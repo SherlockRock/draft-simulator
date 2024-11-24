@@ -1,7 +1,7 @@
-const { DataTypes, Sequelize } = require('sequelize');
-const sequelize = require('../config/database');
+const { DataTypes, Sequelize } = require("sequelize");
+const sequelize = require("../config/database");
 
-const Draft = sequelize.define('Draft', {
+const Draft = sequelize.define("Draft", {
   id: {
     type: DataTypes.UUID,
     defaultValue: DataTypes.UUIDV4,
@@ -9,8 +9,29 @@ const Draft = sequelize.define('Draft', {
   },
   picks: {
     type: DataTypes.ARRAY(Sequelize.TEXT),
-    defaultValue: ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
-  }
+    defaultValue: [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ],
+  },
 });
 
 module.exports = Draft;
