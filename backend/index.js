@@ -44,7 +44,7 @@ async function main() {
       console.log(data);
       try {
         // store the message in the database
-        if ("id" in data) {
+        if ("id" in data && data.picks.length === 20) {
           Draft.update({ picks: data.picks }, { where: { id: data.id } });
         }
       } catch (e) {

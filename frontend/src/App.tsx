@@ -1,12 +1,12 @@
-import type { Component } from "solid-js";
+import { Component } from "solid-js";
 import NavBar from "./NavBar";
-import Draft from "./Draft";
+import { RouteSectionProps } from "@solidjs/router";
 
-const App: Component = () => {
+const App: Component<RouteSectionProps<unknown>> = (props) => {
     return (
         <div class="min-h-screen overflow-clip bg-purple-800">
             <NavBar user={{ name: "Rourke" }} />
-            <Draft />
+            {props.children}
         </div>
     );
 };

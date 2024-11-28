@@ -4,8 +4,8 @@ type props = {
 
 function NavBar(props: props) {
     return (
-        <div class="flex h-8 bg-purple-950">
-            <p class="self-center">Hello {props.user.name}</p>
+        <div class="flex h-8 justify-around bg-purple-950">
+            <p class="self-center text-slate-100">Hello {props.user.name}</p>
         </div>
     );
 }

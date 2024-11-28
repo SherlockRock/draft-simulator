@@ -1,14 +1,21 @@
 ## Usage
 
-Those templates dependencies are maintained via [pnpm](https://pnpm.io) via `pnpm up -Lri`.
-
-This is the reason you see a `pnpm-lock.yaml`. That being said, any package manager will work. This file can be safely be removed once you clone a template.
+frontend:
 
 ```bash
+$ cd frontend
 $ npm install # or pnpm install or yarn install
+$ npm run dev
 ```
 
-### Learn more on the [Solid Website](https://solidjs.com) and come chat with us on our [Discord](https://discord.com/invite/solidjs)
+backend:
+setup postgres db based on .env.sample then do the following
+
+```bash
+$ cd backend
+$ npm install # or pnpm install or yarn install
+$ node index.js
+```
 
 ## Available Scripts
 
@@ -17,7 +24,6 @@ In the project directory, you can run:
 ### `npm run dev` or `npm start`
 
 Runs the app in the development mode.<br>
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
 
 The page will reload if you make edits.<br>
 
