@@ -20,12 +20,10 @@ import {
     topChamps
 } from "./constants";
 import KeyEvent, { Key } from "./KeyEvent";
-import { io } from "socket.io-client";
 import { useNavigate, useParams } from "@solidjs/router";
 import DraftList from "./DraftList";
-
-// Connect to the socket.io server
-const socket = io("http://localhost:3000");
+import { useSocket } from "./socketProvider";
+import Chat from "./Chat";
 
 // type champion = { name: string; img: string };
 
@@ -33,6 +31,7 @@ function Draft() {
     // const [searchParams, setSearchParams] = useSearchParams();
     const params = useParams();
     const navigate = useNavigate();
+    const socket = useSocket();
     const [searchWord, setSearchWord] = createSignal("");
     const [selectedChampion, setSelectedChampion] = createSignal("");
     const [currentlySorting, setCurrentlySorting] = createSignal("");
@@ -46,8 +45,12 @@ function Draft() {
         if (hold === null) {
             return { picks: [...Array(20)].map(() => ""), id: "" };
         } else if ("id" in hold) {
+            // Join a room
+            socket.emit("joinRoom", hold.id);
             return hold;
         }
+        // Join a room
+        socket.emit("joinRoom", hold[0].id);
         return hold[0];
     };
     const [draft, { mutate }] = createResource(
@@ -453,7 +456,8 @@ function Draft() {
                     </Match>
                 </Switch>
             </Suspense>
-            <DraftList />
+            <DraftList currentDraft={draft().id} />
+            <Chat currentDraft={draft().id} />
         </div>
     );
 }

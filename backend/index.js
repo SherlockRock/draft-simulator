@@ -54,7 +54,29 @@ async function main() {
         return;
       }
       // include the offset with the message
-      io.emit("draftUpdate", data, data.id);
+      io.to(data.id).emit("draftUpdate", data, data.id);
+    });
+
+    // Join a room
+    socket.on("joinRoom", (room) => {
+      socket.join(room);
+      console.log(`${socket.id} joined room: ${room}`);
+    });
+
+    // Leave a room
+    socket.on("leaveRoom", (room) => {
+      socket.leave(room);
+      console.log(`${socket.id} left room: ${room}`);
+    });
+
+    // Broadcast to a room
+    socket.on("newMessage", (test) => {
+      console.log(test);
+      io.to(test.room).emit("chatMessage", {
+        username: socket.id,
+        chat: test.message,
+      });
+      console.log(`Message sent to room ${test.room}: ${test.message}`);
     });
   });
 

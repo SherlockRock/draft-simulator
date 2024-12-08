@@ -1,13 +1,19 @@
 import { useNavigate } from "@solidjs/router";
 import { createResource, Index } from "solid-js";
+import { useSocket } from "./socketProvider";
 
 type draft = {
     id: string;
     picks: string[];
 };
 
-function DraftList() {
+type props = {
+    currentDraft: string;
+};
+
+function DraftList(props: props) {
     const navigate = useNavigate();
+    const socket = useSocket();
     const fetchDraftList = async () => {
         const res = await fetch("http://localhost:3000/api/drafts");
         return await res.json();
@@ -23,18 +29,35 @@ function DraftList() {
     //     }
     // };
 
-    const handleClick = async () => {
+    const handleNewDraft = async () => {
         const res = await fetch("http://localhost:3000/api/drafts", { method: "POST" });
         const data = await res.json();
         mutate((prev) => [...(prev || []), data]);
+        socket.emit("leaveRoom", props.currentDraft);
         navigate(`/${data.id}`);
+    };
+
+    const draftListClass = (id: string, index: number) => {
+        let text = "";
+        if (props.currentDraft === id) {
+            text = "text-red-500";
+        } else {
+            text = index % 2 === 0 ? "text-gray-700" : "text-slate-100";
+        }
+        if (index % 2 === 0) {
+            return `${text} flex justify-between bg-slate-100`;
+        }
+        return `${text} flex justify-between bg-gray-700`;
     };
 
     return (
         <div>
             <div class="flex justify-between text-slate-100">
                 <p>Draft History:</p>
-                <button class="bg-green-600" onClick={handleClick}>
+                <button
+                    class="rounded-md rounded-b-none bg-green-600 px-4 py-2 text-sm font-medium"
+                    onClick={handleNewDraft}
+                >
                     New Draft
                 </button>
             </div>
@@ -42,12 +65,11 @@ function DraftList() {
                 <Index each={draftList()}>
                     {(each, index) => (
                         <li
-                            class={
-                                index % 2 === 0
-                                    ? "flex justify-between bg-slate-100 text-slate-700"
-                                    : "flex justify-between bg-slate-700 text-slate-100"
-                            }
-                            onClick={() => navigate(`/${each().id}`)}
+                            class={draftListClass(each().id, index)}
+                            onClick={() => {
+                                socket.emit("leaveRoom", props.currentDraft);
+                                navigate(`/${each().id}`);
+                            }}
                         >
                             <p>{each().id}</p>
                             <button
