@@ -1,11 +1,40 @@
-type props = {
-    user: { name: string };
-};
+import { useUser } from "./userProvider";
 
-function NavBar(props: props) {
+function NavBar() {
+    const accessor = useUser();
+    const [user, logout] = accessor();
+    const handleLogin = () => {
+        window.location.href = "https://localhost:3000/auth/google";
+    };
+
+    const handleLogOut = () => {
+        fetch("https://localhost:3000/api/revoke/", {
+            method: "GET"
+        });
+        if (logout !== undefined && "logout" in logout) {
+            logout.logout();
+        }
+    };
+
     return (
-        <div class="flex h-8 justify-around bg-purple-950">
-            <p class="self-center text-slate-100">Hello {props.user.name}</p>
+        <div class="flex h-12 justify-around bg-purple-950 py-1">
+            {user() !== undefined && "name" in user() ? (
+                <>
+                    <button
+                        class="text-md h-10 rounded bg-blue-500 px-3 font-sans font-normal hover:bg-blue-600"
+                        onClick={handleLogOut}
+                    >
+                        Log out of Google
+                    </button>
+                </>
+            ) : (
+                <button
+                    class="text-md h-10 rounded bg-blue-500 px-3 font-sans font-normal hover:bg-blue-600"
+                    onClick={handleLogin}
+                >
+                    Login with Google
+                </button>
+            )}
         </div>
     );
 }

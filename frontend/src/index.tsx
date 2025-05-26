@@ -4,7 +4,7 @@ import { Router, Route } from "@solidjs/router";
 
 import "./index.css";
 import App from "./App";
-import Draft from "./Draft";
+import { UserWrapper } from "./UserWrapper";
 
 const root = document.getElementById("root");
 
@@ -17,7 +17,8 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 render(
     () => (
         <Router root={App}>
-            <Route path="/:session?" component={Draft} />
+            <Route path="/:session?" component={UserWrapper} />
+            <Route path="/:token?" component={UserWrapper} />
         </Router>
     ),
     root!

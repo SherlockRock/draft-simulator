@@ -2,6 +2,11 @@ import { useNavigate } from "@solidjs/router";
 import { createResource, Index } from "solid-js";
 import { useSocket } from "./socketProvider";
 
+const fetchDraftList = async () => {
+    const res = await fetch("https://localhost:3000/api/drafts");
+    return await res.json();
+};
+
 type draft = {
     id: string;
     picks: string[];
@@ -14,23 +19,10 @@ type props = {
 function DraftList(props: props) {
     const navigate = useNavigate();
     const socket = useSocket();
-    const fetchDraftList = async () => {
-        const res = await fetch("http://localhost:3000/api/drafts");
-        return await res.json();
-    };
     const [draftList, { mutate }] = createResource<draft[]>(fetchDraftList);
-    // const handleDelete = async (id: string) => {
-    //     const res = await fetch(`http://localhost:3000/api/drafts/${id}`, {
-    //         method: "DELETE"
-    //     });
-    //     const result = await res.json();
-    //     if ("id" in result && result.id !== "") {
-    //         mutate((prev) => prev?.filter((item) => item.id !== result.id));
-    //     }
-    // };
 
     const handleNewDraft = async () => {
-        const res = await fetch("http://localhost:3000/api/drafts", { method: "POST" });
+        const res = await fetch("https://localhost:3000/api/drafts", { method: "POST" });
         const data = await res.json();
         mutate((prev) => [...(prev || []), data]);
         socket.emit("leaveRoom", props.currentDraft);
@@ -75,7 +67,7 @@ function DraftList(props: props) {
                             <button
                                 onClick={async () => {
                                     const res = await fetch(
-                                        `http://localhost:3000/api/drafts/${each().id}`,
+                                        `https://localhost:3000/api/drafts/${each().id}`,
                                         { method: "DELETE" }
                                     );
                                     const result = await res.json();

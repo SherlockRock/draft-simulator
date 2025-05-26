@@ -1,6 +1,6 @@
-import { createSignal, For, onCleanup } from "solid-js";
-import { useSocket } from "./socketProvider";
+import { createEffect, createSignal, For, onCleanup } from "solid-js";
 import { DOMElement } from "solid-js/jsx-runtime";
+import { useUser } from "./userProvider";
 
 type chatMessage = {
     username: string;
@@ -12,15 +12,31 @@ type props = {
 };
 
 function Chat(props: props) {
-    const socket = useSocket();
+    const accessor = useUser();
+    const userArray = accessor();
+    const user = userArray[0]();
+    const socket = userArray[2];
     const [messages, setMessages] = createSignal<chatMessage[]>([]);
     const [message, setMessage] = createSignal("");
+    const [previousDraft, setPreviousDraft] = createSignal("");
 
-    socket.on("chatMessage", (newMessage: chatMessage) => {
-        if (newMessage.username !== socket.id) {
-            setMessages((prev) => [...prev, newMessage]);
+    createEffect(() => {
+        if (previousDraft() === "") {
+            setPreviousDraft(props.currentDraft);
+        } else if (previousDraft() !== props.currentDraft) {
+            setMessages([]); // Clear messages when the draft changes
+            setPreviousDraft(props.currentDraft);
         }
     });
+
+    socket.on(
+        "chatMessage",
+        (newMessage: { username: string; chat: string; socketId: string }) => {
+            if (user === undefined && newMessage.socketId !== socket.id) {
+                setMessages((prev) => [...prev, newMessage]);
+            }
+        }
+    );
 
     onCleanup(() => {
         socket.off("chatMessage");
@@ -34,8 +50,14 @@ function Chat(props: props) {
     ) => {
         e.preventDefault();
         if (message().trim()) {
+            let username = "";
+            if (user !== undefined && "name" in user) {
+                username = user.name;
+            } else {
+                username = socket.id;
+            }
             const holdMessage = message();
-            setMessages((prev) => [...prev, { chat: holdMessage, username: "You" }]);
+            setMessages((prev) => [...prev, { chat: holdMessage, username }]);
             socket.emit("newMessage", { room: props.currentDraft, message: holdMessage });
             setMessage(""); // Clear the input
         }

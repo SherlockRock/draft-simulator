@@ -22,23 +22,21 @@ import {
 import KeyEvent, { Key } from "./KeyEvent";
 import { useNavigate, useParams } from "@solidjs/router";
 import DraftList from "./DraftList";
-import { useSocket } from "./socketProvider";
 import Chat from "./Chat";
-
-// type champion = { name: string; img: string };
+import { useUser } from "./userProvider";
 
 function Draft() {
-    // const [searchParams, setSearchParams] = useSearchParams();
     const params = useParams();
     const navigate = useNavigate();
-    const socket = useSocket();
+    const accessor = useUser();
+    const socket = accessor()[2];
     const [searchWord, setSearchWord] = createSignal("");
     const [selectedChampion, setSelectedChampion] = createSignal("");
     const [currentlySorting, setCurrentlySorting] = createSignal("");
     const [dropdownOpen, setDropdownOpen] = createSignal(false);
     const [dropdownIndex, setDropdownIndex] = createSignal(0);
     const fetchDraft = async (id: string) => {
-        const res = await fetch(`http://localhost:3000/api/drafts/${id}`, {
+        const res = await fetch(`https://localhost:3000/api/drafts/${id}`, {
             method: "GET"
         });
         const hold = await res.json();
@@ -60,17 +58,13 @@ function Draft() {
 
     // Handle Socket.IO events
     createEffect(() => {
-        if (draft().picks.length !== 0) {
-            // setSearchParams({ session: draft().id });
+        const holdDraft = draft();
+        if (holdDraft !== undefined && holdDraft.picks.length !== 0) {
             navigate(`/${draft().id}`);
         }
     });
 
-    socket.on("connect", async () => {
-        console.log("Connected to server with ID:", socket.id);
-    });
-
-    socket.on("draftUpdate", (data) => {
+    socket.on("draftUpdate", (data: { picks: string[] }) => {
         if (data.picks.length !== 0) {
             mutate((old) => ({
                 ...old,
@@ -83,17 +77,6 @@ function Draft() {
         socket.off("draftUpdate");
         socket.disconnect();
     });
-
-    // const fetchMessage = async () => {
-    //   const res = await fetch('http://localhost:3000/api/drafts');
-    //   const data = await res.json();
-    //   console.log(data);
-    //   if (data?.length !== 0){
-    //     setPicks([...data[0]]);
-    //   }
-    // };
-
-    // fetchMessage();
 
     const handleSearch = (
         event: InputEvent & {
@@ -456,8 +439,8 @@ function Draft() {
                     </Match>
                 </Switch>
             </Suspense>
-            <DraftList currentDraft={draft().id} />
-            <Chat currentDraft={draft().id} />
+            <DraftList currentDraft={draft()?.id} />
+            <Chat currentDraft={draft()?.id} />
         </div>
     );
 }

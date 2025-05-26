@@ -3,7 +3,6 @@ const router = express.Router();
 const Draft = require("../models/Draft");
 
 router.get("/", async (req, res) => {
-  console.log("drafts?");
   try {
     const drafts = await Draft.findAll();
     res.json(drafts);
@@ -14,7 +13,6 @@ router.get("/", async (req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
-  console.log("get draft");
   try {
     const drafts = await Draft.findByPk(req.params.id);
     res.json(drafts);
@@ -25,7 +23,6 @@ router.get("/:id", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  console.log("new draft");
   try {
     const draft = await Draft.create();
     res.json(draft);
@@ -36,9 +33,7 @@ router.post("/", async (req, res) => {
 });
 
 router.delete("/:id", async (req, res) => {
-  console.log("delete draft");
   try {
-    console.log(req.params.id);
     const draft = await Draft.findByPk(req.params.id);
     draft.destroy();
     res.json(req.params.id);
