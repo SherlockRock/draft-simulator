@@ -6,12 +6,15 @@ import solidPlugin from "vite-plugin-solid";
 export default defineConfig({
     plugins: [solidPlugin()],
     server: {
-        https: {
-            key: fs.readFileSync("./localhost+2-key.pem"),
-            cert: fs.readFileSync("./localhost+2.pem")
-        },
+        https:
+            process.env.NODE_ENV === "development"
+                ? {
+                      key: fs.readFileSync("./localhost+2-key.pem"),
+                      cert: fs.readFileSync("./localhost+2.pem")
+                  }
+                : undefined,
         proxy: {
-            "/api": "https://localhost:3000"
+            "/api": { target: process.env.VITE_API_URL }
         },
         watch: {
             usePolling: true

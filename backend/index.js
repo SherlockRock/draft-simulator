@@ -43,10 +43,6 @@ async function main() {
     })
   );
 
-  // Load the SSL certificate and key
-  const key = await readFile("./localhost+2-key.pem");
-  const cert = await readFile("./localhost+2.pem");
-
   /**
    * To use OAuth2 authentication, we need access to a CLIENT_ID, CLIENT_SECRET, AND REDIRECT_URI
    * from the client_secret.json file. To get these credentials for your application, visit
@@ -302,17 +298,24 @@ async function main() {
   app.use("/api/drafts", draftRoutes);
   app.use("/api/users", userRoutes);
 
-  const server = createServer(
-    {
+  // Load the SSL certificate and key
+  let options = {};
+  if (process.env.ENVIRONMENT === "development") {
+    const key = await readFile("./localhost+2-key.pem");
+    const cert = await readFile("./localhost+2.pem");
+    options = {
       key,
       cert,
-    },
-    app
-  );
+    };
+  }
+  const server = createServer(options, app);
   const io = new Server(server, {
     connectionStateRecovery: {},
     cors: {
-      origin: "https://localhost:5173", // Frontend URL
+      origin: [
+        "https://localhost:5173", // for local development
+        "https://draft-simulator.onrender.com", // for production
+      ],
       // methods: ["GET", "POST"],
       credentials: true,
     },
