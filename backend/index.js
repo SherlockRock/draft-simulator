@@ -373,8 +373,9 @@ async function main() {
   });
 
   const PORT = process.env.PORT || 5000;
-  server.listen(PORT, () => {
-    console.log(`server running at http://localhost:${PORT}`);
+  const HOST = process.env.HOST || "localhost";
+  server.listen(PORT, HOST, () => {
+    console.log(`server running at http://${HOST}:${PORT}`);
   });
 }
 
