@@ -373,7 +373,8 @@ async function main() {
   });
 
   const PORT = process.env.PORT || 5000;
-  const HOST = process.env.HOST || "localhost";
+  const HOST =
+    process.env.ENVIRONMENT === "development" ? "0.0.0.0" : "localhost";
   server.listen(PORT, HOST, () => {
     console.log(`server running at http://${HOST}:${PORT}`);
   });
