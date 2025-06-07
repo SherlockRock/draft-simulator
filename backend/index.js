@@ -52,7 +52,7 @@ async function main() {
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    `${FRONTEND_ORIGIN}/oauth2callback`
+    `${process.env.FRONTEND_ORIGIN}/oauth2callback`
   );
   const JWT_SECRET = process.env.JWT_SECRET;
   const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET;
@@ -315,6 +315,7 @@ async function main() {
     connectionStateRecovery: {},
     cors: {
       origin: process.env.FRONTEND_ORIGIN,
+      methods: ["GET", "POST"],
       credentials: true,
     },
   });
