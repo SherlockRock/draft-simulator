@@ -18,12 +18,13 @@ import {
     sortOptions,
     supportChamps,
     topChamps
-} from "./constants";
+} from "./utils/constants";
 import KeyEvent, { Key } from "./KeyEvent";
 import { useNavigate, useParams } from "@solidjs/router";
 import DraftList from "./DraftList";
 import Chat from "./Chat";
 import { useUser } from "./userProvider";
+import { fetchDraft } from "./utils/actions";
 
 function Draft() {
     const params = useParams();
@@ -35,25 +36,22 @@ function Draft() {
     const [currentlySorting, setCurrentlySorting] = createSignal("");
     const [dropdownOpen, setDropdownOpen] = createSignal(false);
     const [dropdownIndex, setDropdownIndex] = createSignal(0);
-    const fetchDraft = async (id: string) => {
-        const res = await fetch(`https://localhost:3000/api/drafts/${id}`, {
-            method: "GET"
-        });
-        const hold = await res.json();
-        if (hold === null) {
+    const handleFetch = async (id: string) => {
+        const draft = await fetchDraft(id);
+        if (draft === null) {
             return { picks: [...Array(20)].map(() => ""), id: "" };
-        } else if ("id" in hold) {
+        } else if ("id" in draft) {
             // Join a room
-            socket.emit("joinRoom", hold.id);
-            return hold;
+            socket.emit("joinRoom", draft.id);
+            return draft;
         }
         // Join a room
-        socket.emit("joinRoom", hold[0].id);
-        return hold[0];
+        socket.emit("joinRoom", draft[0].id);
+        return draft[0];
     };
     const [draft, { mutate }] = createResource(
         () => (params.session !== undefined ? String(params.session) : ""),
-        fetchDraft
+        handleFetch
     );
 
     // Handle Socket.IO events

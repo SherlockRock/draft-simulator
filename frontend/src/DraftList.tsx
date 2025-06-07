@@ -1,11 +1,7 @@
 import { useNavigate } from "@solidjs/router";
 import { createResource, Index } from "solid-js";
 import { useSocket } from "./socketProvider";
-
-const fetchDraftList = async () => {
-    const res = await fetch("https://localhost:3000/api/drafts");
-    return await res.json();
-};
+import { deleteDraft, fetchDraftList, postNewDraft } from "./utils/actions";
 
 type draft = {
     id: string;
@@ -22,8 +18,7 @@ function DraftList(props: props) {
     const [draftList, { mutate }] = createResource<draft[]>(fetchDraftList);
 
     const handleNewDraft = async () => {
-        const res = await fetch("https://localhost:3000/api/drafts", { method: "POST" });
-        const data = await res.json();
+        const data = await postNewDraft();
         mutate((prev) => [...(prev || []), data]);
         socket.emit("leaveRoom", props.currentDraft);
         navigate(`/${data.id}`);
@@ -66,11 +61,7 @@ function DraftList(props: props) {
                             <p>{each().id}</p>
                             <button
                                 onClick={async () => {
-                                    const res = await fetch(
-                                        `https://localhost:3000/api/drafts/${each().id}`,
-                                        { method: "DELETE" }
-                                    );
-                                    const result = await res.json();
+                                    const result = await deleteDraft(each().id);
                                     if (result) {
                                         mutate((prev) =>
                                             prev?.filter((item) => item.id !== result)

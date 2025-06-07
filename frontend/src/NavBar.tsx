@@ -1,4 +1,5 @@
 import { useUser } from "./userProvider";
+import { handleRevoke } from "./utils/actions";
 
 function NavBar() {
     const accessor = useUser();
@@ -8,9 +9,7 @@ function NavBar() {
     };
 
     const handleLogOut = () => {
-        fetch("https://localhost:3000/api/revoke/", {
-            method: "GET"
-        });
+        handleRevoke();
         if (logout !== undefined && "logout" in logout) {
             logout.logout();
         }

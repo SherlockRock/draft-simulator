@@ -1,5 +1,5 @@
 import { For } from "solid-js";
-import { champions } from "./constants";
+import { champions } from "./utils/constants";
 
 type props = {
     inputValue: string;
