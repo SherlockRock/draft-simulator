@@ -299,16 +299,14 @@ async function main() {
   app.use("/api/users", userRoutes);
 
   // Load the SSL certificate and key
-  let options = {};
+  let server;
   if (process.env.ENVIRONMENT === "development") {
     const key = await readFile("./localhost+2-key.pem");
     const cert = await readFile("./localhost+2.pem");
-    options = {
-      key,
-      cert,
-    };
+    server = https.createServer({ key, cert }, app);
+  } else {
+    server = http.createServer(app);
   }
-  const server = createServer(options, app);
   const io = new Server(server, {
     connectionStateRecovery: {},
     cors: {
