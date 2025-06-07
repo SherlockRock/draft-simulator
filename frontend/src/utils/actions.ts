@@ -1,6 +1,6 @@
 export const BASE_URL =
     import.meta.env.VITE_ENVIRONMENT === "production"
-        ? import.meta.env.VITE_API_URL
+        ? `${import.meta.env.VITE_API_URL}/api`
         : "/api";
 
 export const fetchDraft = async (id: string): Promise<any> => {
