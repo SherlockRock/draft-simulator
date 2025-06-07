@@ -8,20 +8,9 @@ import {
 import { JSX } from "solid-js";
 import { AnonSocketProvider, useAnonSocket } from "./anonSocketProvider";
 import { SocketProvider, useSocket } from "./socketProvider";
+import { fetchUserDetails } from "./utils/actions";
 
 const UserContext = createContext<Accessor<Array<any>>>();
-
-const fetchUserDetails = async () => {
-    const refresh = await fetch(`https://localhost:3000/refresh-token/`, {
-        method: "GET",
-        credentials: "include"
-    });
-    if (refresh.ok) {
-        const hold = await refresh.json();
-        return hold.user;
-    }
-    return undefined;
-};
 
 export function UserProvider(props: { children: JSX.Element }) {
     const socket = useSocket();

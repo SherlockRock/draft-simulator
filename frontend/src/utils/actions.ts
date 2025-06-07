@@ -53,3 +53,7 @@ export const handleRevoke = async () => {
         method: "GET"
     });
 };
+
+export const handleLogin = () => {
+    window.location.href = `${BASE_URL}/auth/google`;
+};

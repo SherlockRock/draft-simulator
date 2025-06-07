@@ -52,7 +52,7 @@ async function main() {
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    "https://localhost:3000/oauth2callback"
+    `${FRONTEND_ORIGIN}/oauth2callback`
   );
   const JWT_SECRET = process.env.JWT_SECRET;
   const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET;
@@ -301,7 +301,6 @@ async function main() {
   app.use("/api/drafts", draftRoutes);
   app.use("/api/users", userRoutes);
 
-  // Load the SSL certificate and key
   let server;
   if (process.env.ENVIRONMENT === "development") {
     const key = await readFile("./localhost+2-key.pem");
@@ -315,11 +314,7 @@ async function main() {
   const io = new Server(server, {
     connectionStateRecovery: {},
     cors: {
-      origin: [
-        "https://localhost:5173", // for local development
-        "https://draft-simulator.onrender.com", // for production
-      ],
-      // methods: ["GET", "POST"],
+      origin: process.env.FRONTEND_ORIGIN,
       credentials: true,
     },
   });

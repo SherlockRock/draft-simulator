@@ -1,12 +1,9 @@
 import { useUser } from "./userProvider";
-import { handleRevoke } from "./utils/actions";
+import { handleLogin, handleRevoke } from "./utils/actions";
 
 function NavBar() {
     const accessor = useUser();
     const [user, logout] = accessor();
-    const handleLogin = () => {
-        window.location.href = "https://localhost:3000/auth/google";
-    };
 
     const handleLogOut = () => {
         handleRevoke();
