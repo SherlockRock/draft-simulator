@@ -43,10 +43,12 @@ function Draft() {
         } else if ("id" in draft) {
             // Join a room
             socket.emit("joinRoom", draft.id);
+            console.log("Joined room:", draft.id);
             return draft;
         }
         // Join a room
         socket.emit("joinRoom", draft[0].id);
+        console.log("Joined room:", draft.id);
         return draft[0];
     };
     const [draft, { mutate }] = createResource(
