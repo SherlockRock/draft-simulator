@@ -9,7 +9,6 @@ const https = require("https");
 const http = require("https");
 const url = require("url");
 const { readFile } = require("node:fs/promises");
-const { createServer } = require("node:https");
 const { google } = require("googleapis");
 const { Server } = require("socket.io");
 const cors = require("cors");
@@ -17,7 +16,6 @@ const draftRoutes = require("./routes/drafts");
 const userRoutes = require("./routes/users");
 const Draft = require("./models/Draft");
 const User = require("./models/User");
-const UserToken = require("./models/User");
 const setupAssociations = require("./models/associations");
 const helpers = require("./helpers");
 require("dotenv").config();
@@ -96,6 +94,8 @@ async function main() {
   passport.deserializeUser((obj, done) => {
     done(null, obj);
   });
+
+  app.get("/", (req, res) => res.send("OK"));
 
   app.get(
     "/auth/google",
@@ -374,10 +374,8 @@ async function main() {
   });
 
   const PORT = process.env.PORT || 5000;
-  const HOST =
-    process.env.ENVIRONMENT === "development" ? "localhost" : "0.0.0.0";
   server.listen(PORT, () => {
-    console.log(`server running at http://${HOST}:${PORT}`);
+    console.log(`server running on PORT ${PORT}`);
   });
 }
 
