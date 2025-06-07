@@ -1,7 +1,8 @@
 const BASE_URL =
-    import.meta.env.NODE_ENV === "production"
+    import.meta.env.ENVIRONMENT === "production"
         ? import.meta.env.VITE_API_URL // e.g., https://your-backend.onrender.com
         : "/api"; // use proxy during development
+console.log(BASE_URL);
 
 export const fetchDraft = async (id: string): Promise<any> => {
     const res = await fetch(`${BASE_URL}/drafts/${id}`, {
@@ -44,7 +45,7 @@ export const deleteDraft = async (id: string) => {
 };
 
 export const handleRevoke = async () => {
-    fetch("https://localhost:3000/api/revoke/", {
+    fetch(`${BASE_URL}/api/revoke/`, {
         method: "GET"
     });
 };

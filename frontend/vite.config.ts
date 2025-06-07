@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
         plugins: [solidPlugin()],
         server: {
             https:
-                env.NODE_ENV === "development"
+                env.ENVIRONMENT === "development"
                     ? {
                           key: fs.readFileSync("./localhost+2-key.pem"),
                           cert: fs.readFileSync("./localhost+2.pem")
