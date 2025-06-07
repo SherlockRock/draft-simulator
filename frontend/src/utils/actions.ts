@@ -8,6 +8,8 @@ export const fetchDraft = async (id: string): Promise<any> => {
         method: "GET"
     });
     const hold = await res.json();
+    console.log(res);
+    console.log(hold);
     return hold;
 };
 
@@ -21,7 +23,10 @@ export const postNewDraft = async () => {
 
 export const fetchDraftList = async () => {
     const res = await fetch(`${BASE_URL}/drafts`);
-    return await res.json();
+    const hold = await res.json();
+    console.log(res);
+    console.log(hold);
+    return hold;
 };
 
 export const fetchUserDetails = async () => {
