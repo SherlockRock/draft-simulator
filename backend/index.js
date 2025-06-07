@@ -26,8 +26,8 @@ async function main() {
       await sequelize.authenticate();
       setupAssociations(sequelize);
       await sequelize.sync({ alter: true }); // Sync all defined models to the database
-      console.log(await Draft.findAll().length, "drafts found");
-      if ((await Draft.findAll().length) === 0) {
+      const count = await Draft.count();
+      if (count === 0) {
         console.log("No drafts found, creating a new draft");
         await Draft.create();
       }
