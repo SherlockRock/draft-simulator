@@ -32,7 +32,7 @@ function Chat(props: props) {
     socket.on(
         "chatMessage",
         (newMessage: { username: string; chat: string; socketId: string }) => {
-            if (user === undefined && newMessage.socketId !== socket.id) {
+            if (newMessage.socketId !== socket.id) {
                 setMessages((prev) => [...prev, newMessage]);
             }
         }

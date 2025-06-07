@@ -1,9 +1,8 @@
 import { createContext, useContext } from "solid-js";
 import { io } from "socket.io-client";
 import { JSX } from "solid-js";
-import { BASE_URL } from "./utils/actions";
 
-const socket = io(BASE_URL, { withCredentials: true });
+const socket = io(import.meta.env.VITE_API_URL, { withCredentials: true });
 
 export const SocketContext = createContext(socket);
 

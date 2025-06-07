@@ -6,7 +6,6 @@ router.get("/", async (req, res) => {
   try {
     console.log("Fetching all drafts");
     const drafts = await Draft.findAll();
-    console.log(drafts);
     res.json(drafts);
   } catch (err) {
     console.error(err);
@@ -18,7 +17,6 @@ router.get("/:id", async (req, res) => {
   try {
     console.log(`Fetching draft with ID: ${req.params.id}`);
     const drafts = await Draft.findByPk(req.params.id);
-    console.log(drafts);
     res.json(drafts);
   } catch (err) {
     console.error(err);

@@ -52,7 +52,7 @@ async function main() {
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    `${process.env.FRONTEND_ORIGIN}/oauth2callback`
+    `${process.env.BACKEND_ORIGIN}/oauth2callback`
   );
   const JWT_SECRET = process.env.JWT_SECRET;
   const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET;
@@ -60,9 +60,6 @@ async function main() {
   //   "https://www.googleapis.com/auth/userinfo.email",
   //   "https://www.googleapis.com/auth/userinfo.profile",
   // ];
-
-  // const PASETO_SECRET = generateKeys("local", { format: "buffer" });
-  // const PASETO_SECRET = Buffer.from(process.env.PASETO_SECRET, "base64");
 
   app.use(
     session({
@@ -100,7 +97,7 @@ async function main() {
   app.get("/", (req, res) => res.send("OK"));
 
   app.get(
-    "/auth/google",
+    "/api/auth/google",
     passport.authenticate("google", { scope: ["profile", "email"] })
   );
 
@@ -216,7 +213,7 @@ async function main() {
     }
   });
 
-  app.get("/refresh-token", async (req, res) => {
+  app.get("/api/refresh-token", async (req, res) => {
     const refreshToken = req.cookies.refreshToken;
     if (!refreshToken) {
       return res.status(403).json({ error: "No refresh token provided" });
@@ -237,7 +234,7 @@ async function main() {
         picture: loggedInUser.picture,
       };
       const newToken = jwt.sign(user, JWT_SECRET, {
-        expiresIn: "60s",
+        expiresIn: "1h",
       });
       res.cookie("jwt", newToken, { httpOnly: true, secure: true });
       res.status(200).json({ user });
@@ -273,7 +270,7 @@ async function main() {
     const postOptions = {
       host: "oauth2.googleapis.com",
       port: "443",
-      path: "/revoke",
+      path: "/api/revoke",
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -321,6 +318,7 @@ async function main() {
   });
 
   io.on("connection", (socket) => {
+    console.log(`New client connected: ${socket.id}`);
     const request = socket.request;
     socket.on("newDraft", async (data) => {
       try {
@@ -349,6 +347,7 @@ async function main() {
 
     // Broadcast to a room
     socket.on("newMessage", async (req) => {
+      console.log("New message received:", req);
       let username = socket.id;
       try {
         const token = request.headers.cookie
@@ -365,7 +364,7 @@ async function main() {
       }
       io.to(req.room).emit("chatMessage", {
         username,
-        sockedId: socket.id,
+        socketId: socket.id,
         chat: req.message,
       });
     });

@@ -1,9 +1,8 @@
 import { createContext, useContext } from "solid-js";
 import { io } from "socket.io-client";
 import { JSX } from "solid-js";
-import { BASE_URL } from "./utils/actions";
 
-const anonSocket = io(BASE_URL);
+const anonSocket = io(import.meta.env.VITE_API_URL);
 
 export const AnonSocketContext = createContext(anonSocket);
 

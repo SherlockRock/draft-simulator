@@ -8,8 +8,6 @@ export const fetchDraft = async (id: string): Promise<any> => {
         method: "GET"
     });
     const hold = await res.json();
-    console.log(res);
-    console.log(hold);
     return hold;
 };
 
@@ -24,10 +22,16 @@ export const postNewDraft = async () => {
 export const fetchDraftList = async () => {
     const res = await fetch(`${BASE_URL}/drafts`);
     const hold = await res.json();
-    console.log(res);
-    console.log(hold);
     return hold;
 };
+
+export const deleteDraft = async (id: string) => {
+    const res = await fetch(`${BASE_URL}/drafts/${id}`, {
+        method: "DELETE"
+    });
+    return await res.json();
+};
+// need to handle all cases where res.ok is false
 
 export const fetchUserDetails = async () => {
     const refresh = await fetch(`${BASE_URL}/refresh-token/`, {
@@ -39,13 +43,6 @@ export const fetchUserDetails = async () => {
         return hold.user;
     }
     return undefined;
-};
-// need to handle all cases where res.ok is false
-export const deleteDraft = async (id: string) => {
-    const res = await fetch(`${BASE_URL}/drafts/${id}`, {
-        method: "DELETE"
-    });
-    return await res.json();
 };
 
 export const handleRevoke = async () => {
