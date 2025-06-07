@@ -304,7 +304,9 @@ async function main() {
     const key = await readFile("./localhost+2-key.pem");
     const cert = await readFile("./localhost+2.pem");
     server = https.createServer({ key, cert }, app);
+    console.log("development environment");
   } else {
+    console.log("production environment");
     server = http.createServer(app);
   }
   const io = new Server(server, {
