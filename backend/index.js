@@ -6,6 +6,7 @@ const session = require("express-session");
 const sequelize = require("./config/database");
 const jwt = require("jsonwebtoken");
 const https = require("https");
+const http = require("https");
 const url = require("url");
 const { readFile } = require("node:fs/promises");
 const { createServer } = require("node:https");
@@ -375,7 +376,7 @@ async function main() {
   const PORT = process.env.PORT || 5000;
   const HOST =
     process.env.ENVIRONMENT === "development" ? "localhost" : "0.0.0.0";
-  server.listen(PORT, HOST, () => {
+  server.listen(PORT, () => {
     console.log(`server running at http://${HOST}:${PORT}`);
   });
 }

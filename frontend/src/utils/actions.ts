@@ -44,7 +44,7 @@ export const deleteDraft = async (id: string) => {
 };
 
 export const handleRevoke = async () => {
-    fetch(`${BASE_URL}/api/revoke/`, {
+    fetch(`${BASE_URL}/revoke/`, {
         method: "GET"
     });
 };
