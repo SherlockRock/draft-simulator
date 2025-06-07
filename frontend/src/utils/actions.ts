@@ -1,8 +1,5 @@
 const BASE_URL =
-    import.meta.env.ENVIRONMENT === "production"
-        ? import.meta.env.VITE_API_URL // e.g., https://your-backend.onrender.com
-        : "/api"; // use proxy during development
-console.log(BASE_URL);
+    import.meta.env.ENVIRONMENT === "production" ? import.meta.env.VITE_API_URL : "/api";
 
 export const fetchDraft = async (id: string): Promise<any> => {
     const res = await fetch(`${BASE_URL}/drafts/${id}`, {
