@@ -191,7 +191,7 @@ async function main() {
         httpOnly: true,
         secure: true,
       });
-      res.redirect("https://localhost:5173/");
+      res.redirect(process.env.FRONTEND_ORIGIN);
     }
   });
 
