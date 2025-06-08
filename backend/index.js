@@ -77,7 +77,7 @@ async function main() {
       {
         clientID: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        callbackURL: "/oauth2callback",
+        callbackURL: `${process.env.BACKEND_ORIGIN}/oauth2callback`,
       },
       (accessToken, refreshToken, profile, done) => {
         // User authentication logic
