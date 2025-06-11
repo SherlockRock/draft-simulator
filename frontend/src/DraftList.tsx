@@ -1,6 +1,5 @@
 import { useNavigate } from "@solidjs/router";
 import { createResource, Index } from "solid-js";
-import { useSocket } from "./socketProvider";
 import { deleteDraft, fetchDraftList, postNewDraft } from "./utils/actions";
 
 type draft = {
@@ -10,17 +9,17 @@ type draft = {
 
 type props = {
     currentDraft: string;
+    socket: any;
 };
 
 function DraftList(props: props) {
     const navigate = useNavigate();
-    const socket = useSocket();
     const [draftList, { mutate }] = createResource<draft[]>(fetchDraftList);
 
     const handleNewDraft = async () => {
         const data = await postNewDraft();
         mutate((prev) => [...(prev || []), data]);
-        socket.emit("leaveRoom", props.currentDraft);
+        props.socket.emit("leaveRoom", props.currentDraft);
         navigate(`/${data.id}`);
     };
 
@@ -54,7 +53,7 @@ function DraftList(props: props) {
                         <li
                             class={draftListClass(each().id, index)}
                             onClick={() => {
-                                socket.emit("leaveRoom", props.currentDraft);
+                                props.socket.emit("leaveRoom", props.currentDraft);
                                 navigate(`/${each().id}`);
                             }}
                         >

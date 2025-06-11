@@ -34,7 +34,7 @@ export const deleteDraft = async (id: string) => {
 // need to handle all cases where res.ok is false
 
 export const fetchUserDetails = async () => {
-    const refresh = await fetch(`${BASE_URL}/refresh-token/`, {
+    const refresh = await fetch(`${BASE_URL}/refresh-token`, {
         method: "GET",
         credentials: "include"
     });

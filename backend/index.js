@@ -138,59 +138,42 @@ async function main() {
           picture: payload.picture,
         });
       }
-      const encodedToken = helpers.encrypt(tokens.access_token);
-      const userTokens = await loggedInUser.getUserTokens();
-      let edited = false;
-      if (userTokens.length !== 0) {
-        userTokens.forEach((token) => {
-          try {
-            const decodedToken = helpers.decrypt(token.jwt);
-            if (decodedToken === tokens.access_token) {
-              token.createdAt = new Date();
-              token.save();
-              edited = true;
-            } else if (
-              token.createdAt < new Date(Date.now() - 1000 * 60 * 60)
-            ) {
-              token.destroy();
-            }
-          } catch (error) {
-            token.destroy();
-          }
-        });
-      } else if (userTokens.length === 0 || !edited) {
-        loggedInUser.createUserToken({ key: encodedToken });
-      }
 
-      // Check if user authorized Calendar read permission.
-      if (
-        tokens.scope.includes(
-          "https://www.googleapis.com/auth/calendar.readonly"
-        )
-      ) {
-        // User authorized Calendar read permission.
-        // Calling the APIs, etc.
-      } else {
-        // User didn't authorize Calendar read permission.
-        // Update UX and application accordingly
-      }
       const user = {
         id: loggedInUser.id,
         name: loggedInUser.name,
         email: loggedInUser.email,
         picture: loggedInUser.picture,
       };
-      const token = jwt.sign(user, JWT_SECRET, {
-        expiresIn: "1h",
+      const accessToken = jwt.sign(user, JWT_SECRET, {
+        expiresIn: "1d",
       });
-      res.cookie("jwt", token, { httpOnly: true, secure: true });
-      const refreshToken = jwt.sign({ id: user.id }, REFRESH_TOKEN_SECRET, {
-        expiresIn: "30d",
+      res.cookie("accessToken", accessToken, {
+        httpOnly: true,
+        secure: true,
       });
+      const refreshToken = jwt.sign(
+        { user_id: user.id },
+        REFRESH_TOKEN_SECRET,
+        {
+          expiresIn: "30d",
+        }
+      );
       res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
         secure: true,
       });
+
+      try {
+        const encodedRefreshToken = helpers.encrypt(refreshToken);
+        loggedInUser.createUserToken({
+          user_id: loggedInUser.id,
+          refresh: encodedRefreshToken,
+        });
+      } catch (error) {
+        console.error("Error creating new token:", error);
+      }
+
       res.redirect(process.env.FRONTEND_ORIGIN);
     }
   });
@@ -218,81 +201,103 @@ async function main() {
     if (!refreshToken) {
       return res.status(403).json({ error: "No refresh token provided" });
     }
-    // Verify refresh token and issue new JWT
-    const decoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET);
-    if (decoded.err) {
-      return res.status(403).json({ error: "Invalid refresh token" });
-    }
     try {
+      const decoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET);
+
       let loggedInUser = await User.findOne({
-        where: { id: decoded.id },
+        where: { id: decoded.user_id },
       });
-      const user = {
-        id: loggedInUser.id,
-        name: loggedInUser.name,
-        email: loggedInUser.email,
-        picture: loggedInUser.picture,
-      };
-      const newToken = jwt.sign(user, JWT_SECRET, {
-        expiresIn: "1h",
-      });
-      res.cookie("jwt", newToken, { httpOnly: true, secure: true });
-      res.status(200).json({ user });
+      if (!loggedInUser) {
+        res.status(403).send("User not found");
+      } else {
+        const userTokens = await loggedInUser.getUserTokens();
+        let found = false;
+        userTokens.forEach((token) => {
+          const tokenDecrypted = helpers.decrypt(token.refresh);
+          if (refreshToken === tokenDecrypted) {
+            found = true;
+          }
+        });
+        if (!found || new Date(decoded.exp * 1000) < new Date(Date.now())) {
+          res.status(403).send("Expired or invalid token");
+        } else {
+          const user = {
+            id: loggedInUser.id,
+            name: loggedInUser.name,
+            email: loggedInUser.email,
+            picture: loggedInUser.picture,
+          };
+          const newToken = jwt.sign(user, JWT_SECRET, {
+            expiresIn: "1d",
+          });
+          res.cookie("accessToken", newToken, { httpOnly: true, secure: true });
+          res.status(200).json({ user });
+        }
+      }
     } catch (err) {
-      res.status(403).json({ error: "User not found" });
+      console.log("Error verifying refresh token:", err);
+      res.status(403).send("Invalid or expired token");
     }
   });
 
   // Example on revoking a token
   app.get("/api/revoke", async (req, res) => {
-    const token = req.cookies.jwt;
-    let postData = "token=";
+    const refreshToken = req.cookies.refreshToken;
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      if (decoded.err) {
-        return res.status(403).json({ error: "Invalid token" });
-      }
+      const reqDecoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET);
       const loggedInUser = await User.findOne({
-        where: { id: decoded.id },
+        where: { id: reqDecoded.user_id },
       });
-      const userTokens = await loggedInUser.getUserTokens();
-      userTokens.forEach((token) => {
-        if (helpers.decrypt(token.jwt) === decoded) {
-          postData += token.access;
-          token.destroy();
-        }
-      });
+      if (loggedInUser) {
+        const userTokens = await loggedInUser.getUserTokens();
+        userTokens.forEach((token) => {
+          const dbTokenDecrypted = helpers.decrypt(token.refresh);
+          if (refreshToken === dbTokenDecrypted) {
+            token.destroy();
+          }
+        });
+      }
     } catch (e) {
+      console.log("Error decoding JWT:", e);
       res.status(403).json({ error: "User not found" });
     }
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: true,
+    });
+    res.clearCookie("accessToken", {
+      httpOnly: true,
+      secure: true,
+    });
+    res.status(200).json({ message: "Tokens revoked successfully" });
 
     // Options for POST request to Google's OAuth 2.0 server to revoke a token
-    const postOptions = {
-      host: "oauth2.googleapis.com",
-      port: "443",
-      path: "/api/revoke",
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Content-Length": Buffer.byteLength(postData),
-      },
-    };
+    // const postOptions = {
+    //   host: "oauth2.googleapis.com",
+    //   port: "443",
+    //   path: "/revoke",
+    //   method: "POST",
+    //   headers: {
+    //     "Content-Type": "application/x-www-form-urlencoded",
+    //     "Content-Length": Buffer.byteLength(postData),
+    //   },
+    // };
 
-    // Set up the request
-    const postReq = https.request(postOptions, function (res) {
-      res.setEncoding("utf8");
-      res.on("data", (d) => {
-        console.log("Response: " + d);
-      });
-    });
+    // // Set up the request
+    // const postReq = https.request(postOptions, function (res) {
+    //   res.setEncoding("utf8");
+    //   res.on("data", (d) => {
+    //     console.log("Response: " + d);
+    //   });
+    // });
 
-    postReq.on("error", (error) => {
-      console.log(error);
-    });
+    // postReq.on("error", (error) => {
+    //   console.log(error);
+    // });
 
-    // Post the request with data
-    postReq.write(postData);
-    postReq.end();
+    // // Post the request with data
+    // postReq.write(postData);
+    // postReq.end();
   });
 
   app.use("/api/drafts", draftRoutes);
@@ -303,9 +308,7 @@ async function main() {
     const key = await readFile("./localhost+2-key.pem");
     const cert = await readFile("./localhost+2.pem");
     server = https.createServer({ key, cert }, app);
-    console.log("development environment");
   } else {
-    console.log("production environment");
     server = http.createServer(app);
   }
   const io = new Server(server, {
@@ -317,9 +320,45 @@ async function main() {
     },
   });
 
+  io.use(async (socket, next) => {
+    const handshake = socket.handshake;
+    const cookieHeader = handshake.headers.cookie;
+
+    if (cookieHeader) {
+      try {
+        console.log(cookieHeader.split("; "));
+        console.log(
+          cookieHeader.split("; ").find((c) => c.startsWith("accessToken="))
+        );
+        const token = cookieHeader
+          .split("; ")
+          .find((c) => c.startsWith("accessToken="));
+
+        if (token) {
+          const decoded = jwt.verify(
+            token.replace(/^accessToken=/, ""),
+            JWT_SECRET
+          );
+          const loggedInUser = await User.findOne({
+            where: { id: decoded.id },
+          });
+
+          if (loggedInUser) {
+            socket.user = loggedInUser;
+            return next();
+          }
+        }
+      } catch (err) {
+        console.error("Error authenticating Socket.IO connection:", err);
+        return next();
+      }
+    }
+    console.log("No valid token found in cookies");
+    next();
+  });
+
   io.on("connection", (socket) => {
     console.log(`New client connected: ${socket.id}`);
-    const request = socket.request;
     socket.on("newDraft", async (data) => {
       try {
         if ("id" in data && data.picks.length === 20) {
@@ -347,21 +386,7 @@ async function main() {
 
     // Broadcast to a room
     socket.on("newMessage", async (req) => {
-      console.log("New message received:", req);
-      let username = socket.id;
-      try {
-        const token = request.headers.cookie
-          .split("; ")
-          .find((c) => c.startsWith("jwt="))
-          .replace(/^jwt=/, "");
-        const decoded = jwt.verify(token, JWT_SECRET);
-        const loggedInUser = await User.findOne({
-          where: { id: decoded.id },
-        });
-        username = loggedInUser.name;
-      } catch (err) {
-        username = socket.id;
-      }
+      const username = socket.user ? socket.user.name : socket.id;
       io.to(req.room).emit("chatMessage", {
         username,
         socketId: socket.id,

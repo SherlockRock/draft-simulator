@@ -26,56 +26,53 @@ import Chat from "./Chat";
 import { useUser } from "./userProvider";
 import { fetchDraft } from "./utils/actions";
 
+const handleFetch = async (id: string) => {
+    const draft = await fetchDraft(id);
+    if (draft === null) {
+        return { picks: [...Array(20)].map(() => ""), id: "" };
+    } else if ("id" in draft) {
+        return draft;
+    }
+    return draft[0];
+};
+
 function Draft() {
     const params = useParams();
     const navigate = useNavigate();
     const accessor = useUser();
-    const socket = accessor()[2];
+    const socketAccessor = accessor()[2];
     const [searchWord, setSearchWord] = createSignal("");
     const [selectedChampion, setSelectedChampion] = createSignal("");
     const [currentlySorting, setCurrentlySorting] = createSignal("");
     const [dropdownOpen, setDropdownOpen] = createSignal(false);
     const [dropdownIndex, setDropdownIndex] = createSignal(0);
-    const handleFetch = async (id: string) => {
-        const draft = await fetchDraft(id);
-        if (draft === null) {
-            return { picks: [...Array(20)].map(() => ""), id: "" };
-        } else if ("id" in draft) {
-            // Join a room
-            socket.emit("joinRoom", draft.id);
-            console.log("Joined room:", draft.id);
-            return draft;
-        }
-        // Join a room
-        socket.emit("joinRoom", draft[0].id);
-        console.log("Joined room:", draft.id);
-        return draft[0];
-    };
     const [draft, { mutate }] = createResource(
         () => (params.session !== undefined ? String(params.session) : ""),
         handleFetch
     );
 
-    // Handle Socket.IO events
     createEffect(() => {
         const holdDraft = draft();
         if (holdDraft !== undefined && holdDraft.picks.length !== 0) {
             navigate(`/${draft().id}`);
+            socketAccessor().emit("joinRoom", holdDraft.id);
         }
     });
 
-    socket.on("draftUpdate", (data: { picks: string[] }) => {
-        if (data.picks.length !== 0) {
-            mutate((old) => ({
-                ...old,
-                picks: [...data.picks]
-            }));
-        }
-    });
-
-    onCleanup(() => {
-        socket.off("draftUpdate");
-        socket.disconnect();
+    createEffect(() => {
+        socketAccessor().on("draftUpdate", (data: { picks: string[] }) => {
+            console.log("Draft update received:", data);
+            if (data.picks.length !== 0) {
+                console.log("mutating draft with picks:", data.picks);
+                mutate((old) => ({
+                    ...old,
+                    picks: [...data.picks]
+                }));
+            }
+        });
+        onCleanup(() => {
+            socketAccessor().off("draftUpdate");
+        });
     });
 
     const handleSearch = (
@@ -117,7 +114,7 @@ function Draft() {
             picks: [...holdPicks]
         }));
         setSelectedChampion("");
-        socket.emit("newDraft", {
+        socketAccessor().emit("newDraft", {
             picks: holdPicks,
             id: params.session
         });
@@ -439,8 +436,8 @@ function Draft() {
                     </Match>
                 </Switch>
             </Suspense>
-            <DraftList currentDraft={draft()?.id} />
-            <Chat currentDraft={draft()?.id} />
+            <DraftList currentDraft={draft()?.id} socket={socketAccessor()} />
+            <Chat currentDraft={draft()?.id} socket={socketAccessor()} />
         </div>
     );
 }

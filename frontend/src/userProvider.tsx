@@ -3,38 +3,69 @@ import {
     createContext,
     createMemo,
     createResource,
-    useContext
+    onMount,
+    useContext,
+    onCleanup,
+    JSX,
+    createEffect,
+    createSignal
 } from "solid-js";
-import { JSX } from "solid-js";
-import { AnonSocketProvider, useAnonSocket } from "./anonSocketProvider";
-import { SocketProvider, useSocket } from "./socketProvider";
 import { fetchUserDetails } from "./utils/actions";
+import { io, Socket } from "socket.io-client";
+
+const createAnonymousSocket = () => io(import.meta.env.VITE_API_URL);
+const createAuthenticatedSocket = () =>
+    io(import.meta.env.VITE_API_URL, { withCredentials: true });
 
 const UserContext = createContext<Accessor<Array<any>>>();
 
 export function UserProvider(props: { children: JSX.Element }) {
-    const socket = useSocket();
-    const anonSocket = useAnonSocket();
-    const [user, { mutate }] = createResource(fetchUserDetails);
+    const [user, { mutate, refetch }] = createResource(fetchUserDetails);
+    const [currentSocket, setCurrentSocket] = createSignal<Socket | undefined>(undefined);
+    const logout = () => {
+        mutate(undefined);
+    };
     const holdUser = createMemo(() => [
         user,
         {
-            logout() {
-                mutate(undefined);
-            }
+            logout
         },
-        user() !== undefined ? socket : anonSocket
+        currentSocket
     ]);
 
-    return (
-        <UserContext.Provider value={holdUser}>
-            {user() !== undefined ? (
-                <SocketProvider>{props.children}</SocketProvider>
-            ) : (
-                <AnonSocketProvider>{props.children}</AnonSocketProvider>
-            )}
-        </UserContext.Provider>
-    );
+    // createEffect to manage the socket instance based on user changes
+    createEffect(() => {
+        const currentUser = user();
+        let newSocket: Socket | undefined;
+        if (currentUser) {
+            newSocket = createAuthenticatedSocket();
+        } else {
+            newSocket = createAnonymousSocket();
+        }
+        setCurrentSocket(newSocket);
+
+        onCleanup(() => {
+            console.log("Cleaning up effect, disconnecting socket:", newSocket?.id);
+            if (newSocket && newSocket.connected) {
+                newSocket.disconnect();
+            }
+        });
+    });
+
+    onMount(() => {
+        const interval = setInterval(
+            () => {
+                refetch();
+            },
+            24 * 60 * 60 * 1000 // 24 hours in milliseconds
+        );
+
+        onCleanup(() => {
+            clearInterval(interval);
+        });
+    });
+
+    return <UserContext.Provider value={holdUser}>{props.children}</UserContext.Provider>;
 }
 
 export function useUser() {
