@@ -243,7 +243,16 @@ async function main() {
   // Example on revoking a token
   app.get("/api/revoke", async (req, res) => {
     const refreshToken = req.cookies.refreshToken;
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: true,
+    });
+    res.clearCookie("accessToken", {
+      httpOnly: true,
+      secure: true,
+    });
     try {
+      console.log("Revoking token:", refreshToken);
       const reqDecoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET);
       const loggedInUser = await User.findOne({
         where: { id: reqDecoded.user_id },
@@ -257,19 +266,11 @@ async function main() {
           }
         });
       }
+      res.status(200).json({ message: "Tokens revoked successfully" });
     } catch (e) {
       console.log("Error decoding JWT:", e);
       res.status(403).json({ error: "User not found" });
     }
-    res.clearCookie("refreshToken", {
-      httpOnly: true,
-      secure: true,
-    });
-    res.clearCookie("accessToken", {
-      httpOnly: true,
-      secure: true,
-    });
-    res.status(200).json({ message: "Tokens revoked successfully" });
 
     // Options for POST request to Google's OAuth 2.0 server to revoke a token
     // const postOptions = {

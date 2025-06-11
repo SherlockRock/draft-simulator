@@ -29,7 +29,8 @@ function Chat(props: props) {
     });
 
     createEffect(() => {
-        props.socket.on(
+        const holdSocket = props.socket;
+        holdSocket.on(
             "chatMessage",
             (newMessage: { username: string; chat: string; socketId: string }) => {
                 console.log("Received message:", newMessage);
@@ -40,7 +41,7 @@ function Chat(props: props) {
         );
 
         onCleanup(() => {
-            props.socket.off("chatMessage");
+            holdSocket.off("chatMessage");
         });
     });
 
