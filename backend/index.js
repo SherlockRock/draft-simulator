@@ -333,7 +333,7 @@ async function main() {
         const token = cookieHeader
           .split("; ")
           .find((c) => c.startsWith("accessToken="));
-
+        console.log("Token found:", token);
         if (token) {
           const decoded = jwt.verify(
             token.replace(/^accessToken=/, ""),
@@ -392,6 +392,10 @@ async function main() {
         socketId: socket.id,
         chat: req.message,
       });
+    });
+
+    socket.on("disconnect", () => {
+      console.log(`Client disconnected: ${socket.id}`);
     });
   });
 
