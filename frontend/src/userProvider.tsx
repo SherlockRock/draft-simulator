@@ -13,9 +13,19 @@ import {
 import { fetchUserDetails } from "./utils/actions";
 import { io, Socket } from "socket.io-client";
 
-const createAnonymousSocket = () => io(import.meta.env.VITE_API_URL);
+const socketOptions = {
+    pingInterval: 25000,
+    pingTimeout: 5000,
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000
+};
+const socketUrl = import.meta.env.VITE_API_URL;
+
+const createAnonymousSocket = () => io(socketUrl, socketOptions);
 const createAuthenticatedSocket = () =>
-    io(import.meta.env.VITE_API_URL, { withCredentials: true });
+    io(socketUrl, { ...socketOptions, withCredentials: true });
 
 const UserContext = createContext<Accessor<Array<any>>>();
 

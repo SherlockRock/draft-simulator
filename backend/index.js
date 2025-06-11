@@ -319,6 +319,8 @@ async function main() {
       methods: ["GET", "POST"],
       credentials: true,
     },
+    pingInterval: 25000, // Send a ping every 25 seconds
+    pingTimeout: 5000, // If no pong received within 5 seconds, consider the connection dead
   });
 
   io.use(async (socket, next) => {
