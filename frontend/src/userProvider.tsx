@@ -13,6 +13,8 @@ import {
 import { fetchUserDetails } from "./utils/actions";
 import { io, Socket } from "socket.io-client";
 
+type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
+
 const socketOptions = {
     pingInterval: 25000,
     pingTimeout: 5000,
@@ -32,6 +34,8 @@ const UserContext = createContext<Accessor<Array<any>>>();
 export function UserProvider(props: { children: JSX.Element }) {
     const [user, { mutate, refetch }] = createResource(fetchUserDetails);
     const [currentSocket, setCurrentSocket] = createSignal<Socket | undefined>(undefined);
+    const [connectionStatus, setConnectionStatus] =
+        createSignal<ConnectionStatus>("connecting"); // New signal for status
     const logout = () => {
         mutate(undefined);
     };
@@ -40,7 +44,8 @@ export function UserProvider(props: { children: JSX.Element }) {
         {
             logout
         },
-        currentSocket
+        currentSocket,
+        connectionStatus
     ]);
 
     // createEffect to manage the socket instance based on user changes
@@ -52,12 +57,49 @@ export function UserProvider(props: { children: JSX.Element }) {
         } else {
             newSocket = createAnonymousSocket();
         }
+
+        newSocket.on("connect", () => {
+            console.log("Socket.IO: Connected! ID:", newSocket.id);
+            setConnectionStatus("connected");
+        });
+
+        newSocket.on("disconnect", (reason) => {
+            console.warn("Socket.IO: Disconnected! Reason:", reason);
+            setConnectionStatus("disconnected");
+        });
+
+        newSocket.on("connect_error", (err) => {
+            console.error("Socket.IO: Connection Error!", err.message);
+            setConnectionStatus("error");
+        });
+
+        newSocket.on("reconnect", (attemptNumber) => {
+            console.log("Socket.IO: Reconnected!", attemptNumber);
+            setConnectionStatus("connected"); // Back to connected
+        });
+
+        newSocket.on("reconnecting", (attemptNumber) => {
+            console.log("Socket.IO: Reconnecting...", attemptNumber);
+            setConnectionStatus("connecting"); // Explicitly show reconnecting
+        });
+
+        newSocket.on("reconnect_failed", () => {
+            console.error("Socket.IO: Reconnection Failed Permanently!");
+            setConnectionStatus("error"); // Permanent failure
+        });
+
         setCurrentSocket(newSocket);
 
         onCleanup(() => {
             console.log("Cleaning up effect, disconnecting socket:", newSocket?.id);
             if (newSocket && newSocket.connected) {
                 newSocket.disconnect();
+                newSocket.off("disconnect");
+                newSocket.off("connect_error");
+                newSocket.off("reconnect");
+                newSocket.off("reconnecting");
+                newSocket.off("reconnect_failed");
+                newSocket.off("connect");
             }
         });
     });
