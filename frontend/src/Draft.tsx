@@ -5,7 +5,8 @@ import {
     createMemo,
     createSignal,
     createEffect,
-    createResource,
+    Resource,
+    Setter,
     Suspense,
     Switch,
     Match
@@ -21,22 +22,14 @@ import {
 } from "./utils/constants";
 import KeyEvent, { Key } from "./KeyEvent";
 import { useNavigate, useParams } from "@solidjs/router";
-import DraftList from "./DraftList";
-import Chat from "./Chat";
 import { useUser } from "./userProvider";
-import { fetchDraft } from "./utils/actions";
 
-const handleFetch = async (id: string) => {
-    const draft = await fetchDraft(id);
-    if (draft === null) {
-        return { picks: [...Array(20)].map(() => ""), id: "" };
-    } else if ("id" in draft) {
-        return draft;
-    }
-    return draft[0];
+type props = {
+    draft: Resource<any>;
+    mutate: Setter<any>;
 };
 
-function Draft() {
+function Draft(props: props) {
     const params = useParams();
     const navigate = useNavigate();
     const accessor = useUser();
@@ -46,15 +39,11 @@ function Draft() {
     const [currentlySorting, setCurrentlySorting] = createSignal("");
     const [dropdownOpen, setDropdownOpen] = createSignal(false);
     const [dropdownIndex, setDropdownIndex] = createSignal(0);
-    const [draft, { mutate }] = createResource(
-        () => (params.session !== undefined ? String(params.session) : ""),
-        handleFetch
-    );
 
     createEffect(() => {
-        const holdDraft = draft();
+        const holdDraft = props.draft();
         if (holdDraft !== undefined && holdDraft.picks.length !== 0) {
-            navigate(`/${draft().id}`);
+            navigate(`/${props.draft().id}`);
             socketAccessor().emit("joinRoom", holdDraft.id);
         }
     });
@@ -64,7 +53,7 @@ function Draft() {
             console.log("Draft update received:", data);
             if (data.picks.length !== 0) {
                 console.log("mutating draft with picks:", data.picks);
-                mutate((old) => ({
+                props.mutate((old) => ({
                     ...old,
                     picks: [...data.picks]
                 }));
@@ -107,9 +96,9 @@ function Draft() {
     };
 
     const handlePick = (index: number) => {
-        const holdPicks = [...draft().picks];
+        const holdPicks = [...props.draft().picks];
         holdPicks[index] = selectedChampion();
-        mutate((old) => ({
+        props.mutate((old) => ({
             ...old,
             picks: [...holdPicks]
         }));
@@ -123,7 +112,7 @@ function Draft() {
     const tableClass = (champ: string) => {
         if (selectedChampion() === champ) {
             return "border-2 border-blue-700 hover:cursor-pointer";
-        } else if (draft().picks.includes(champ)) {
+        } else if (props.draft().picks.includes(champ)) {
             return "border-2 border-gray-950 brightness-[30%]";
         }
         return "border-2 border-black hover:cursor-pointer";
@@ -131,12 +120,12 @@ function Draft() {
 
     const picksAndBansClass = (champ: string) => {
         return champ === "" && selectedChampion() === ""
-            ? "h-[120px] w-[120px] border-4 border-gray-800"
-            : "h-[120px] w-[120px] border-4 border-gray-800 hover:cursor-pointer";
+            ? "aspect-square w-[min(8vw,120px)] border-4 border-gray-800"
+            : "aspect-square w-[min(8vw,120px)] border-4 border-gray-800 hover:cursor-pointer";
     };
 
     const handleSelectedChamp = (champ: string) => {
-        if (!draft().picks.includes(champ)) {
+        if (!props.draft().picks.includes(champ)) {
             setSelectedChampion(champ);
         }
     };
@@ -229,10 +218,10 @@ function Draft() {
         <div class="flex h-full w-full flex-col p-2">
             <Suspense fallback={<div>Loading...</div>}>
                 <Switch>
-                    <Match when={draft.error}>
-                        <span>Error: {draft.error.message}</span>
+                    <Match when={props.draft.error}>
+                        <span>Error: {props.draft.error.message}</span>
                     </Match>
-                    <Match when={draft()}>
+                    <Match when={props.draft()}>
                         <KeyEvent
                             onKeyUp={handleKeyEvent}
                             keys={["Enter", "ArrowUp", "ArrowDown", "Escape"]}
@@ -240,7 +229,7 @@ function Draft() {
                         <div class="flex w-full justify-center self-center">
                             <div class="flex w-full justify-evenly gap-1 self-center">
                                 {/* All 10 bans */}
-                                <Index each={draft().picks.slice(0, 10)}>
+                                <Index each={props.draft().picks.slice(0, 10)}>
                                     {(each, index) => (
                                         <>
                                             <div
@@ -250,7 +239,7 @@ function Draft() {
                                                 <img src={champNumberToImg(each())} />
                                             </div>
                                             {index === 4 && (
-                                                <div class="inline-block h-[120px] min-h-[1em] w-0.5 self-stretch bg-neutral-100 opacity-100 dark:opacity-50" />
+                                                <div class="inline-block min-h-max w-0.5 self-stretch bg-neutral-100 opacity-100 dark:opacity-50" />
                                             )}
                                         </>
                                     )}
@@ -260,7 +249,7 @@ function Draft() {
                         <div class="flex w-full justify-center self-center pt-4">
                             <div class="flex flex-col justify-between gap-1">
                                 {/* Blue Side Champions */}
-                                <Index each={draft().picks.slice(10, 15)}>
+                                <Index each={props.draft().picks.slice(10, 15)}>
                                     {(each, index) => (
                                         <div
                                             class={picksAndBansClass(each())}
@@ -271,7 +260,7 @@ function Draft() {
                                     )}
                                 </Index>
                             </div>
-                            <div class="mx-4 w-[600px]">
+                            <div class="mx-4 w-[min(80vw,600px)]">
                                 <div class="flex">
                                     <input
                                         class="w-full bg-gray-950 p-1 text-white focus:outline-none"
@@ -280,31 +269,6 @@ function Draft() {
                                         onInput={handleSearch}
                                         placeholder="Search Champions..."
                                     />
-                                    {/* <img
-              class="h-8 hover:cursor-pointer"
-              src="/src/assets/icon-position-top.webp"
-              onClick={() => setCurrentlySorting("top")}
-            />
-            <img
-              class="h-8 hover:cursor-pointer"
-              src="/src/assets/icon-position-jungle.webp"
-              onClick={() => setCurrentlySorting("jungle")}
-            />
-            <img
-              class="h-8 hover:cursor-pointer"
-              src="/src/assets/icon-position-middle.webp"
-              onClick={() => setCurrentlySorting("mid")}
-            />
-            <img
-              class="h-8 hover:cursor-pointer"
-              src="/src/assets/icon-position-bottom.webp"
-              onClick={() => setCurrentlySorting("bot")}
-            />
-            <img
-              class="h-8 hover:cursor-pointer"
-              src="/src/assets/icon-position-support.webp"
-              onClick={() => setCurrentlySorting("support")}
-            /> */}
                                     <div
                                         class="mx-auto max-w-md"
                                         onFocusOut={closeDropdown}
@@ -400,7 +364,7 @@ function Draft() {
                                         </div>
                                     </div>
                                 </div>
-                                <div class="h-[600px] overflow-auto">
+                                <div class="h-[70vh] overflow-auto">
                                     <div class="z-0 grid grid-cols-5">
                                         {/* Table Search Results */}
                                         <For each={holdChamps()}>
@@ -421,7 +385,7 @@ function Draft() {
                             </div>
                             <div class="flex flex-col justify-between gap-1">
                                 {/* Red Side Champions */}
-                                <Index each={draft().picks.slice(15, 20)}>
+                                <Index each={props.draft().picks.slice(15, 20)}>
                                     {(each, index) => (
                                         <div
                                             class={picksAndBansClass(each())}
@@ -436,8 +400,6 @@ function Draft() {
                     </Match>
                 </Switch>
             </Suspense>
-            <DraftList currentDraft={draft()?.id} socket={socketAccessor()} />
-            <Chat currentDraft={draft()?.id} socket={socketAccessor()} />
         </div>
     );
 }

@@ -73,33 +73,35 @@ function Chat(props: props) {
     };
 
     return (
-        <div class="flex flex-col items-center justify-center text-white">
-            <div class="w-full bg-gray-800 p-4 shadow-lg">
-                <div class="mb-4 h-64 overflow-y-auto rounded-md bg-gray-700 p-2">
+        <div class="flex h-full flex-col">
+            <div class="mb-2 text-sm font-medium text-slate-100">Chat</div>
+            <div class="flex flex-1 flex-col rounded border border-gray-700 bg-gray-800">
+                <div class="flex-1 overflow-y-auto p-2">
                     <For each={messages()}>
                         {(msg) => (
-                            <div class="mb-2 flex text-wrap ">
-                                <span class="text-sm font-semibold text-blue-400">
+                            <div class="mb-2 flex flex-wrap text-sm">
+                                <span class="font-medium text-blue-400">
                                     {msg.username}:
                                 </span>
-                                <span class="pl-1 text-sm text-slate-100">
-                                    {msg.chat}
-                                </span>
+                                <span class="pl-1 text-slate-100">{msg.chat}</span>
                             </div>
                         )}
                     </For>
                 </div>
-                <form class="flex items-center" onSubmit={sendMessage}>
+                <form
+                    class="flex items-center border-t border-gray-700 p-2"
+                    onSubmit={sendMessage}
+                >
                     <input
                         type="text"
                         placeholder="Type a message..."
-                        class="flex-1 rounded-l-md border-none bg-gray-700 px-3 py-2 text-sm text-slate-100 focus:outline-none"
+                        class="flex-1 rounded-l-md border-none bg-gray-700 px-3 py-1 text-sm text-slate-100 focus:outline-none"
                         value={message()}
                         onInput={(e) => setMessage(e.target.value)}
                     />
                     <button
                         type="submit"
-                        class="rounded-r-md bg-purple-800 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-purple-500"
+                        class="rounded-r-md bg-purple-800 px-3 py-1 text-sm font-medium text-slate-100 hover:bg-purple-700"
                     >
                         Send
                     </button>
