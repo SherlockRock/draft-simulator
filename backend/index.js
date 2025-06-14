@@ -73,6 +73,11 @@ async function main() {
       store: sessionStore, // Use the Sequelize store
       resave: false,
       saveUninitialized: true,
+      cookie: {
+        secure: true,
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000, // Session max age (e.g., 24 hours)
+      },
     })
   );
 
@@ -120,6 +125,7 @@ async function main() {
       console.log("State mismatch. Possible CSRF attack");
       res.end("State mismatch. Possible CSRF attack");
     } else {
+      console.log("made it to start of oauth2callback");
       let { tokens } = await oauth2Client.getToken(q.code);
       oauth2Client.setCredentials(tokens);
       const ticket = await oauth2Client.verifyIdToken({
@@ -204,6 +210,7 @@ async function main() {
   });
 
   app.get("/api/refresh-token", async (req, res) => {
+    console.log(req.cookies);
     const refreshToken = req.cookies.refreshToken;
     if (!refreshToken) {
       return res.status(403).json({ error: "No refresh token provided" });
