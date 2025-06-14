@@ -73,13 +73,6 @@ async function main() {
       store: sessionStore, // Use the Sequelize store
       resave: false,
       saveUninitialized: true,
-      cookie: {
-        secure: process.env.ENVIRONMENT === "production",
-        httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000, // Session max age (e.g., 24 hours)
-        secure: true,
-        sameSite: "none",
-      },
     })
   );
 
