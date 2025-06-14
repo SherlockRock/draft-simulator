@@ -74,7 +74,7 @@ async function main() {
       resave: false,
       saveUninitialized: true,
       cookie: {
-        secure: process.env.NODE_ENV === "production",
+        secure: process.env.ENVIRONMENT === "production",
         httpOnly: true,
         maxAge: 24 * 60 * 60 * 1000, // Session max age (e.g., 24 hours)
       },
