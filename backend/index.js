@@ -62,6 +62,8 @@ async function main() {
   //   "https://www.googleapis.com/auth/userinfo.profile",
   // ];
 
+  app.set("trust proxy", 1);
+
   const sessionStore = new SequelizeStore({
     db: sequelize, // Your already initialized sequelize instance
     tableName: "Sessions", // Optional: customize table name
@@ -77,6 +79,7 @@ async function main() {
         secure: true,
         httpOnly: true,
         maxAge: 24 * 60 * 60 * 1000, // Session max age (e.g., 24 hours)
+        sameSite: "none",
       },
     })
   );
