@@ -4,6 +4,7 @@ const GoogleStrategy = require("passport-google-oauth20").Strategy;
 const cookieParser = require("cookie-parser");
 const session = require("express-session");
 const sequelize = require("./config/database");
+const SequelizeStore = require("connect-session-sequelize")(session.Store);
 const jwt = require("jsonwebtoken");
 const https = require("https");
 const http = require("http");
@@ -61,11 +62,22 @@ async function main() {
   //   "https://www.googleapis.com/auth/userinfo.profile",
   // ];
 
+  const sessionStore = new SequelizeStore({
+    db: sequelize, // Your already initialized sequelize instance
+    tableName: "Sessions", // Optional: customize table name
+  });
+
   app.use(
     session({
       secret: process.env.SESSION_SECRET,
+      store: sessionStore, // Use the Sequelize store
       resave: false,
       saveUninitialized: true,
+      cookie: {
+        secure: process.env.NODE_ENV === "production",
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000, // Session max age (e.g., 24 hours)
+      },
     })
   );
 
