@@ -32,9 +32,9 @@ function DraftList(props: props) {
             text = index % 2 === 0 ? "text-gray-700" : "text-slate-100";
         }
         if (index % 2 === 0) {
-            return `${text} flex justify-between bg-slate-100`;
+            return `${text} flex w-full justify-between bg-slate-100`;
         }
-        return `${text} flex justify-between bg-gray-700`;
+        return `${text} flex w-full justify-between bg-gray-700`;
     };
 
     return (

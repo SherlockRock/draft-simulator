@@ -95,7 +95,7 @@ function Chat(props: props) {
                     <input
                         type="text"
                         placeholder="Type a message..."
-                        class="flex-1 rounded-l-md border-none bg-gray-700 px-3 py-1 text-sm text-slate-100 focus:outline-none"
+                        class="w-40 flex-1 rounded-l-md border-none bg-gray-700 px-3 py-1 text-sm text-slate-100 focus:outline-none"
                         value={message()}
                         onInput={(e) => setMessage(e.target.value)}
                     />

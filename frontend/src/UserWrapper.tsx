@@ -6,7 +6,7 @@ import Chat from "./Chat";
 import DraftList from "./DraftList";
 import { useParams } from "@solidjs/router";
 import { useUser } from "./userProvider";
-import { createResource } from "solid-js";
+import { createResource, createSignal } from "solid-js";
 import { fetchDraft } from "./utils/actions";
 
 const handleFetch = async (id: string) => {
@@ -23,6 +23,7 @@ const Layout = () => {
     const params = useParams();
     const accessor = useUser();
     const socketAccessor = accessor()[2];
+    const [isExpanded, setIsExpanded] = createSignal(true);
     const [draft, { mutate }] = createResource(
         () => (params.session !== undefined ? String(params.session) : ""),
         handleFetch
@@ -31,16 +32,45 @@ const Layout = () => {
     return (
         <div class="flex h-screen">
             {/* Left Sidebar */}
-            <div class="flex w-[max(20vw,300px)] flex-col bg-purple-950">
-                <NavBar />
-                <div class="flex flex-1 flex-col overflow-y-auto p-4">
-                    <DraftList currentDraft={params.session} socket={socketAccessor()} />
-                    <div class="mt-4 flex-1">
-                        <Chat
-                            currentDraft={draft()?.id || ""}
-                            socket={socketAccessor()}
-                        />
+            <div
+                class={`flex flex-col bg-purple-950 transition-all duration-300 ${isExpanded() ? "w-[max(20vw,300px)]" : "w-6"}`}
+            >
+                <div class="flex h-full">
+                    <div
+                        class={`flex flex-1 flex-col overflow-hidden ${isExpanded() ? "w-full" : "w-0"}`}
+                    >
+                        <NavBar />
+                        <div class="flex flex-1 flex-col overflow-y-auto p-4">
+                            <DraftList
+                                currentDraft={params.session}
+                                socket={socketAccessor()}
+                            />
+                            <div class="mt-4 flex-1">
+                                <Chat
+                                    currentDraft={draft()?.id || ""}
+                                    socket={socketAccessor()}
+                                />
+                            </div>
+                        </div>
                     </div>
+                    <button
+                        onClick={() => setIsExpanded((prev) => !prev)}
+                        class="flex h-full w-6 items-center bg-purple-900 px-1 hover:bg-purple-700"
+                    >
+                        <svg
+                            class={`h-6  transform text-white transition-transform ${isExpanded() ? "rotate-0" : "rotate-180"}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M15 19l-7-7 7-7"
+                            />
+                        </svg>
+                    </button>
                 </div>
             </div>
 
