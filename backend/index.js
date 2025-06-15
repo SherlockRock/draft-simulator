@@ -167,6 +167,7 @@ async function main() {
       res.cookie("accessToken", accessToken, {
         httpOnly: true,
         secure: true,
+        sameSite: "none",
       });
       const refreshToken = jwt.sign(
         { user_id: user.id },
@@ -178,6 +179,7 @@ async function main() {
       res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
         secure: true,
+        sameSite: "none",
       });
 
       try {
@@ -247,7 +249,11 @@ async function main() {
           const newToken = jwt.sign(user, JWT_SECRET, {
             expiresIn: "1d",
           });
-          res.cookie("accessToken", newToken, { httpOnly: true, secure: true });
+          res.cookie("accessToken", newToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "none",
+          });
           res.status(200).json({ user });
         }
       }
@@ -263,10 +269,12 @@ async function main() {
     res.clearCookie("refreshToken", {
       httpOnly: true,
       secure: true,
+      sameSite: "none",
     });
     res.clearCookie("accessToken", {
       httpOnly: true,
       secure: true,
+      sameSite: "none",
     });
     try {
       console.log("Revoking token:", refreshToken);
