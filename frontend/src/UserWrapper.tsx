@@ -24,10 +24,28 @@ const Layout = () => {
     const accessor = useUser();
     const socketAccessor = accessor()[2];
     const [isExpanded, setIsExpanded] = createSignal(true);
+    const [childrenVisible, setChildrenVisible] = createSignal(true);
     const [draft, { mutate }] = createResource(
         () => (params.session !== undefined ? String(params.session) : ""),
         handleFetch
     );
+    let navTrayRef;
+
+    const handleNavTransitionEnd = (event: TransitionEvent) => {
+        if (event.target === navTrayRef) {
+            if (isExpanded()) {
+                setChildrenVisible(true);
+            }
+        }
+    };
+
+    const handleExpandMinimize = () => {
+        const expanded = isExpanded();
+        setIsExpanded(() => !expanded);
+        if (expanded) {
+            setChildrenVisible(false);
+        }
+    };
 
     return (
         <div class="flex h-screen">
@@ -37,24 +55,30 @@ const Layout = () => {
             >
                 <div class="flex h-full">
                     <div
-                        class={`flex flex-1 flex-col overflow-hidden ${isExpanded() ? "w-full" : "w-0"}`}
+                        ref={navTrayRef}
+                        class={`flex flex-1 flex-col transition-all duration-150 ${isExpanded() ? "w-full" : "w-0"}`}
+                        onTransitionEnd={handleNavTransitionEnd}
                     >
-                        <NavBar />
-                        <div class="flex flex-1 flex-col overflow-y-auto p-4">
-                            <DraftList
-                                currentDraft={params.session}
-                                socket={socketAccessor()}
-                            />
-                            <div class="mt-4 flex-1">
-                                <Chat
-                                    currentDraft={draft()?.id || ""}
+                        {childrenVisible() ? (
+                            <div
+                                class={`flex flex-1 flex-col px-4 ${isExpanded() ? "" : "hidden"}`}
+                            >
+                                <NavBar />
+                                <DraftList
+                                    currentDraft={params.session}
                                     socket={socketAccessor()}
                                 />
+                                <div class="flex-1 pb-7">
+                                    <Chat
+                                        currentDraft={draft()?.id || ""}
+                                        socket={socketAccessor()}
+                                    />
+                                </div>
                             </div>
-                        </div>
+                        ) : null}
                     </div>
                     <button
-                        onClick={() => setIsExpanded((prev) => !prev)}
+                        onClick={handleExpandMinimize}
                         class="flex h-full w-6 items-center bg-purple-900 px-1 hover:bg-purple-700"
                     >
                         <svg

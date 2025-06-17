@@ -38,7 +38,7 @@ function DraftList(props: props) {
     };
 
     return (
-        <div class="flex flex-col gap-2">
+        <div class="relative">
             <div class="flex items-center justify-between">
                 <button
                     class="flex items-center gap-2 text-slate-100"
@@ -47,7 +47,7 @@ function DraftList(props: props) {
                     <span>Draft History</span>
                     <svg
                         class={`h-4 w-4 transform transition-transform ${
-                            isExpanded() ? "rotate-180" : ""
+                            isExpanded() ? "" : "rotate-180"
                         }`}
                         fill="none"
                         stroke="currentColor"
@@ -69,7 +69,7 @@ function DraftList(props: props) {
                 </button>
             </div>
             {isExpanded() && (
-                <div class="max-h-48 overflow-y-auto rounded border border-gray-700">
+                <div class="absolute left-0 right-0 z-50 mt-1 max-h-48 w-[350px] rounded border border-gray-700 bg-white shadow-lg">
                     <ul>
                         <Index each={draftList()}>
                             {(each, index) => (
@@ -81,6 +81,7 @@ function DraftList(props: props) {
                                             props.currentDraft
                                         );
                                         navigate(`/${each().id}`);
+                                        setIsExpanded(false);
                                     }}
                                 >
                                     <p class="px-2 py-1">{each().id}</p>
