@@ -13,12 +13,12 @@ function NavBar() {
     };
 
     return (
-        <div class="flex flex-col gap-2 bg-purple-950 p-4">
+        <div class="flex flex-col gap-2 pt-4">
             {user() !== undefined && "name" in user() ? (
                 <div class="flex flex-col gap-2">
                     <p class="text-slate-100">Hello: {user().name}</p>
                     <button
-                        class="text-md rounded bg-blue-500 px-3 py-2 font-sans font-normal hover:bg-blue-600"
+                        class="text-md rounded-md bg-blue-500 px-3 py-2 font-sans font-normal hover:bg-blue-600"
                         onClick={handleLogOut}
                     >
                         Log out of Google
@@ -26,7 +26,7 @@ function NavBar() {
                 </div>
             ) : (
                 <button
-                    class="text-md rounded bg-blue-500 px-3 py-2 font-sans font-normal hover:bg-blue-600"
+                    class="text-md rounded-md bg-blue-500 px-3 py-2 font-sans font-normal hover:bg-blue-600"
                     onClick={handleLogin}
                 >
                     Login with Google

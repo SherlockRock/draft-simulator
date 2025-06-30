@@ -74,8 +74,8 @@ function Chat(props: props) {
 
     return (
         <div class="flex h-full flex-col">
-            <div class="mb-2 text-sm font-medium text-slate-100">Chat</div>
-            <div class="flex flex-1 flex-col rounded border border-gray-700 bg-gray-800">
+            <div class="mb-2 text-sm font-medium text-slate-100">Draft Chat</div>
+            <div class="flex flex-1 flex-col rounded-md border border-gray-700 bg-gray-800">
                 <div class="flex-1 overflow-y-auto p-2">
                     <For each={messages()}>
                         {(msg) => (
@@ -101,7 +101,7 @@ function Chat(props: props) {
                     />
                     <button
                         type="submit"
-                        class="rounded-r-md bg-purple-800 px-3 py-1 text-sm font-medium text-slate-100 hover:bg-purple-700"
+                        class="rounded-r-md bg-blue-500 px-3 py-1 text-sm font-medium text-slate-100 hover:bg-blue-600"
                     >
                         Send
                     </button>

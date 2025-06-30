@@ -7,17 +7,7 @@ import DraftList from "./DraftList";
 import { useParams } from "@solidjs/router";
 import { useUser } from "./userProvider";
 import { createResource, createSignal } from "solid-js";
-import { fetchDraft } from "./utils/actions";
-
-const handleFetch = async (id: string) => {
-    const draft = await fetchDraft(id);
-    if (draft === null) {
-        return { picks: [...Array(20)].map(() => ""), id: "" };
-    } else if ("id" in draft) {
-        return draft;
-    }
-    return draft[0];
-};
+import { fetchDefaultDraft } from "./utils/actions";
 
 const Layout = () => {
     const params = useParams();
@@ -27,7 +17,7 @@ const Layout = () => {
     const [childrenVisible, setChildrenVisible] = createSignal(true);
     const [draft, { mutate }] = createResource(
         () => (params.session !== undefined ? String(params.session) : ""),
-        handleFetch
+        fetchDefaultDraft
     );
     let navTrayRef;
 
@@ -48,10 +38,10 @@ const Layout = () => {
     };
 
     return (
-        <div class="flex h-screen">
+        <div class="flex h-screen gap-2">
             {/* Left Sidebar */}
             <div
-                class={`flex flex-col bg-purple-950 transition-all duration-300 ${isExpanded() ? "w-[max(20vw,300px)]" : "w-6"}`}
+                class={`flex flex-col bg-gray-950 transition-all duration-300 ${isExpanded() ? "w-[max(20vw,300px)]" : "w-6"}`}
             >
                 <div class="flex h-full">
                     <div
@@ -61,19 +51,20 @@ const Layout = () => {
                     >
                         {childrenVisible() ? (
                             <div
-                                class={`flex flex-1 flex-col px-4 ${isExpanded() ? "" : "hidden"}`}
+                                class={`flex flex-1 flex-col gap-4 px-4 ${isExpanded() ? "" : "hidden"}`}
                             >
                                 <NavBar />
                                 <DraftList
                                     currentDraft={params.session}
                                     socket={socketAccessor()}
                                 />
-                                <div class="flex-1 pb-7">
+                                <div class="flex-1">
                                     <Chat
                                         currentDraft={draft()?.id || ""}
                                         socket={socketAccessor()}
                                     />
                                 </div>
+                                <div class="pb-4 text-center text-slate-100">v0.0.1</div>
                             </div>
                         ) : null}
                     </div>
@@ -102,7 +93,6 @@ const Layout = () => {
             <div class="flex-1 overflow-y-auto">
                 <ConnectionBanner />
                 <Draft draft={draft} mutate={mutate} />
-                <div class="text-center text-slate-100">v0.0.1</div>
             </div>
         </div>
     );

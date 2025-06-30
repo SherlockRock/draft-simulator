@@ -20,9 +20,13 @@ export const postNewDraft = async () => {
 };
 
 export const fetchDraftList = async () => {
-    const res = await fetch(`${BASE_URL}/drafts`);
-    const hold = await res.json();
-    return hold;
+    const res = await fetch(`${BASE_URL}/drafts/dropdown`);
+    return await res.json();
+};
+
+export const fetchDefaultDraft = async (id?: string) => {
+    const res = await fetch(`${BASE_URL}/drafts${id !== undefined ? `/${id}` : ""}`);
+    return await res.json();
 };
 
 export const deleteDraft = async (id: string) => {
