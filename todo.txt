@@ -1,0 +1,11 @@
+Short Term:
+    Change share flow to have dropdown that displays link and coppy button
+    Use sockets to update draft detail changes
+    Add drag and drop to frontend champ select
+    Add ability to modify list of users who can view the draft
+
+Long Term:
+    VS draft
+    View multiple drafts at once
+    Friend Functionality
+    Add types

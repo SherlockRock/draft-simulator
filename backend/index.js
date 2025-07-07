@@ -15,6 +15,7 @@ const { Server } = require("socket.io");
 const cors = require("cors");
 const draftRoutes = require("./routes/drafts");
 const userRoutes = require("./routes/users");
+const shareRoutes = require("./routes/shares");
 const Draft = require("./models/Draft");
 const User = require("./models/User");
 const setupAssociations = require("./models/associations");
@@ -27,11 +28,6 @@ async function main() {
       await sequelize.authenticate();
       setupAssociations(sequelize);
       await sequelize.sync({ alter: true }); // Sync all defined models to the database
-      const count = await Draft.count();
-      if (count === 0) {
-        console.log("No drafts found, creating a new draft");
-        await Draft.create();
-      }
     } catch (error) {
       console.error("Unable to connect to the database:", error);
     }
@@ -196,24 +192,6 @@ async function main() {
     }
   });
 
-  // Protected route example
-  app.get("/api/user", async (req, res) => {
-    const token = req.cookies.jwt;
-    if (!token) {
-      return res.status(401).send("Unauthorized");
-    }
-
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      const loggedInUser = await User.findOne({
-        where: { id: decoded.id },
-      });
-      res.status(200).json({ user: loggedInUser });
-    } catch (err) {
-      res.status(403).send("Invalid or expired token");
-    }
-  });
-
   app.get("/api/refresh-token", async (req, res) => {
     console.log(req.cookies);
     const refreshToken = req.cookies.refreshToken;
@@ -328,6 +306,7 @@ async function main() {
 
   app.use("/api/drafts", draftRoutes);
   app.use("/api/users", userRoutes);
+  app.use("/api/shares", shareRoutes);
 
   let server;
   if (process.env.ENVIRONMENT === "development") {
@@ -354,14 +333,9 @@ async function main() {
 
     if (cookieHeader) {
       try {
-        console.log(cookieHeader.split("; "));
-        console.log(
-          cookieHeader.split("; ").find((c) => c.startsWith("accessToken="))
-        );
         const token = cookieHeader
           .split("; ")
           .find((c) => c.startsWith("accessToken="));
-        console.log("Token found:", token);
         if (token) {
           const decoded = jwt.verify(
             token.replace(/^accessToken=/, ""),
@@ -378,7 +352,7 @@ async function main() {
         }
       } catch (err) {
         console.error("Error authenticating Socket.IO connection:", err);
-        return next();
+        return next(new Error("Authentication error"));
       }
     }
     console.log("No valid token found in cookies");

@@ -6,8 +6,9 @@ import Chat from "./Chat";
 import DraftList from "./DraftList";
 import { useParams } from "@solidjs/router";
 import { useUser } from "./userProvider";
-import { createResource, createSignal } from "solid-js";
-import { fetchDefaultDraft } from "./utils/actions";
+import { createResource, createSignal, Show } from "solid-js";
+import { fetchDefaultDraft, fetchDraftList } from "./utils/actions";
+import CreateDraft from "./CreateDraft";
 
 const Layout = () => {
     const params = useParams();
@@ -15,10 +16,12 @@ const Layout = () => {
     const socketAccessor = accessor()[2];
     const [isExpanded, setIsExpanded] = createSignal(true);
     const [childrenVisible, setChildrenVisible] = createSignal(true);
-    const [draft, { mutate }] = createResource(
-        () => (params.session !== undefined ? String(params.session) : ""),
+    const [draft, { mutate: mutateDraft }] = createResource(
+        () => (params.session !== undefined ? String(params.session) : null),
         fetchDefaultDraft
     );
+    const [draftList, { mutate: mutateDraftList }] =
+        createResource<any[]>(fetchDraftList);
     let navTrayRef;
 
     const handleNavTransitionEnd = (event: TransitionEvent) => {
@@ -55,7 +58,10 @@ const Layout = () => {
                             >
                                 <NavBar />
                                 <DraftList
-                                    currentDraft={params.session}
+                                    currentDraft={draft()}
+                                    mutateDraft={mutateDraft}
+                                    draftList={draftList() || []}
+                                    mutateDraftList={mutateDraftList}
                                     socket={socketAccessor()}
                                 />
                                 <div class="flex-1">
@@ -92,7 +98,14 @@ const Layout = () => {
             {/* Main Content */}
             <div class="flex-1 overflow-y-auto">
                 <ConnectionBanner />
-                <Draft draft={draft} mutate={mutate} />
+                <Show
+                    when={draft()}
+                    fallback={
+                        <CreateDraft draftList={draftList} mutate={mutateDraftList} />
+                    }
+                >
+                    <Draft draft={draft} mutate={mutateDraft} />
+                </Show>
             </div>
         </div>
     );

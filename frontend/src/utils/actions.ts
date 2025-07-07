@@ -11,9 +11,13 @@ export const fetchDraft = async (id: string): Promise<any> => {
     return hold;
 };
 
-export const postNewDraft = async () => {
+export const postNewDraft = async (data: { name: string; public: boolean }) => {
     const res = await fetch(`${BASE_URL}/drafts`, {
-        method: "POST"
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(data)
     });
     const hold = await res.json();
     return hold;
@@ -24,8 +28,23 @@ export const fetchDraftList = async () => {
     return await res.json();
 };
 
-export const fetchDefaultDraft = async (id?: string) => {
-    const res = await fetch(`${BASE_URL}/drafts${id !== undefined ? `/${id}` : ""}`);
+export const fetchDefaultDraft = async (id: string | null) => {
+    if (!id) return null;
+    const res = await fetch(`${BASE_URL}/drafts/${id}`);
+    return await res.json();
+};
+
+export const editDraft = async (
+    id: string,
+    data: { name?: string; public?: boolean }
+) => {
+    const res = await fetch(`${BASE_URL}/drafts/${id}`, {
+        method: "PUT",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(data)
+    });
     return await res.json();
 };
 
@@ -35,6 +54,16 @@ export const deleteDraft = async (id: string) => {
     });
     return await res.json();
 };
+
+export const generateShareLink = async (draftId: string) => {
+    const res = await fetch(`${BASE_URL}/shares/${draftId}/generate-link`, {
+        method: "POST",
+        credentials: "include"
+    });
+    const { shareLink } = await res.json();
+    return shareLink;
+};
+
 // need to handle all cases where res.ok is false
 
 export const fetchUserDetails = async () => {

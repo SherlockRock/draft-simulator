@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Setter } from "solid-js";
+import { createMemo, createSignal, For, Setter, Show } from "solid-js";
 import KeyEvent, { Key } from "../KeyEvent";
 
 type props = {
@@ -11,7 +11,7 @@ type props = {
 export const SearchableSelect = (props: props) => {
     const [isFocused, setIsFocused] = createSignal(false);
     const [dropdownOpen, setDropdownOpen] = createSignal(false);
-    const [dropdownIndex, setDropdownIndex] = createSignal(0);
+    const [dropdownIndex, setDropdownIndex] = createSignal(-1);
 
     const openDropdown = () => {
         setDropdownOpen(true);
@@ -27,7 +27,6 @@ export const SearchableSelect = (props: props) => {
     };
 
     const onFocusIn = () => {
-        console.log("on focus in");
         setIsFocused(true);
         openDropdown();
     };
@@ -36,7 +35,7 @@ export const SearchableSelect = (props: props) => {
         if (!isFocused()) return;
         switch (key) {
             case "Enter":
-                if (dropdownOpen()) {
+                if (dropdownOpen() && dropdownIndex() >= 0) {
                     const hold = holdSortOptions();
                     props.setSelectText(hold[dropdownIndex() % hold.length]);
                     setDropdownOpen(false);
@@ -162,7 +161,7 @@ export const SearchableSelect = (props: props) => {
                 </label>
             </div>
             {dropdownOpen() && (
-                <div class="absolute z-10 w-full flex-col border border-t-0 border-blue-600">
+                <div class="absolute z-10 w-full flex-col rounded-md border border-t-0 border-blue-600">
                     <For each={holdSortOptions()}>
                         {(option, index) => (
                             <div
@@ -191,6 +190,9 @@ export const SearchableSelect = (props: props) => {
                             </div>
                         )}
                     </For>
+                    <Show when={holdSortOptions().length === 0}>
+                        <a class="block border-l-4 bg-gray-950 p-2 text-gray-500">None</a>
+                    </Show>
                 </div>
             )}
         </div>
