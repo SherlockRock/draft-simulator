@@ -9,7 +9,9 @@ import {
     Setter,
     Suspense,
     Switch,
-    Match
+    Match,
+    JSX,
+    Show
 } from "solid-js";
 import {
     botChamps,
@@ -23,6 +25,46 @@ import {
 import { useNavigate, useParams } from "@solidjs/router";
 import { useUser } from "./userProvider";
 import { SearchableSelect } from "./components/SearchableSelect";
+import {
+    createDraggable,
+    createDroppable,
+    DragDropProvider,
+    DragDropSensors,
+    DragEventHandler,
+    DragOverlay
+} from "@thisbeyond/solid-dnd";
+
+type draggableProps = {
+    name: string;
+    children: JSX.Element;
+};
+const DraggableWrapper = (props: draggableProps) => {
+    const draggable = createDraggable(props.name);
+
+    return (
+        <div use:draggable class="draggable">
+            {props.children}
+        </div>
+    );
+};
+
+type droppableProps = {
+    id: number;
+    children: JSX.Element;
+};
+const Droppable = (props: droppableProps) => {
+    const droppable = createDroppable(props.id);
+
+    return (
+        <div
+            use:droppable
+            class="droppable w-fit"
+            classList={{ "!droppable-accept": droppable.isActiveDroppable }}
+        >
+            {props.children}
+        </div>
+    );
+};
 
 type props = {
     draft: Resource<any>;
@@ -37,6 +79,7 @@ function Draft(props: props) {
     const [searchWord, setSearchWord] = createSignal("");
     const [selectedChampion, setSelectedChampion] = createSignal("");
     const [selectText, setSelectText] = createSignal("");
+    const [currentDragged, setCurrentDragged] = createSignal("");
 
     createEffect(() => {
         const holdDraft = props.draft();
@@ -69,28 +112,54 @@ function Draft(props: props) {
         setSearchWord(event.target.value);
     };
 
-    const handlePick = (index: number) => {
-        const holdPicks = [...props.draft().picks];
-        holdPicks[index] = selectedChampion();
+    const handlePick = (index: number, championId: string) => {
+        const holdPicks = [
+            ...props
+                .draft()
+                .picks.map((pick: string) => (pick === championId ? "" : pick))
+        ];
+        if (index !== -1) {
+            holdPicks[index] = championId;
+        }
         props.mutate((old) => ({
             ...old,
             picks: [...holdPicks]
         }));
-        setSelectedChampion("");
         socketAccessor().emit("newDraft", {
             picks: holdPicks,
             id: params.session
         });
+        setSelectedChampion("");
+        setCurrentDragged("");
+    };
+
+    const handleSelect = (index: number) => {
+        if (selectedChampion() !== "" || props.draft().picks[index] !== "") {
+            handlePick(index, selectedChampion());
+        }
+    };
+
+    const onDragStart: DragEventHandler = (args) => {
+        setCurrentDragged(String(args.draggable.id).split("-")[1]);
+    };
+
+    // Clear activeChamp when drag ends
+    const onDragEnd: DragEventHandler = (event) => {
+        if (event.droppable) {
+            handlePick(Number(event.droppable.id), currentDragged());
+        } else {
+            setCurrentDragged("");
+        }
     };
 
     const tableClass = (champ: string) => {
         const champNum = String(champions.findIndex((c) => c.name === champ));
         if (selectedChampion() === champNum) {
-            return "border-2 border-blue-700 hover:cursor-pointer";
+            return "border-2 border-blue-700 hover:cursor-move";
         } else if (props.draft().picks.includes(champNum)) {
             return "border-2 border-gray-950 brightness-[30%]";
         }
-        return "border-2 border-black hover:cursor-pointer";
+        return "border-2 border-black hover:cursor-move";
     };
 
     const picksAndBansClass = (champ: string) => {
@@ -139,97 +208,216 @@ function Draft(props: props) {
     const holdChamps = createMemo(() => sortChamps(searchWord(), selectText()));
 
     return (
-        <div class="flex h-full w-full flex-col p-2">
+        <div class="flex h-full w-full flex-col p-2" draggable="false">
             <Suspense fallback={<div>Loading...</div>}>
-                <Switch>
-                    <Match when={props.draft.error}>
-                        <span>Error: {props.draft.error.message}</span>
-                    </Match>
-                    <Match when={props.draft()}>
-                        <div class="flex w-full justify-center self-center">
-                            <div class="flex w-full justify-evenly gap-1 self-center">
-                                {/* All 10 bans */}
-                                <Index each={props.draft().picks.slice(0, 10)}>
-                                    {(each, index) => (
-                                        <>
-                                            <div
-                                                class={picksAndBansClass(each())}
-                                                onClick={() => handlePick(index)}
-                                            >
-                                                <img src={champNumberToImg(each())} />
-                                            </div>
-                                            {index === 4 && (
-                                                <div class="inline-block min-h-max w-0.5 self-stretch bg-neutral-100 opacity-100 dark:opacity-50" />
-                                            )}
-                                        </>
-                                    )}
-                                </Index>
-                            </div>
-                        </div>
-                        <div class="flex w-full justify-center self-center pt-4">
-                            <div class="flex flex-col justify-between gap-1">
-                                {/* Blue Side Champions */}
-                                <Index each={props.draft().picks.slice(10, 15)}>
-                                    {(each, index) => (
-                                        <div
-                                            class={picksAndBansClass(each())}
-                                            onClick={() => handlePick(index + 10)}
-                                        >
-                                            <img src={champNumberToImg(each())} />
-                                        </div>
-                                    )}
-                                </Index>
-                            </div>
-                            <div class="mx-4 w-[min(80vw,600px)] rounded-t-md bg-gray-950">
-                                <div class="flex">
-                                    <input
-                                        class="w-full rounded-md bg-gray-950 p-1 text-white focus:outline-none"
-                                        type="text"
-                                        value={searchWord()}
-                                        onInput={handleSearch}
-                                        placeholder="Search Champions..."
-                                    />
-                                    <SearchableSelect
-                                        sortOptions={sortOptions}
-                                        selectText={selectText()}
-                                        setSelectText={setSelectText}
-                                    />
+                <DragDropProvider onDragEnd={onDragEnd} onDragStart={onDragStart}>
+                    <Show when={currentDragged() !== ""}>
+                        <DragOverlay>
+                            <img
+                                // class={tableClass(String(champ.name))}
+                                src={champNumberToImg(currentDragged())}
+                                onClick={() =>
+                                    handleSelectedChamp(String(currentDragged()))
+                                }
+                                draggable="false"
+                            />
+                        </DragOverlay>
+                    </Show>
+                    <DragDropSensors />
+                    <Switch>
+                        <Match when={props.draft.error}>
+                            <span>Error: {props.draft.error.message}</span>
+                        </Match>
+                        <Match when={props.draft()}>
+                            <div class="flex w-full justify-center self-center">
+                                <div class="flex w-full justify-evenly gap-1 self-center">
+                                    {/* All 10 bans */}
+                                    <Index each={props.draft().picks.slice(0, 10)}>
+                                        {(each, index) => (
+                                            <>
+                                                <Droppable id={index}>
+                                                    <Show
+                                                        when={each()}
+                                                        keyed
+                                                        fallback={
+                                                            <div
+                                                                class={
+                                                                    "aspect-square w-[min(8vw,120px)] border-4 border-gray-800"
+                                                                }
+                                                                onClick={() =>
+                                                                    handleSelect(index)
+                                                                }
+                                                            />
+                                                        }
+                                                    >
+                                                        <DraggableWrapper
+                                                            name={`banned-${each()}`}
+                                                        >
+                                                            <div
+                                                                class={picksAndBansClass(
+                                                                    each()
+                                                                )}
+                                                                onClick={() =>
+                                                                    handleSelect(index)
+                                                                }
+                                                            >
+                                                                <img
+                                                                    src={champNumberToImg(
+                                                                        each()
+                                                                    )}
+                                                                    draggable="false"
+                                                                />
+                                                            </div>
+                                                        </DraggableWrapper>
+                                                    </Show>
+                                                </Droppable>
+                                                {index === 4 && (
+                                                    <div class="inline-block min-h-max w-0.5 self-stretch bg-neutral-100 opacity-100 dark:opacity-50" />
+                                                )}
+                                            </>
+                                        )}
+                                    </Index>
                                 </div>
-                                <div class="h-[85vh] overflow-auto">
-                                    <div class="z-0 grid grid-cols-5">
-                                        {/* Table Search Results */}
-                                        <For each={holdChamps()}>
-                                            {(champ, index) => (
-                                                <img
-                                                    class={tableClass(String(champ.name))}
-                                                    src={champ.img}
-                                                    onClick={() =>
-                                                        handleSelectedChamp(
-                                                            String(index())
-                                                        )
+                            </div>
+                            <div class="flex w-full justify-center self-center pt-4">
+                                <div class="flex flex-col justify-between gap-1">
+                                    {/* Blue Side Champions */}
+                                    <Index each={props.draft().picks.slice(10, 15)}>
+                                        {(each, index) => (
+                                            <Droppable id={index + 10}>
+                                                <Show
+                                                    when={each()}
+                                                    keyed
+                                                    fallback={
+                                                        <div
+                                                            class={
+                                                                "aspect-square w-[min(8vw,120px)] border-4 border-gray-800"
+                                                            }
+                                                            onClick={() =>
+                                                                handleSelect(index + 10)
+                                                            }
+                                                        />
                                                     }
-                                                />
-                                            )}
-                                        </For>
+                                                >
+                                                    <DraggableWrapper
+                                                        name={`picked-${each()}`}
+                                                    >
+                                                        <div
+                                                            class={picksAndBansClass(
+                                                                each()
+                                                            )}
+                                                            onClick={() =>
+                                                                handleSelect(index + 10)
+                                                            }
+                                                        >
+                                                            <img
+                                                                src={champNumberToImg(
+                                                                    each()
+                                                                )}
+                                                                draggable="false"
+                                                            />
+                                                        </div>
+                                                    </DraggableWrapper>
+                                                </Show>
+                                            </Droppable>
+                                        )}
+                                    </Index>
+                                </div>
+                                <div class="mx-4 w-[min(80vw,600px)] rounded-t-md bg-gray-950">
+                                    <div class="flex pb-2">
+                                        <input
+                                            class="w-full rounded-md bg-gray-950 p-1 text-white focus:outline-none"
+                                            type="text"
+                                            value={searchWord()}
+                                            onInput={handleSearch}
+                                            placeholder="Search Champions..."
+                                        />
+                                        <SearchableSelect
+                                            sortOptions={sortOptions}
+                                            selectText={selectText()}
+                                            setSelectText={setSelectText}
+                                        />
+                                    </div>
+                                    <div class="h-[85vh] overflow-auto">
+                                        <Droppable id={-1}>
+                                            <div class="grid grid-cols-5">
+                                                {/* Table Search Results */}
+                                                <For each={holdChamps()}>
+                                                    {(champ, index) => (
+                                                        <>
+                                                            <DraggableWrapper
+                                                                name={`unpicked-${index()}`}
+                                                            >
+                                                                <img
+                                                                    class={tableClass(
+                                                                        String(champ.name)
+                                                                    )}
+                                                                    src={champ.img}
+                                                                    onClick={() =>
+                                                                        handleSelectedChamp(
+                                                                            String(
+                                                                                index()
+                                                                            )
+                                                                        )
+                                                                    }
+                                                                    draggable="false"
+                                                                />
+                                                            </DraggableWrapper>
+                                                        </>
+                                                    )}
+                                                </For>
+                                            </div>
+                                        </Droppable>
                                     </div>
                                 </div>
+                                <div class="flex flex-col justify-between gap-1">
+                                    {/* Red Side Champions */}
+                                    <Index each={props.draft().picks.slice(15, 20)}>
+                                        {(each, index) => (
+                                            <Droppable id={index + 15}>
+                                                <Switch>
+                                                    <Match when={each() === ""}>
+                                                        <div
+                                                            class={
+                                                                "aspect-square w-[min(8vw,120px)] border-4 border-gray-800"
+                                                            }
+                                                            onClick={() =>
+                                                                handleSelect(index + 15)
+                                                            }
+                                                        />
+                                                    </Match>
+                                                    <Match when={each() !== ""}>
+                                                        <DraggableWrapper
+                                                            name={`picked-${each()}`}
+                                                        >
+                                                            <div
+                                                                class={picksAndBansClass(
+                                                                    each()
+                                                                )}
+                                                                onClick={() =>
+                                                                    handleSelect(
+                                                                        index + 15
+                                                                    )
+                                                                }
+                                                            >
+                                                                <img
+                                                                    src={champNumberToImg(
+                                                                        each()
+                                                                    )}
+                                                                    draggable="false"
+                                                                />
+                                                            </div>
+                                                        </DraggableWrapper>
+                                                    </Match>
+                                                </Switch>
+                                            </Droppable>
+                                        )}
+                                    </Index>
+                                </div>
                             </div>
-                            <div class="flex flex-col justify-between gap-1">
-                                {/* Red Side Champions */}
-                                <Index each={props.draft().picks.slice(15, 20)}>
-                                    {(each, index) => (
-                                        <div
-                                            class={picksAndBansClass(each())}
-                                            onClick={() => handlePick(index + 15)}
-                                        >
-                                            <img src={champNumberToImg(each())} />
-                                        </div>
-                                    )}
-                                </Index>
-                            </div>
-                        </div>
-                    </Match>
-                </Switch>
+                        </Match>
+                    </Switch>
+                </DragDropProvider>
             </Suspense>
         </div>
     );
