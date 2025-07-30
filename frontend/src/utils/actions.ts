@@ -5,7 +5,8 @@ export const BASE_URL =
 
 export const fetchDraft = async (id: string): Promise<any> => {
     const res = await fetch(`${BASE_URL}/drafts/${id}`, {
-        method: "GET"
+        method: "GET",
+        credentials: "include"
     });
     const hold = await res.json();
     return hold;
@@ -14,6 +15,7 @@ export const fetchDraft = async (id: string): Promise<any> => {
 export const postNewDraft = async (data: { name: string; public: boolean }) => {
     const res = await fetch(`${BASE_URL}/drafts`, {
         method: "POST",
+        credentials: "include",
         headers: {
             "Content-Type": "application/json"
         },
@@ -24,13 +26,19 @@ export const postNewDraft = async (data: { name: string; public: boolean }) => {
 };
 
 export const fetchDraftList = async () => {
-    const res = await fetch(`${BASE_URL}/drafts/dropdown`);
+    const res = await fetch(`${BASE_URL}/drafts/dropdown`, {
+        method: "GET",
+        credentials: "include"
+    });
     return await res.json();
 };
 
 export const fetchDefaultDraft = async (id: string | null) => {
     if (!id) return null;
-    const res = await fetch(`${BASE_URL}/drafts/${id}`);
+    const res = await fetch(`${BASE_URL}/drafts/${id}`, {
+        method: "GET",
+        credentials: "include"
+    });
     return await res.json();
 };
 
@@ -40,6 +48,7 @@ export const editDraft = async (
 ) => {
     const res = await fetch(`${BASE_URL}/drafts/${id}`, {
         method: "PUT",
+        credentials: "include",
         headers: {
             "Content-Type": "application/json"
         },
@@ -50,7 +59,8 @@ export const editDraft = async (
 
 export const deleteDraft = async (id: string) => {
     const res = await fetch(`${BASE_URL}/drafts/${id}`, {
-        method: "DELETE"
+        method: "DELETE",
+        credentials: "include"
     });
     return await res.json();
 };
@@ -80,7 +90,8 @@ export const fetchUserDetails = async () => {
 
 export const handleRevoke = async () => {
     fetch(`${BASE_URL}/revoke/`, {
-        method: "GET"
+        method: "GET",
+        credentials: "include"
     });
 };
 

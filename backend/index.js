@@ -160,13 +160,10 @@ async function main() {
       const accessToken = jwt.sign(user, JWT_SECRET, {
         expiresIn: "1d",
       });
-      const cookieOrgin =
-        process.env.ENVIRONMENT === "development" ? undefined : "onrender.com";
       res.cookie("accessToken", accessToken, {
         httpOnly: true,
         secure: true,
         sameSite: "none",
-        domain: cookieOrgin,
       });
       const refreshToken = jwt.sign(
         { user_id: user.id },
@@ -179,7 +176,6 @@ async function main() {
         httpOnly: true,
         secure: true,
         sameSite: "none",
-        domain: cookieOrgin,
       });
 
       try {
