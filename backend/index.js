@@ -97,13 +97,13 @@ async function main() {
     )
   );
 
-  passport.serializeUser((user, done) => {
-    done(null, user);
-  });
+  // passport.serializeUser((user, done) => {
+  //   done(null, user);
+  // });
 
-  passport.deserializeUser((obj, done) => {
-    done(null, obj);
-  });
+  // passport.deserializeUser((obj, done) => {
+  //   done(null, obj);
+  // });
 
   app.get("/", (req, res) => res.send("OK"));
 
@@ -160,10 +160,13 @@ async function main() {
       const accessToken = jwt.sign(user, JWT_SECRET, {
         expiresIn: "1d",
       });
+      const cookieOrgin =
+        process.env.ENVIRONMENT === "development" ? undefined : "onrender.com";
       res.cookie("accessToken", accessToken, {
         httpOnly: true,
         secure: true,
         sameSite: "none",
+        domain: cookieOrgin,
       });
       const refreshToken = jwt.sign(
         { user_id: user.id },
@@ -176,6 +179,7 @@ async function main() {
         httpOnly: true,
         secure: true,
         sameSite: "none",
+        domain: cookieOrgin,
       });
 
       try {
