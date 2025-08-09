@@ -1,13 +1,13 @@
-import { createSignal, createMemo, createEffect, Show } from "solid-js";
+import { createSignal, createMemo, createEffect, Show, Resource } from "solid-js";
 import { editDraft, generateShareLink } from "./utils/actions";
 import KeyEvent, { Key } from "./KeyEvent";
 import { DOMElement } from "solid-js/jsx-runtime";
 import { useUser } from "./userProvider";
 
 type props = {
-    currentDraft: any;
+    currentDraft: Resource<any>;
     mutateDraft: any;
-    draftList: any[];
+    draftList: Resource<any[]>;
     mutateDraftList: any;
 };
 
@@ -19,15 +19,17 @@ function DraftDetails(props: props) {
     const [draftName, setDraftName] = createSignal("");
 
     createEffect(() => {
-        if (props.currentDraft) {
-            setDraftName(props.currentDraft.name);
+        const currentDraft = props.currentDraft();
+        if (currentDraft) {
+            setDraftName(currentDraft.name);
         }
     });
 
     const handleTogglePublic = async () => {
-        if (props.currentDraft) {
-            const updatedDraft = await editDraft(props.currentDraft.id, {
-                public: !props.currentDraft.public
+        const currentDraft = props.currentDraft();
+        if (currentDraft) {
+            const updatedDraft = await editDraft(currentDraft.id, {
+                public: !currentDraft.public
             });
             props.mutateDraft(updatedDraft);
         }
@@ -40,11 +42,12 @@ function DraftDetails(props: props) {
         }
     ) => {
         e?.preventDefault();
-        const updatedDraft = await editDraft(props.currentDraft.id, {
+        const updatedDraft = await editDraft(props.currentDraft()?.id, {
             name: draftName()
         });
+        const existingDrafts = props.draftList() || [];
         props.mutateDraftList(
-            props.draftList.map((draft) =>
+            existingDrafts.map((draft) =>
                 draft.id === updatedDraft.id ? updatedDraft : draft
             )
         );
@@ -75,14 +78,17 @@ function DraftDetails(props: props) {
     };
 
     const handleShare = async () => {
-        if (props.currentDraft) {
-            const shareLink = await generateShareLink(props.currentDraft.id);
+        const currentDraft = props.currentDraft();
+        if (currentDraft) {
+            const shareLink = await generateShareLink(currentDraft.id);
             navigator.clipboard.writeText(shareLink);
             alert("Share link copied to clipboard!");
         }
     };
 
-    const isOwner = createMemo(() => userAccessor()?.id === props.currentDraft?.owner_id);
+    const isOwner = createMemo(
+        () => userAccessor()?.id === props.currentDraft()?.owner_id
+    );
 
     return (
         <div class="mt-4 text-white">
@@ -90,7 +96,10 @@ function DraftDetails(props: props) {
             <div class="flex items-center gap-2">
                 <p>Name:</p>
                 <div class="flex gap-2">
-                    <Show when={isOwner()} fallback={<p>{props.currentDraft.name}</p>}>
+                    <Show
+                        when={isOwner()}
+                        fallback={<p>{props.currentDraft()?.name || ""}</p>}
+                    >
                         <form class="flex gap-2" onSubmit={handleNameChange}>
                             {isEditingName() ? (
                                 <input
@@ -101,7 +110,7 @@ function DraftDetails(props: props) {
                                     class="rounded-md border border-gray-700 bg-gray-800 px-2 py-1 text-white"
                                 />
                             ) : (
-                                <p>{props.currentDraft.name}</p>
+                                <p>{props.currentDraft()?.name || ""}</p>
                             )}
                             {isEditingName() ? (
                                 <button type="submit">
@@ -142,7 +151,7 @@ function DraftDetails(props: props) {
                     <input
                         tabIndex={0}
                         type="checkbox"
-                        checked={props.currentDraft.public}
+                        checked={props.currentDraft()?.public}
                         class="peer sr-only"
                         onChange={handleTogglePublic}
                         disabled={!isOwner()}

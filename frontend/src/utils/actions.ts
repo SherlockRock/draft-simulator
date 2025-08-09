@@ -34,7 +34,7 @@ export const fetchDraftList = async () => {
 };
 
 export const fetchDefaultDraft = async (id: string | null) => {
-    if (!id) return null;
+    if (!id || id === "oauth2callback") return null;
     const res = await fetch(`${BASE_URL}/drafts/${id}`, {
         method: "GET",
         credentials: "include"
@@ -77,7 +77,7 @@ export const generateShareLink = async (draftId: string) => {
 // need to handle all cases where res.ok is false
 
 export const fetchUserDetails = async () => {
-    const refresh = await fetch(`${BASE_URL}/refresh-token`, {
+    const refresh = await fetch(`${BASE_URL}/auth/refresh-token`, {
         method: "GET",
         credentials: "include"
     });
@@ -89,12 +89,30 @@ export const fetchUserDetails = async () => {
 };
 
 export const handleRevoke = async () => {
-    fetch(`${BASE_URL}/revoke/`, {
+    fetch(`${BASE_URL}/auth/revoke/`, {
         method: "GET",
         credentials: "include"
     });
 };
 
 export const handleLogin = () => {
-    window.location.href = `${BASE_URL}/auth/google`;
+    const googleLoginURL = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${import.meta.env.VITE_GOOGLE_CLIENT_ID}&redirect_uri=${window.location.origin}/oauth2callback&response_type=code&scope=openid%20profile%20email`;
+    window.location.href = googleLoginURL;
+};
+
+export const handleGoogleLogin = async (code: string) => {
+    console.log("Handling Google login with code:", code);
+    const res = await fetch(`${BASE_URL}/auth/google/callback`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ code })
+    });
+    console.log("Response from Google login:", res);
+    if (res.ok) {
+        const { user } = await res.json();
+        return user;
+    }
+    return undefined;
 };

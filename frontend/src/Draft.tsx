@@ -83,7 +83,7 @@ function Draft(props: props) {
 
     createEffect(() => {
         const holdDraft = props.draft();
-        if (holdDraft !== undefined && holdDraft.picks.length !== 0) {
+        if (holdDraft && holdDraft.picks.length !== 0) {
             navigate(`/${props.draft().id}`);
             socketAccessor().emit("joinRoom", holdDraft.id);
         }

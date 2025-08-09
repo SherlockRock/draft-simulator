@@ -1,14 +1,14 @@
 import { useNavigate } from "@solidjs/router";
-import { createSignal, createMemo, Show } from "solid-js";
+import { createSignal, createMemo, Show, Resource } from "solid-js";
 import { SearchableSelect } from "./components/SearchableSelect";
 import DraftDetails from "./DraftDetails";
 
 type props = {
-    currentDraft: any;
+    currentDraft: Resource<any>;
     mutateDraft: any;
-    draftList: any[];
+    draftList: Resource<any[]>;
     mutateDraftList: any;
-    socket: any;
+    socket: Resource<any>;
 };
 
 function DraftList(props: props) {
@@ -16,24 +16,29 @@ function DraftList(props: props) {
     const [selectText, setSelectText] = createSignal("");
 
     const onValidSelect = (newValue: string) => {
-        const selectedDraft = props.draftList?.find((draft) => draft.name === newValue);
+        const selectedDraft = props.draftList()?.find((draft) => draft.name === newValue);
         if (selectedDraft) {
-            if (props.currentDraft) {
-                props.socket.emit("leaveRoom", props.currentDraft.id);
-            }
             navigate(`/${selectedDraft.id}`);
+        }
+        const currentDraft = props.currentDraft();
+        if (currentDraft) {
+            props.socket().emit("leaveRoom", currentDraft.id);
         }
     };
 
     const handleNewDraft = () => {
-        if (props.currentDraft) {
+        const currentDraft = props.currentDraft();
+        if (currentDraft) {
             props.mutateDraft(null);
-            props.socket.emit("leaveRoom", props.currentDraft.id);
+            props.socket().emit("leaveRoom", currentDraft.id);
         }
         navigate(`/`);
     };
 
-    const drafts = createMemo(() => props.draftList?.map((draft) => draft.name) || []);
+    const drafts = createMemo(() => {
+        console.log("Drafts:", props.draftList());
+        return props.draftList()?.map((draft) => draft.name) || [];
+    });
 
     return (
         <div class="flex w-full flex-col gap-2">
@@ -50,7 +55,7 @@ function DraftList(props: props) {
             >
                 New Draft
             </button>
-            <Show when={props.currentDraft}>
+            <Show when={props.currentDraft()}>
                 <DraftDetails
                     currentDraft={props.currentDraft}
                     mutateDraft={props.mutateDraft}

@@ -10,8 +10,9 @@ import {
     createEffect,
     createSignal
 } from "solid-js";
-import { fetchUserDetails } from "./utils/actions";
+import { fetchUserDetails, handleGoogleLogin } from "./utils/actions";
 import { io, Socket } from "socket.io-client";
+import { useNavigate, useSearchParams } from "@solidjs/router";
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 
@@ -32,23 +33,39 @@ const createAuthenticatedSocket = () =>
 const UserContext = createContext<Accessor<Array<any>>>();
 
 export function UserProvider(props: { children: JSX.Element }) {
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [user, { mutate, refetch }] = createResource(fetchUserDetails);
     const [currentSocket, setCurrentSocket] = createSignal<Socket | undefined>(undefined);
     const [connectionStatus, setConnectionStatus] =
-        createSignal<ConnectionStatus>("connecting"); // New signal for status
+        createSignal<ConnectionStatus>("connecting");
+    const login = async (code: string) => {
+        const user = await handleGoogleLogin(code);
+        return user;
+    };
     const logout = () => {
         mutate(undefined);
     };
     const holdUser = createMemo(() => [
         user,
         {
+            login,
             logout
         },
         currentSocket,
         connectionStatus
     ]);
 
-    // createEffect to manage the socket instance based on user changes
+    createEffect(() => {
+        const code = searchParams.code;
+        if (typeof code === "string") {
+            login(code).then((res) => {
+                mutate(res);
+                navigate("/");
+            });
+        }
+    });
+
     createEffect(() => {
         const currentUser = user();
         let newSocket: Socket | undefined;
@@ -75,17 +92,17 @@ export function UserProvider(props: { children: JSX.Element }) {
 
         newSocket.on("reconnect", (attemptNumber) => {
             console.log("Socket.IO: Reconnected!", attemptNumber);
-            setConnectionStatus("connected"); // Back to connected
+            setConnectionStatus("connected");
         });
 
         newSocket.on("reconnecting", (attemptNumber) => {
             console.log("Socket.IO: Reconnecting...", attemptNumber);
-            setConnectionStatus("connecting"); // Explicitly show reconnecting
+            setConnectionStatus("connecting");
         });
 
         newSocket.on("reconnect_failed", () => {
             console.error("Socket.IO: Reconnection Failed Permanently!");
-            setConnectionStatus("error"); // Permanent failure
+            setConnectionStatus("error");
         });
 
         setCurrentSocket(newSocket);

@@ -1,20 +1,25 @@
 import { useUser } from "./userProvider";
 import { handleLogin, handleRevoke } from "./utils/actions";
 
-function NavBar() {
+type props = {
+    clearDraftList: () => void;
+};
+
+function NavBar(props: props) {
     const accessor = useUser();
-    const [user, logout] = accessor();
+    const [user, actions] = accessor();
 
     const handleLogOut = () => {
         handleRevoke();
-        if (logout !== undefined && "logout" in logout) {
-            logout.logout();
+        if (actions && "logout" in actions) {
+            actions.logout();
         }
+        props.clearDraftList();
     };
 
     return (
         <div class="flex flex-col gap-2 pt-4">
-            {user() !== undefined && "name" in user() ? (
+            {user() && "name" in user() ? (
                 <div class="flex flex-col gap-2">
                     <p class="text-slate-100">Hello: {user().name}</p>
                     <button

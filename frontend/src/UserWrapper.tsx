@@ -6,23 +6,35 @@ import Chat from "./Chat";
 import DraftList from "./DraftList";
 import { useParams } from "@solidjs/router";
 import { useUser } from "./userProvider";
-import { createResource, createSignal, Show } from "solid-js";
+import { createEffect, createResource, createSignal, Show } from "solid-js";
 import { fetchDefaultDraft, fetchDraftList } from "./utils/actions";
 import CreateDraft from "./CreateDraft";
 
 const Layout = () => {
     const params = useParams();
     const accessor = useUser();
-    const socketAccessor = accessor()[2];
+    const [user, , socketAccessor] = accessor();
     const [isExpanded, setIsExpanded] = createSignal(true);
     const [childrenVisible, setChildrenVisible] = createSignal(true);
-    const [draft, { mutate: mutateDraft }] = createResource(
+    const [draft, { mutate: mutateDraft, refetch: refetchDraft }] = createResource(
         () => (params.session !== undefined ? String(params.session) : null),
         fetchDefaultDraft
     );
-    const [draftList, { mutate: mutateDraftList }] =
+    const [draftList, { mutate: mutateDraftList, refetch: refetchDraftList }] =
         createResource<any[]>(fetchDraftList);
     let navTrayRef;
+    let previousUser = user();
+
+    createEffect(() => {
+        const currentUser = user();
+        if (currentUser === undefined) {
+            mutateDraftList([]);
+        } else if (currentUser !== previousUser) {
+            refetchDraftList();
+            refetchDraft();
+        }
+        previousUser = currentUser;
+    });
 
     const handleNavTransitionEnd = (event: TransitionEvent) => {
         if (event.target === navTrayRef) {
@@ -37,6 +49,13 @@ const Layout = () => {
         setIsExpanded(() => !expanded);
         if (expanded) {
             setChildrenVisible(false);
+        }
+    };
+
+    const clearDraftList = () => {
+        mutateDraftList([]);
+        if (draft()?.public !== true) {
+            mutateDraft(null);
         }
     };
 
@@ -56,13 +75,13 @@ const Layout = () => {
                             <div
                                 class={`flex flex-1 flex-col gap-4 px-4 ${isExpanded() ? "" : "hidden"}`}
                             >
-                                <NavBar />
+                                <NavBar clearDraftList={clearDraftList} />
                                 <DraftList
-                                    currentDraft={draft()}
+                                    currentDraft={draft}
                                     mutateDraft={mutateDraft}
-                                    draftList={draftList() || []}
+                                    draftList={draftList}
                                     mutateDraftList={mutateDraftList}
-                                    socket={socketAccessor()}
+                                    socket={socketAccessor}
                                 />
                                 <div class="flex-1">
                                     <Chat

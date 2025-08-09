@@ -23,7 +23,7 @@ function Chat(props: props) {
         if (previousDraft() === "") {
             setPreviousDraft(props.currentDraft);
         } else if (previousDraft() !== props.currentDraft) {
-            setMessages([]); // Clear messages when the draft changes
+            setMessages([]);
             setPreviousDraft(props.currentDraft);
         }
     });
@@ -33,7 +33,6 @@ function Chat(props: props) {
         holdSocket.on(
             "chatMessage",
             (newMessage: { username: string; chat: string; socketId: string }) => {
-                console.log("Received message:", newMessage);
                 if (newMessage.socketId !== props.socket.id) {
                     setMessages((prev) => [...prev, newMessage]);
                 }
@@ -55,20 +54,18 @@ function Chat(props: props) {
         if (message().trim()) {
             const user = userAccessor();
             let username = "";
-            if (user !== undefined && "name" in user) {
+            if (user && "name" in user) {
                 username = user.name;
             } else {
                 username = props.socket.id;
             }
-            console.log(user);
-            console.log("Sending message:", message(), "from user:", username);
             const holdMessage = message();
             setMessages((prev) => [...prev, { chat: holdMessage, username }]);
             props.socket.emit("newMessage", {
                 room: props.currentDraft,
                 message: holdMessage
             });
-            setMessage(""); // Clear the input
+            setMessage("");
         }
     };
 
