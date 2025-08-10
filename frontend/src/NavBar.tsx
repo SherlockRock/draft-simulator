@@ -23,7 +23,7 @@ function NavBar(props: props) {
                 <div class="flex flex-col gap-2">
                     <p class="text-slate-100">Hello: {user().name}</p>
                     <button
-                        class="text-md rounded-md bg-blue-500 px-3 py-2 font-sans font-normal hover:bg-blue-600"
+                        class="text-md rounded-md bg-blue-600 px-3 py-2 font-sans font-normal hover:bg-blue-700"
                         onClick={handleLogOut}
                     >
                         Log out of Google
@@ -31,7 +31,7 @@ function NavBar(props: props) {
                 </div>
             ) : (
                 <button
-                    class="text-md rounded-md bg-blue-500 px-3 py-2 font-sans font-normal hover:bg-blue-600"
+                    class="text-md rounded-md bg-blue-600 px-3 py-2 font-sans font-normal hover:bg-blue-700"
                     onClick={handleLogin}
                 >
                     Login with Google

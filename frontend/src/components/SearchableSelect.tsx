@@ -2,6 +2,7 @@ import { createMemo, createSignal, For, Setter, Show } from "solid-js";
 import KeyEvent, { Key } from "../KeyEvent";
 
 type props = {
+    currentlySelected: string;
     sortOptions: string[];
     selectText: string;
     setSelectText: Setter<string>;
@@ -75,14 +76,6 @@ export const SearchableSelect = (props: props) => {
         }
     };
 
-    const handleOptionSelected = (
-        index: number,
-        currentIndex: number,
-        options: string[]
-    ) => {
-        return index === currentIndex % options.length;
-    };
-
     const handleSortOptions = (sortInput: string) => {
         const currentTextIsValid = props.sortOptions.includes(sortInput);
         if (sortInput === "" || currentTextIsValid) {
@@ -92,9 +85,13 @@ export const SearchableSelect = (props: props) => {
             option.toLowerCase().includes(sortInput)
         );
     };
+
     const holdSortOptions = createMemo(() => {
         const hold = handleSortOptions(props.selectText);
         return hold;
+    });
+    const holdSelectedIndex = createMemo(() => {
+        return props.sortOptions.indexOf(props.currentlySelected);
     });
 
     return (
@@ -175,15 +172,12 @@ export const SearchableSelect = (props: props) => {
                                 }}
                             >
                                 <a
-                                    class="block border-l-4 bg-gray-950 p-2 text-white group-hover:border-blue-600 group-hover:bg-gray-800"
-                                    classList={{
-                                        "border-blue-600 bg-gray-800":
-                                            handleOptionSelected(
-                                                index(),
-                                                dropdownIndex(),
-                                                holdSortOptions()
-                                            )
-                                    }}
+                                    class={`block border-l-4 bg-gray-950 p-2 text-white transition-colors group-hover:border-blue-600 group-hover:bg-gray-800 group-hover:text-blue-600
+                                        ${
+                                            holdSelectedIndex() === index()
+                                                ? "border-green-600 text-green-600"
+                                                : "border-white text-white"
+                                        }`}
                                 >
                                     {option}
                                 </a>

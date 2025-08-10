@@ -79,6 +79,7 @@ function Draft(props: props) {
     const [searchWord, setSearchWord] = createSignal("");
     const [selectedChampion, setSelectedChampion] = createSignal("");
     const [selectText, setSelectText] = createSignal("");
+    const [currentlySelected, setCurrentlySelected] = createSignal("");
     const [currentDragged, setCurrentDragged] = createSignal("");
 
     createEffect(() => {
@@ -172,6 +173,10 @@ function Draft(props: props) {
         if (!props.draft().picks.includes(champ)) {
             setSelectedChampion(champ);
         }
+    };
+
+    const onValidSelect = (newValue: string) => {
+        setCurrentlySelected(newValue);
     };
 
     const sortChamps = (searchWord: string, currentlySorting: string) => {
@@ -333,9 +338,11 @@ function Draft(props: props) {
                                             placeholder="Search Champions..."
                                         />
                                         <SearchableSelect
+                                            currentlySelected={currentlySelected()}
                                             sortOptions={sortOptions}
                                             selectText={selectText()}
                                             setSelectText={setSelectText}
+                                            onValidSelect={onValidSelect}
                                         />
                                     </div>
                                     <div class="h-[85vh] overflow-auto">

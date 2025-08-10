@@ -1,5 +1,4 @@
 Short Term:
-    Update dropdown functionality to show what is currently selected and so it updates when creating a new draft
     Change share flow to have dropdown that displays link and coppy button
     Use sockets to update draft detail changes
     Allow non signed in users to see a non saving draft

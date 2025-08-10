@@ -1,5 +1,5 @@
 import { useNavigate } from "@solidjs/router";
-import { createSignal, createMemo, Show, Resource } from "solid-js";
+import { createSignal, createMemo, Show, Resource, createEffect } from "solid-js";
 import { SearchableSelect } from "./components/SearchableSelect";
 import DraftDetails from "./DraftDetails";
 
@@ -14,6 +14,10 @@ type props = {
 function DraftList(props: props) {
     const navigate = useNavigate();
     const [selectText, setSelectText] = createSignal("");
+
+    createEffect(() => {
+        setSelectText(props.currentDraft().name);
+    });
 
     const onValidSelect = (newValue: string) => {
         const selectedDraft = props.draftList()?.find((draft) => draft.name === newValue);
@@ -36,7 +40,6 @@ function DraftList(props: props) {
     };
 
     const drafts = createMemo(() => {
-        console.log("Drafts:", props.draftList());
         return props.draftList()?.map((draft) => draft.name) || [];
     });
 
@@ -44,6 +47,7 @@ function DraftList(props: props) {
         <div class="flex w-full flex-col gap-2">
             <div class="text-gray-300">Select Draft:</div>
             <SearchableSelect
+                currentlySelected={props.currentDraft()?.name || ""}
                 sortOptions={drafts()}
                 selectText={selectText()}
                 setSelectText={setSelectText}
