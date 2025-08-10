@@ -101,15 +101,14 @@ export const handleLogin = () => {
 };
 
 export const handleGoogleLogin = async (code: string) => {
-    console.log("Handling Google login with code:", code);
     const res = await fetch(`${BASE_URL}/auth/google/callback`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
         },
+        credentials: "include",
         body: JSON.stringify({ code })
     });
-    console.log("Response from Google login:", res);
     if (res.ok) {
         const { user } = await res.json();
         return user;
