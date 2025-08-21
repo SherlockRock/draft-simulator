@@ -1,11 +1,12 @@
 import { useNavigate } from "@solidjs/router";
-import { createSignal, createMemo, Show, Resource, createEffect } from "solid-js";
+import { createSignal, createMemo, Show, Resource, createEffect, Setter } from "solid-js";
 import { SearchableSelect } from "./components/SearchableSelect";
 import DraftDetails from "./DraftDetails";
+import { draft } from "./UserWrapper";
 
 type props = {
-    currentDraft: Resource<any>;
-    mutateDraft: any;
+    currentDraft: Resource<draft | null>;
+    mutateDraft: Setter<draft | null | undefined>;
     draftList: Resource<any[]>;
     mutateDraftList: any;
     socket: Resource<any>;
@@ -16,7 +17,7 @@ function DraftList(props: props) {
     const [selectText, setSelectText] = createSignal("");
 
     createEffect(() => {
-        setSelectText(props.currentDraft().name);
+        setSelectText(props.currentDraft()?.name ?? "");
     });
 
     const onValidSelect = (newValue: string) => {

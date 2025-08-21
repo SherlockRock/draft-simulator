@@ -1,3 +1,5 @@
+import { draft } from "../UserWrapper";
+
 export const BASE_URL =
     import.meta.env.VITE_ENVIRONMENT === "production"
         ? `${import.meta.env.VITE_API_URL}/api`
@@ -33,7 +35,7 @@ export const fetchDraftList = async () => {
     return await res.json();
 };
 
-export const fetchDefaultDraft = async (id: string | null) => {
+export const fetchDefaultDraft = async (id: string | null): Promise<draft | null> => {
     if (!id || id === "oauth2callback") return null;
     const res = await fetch(`${BASE_URL}/drafts/${id}`, {
         method: "GET",

@@ -14,7 +14,7 @@ const authRoutes = require("./routes/auth"); // Import the new auth routes
 const Draft = require("./models/Draft");
 const User = require("./models/User");
 const setupAssociations = require("./models/associations");
-const helpers = require("./helpers");
+const socketService = require("./middleware/socketService");
 require("dotenv").config();
 
 async function main() {
@@ -73,6 +73,8 @@ async function main() {
     pingInterval: 25000, // Send a ping every 25 seconds
     pingTimeout: 5000, // If no pong received within 5 seconds, consider the connection dead
   });
+
+  socketService.init(io);
 
   io.use(async (socket, next) => {
     const handshake = socket.handshake;

@@ -10,6 +10,14 @@ import { createEffect, createResource, createSignal, Show } from "solid-js";
 import { fetchDefaultDraft, fetchDraftList } from "./utils/actions";
 import CreateDraft from "./CreateDraft";
 
+export type draft = {
+    id: string;
+    name: string;
+    public: boolean;
+    picks: string[];
+    owner_id: string;
+};
+
 const Layout = () => {
     const params = useParams();
     const accessor = useUser();

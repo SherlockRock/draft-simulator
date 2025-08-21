@@ -33,6 +33,7 @@ import {
     DragEventHandler,
     DragOverlay
 } from "@thisbeyond/solid-dnd";
+import { draft } from "./UserWrapper";
 
 type draggableProps = {
     name: string;
@@ -91,14 +92,22 @@ function Draft(props: props) {
     });
 
     createEffect(() => {
-        socketAccessor().on("draftUpdate", (data: { picks: string[] }) => {
-            if (data.picks.length !== 0) {
-                props.mutate((old) => ({
-                    ...old,
-                    picks: [...data.picks]
-                }));
+        socketAccessor().on(
+            "draftUpdate",
+            (data: { picks: string[]; id: string } | draft) => {
+                if ("owner_id" in data) {
+                    props.mutate(() => ({
+                        ...data,
+                        picks: [...data.picks]
+                    }));
+                } else {
+                    props.mutate((old) => ({
+                        ...old,
+                        picks: [...data.picks]
+                    }));
+                }
             }
-        });
+        );
         onCleanup(() => {
             socketAccessor().off("draftUpdate");
         });

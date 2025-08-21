@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Draft = require("../models/Draft");
 const { protect, getUserFromRequest } = require("../middleware/auth");
+const socketService = require("../middleware/socketService");
 
 router.get("/dropdown", async (req, res) => {
   try {
@@ -117,6 +118,7 @@ router.put("/:id", protect, async (req, res) => {
 
     await draft.save();
     res.json(draft);
+    socketService.emitToRoom(draft.id, "draftUpdate", draft.toJSON());
   } catch (err) {
     console.error(err);
     res.status(500).send("Server Error");
