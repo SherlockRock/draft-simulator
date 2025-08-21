@@ -124,15 +124,19 @@ async function main() {
     });
 
     // Join a room
-    socket.on("joinRoom", (room) => {
+    socket.on("joinRoom", async (room) => {
       socket.join(room);
       console.log(`${socket.id} joined room: ${room}`);
+      const roomSize = await socketService.getRoomSize(room);
+      io.to(room).emit("userCountUpdate", roomSize);
     });
 
     // Leave a room
-    socket.on("leaveRoom", (room) => {
+    socket.on("leaveRoom", async (room) => {
       socket.leave(room);
       console.log(`${socket.id} left room: ${room}`);
+      const roomSize = await socketService.getRoomSize(room);
+      io.to(room).emit("userCountUpdate", roomSize);
     });
 
     // Broadcast to a room
@@ -143,6 +147,15 @@ async function main() {
         socketId: socket.id,
         chat: req.message,
       });
+    });
+
+    socket.on("disconnecting", () => {
+      for (const room of socket.rooms) {
+        if (room !== socket.id) {
+          const roomSize = io.sockets.adapter.rooms.get(room).size;
+          io.to(room).emit("userCountUpdate", roomSize - 1);
+        }
+      }
     });
 
     socket.on("disconnect", () => {

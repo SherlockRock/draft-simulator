@@ -18,12 +18,14 @@ function Chat(props: props) {
     const [messages, setMessages] = createSignal<chatMessage[]>([]);
     const [message, setMessage] = createSignal("");
     const [previousDraft, setPreviousDraft] = createSignal("");
+    const [userCount, setUserCount] = createSignal(0);
 
     createEffect(() => {
         if (previousDraft() === "") {
             setPreviousDraft(props.currentDraft);
         } else if (previousDraft() !== props.currentDraft) {
             setMessages([]);
+            setUserCount(0);
             setPreviousDraft(props.currentDraft);
         }
     });
@@ -39,8 +41,13 @@ function Chat(props: props) {
             }
         );
 
+        holdSocket.on("userCountUpdate", (count: number) => {
+            setUserCount(count);
+        });
+
         onCleanup(() => {
             holdSocket.off("chatMessage");
+            holdSocket.off("userCountUpdate");
         });
     });
 
@@ -71,8 +78,11 @@ function Chat(props: props) {
 
     return (
         <div class="flex h-full flex-col">
-            <div class="mb-2 text-sm font-medium text-slate-100">Draft Chat</div>
             <div class="flex flex-1 flex-col rounded-md border border-gray-700 bg-gray-800">
+                <div class="flex justify-between border-b border-gray-700 p-2 text-sm font-medium text-slate-100">
+                    <p>Draft Chat</p>
+                    <p>Current Users: {userCount()}</p>
+                </div>
                 <div class="flex-1 overflow-y-auto p-2">
                     <For each={messages()}>
                         {(msg) => (
