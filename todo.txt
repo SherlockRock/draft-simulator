@@ -2,7 +2,6 @@ Short Term:
     Change share flow to have dropdown that displays link and coppy button
     Use sockets to update draft detail changes
     Allow non signed in users to see a non saving draft
-    Add drag and drop to frontend champ select
     Add ability to modify list of users who can view the draft
 
 Long Term:

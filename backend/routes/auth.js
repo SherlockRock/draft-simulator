@@ -76,6 +76,7 @@ router.post("/google/callback", async (req, res) => {
       httpOnly: true,
       secure: true,
       sameSite: "none",
+      path: "/api/auth",
     });
 
     try {
