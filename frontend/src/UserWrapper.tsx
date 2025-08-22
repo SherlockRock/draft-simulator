@@ -68,7 +68,7 @@ const Layout = () => {
     };
 
     return (
-        <div class="flex h-screen gap-2">
+        <div class="flex h-full gap-2">
             {/* Left Sidebar */}
             <div
                 class={`flex flex-col bg-gray-950 transition-all duration-300 ${isExpanded() ? "w-[max(20vw,300px)]" : "w-6"}`}
@@ -97,7 +97,7 @@ const Layout = () => {
                                         socket={socketAccessor()}
                                     />
                                 </div>
-                                <div class="pb-4 text-center text-slate-100">v0.0.1</div>
+                                <div class="pb-4 text-center text-slate-100">v0.0.2</div>
                             </div>
                         ) : null}
                     </div>

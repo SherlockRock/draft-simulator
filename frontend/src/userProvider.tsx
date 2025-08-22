@@ -134,7 +134,11 @@ export function UserProvider(props: { children: JSX.Element }) {
         });
     });
 
-    return <UserContext.Provider value={holdUser}>{props.children}</UserContext.Provider>;
+    return (
+        <UserContext.Provider value={holdUser}>
+            <div class="h-full">{props.children}</div>
+        </UserContext.Provider>
+    );
 }
 
 export function useUser() {

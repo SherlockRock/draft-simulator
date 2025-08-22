@@ -222,7 +222,7 @@ function Draft(props: props) {
     const holdChamps = createMemo(() => sortChamps(searchWord(), selectText()));
 
     return (
-        <div class="flex h-full w-full flex-col p-2" draggable="false">
+        <div class="flex h-screen w-full flex-col px-2" draggable="false">
             <Suspense fallback={<div>Loading...</div>}>
                 <DragDropProvider onDragEnd={onDragEnd} onDragStart={onDragStart}>
                     <Show when={currentDragged() !== ""}>
@@ -243,7 +243,7 @@ function Draft(props: props) {
                             <span>Error: {props.draft.error.message}</span>
                         </Match>
                         <Match when={props.draft()}>
-                            <div class="flex w-full justify-center self-center">
+                            <div class="flex w-full justify-center self-center pt-2">
                                 <div class="flex w-full justify-evenly gap-1 self-center">
                                     {/* All 10 bans */}
                                     <Index each={props.draft().picks.slice(0, 10)}>
@@ -293,7 +293,7 @@ function Draft(props: props) {
                                     </Index>
                                 </div>
                             </div>
-                            <div class="flex w-full justify-center self-center pt-4">
+                            <div class="flex max-h-[84%] w-full justify-center self-center pt-4">
                                 <div class="flex flex-col justify-between gap-1">
                                     {/* Blue Side Champions */}
                                     <Index each={props.draft().picks.slice(10, 15)}>
