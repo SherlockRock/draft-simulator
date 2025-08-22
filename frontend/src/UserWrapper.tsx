@@ -76,7 +76,7 @@ const Layout = () => {
                 <div class="flex h-full">
                     <div
                         ref={navTrayRef}
-                        class={`flex flex-1 flex-col transition-all duration-150 ${isExpanded() ? "w-full" : "w-0"}`}
+                        class={`flex flex-1 flex-col overflow-hidden transition-all duration-150 ${isExpanded() ? "w-full" : "w-0"}`}
                         onTransitionEnd={handleNavTransitionEnd}
                     >
                         {childrenVisible() ? (

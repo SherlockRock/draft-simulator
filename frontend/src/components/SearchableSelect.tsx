@@ -179,7 +179,9 @@ export const SearchableSelect = (props: props) => {
                                                 : "border-white text-white"
                                         }`}
                                 >
-                                    {option}
+                                    <p class="inline-block w-full overflow-hidden text-ellipsis whitespace-nowrap">
+                                        {option}
+                                    </p>
                                 </a>
                             </div>
                         )}

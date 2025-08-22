@@ -45,7 +45,7 @@ function DraftList(props: props) {
     });
 
     return (
-        <div class="flex w-full flex-col gap-2">
+        <div class="flex w-full flex-col gap-2 pr-2">
             <div class="text-gray-300">Select Draft:</div>
             <SearchableSelect
                 currentlySelected={props.currentDraft()?.name || ""}
@@ -55,7 +55,7 @@ function DraftList(props: props) {
                 onValidSelect={onValidSelect}
             />
             <button
-                class="flex-shrink-0 rounded-md bg-green-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-green-700"
+                class="flex-shrink-0 rounded-md bg-green-600 px-3 py-2.5 font-medium text-white hover:bg-green-700"
                 onClick={handleNewDraft}
             >
                 New Draft

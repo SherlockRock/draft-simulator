@@ -108,7 +108,7 @@ function Chat(props: props) {
                     />
                     <button
                         type="submit"
-                        class="rounded-r-md bg-blue-500 px-3 py-1 text-sm font-medium text-slate-100 hover:bg-blue-600"
+                        class="rounded-r-md bg-blue-600 px-3 py-1 text-sm font-medium text-slate-100 hover:bg-blue-600"
                     >
                         Send
                     </button>

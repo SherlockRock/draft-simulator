@@ -1,6 +1,4 @@
 Short Term:
-    add room active user count
-    Change share flow to have dropdown that displays link and coppy button
     Allow non signed in users to see a non saving draft
     Add ability to modify list of users who can view the draft
 
