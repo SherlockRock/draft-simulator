@@ -1,9 +1,8 @@
 Short Term:
     Allow non signed in users to see a non saving draft
-    Add ability to modify list of users who can view the draft
 
 Long Term:
     VS draft
-    View multiple drafts at once
-    Friend Functionality
+    View multiple drafts at once. Canvas?
+    Friend Functionality -> Add ability to modify list of users who can view the draft
     Add types
