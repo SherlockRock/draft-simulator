@@ -109,7 +109,7 @@ router.get("/refresh-token", async (req, res) => {
       where: { id: decoded.user_id },
     });
     if (!loggedInUser) {
-      res.status(403).send("User not found");
+      res.status(403).json({ error: "User not found" });
     } else {
       const userTokens = await loggedInUser.getUserTokens();
       let found = false;
@@ -120,7 +120,7 @@ router.get("/refresh-token", async (req, res) => {
         }
       });
       if (!found || new Date(decoded.exp * 1000) < new Date(Date.now())) {
-        res.status(403).send("Expired or invalid token");
+        res.status(403).json({ error: "Expired or invalid token" });
       } else {
         const user = {
           id: loggedInUser.id,
@@ -141,7 +141,7 @@ router.get("/refresh-token", async (req, res) => {
     }
   } catch (err) {
     console.log("Error verifying refresh token:", err);
-    res.status(403).send("Invalid or expired token");
+    res.status(403).json({ error: "Invalid or expired token" });
   }
 });
 

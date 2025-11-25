@@ -1,8 +1,42 @@
+Canvas Functionality:
+    replace draft list button Functionality with right click menus?
+        editing from the manage canvas' dialog
+    Export draft
+    connection arrows
+    folder heirarchy
+    enforce unique names when copying drafts
+
 Short Term:
+    searchable select need to fix arrow key controls
+    server tweaks when json token is too old? then draft wasn't loading for some reason
+    Bottom of champ list doesn't display right when uneven number of champs
     Allow non signed in users to see a non saving draft
+    need to handle all cases where res.ok is false
+    fix or remove current user count
 
 Long Term:
+    fearless/iron man
+    convert APIs to use Tanstack Query + better error handling
     VS draft
     View multiple drafts at once. Canvas?
     Friend Functionality -> Add ability to modify list of users who can view the draft
-    Add types
+    Add types w/ zod
+    Light mode/dark mode/UI customization?
+
+UI colors:
+bg dark slate-800
+bg medium slate-700
+bg light slate-600
+
+border lighter than light slate-500
+
+text primary slate-50
+text muted slate-200
+
+primary action dark teal-700
+primary action light teal-400
+
+danger red-500
+warning yellow-500
+success green-500
+info

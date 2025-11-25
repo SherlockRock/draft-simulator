@@ -1,4 +1,4 @@
-import { draft } from "../UserWrapper";
+import { CanvasDraft, Viewport, CanvasUser, draft } from "./types";
 
 export const BASE_URL =
     import.meta.env.VITE_ENVIRONMENT === "production"
@@ -14,7 +14,14 @@ export const fetchDraft = async (id: string): Promise<any> => {
     return hold;
 };
 
-export const postNewDraft = async (data: { name: string; public: boolean }) => {
+export const postNewDraft = async (data: {
+    name: string;
+    public: boolean;
+    picks?: string[];
+    canvas_id?: string;
+    positionX?: number;
+    positionY?: number;
+}) => {
     const res = await fetch(`${BASE_URL}/drafts`, {
         method: "POST",
         credentials: "include",
@@ -41,6 +48,10 @@ export const fetchDefaultDraft = async (id: string | null): Promise<draft | null
         method: "GET",
         credentials: "include"
     });
+    if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to fetch draft");
+    }
     return await res.json();
 };
 
@@ -67,6 +78,26 @@ export const deleteDraft = async (id: string) => {
     return await res.json();
 };
 
+export const deleteDraftFromCanvas = async (data: { canvas: string; draft: string }) => {
+    const res = await fetch(`${BASE_URL}/canvas/${data.canvas}/draft/${data.draft}`, {
+        method: "DELETE",
+        credentials: "include"
+    });
+    if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to fetch draft");
+    }
+    return await res.json();
+};
+
+export const deleteCanvas = async (canvas: string) => {
+    const res = await fetch(`${BASE_URL}/canvas/${canvas}`, {
+        method: "DELETE",
+        credentials: "include"
+    });
+    return await res.json();
+};
+
 export const generateShareLink = async (draftId: string) => {
     const res = await fetch(`${BASE_URL}/shares/${draftId}/generate-link`, {
         method: "POST",
@@ -76,7 +107,79 @@ export const generateShareLink = async (draftId: string) => {
     return shareLink;
 };
 
-// need to handle all cases where res.ok is false
+export const generateCanvasShareLink = async (canvasId: string) => {
+    const res = await fetch(`${BASE_URL}/shares/${canvasId}/generate-canvas-link`, {
+        method: "POST",
+        credentials: "include"
+    });
+    const { shareLink } = await res.json();
+    return shareLink;
+};
+
+export type CanvasResposnse = {
+    name: string;
+    drafts: CanvasDraft[];
+    lastViewport: Viewport;
+};
+export const fetchCanvas = async (canvasId: string): Promise<CanvasResposnse> => {
+    const res = await fetch(`${BASE_URL}/canvas/${canvasId}`, {
+        method: "GET",
+        credentials: "include"
+    });
+    if (!res.ok) {
+        const errorData = await res.json();
+        const error = new Error(errorData.error || "Failed to fetch canvas") as Error & {
+            status: number;
+        };
+        error.status = res.status;
+        throw error;
+    }
+    return await res.json();
+};
+
+export const generateNewCanvas = async (draftId: string) => {
+    const res = await fetch(`${BASE_URL}/canvas/`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ draftId })
+    });
+    if (res.ok) {
+        return await res.json();
+    }
+    return null;
+};
+
+export const updateCanvasName = async (data: { canvasId: string; name: string }) => {
+    const response = await fetch(`${BASE_URL}/canvas/${data.canvasId}/name`, {
+        method: "PATCH",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        credentials: "include",
+        body: JSON.stringify({ name: data.name })
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to update canvas name");
+    }
+
+    return response.json();
+};
+
+export const fetchDraftCanvases = async (draftId: string) => {
+    const res = await fetch(`${BASE_URL}/drafts/${draftId}/canvases`, {
+        method: "GET",
+        credentials: "include"
+    });
+    if (res.ok) {
+        return await res.json();
+    }
+    return null;
+};
 
 export const fetchUserDetails = async () => {
     const refresh = await fetch(`${BASE_URL}/auth/refresh-token`, {
@@ -116,4 +219,78 @@ export const handleGoogleLogin = async (code: string) => {
         return user;
     }
     return undefined;
+};
+
+export const updateCanvasDraftPosition = async (data: {
+    canvasId: string;
+    draftId: string;
+    positionX: number;
+    positionY: number;
+}) => {
+    const { canvasId, draftId, positionX, positionY } = data;
+    const res = await fetch(`${BASE_URL}/canvas/${canvasId}/draft/${draftId}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ positionX, positionY })
+    });
+    if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to update position");
+    }
+    return await res.json();
+};
+
+export const updateCanvasViewport = async (data: {
+    canvasId: string;
+    viewport: { x: number; y: number; zoom: number };
+}) => {
+    const response = await fetch(`/api/canvas/${data.canvasId}/viewport`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data.viewport)
+    });
+    if (!response.ok) {
+        throw new Error("Failed to update viewport");
+    }
+    return response.json();
+};
+
+export const fetchCanvasUsers = async (canvasId: string): Promise<CanvasUser[]> => {
+    const res = await fetch(`${BASE_URL}/canvas/${canvasId}/users`, {
+        method: "GET",
+        credentials: "include"
+    });
+    if (res.ok) {
+        const { users } = await res.json();
+        return users;
+    }
+    return [];
+};
+
+export const updateCanvasUserPermission = async (
+    canvasId: string,
+    userId: string,
+    permissions: string
+) => {
+    const res = await fetch(`${BASE_URL}/canvas/${canvasId}/users/${userId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ permissions })
+    });
+    if (!res.ok) throw new Error("Failed to update permission");
+    return await res.json();
+};
+
+export const removeUserFromCanvas = async (canvasId: string, userId: string) => {
+    const res = await fetch(`${BASE_URL}/canvas/${canvasId}/users/${userId}`, {
+        method: "DELETE",
+        credentials: "include"
+    });
+    if (!res.ok) throw new Error("Failed to remove user");
+    return await res.json();
 };

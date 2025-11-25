@@ -8,10 +8,10 @@ const ConnectionBanner = () => {
     return (
         <Show when={connectionStatus() !== "connected"}>
             <div
-                class="fixed left-0 right-0 top-0 z-50 p-3 text-center font-bold text-white"
+                class="fixed left-0 right-0 top-0 z-50 p-3 text-center font-bold text-slate-50"
                 classList={{
-                    "bg-yellow-600": connectionStatus() === "connecting",
-                    "bg-red-600":
+                    "bg-yellow-500": connectionStatus() === "connecting",
+                    "bg-red-500":
                         connectionStatus() === "disconnected" ||
                         connectionStatus() === "error"
                 }}

@@ -12,7 +12,6 @@ import {
 } from "solid-js";
 import { fetchUserDetails, handleGoogleLogin } from "./utils/actions";
 import { io, Socket } from "socket.io-client";
-import { useNavigate, useSearchParams } from "@solidjs/router";
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 
@@ -33,14 +32,13 @@ const createAuthenticatedSocket = () =>
 const UserContext = createContext<Accessor<Array<any>>>();
 
 export function UserProvider(props: { children: JSX.Element }) {
-    const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
     const [user, { mutate, refetch }] = createResource(fetchUserDetails);
     const [currentSocket, setCurrentSocket] = createSignal<Socket | undefined>(undefined);
     const [connectionStatus, setConnectionStatus] =
         createSignal<ConnectionStatus>("connecting");
     const login = async (code: string) => {
         const user = await handleGoogleLogin(code);
+        mutate(user);
         return user;
     };
     const logout = () => {
@@ -55,16 +53,6 @@ export function UserProvider(props: { children: JSX.Element }) {
         currentSocket,
         connectionStatus
     ]);
-
-    createEffect(() => {
-        const code = searchParams.code;
-        if (typeof code === "string") {
-            login(code).then((res) => {
-                mutate(res);
-                navigate("/");
-            });
-        }
-    });
 
     createEffect(() => {
         const currentUser = user();

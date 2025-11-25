@@ -10,11 +10,13 @@ const cors = require("cors");
 const draftRoutes = require("./routes/drafts");
 const userRoutes = require("./routes/users");
 const shareRoutes = require("./routes/shares");
-const authRoutes = require("./routes/auth"); // Import the new auth routes
+const authRoutes = require("./routes/auth");
+const canvasRoutes = require("./routes/canvas");
 const Draft = require("./models/Draft");
 const User = require("./models/User");
 const setupAssociations = require("./models/associations");
 const socketService = require("./middleware/socketService");
+const { UserCanvas } = require("./models/Canvas");
 require("dotenv").config();
 
 async function main() {
@@ -54,6 +56,7 @@ async function main() {
   app.use("/api/drafts", draftRoutes);
   app.use("/api/users", userRoutes);
   app.use("/api/shares", shareRoutes);
+  app.use("/api/canvas", canvasRoutes);
 
   let server;
   if (process.env.ENVIRONMENT === "development") {
@@ -123,7 +126,6 @@ async function main() {
       io.to(data.id).emit("draftUpdate", data, data.id);
     });
 
-    // Join a room
     socket.on("joinRoom", async (room) => {
       socket.join(room);
       console.log(`${socket.id} joined room: ${room}`);
@@ -131,7 +133,6 @@ async function main() {
       io.to(room).emit("userCountUpdate", roomSize);
     });
 
-    // Leave a room
     socket.on("leaveRoom", async (room) => {
       socket.leave(room);
       console.log(`${socket.id} left room: ${room}`);
@@ -139,7 +140,6 @@ async function main() {
       io.to(room).emit("userCountUpdate", roomSize);
     });
 
-    // Broadcast to a room
     socket.on("newMessage", async (req) => {
       const username = socket.user ? socket.user.name : socket.id;
       io.to(req.room).emit("chatMessage", {
@@ -147,6 +147,26 @@ async function main() {
         socketId: socket.id,
         chat: req.message,
       });
+    });
+
+    socket.on("canvasObjectMove", async (data) => {
+      const userCanvas = await UserCanvas.findOne({
+        where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },
+      });
+      if (
+        (userCanvas && userCanvas.permissions === "edit") ||
+        userCanvas.permissions === "admin"
+      ) {
+        io.to(data.canvasId).emit(
+          "canvasObjectMoved",
+          {
+            draftId: data.draftId,
+            positionX: data.positionX,
+            positionY: data.positionY,
+          },
+          data.canvasId
+        );
+      }
     });
 
     socket.on("disconnecting", () => {

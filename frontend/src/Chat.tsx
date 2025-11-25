@@ -78,8 +78,8 @@ function Chat(props: props) {
 
     return (
         <div class="flex h-full flex-col">
-            <div class="flex flex-1 flex-col rounded-md border border-gray-700 bg-gray-800">
-                <div class="flex justify-between border-b border-gray-700 p-2 text-sm font-medium text-slate-100">
+            <div class="flex flex-1 flex-col rounded-md border border-slate-500 bg-slate-700">
+                <div class="flex justify-between border-b border-slate-500 p-2 text-sm font-medium text-slate-50">
                     <p>Draft Chat</p>
                     <p>Current Users: {userCount()}</p>
                 </div>
@@ -96,19 +96,19 @@ function Chat(props: props) {
                     </For>
                 </div>
                 <form
-                    class="flex items-center border-t border-gray-700 p-2"
+                    class="flex items-center border-t border-slate-500 p-2"
                     onSubmit={sendMessage}
                 >
                     <input
                         type="text"
                         placeholder="Type a message..."
-                        class="w-40 flex-1 rounded-l-md border-none bg-gray-700 px-3 py-1 text-sm text-slate-100 focus:outline-none"
+                        class="w-40 flex-1 rounded-l-md border-none bg-slate-600 px-3 py-1 text-sm text-slate-50 placeholder:text-slate-200 focus:outline-none"
                         value={message()}
                         onInput={(e) => setMessage(e.target.value)}
                     />
                     <button
                         type="submit"
-                        class="rounded-r-md bg-blue-600 px-3 py-1 text-sm font-medium text-slate-100 hover:bg-blue-600"
+                        class="rounded-r-md bg-teal-700 px-3 py-1 text-sm font-medium text-slate-50 hover:bg-teal-400"
                     >
                         Send
                     </button>

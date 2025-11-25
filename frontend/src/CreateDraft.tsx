@@ -15,7 +15,7 @@ function CreateDraft(props: props) {
     const handleCreateDraft = async () => {
         const newDraft = await postNewDraft({ name: name(), public: isPublic() });
         props.mutate([...props.draftList(), newDraft]);
-        navigate(`/${newDraft.id}`);
+        navigate(`/draft/${newDraft.id}`);
     };
 
     return (
@@ -34,7 +34,7 @@ function CreateDraft(props: props) {
                         type="text"
                         value={name()}
                         onInput={(e) => setName(e.currentTarget.value)}
-                        class="focus:shadow-outline w-full appearance-none rounded border px-3 py-2 leading-tight text-gray-700 shadow focus:outline-none"
+                        class="focus:shadow-outline w-full appearance-none rounded border border-slate-500 bg-slate-600 px-3 py-2 leading-tight text-slate-50 shadow focus:outline-none"
                     />
                 </div>
                 <div class="mb-6">
@@ -43,7 +43,7 @@ function CreateDraft(props: props) {
                             type="checkbox"
                             checked={isPublic()}
                             onChange={(e) => setIsPublic(e.currentTarget.checked)}
-                            class="mr-2"
+                            class="mr-2 accent-teal-700 hover:accent-teal-400"
                         />
                         <span class="text-sm text-white">Public</span>
                     </label>
@@ -51,7 +51,7 @@ function CreateDraft(props: props) {
                 <div class="flex items-center justify-between">
                     <button
                         onClick={handleCreateDraft}
-                        class="focus:shadow-outline rounded bg-blue-500 px-4 py-2 font-bold text-white hover:bg-blue-700 focus:outline-none"
+                        class="focus:shadow-outline rounded bg-teal-700 px-4 py-2 text-slate-50 hover:bg-teal-400 focus:outline-none"
                         type="button"
                     >
                         Create Draft

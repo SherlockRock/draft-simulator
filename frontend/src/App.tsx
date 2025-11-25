@@ -1,8 +1,14 @@
 import { Component } from "solid-js";
 import { RouteSectionProps } from "@solidjs/router";
+import { Toaster } from "solid-toast";
 
 const App: Component<RouteSectionProps<unknown>> = (props) => {
-    return <div class="h-screen overflow-clip bg-purple-800">{props.children}</div>;
+    return (
+        <div class="h-screen overflow-clip bg-slate-700">
+            {props.children}
+            <Toaster />
+        </div>
+    );
 };
 
 export default App;

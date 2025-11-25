@@ -33,7 +33,7 @@ import {
     DragEventHandler,
     DragOverlay
 } from "@thisbeyond/solid-dnd";
-import { draft } from "./UserWrapper";
+import { draft } from "./utils/types";
 
 type draggableProps = {
     name: string;
@@ -82,11 +82,13 @@ function Draft(props: props) {
     const [selectText, setSelectText] = createSignal("");
     const [currentlySelected, setCurrentlySelected] = createSignal("");
     const [currentDragged, setCurrentDragged] = createSignal("");
+    const [anonDraft, setAnonDraft] = createSignal<boolean>(true);
 
     createEffect(() => {
         const holdDraft = props.draft();
-        if (holdDraft && holdDraft.picks.length !== 0) {
-            navigate(`/${props.draft().id}`);
+        if (holdDraft && anonDraft()) {
+            setAnonDraft(false);
+            navigate(`/draft/${holdDraft.id}`, { replace: true });
             socketAccessor().emit("joinRoom", holdDraft.id);
         }
     });
@@ -137,7 +139,7 @@ function Draft(props: props) {
         }));
         socketAccessor().emit("newDraft", {
             picks: holdPicks,
-            id: params.session
+            id: params.id
         });
         setSelectedChampion("");
         setCurrentDragged("");
@@ -172,10 +174,15 @@ function Draft(props: props) {
         return "border-2 border-black hover:cursor-move";
     };
 
-    const picksAndBansClass = (champ: string) => {
+    const picksClasses = (champ: string) => {
         return champ === "" && selectedChampion() === ""
-            ? "aspect-square w-[min(8vw,120px)] border-4 border-gray-800"
-            : "aspect-square w-[min(8vw,120px)] border-4 border-gray-800 hover:cursor-pointer";
+            ? "aspect-square w-[min(8vw,120px)] border-2 border-slate-500"
+            : "aspect-square w-[min(8vw,120px)] border-2 border-slate-500 hover:cursor-pointer";
+    };
+    const bansClasses = (champ: string) => {
+        return champ === "" && selectedChampion() === ""
+            ? "aspect-square w-[min(6vw,120px)] border-2 border-slate-500"
+            : "aspect-square w-[min(6vw,120px)] border-2 border-slate-500 hover:cursor-pointer";
     };
 
     const handleSelectedChamp = (champ: string) => {
@@ -254,21 +261,19 @@ function Draft(props: props) {
                                                         when={each()}
                                                         keyed
                                                         fallback={
-                                                            <div
-                                                                class={
-                                                                    "aspect-square w-[min(8vw,120px)] border-4 border-gray-800"
-                                                                }
-                                                                onClick={() =>
-                                                                    handleSelect(index)
-                                                                }
-                                                            />
+                                                            <div class="aspect-square w-[min(6vw,120px)] border-2 border-slate-500">
+                                                                <img
+                                                                    src="/src/assets/BlankSquare.webp"
+                                                                    draggable="false"
+                                                                />
+                                                            </div>
                                                         }
                                                     >
                                                         <DraggableWrapper
                                                             name={`banned-${each()}`}
                                                         >
                                                             <div
-                                                                class={picksAndBansClass(
+                                                                class={bansClasses(
                                                                     each()
                                                                 )}
                                                                 onClick={() =>
@@ -303,23 +308,19 @@ function Draft(props: props) {
                                                     when={each()}
                                                     keyed
                                                     fallback={
-                                                        <div
-                                                            class={
-                                                                "aspect-square w-[min(8vw,120px)] border-4 border-gray-800"
-                                                            }
-                                                            onClick={() =>
-                                                                handleSelect(index + 10)
-                                                            }
-                                                        />
+                                                        <div class="aspect-square w-[min(8vw,120px)] border-2 border-slate-500">
+                                                            <img
+                                                                src="/src/assets/BlankSquare.webp"
+                                                                draggable="false"
+                                                            />
+                                                        </div>
                                                     }
                                                 >
                                                     <DraggableWrapper
                                                         name={`picked-${each()}`}
                                                     >
                                                         <div
-                                                            class={picksAndBansClass(
-                                                                each()
-                                                            )}
+                                                            class={picksClasses(each())}
                                                             onClick={() =>
                                                                 handleSelect(index + 10)
                                                             }
@@ -337,16 +338,17 @@ function Draft(props: props) {
                                         )}
                                     </Index>
                                 </div>
-                                <div class="mx-4 w-[min(80vw,600px)] rounded-t-md bg-gray-950">
-                                    <div class="flex pb-2">
+                                <div class="mx-4 w-[min(80vw,600px)] rounded-t-md ">
+                                    <div class="flex">
                                         <input
-                                            class="w-full rounded-md bg-gray-950 p-1 text-white focus:outline-none"
+                                            class="w-full rounded-t-md bg-slate-800 p-1 text-slate-50 placeholder:text-slate-200 focus:outline-none"
                                             type="text"
                                             value={searchWord()}
                                             onInput={handleSearch}
                                             placeholder="Search Champions..."
                                         />
                                         <SearchableSelect
+                                            placeholder="Sort by Role"
                                             currentlySelected={currentlySelected()}
                                             sortOptions={sortOptions}
                                             selectText={selectText()}
@@ -354,7 +356,7 @@ function Draft(props: props) {
                                             onValidSelect={onValidSelect}
                                         />
                                     </div>
-                                    <div class="h-[85vh] overflow-auto">
+                                    <div class="custom-scrollbar h-[85vh] overflow-auto">
                                         <Droppable id={-1}>
                                             <div class="grid grid-cols-5">
                                                 {/* Table Search Results */}
@@ -391,41 +393,36 @@ function Draft(props: props) {
                                     <Index each={props.draft().picks.slice(15, 20)}>
                                         {(each, index) => (
                                             <Droppable id={index + 15}>
-                                                <Switch>
-                                                    <Match when={each() === ""}>
+                                                <Show
+                                                    when={each()}
+                                                    keyed
+                                                    fallback={
+                                                        <div class="aspect-square w-[min(8vw,120px)] border-2 border-slate-500">
+                                                            <img
+                                                                src="/src/assets/BlankSquare.webp"
+                                                                draggable="false"
+                                                            />
+                                                        </div>
+                                                    }
+                                                >
+                                                    <DraggableWrapper
+                                                        name={`picked-${each()}`}
+                                                    >
                                                         <div
-                                                            class={
-                                                                "aspect-square w-[min(8vw,120px)] border-4 border-gray-800"
-                                                            }
+                                                            class={picksClasses(each())}
                                                             onClick={() =>
                                                                 handleSelect(index + 15)
                                                             }
-                                                        />
-                                                    </Match>
-                                                    <Match when={each() !== ""}>
-                                                        <DraggableWrapper
-                                                            name={`picked-${each()}`}
                                                         >
-                                                            <div
-                                                                class={picksAndBansClass(
+                                                            <img
+                                                                src={champNumberToImg(
                                                                     each()
                                                                 )}
-                                                                onClick={() =>
-                                                                    handleSelect(
-                                                                        index + 15
-                                                                    )
-                                                                }
-                                                            >
-                                                                <img
-                                                                    src={champNumberToImg(
-                                                                        each()
-                                                                    )}
-                                                                    draggable="false"
-                                                                />
-                                                            </div>
-                                                        </DraggableWrapper>
-                                                    </Match>
-                                                </Switch>
+                                                                draggable="false"
+                                                            />
+                                                        </div>
+                                                    </DraggableWrapper>
+                                                </Show>
                                             </Droppable>
                                         )}
                                     </Index>

@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const DraftShare = require("./models/DraftShare");
 
 const encrypt = (token) => {
   const key = Buffer.from(process.env.ENCRYPTION_KEY, "base64"); // Must be 32 bytes for aes-256
@@ -24,4 +25,16 @@ const decrypt = (data) => {
   return decrypted;
 };
 
-module.exports = { encrypt, decrypt };
+const draftHasSharedWithUser = async (draft, user) => {
+  try {
+    const share = await DraftShare.findOne({
+      where: { draft_id: draft.id, user_id: user.id },
+    });
+    return share !== null;
+  } catch (error) {
+    console.error("Error checking draft share:", error);
+    return res.status(403).json({ error: "Unauthorized" });
+  }
+};
+
+module.exports = { encrypt, decrypt, draftHasSharedWithUser };

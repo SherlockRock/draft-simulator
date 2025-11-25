@@ -1,11 +1,16 @@
 /* @refresh reload */
 import { render } from "solid-js/web";
 import { Router, Route } from "@solidjs/router";
+import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 
 import "./index.css";
 import App from "./App";
 import { UserWrapper } from "./UserWrapper";
-import SharePage from "./SharePage";
+import DraftWorkflow from "./workflows/DraftWorkflow";
+import CanvasWorkflow from "./workflows/CanvasWorkflow";
+import AuthCallback from "./AuthCallback";
+import ShareDraftPage from "./ShareDraftPage";
+import ShareCanvasPage from "./ShareCanvasPage";
 
 const root = document.getElementById("root");
 
@@ -15,13 +20,22 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
     );
 }
 
+const queryClient = new QueryClient();
+
 render(
     () => (
-        <Router root={App}>
-            <Route path="/share" component={SharePage} />
-            <Route path="/:session?" component={UserWrapper} />
-            <Route path="/:token?" component={UserWrapper} />
-        </Router>
+        <QueryClientProvider client={queryClient}>
+            <Router root={App}>
+                <Route path="/share/draft" component={ShareDraftPage} />
+                <Route path="/share/canvas" component={ShareCanvasPage} />
+                <Route path="/" component={UserWrapper}>
+                    <Route path="/oauth2callback" component={AuthCallback} />
+                    <Route path="/" component={DraftWorkflow} />
+                    <Route path="/draft/:id" component={DraftWorkflow} />
+                    <Route path="/canvas/:id" component={CanvasWorkflow} />
+                </Route>
+            </Router>
+        </QueryClientProvider>
     ),
     root!
 );

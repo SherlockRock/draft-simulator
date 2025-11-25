@@ -1,7 +1,9 @@
 import { createMemo, createSignal, For, Setter, Show } from "solid-js";
 import KeyEvent, { Key } from "../KeyEvent";
+import { sortOptions } from "../utils/constants";
 
 type props = {
+    placeholder?: string;
     currentlySelected: string;
     sortOptions: string[];
     selectText: string;
@@ -49,7 +51,7 @@ export const SearchableSelect = (props: props) => {
                 if (dropdownOpen()) {
                     setDropdownIndex((prevIndex) => {
                         if (prevIndex === 0) {
-                            return 4;
+                            return sortOptions.length - 1;
                         }
                         return prevIndex - 1;
                     });
@@ -58,7 +60,7 @@ export const SearchableSelect = (props: props) => {
             case "ArrowDown":
                 if (dropdownOpen()) {
                     setDropdownIndex((prevIndex) => {
-                        if (prevIndex === 4) {
+                        if (prevIndex === sortOptions.length - 1) {
                             return 0;
                         }
                         return prevIndex + 1;
@@ -101,7 +103,7 @@ export const SearchableSelect = (props: props) => {
                 keys={["Enter", "ArrowUp", "ArrowDown", "Escape"]}
             />
             <div
-                class="flex h-10 items-center rounded-md border border-blue-600 bg-gray-950"
+                class="flex h-10 items-center rounded-md border border-teal-700 bg-slate-800"
                 onFocusIn={onFocusIn}
                 onFocusOut={onFocusOut}
                 tabIndex={0}
@@ -113,15 +115,16 @@ export const SearchableSelect = (props: props) => {
                         setDropdownOpen(true);
                         props.setSelectText(e.target.value);
                     }}
+                    placeholder={props.placeholder}
                     name="select"
                     id="select"
-                    class="w-full appearance-none bg-inherit px-4 text-white outline-none"
+                    class="w-full appearance-none bg-inherit px-4 text-slate-50 outline-none placeholder:text-slate-200"
                 />
                 <button
                     onClick={() => {
                         props.setSelectText("");
                     }}
-                    class="cursor-pointer text-white outline-none transition-all hover:text-gray-600 focus:outline-none"
+                    class="cursor-pointer text-slate-50 outline-none transition-all hover:text-teal-700 focus:outline-none"
                 >
                     <svg
                         class="mx-2 h-4 w-4 fill-current"
@@ -138,7 +141,7 @@ export const SearchableSelect = (props: props) => {
                 </button>
                 <label
                     for="show_more"
-                    class="cursor-pointer border-l border-gray-700 text-gray-300 outline-none transition-all hover:text-gray-600 focus:outline-none"
+                    class="cursor-pointer border-l border-slate-500 text-slate-50 outline-none transition-all hover:text-teal-700 focus:outline-none"
                 >
                     <button class="flex h-full justify-center">
                         <svg
@@ -158,7 +161,7 @@ export const SearchableSelect = (props: props) => {
                 </label>
             </div>
             {dropdownOpen() && (
-                <div class="absolute z-10 w-full flex-col rounded-md border border-t-0 border-blue-600">
+                <div class="absolute z-10 w-full flex-col rounded-md border border-t-0 border-teal-400">
                     <For each={holdSortOptions()}>
                         {(option, index) => (
                             <div
@@ -172,7 +175,7 @@ export const SearchableSelect = (props: props) => {
                                 }}
                             >
                                 <a
-                                    class={`block border-l-4 bg-gray-950 p-2 text-white transition-colors group-hover:border-blue-600 group-hover:bg-gray-800 group-hover:text-blue-600
+                                    class={`block border-l-4 bg-gray-950 p-2 transition-colors group-hover:border-blue-600 group-hover:bg-gray-800 group-hover:text-teal-400
                                         ${
                                             holdSelectedIndex() === index()
                                                 ? "border-green-600 text-green-600"

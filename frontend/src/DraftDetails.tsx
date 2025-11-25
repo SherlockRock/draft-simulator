@@ -111,7 +111,7 @@ function DraftDetails(props: props) {
     );
 
     return (
-        <div class="mt-4 text-white">
+        <div class="mt-4 text-slate-50">
             <KeyEvent onKeyUp={handleKeyEvent} keys={["Enter", "Escape"]} />
             <div class="flex h-9 items-center">
                 <div class="flex w-full gap-2">
@@ -133,7 +133,7 @@ function DraftDetails(props: props) {
                                         onInput={(e) =>
                                             setDraftName(e.currentTarget.value)
                                         }
-                                        class="w-full rounded-md border border-gray-700 bg-gray-800 p-1 text-white"
+                                        class="w-full rounded-md border border-slate-500 bg-slate-600 p-1 text-slate-50 focus:outline-none"
                                     />
                                 </div>
                             ) : (
@@ -142,7 +142,10 @@ function DraftDetails(props: props) {
                                 </p>
                             )}
                             {isEditingName() ? (
-                                <button type="submit" class="hover:text-blue-600">
+                                <button
+                                    type="submit"
+                                    class="text-teal-700 hover:text-teal-400"
+                                >
                                     <svg
                                         xmlns="http://www.w3.org/2000/svg"
                                         class="h-5 w-5"
@@ -159,7 +162,7 @@ function DraftDetails(props: props) {
                             ) : (
                                 <button
                                     onClick={handleOnClick}
-                                    class="hover:text-blue-600"
+                                    class="text-teal-700 hover:text-teal-400"
                                 >
                                     <svg
                                         xmlns="http://www.w3.org/2000/svg"
@@ -195,13 +198,13 @@ function DraftDetails(props: props) {
                             onChange={handleTogglePublic}
                             disabled={!isOwner()}
                         />
-                        <div class="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all peer-checked:bg-blue-600 peer-checked:after:translate-x-full " />
+                        <div class="peer h-6 w-11 rounded-full bg-slate-600 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-slate-50 after:transition-all hover:bg-slate-500 peer-checked:bg-teal-700 peer-checked:after:translate-x-full peer-checked:hover:bg-teal-400 " />
                     </label>
                 </div>
                 <Show when={isOwner()}>
                     <div class="relative inline-block" onFocusOut={handleFocusOut}>
                         <button
-                            class="text-white hover:text-blue-600"
+                            class="text-teal-700 hover:text-teal-400"
                             onClick={handleShare}
                         >
                             <svg
@@ -214,17 +217,17 @@ function DraftDetails(props: props) {
                             </svg>
                         </button>
                         <Show when={isPopperOpen()}>
-                            <div class="absolute -right-3/4 z-10 mb-2 w-auto min-w-max rounded-md bg-gray-800 p-2 shadow-lg">
+                            <div class="absolute -right-3/4 z-10 mb-2 w-auto min-w-max rounded-md bg-slate-600 p-2 shadow-lg">
                                 <div class="flex items-center gap-2">
                                     <input
                                         type="text"
                                         readOnly
                                         value={shareLink()}
-                                        class="w-48 rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-white"
+                                        class="w-48 rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-slate-50"
                                     />
                                     <button
                                         onClick={handleCopy}
-                                        class="rounded-md bg-blue-600 p-2 text-white hover:bg-blue-700"
+                                        class="rounded-md bg-teal-400 p-2 text-slate-50 hover:bg-teal-700"
                                     >
                                         <Show
                                             when={!copied()}
