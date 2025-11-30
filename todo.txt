@@ -1,4 +1,5 @@
 Canvas Functionality:
+    viewport not updating
     replace draft list button Functionality with right click menus?
         editing from the manage canvas' dialog
     Export draft
@@ -7,6 +8,7 @@ Canvas Functionality:
     enforce unique names when copying drafts
 
 Short Term:
+    champ table error when searching by "gn"?
     searchable select need to fix arrow key controls
     server tweaks when json token is too old? then draft wasn't loading for some reason
     Bottom of champ list doesn't display right when uneven number of champs

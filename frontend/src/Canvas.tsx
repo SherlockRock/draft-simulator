@@ -294,7 +294,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const updateViewportMutation = useMutation(() => ({
         mutationFn: updateCanvasViewport,
         onError: (error: Error) => {
-            toast.error(`Error deleting draft: ${error.message}`);
+            toast.error(`Error updating view: ${error.message}`);
         }
     }));
 

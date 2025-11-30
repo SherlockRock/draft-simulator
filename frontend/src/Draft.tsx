@@ -34,6 +34,7 @@ import {
     DragOverlay
 } from "@thisbeyond/solid-dnd";
 import { draft } from "./utils/types";
+import BlankSquare from "/src/assets/BlankSquare.webp";
 
 type draggableProps = {
     name: string;
@@ -263,7 +264,7 @@ function Draft(props: props) {
                                                         fallback={
                                                             <div class="aspect-square w-[min(6vw,120px)] border-2 border-slate-500">
                                                                 <img
-                                                                    src="/src/assets/BlankSquare.webp"
+                                                                    src={BlankSquare}
                                                                     draggable="false"
                                                                 />
                                                             </div>
@@ -310,7 +311,7 @@ function Draft(props: props) {
                                                     fallback={
                                                         <div class="aspect-square w-[min(8vw,120px)] border-2 border-slate-500">
                                                             <img
-                                                                src="/src/assets/BlankSquare.webp"
+                                                                src={BlankSquare}
                                                                 draggable="false"
                                                             />
                                                         </div>
@@ -399,7 +400,7 @@ function Draft(props: props) {
                                                     fallback={
                                                         <div class="aspect-square w-[min(8vw,120px)] border-2 border-slate-500">
                                                             <img
-                                                                src="/src/assets/BlankSquare.webp"
+                                                                src={BlankSquare}
                                                                 draggable="false"
                                                             />
                                                         </div>

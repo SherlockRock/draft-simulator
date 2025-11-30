@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import KeyEvent, { Key } from "../KeyEvent";
 import { champions } from "../utils/constants";
+import BlankSquare from "/src/assets/BlankSquare.webp";
 
 const indexToShorthand = [
     "BB1",
@@ -45,7 +46,6 @@ export const CanvasSelect = (props: props) => {
     const [dropdownOpen, setDropdownOpen] = createSignal(false);
     const [dropdownIndex, setDropdownIndex] = createSignal(-1);
     const [selectText, setSelectText] = createSignal("");
-    const [currentlySelected, setCurrentlySelected] = createSignal("");
     const [unavailableChampions, setUnavailableChampions] = createSignal<string[]>([]);
 
     // Refs for scroll management
@@ -118,7 +118,6 @@ export const CanvasSelect = (props: props) => {
                         holdOptions[dropdownIndex() % holdOptions.length].name;
                     setSelectText(holdChampName);
                     setDropdownOpen(false);
-                    setCurrentlySelected(holdChampName);
                     props.handlePickChange(
                         props.draft.id,
                         spliceIndexToRealIndex[props.index()],
@@ -157,10 +156,6 @@ export const CanvasSelect = (props: props) => {
         }
     };
 
-    // const holdSelectedIndex = createMemo(() => {
-    //     return champions.findIndex((value) => value.name === currentlySelected());
-    // });
-
     const selectedChampion = () => {
         return props.pick !== "" ? champions[Number(props.pick)] : null;
     };
@@ -192,11 +187,7 @@ export const CanvasSelect = (props: props) => {
                     <Show
                         when={selectedChampion() !== null}
                         fallback={
-                            <img
-                                src="/src/assets/BlankSquare.webp"
-                                alt={"no champion selected"}
-                                class="h-6 w-6 rounded"
-                            />
+                            <img src={BlankSquare} alt="blank" class="h-6 w-6 rounded" />
                         }
                     >
                         <img
@@ -267,7 +258,6 @@ export const CanvasSelect = (props: props) => {
                                             e.preventDefault();
                                             if (!champNotAvailable) {
                                                 setSelectText(champion.name);
-                                                setCurrentlySelected(champion.name);
                                                 props.handlePickChange(
                                                     props.draft.id,
                                                     spliceIndexToRealIndex[props.index()],

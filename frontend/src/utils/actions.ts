@@ -10,6 +10,9 @@ export const fetchDraft = async (id: string): Promise<any> => {
         method: "GET",
         credentials: "include"
     });
+    if (!res.ok) {
+        throw new Error("Failed to fetch draft");
+    }
     const hold = await res.json();
     return hold;
 };
@@ -30,6 +33,9 @@ export const postNewDraft = async (data: {
         },
         body: JSON.stringify(data)
     });
+    if (!res.ok) {
+        throw new Error("Failed to create new draft");
+    }
     const hold = await res.json();
     return hold;
 };
@@ -39,6 +45,9 @@ export const fetchDraftList = async () => {
         method: "GET",
         credentials: "include"
     });
+    if (!res.ok) {
+        throw new Error("Failed to fetch draft list");
+    }
     return await res.json();
 };
 
@@ -67,6 +76,9 @@ export const editDraft = async (
         },
         body: JSON.stringify(data)
     });
+    if (!res.ok) {
+        throw new Error("Failed to edit draft");
+    }
     return await res.json();
 };
 
@@ -75,6 +87,9 @@ export const deleteDraft = async (id: string) => {
         method: "DELETE",
         credentials: "include"
     });
+    if (!res.ok) {
+        throw new Error("Failed to delete draft");
+    }
     return await res.json();
 };
 
@@ -95,6 +110,9 @@ export const deleteCanvas = async (canvas: string) => {
         method: "DELETE",
         credentials: "include"
     });
+    if (!res.ok) {
+        throw new Error("Failed to delete canvas");
+    }
     return await res.json();
 };
 
@@ -103,6 +121,9 @@ export const generateShareLink = async (draftId: string) => {
         method: "POST",
         credentials: "include"
     });
+    if (!res.ok) {
+        throw new Error("Failed to generate share link");
+    }
     const { shareLink } = await res.json();
     return shareLink;
 };
@@ -146,14 +167,14 @@ export const generateNewCanvas = async (draftId: string) => {
         },
         body: JSON.stringify({ draftId })
     });
-    if (res.ok) {
-        return await res.json();
+    if (!res.ok) {
+        throw new Error("Failed to create new canvas");
     }
-    return null;
+    return await res.json();
 };
 
 export const updateCanvasName = async (data: { canvasId: string; name: string }) => {
-    const response = await fetch(`${BASE_URL}/canvas/${data.canvasId}/name`, {
+    const res = await fetch(`${BASE_URL}/canvas/${data.canvasId}/name`, {
         method: "PATCH",
         headers: {
             "Content-Type": "application/json"
@@ -162,12 +183,12 @@ export const updateCanvasName = async (data: { canvasId: string; name: string })
         body: JSON.stringify({ name: data.name })
     });
 
-    if (!response.ok) {
-        const error = await response.json();
+    if (!res.ok) {
+        const error = await res.json();
         throw new Error(error.error || "Failed to update canvas name");
     }
 
-    return response.json();
+    return res.json();
 };
 
 export const fetchDraftCanvases = async (draftId: string) => {
@@ -175,22 +196,24 @@ export const fetchDraftCanvases = async (draftId: string) => {
         method: "GET",
         credentials: "include"
     });
-    if (res.ok) {
-        return await res.json();
+
+    if (!res.ok) {
+        throw new Error("Failed to fetch draft canvases");
     }
-    return null;
+    return await res.json();
 };
 
 export const fetchUserDetails = async () => {
-    const refresh = await fetch(`${BASE_URL}/auth/refresh-token`, {
+    const res = await fetch(`${BASE_URL}/auth/refresh-token`, {
         method: "GET",
         credentials: "include"
     });
-    if (refresh.ok) {
-        const hold = await refresh.json();
-        return hold.user;
+
+    if (!res.ok) {
+        throw new Error("Failed to fetch user details");
     }
-    return undefined;
+    const hold = await res.json();
+    return hold.user;
 };
 
 export const handleRevoke = async () => {
@@ -214,11 +237,11 @@ export const handleGoogleLogin = async (code: string) => {
         credentials: "include",
         body: JSON.stringify({ code })
     });
-    if (res.ok) {
-        const { user } = await res.json();
-        return user;
+    if (!res.ok) {
+        throw new Error("Failed to handle Google login");
     }
-    return undefined;
+    const { user } = await res.json();
+    return user;
 };
 
 export const updateCanvasDraftPosition = async (data: {
@@ -247,16 +270,16 @@ export const updateCanvasViewport = async (data: {
     canvasId: string;
     viewport: { x: number; y: number; zoom: number };
 }) => {
-    const response = await fetch(`/api/canvas/${data.canvasId}/viewport`, {
+    const res = await fetch(`/api/canvas/${data.canvasId}/viewport`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data.viewport)
     });
-    if (!response.ok) {
+    if (!res.ok) {
         throw new Error("Failed to update viewport");
     }
-    return response.json();
+    return await res.json();
 };
 
 export const fetchCanvasUsers = async (canvasId: string): Promise<CanvasUser[]> => {
@@ -264,11 +287,11 @@ export const fetchCanvasUsers = async (canvasId: string): Promise<CanvasUser[]> 
         method: "GET",
         credentials: "include"
     });
-    if (res.ok) {
-        const { users } = await res.json();
-        return users;
+    if (!res.ok) {
+        throw new Error("Failed to fetch canvas users");
     }
-    return [];
+    const { users } = await res.json();
+    return users;
 };
 
 export const updateCanvasUserPermission = async (
@@ -282,7 +305,9 @@ export const updateCanvasUserPermission = async (
         credentials: "include",
         body: JSON.stringify({ permissions })
     });
-    if (!res.ok) throw new Error("Failed to update permission");
+    if (!res.ok) {
+        throw new Error("Failed to update permission");
+    }
     return await res.json();
 };
 
@@ -291,6 +316,8 @@ export const removeUserFromCanvas = async (canvasId: string, userId: string) => 
         method: "DELETE",
         credentials: "include"
     });
-    if (!res.ok) throw new Error("Failed to remove user");
+    if (!res.ok) {
+        throw new Error("Failed to remove user");
+    }
     return await res.json();
 };
