@@ -292,6 +292,7 @@ router.delete("/:canvasId", protect, async (req, res) => {
 
 router.patch("/:canvasId/viewport", async (req, res) => {
   try {
+    console.log("Received viewport update request:", req.params, req.body);
     const user = await getUserFromRequest(req);
 
     if (!user) {
@@ -324,8 +325,12 @@ router.patch("/:canvasId/viewport", async (req, res) => {
     userCanvas.lastZoomLevel = zoom;
     userCanvas.lastAccessedAt = new Date();
     await userCanvas.save();
-
-    res.status(200).json({
+    console.log("Viewport updated for userCanvas:", {
+      success: true,
+      message: "Viewport updated",
+      viewport: { x, y, zoom },
+    });
+    return res.status(200).json({
       success: true,
       message: "Viewport updated",
       viewport: { x, y, zoom },
