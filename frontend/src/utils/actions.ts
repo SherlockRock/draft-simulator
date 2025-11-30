@@ -270,7 +270,7 @@ export const updateCanvasViewport = async (data: {
     canvasId: string;
     viewport: { x: number; y: number; zoom: number };
 }) => {
-    const res = await fetch(`/api/canvas/${data.canvasId}/viewport`, {
+    const res = await fetch(`${BASE_URL}/api/canvas/${data.canvasId}/viewport`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
