@@ -238,7 +238,7 @@ export const handleGoogleLogin = async (code: string) => {
         body: JSON.stringify({ code })
     });
     if (!res.ok) {
-        throw new Error("Failed to handle Google login");
+        return null;
     }
     const { user } = await res.json();
     return user;

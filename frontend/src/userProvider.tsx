@@ -31,8 +31,12 @@ const createAuthenticatedSocket = () =>
 
 const UserContext = createContext<Accessor<Array<any>>>();
 
+const shouldFetchUser = () => {
+    return !window.location.pathname.includes("/oauth2callback");
+};
+
 export function UserProvider(props: { children: JSX.Element }) {
-    const [user, { mutate, refetch }] = createResource(fetchUserDetails);
+    const [user, { mutate, refetch }] = createResource(shouldFetchUser, fetchUserDetails);
     const [currentSocket, setCurrentSocket] = createSignal<Socket | undefined>(undefined);
     const [connectionStatus, setConnectionStatus] =
         createSignal<ConnectionStatus>("connecting");

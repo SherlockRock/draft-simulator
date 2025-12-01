@@ -161,37 +161,41 @@ export const SearchableSelect = (props: props) => {
                 </label>
             </div>
             {dropdownOpen() && (
-                <div class="absolute z-10 w-full flex-col rounded-md border border-t-0 border-teal-400">
-                    <For each={holdSortOptions()}>
-                        {(option, index) => (
-                            <div
-                                class="group cursor-pointer"
-                                onMouseDown={() => {
-                                    props.setSelectText(option);
-                                    closeDropdown();
-                                    if (props.onValidSelect) {
-                                        props.onValidSelect(option);
-                                    }
-                                }}
-                            >
-                                <a
-                                    class={`block border-l-4 bg-gray-950 p-2 transition-colors group-hover:border-blue-600 group-hover:bg-gray-800 group-hover:text-teal-400
+                <div class="custom-scrollbar absolute z-10 w-full flex-col overflow-y-auto rounded-md border border-t-0 border-teal-400">
+                    <div class="max-h-80">
+                        <For each={holdSortOptions()}>
+                            {(option, index) => (
+                                <div
+                                    class="group cursor-pointer"
+                                    onMouseDown={() => {
+                                        props.setSelectText(option);
+                                        closeDropdown();
+                                        if (props.onValidSelect) {
+                                            props.onValidSelect(option);
+                                        }
+                                    }}
+                                >
+                                    <a
+                                        class={`block border-l-4 bg-gray-950 p-2 transition-colors group-hover:border-blue-600 group-hover:bg-gray-800 group-hover:text-teal-400
                                         ${
                                             holdSelectedIndex() === index()
                                                 ? "border-green-600 text-green-600"
                                                 : "border-white text-white"
                                         }`}
-                                >
-                                    <p class="inline-block w-full overflow-hidden text-ellipsis whitespace-nowrap">
-                                        {option}
-                                    </p>
-                                </a>
-                            </div>
-                        )}
-                    </For>
-                    <Show when={holdSortOptions().length === 0}>
-                        <a class="block border-l-4 bg-gray-950 p-2 text-gray-500">None</a>
-                    </Show>
+                                    >
+                                        <p class="inline-block w-full overflow-hidden text-ellipsis whitespace-nowrap">
+                                            {option}
+                                        </p>
+                                    </a>
+                                </div>
+                            )}
+                        </For>
+                        <Show when={holdSortOptions().length === 0}>
+                            <a class="block border-l-4 bg-gray-950 p-2 text-gray-500">
+                                None
+                            </a>
+                        </Show>
+                    </div>
                 </div>
             )}
         </div>

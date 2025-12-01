@@ -236,7 +236,7 @@ function Draft(props: props) {
                     <Show when={currentDragged() !== ""}>
                         <DragOverlay>
                             <img
-                                // class={tableClass(String(champ.name))}
+                                class="w-[min(8vw,120px)]"
                                 src={champNumberToImg(currentDragged())}
                                 onClick={() =>
                                     handleSelectedChamp(String(currentDragged()))
@@ -266,6 +266,11 @@ function Draft(props: props) {
                                                                 <img
                                                                     src={BlankSquare}
                                                                     draggable="false"
+                                                                    onClick={() =>
+                                                                        handleSelect(
+                                                                            index
+                                                                        )
+                                                                    }
                                                                 />
                                                             </div>
                                                         }
@@ -313,6 +318,11 @@ function Draft(props: props) {
                                                             <img
                                                                 src={BlankSquare}
                                                                 draggable="false"
+                                                                onClick={() =>
+                                                                    handleSelect(
+                                                                        index + 10
+                                                                    )
+                                                                }
                                                             />
                                                         </div>
                                                     }
@@ -340,9 +350,9 @@ function Draft(props: props) {
                                     </Index>
                                 </div>
                                 <div class="mx-4 w-[min(80vw,600px)] rounded-t-md ">
-                                    <div class="flex">
+                                    <div class="flex rounded-tl-md bg-slate-800">
                                         <input
-                                            class="w-full rounded-t-md bg-slate-800 p-1 text-slate-50 placeholder:text-slate-200 focus:outline-none"
+                                            class="w-full rounded-tl-md bg-slate-800 p-1 text-slate-50 placeholder:text-slate-200 focus:outline-none"
                                             type="text"
                                             value={searchWord()}
                                             onInput={handleSearch}
@@ -402,6 +412,11 @@ function Draft(props: props) {
                                                             <img
                                                                 src={BlankSquare}
                                                                 draggable="false"
+                                                                onClick={() =>
+                                                                    handleSelect(
+                                                                        index + 15
+                                                                    )
+                                                                }
                                                             />
                                                         </div>
                                                     }

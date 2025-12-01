@@ -17,13 +17,31 @@ const oauth2Client = new google.auth.OAuth2(
 
 router.post("/google/callback", async (req, res) => {
   const { code } = req.body;
+
   if (!code) {
     return res.status(400).json({ error: "Code is required" });
   }
 
   try {
-    const { tokens } = await oauth2Client.getToken(code);
-    console.log("Google OAuth tokens:", tokens);
+    let tokens;
+    try {
+      const result = await oauth2Client.getToken(code);
+      tokens = result.tokens;
+    } catch (error) {
+      if (error.response?.data?.error === "invalid_grant") {
+        return res.status(400).json({
+          error: "invalid_grant",
+          message:
+            "Authorization code has expired or already been used. Please try logging in again.",
+        });
+      }
+
+      return res.status(500).json({
+        error: "oauth_error",
+        message: "Failed to exchange authorization code for tokens",
+      });
+    }
+
     oauth2Client.setCredentials(tokens);
 
     const ticket = await oauth2Client.verifyIdToken({
