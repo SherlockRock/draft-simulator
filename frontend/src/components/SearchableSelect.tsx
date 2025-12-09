@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Setter, Show } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
 import KeyEvent, { Key } from "../KeyEvent";
 import { sortOptions } from "../utils/constants";
 
@@ -7,7 +7,7 @@ type props = {
     currentlySelected: string;
     sortOptions: string[];
     selectText: string;
-    setSelectText: Setter<string>;
+    setSelectText: (newValue: string) => void;
     onValidSelect?: (newValue: string) => void;
 };
 
@@ -79,8 +79,7 @@ export const SearchableSelect = (props: props) => {
     };
 
     const handleSortOptions = (sortInput: string) => {
-        const currentTextIsValid = props.sortOptions.includes(sortInput);
-        if (sortInput === "" || currentTextIsValid) {
+        if (sortInput === "" || sortInput === props.currentlySelected) {
             return props.sortOptions;
         }
         return props.sortOptions.filter((option) =>
@@ -91,9 +90,6 @@ export const SearchableSelect = (props: props) => {
     const holdSortOptions = createMemo(() => {
         const hold = handleSortOptions(props.selectText);
         return hold;
-    });
-    const holdSelectedIndex = createMemo(() => {
-        return props.sortOptions.indexOf(props.currentlySelected);
     });
 
     return (
@@ -164,7 +160,7 @@ export const SearchableSelect = (props: props) => {
                 <div class="custom-scrollbar absolute z-10 w-full flex-col overflow-y-auto rounded-md border border-t-0 border-teal-400">
                     <div class="max-h-80">
                         <For each={holdSortOptions()}>
-                            {(option, index) => (
+                            {(option) => (
                                 <div
                                     class="group cursor-pointer"
                                     onMouseDown={() => {
@@ -178,7 +174,7 @@ export const SearchableSelect = (props: props) => {
                                     <a
                                         class={`block border-l-4 bg-gray-950 p-2 transition-colors group-hover:border-blue-600 group-hover:bg-gray-800 group-hover:text-teal-400
                                         ${
-                                            holdSelectedIndex() === index()
+                                            props.currentlySelected === option
                                                 ? "border-green-600 text-green-600"
                                                 : "border-white text-white"
                                         }`}

@@ -1,13 +1,21 @@
 Canvas Functionality:
+    share link for edit access
     replace draft list button Functionality with right click menus?
         editing from the manage canvas' dialog
     Export draft
     connection arrows
     folder heirarchy
     enforce unique names when copying drafts
+    seperating canvas drafts from "real" drafts
+    manage connection type/color?
+    quick traversal of draft through tab/enter
+    canvas select opens briefly when clearing champ
+    double clicking into draft name causes success toast to spawn
+    Pressing enter bypasses champ being disabled
+    clearing champ text then clicking out does not clear champ img
 
 Short Term:
-    champ table error when searching by "gn"?
+    delete draft functionality
     weird auth flow when a user was signed in but became outdated
     searchable select need to fix arrow key controls
     server tweaks when json token is too old? then draft wasn't loading for some reason
@@ -24,6 +32,8 @@ Long Term:
     Friend Functionality -> Add ability to modify list of users who can view the draft
     Add types w/ zod
     Light mode/dark mode/UI customization?
+    UI cleanup + animations
+    optimize db writes for socket updates, redis?
 
 UI colors:
 bg dark slate-800

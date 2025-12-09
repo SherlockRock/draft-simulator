@@ -35,6 +35,7 @@ import {
 } from "@thisbeyond/solid-dnd";
 import { draft } from "./utils/types";
 import BlankSquare from "/src/assets/BlankSquare.webp";
+import { useQueryClient } from "@tanstack/solid-query";
 
 type draggableProps = {
     name: string;
@@ -78,6 +79,7 @@ function Draft(props: props) {
     const navigate = useNavigate();
     const accessor = useUser();
     const socketAccessor = accessor()[2];
+    const queryClient = useQueryClient();
     const [searchWord, setSearchWord] = createSignal("");
     const [selectedChampion, setSelectedChampion] = createSignal("");
     const [selectText, setSelectText] = createSignal("");
@@ -125,6 +127,11 @@ function Draft(props: props) {
         setSearchWord(event.target.value);
     };
 
+    const handleSelectText = (newText: string) => {
+        setSelectText(newText);
+        setCurrentlySelected("");
+    };
+
     const handlePick = (index: number, championId: string) => {
         const holdPicks = [
             ...props
@@ -144,6 +151,7 @@ function Draft(props: props) {
         });
         setSelectedChampion("");
         setCurrentDragged("");
+        queryClient.invalidateQueries({ queryKey: ["canvas"] });
     };
 
     const handleSelect = (index: number) => {
@@ -363,7 +371,7 @@ function Draft(props: props) {
                                             currentlySelected={currentlySelected()}
                                             sortOptions={sortOptions}
                                             selectText={selectText()}
-                                            setSelectText={setSelectText}
+                                            setSelectText={handleSelectText}
                                             onValidSelect={onValidSelect}
                                         />
                                     </div>

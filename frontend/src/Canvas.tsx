@@ -8,7 +8,11 @@ import {
     createMemo
 } from "solid-js";
 import { createStore } from "solid-js/store";
-import { champions } from "./utils/constants";
+import {
+    champions,
+    indexToShorthandHorizontal,
+    indexToShorthandVertical
+} from "./utils/constants";
 import { useMutation, useQueryClient } from "@tanstack/solid-query";
 import {
     postNewDraft,
@@ -16,14 +20,24 @@ import {
     deleteDraftFromCanvas,
     updateCanvasViewport,
     CanvasResposnse,
-    updateCanvasName
+    updateCanvasName,
+    createConnection,
+    updateConnection,
+    deleteConnection,
+    createVertex,
+    updateVertex,
+    deleteVertex,
+    editDraft
 } from "./utils/actions";
 import { useNavigate, useParams } from "@solidjs/router";
 import { toast } from "solid-toast";
 import { useUser } from "./userProvider";
-import { CanvasDraft, draft, Viewport } from "./utils/types";
+import { CanvasDraft, draft, Viewport, Connection } from "./utils/types";
 import { CanvasSelect } from "./components/CanvasSelect";
 import { Dialog } from "./components/Dialog";
+import { ConnectionComponent, ConnectionPreview } from "./components/Connections";
+import { AnchorPoints } from "./components/AnchorPoints";
+import { AnchorType } from "./utils/types";
 
 type cardProps = {
     canvasDraft: CanvasDraft;
@@ -35,10 +49,15 @@ type cardProps = {
     layoutToggle: () => boolean;
     setLayoutToggle: (val: boolean) => void;
     viewport: () => Viewport;
+    isConnectionMode: boolean;
+    onAnchorClick: (draftId: string, anchorType: AnchorType) => void;
+    connectionSource: () => string | null;
+    sourceAnchor: () => { type: AnchorType } | null;
 };
 
 const CanvasCard = (props: cardProps) => {
     const navigate = useNavigate();
+    const [nameSignal, setNameSignal] = createSignal(props.canvasDraft.Draft.name);
     const worldToScreen = (worldX: number, worldY: number) => {
         const vp = props.viewport();
         return {
@@ -49,61 +68,83 @@ const CanvasCard = (props: cardProps) => {
     const screenPos = () =>
         worldToScreen(props.canvasDraft.positionX, props.canvasDraft.positionY);
 
-    const draftArrayMemo = createMemo(() => {
-        return props.layoutToggle()
+    const draftArrayMemo = createMemo(() =>
+        props.layoutToggle()
             ? [
-                  ...props.canvasDraft.Draft.picks.slice(0, 3),
-                  ...props.canvasDraft.Draft.picks.slice(10, 13),
-                  ...props.canvasDraft.Draft.picks.slice(3, 5),
-                  ...props.canvasDraft.Draft.picks.slice(13, 15),
-                  ...props.canvasDraft.Draft.picks.slice(5, 8),
-                  ...props.canvasDraft.Draft.picks.slice(15, 18),
-                  ...props.canvasDraft.Draft.picks.slice(8, 10),
-                  ...props.canvasDraft.Draft.picks.slice(18, 20)
-              ]
-            : [
                   ...props.canvasDraft.Draft.picks.slice(0, 5),
                   ...props.canvasDraft.Draft.picks.slice(10, 20),
                   ...props.canvasDraft.Draft.picks.slice(5, 10)
-              ];
-    });
+              ]
+            : [
+                  ...props.canvasDraft.Draft.picks.slice(0, 5),
+                  ...props.canvasDraft.Draft.picks.slice(10, 15),
+                  ...props.canvasDraft.Draft.picks.slice(5, 10),
+                  ...props.canvasDraft.Draft.picks.slice(15, 20)
+              ]
+    );
+
+    const indexToShorthand = createMemo(() =>
+        props.layoutToggle() ? indexToShorthandHorizontal : indexToShorthandVertical
+    );
+
+    const selected = createMemo(
+        () => props.connectionSource() === props.canvasDraft.Draft.id
+    );
 
     return (
         <div
-            class="absolute flex flex-col rounded-md border border-slate-500 bg-slate-600 shadow-lg"
+            class="absolute z-30 flex flex-col rounded-md border border-slate-500 bg-slate-600 shadow-lg"
+            classList={{
+                "ring-4 ring-blue-400": props.isConnectionMode && !selected(),
+                "ring-4 ring-green-400": selected()
+            }}
             style={{
                 left: `${screenPos().x}px`,
                 top: `${screenPos().y}px`,
                 width: props.layoutToggle() ? "700px" : "350px",
-                cursor: "move",
+                cursor: props.isConnectionMode ? "default" : "move",
                 transform: `scale(${props.viewport().zoom})`,
                 "transform-origin": "top left"
             }}
-            onMouseDown={[props.onBoxMouseDown, props.canvasDraft.Draft.id]}
+            onMouseDown={(e) => {
+                if (!props.isConnectionMode) {
+                    props.onBoxMouseDown(props.canvasDraft.Draft.id, e);
+                }
+            }}
         >
+            <Show when={props.isConnectionMode}>
+                <AnchorPoints
+                    onSelectAnchor={(anchorType) => {
+                        props.onAnchorClick(props.canvasDraft.Draft.id, anchorType);
+                    }}
+                    layoutToggle={props.layoutToggle}
+                    zoom={props.viewport().zoom}
+                    selected={selected}
+                    sourceAnchor={props.sourceAnchor}
+                />
+            </Show>
             <div class="flex items-center justify-between p-1">
                 <input
                     type="text"
                     placeholder="Enter Draft Name"
-                    value={props.canvasDraft.Draft.name}
-                    onInput={(e) =>
-                        props.handleNameChange(
-                            props.canvasDraft.Draft.id,
-                            e.currentTarget.value
-                        )
-                    }
+                    value={nameSignal()}
+                    onInput={(e) => setNameSignal(e.currentTarget.value)}
                     onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === "Escape") {
                             e.currentTarget.blur();
                         }
                     }}
-                    onBlur={(e) => e.currentTarget.blur()}
+                    onBlur={() =>
+                        props.handleNameChange(props.canvasDraft.Draft.id, nameSignal())
+                    }
                     class="w-3/4 bg-transparent font-bold text-slate-50"
+                    disabled={props.isConnectionMode}
                 />
                 <div class="flex gap-1">
                     <button
                         onClick={() => navigate(`/draft/${props.canvasDraft.Draft.id}`)}
-                        class="mr-1 flex h-6 w-6 items-center justify-center rounded bg-cyan-400 hover:bg-cyan-700"
+                        class={`mr-1 flex h-6 w-6 items-center justify-center rounded bg-cyan-400 ${props.isConnectionMode ? "" : "cursor-pointer hover:bg-cyan-700"}`}
+                        disabled={props.isConnectionMode}
                     >
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -121,7 +162,8 @@ const CanvasCard = (props: cardProps) => {
                     </button>
                     <button
                         onClick={() => props.addBox(props.canvasDraft)}
-                        class="mr-1 flex h-6 w-6 items-center justify-center rounded bg-green-400 hover:bg-green-700"
+                        class={`mr-1 flex h-6 w-6 items-center justify-center rounded bg-green-400 ${props.isConnectionMode ? "" : "cursor-pointer hover:bg-green-700"}`}
+                        disabled={props.isConnectionMode}
                     >
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -139,7 +181,8 @@ const CanvasCard = (props: cardProps) => {
                     </button>
                     <button
                         onClick={() => props.deleteBox(props.canvasDraft.Draft.id)}
-                        class="flex h-6 w-6 items-center justify-center rounded bg-red-400 hover:bg-red-600"
+                        class={`flex h-6 w-6 items-center justify-center rounded bg-red-400 ${props.isConnectionMode ? "" : "cursor-pointer hover:bg-red-600"}`}
+                        disabled={props.isConnectionMode}
                     >
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -175,6 +218,9 @@ const CanvasCard = (props: cardProps) => {
                             pick={pick}
                             handlePickChange={props.handlePickChange}
                             draft={props.canvasDraft.Draft}
+                            indexToShorthand={indexToShorthand()}
+                            layoutToggle={props.layoutToggle}
+                            disabled={props.isConnectionMode}
                         />
                     )}
                 </For>
@@ -213,10 +259,56 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const accessor = useUser();
     const socketAccessor = accessor()[2];
     const [canvasDrafts, setCanvasDrafts] = createStore<CanvasDraft[]>([]);
+    const [connections, setConnections] = createStore<Connection[]>([]);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = createSignal(false);
     const [draftToDelete, setDraftToDelete] = createSignal<CanvasDraft | null>(null);
     const [viewportInitialized, setViewportInitialized] = createSignal(false);
+    const [isConnectionMode, setIsConnectionMode] = createSignal(false);
+    const [connectionSource, setConnectionSource] = createSignal<string | null>(null);
+    const [sourceAnchor, setSourceAnchor] = createSignal<{
+        type: AnchorType;
+    } | null>(null);
+    const [selectedVertexForConnection, setSelectedVertexForConnection] = createSignal<{
+        connectionId: string;
+        vertexId: string;
+    } | null>(null);
+    const [previewMousePos, setPreviewMousePos] = createSignal<{
+        x: number;
+        y: number;
+    } | null>(null);
+    const [dragState, setDragState] = createSignal<{
+        activeBoxId: string | null;
+        offsetX: number;
+        offsetY: number;
+        isPanning: boolean;
+        panStartX: number;
+        panStartY: number;
+        viewportStartX: number;
+        viewportStartY: number;
+    }>({
+        activeBoxId: null,
+        offsetX: 0,
+        offsetY: 0,
+        isPanning: false,
+        panStartX: 0,
+        panStartY: 0,
+        viewportStartX: 0,
+        viewportStartY: 0
+    });
+    const [vertexDragState, setVertexDragState] = createSignal<{
+        connectionId: string | null;
+        vertexId: string | null;
+        offsetX: number;
+        offsetY: number;
+    }>({
+        connectionId: null,
+        vertexId: null,
+        offsetX: 0,
+        offsetY: 0
+    });
+
     let canvasContainerRef: HTMLDivElement | undefined;
+    let svgRef: SVGSVGElement | undefined;
 
     const updateCanvasNameMutation = useMutation(() => ({
         mutationFn: updateCanvasName,
@@ -253,17 +345,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     }));
 
     const editDraftMutation = useMutation(() => ({
-        mutationFn: (data: {
-            name: string;
-            public: boolean;
-            canvas_id: string;
-            picks: string[];
-        }) => {
-            return postNewDraft(data);
+        mutationFn: (data: { id: string; name: string; public: boolean }) => {
+            return editDraft(data.id, data);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
-            toast.success("Successfully created new draft!");
+            toast.success("Successfully edited draft!");
         },
         onError: (error) => {
             toast.error(`Error creating new draft: ${error.message}`);
@@ -298,6 +385,69 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     }));
 
+    const createConnectionMutation = useMutation(() => ({
+        mutationFn: createConnection,
+        onSuccess: () => {
+            toast.success("Connection created!");
+            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+        },
+        onError: (error: Error) => {
+            toast.error(`Failed to create connection: ${error.message}`);
+        }
+    }));
+
+    const updateConnectionMutation = useMutation(() => ({
+        mutationFn: updateConnection,
+        onSuccess: () => {
+            toast.success("Connection updated!");
+            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+            setSelectedVertexForConnection(null);
+        },
+        onError: (error: Error) => {
+            toast.error(`Failed to update connection: ${error.message}`);
+        }
+    }));
+
+    const deleteConnectionMutation = useMutation(() => ({
+        mutationFn: deleteConnection,
+        onSuccess: () => {
+            toast.success("Connection deleted!");
+            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+        },
+        onError: (error: Error) => {
+            toast.error(`Failed to delete connection: ${error.message}`);
+        }
+    }));
+
+    const createVertexMutation = useMutation(() => ({
+        mutationFn: createVertex,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+        },
+        onError: (error: Error) => {
+            toast.error(`Failed to create vertex: ${error.message}`);
+        }
+    }));
+
+    const updateVertexMutation = useMutation(() => ({
+        mutationFn: updateVertex,
+        onError: (error: Error) => {
+            toast.error(`Failed to update vertex: ${error.message}`);
+            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+        }
+    }));
+
+    const deleteVertexMutation = useMutation(() => ({
+        mutationFn: deleteVertex,
+        onSuccess: () => {
+            toast.success("Vertex deleted!");
+            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+        },
+        onError: (error: Error) => {
+            toast.error(`Failed to delete vertex: ${error.message}`);
+        }
+    }));
+
     const emitMove = (draftId: string, positionX: number, positionY: number) => {
         socketAccessor().emit("canvasObjectMove", {
             canvasId: params.id,
@@ -309,9 +459,27 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const debouncedEmitMove = debounce(emitMove, 25);
 
+    const emitVertexMove = (
+        connectionId: string,
+        vertexId: string,
+        x: number,
+        y: number
+    ) => {
+        socketAccessor().emit("vertexMove", {
+            canvasId: params.id,
+            connectionId,
+            vertexId,
+            x,
+            y
+        });
+    };
+
+    const debouncedEmitVertexMove = debounce(emitVertexMove, 25);
+
     createEffect(() => {
         if (props.canvasData && canvasDrafts.length === 0) {
             setCanvasDrafts(props.canvasData.drafts ?? []);
+            setConnections(props.canvasData.connections ?? []);
             if (!viewportInitialized()) {
                 props.setViewport(
                     props.canvasData.lastViewport ?? { x: 0, y: 0, zoom: 1 }
@@ -328,8 +496,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     createEffect(() => {
         socketAccessor().on(
             "canvasUpdate",
-            (data: { canvas: { id: string; name: string }; drafts: CanvasDraft[] }) => {
+            (data: {
+                canvas: { id: string; name: string };
+                drafts: CanvasDraft[];
+                connections: Connection[];
+            }) => {
                 setCanvasDrafts(data.drafts);
+                setConnections(data.connections);
                 queryClient.setQueryData(["canvas", params.id], (oldData: any) => {
                     return { ...oldData, name: data.canvas.name };
                 });
@@ -354,10 +527,97 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 }
             }
         );
+        socketAccessor().on(
+            "connectionCreated",
+            (data: { connection: Connection; allConnections: Connection[] }) => {
+                setConnections(data.allConnections);
+            }
+        );
+        socketAccessor().on(
+            "connectionUpdated",
+            (data: { connection: Connection; allConnections: Connection[] }) => {
+                setConnections(data.allConnections);
+            }
+        );
+        socketAccessor().on(
+            "connectionDeleted",
+            (data: { connectionId: string; allConnections: Connection[] }) => {
+                setConnections(data.allConnections);
+            }
+        );
+        socketAccessor().on(
+            "vertexCreated",
+            (data: {
+                connectionId: string;
+                vertex: any;
+                allConnections: Connection[];
+            }) => {
+                setConnections(data.allConnections);
+            }
+        );
+        socketAccessor().on(
+            "vertexMoved",
+            (data: { connectionId: string; vertexId: string; x: number; y: number }) => {
+                const vState = vertexDragState();
+                // Don't update if we're the one dragging this vertex
+                if (
+                    vState.connectionId !== data.connectionId ||
+                    vState.vertexId !== data.vertexId
+                ) {
+                    setConnections(
+                        (conn) => conn.id === data.connectionId,
+                        "vertices",
+                        (v) => v.id === data.vertexId,
+                        { x: data.x, y: data.y }
+                    );
+                }
+            }
+        );
+        socketAccessor().on(
+            "vertexUpdated",
+            (data: { connectionId: string; vertexId: string; x: number; y: number }) => {
+                const vState = vertexDragState();
+                // Don't update if we're the one dragging this vertex
+                if (
+                    vState.connectionId !== data.connectionId ||
+                    vState.vertexId !== data.vertexId
+                ) {
+                    setConnections(
+                        (conn) => conn.id === data.connectionId,
+                        "vertices",
+                        (v) => v.id === data.vertexId,
+                        { x: data.x, y: data.y }
+                    );
+                }
+            }
+        );
+        socketAccessor().on(
+            "vertexDeleted",
+            (data: {
+                connectionId: string;
+                vertexId: string;
+                connection: Connection;
+            }) => {
+                setConnections(
+                    (conn) => conn.id === data.connectionId,
+                    (conn) => ({
+                        ...conn,
+                        vertices: conn.vertices.filter((v) => v.id !== data.vertexId)
+                    })
+                );
+            }
+        );
         onCleanup(() => {
             socketAccessor().off("canvasUpdate");
             socketAccessor().off("draftUpdate");
             socketAccessor().off("canvasObjectMoved");
+            socketAccessor().off("connectionCreated");
+            socketAccessor().off("connectionUpdated");
+            socketAccessor().off("connectionDeleted");
+            socketAccessor().off("vertexCreated");
+            socketAccessor().off("vertexMoved");
+            socketAccessor().off("vertexUpdated");
+            socketAccessor().off("vertexDeleted");
         });
     });
 
@@ -412,32 +672,108 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const handleNameChange = (draftId: string, newName: string) => {
         editDraftMutation.mutate({
+            id: draftId,
             name: newName,
-            public: false,
-            canvas_id: params.id!,
-            picks: []
+            public: false
         });
     };
 
-    const [dragState, setDragState] = createSignal<{
-        activeBoxId: string | null;
-        offsetX: number;
-        offsetY: number;
-        isPanning: boolean;
-        panStartX: number;
-        panStartY: number;
-        viewportStartX: number;
-        viewportStartY: number;
-    }>({
-        activeBoxId: null,
-        offsetX: 0,
-        offsetY: 0,
-        isPanning: false,
-        panStartX: 0,
-        panStartY: 0,
-        viewportStartX: 0,
-        viewportStartY: 0
-    });
+    const onAnchorClick = (draftId: string, anchorType: AnchorType) => {
+        if (!isConnectionMode()) return;
+
+        const selectedVertex = selectedVertexForConnection();
+        const source = connectionSource();
+
+        // If a vertex is selected, add this draft as target
+        if (selectedVertex) {
+            updateConnectionMutation.mutate({
+                canvasId: params.id,
+                connectionId: selectedVertex.connectionId,
+                addTarget: { draftId, anchorType }
+            });
+            setSelectedVertexForConnection(null);
+            return;
+        }
+
+        // If no anchor selected yet, select this anchor (for creating new connection OR adding as source)
+        if (!source) {
+            setConnectionSource(draftId);
+            setSourceAnchor({ type: anchorType });
+            setPreviewMousePos(null);
+        } else if (source !== draftId) {
+            // Different draft clicked - create new connection
+            const srcAnchor = sourceAnchor();
+            createConnectionMutation.mutate({
+                canvasId: params.id,
+                sourceDraftIds: [{ draftId: source, anchorType: srcAnchor?.type }],
+                targetDraftIds: [{ draftId, anchorType }]
+            });
+            setConnectionSource(null);
+            setSourceAnchor(null);
+            setPreviewMousePos(null);
+        } else if (source === draftId) {
+            setConnectionSource(null);
+            setSourceAnchor(null);
+            setPreviewMousePos(null);
+        }
+    };
+
+    const handleDeleteConnection = (connectionId: string) => {
+        deleteConnectionMutation.mutate({
+            canvasId: params.id,
+            connectionId
+        });
+    };
+
+    const toggleConnectionMode = () => {
+        setIsConnectionMode(!isConnectionMode());
+        setConnectionSource(null);
+        setSourceAnchor(null);
+        setPreviewMousePos(null);
+        setSelectedVertexForConnection(null);
+    };
+
+    const handleConnectionClick = (connectionId: string) => {
+        if (!isConnectionMode()) return;
+
+        const source = connectionSource();
+        const srcAnchor = sourceAnchor();
+
+        // If an anchor is selected, add it as source to this connection
+        if (source && srcAnchor) {
+            updateConnectionMutation.mutate({
+                canvasId: params.id,
+                connectionId,
+                addSource: { draftId: source, anchorType: srcAnchor.type }
+            });
+            setConnectionSource(null);
+            setSourceAnchor(null);
+            setPreviewMousePos(null);
+        }
+    };
+
+    const handleVertexClick = (connectionId: string, vertexId: string) => {
+        if (!isConnectionMode()) return;
+
+        const source = connectionSource();
+        const srcAnchor = sourceAnchor();
+
+        // If an anchor is selected, add it as source to this connection
+        if (source && srcAnchor) {
+            updateConnectionMutation.mutate({
+                canvasId: params.id,
+                connectionId,
+                addSource: { draftId: source, anchorType: srcAnchor.type }
+            });
+            setConnectionSource(null);
+            setSourceAnchor(null);
+            setPreviewMousePos(null);
+            return;
+        }
+
+        // Otherwise, select the vertex (for adding targets)
+        setSelectedVertexForConnection({ connectionId, vertexId });
+    };
 
     const screenToWorld = (screenX: number, screenY: number) => {
         const vp = props.viewport();
@@ -448,6 +784,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const onBoxMouseDown = (draftId: string, e: MouseEvent) => {
+        if (isConnectionMode()) return;
+
         const target = e.target as HTMLElement;
         if (target.closest("select, button, input")) {
             return;
@@ -470,6 +808,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const onBackgroundMouseDown = (e: MouseEvent) => {
+        if (isConnectionMode()) {
+            setConnectionSource(null);
+            setSourceAnchor(null);
+            setPreviewMousePos(null);
+        }
+
         const target = e.target as HTMLElement;
         if (target === canvasContainerRef || canvasContainerRef?.contains(target)) {
             const vp = props.viewport();
@@ -487,6 +831,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const onBackgroundDoubleClick = (e: MouseEvent) => {
+        if (isConnectionMode()) return;
+
         const target = e.target as HTMLElement;
         if (target === canvasContainerRef || canvasContainerRef?.contains(target)) {
             e.preventDefault();
@@ -516,8 +862,91 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     }, 1000);
 
+    const onVertexDragStart = (
+        connectionId: string,
+        vertexId: string,
+        positionX: number,
+        positionY: number,
+        e: MouseEvent
+    ) => {
+        e.stopPropagation();
+        const worldCoords = screenToWorld(e.clientX, e.clientY);
+        setVertexDragState({
+            connectionId,
+            vertexId,
+            offsetX: worldCoords.x - positionX,
+            offsetY: worldCoords.y - positionY
+        });
+    };
+
+    const handleCreateVertex = (connectionId: string, x: number, y: number) => {
+        createVertexMutation.mutate({
+            canvasId: params.id,
+            connectionId,
+            x,
+            y
+        });
+    };
+
+    const handleDeleteVertex = (connectionId: string, vertexId: string) => {
+        deleteVertexMutation.mutate({
+            canvasId: params.id,
+            connectionId,
+            vertexId
+        });
+    };
+
     onMount(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && isConnectionMode()) {
+                e.preventDefault();
+                if (connectionSource() || selectedVertexForConnection()) {
+                    // First escape: clear any selections
+                    setConnectionSource(null);
+                    setSourceAnchor(null);
+                    setPreviewMousePos(null);
+                    setSelectedVertexForConnection(null);
+                } else {
+                    // Second escape: exit connection mode
+                    setIsConnectionMode(false);
+                }
+            } else if (e.key === "Enter" && isConnectionMode()) {
+                e.preventDefault();
+                setIsConnectionMode(false);
+                setConnectionSource(null);
+                setSourceAnchor(null);
+                setPreviewMousePos(null);
+                setSelectedVertexForConnection(null);
+            }
+        };
+
         const onWindowMouseMove = (e: MouseEvent) => {
+            if (isConnectionMode() && connectionSource() && canvasContainerRef) {
+                const canvasRect = canvasContainerRef.getBoundingClientRect();
+                const canvasRelativeX = e.clientX - canvasRect.left;
+                const canvasRelativeY = e.clientY - canvasRect.top;
+                setPreviewMousePos({ x: canvasRelativeX, y: canvasRelativeY });
+            }
+
+            const vState = vertexDragState();
+            if (vState.connectionId && vState.vertexId) {
+                const worldCoords = screenToWorld(e.clientX, e.clientY);
+                const newX = worldCoords.x - vState.offsetX;
+                const newY = worldCoords.y - vState.offsetY;
+
+                // Optimistic update
+                setConnections(
+                    (conn) => conn.id === vState.connectionId,
+                    "vertices",
+                    (v) => v.id === vState.vertexId,
+                    { x: newX, y: newY }
+                );
+
+                // Emit socket update for live collaboration
+                debouncedEmitVertexMove(vState.connectionId, vState.vertexId, newX, newY);
+                return;
+            }
+
             const state = dragState();
 
             if (state.isPanning) {
@@ -544,6 +973,34 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         };
 
         const onWindowMouseUp = () => {
+            const vertexDrag = vertexDragState();
+            if (vertexDrag.connectionId && vertexDrag.vertexId) {
+                const connection = connections.find(
+                    (c) => c.id === vertexDrag.connectionId
+                );
+                const vertex = connection?.vertices.find(
+                    (v) => v.id === vertexDrag.vertexId
+                );
+
+                if (connection && vertex) {
+                    updateVertexMutation.mutate({
+                        canvasId: params.id,
+                        connectionId: vertexDrag.connectionId,
+                        vertexId: vertexDrag.vertexId,
+                        x: vertex.x,
+                        y: vertex.y
+                    });
+                }
+
+                setVertexDragState({
+                    connectionId: null,
+                    vertexId: null,
+                    offsetX: 0,
+                    offsetY: 0
+                });
+                return;
+            }
+
             const state = dragState();
             if (state.activeBoxId) {
                 const finalDraft = canvasDrafts.find(
@@ -590,11 +1047,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             }
         };
 
+        window.addEventListener("keydown", onKeyDown);
         window.addEventListener("mousemove", onWindowMouseMove);
         window.addEventListener("mouseup", onWindowMouseUp);
         window.addEventListener("wheel", onWindowWheel, { passive: false });
 
         onCleanup(() => {
+            window.removeEventListener("keydown", onKeyDown);
             window.removeEventListener("mousemove", onWindowMouseMove);
             window.removeEventListener("mouseup", onWindowMouseUp);
             window.removeEventListener("wheel", onWindowWheel);
@@ -646,7 +1105,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             }
         >
             <div class="relative h-full w-full overflow-hidden" ref={canvasContainerRef}>
-                <div class="absolute left-4 top-4 z-10 flex gap-2">
+                <div class="absolute left-4 top-4 z-40 flex gap-2">
                     <input
                         type="text"
                         value={props.canvasData?.name || ""}
@@ -659,7 +1118,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         }}
                         class="rounded border border-slate-500 bg-slate-600 px-3 py-1.5 text-slate-50 shadow focus:border-teal-400 focus:outline-none"
                         placeholder="Canvas Name"
+                        disabled={isConnectionMode()}
                     />
+                    <button
+                        onClick={toggleConnectionMode}
+                        class="rounded px-4 py-2 font-semibold text-white shadow transition-colors"
+                        classList={{
+                            "bg-blue-600 hover:bg-blue-700": !isConnectionMode(),
+                            "bg-green-600 hover:bg-green-700": isConnectionMode()
+                        }}
+                    >
+                        {isConnectionMode() ? "✓ Connection Mode" : "Connection Mode"}
+                    </button>
                     <div class="rounded border border-slate-500 bg-slate-600 px-3 py-1.5 text-slate-50 shadow">
                         Zoom: {Math.round(props.viewport().zoom * 100)}%
                     </div>
@@ -679,7 +1149,43 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     class="canvas-background absolute inset-0 cursor-move bg-slate-700"
                     onMouseDown={onBackgroundMouseDown}
                     onDblClick={onBackgroundDoubleClick}
-                />
+                >
+                    <svg ref={svgRef} class="absolute inset-0 z-30 h-full w-full">
+                        <For each={connections}>
+                            {(connection) => (
+                                <ConnectionComponent
+                                    connection={connection}
+                                    drafts={canvasDrafts}
+                                    viewport={props.viewport}
+                                    onDeleteConnection={handleDeleteConnection}
+                                    onCreateVertex={handleCreateVertex}
+                                    onDeleteVertex={handleDeleteVertex}
+                                    onVertexDragStart={onVertexDragStart}
+                                    isConnectionMode={isConnectionMode()}
+                                    onConnectionClick={handleConnectionClick}
+                                    onVertexClick={handleVertexClick}
+                                    selectedVertexId={
+                                        selectedVertexForConnection()?.vertexId || null
+                                    }
+                                    layoutToggle={props.layoutToggle}
+                                />
+                            )}
+                        </For>
+                        <Show when={connectionSource()}>
+                            <ConnectionPreview
+                                startDraft={
+                                    canvasDrafts.find(
+                                        (d) => d.Draft.id === connectionSource()!
+                                    )!
+                                }
+                                sourceAnchor={sourceAnchor()}
+                                mousePos={previewMousePos()}
+                                viewport={props.viewport}
+                                layoutToggle={props.layoutToggle}
+                            />
+                        </Show>
+                    </svg>
+                </div>
                 <For each={canvasDrafts}>
                     {(cd) => (
                         <CanvasCard
@@ -692,6 +1198,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             onBoxMouseDown={onBoxMouseDown}
                             layoutToggle={props.layoutToggle}
                             setLayoutToggle={props.setLayoutToggle}
+                            isConnectionMode={isConnectionMode()}
+                            onAnchorClick={onAnchorClick}
+                            connectionSource={connectionSource}
+                            sourceAnchor={sourceAnchor}
                         />
                     )}
                 </For>

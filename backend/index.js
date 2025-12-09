@@ -169,6 +169,23 @@ async function main() {
       }
     });
 
+    socket.on("vertexMove", async (data) => {
+      const userCanvas = await UserCanvas.findOne({
+        where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },
+      });
+      if (
+        (userCanvas && userCanvas.permissions === "edit") ||
+        userCanvas.permissions === "admin"
+      ) {
+        io.to(data.canvasId).emit("vertexMoved", {
+          connectionId: data.connectionId,
+          vertexId: data.vertexId,
+          x: data.x,
+          y: data.y,
+        });
+      }
+    });
+
     socket.on("disconnecting", () => {
       for (const room of socket.rooms) {
         if (room !== socket.id) {

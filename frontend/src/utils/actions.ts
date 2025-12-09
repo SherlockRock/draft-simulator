@@ -1,4 +1,4 @@
-import { CanvasDraft, Viewport, CanvasUser, draft } from "./types";
+import { CanvasDraft, Viewport, CanvasUser, draft, Connection } from "./types";
 
 export const BASE_URL =
     import.meta.env.VITE_ENVIRONMENT === "production"
@@ -140,6 +140,7 @@ export const generateCanvasShareLink = async (canvasId: string) => {
 export type CanvasResposnse = {
     name: string;
     drafts: CanvasDraft[];
+    connections: Connection[];
     lastViewport: Viewport;
 };
 export const fetchCanvas = async (canvasId: string): Promise<CanvasResposnse> => {
@@ -320,4 +321,168 @@ export const removeUserFromCanvas = async (canvasId: string, userId: string) => 
         throw new Error("Failed to remove user");
     }
     return await res.json();
+};
+
+export const createConnection = async (data: {
+    canvasId: string;
+    sourceDraftIds: Array<{ draftId: string; anchorType?: string }>;
+    targetDraftIds: Array<{ draftId: string; anchorType?: string }>;
+    style?: "solid" | "dashed" | "dotted";
+    vertices?: Array<{ id: string; x: number; y: number }>;
+}): Promise<{ success: boolean; connection: Connection }> => {
+    const response = await fetch(`/api/canvas/${data.canvasId}/connections`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        credentials: "include",
+        body: JSON.stringify({
+            sourceDraftIds: data.sourceDraftIds,
+            targetDraftIds: data.targetDraftIds,
+            style: data.style,
+            vertices: data.vertices
+        })
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to create connection");
+    }
+
+    return response.json();
+};
+
+export const createVertex = async (data: {
+    canvasId: string;
+    connectionId: string;
+    x: number;
+    y: number;
+    insertAfterIndex?: number;
+}): Promise<{
+    success: boolean;
+    vertex: { id: string; x: number; y: number };
+    connection: Connection;
+}> => {
+    const response = await fetch(
+        `/api/canvas/${data.canvasId}/connections/${data.connectionId}/vertices`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            credentials: "include",
+            body: JSON.stringify({
+                x: data.x,
+                y: data.y,
+                insertAfterIndex: data.insertAfterIndex
+            })
+        }
+    );
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to create vertex");
+    }
+
+    return response.json();
+};
+
+export const updateVertex = async (data: {
+    canvasId: string;
+    connectionId: string;
+    vertexId: string;
+    x: number;
+    y: number;
+}): Promise<{ success: boolean; vertex: { id: string; x: number; y: number } }> => {
+    const response = await fetch(
+        `/api/canvas/${data.canvasId}/connections/${data.connectionId}/vertices/${data.vertexId}`,
+        {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            credentials: "include",
+            body: JSON.stringify({
+                x: data.x,
+                y: data.y
+            })
+        }
+    );
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to update vertex");
+    }
+
+    return response.json();
+};
+
+export const deleteVertex = async (data: {
+    canvasId: string;
+    connectionId: string;
+    vertexId: string;
+}): Promise<{ success: boolean; message: string; connection: Connection }> => {
+    const response = await fetch(
+        `/api/canvas/${data.canvasId}/connections/${data.connectionId}/vertices/${data.vertexId}`,
+        {
+            method: "DELETE",
+            credentials: "include"
+        }
+    );
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to delete vertex");
+    }
+
+    return response.json();
+};
+
+export const updateConnection = async (data: {
+    canvasId: string;
+    connectionId: string;
+    addSource?: { draftId: string; anchorType?: string };
+    addTarget?: { draftId: string; anchorType?: string };
+}): Promise<{ success: boolean; connection: Connection }> => {
+    const response = await fetch(
+        `/api/canvas/${data.canvasId}/connections/${data.connectionId}`,
+        {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            credentials: "include",
+            body: JSON.stringify({
+                addSource: data.addSource,
+                addTarget: data.addTarget
+            })
+        }
+    );
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to update connection");
+    }
+
+    return response.json();
+};
+
+export const deleteConnection = async (data: {
+    canvasId: string;
+    connectionId: string;
+}): Promise<{ success: boolean; message: string }> => {
+    const response = await fetch(
+        `/api/canvas/${data.canvasId}/connections/${data.connectionId}`,
+        {
+            method: "DELETE",
+            credentials: "include"
+        }
+    );
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to delete connection");
+    }
+
+    return response.json();
 };

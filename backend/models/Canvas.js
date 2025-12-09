@@ -59,4 +59,44 @@ const CanvasShare = sequelize.define("CanvasShare", {
   },
 });
 
-module.exports = { Canvas, UserCanvas, CanvasDraft, CanvasShare };
+const CanvasConnection = sequelize.define("CanvasConnection", {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  canvas_id: {
+    type: DataTypes.UUID,
+    references: { model: Canvas, key: "id" },
+  },
+  source_draft_ids: {
+    type: DataTypes.JSON,
+    allowNull: false,
+    defaultValue: [],
+    comment: "Array of {draft_id: UUID, anchor_type: AnchorType}",
+  },
+  target_draft_ids: {
+    type: DataTypes.JSON,
+    allowNull: false,
+    defaultValue: [],
+    comment: "Array of {draft_id: UUID, anchor_type: AnchorType}",
+  },
+  vertices: {
+    type: DataTypes.JSON,
+    allowNull: false,
+    defaultValue: [],
+    comment: "Array of {id: UUID, x: number, y: number}",
+  },
+  style: {
+    type: DataTypes.ENUM("solid", "dashed", "dotted"),
+    defaultValue: "solid",
+  },
+});
+
+module.exports = {
+  Canvas,
+  UserCanvas,
+  CanvasDraft,
+  CanvasShare,
+  CanvasConnection,
+};

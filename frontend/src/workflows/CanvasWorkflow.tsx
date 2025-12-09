@@ -17,6 +17,7 @@ import { Viewport } from "../utils/types";
 import toast from "solid-toast";
 import { Dialog } from "../components/Dialog";
 import { AuthGuard } from "../components/AuthGaurd";
+import { cardHeight, cardWidth } from "../utils/helpers";
 
 const CanvasWorkflow = () => {
     const params = useParams();
@@ -104,13 +105,13 @@ const CanvasWorkflow = () => {
         if (canvasContainerRef) {
             const vp = viewport();
             const canvasRect = canvasContainerRef.getBoundingClientRect();
-            const cardHeight = layoutToggle() ? 274 : 474;
-            const cardWidth = 400;
+            const currentHeight = cardHeight(layoutToggle());
+            const currentWidth = cardWidth(layoutToggle());
             const centerWorldX = vp.x + canvasRect.width / 2 / vp.zoom;
             const centerWorldY = vp.y + canvasRect.height / 2 / vp.zoom;
 
-            const positionX = centerWorldX - cardWidth / 2;
-            const positionY = centerWorldY - cardHeight / 2;
+            const positionX = centerWorldX - currentWidth / 2;
+            const positionY = centerWorldY - currentHeight / 2;
 
             newDraftMutation.mutate({
                 name: "New Draft",
@@ -281,22 +282,20 @@ const CanvasWorkflow = () => {
                                             if (canvasContainerRef) {
                                                 const container =
                                                     canvasContainerRef.getBoundingClientRect();
-                                                const cardWidth = layoutToggle()
-                                                    ? 350
-                                                    : 700;
-                                                const cardHeight = layoutToggle()
-                                                    ? 274
-                                                    : 474;
+                                                const currentWidth =
+                                                    cardWidth(layoutToggle());
+                                                const currentHeight =
+                                                    cardHeight(layoutToggle());
                                                 setViewport((prev) => ({
                                                     ...prev,
                                                     x:
                                                         draft.positionX -
                                                         container.width / 2 / prev.zoom +
-                                                        cardWidth / 2 / prev.zoom,
+                                                        currentWidth / 2 / prev.zoom,
                                                     y:
                                                         draft.positionY -
                                                         container.height / 2 / prev.zoom +
-                                                        cardHeight / 2 / prev.zoom
+                                                        currentHeight / 2 / prev.zoom
                                                 }));
                                             }
                                         }}

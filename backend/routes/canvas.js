@@ -1,6 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const { Canvas, UserCanvas, CanvasDraft } = require("../models/Canvas.js");
+const {
+  Canvas,
+  UserCanvas,
+  CanvasDraft,
+  CanvasConnection,
+} = require("../models/Canvas.js");
 const Draft = require("../models/Draft.js");
 const User = require("../models/User.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
@@ -44,9 +49,15 @@ router.get("/:canvasId", async (req, res) => {
       nest: true,
     });
 
+    const connections = await CanvasConnection.findAll({
+      where: { canvas_id: canvas.id },
+      raw: true,
+    });
+
     res.json({
       name: canvas.name,
       drafts: canvasDrafts,
+      connections: connections,
       lastViewport: {
         x: userCanvas.lastViewportX,
         y: userCanvas.lastViewportY,
@@ -54,6 +65,7 @@ router.get("/:canvasId", async (req, res) => {
       },
     });
   } catch (error) {
+    console.log("Error loading canvas:", error);
     res.status(500).json({ error: "Failed to load canvas" });
   }
 });
@@ -114,6 +126,31 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
       });
     }
 
+    // Update connections involving this draft
+    const allConnections = await CanvasConnection.findAll({
+      where: { canvas_id: canvasId },
+    });
+
+    for (const conn of allConnections) {
+      // Filter out the deleted draft from source and target arrays
+      const filteredSources = (conn.source_draft_ids || []).filter(
+        (src) => src.draft_id !== draftId
+      );
+      const filteredTargets = (conn.target_draft_ids || []).filter(
+        (tgt) => tgt.draft_id !== draftId
+      );
+
+      // If either array is empty, delete the connection
+      if (filteredSources.length === 0 || filteredTargets.length === 0) {
+        await conn.destroy();
+      } else {
+        // Otherwise, update with filtered arrays
+        conn.source_draft_ids = filteredSources;
+        conn.target_draft_ids = filteredTargets;
+        await conn.save();
+      }
+    }
+
     const affectedRows = await CanvasDraft.destroy({
       where: {
         canvas_id: canvasId,
@@ -130,12 +167,17 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
         raw: true,
         nest: true,
       });
+      const connections = await CanvasConnection.findAll({
+        where: { canvas_id: canvasId },
+        raw: true,
+      });
       res
         .status(200)
         .json({ success: true, message: "Draft removed from canvas" });
       socketService.emitToRoom(canvasId, "canvasUpdate", {
         canvas: canvas.toJSON(),
         drafts: canvasDrafts,
+        connections: connections,
       });
     } else {
       res
@@ -147,63 +189,6 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
     res.status(500).json({ error: "Failed to remove draft from canvas" });
   }
 });
-
-// router.put("/:canvasId", async (req, res) => {
-//   try {
-//     const canvas = await Canvas.findByPk(req.params.id);
-//     if (!canvas) {
-//       return res.status(404).json({ error: "Canvas not found" });
-//     }
-
-//     const user = await getUserFromRequest(req);
-//     if (!user) {
-//       return res.status(404).json({ error: "User not found" });
-//     }
-
-//     const { drafts, viewport, name } = req.body;
-//     const userCanvas = await UserCanvas.findOne({
-//       where: { canvasId: canvas.id, userId: user.id },
-//     });
-
-//     if (
-//       !userCanvas ||
-//       (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
-//     ) {
-//       return res.status(403).json({
-//         error: "Forbidden: You don't have permission to edit this canvas",
-//       });
-//     }
-
-//     if (name !== canvas.name) {
-//       canvas.name = name;
-//       await canvas.save();
-//     }
-//     userCanvas.lastViewportX = viewport.x;
-//     userCanvas.lastViewportY = viewport.y;
-//     userCanvas.lastZoomLevel = viewport.zoom;
-//     userCanvas.lastAccessedAt = new Date();
-//     await userCanvas.save();
-
-//     drafts.forEach((eachDraft) => {
-//       const canvasDraft = canvas.CanvasDrafts.find(
-//         (cd) => cd.draftId === eachDraft.id
-//       );
-//       canvasDraft.positionX = eachDraft.positionX;
-//       canvasDraft.positionY = eachDraft.positionY;
-//       canvasDraft.save();
-//       const draft = Draft.findByPk(eachDraft.id);
-//       draft.picks = draft.picks;
-//       draft.save();
-//     });
-
-//     res.json({
-//       success: true,
-//     });
-//     socketService.emitToRoom(canvas.id, "canvasUpdate", canvas.toJSON());
-//   } catch (error) {
-//     res.status(500).json({ error: "Failed to save canvas" });
-//   }
-// });
 
 router.post("/", async (req, res) => {
   try {
@@ -262,6 +247,10 @@ router.delete("/:canvasId", protect, async (req, res) => {
       });
     }
 
+    await CanvasConnection.destroy({
+      where: { canvas_id: canvasId },
+      transaction: t,
+    });
     await CanvasDraft.destroy({
       where: { canvas_id: canvasId },
       transaction: t,
@@ -301,7 +290,6 @@ router.patch("/:canvasId/viewport", async (req, res) => {
     const { canvasId } = req.params;
     const { x, y, zoom } = req.body;
 
-    // Validate input
     if (
       typeof x !== "number" ||
       typeof y !== "number" ||
@@ -310,7 +298,6 @@ router.patch("/:canvasId/viewport", async (req, res) => {
       return res.status(400).json({ error: "Invalid viewport data" });
     }
 
-    // Find or create the UserCanvas record
     const [userCanvas] = await UserCanvas.findOrCreate({
       where: {
         canvas_id: canvasId,
@@ -318,7 +305,6 @@ router.patch("/:canvasId/viewport", async (req, res) => {
       },
     });
 
-    // Update viewport values
     userCanvas.lastViewportX = x;
     userCanvas.lastViewportY = y;
     userCanvas.lastZoomLevel = zoom;
@@ -344,7 +330,6 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
       return res.status(400).json({ error: "Invalid canvas name" });
     }
 
-    // Check user permissions
     const userCanvas = await UserCanvas.findOne({
       where: { canvas_id: canvasId, user_id: req.user.id },
     });
@@ -358,7 +343,6 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
       });
     }
 
-    // Update canvas name
     const canvas = await Canvas.findByPk(canvasId);
 
     if (!canvas) {
@@ -376,6 +360,11 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
       nest: true,
     });
 
+    const connections = await CanvasConnection.findAll({
+      where: { canvas_id: canvas.id },
+      raw: true,
+    });
+
     const canvasJSON = canvas.toJSON();
 
     res.status(200).json({
@@ -387,6 +376,7 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
     socketService.emitToRoom(canvasId, "canvasUpdate", {
       canvas: canvas.toJSON(),
       drafts: canvasDrafts,
+      connections: connections,
     });
   } catch (error) {
     console.error("Failed to update canvas name:", error);
@@ -398,7 +388,6 @@ router.get("/:canvasId/users", protect, async (req, res) => {
   try {
     const { canvasId } = req.params;
 
-    // Check requester permissions
     const requesterUserCanvas = await UserCanvas.findOne({
       where: { canvas_id: canvasId, user_id: req.user.id },
     });
@@ -409,8 +398,6 @@ router.get("/:canvasId/users", protect, async (req, res) => {
         .json({ error: "Forbidden: You don't have access to this canvas" });
     }
 
-    // Fetch users associated with the canvas
-    // We use Canvas.findByPk with include User to get users and the junction table data
     const canvas = await Canvas.findByPk(canvasId, {
       include: [
         {
@@ -427,7 +414,6 @@ router.get("/:canvasId/users", protect, async (req, res) => {
       return res.status(404).json({ error: "Canvas not found" });
     }
 
-    // Transform response to be cleaner
     const users = canvas.Users.map((user) => ({
       id: user.id,
       name: user.name,
@@ -449,7 +435,6 @@ router.put("/:canvasId/users/:userId", protect, async (req, res) => {
     const { canvasId, userId } = req.params;
     const { permissions } = req.body;
 
-    // Check requester permissions (must be admin)
     const requesterUserCanvas = await UserCanvas.findOne({
       where: { canvas_id: canvasId, user_id: req.user.id },
     });
@@ -459,9 +444,6 @@ router.put("/:canvasId/users/:userId", protect, async (req, res) => {
         .status(403)
         .json({ error: "Forbidden: You must be an admin to manage users" });
     }
-
-    // Prevent changing own permissions to non-admin if you are the only admin?
-    // For now simple update.
 
     const [affectedRows] = await UserCanvas.update(
       { permissions },
@@ -491,7 +473,6 @@ router.delete("/:canvasId/users/:userId", protect, async (req, res) => {
   try {
     const { canvasId, userId } = req.params;
 
-    // Check requester permissions (must be admin)
     const requesterUserCanvas = await UserCanvas.findOne({
       where: { canvas_id: canvasId, user_id: req.user.id },
     });
@@ -501,10 +482,6 @@ router.delete("/:canvasId/users/:userId", protect, async (req, res) => {
         .status(403)
         .json({ error: "Forbidden: You must be an admin to remove users" });
     }
-
-    // Prevent removing yourself? Or allow leaving?
-    // If removing yourself, check if there are other admins?
-    // For simplicity, allow removing anyone.
 
     const affectedRows = await UserCanvas.destroy({
       where: {
@@ -527,5 +504,488 @@ router.delete("/:canvasId/users/:userId", protect, async (req, res) => {
     res.status(500).json({ error: "Failed to remove user" });
   }
 });
+
+router.post("/:canvasId/connections", protect, async (req, res) => {
+  try {
+    const { canvasId } = req.params;
+    const { sourceDraftIds, targetDraftIds, style, vertices } = req.body;
+
+    // Validation
+    if (!Array.isArray(sourceDraftIds) || sourceDraftIds.length === 0) {
+      return res.status(400).json({
+        error: "At least one source is required",
+      });
+    }
+
+    if (!Array.isArray(targetDraftIds) || targetDraftIds.length === 0) {
+      return res.status(400).json({
+        error: "At least one target is required",
+      });
+    }
+
+    const userCanvas = await UserCanvas.findOne({
+      where: { canvas_id: canvasId, user_id: req.user.id },
+    });
+
+    if (
+      !userCanvas ||
+      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
+    ) {
+      return res.status(403).json({
+        error: "Forbidden: You don't have permission to edit this canvas",
+      });
+    }
+
+    // Validate all draft IDs exist on this canvas
+    const canvasDrafts = await CanvasDraft.findAll({
+      where: { canvas_id: canvasId },
+      attributes: ["draft_id"],
+    });
+    const validDraftIds = new Set(canvasDrafts.map((cd) => cd.draft_id));
+
+    for (const src of sourceDraftIds) {
+      if (!validDraftIds.has(src.draftId)) {
+        return res.status(400).json({
+          error: `Source draft ${src.draftId} not found on canvas`,
+        });
+      }
+    }
+
+    for (const tgt of targetDraftIds) {
+      if (!validDraftIds.has(tgt.draftId)) {
+        return res.status(400).json({
+          error: `Target draft ${tgt.draftId} not found on canvas`,
+        });
+      }
+    }
+
+    // Transform to backend format
+    const sourceDraftIdsFormatted = sourceDraftIds.map((src) => ({
+      draft_id: src.draftId,
+      anchor_type: src.anchorType || "top",
+    }));
+
+    const targetDraftIdsFormatted = targetDraftIds.map((tgt) => ({
+      draft_id: tgt.draftId,
+      anchor_type: tgt.anchorType || "top",
+    }));
+
+    const connection = await CanvasConnection.create({
+      canvas_id: canvasId,
+      source_draft_ids: sourceDraftIdsFormatted,
+      target_draft_ids: targetDraftIdsFormatted,
+      vertices: vertices || [],
+      style: style || "solid",
+    });
+
+    res.status(201).json({
+      success: true,
+      connection: connection.toJSON(),
+    });
+
+    const connections = await CanvasConnection.findAll({
+      where: { canvas_id: canvasId },
+      raw: true,
+    });
+
+    socketService.emitToRoom(canvasId, "connectionCreated", {
+      connection: connection.toJSON(),
+      allConnections: connections,
+    });
+  } catch (error) {
+    console.error("Failed to create connection:", error);
+    res.status(500).json({ error: "Failed to create connection" });
+  }
+});
+
+router.patch(
+  "/:canvasId/connections/:connectionId",
+  protect,
+  async (req, res) => {
+    try {
+      const { canvasId, connectionId } = req.params;
+      const { addSource, addTarget } = req.body;
+
+      const userCanvas = await UserCanvas.findOne({
+        where: { canvas_id: canvasId, user_id: req.user.id },
+      });
+
+      if (
+        !userCanvas ||
+        (userCanvas.permissions !== "edit" &&
+          userCanvas.permissions !== "admin")
+      ) {
+        return res.status(403).json({
+          error: "Forbidden: You don't have permission to edit this canvas",
+        });
+      }
+
+      const connection = await CanvasConnection.findOne({
+        where: { id: connectionId, canvas_id: canvasId },
+      });
+
+      if (!connection) {
+        return res.status(404).json({
+          error: "Connection not found",
+        });
+      }
+
+      // Validate draft exists on canvas
+      const canvasDrafts = await CanvasDraft.findAll({
+        where: { canvas_id: canvasId },
+        attributes: ["draft_id"],
+      });
+      const validDraftIds = new Set(canvasDrafts.map((cd) => cd.draft_id));
+
+      if (addSource) {
+        if (!validDraftIds.has(addSource.draftId)) {
+          return res.status(400).json({
+            error: `Draft ${addSource.draftId} not found on canvas`,
+          });
+        }
+
+        const newSource = {
+          draft_id: addSource.draftId,
+          anchor_type: addSource.anchorType || "top",
+        };
+
+        // Check if already exists
+        const exists = connection.source_draft_ids.some(
+          (src) => src.draft_id === newSource.draft_id
+        );
+
+        if (!exists) {
+          connection.source_draft_ids = [
+            ...connection.source_draft_ids,
+            newSource,
+          ];
+          connection.changed("source_draft_ids", true);
+        }
+      }
+
+      if (addTarget) {
+        if (!validDraftIds.has(addTarget.draftId)) {
+          return res.status(400).json({
+            error: `Draft ${addTarget.draftId} not found on canvas`,
+          });
+        }
+
+        const newTarget = {
+          draft_id: addTarget.draftId,
+          anchor_type: addTarget.anchorType || "top",
+        };
+
+        // Check if already exists
+        const exists = connection.target_draft_ids.some(
+          (tgt) => tgt.draft_id === newTarget.draft_id
+        );
+
+        if (!exists) {
+          connection.target_draft_ids = [
+            ...connection.target_draft_ids,
+            newTarget,
+          ];
+          connection.changed("target_draft_ids", true);
+        }
+      }
+
+      await connection.save();
+
+      res.status(200).json({
+        success: true,
+        connection: connection.toJSON(),
+      });
+
+      const connections = await CanvasConnection.findAll({
+        where: { canvas_id: canvasId },
+        raw: true,
+      });
+
+      socketService.emitToRoom(canvasId, "connectionUpdated", {
+        connection: connection.toJSON(),
+        allConnections: connections,
+      });
+    } catch (error) {
+      console.error("Failed to update connection:", error);
+      res.status(500).json({ error: "Failed to update connection" });
+    }
+  }
+);
+
+router.delete(
+  "/:canvasId/connections/:connectionId",
+  protect,
+  async (req, res) => {
+    try {
+      const { canvasId, connectionId } = req.params;
+
+      const userCanvas = await UserCanvas.findOne({
+        where: { canvas_id: canvasId, user_id: req.user.id },
+      });
+
+      if (
+        !userCanvas ||
+        (userCanvas.permissions !== "edit" &&
+          userCanvas.permissions !== "admin")
+      ) {
+        return res.status(403).json({
+          error: "Forbidden: You don't have permission to edit this canvas",
+        });
+      }
+
+      const affectedRows = await CanvasConnection.destroy({
+        where: {
+          id: connectionId,
+          canvas_id: canvasId,
+        },
+      });
+
+      if (affectedRows > 0) {
+        res.status(200).json({
+          success: true,
+          message: "Connection deleted",
+        });
+
+        const connections = await CanvasConnection.findAll({
+          where: { canvas_id: canvasId },
+          raw: true,
+        });
+
+        socketService.emitToRoom(canvasId, "connectionDeleted", {
+          connectionId,
+          allConnections: connections,
+        });
+      } else {
+        res.status(404).json({
+          success: false,
+          message: "Connection not found",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to delete connection:", error);
+      res.status(500).json({ error: "Failed to delete connection" });
+    }
+  }
+);
+
+// Vertex Management Endpoints
+
+// Create a new vertex on a connection
+router.post(
+  "/:canvasId/connections/:connectionId/vertices",
+  protect,
+  async (req, res) => {
+    try {
+      const { canvasId, connectionId } = req.params;
+      const { x, y, insertAfterIndex } = req.body;
+
+      if (typeof x !== "number" || typeof y !== "number") {
+        return res.status(400).json({
+          error: "Invalid vertex coordinates",
+        });
+      }
+
+      const userCanvas = await UserCanvas.findOne({
+        where: { canvas_id: canvasId, user_id: req.user.id },
+      });
+
+      if (
+        !userCanvas ||
+        (userCanvas.permissions !== "edit" &&
+          userCanvas.permissions !== "admin")
+      ) {
+        return res.status(403).json({
+          error: "Forbidden: You don't have permission to edit this canvas",
+        });
+      }
+
+      const connection = await CanvasConnection.findOne({
+        where: { id: connectionId, canvas_id: canvasId },
+      });
+
+      if (!connection) {
+        return res.status(404).json({
+          error: "Connection not found",
+        });
+      }
+
+      // Generate unique ID for the new vertex
+      const { v4: uuidv4 } = require("uuid");
+      const newVertex = {
+        id: uuidv4(),
+        x,
+        y,
+      };
+
+      // Insert vertex at specified index or append to end
+      const vertices = [...(connection.vertices || [])];
+      if (typeof insertAfterIndex === "number" && insertAfterIndex >= 0) {
+        vertices.splice(insertAfterIndex + 1, 0, newVertex);
+      } else {
+        vertices.push(newVertex);
+      }
+
+      connection.vertices = vertices;
+      connection.changed("vertices", true);
+      await connection.save();
+
+      res.status(201).json({
+        success: true,
+        vertex: newVertex,
+        connection: connection.toJSON(),
+      });
+
+      const connections = await CanvasConnection.findAll({
+        where: { canvas_id: canvasId },
+        raw: true,
+      });
+
+      socketService.emitToRoom(canvasId, "vertexCreated", {
+        connectionId: connection.id,
+        vertex: newVertex,
+        allConnections: connections,
+      });
+    } catch (error) {
+      console.error("Failed to create vertex:", error);
+      res.status(500).json({ error: "Failed to create vertex" });
+    }
+  }
+);
+
+// Update a vertex position (for dragging)
+router.put(
+  "/:canvasId/connections/:connectionId/vertices/:vertexId",
+  protect,
+  async (req, res) => {
+    try {
+      console.log("Updating vertex position");
+      const { canvasId, connectionId, vertexId } = req.params;
+      const { x, y } = req.body;
+
+      if (typeof x !== "number" || typeof y !== "number") {
+        return res.status(400).json({
+          error: "Invalid vertex coordinates",
+        });
+      }
+
+      const userCanvas = await UserCanvas.findOne({
+        where: { canvas_id: canvasId, user_id: req.user.id },
+      });
+
+      if (
+        !userCanvas ||
+        (userCanvas.permissions !== "edit" &&
+          userCanvas.permissions !== "admin")
+      ) {
+        return res.status(403).json({
+          error: "Forbidden: You don't have permission to edit this canvas",
+        });
+      }
+
+      const connection = await CanvasConnection.findOne({
+        where: { id: connectionId, canvas_id: canvasId },
+      });
+
+      if (!connection) {
+        return res.status(404).json({
+          error: "Connection not found",
+        });
+      }
+
+      const vertices = connection.vertices || [];
+      const vertexIndex = vertices.findIndex((v) => v.id === vertexId);
+
+      if (vertexIndex === -1) {
+        return res.status(404).json({
+          error: "Vertex not found",
+        });
+      }
+
+      vertices[vertexIndex].x = x;
+      vertices[vertexIndex].y = y;
+
+      connection.vertices = vertices;
+      connection.changed("vertices", true);
+      await connection.save();
+
+      res.status(200).json({
+        success: true,
+        vertex: vertices[vertexIndex],
+      });
+
+      socketService.emitToRoom(canvasId, "vertexUpdated", {
+        connectionId: connection.id,
+        vertexId: vertices[vertexIndex].id,
+        x: vertices[vertexIndex].x,
+        y: vertices[vertexIndex].y,
+      });
+    } catch (error) {
+      console.error("Failed to update vertex:", error);
+      res.status(500).json({ error: "Failed to update vertex" });
+    }
+  }
+);
+
+// Delete a vertex and auto-reconnect
+router.delete(
+  "/:canvasId/connections/:connectionId/vertices/:vertexId",
+  protect,
+  async (req, res) => {
+    try {
+      const { canvasId, connectionId, vertexId } = req.params;
+
+      const userCanvas = await UserCanvas.findOne({
+        where: { canvas_id: canvasId, user_id: req.user.id },
+      });
+
+      if (
+        !userCanvas ||
+        (userCanvas.permissions !== "edit" &&
+          userCanvas.permissions !== "admin")
+      ) {
+        return res.status(403).json({
+          error: "Forbidden: You don't have permission to edit this canvas",
+        });
+      }
+
+      const connection = await CanvasConnection.findOne({
+        where: { id: connectionId, canvas_id: canvasId },
+      });
+
+      if (!connection) {
+        return res.status(404).json({
+          error: "Connection not found",
+        });
+      }
+
+      const vertices = connection.vertices || [];
+      const filteredVertices = vertices.filter((v) => v.id !== vertexId);
+
+      if (filteredVertices.length === vertices.length) {
+        return res.status(404).json({
+          error: "Vertex not found",
+        });
+      }
+
+      connection.vertices = filteredVertices;
+      connection.changed("vertices", true);
+      await connection.save();
+
+      res.status(200).json({
+        success: true,
+        message: "Vertex deleted",
+        connection: connection.toJSON(),
+      });
+
+      socketService.emitToRoom(canvasId, "vertexDeleted", {
+        connectionId: connection.id,
+        vertexId,
+      });
+    } catch (error) {
+      console.error("Failed to delete vertex:", error);
+      res.status(500).json({ error: "Failed to delete vertex" });
+    }
+  }
+);
 
 module.exports = router;

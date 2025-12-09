@@ -3,33 +3,6 @@ import KeyEvent, { Key } from "../KeyEvent";
 import { champions } from "../utils/constants";
 import BlankSquare from "/src/assets/BlankSquare.webp";
 
-const indexToShorthand = [
-    "BB1",
-    "BB2",
-    "BB3",
-    "BB4",
-    "BB5",
-    "B1",
-    "B2",
-    "B3",
-    "B4",
-    "B5",
-    "R1",
-    "R2",
-    "R3",
-    "R4",
-    "R5",
-    "RB1",
-    "RB2",
-    "RB3",
-    "RB4",
-    "RB5"
-];
-
-const spliceIndexToRealIndex = [
-    0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 5, 6, 7, 8, 9
-];
-
 type props = {
     pick: string;
     index: () => number;
@@ -39,6 +12,9 @@ type props = {
         id: string;
         picks: string[];
     };
+    indexToShorthand: string[];
+    layoutToggle: () => boolean;
+    disabled?: boolean;
 };
 
 export const CanvasSelect = (props: props) => {
@@ -51,6 +27,12 @@ export const CanvasSelect = (props: props) => {
     // Refs for scroll management
     let dropdownRef: HTMLDivElement | undefined;
     const buttonRefs: Map<number, HTMLButtonElement> = new Map();
+
+    const spliceIndexToRealIndex = createMemo(() => {
+        return props.layoutToggle()
+            ? [0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 5, 6, 7, 8, 9]
+            : [0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 5, 6, 7, 8, 9, 15, 16, 17, 18, 19];
+    });
 
     createEffect(() => {
         setUnavailableChampions(
@@ -87,6 +69,7 @@ export const CanvasSelect = (props: props) => {
     };
 
     const onFocusIn = () => {
+        if (props.disabled) return;
         setIsFocused(true);
         setDropdownOpen(true);
     };
@@ -95,7 +78,7 @@ export const CanvasSelect = (props: props) => {
         const currentTextIsValid = champions.find(
             (value) => value.name.toLowerCase() === sortInput.toLowerCase()
         );
-        if (sortInput === "" || currentTextIsValid !== undefined) {
+        if (sortInput === "" || (currentTextIsValid !== undefined && !dropdownOpen())) {
             return champions;
         }
         return champions.filter((option) =>
@@ -120,7 +103,7 @@ export const CanvasSelect = (props: props) => {
                     setDropdownOpen(false);
                     props.handlePickChange(
                         props.draft.id,
-                        spliceIndexToRealIndex[props.index()],
+                        spliceIndexToRealIndex()[props.index()],
                         holdChampName
                     );
                 }
@@ -197,15 +180,16 @@ export const CanvasSelect = (props: props) => {
                         />
                     </Show>
                     <input
-                        value={selectText() ?? indexToShorthand[props.index()]}
+                        value={selectText() ?? props.indexToShorthand[props.index()]}
                         onInput={(e) => {
                             setDropdownIndex(0);
                             setSelectText(e.target.value);
                         }}
-                        placeholder={indexToShorthand[props.index()]}
+                        placeholder={props.indexToShorthand[props.index()]}
                         name="select"
                         id="select"
                         class="h-6 w-full appearance-none bg-inherit px-1 text-slate-50 outline-none placeholder:text-slate-200"
+                        disabled={props.disabled}
                     />
                     <Show when={selectedChampion() !== null}>
                         <button
@@ -214,11 +198,12 @@ export const CanvasSelect = (props: props) => {
                                 setDropdownIndex(0);
                                 props.handlePickChange(
                                     props.draft.id,
-                                    spliceIndexToRealIndex[props.index()],
+                                    spliceIndexToRealIndex()[props.index()],
                                     ""
                                 );
                             }}
                             class="cursor-pointer text-slate-200 outline-none transition-all hover:text-teal-400 focus:outline-none"
+                            disabled={props.disabled}
                         >
                             <svg
                                 class="h-4 w-4 fill-current"
@@ -260,7 +245,9 @@ export const CanvasSelect = (props: props) => {
                                                 setSelectText(champion.name);
                                                 props.handlePickChange(
                                                     props.draft.id,
-                                                    spliceIndexToRealIndex[props.index()],
+                                                    spliceIndexToRealIndex()[
+                                                        props.index()
+                                                    ],
                                                     champion.name
                                                 );
                                                 setDropdownOpen(false);

@@ -3,17 +3,20 @@ import Ahri from "/src/assets/AhriSquare.webp";
 import Akali from "/src/assets/AkaliSquare.webp";
 import Akshan from "/src/assets/AkshanSquare.webp";
 import Alistar from "/src/assets/AlistarSquare.webp";
+import Ambessa from "/src/assets/AmbessaSquare.webp";
 import Amumu from "/src/assets/AmumuSquare.webp";
 import Anivia from "/src/assets/AniviaSquare.webp";
 import Annie from "/src/assets/AnnieSquare.webp";
 import Aphelios from "/src/assets/ApheliosSquare.webp";
 import Ashe from "/src/assets/AsheSquare.webp";
 import AurelionSol from "/src/assets/AurelionSolSquare.webp";
+import Aurora from "/src/assets/AuroraSquare.webp";
 import Azir from "/src/assets/AzirSquare.webp";
 import Bard from "/src/assets/BardSquare.webp";
 import Blitzcrank from "/src/assets/BlitzcrankSquare.webp";
 import Brand from "/src/assets/BrandSquare.webp";
 import Braum from "/src/assets/BraumSquare.webp";
+import Briar from "/src/assets/BriarSquare.webp";
 import Caitlyn from "/src/assets/CaitlynSquare.webp";
 import Camille from "/src/assets/CamilleSquare.webp";
 import Cassiopeia from "/src/assets/CassiopeiaSquare.webp";
@@ -39,6 +42,7 @@ import Graves from "/src/assets/GravesSquare.webp";
 import Gwen from "/src/assets/GwenSquare.webp";
 import Hecarim from "/src/assets/HecarimSquare.webp";
 import Heimerdinger from "/src/assets/HeimerdingerSquare.webp";
+import Hwei from "/src/assets/HweiSquare.webp";
 import Illaoi from "/src/assets/IllaoiSquare.webp";
 import Irelia from "/src/assets/IreliaSquare.webp";
 import Ivern from "/src/assets/IvernSquare.webp";
@@ -72,6 +76,7 @@ import Lulu from "/src/assets/LuluSquare.webp";
 import Lux from "/src/assets/LuxSquare.webp";
 import Malphite from "/src/assets/MalphiteSquare.webp";
 import Malzahar from "/src/assets/MalzaharSquare.webp";
+import Mel from "/src/assets/MelSquare.webp";
 import Maokai from "/src/assets/MaokaiSquare.webp";
 import MasterYi from "/src/assets/MasterYiSquare.webp";
 import Milio from "/src/assets/MilioSquare.webp";
@@ -84,6 +89,7 @@ import Nasus from "/src/assets/NasusSquare.webp";
 import Nautilus from "/src/assets/NautilusSquare.webp";
 import Neeko from "/src/assets/NeekoSquare.webp";
 import Nidalee from "/src/assets/NidaleeSquare.webp";
+import Nilah from "/src/assets/NilahSquare.webp";
 import Nocturne from "/src/assets/NocturneSquare.webp";
 import Nunu from "/src/assets/NunuSquare.webp";
 import Olaf from "/src/assets/OlafSquare.webp";
@@ -116,6 +122,7 @@ import Singed from "/src/assets/SingedSquare.webp";
 import Sion from "/src/assets/SionSquare.webp";
 import Sivir from "/src/assets/SivirSquare.webp";
 import Skarner from "/src/assets/SkarnerSquare.webp";
+import Smolder from "/src/assets/SmolderSquare.webp";
 import Sona from "/src/assets/SonaSquare.webp";
 import Soraka from "/src/assets/SorakaSquare.webp";
 import Swain from "/src/assets/SwainSquare.webp";
@@ -152,7 +159,9 @@ import XinZhao from "/src/assets/XinZhaoSquare.webp";
 import Yasuo from "/src/assets/YasuoSquare.webp";
 import Yone from "/src/assets/YoneSquare.webp";
 import Yorick from "/src/assets/YorickSquare.webp";
+import Yunara from "/src/assets/YunaraSquare.webp";
 import Yuumi from "/src/assets/YuumiSquare.webp";
+import Zaahen from "/src/assets/ZaahenSquare.webp";
 import Zac from "/src/assets/ZacSquare.webp";
 import Zed from "/src/assets/ZedSquare.webp";
 import Zeri from "/src/assets/ZeriSquare.webp";
@@ -167,17 +176,20 @@ export const champions = [
     { name: "Akali", img: Akali },
     { name: "Akshan", img: Akshan },
     { name: "Alistar", img: Alistar },
+    { name: "Ambessa", img: Ambessa },
     { name: "Amumu", img: Amumu },
     { name: "Anivia", img: Anivia },
     { name: "Annie", img: Annie },
     { name: "Aphelios", img: Aphelios },
     { name: "Ashe", img: Ashe },
     { name: "Aurelion Sol", img: AurelionSol },
+    { name: "Aurora", img: Aurora },
     { name: "Azir", img: Azir },
     { name: "Bard", img: Bard },
     { name: "Blitzcrank", img: Blitzcrank },
     { name: "Brand", img: Brand },
     { name: "Braum", img: Braum },
+    { name: "Briar", img: Briar },
     { name: "Caitlyn", img: Caitlyn },
     { name: "Camille", img: Camille },
     { name: "Cassiopeia", img: Cassiopeia },
@@ -203,6 +215,7 @@ export const champions = [
     { name: "Gwen", img: Gwen },
     { name: "Hecarim", img: Hecarim },
     { name: "Heimerdinger", img: Heimerdinger },
+    { name: "Hwei", img: Hwei },
     { name: "Illaoi", img: Illaoi },
     { name: "Irelia", img: Irelia },
     { name: "Ivern", img: Ivern },
@@ -236,6 +249,7 @@ export const champions = [
     { name: "Lux", img: Lux },
     { name: "Malphite", img: Malphite },
     { name: "Malzahar", img: Malzahar },
+    { name: "Mel", img: Mel },
     { name: "Maokai", img: Maokai },
     { name: "Master Yi", img: MasterYi },
     { name: "Milio", img: Milio },
@@ -248,6 +262,7 @@ export const champions = [
     { name: "Nautilus", img: Nautilus },
     { name: "Neeko", img: Neeko },
     { name: "Nidalee", img: Nidalee },
+    { name: "Nilah", img: Nilah },
     { name: "Nocturne", img: Nocturne },
     { name: "Nunu", img: Nunu },
     { name: "Olaf", img: Olaf },
@@ -280,6 +295,7 @@ export const champions = [
     { name: "Sion", img: Sion },
     { name: "Sivir", img: Sivir },
     { name: "Skarner", img: Skarner },
+    { name: "Smolder", img: Smolder },
     { name: "Sona", img: Sona },
     { name: "Soraka", img: Soraka },
     { name: "Swain", img: Swain },
@@ -316,7 +332,9 @@ export const champions = [
     { name: "Yasuo", img: Yasuo },
     { name: "Yone", img: Yone },
     { name: "Yorick", img: Yorick },
+    { name: "Yunara", img: Yunara },
     { name: "Yuumi", img: Yuumi },
+    { name: "Zaahen", img: Zaahen },
     { name: "Zac", img: Zac },
     { name: "Zed", img: Zed },
     { name: "Zeri", img: Zeri },
@@ -355,3 +373,49 @@ export const supportChamps = [
 ];
 
 export const sortOptions = ["Top", "Jungle", "Mid", "Bot", "Support"];
+
+export const indexToShorthandHorizontal = [
+    "BB1",
+    "BB2",
+    "BB3",
+    "BB4",
+    "BB5",
+    "B1",
+    "B2",
+    "B3",
+    "B4",
+    "B5",
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "RB1",
+    "RB2",
+    "RB3",
+    "RB4",
+    "RB5"
+];
+
+export const indexToShorthandVertical = [
+    "BB1",
+    "BB2",
+    "BB3",
+    "BB4",
+    "BB5",
+    "B1",
+    "B2",
+    "B3",
+    "B4",
+    "B5",
+    "RB1",
+    "RB2",
+    "RB3",
+    "RB4",
+    "RB5",
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5"
+];
