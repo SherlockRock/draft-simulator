@@ -1,4 +1,5 @@
 Canvas Functionality:
+    share link broken on prod?
     share link for edit access
     replace draft list button Functionality with right click menus?
         editing from the manage canvas' dialog

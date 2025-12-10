@@ -1130,7 +1130,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     >
                         {isConnectionMode() ? "✓ Connection Mode" : "Connection Mode"}
                     </button>
-                    <div class="rounded border border-slate-500 bg-slate-600 px-3 py-1.5 text-slate-50 shadow">
+                    <div class="rounded border border-slate-500 bg-slate-600 px-3 py-1.5 text-center text-slate-50 shadow">
                         Zoom: {Math.round(props.viewport().zoom * 100)}%
                     </div>
                     <button

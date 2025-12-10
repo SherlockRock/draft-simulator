@@ -330,7 +330,7 @@ export const createConnection = async (data: {
     style?: "solid" | "dashed" | "dotted";
     vertices?: Array<{ id: string; x: number; y: number }>;
 }): Promise<{ success: boolean; connection: Connection }> => {
-    const response = await fetch(`/api/canvas/${data.canvasId}/connections`, {
+    const response = await fetch(`${BASE_URL}/canvas/${data.canvasId}/connections`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
@@ -364,7 +364,7 @@ export const createVertex = async (data: {
     connection: Connection;
 }> => {
     const response = await fetch(
-        `/api/canvas/${data.canvasId}/connections/${data.connectionId}/vertices`,
+        `${BASE_URL}/canvas/${data.canvasId}/connections/${data.connectionId}/vertices`,
         {
             method: "POST",
             headers: {
@@ -395,7 +395,7 @@ export const updateVertex = async (data: {
     y: number;
 }): Promise<{ success: boolean; vertex: { id: string; x: number; y: number } }> => {
     const response = await fetch(
-        `/api/canvas/${data.canvasId}/connections/${data.connectionId}/vertices/${data.vertexId}`,
+        `${BASE_URL}/canvas/${data.canvasId}/connections/${data.connectionId}/vertices/${data.vertexId}`,
         {
             method: "PUT",
             headers: {
@@ -423,7 +423,7 @@ export const deleteVertex = async (data: {
     vertexId: string;
 }): Promise<{ success: boolean; message: string; connection: Connection }> => {
     const response = await fetch(
-        `/api/canvas/${data.canvasId}/connections/${data.connectionId}/vertices/${data.vertexId}`,
+        `${BASE_URL}/canvas/${data.canvasId}/connections/${data.connectionId}/vertices/${data.vertexId}`,
         {
             method: "DELETE",
             credentials: "include"
@@ -445,7 +445,7 @@ export const updateConnection = async (data: {
     addTarget?: { draftId: string; anchorType?: string };
 }): Promise<{ success: boolean; connection: Connection }> => {
     const response = await fetch(
-        `/api/canvas/${data.canvasId}/connections/${data.connectionId}`,
+        `${BASE_URL}/canvas/${data.canvasId}/connections/${data.connectionId}`,
         {
             method: "PATCH",
             headers: {
@@ -472,7 +472,7 @@ export const deleteConnection = async (data: {
     connectionId: string;
 }): Promise<{ success: boolean; message: string }> => {
     const response = await fetch(
-        `/api/canvas/${data.canvasId}/connections/${data.connectionId}`,
+        `${BASE_URL}/canvas/${data.canvasId}/connections/${data.connectionId}`,
         {
             method: "DELETE",
             credentials: "include"
