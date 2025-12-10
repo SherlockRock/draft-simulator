@@ -149,6 +149,7 @@ router.post("/:canvasId/share", protect, async (req, res) => {
 router.post("/:canvasId/generate-canvas-link", protect, async (req, res) => {
   try {
     const canvas = await Canvas.findByPk(req.params.canvasId);
+    const { permissions } = req.body; // Get permission level from request body
 
     if (!canvas) {
       return res.status(404).json({ error: "Canvas not found" });
@@ -166,8 +167,13 @@ router.post("/:canvasId/generate-canvas-link", protect, async (req, res) => {
       });
     }
 
+    const validPermissions = ["view", "edit"];
+    const sharePermissions = validPermissions.includes(permissions)
+      ? permissions
+      : "view";
+
     const shareToken = jwt.sign(
-      { canvasId: canvas.id },
+      { canvasId: canvas.id, permissions: sharePermissions },
       process.env.SHARE_JWT_SECRET,
       { expiresIn: "1h" }
     );
@@ -203,6 +209,8 @@ router.get("/verify-canvas-link", async (req, res) => {
       return res.status(404).json({ error: "Canvas not found" });
     }
 
+    const sharePermissions = decoded.permissions || "view";
+
     const existingAccess = await UserCanvas.findOne({
       where: {
         canvas_id: canvas.id,
@@ -214,8 +222,13 @@ router.get("/verify-canvas-link", async (req, res) => {
       await UserCanvas.create({
         canvas_id: canvas.id,
         user_id: user.id,
-        permissions: "view",
+        permissions: sharePermissions,
       });
+    } else if (
+      existingAccess.permissions === "view" &&
+      sharePermissions === "edit"
+    ) {
+      await existingAccess.update({ permissions: "edit" });
     }
 
     res.json({ success: true, canvasId: canvas.id });

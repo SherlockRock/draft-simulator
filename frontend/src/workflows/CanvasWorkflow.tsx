@@ -1,4 +1,4 @@
-import { For, createEffect, createSignal } from "solid-js";
+import { For, createEffect, createSignal, Show } from "solid-js";
 import {
     fetchCanvas,
     postNewDraft,
@@ -26,6 +26,8 @@ const CanvasWorkflow = () => {
     const [viewport, setViewport] = createSignal<Viewport>({ x: 0, y: 0, zoom: 1 });
     const [layoutToggle, setLayoutToggle] = createSignal(false);
     const [isManageUsersOpen, setIsManageUsersOpen] = createSignal(false);
+    const [isSharePopperOpen, setIsSharePopperOpen] = createSignal(false);
+    const [copied, setCopied] = createSignal("");
     let canvasContainerRef: HTMLDivElement | undefined;
 
     const canvasQuery = useQuery(() => ({
@@ -56,6 +58,20 @@ const CanvasWorkflow = () => {
         queryKey: ["canvasUsers", params.id],
         enabled: isManageUsersOpen() && !!params.id,
         queryFn: () => fetchCanvasUsers(params.id)
+    }));
+
+    const viewShareLinkQuery = useQuery(() => ({
+        queryKey: ["canvasShareLink", params.id, "view"],
+        queryFn: () => generateCanvasShareLink(params.id, "view"),
+        enabled: isSharePopperOpen() && !!params.id,
+        staleTime: 5 * 60 * 1000
+    }));
+
+    const editShareLinkQuery = useQuery(() => ({
+        queryKey: ["canvasShareLink", params.id, "edit"],
+        queryFn: () => generateCanvasShareLink(params.id, "edit"),
+        enabled: isSharePopperOpen() && !!params.id,
+        staleTime: 5 * 60 * 1000
     }));
 
     const updatePermissionMutation = useMutation(() => ({
@@ -124,13 +140,30 @@ const CanvasWorkflow = () => {
         }
     };
 
-    const handleShareCanvas = async () => {
-        try {
-            const shareLink = await generateCanvasShareLink(params.id);
-            await navigator.clipboard.writeText(shareLink);
-            toast.success("Share link copied to clipboard!");
-        } catch (error) {
-            toast.error("Failed to generate share link:" + error);
+    const handleShareCanvas = () => {
+        setIsSharePopperOpen((prev) => !prev);
+    };
+
+    const handleCopyViewLink = () => {
+        if (viewShareLinkQuery.data) {
+            navigator.clipboard.writeText(viewShareLinkQuery.data);
+            setCopied("view");
+            setTimeout(() => setCopied(""), 2000);
+        }
+    };
+
+    const handleCopyEditLink = () => {
+        if (editShareLinkQuery.data) {
+            navigator.clipboard.writeText(editShareLinkQuery.data);
+            setCopied("edit");
+            setTimeout(() => setCopied(""), 2000);
+        }
+    };
+
+    const handleShareFocusOut = (e: FocusEvent) => {
+        const container = e.currentTarget as HTMLDivElement;
+        if (e.relatedTarget === null || !container.contains(e.relatedTarget as Node)) {
+            setIsSharePopperOpen(false);
         }
     };
 
@@ -263,12 +296,191 @@ const CanvasWorkflow = () => {
                             >
                                 Manage Users
                             </button>
-                            <button
-                                onClick={handleShareCanvas}
-                                class="rounded-md bg-teal-700 px-3 py-2 text-center font-medium text-slate-200 hover:bg-teal-400"
+                            <div
+                                class="relative h-full w-full"
+                                onFocusOut={handleShareFocusOut}
                             >
-                                Share
-                            </button>
+                                <button
+                                    onClick={handleShareCanvas}
+                                    class="h-full w-full rounded-md bg-teal-700 px-3 py-2 text-center font-medium text-slate-200 hover:bg-teal-400"
+                                >
+                                    Share
+                                </button>
+                                {isSharePopperOpen() && (
+                                    <div class="absolute right-0 top-full z-10 mt-2 w-auto min-w-max rounded-md bg-slate-600 p-3 shadow-lg">
+                                        <div class="space-y-3">
+                                            <div>
+                                                <p class="mb-1 text-xs font-medium text-slate-300">
+                                                    View Only Access
+                                                </p>
+                                                <Show
+                                                    when={!viewShareLinkQuery.isPending}
+                                                    fallback={
+                                                        <div class="flex items-center gap-2">
+                                                            <svg
+                                                                class="h-4 w-4 animate-spin text-teal-400"
+                                                                xmlns="http://www.w3.org/2000/svg"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                            >
+                                                                <circle
+                                                                    class="opacity-25"
+                                                                    cx="12"
+                                                                    cy="12"
+                                                                    r="10"
+                                                                    stroke="currentColor"
+                                                                    stroke-width="4"
+                                                                />
+                                                                <path
+                                                                    class="opacity-75"
+                                                                    fill="currentColor"
+                                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                                />
+                                                            </svg>
+                                                            <span class="text-xs text-slate-400">
+                                                                Loading...
+                                                            </span>
+                                                        </div>
+                                                    }
+                                                >
+                                                    <div class="flex items-center gap-2">
+                                                        <input
+                                                            type="text"
+                                                            readOnly
+                                                            value={
+                                                                viewShareLinkQuery.data ||
+                                                                ""
+                                                            }
+                                                            class="w-40 rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-sm text-slate-50"
+                                                        />
+                                                        <button
+                                                            onClick={handleCopyViewLink}
+                                                            class="rounded-md bg-teal-400 p-2 text-slate-50 hover:bg-teal-700 disabled:opacity-50"
+                                                            disabled={
+                                                                !viewShareLinkQuery.data
+                                                            }
+                                                        >
+                                                            {copied() === "view" ? (
+                                                                <svg
+                                                                    xmlns="http://www.w3.org/2000/svg"
+                                                                    class="h-5 w-5"
+                                                                    viewBox="0 0 20 20"
+                                                                    fill="currentColor"
+                                                                >
+                                                                    <path
+                                                                        fill-rule="evenodd"
+                                                                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                                                        clip-rule="evenodd"
+                                                                    />
+                                                                </svg>
+                                                            ) : (
+                                                                <svg
+                                                                    xmlns="http://www.w3.org/2000/svg"
+                                                                    class="h-5 w-5"
+                                                                    fill="none"
+                                                                    viewBox="0 0 24 24"
+                                                                    stroke="currentColor"
+                                                                    stroke-width="2"
+                                                                >
+                                                                    <path
+                                                                        stroke-linecap="round"
+                                                                        stroke-linejoin="round"
+                                                                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                                                    />
+                                                                </svg>
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                </Show>
+                                            </div>
+                                            <div>
+                                                <p class="mb-1 text-xs font-medium text-slate-300">
+                                                    Edit Access
+                                                </p>
+                                                <Show
+                                                    when={!editShareLinkQuery.isPending}
+                                                    fallback={
+                                                        <div class="flex items-center gap-2">
+                                                            <svg
+                                                                class="h-4 w-4 animate-spin text-teal-400"
+                                                                xmlns="http://www.w3.org/2000/svg"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                            >
+                                                                <circle
+                                                                    class="opacity-25"
+                                                                    cx="12"
+                                                                    cy="12"
+                                                                    r="10"
+                                                                    stroke="currentColor"
+                                                                    stroke-width="4"
+                                                                />
+                                                                <path
+                                                                    class="opacity-75"
+                                                                    fill="currentColor"
+                                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                                />
+                                                            </svg>
+                                                            <span class="text-xs text-slate-400">
+                                                                Loading...
+                                                            </span>
+                                                        </div>
+                                                    }
+                                                >
+                                                    <div class="flex items-center gap-2">
+                                                        <input
+                                                            type="text"
+                                                            readOnly
+                                                            value={
+                                                                editShareLinkQuery.data ||
+                                                                ""
+                                                            }
+                                                            class="w-40 rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-sm text-slate-50"
+                                                        />
+                                                        <button
+                                                            onClick={handleCopyEditLink}
+                                                            class="rounded-md bg-teal-400 p-2 text-slate-50 hover:bg-teal-700 disabled:opacity-50"
+                                                            disabled={
+                                                                !editShareLinkQuery.data
+                                                            }
+                                                        >
+                                                            {copied() === "edit" ? (
+                                                                <svg
+                                                                    xmlns="http://www.w3.org/2000/svg"
+                                                                    class="h-5 w-5"
+                                                                    viewBox="0 0 20 20"
+                                                                    fill="currentColor"
+                                                                >
+                                                                    <path
+                                                                        fill-rule="evenodd"
+                                                                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                                                        clip-rule="evenodd"
+                                                                    />
+                                                                </svg>
+                                                            ) : (
+                                                                <svg
+                                                                    xmlns="http://www.w3.org/2000/svg"
+                                                                    class="h-5 w-5"
+                                                                    fill="none"
+                                                                    viewBox="0 0 24 24"
+                                                                    stroke="currentColor"
+                                                                    stroke-width="2"
+                                                                >
+                                                                    <path
+                                                                        stroke-linecap="round"
+                                                                        stroke-linejoin="round"
+                                                                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                                                    />
+                                                                </svg>
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                </Show>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                     <div class="custom-scrollbar max-h-1/4 overflow-y-scroll rounded-md border-slate-500 bg-slate-700 p-2">

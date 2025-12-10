@@ -128,10 +128,17 @@ export const generateShareLink = async (draftId: string) => {
     return shareLink;
 };
 
-export const generateCanvasShareLink = async (canvasId: string) => {
+export const generateCanvasShareLink = async (
+    canvasId: string,
+    permissions: "view" | "edit" = "view"
+) => {
     const res = await fetch(`${BASE_URL}/shares/${canvasId}/generate-canvas-link`, {
         method: "POST",
-        credentials: "include"
+        credentials: "include",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ permissions })
     });
     const { shareLink } = await res.json();
     return shareLink;
