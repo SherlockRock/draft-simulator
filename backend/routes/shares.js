@@ -67,29 +67,48 @@ router.post("/:draftId/generate-link", protect, async (req, res) => {
 
 router.get("/verify-link", async (req, res) => {
   try {
+    console.log("=== SHARE VERIFICATION START ===");
+    console.log("Request protocol:", req.protocol);
+    console.log("Request secure:", req.secure);
+    console.log("Request headers origin:", req.headers.origin);
+    console.log("Request headers referer:", req.headers.referer);
+    console.log("Request cookies:", req.cookies);
+    console.log("Query params:", req.query);
+    console.log("FRONTEND_ORIGIN:", process.env.FRONTEND_ORIGIN);
+
     const user = await getUserFromRequest(req);
+    console.log("User from request:", user ? `User ID: ${user.id}` : "NULL");
+
     if (!user) {
+      console.log("NO USER - Redirecting to:", process.env.FRONTEND_ORIGIN);
       return res.redirect(process.env.FRONTEND_ORIGIN);
     }
 
     const { token } = req.query;
     if (!token) {
+      console.log("NO TOKEN PROVIDED");
       return res.status(400).json({ error: "Share token is required" });
     }
 
     const decoded = jwt.verify(token, process.env.SHARE_JWT_SECRET);
+    console.log("Token decoded successfully for draftId:", decoded.draftId);
+
     const draft = await Draft.findByPk(decoded.draftId);
 
     if (!draft) {
+      console.log("DRAFT NOT FOUND for ID:", decoded.draftId);
       return res.status(404).json({ error: "Draft not found" });
     }
 
     // Add user to the draft's shared list
     await draft.addSharedWith(user, { through: { access_level: "viewer" } });
+    console.log("User added to draft successfully");
 
-    res.redirect(`${process.env.FRONTEND_ORIGIN}/draft/${draft.id}`);
+    const redirectUrl = `${process.env.FRONTEND_ORIGIN}/draft/${draft.id}`;
+    console.log("Redirecting to:", redirectUrl);
+    res.redirect(redirectUrl);
   } catch (err) {
-    console.error(err);
+    console.error("SHARE VERIFICATION ERROR:", err);
     if (err.name === "TokenExpiredError") {
       return res.status(401).json({ error: "Share link has expired." });
     } else if (err.name === "JsonWebTokenError") {
