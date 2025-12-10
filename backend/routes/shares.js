@@ -80,8 +80,8 @@ router.get("/verify-link", async (req, res) => {
     console.log("User from request:", user ? `User ID: ${user.id}` : "NULL");
 
     if (!user) {
-      console.log("NO USER - Redirecting to:", process.env.FRONTEND_ORIGIN);
-      return res.redirect(process.env.FRONTEND_ORIGIN);
+      console.log("NO USER - Returning 401");
+      return res.status(401).json({ error: "Not authenticated" });
     }
 
     const { token } = req.query;
@@ -104,9 +104,8 @@ router.get("/verify-link", async (req, res) => {
     await draft.addSharedWith(user, { through: { access_level: "viewer" } });
     console.log("User added to draft successfully");
 
-    const redirectUrl = `${process.env.FRONTEND_ORIGIN}/draft/${draft.id}`;
-    console.log("Redirecting to:", redirectUrl);
-    res.redirect(redirectUrl);
+    // Return success with draft ID so frontend can navigate
+    res.json({ success: true, draftId: draft.id });
   } catch (err) {
     console.error("SHARE VERIFICATION ERROR:", err);
     if (err.name === "TokenExpiredError") {
@@ -192,11 +191,15 @@ router.post("/:canvasId/generate-canvas-link", protect, async (req, res) => {
 
 router.get("/verify-canvas-link", async (req, res) => {
   try {
-    console.log("Verifying canvas share link");
+    console.log("=== CANVAS SHARE VERIFICATION START ===");
+    console.log("Request cookies:", req.cookies);
+
     const user = await getUserFromRequest(req);
+    console.log("User from request:", user ? `User ID: ${user.id}` : "NULL");
+
     if (!user) {
-      console.log("No user found, redirecting to frontend");
-      return res.redirect(process.env.FRONTEND_ORIGIN);
+      console.log("NO USER - Returning 401");
+      return res.status(401).json({ error: "Not authenticated" });
     }
 
     const { token } = req.query;
@@ -206,9 +209,12 @@ router.get("/verify-canvas-link", async (req, res) => {
     }
 
     const decoded = jwt.verify(token, process.env.SHARE_JWT_SECRET);
+    console.log("Token decoded successfully for canvasId:", decoded.canvasId);
+
     const canvas = await Canvas.findByPk(decoded.canvasId);
 
     if (!canvas) {
+      console.log("CANVAS NOT FOUND for ID:", decoded.canvasId);
       return res.status(404).json({ error: "Canvas not found" });
     }
 
@@ -217,10 +223,12 @@ router.get("/verify-canvas-link", async (req, res) => {
       user_id: user.id,
       permissions: "view",
     });
+    console.log("User added to canvas successfully");
 
-    res.redirect(`${process.env.FRONTEND_ORIGIN}/canvas/${canvas.id}`);
+    // Return success with canvas ID so frontend can navigate
+    res.json({ success: true, canvasId: canvas.id });
   } catch (err) {
-    console.error(err);
+    console.error("CANVAS SHARE VERIFICATION ERROR:", err);
     if (err.name === "TokenExpiredError") {
       return res.status(401).json({ error: "Share link has expired." });
     } else if (err.name === "JsonWebTokenError") {
