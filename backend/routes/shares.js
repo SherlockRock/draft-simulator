@@ -67,17 +67,7 @@ router.post("/:draftId/generate-link", protect, async (req, res) => {
 
 router.get("/verify-link", async (req, res) => {
   try {
-    console.log("=== SHARE VERIFICATION START ===");
-    console.log("Request protocol:", req.protocol);
-    console.log("Request secure:", req.secure);
-    console.log("Request headers origin:", req.headers.origin);
-    console.log("Request headers referer:", req.headers.referer);
-    console.log("Request cookies:", req.cookies);
-    console.log("Query params:", req.query);
-    console.log("FRONTEND_ORIGIN:", process.env.FRONTEND_ORIGIN);
-
     const user = await getUserFromRequest(req);
-    console.log("User from request:", user ? `User ID: ${user.id}` : "NULL");
 
     if (!user) {
       console.log("NO USER - Returning 401");
@@ -91,8 +81,6 @@ router.get("/verify-link", async (req, res) => {
     }
 
     const decoded = jwt.verify(token, process.env.SHARE_JWT_SECRET);
-    console.log("Token decoded successfully for draftId:", decoded.draftId);
-
     const draft = await Draft.findByPk(decoded.draftId);
 
     if (!draft) {
@@ -100,11 +88,14 @@ router.get("/verify-link", async (req, res) => {
       return res.status(404).json({ error: "Draft not found" });
     }
 
-    // Add user to the draft's shared list
-    await draft.addSharedWith(user, { through: { access_level: "viewer" } });
-    console.log("User added to draft successfully");
+    const existingAccess = await User.getSharedWith({
+      where: { id: user.id },
+    });
 
-    // Return success with draft ID so frontend can navigate
+    if (!existingAccess.length > 0) {
+      await draft.addSharedWith(user, { through: { access_level: "viewer" } });
+    }
+
     res.json({ success: true, draftId: draft.id });
   } catch (err) {
     console.error("SHARE VERIFICATION ERROR:", err);
@@ -191,11 +182,7 @@ router.post("/:canvasId/generate-canvas-link", protect, async (req, res) => {
 
 router.get("/verify-canvas-link", async (req, res) => {
   try {
-    console.log("=== CANVAS SHARE VERIFICATION START ===");
-    console.log("Request cookies:", req.cookies);
-
     const user = await getUserFromRequest(req);
-    console.log("User from request:", user ? `User ID: ${user.id}` : "NULL");
 
     if (!user) {
       console.log("NO USER - Returning 401");
@@ -209,8 +196,6 @@ router.get("/verify-canvas-link", async (req, res) => {
     }
 
     const decoded = jwt.verify(token, process.env.SHARE_JWT_SECRET);
-    console.log("Token decoded successfully for canvasId:", decoded.canvasId);
-
     const canvas = await Canvas.findByPk(decoded.canvasId);
 
     if (!canvas) {
@@ -218,14 +203,21 @@ router.get("/verify-canvas-link", async (req, res) => {
       return res.status(404).json({ error: "Canvas not found" });
     }
 
-    const userCanvas = await UserCanvas.create({
-      canvas_id: canvas.id,
-      user_id: user.id,
-      permissions: "view",
+    const existingAccess = await UserCanvas.findOne({
+      where: {
+        canvas_id: canvas.id,
+        user_id: user.id,
+      },
     });
-    console.log("User added to canvas successfully");
 
-    // Return success with canvas ID so frontend can navigate
+    if (!existingAccess) {
+      await UserCanvas.create({
+        canvas_id: canvas.id,
+        user_id: user.id,
+        permissions: "view",
+      });
+    }
+
     res.json({ success: true, canvasId: canvas.id });
   } catch (err) {
     console.error("CANVAS SHARE VERIFICATION ERROR:", err);
