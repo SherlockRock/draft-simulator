@@ -1,18 +1,13 @@
 Canvas Functionality:
-    share link for edit access
     replace draft list button Functionality with right click menus?
-        editing from the manage canvas' dialog
+    editing from the manage canvas' dialog
     Export draft
-    connection arrows
     folder heirarchy
     enforce unique names when copying drafts
     seperating canvas drafts from "real" drafts
     manage connection type/color?
+
     quick traversal of draft through tab/enter
-    canvas select opens briefly when clearing champ
-    double clicking into draft name causes success toast to spawn
-    Pressing enter bypasses champ being disabled
-    clearing champ text then clicking out does not clear champ img
 
 Short Term:
     delete draft functionality

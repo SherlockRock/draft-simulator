@@ -69,9 +69,10 @@ export const CanvasSelect = (props: props) => {
     };
 
     const onFocusIn = () => {
-        if (props.disabled) return;
-        setIsFocused(true);
-        setDropdownOpen(true);
+        if (!props.disabled) {
+            setIsFocused(true);
+            setDropdownOpen(true);
+        }
     };
 
     const handleSortOptions = (sortInput: string) => {
@@ -99,13 +100,17 @@ export const CanvasSelect = (props: props) => {
                     const holdOptions = holdSortOptions();
                     const holdChampName =
                         holdOptions[dropdownIndex() % holdOptions.length].name;
-                    setSelectText(holdChampName);
-                    setDropdownOpen(false);
-                    props.handlePickChange(
-                        props.draft.id,
-                        spliceIndexToRealIndex()[props.index()],
-                        holdChampName
-                    );
+                    const champNotAvailable =
+                        unavailableChampions().includes(holdChampName);
+                    if (!champNotAvailable) {
+                        setSelectText(holdChampName);
+                        setDropdownOpen(false);
+                        props.handlePickChange(
+                            props.draft.id,
+                            spliceIndexToRealIndex()[props.index()],
+                            holdChampName
+                        );
+                    }
                 }
                 break;
             case "ArrowUp":
@@ -185,6 +190,31 @@ export const CanvasSelect = (props: props) => {
                             setDropdownIndex(0);
                             setSelectText(e.target.value);
                         }}
+                        onBlur={() => {
+                            const inputValue = selectText().trim();
+                            if (inputValue === "") {
+                                setSelectText(selectedChampion()?.name || "");
+                            }
+
+                            const matchedChampion = champions.find(
+                                (champ) =>
+                                    champ.name.toLowerCase() === inputValue.toLowerCase()
+                            );
+
+                            if (matchedChampion) {
+                                const isAvailable = !unavailableChampions().includes(
+                                    matchedChampion.name
+                                );
+                                if (isAvailable) {
+                                    setSelectText(matchedChampion.name);
+                                    props.handlePickChange(
+                                        props.draft.id,
+                                        spliceIndexToRealIndex()[props.index()],
+                                        matchedChampion.name
+                                    );
+                                }
+                            }
+                        }}
                         placeholder={props.indexToShorthand[props.index()]}
                         name="select"
                         id="select"
@@ -193,6 +223,10 @@ export const CanvasSelect = (props: props) => {
                     />
                     <Show when={selectedChampion() !== null}>
                         <button
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                            }}
                             onClick={() => {
                                 setSelectText("");
                                 setDropdownIndex(0);
