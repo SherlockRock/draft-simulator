@@ -4,6 +4,7 @@ import KeyEvent, { Key } from "./KeyEvent";
 import { DOMElement } from "solid-js/jsx-runtime";
 import { useUser } from "./userProvider";
 import { useQuery } from "@tanstack/solid-query";
+import toast from "solid-toast";
 
 type props = {
     currentDraft: Resource<any>;
@@ -24,9 +25,17 @@ function DraftDetails(props: props) {
     const shareLinkQuery = useQuery(() => ({
         queryKey: ["shareLink", props.currentDraft()?.id],
         queryFn: () => generateShareLink(props.currentDraft()!.id),
-        enabled: isPopperOpen() && !!props.currentDraft()?.id,
-        staleTime: 5 * 60 * 1000
+        enabled: isPopperOpen() && !!props.currentDraft()?.id && isOwner(),
+        staleTime: 5 * 60 * 1000,
+        retry: false
     }));
+
+    createEffect(() => {
+        if (shareLinkQuery.isError && isPopperOpen()) {
+            toast.error("Failed to generate share link");
+            setIsPopperOpen(false);
+        }
+    });
 
     createEffect(() => {
         const currentDraft = props.currentDraft();

@@ -25,7 +25,7 @@ const ShareCanvasPage = () => {
                     navigate(`/canvas/${data.canvasId}`);
                 } else {
                     const error = await response.json();
-                    toast.error(`Share verification failed: ${error}`);
+                    toast.error(`Share verification failed: ${error.error}`);
                     navigate("/");
                 }
             } catch (error) {

@@ -149,6 +149,7 @@ export type CanvasResposnse = {
     drafts: CanvasDraft[];
     connections: Connection[];
     lastViewport: Viewport;
+    userPermissions: "view" | "edit" | "admin";
 };
 export const fetchCanvas = async (canvasId: string): Promise<CanvasResposnse> => {
     const res = await fetch(`${BASE_URL}/canvas/${canvasId}`, {

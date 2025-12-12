@@ -63,6 +63,7 @@ router.get("/:canvasId", async (req, res) => {
         y: userCanvas.lastViewportY,
         zoom: userCanvas.lastZoomLevel,
       },
+      userPermissions: userCanvas.permissions, // Include user's permissions
     });
   } catch (error) {
     console.log("Error loading canvas:", error);
