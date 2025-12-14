@@ -5,6 +5,7 @@ export type CanvasDraft = {
         name: string;
         id: string;
         picks: string[];
+        type: "canvas" | "standalone" | "versus";
     };
 };
 
@@ -20,6 +21,7 @@ export type draft = {
     public: boolean;
     picks: string[];
     owner_id: string;
+    type: "canvas" | "standalone" | "versus";
 };
 
 export type CanvasUser = {

@@ -16,7 +16,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query";
 import { Viewport } from "../utils/types";
 import toast from "solid-toast";
 import { Dialog } from "../components/Dialog";
-import { AuthGuard } from "../components/AuthGaurd";
+import { AuthGuard } from "../components/AuthGuard";
 import { cardHeight, cardWidth } from "../utils/helpers";
 
 const CanvasWorkflow = () => {

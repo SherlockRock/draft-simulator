@@ -1,6 +1,6 @@
 import { CanvasDraft, AnchorType, Viewport, AnchorPosition } from "./types";
 
-export const cardHeight = (layoutToggle: boolean) => (layoutToggle ? 274 : 474);
+export const cardHeight = (layoutToggle: boolean) => (layoutToggle ? 297 : 500);
 export const cardWidth = (layoutToggle: boolean) => (layoutToggle ? 700 : 350);
 
 /**

@@ -204,7 +204,6 @@ export const CanvasSelect = (props: props) => {
                                         unavailableChampions().includes(holdChampName);
                                     if (!champNotAvailable) {
                                         setSelectText(holdChampName);
-                                        setDropdownOpen(false);
                                         props.handlePickChange(
                                             props.draft.id,
                                             spliceIndexToRealIndex()[props.index()],
@@ -212,6 +211,8 @@ export const CanvasSelect = (props: props) => {
                                         );
                                     }
                                 }
+                                setDropdownOpen(false);
+                                e.currentTarget.blur();
                                 if (e.shiftKey) {
                                     props.onSelectPrevious?.();
                                 } else {

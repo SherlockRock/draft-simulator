@@ -66,7 +66,7 @@ export const fetchDefaultDraft = async (id: string | null): Promise<draft | null
 
 export const editDraft = async (
     id: string,
-    data: { name?: string; public?: boolean }
+    data: { name?: string; public?: boolean; type?: "canvas" | "standalone" | "versus" }
 ) => {
     const res = await fetch(`${BASE_URL}/drafts/${id}`, {
         method: "PUT",

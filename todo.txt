@@ -4,8 +4,11 @@ Canvas Functionality:
     Export draft
     folder heirarchy
     enforce unique names when copying drafts
+    no permissions to move drafts but was allowed to copy
     seperating canvas drafts from "real" drafts
+        "view" button needs to change in tandem with this
     manage connection type/color?
+        allow for text or champion icons to identify meaning of branch
 
 Short Term:
     delete draft functionality
@@ -16,6 +19,7 @@ Short Term:
     Allow non signed in users to see a non saving draft
     need to handle all cases where res.ok is false
     fix or remove current user count
+    new draft button disabled when viewing new draft screen
 
 Long Term:
     fearless/iron man

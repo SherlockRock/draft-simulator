@@ -44,7 +44,7 @@ router.get("/:canvasId", async (req, res) => {
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvas.id },
       attributes: ["positionX", "positionY"],
-      include: [{ model: Draft, attributes: ["name", "id", "picks"] }],
+      include: [{ model: Draft, attributes: ["name", "id", "picks", "type"] }],
       raw: true,
       nest: true,
     });
@@ -164,7 +164,7 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
       const canvasDrafts = await CanvasDraft.findAll({
         where: { canvas_id: canvasId },
         attributes: ["positionX", "positionY"],
-        include: [{ model: Draft, attributes: ["name", "id", "picks"] }],
+        include: [{ model: Draft, attributes: ["name", "id", "picks", "type"] }],
         raw: true,
         nest: true,
       });
@@ -356,7 +356,7 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvas.id },
       attributes: ["positionX", "positionY"],
-      include: [{ model: Draft, attributes: ["name", "id", "picks"] }],
+      include: [{ model: Draft, attributes: ["name", "id", "picks", "type"] }],
       raw: true,
       nest: true,
     });

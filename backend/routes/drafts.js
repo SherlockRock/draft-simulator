@@ -69,11 +69,27 @@ router.get("/:id", async (req, res) => {
 router.post("/", protect, async (req, res) => {
   try {
     const { name, public, canvas_id, positionX, positionY, picks } = req.body;
+
+    let finalName = name || "New Draft";
+    let draftType = "standalone";
+
+    if (canvas_id) {
+      const canvas = await Canvas.findByPk(canvas_id);
+      if (!canvas) {
+        return res.status(404).json({ error: "Canvas not found" });
+      }
+
+      draftType = "canvas";
+      const { generateUniqueCanvasDraftName } = require("../helpers");
+      finalName = await generateUniqueCanvasDraftName(finalName, canvas_id);
+    }
+
     const draft = await Draft.create({
       owner_id: req.user.id,
-      name: name,
+      name: finalName,
       public: public,
       picks: picks,
+      type: draftType,
     });
 
     if (canvas_id) {
@@ -90,7 +106,9 @@ router.post("/", protect, async (req, res) => {
       const canvasDrafts = await CanvasDraft.findAll({
         where: { canvas_id: canvas_id },
         attributes: ["positionX", "positionY"],
-        include: [{ model: Draft, attributes: ["name", "id", "picks"] }],
+        include: [
+          { model: Draft, attributes: ["name", "id", "picks", "type"] },
+        ],
         raw: true,
         nest: true,
       });
@@ -125,7 +143,7 @@ router.delete("/:id", protect, async (req, res) => {
 
 router.put("/:id", protect, async (req, res) => {
   try {
-    const { name, public: publicStatus } = req.body;
+    const { name, public: publicStatus, type } = req.body;
     const draft = await Draft.findByPk(req.params.id);
 
     if (!draft) {
@@ -138,7 +156,36 @@ router.put("/:id", protect, async (req, res) => {
         .json({ error: "Not authorized to edit this draft" });
     }
 
-    if (name) {
+    if (type !== undefined && type !== draft.type) {
+      // Only allow canvas -> standalone conversion
+      if (draft.type !== "versus") {
+        draft.type = type;
+      }
+    }
+
+    // Handle name change for canvas drafts with uniqueness validation
+    if (name && name !== draft.name && draft.type === "canvas") {
+      // This is a canvas draft being renamed - need to validate uniqueness
+      const canvasAssociations = await CanvasDraft.findAll({
+        where: { draft_id: draft.id },
+        attributes: ["canvas_id"],
+      });
+
+      if (canvasAssociations.length > 0) {
+        // For canvas drafts, validate uniqueness on the first canvas it's associated with
+        const firstCanvasId = canvasAssociations[0].canvas_id;
+        const { generateUniqueCanvasDraftName } = require("../helpers");
+        const uniqueName = await generateUniqueCanvasDraftName(
+          name,
+          firstCanvasId,
+          draft.id
+        );
+
+        draft.name = uniqueName;
+      } else {
+        draft.name = name;
+      }
+    } else if (name && name !== draft.name) {
       draft.name = name;
     }
 

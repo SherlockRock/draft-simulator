@@ -62,7 +62,38 @@ type cardProps = {
 
 const CanvasCard = (props: cardProps) => {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
+    const params = useParams();
     const [nameSignal, setNameSignal] = createSignal(props.canvasDraft.Draft.name);
+    const [isConversionDialogOpen, setIsConversionDialogOpen] = createSignal(false);
+
+    const convertToStandaloneMutation = useMutation(() => ({
+        mutationFn: (draftId: string) => {
+            return editDraft(draftId, { type: "standalone" });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+            toast.success("Draft converted to standalone!");
+            setIsConversionDialogOpen(false);
+            navigate(`/draft/${props.canvasDraft.Draft.id}`);
+        },
+        onError: (error: Error) => {
+            toast.error(`Failed to convert draft: ${error.message}`);
+        }
+    }));
+
+    const handleViewClick = () => {
+        if (props.canvasDraft.Draft.type === "canvas") {
+            setIsConversionDialogOpen(true);
+        } else {
+            navigate(`/draft/${props.canvasDraft.Draft.id}`);
+        }
+    };
+
+    const handleConvertConfirm = () => {
+        convertToStandaloneMutation.mutate(props.canvasDraft.Draft.id);
+    };
+
     const worldToScreen = (worldX: number, worldY: number) => {
         const vp = props.viewport();
         return {
@@ -128,81 +159,145 @@ const CanvasCard = (props: cardProps) => {
                     sourceAnchor={props.sourceAnchor}
                 />
             </Show>
-            <div class="flex items-center justify-between p-1">
-                <input
-                    type="text"
-                    placeholder="Enter Draft Name"
-                    value={nameSignal()}
-                    onInput={(e) => setNameSignal(e.currentTarget.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === "Escape") {
-                            e.currentTarget.blur();
-                        }
-                    }}
-                    onBlur={() =>
-                        props.handleNameChange(props.canvasDraft.Draft.id, nameSignal())
-                    }
-                    class="w-3/4 bg-transparent font-bold text-slate-50"
-                    disabled={props.isConnectionMode}
-                />
-                <div class="flex gap-1">
-                    <button
-                        onClick={() => navigate(`/draft/${props.canvasDraft.Draft.id}`)}
-                        class={`mr-1 flex h-6 w-6 items-center justify-center rounded bg-cyan-400 ${props.isConnectionMode ? "" : "cursor-pointer hover:bg-cyan-700"}`}
-                        disabled={props.isConnectionMode}
-                    >
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            class="h-4 w-4"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        >
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                            <circle cx="12" cy="12" r="3" />
-                        </svg>
-                    </button>
-                    <button
-                        onClick={() => props.addBox(props.canvasDraft)}
-                        class={`mr-1 flex h-6 w-6 items-center justify-center rounded bg-green-400 ${props.isConnectionMode ? "" : "cursor-pointer hover:bg-green-700"}`}
-                        disabled={props.isConnectionMode}
-                    >
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            class="h-4 w-4"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        >
-                            <line x1="12" y1="5" x2="12" y2="19" />
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                        </svg>
-                    </button>
-                    <button
-                        onClick={() => props.deleteBox(props.canvasDraft.Draft.id)}
-                        class={`flex h-6 w-6 items-center justify-center rounded bg-red-400 ${props.isConnectionMode ? "" : "cursor-pointer hover:bg-red-600"}`}
-                        disabled={props.isConnectionMode}
-                    >
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            class="h-4 w-4"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        >
-                            <line x1="18" y1="6" x2="6" y2="18" />
-                            <line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
-                    </button>
+            <div class="flex flex-col gap-1 p-1">
+                <div class="flex items-center justify-between">
+                    <div class="flex min-w-0 flex-1 flex-col gap-1">
+                        <input
+                            type="text"
+                            placeholder="Enter Draft Name"
+                            value={nameSignal()}
+                            onInput={(e) => setNameSignal(e.currentTarget.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === "Escape") {
+                                    e.currentTarget.blur();
+                                }
+                            }}
+                            onBlur={() =>
+                                props.handleNameChange(
+                                    props.canvasDraft.Draft.id,
+                                    nameSignal()
+                                )
+                            }
+                            class="bg-transparent font-bold text-slate-50"
+                            disabled={props.isConnectionMode}
+                        />
+                        <div class="flex items-center gap-1">
+                            <span
+                                class="rounded px-2 py-0.5 text-xs"
+                                classList={{
+                                    "bg-blue-500/20 text-blue-300 border border-blue-400/30":
+                                        props.canvasDraft.Draft.type === "canvas",
+                                    "bg-purple-500/20 text-purple-300 border border-purple-400/30":
+                                        props.canvasDraft.Draft.type === "standalone",
+                                    "bg-green-500/20 text-green-300 border border-green-400/30":
+                                        props.canvasDraft.Draft.type === "versus"
+                                }}
+                            >
+                                {props.canvasDraft.Draft.type === "canvas"
+                                    ? "Canvas Only Draft"
+                                    : props.canvasDraft.Draft.type === "standalone"
+                                      ? "Stand Alone Draft"
+                                      : "Versus Draft"}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="flex gap-1">
+                        <div class="group relative">
+                            <button
+                                onClick={handleViewClick}
+                                class={`mr-1 flex size-7 items-center justify-center rounded ${props.canvasDraft.Draft.type === "canvas" ? "bg-orange-400" : "bg-cyan-400"} ${props.isConnectionMode ? "" : "cursor-pointer hover:bg-opacity-80"}`}
+                                disabled={props.isConnectionMode}
+                            >
+                                <Show
+                                    when={props.canvasDraft.Draft.type === "canvas"}
+                                    fallback={
+                                        <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            class="h-4 w-4"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                        >
+                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                            <circle cx="12" cy="12" r="3" />
+                                        </svg>
+                                    }
+                                >
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        class="h-4 w-4"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <line x1="5" y1="12" x2="19" y2="12" />
+                                        <polyline points="12 5 19 12 12 19" />
+                                    </svg>
+                                </Show>
+                            </button>
+                            <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+                                {props.canvasDraft.Draft.type === "canvas"
+                                    ? "Convert to Stand Alone"
+                                    : "View as Stand Alone"}
+                            </span>
+                        </div>
+                        <div class="group relative">
+                            <button
+                                onClick={() => props.addBox(props.canvasDraft)}
+                                class={`mr-1 flex size-7 items-center justify-center rounded bg-green-400 ${props.isConnectionMode ? "" : "cursor-pointer hover:bg-green-700"}`}
+                                disabled={props.isConnectionMode}
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    class="h-4 w-4"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <line x1="12" y1="5" x2="12" y2="19" />
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                </svg>
+                            </button>
+                            <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+                                Copy Draft
+                            </span>
+                        </div>
+                        <div class="group relative">
+                            <button
+                                onClick={() =>
+                                    props.deleteBox(props.canvasDraft.Draft.id)
+                                }
+                                class={`flex size-7 items-center justify-center rounded bg-red-400 ${props.isConnectionMode ? "" : "cursor-pointer hover:bg-red-600"}`}
+                                disabled={props.isConnectionMode}
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    class="h-4 w-4"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <line x1="18" y1="6" x2="6" y2="18" />
+                                    <line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                            </button>
+                            <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+                                Delete Draft
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="mb-2 grid grid-cols-2 gap-1">
@@ -237,6 +332,44 @@ const CanvasCard = (props: cardProps) => {
                     )}
                 </For>
             </div>
+            <Dialog
+                isOpen={isConversionDialogOpen}
+                onCancel={() => setIsConversionDialogOpen(false)}
+                body={
+                    <>
+                        <h3 class="mb-4 text-lg font-bold text-slate-50">
+                            Convert to Standalone Draft?
+                        </h3>
+                        <p class="mb-6 text-slate-200">
+                            This will convert "{props.canvasDraft.Draft.name}" from a
+                            canvas-only draft to a standalone draft. You'll be able to
+                            view and edit it independently, and it will no longer be
+                            restricted to this canvas.
+                        </p>
+                        <p class="mb-6 text-sm text-slate-300">
+                            The draft will remain on this canvas, but you'll be able to
+                            access it from your drafts list.
+                        </p>
+                        <div class="flex justify-end gap-4">
+                            <button
+                                onClick={() => setIsConversionDialogOpen(false)}
+                                class="rounded bg-slate-500 px-4 py-2 text-slate-50 hover:bg-slate-600"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleConvertConfirm}
+                                class="rounded bg-orange-500 px-4 py-2 text-slate-50 hover:bg-orange-600"
+                                disabled={convertToStandaloneMutation.isPending}
+                            >
+                                {convertToStandaloneMutation.isPending
+                                    ? "Converting..."
+                                    : "Convert to Standalone"}
+                            </button>
+                        </div>
+                    </>
+                }
+            />
         </div>
     );
 };
@@ -646,7 +779,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const addBox = (fromBox: CanvasDraft) => {
         newDraftMutation.mutate({
-            name: fromBox.Draft.name + " Copy",
+            name: fromBox.Draft.name,
             picks: fromBox.Draft.picks,
             public: false,
             canvas_id: params.id,
@@ -916,7 +1049,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const onSelectNext = () => {
-        setFocusedSelectIndex((focusedSelectIndex() + 1) % 20);
+        const holdSelectIndex = focusedSelectIndex();
+        setFocusedSelectIndex(holdSelectIndex === 19 ? -1 : holdSelectIndex + 1);
     };
 
     const onSelectPrevious = () => {
