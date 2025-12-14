@@ -7,8 +7,6 @@ Canvas Functionality:
     seperating canvas drafts from "real" drafts
     manage connection type/color?
 
-    quick traversal of draft through tab/enter
-
 Short Term:
     delete draft functionality
     weird auth flow when a user was signed in but became outdated

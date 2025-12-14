@@ -14,7 +14,12 @@ type props = {
     };
     indexToShorthand: string[];
     layoutToggle: () => boolean;
-    disabled?: boolean;
+    disabled: boolean;
+    focusedDraftId: () => string | null;
+    focusedSelectIndex: () => number;
+    onFocus: () => void;
+    onSelectNext: () => void;
+    onSelectPrevious: () => void;
 };
 
 export const CanvasSelect = (props: props) => {
@@ -27,6 +32,7 @@ export const CanvasSelect = (props: props) => {
     // Refs for scroll management
     let dropdownRef: HTMLDivElement | undefined;
     const buttonRefs: Map<number, HTMLButtonElement> = new Map();
+    let inputRef: HTMLInputElement | undefined;
 
     const spliceIndexToRealIndex = createMemo(() => {
         return props.layoutToggle()
@@ -45,6 +51,16 @@ export const CanvasSelect = (props: props) => {
     createEffect(() => {
         if (props.pick !== "") {
             setSelectText(champions[Number(props.pick)].name);
+        }
+    });
+
+    createEffect(() => {
+        if (
+            props.focusedDraftId() === props.draft.id &&
+            props.focusedSelectIndex() === props.index() &&
+            inputRef
+        ) {
+            inputRef.focus();
         }
     });
 
@@ -72,6 +88,7 @@ export const CanvasSelect = (props: props) => {
         if (!props.disabled) {
             setIsFocused(true);
             setDropdownOpen(true);
+            props.onFocus?.();
         }
     };
 
@@ -95,24 +112,6 @@ export const CanvasSelect = (props: props) => {
     const handleKeyEvent = (key: Key) => {
         if (!isFocused()) return;
         switch (key) {
-            case "Enter":
-                if (dropdownOpen() && dropdownIndex() >= 0) {
-                    const holdOptions = holdSortOptions();
-                    const holdChampName =
-                        holdOptions[dropdownIndex() % holdOptions.length].name;
-                    const champNotAvailable =
-                        unavailableChampions().includes(holdChampName);
-                    if (!champNotAvailable) {
-                        setSelectText(holdChampName);
-                        setDropdownOpen(false);
-                        props.handlePickChange(
-                            props.draft.id,
-                            spliceIndexToRealIndex()[props.index()],
-                            holdChampName
-                        );
-                    }
-                }
-                break;
             case "ArrowUp":
                 if (dropdownOpen()) {
                     setDropdownIndex((prevIndex) => {
@@ -168,7 +167,7 @@ export const CanvasSelect = (props: props) => {
         <div class="relative flex w-full justify-center">
             <KeyEvent
                 onKeyUp={handleKeyEvent}
-                keys={["Enter", "ArrowUp", "ArrowDown", "Escape"]}
+                keys={["ArrowUp", "ArrowDown", "Escape"]}
             />
             <div onFocusIn={onFocusIn} onFocusOut={onFocusOut} tabIndex={0}>
                 <div class="flex w-40 items-center gap-2 rounded bg-slate-800 p-1 text-left text-sm hover:bg-slate-700">
@@ -185,10 +184,40 @@ export const CanvasSelect = (props: props) => {
                         />
                     </Show>
                     <input
+                        ref={inputRef}
                         value={selectText() ?? props.indexToShorthand[props.index()]}
                         onInput={(e) => {
                             setDropdownIndex(0);
                             setSelectText(e.target.value);
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (!dropdownOpen()) return;
+                                if (dropdownIndex() >= 0) {
+                                    const holdOptions = holdSortOptions();
+                                    const holdChampName =
+                                        holdOptions[dropdownIndex() % holdOptions.length]
+                                            .name;
+                                    const champNotAvailable =
+                                        unavailableChampions().includes(holdChampName);
+                                    if (!champNotAvailable) {
+                                        setSelectText(holdChampName);
+                                        setDropdownOpen(false);
+                                        props.handlePickChange(
+                                            props.draft.id,
+                                            spliceIndexToRealIndex()[props.index()],
+                                            holdChampName
+                                        );
+                                    }
+                                }
+                                if (e.shiftKey) {
+                                    props.onSelectPrevious?.();
+                                } else {
+                                    props.onSelectNext?.();
+                                }
+                            }
                         }}
                         onBlur={() => {
                             const inputValue = selectText().trim();
@@ -217,7 +246,7 @@ export const CanvasSelect = (props: props) => {
                         }}
                         placeholder={props.indexToShorthand[props.index()]}
                         name="select"
-                        id="select"
+                        id={`${props.draft.id}-${props.index()}-select`}
                         class="h-6 w-full appearance-none bg-inherit px-1 text-slate-50 outline-none placeholder:text-slate-200"
                         disabled={props.disabled}
                     />

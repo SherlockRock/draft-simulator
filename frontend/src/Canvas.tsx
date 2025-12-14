@@ -53,6 +53,11 @@ type cardProps = {
     onAnchorClick: (draftId: string, anchorType: AnchorType) => void;
     connectionSource: () => string | null;
     sourceAnchor: () => { type: AnchorType } | null;
+    focusedDraftId: () => string | null;
+    focusedSelectIndex: () => number;
+    onSelectFocus: (draftId: string, selectIndex: number) => void;
+    onSelectNext: () => void;
+    onSelectPrevious: () => void;
 };
 
 const CanvasCard = (props: cardProps) => {
@@ -221,6 +226,13 @@ const CanvasCard = (props: cardProps) => {
                             indexToShorthand={indexToShorthand()}
                             layoutToggle={props.layoutToggle}
                             disabled={props.isConnectionMode}
+                            focusedDraftId={props.focusedDraftId}
+                            focusedSelectIndex={props.focusedSelectIndex}
+                            onFocus={() =>
+                                props.onSelectFocus(props.canvasDraft.Draft.id, index())
+                            }
+                            onSelectNext={props.onSelectNext}
+                            onSelectPrevious={props.onSelectPrevious}
                         />
                     )}
                 </For>
@@ -306,6 +318,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         offsetX: 0,
         offsetY: 0
     });
+    const [focusedDraftId, setFocusedDraftId] = createSignal<string | null>(null);
+    const [focusedSelectIndex, setFocusedSelectIndex] = createSignal<number>(-1);
 
     let canvasContainerRef: HTMLDivElement | undefined;
     let svgRef: SVGSVGElement | undefined;
@@ -896,8 +910,65 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     };
 
+    const onSelectFocus = (draftId: string, selectIndex: number) => {
+        setFocusedDraftId(draftId);
+        setFocusedSelectIndex(selectIndex);
+    };
+
+    const onSelectNext = () => {
+        setFocusedSelectIndex((focusedSelectIndex() + 1) % 20);
+    };
+
+    const onSelectPrevious = () => {
+        const holdSelectIndex = focusedSelectIndex();
+        setFocusedSelectIndex(holdSelectIndex === 0 ? 19 : holdSelectIndex - 1);
+    };
+
+    const tabOrder = [
+        0, 10, 1, 11, 2, 12, 3, 13, 4, 14, 5, 15, 6, 16, 7, 17, 8, 18, 9, 19
+    ];
+
+    const moveToNextSelect = () => {
+        const currentDraftId = focusedDraftId();
+        const currentIndex = focusedSelectIndex();
+
+        if (currentDraftId === null || currentIndex === -1) return;
+
+        const currentPosition = tabOrder.indexOf(currentIndex);
+        if (currentPosition === -1) return;
+
+        const nextPosition = (currentPosition + 1) % tabOrder.length;
+        const nextIndex = tabOrder[nextPosition];
+        setFocusedSelectIndex(nextIndex);
+    };
+
+    const moveToPreviousSelect = () => {
+        const currentDraftId = focusedDraftId();
+        const currentIndex = focusedSelectIndex();
+
+        if (currentDraftId === null || currentIndex === -1) return;
+
+        const currentPosition = tabOrder.indexOf(currentIndex);
+        if (currentPosition === -1) return;
+
+        const prevPosition = (currentPosition - 1 + tabOrder.length) % tabOrder.length;
+        const prevIndex = tabOrder[prevPosition];
+
+        setFocusedSelectIndex(prevIndex);
+    };
+
     onMount(() => {
         const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Tab" && focusedDraftId() !== null) {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    moveToPreviousSelect();
+                } else {
+                    moveToNextSelect();
+                }
+                return;
+            }
+
             if (e.key === "Escape" && isConnectionMode()) {
                 e.preventDefault();
                 if (connectionSource() || selectedVertexForConnection()) {
@@ -1202,6 +1273,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             onAnchorClick={onAnchorClick}
                             connectionSource={connectionSource}
                             sourceAnchor={sourceAnchor}
+                            focusedDraftId={focusedDraftId}
+                            focusedSelectIndex={focusedSelectIndex}
+                            onSelectFocus={onSelectFocus}
+                            onSelectNext={onSelectNext}
+                            onSelectPrevious={onSelectPrevious}
                         />
                     )}
                 </For>
