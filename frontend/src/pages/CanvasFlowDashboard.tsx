@@ -1,16 +1,17 @@
-import { Component, For, Show, Switch, Match, onCleanup } from "solid-js";
+import { Component, For, Show, Switch, Match, onCleanup, createSignal } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { useInfiniteQuery } from "@tanstack/solid-query";
 import TutorialStep from "../components/TutorialStep";
 import ActivityItem from "../components/ActivityItem";
 import { fetchRecentActivity } from "../utils/actions";
 import { useUser } from "../userProvider";
-import toast from "solid-toast";
+import { CreateCanvasDialog } from "../components/CreateCanvasDialog";
 
 const CanvasFlowDashboard: Component = () => {
     const navigate = useNavigate();
     const context = useUser();
     const [user] = context();
+    const [showCreateDialog, setShowCreateDialog] = createSignal(false);
 
     const activitiesQuery = useInfiniteQuery(() => ({
         queryKey: ["recentActivity", "canvas"],
@@ -36,16 +37,8 @@ const CanvasFlowDashboard: Component = () => {
         onCleanup(() => observer.disconnect());
     };
 
-    const handleCreateCanvas = async () => {
-        try {
-            // TODO: Implement canvas creation API endpoint
-            // For now, show a coming soon message
-            toast.success("Canvas creation coming soon!");
-            navigate("/canvas");
-        } catch (error) {
-            console.error("Failed to create canvas:", error);
-            toast.error("Failed to create canvas");
-        }
+    const handleCreateCanvas = () => {
+        setShowCreateDialog(true);
     };
 
     return (
@@ -159,6 +152,15 @@ const CanvasFlowDashboard: Component = () => {
                     </section>
                 </Show>
             </div>
+
+            <CreateCanvasDialog
+                isOpen={showCreateDialog}
+                onClose={() => setShowCreateDialog(false)}
+                onSuccess={(canvasId) => {
+                    setShowCreateDialog(false);
+                    navigate(`/canvas/${canvasId}`);
+                }}
+            />
         </div>
     );
 };

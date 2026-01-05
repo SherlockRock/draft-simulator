@@ -2,6 +2,7 @@ import { useNavigate } from "@solidjs/router";
 import { createSignal, createMemo, Show, Resource, createEffect, Setter } from "solid-js";
 import { SearchableSelect } from "./components/SearchableSelect";
 import { CanvasListDialog } from "./components/CanvasListDialog";
+import { CreateDraftDialog } from "./components/CreateDraftDialog";
 import DraftDetails from "./DraftDetails";
 import { draft } from "./utils/types";
 
@@ -17,6 +18,7 @@ function DraftList(props: props) {
     const navigate = useNavigate();
     const [selectText, setSelectText] = createSignal("");
     const [showCanvasDialog, setShowCanvasDialog] = createSignal(false);
+    const [showCreateDialog, setShowCreateDialog] = createSignal(false);
 
     createEffect(() => {
         setSelectText(props.currentDraft()?.name ?? "");
@@ -34,12 +36,17 @@ function DraftList(props: props) {
     };
 
     const handleNewDraft = () => {
+        setShowCreateDialog(true);
+    };
+
+    const handleDraftCreated = (draftId: string) => {
         const currentDraft = props.currentDraft();
         if (currentDraft) {
             props.mutateDraft(null);
             props.socket().emit("leaveRoom", currentDraft.id);
         }
-        navigate(`/draft/new`);
+        setShowCreateDialog(false);
+        navigate(`/draft/${draftId}`);
     };
 
     const drafts = createMemo(() => {
@@ -95,6 +102,12 @@ function DraftList(props: props) {
                     onCanvasSelect={handleCanvasSelect}
                 />
             </Show>
+            <CreateDraftDialog
+                isOpen={showCreateDialog}
+                onClose={() => setShowCreateDialog(false)}
+                onSuccess={handleDraftCreated}
+                initialType="standalone"
+            />
         </div>
     );
 }

@@ -30,6 +30,7 @@ Short Term:
     need to handle all cases where res.ok is false
     fix or remove current user count
     new draft button disabled when viewing new draft screen
+    activities include who edited
 
 Long Term:
     fearless/iron man

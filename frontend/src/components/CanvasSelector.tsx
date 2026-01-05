@@ -1,7 +1,7 @@
-import { Component, For, Show, createResource } from "solid-js";
+import { Component, For, Show, createResource, createSignal } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { fetchCanvasList } from "../utils/actions";
-import toast from "solid-toast";
+import { CreateCanvasDialog } from "./CreateCanvasDialog";
 
 interface Canvas {
     id: string;
@@ -16,21 +16,14 @@ interface CanvasSelectorProps {
 const CanvasSelector: Component<CanvasSelectorProps> = (props) => {
     const navigate = useNavigate();
     const [canvases] = createResource<Canvas[]>(fetchCanvasList);
+    const [showCreateDialog, setShowCreateDialog] = createSignal(false);
 
     const handleSelect = (canvasId: string) => {
         navigate(`/canvas/${canvasId}`);
     };
 
-    const handleCreateNew = async () => {
-        try {
-            // For now, just navigate to canvas dashboard
-            // In a full implementation, this would create a new canvas via API
-            toast.success("Canvas creation coming soon!");
-            navigate("/canvas");
-        } catch (error) {
-            console.error("Failed to create canvas:", error);
-            toast.error("Failed to create canvas");
-        }
+    const handleCreateNew = () => {
+        setShowCreateDialog(true);
     };
 
     return (
@@ -65,6 +58,15 @@ const CanvasSelector: Component<CanvasSelectorProps> = (props) => {
             >
                 Create New Canvas
             </button>
+
+            <CreateCanvasDialog
+                isOpen={showCreateDialog}
+                onClose={() => setShowCreateDialog(false)}
+                onSuccess={(canvasId) => {
+                    setShowCreateDialog(false);
+                    navigate(`/canvas/${canvasId}`);
+                }}
+            />
         </div>
     );
 };

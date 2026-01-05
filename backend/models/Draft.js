@@ -17,11 +17,15 @@ const Draft = sequelize.define("Draft", {
   },
   type: {
     type: DataTypes.STRING,
-    defaultValue: 'standalone',
+    defaultValue: "standalone",
     allowNull: false,
     validate: {
-      isIn: [['canvas', 'standalone', 'versus']]
-    }
+      isIn: [["canvas", "standalone", "versus"]],
+    },
+  },
+  description: {
+    type: DataTypes.TEXT,
+    defaultValue: "",
   },
   // Future: Folder support per canvas
   // parent_folder_id: {

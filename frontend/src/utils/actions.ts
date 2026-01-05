@@ -66,7 +66,11 @@ export const fetchDefaultDraft = async (id: string | null): Promise<draft | null
 
 export const editDraft = async (
     id: string,
-    data: { name?: string; public?: boolean; type?: "canvas" | "standalone" | "versus" }
+    data: {
+        name?: string;
+        description?: string;
+        public?: boolean;
+    }
 ) => {
     const res = await fetch(`${BASE_URL}/drafts/${id}`, {
         method: "PUT",
@@ -182,14 +186,39 @@ export const generateNewCanvas = async (draftId: string) => {
     return await res.json();
 };
 
-export const updateCanvasName = async (data: { canvasId: string; name: string }) => {
+export const createCanvas = async (data: {
+    name: string;
+    description?: string;
+}): Promise<{
+    success: boolean;
+    canvas: { id: string; name: string; description?: string; drafts: any[] };
+}> => {
+    const res = await fetch(`${BASE_URL}/canvas/`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        throw new Error("Failed to create canvas");
+    }
+    return await res.json();
+};
+
+export const updateCanvasName = async (data: {
+    canvasId: string;
+    name: string;
+    description?: string;
+}) => {
     const res = await fetch(`${BASE_URL}/canvas/${data.canvasId}/name`, {
         method: "PATCH",
         headers: {
             "Content-Type": "application/json"
         },
         credentials: "include",
-        body: JSON.stringify({ name: data.name })
+        body: JSON.stringify({ name: data.name, description: data.description })
     });
 
     if (!res.ok) {
@@ -529,9 +558,12 @@ export const fetchCanvasList = async () => {
     return await res.json();
 };
 
-export const createDraft = async (
-    type: "standalone" | "canvas" | "versus" = "standalone"
-) => {
+export const createDraft = async (data: {
+    name: string;
+    public: boolean;
+    description?: string;
+    type?: "standalone" | "canvas" | "versus";
+}): Promise<{ id: string; name: string; public: boolean; type: string }> => {
     const res = await fetch(`${BASE_URL}/drafts`, {
         method: "POST",
         credentials: "include",
@@ -539,9 +571,9 @@ export const createDraft = async (
             "Content-Type": "application/json"
         },
         body: JSON.stringify({
-            name: "New Draft",
-            public: true,
-            type
+            name: data.name,
+            public: data.public,
+            description: data.description
         })
     });
 

@@ -249,14 +249,39 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    const { draftId } = req.body;
-    const draft = await Draft.findByPk(draftId);
+    const { draftId, name, description } = req.body;
     const user = await getUserFromRequest(req);
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
+    // Create empty canvas (no draft)
+    if (!draftId) {
+      const canvas = await Canvas.create({
+        name: name || "New Canvas",
+        description: description,
+      });
+
+      await UserCanvas.create({
+        canvas_id: canvas.id,
+        user_id: user.id,
+        permissions: "admin",
+      });
+
+      return res.json({
+        success: true,
+        canvas: {
+          id: canvas.id,
+          name: canvas.name,
+          description: canvas.description,
+          drafts: [],
+        },
+      });
+    }
+
+    // Create canvas from draft (existing behavior)
+    const draft = await Draft.findByPk(draftId);
     const isSharedWith = await draftHasSharedWithUser(draft, user);
     if (!draft.public && draft.owner_id !== user.id && !isSharedWith) {
       return res
@@ -264,7 +289,10 @@ router.post("/", async (req, res) => {
         .json({ error: "Not authorized to use this draft" });
     }
 
-    const canvas = await Canvas.create({ name: draft.name + " Canvas" });
+    const canvas = await Canvas.create({
+      name: name || draft.name + " Canvas",
+      description: description,
+    });
     const canvasDraft = await CanvasDraft.create({
       canvas_id: canvas.id,
       draft_id: draft.id,
@@ -280,6 +308,7 @@ router.post("/", async (req, res) => {
       canvas: {
         id: canvas.id,
         name: canvas.name,
+        description: canvas.description,
         drafts: [draft.toJSON()],
       },
     });
@@ -381,7 +410,7 @@ router.patch("/:canvasId/viewport", async (req, res) => {
 router.patch("/:canvasId/name", protect, async (req, res) => {
   try {
     const { canvasId } = req.params;
-    const { name } = req.body;
+    const { name, description } = req.body;
 
     if (!name || typeof name !== "string") {
       return res.status(400).json({ error: "Invalid canvas name" });
@@ -407,6 +436,9 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
     }
 
     canvas.name = name;
+    if (description !== undefined) {
+      canvas.description = description;
+    }
     await canvas.save();
 
     const canvasDrafts = await CanvasDraft.findAll({

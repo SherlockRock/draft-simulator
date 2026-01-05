@@ -69,7 +69,15 @@ router.get("/:id", async (req, res) => {
 
 router.post("/", protect, async (req, res) => {
   try {
-    const { name, public, canvas_id, positionX, positionY, picks } = req.body;
+    const {
+      name,
+      public,
+      canvas_id,
+      positionX,
+      positionY,
+      picks,
+      description,
+    } = req.body;
 
     let finalName = name || "New Draft";
     let draftType = "standalone";
@@ -91,6 +99,7 @@ router.post("/", protect, async (req, res) => {
       public: public,
       picks: picks,
       type: draftType,
+      description: description,
     });
 
     if (canvas_id) {
@@ -147,7 +156,7 @@ router.delete("/:id", protect, async (req, res) => {
 
 router.put("/:id", protect, async (req, res) => {
   try {
-    const { name, public: publicStatus, type } = req.body;
+    const { name, description, public: publicStatus, type } = req.body;
     const draft = await Draft.findByPk(req.params.id);
 
     if (!draft) {
@@ -195,6 +204,10 @@ router.put("/:id", protect, async (req, res) => {
 
     if (publicStatus !== undefined) {
       draft.public = publicStatus;
+    }
+
+    if (description !== undefined) {
+      draft.description = description;
     }
 
     await draft.save();

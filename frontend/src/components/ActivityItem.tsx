@@ -18,6 +18,8 @@ interface Activity {
     resource_type: "draft" | "canvas" | "versus";
     resource_id: string;
     resource_name: string;
+    description?: string;
+    public?: boolean;
     timestamp: string;
     created_at: string;
     is_owner: boolean;
@@ -36,6 +38,9 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     const [isManageUsersOpen, setIsManageUsersOpen] = createSignal(false);
     const [copied, setCopied] = createSignal("");
     const [editName, setEditName] = createSignal(props.activity.resource_name);
+    const [editDescription, setEditDescription] = createSignal(
+        props.activity.description || ""
+    );
     const [editPublic, setEditPublic] = createSignal(false);
 
     let sharePopupRef: HTMLDivElement | undefined;
@@ -148,7 +153,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     }));
 
     const editDraftMutation = useMutation(() => ({
-        mutationFn: (data: { name: string; public: boolean }) =>
+        mutationFn: (data: { name: string; description?: string; public: boolean }) =>
             editDraft(props.activity.resource_id, data),
         onSuccess: () => {
             setIsEditOpen(false);
@@ -161,8 +166,12 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     }));
 
     const editCanvasMutation = useMutation(() => ({
-        mutationFn: (name: string) =>
-            updateCanvasName({ canvasId: props.activity.resource_id, name }),
+        mutationFn: (data: { name: string; description?: string }) =>
+            updateCanvasName({
+                canvasId: props.activity.resource_id,
+                name: data.name,
+                description: data.description
+            }),
         onSuccess: () => {
             setIsEditOpen(false);
             toast.success("Canvas updated successfully");
@@ -254,6 +263,8 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     const handleEdit = (e: MouseEvent) => {
         e.stopPropagation();
         setEditName(props.activity.resource_name);
+        setEditDescription(props.activity.description || "");
+        setEditPublic(props.activity.public ?? false);
         setIsEditOpen(true);
     };
 
@@ -302,10 +313,14 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
         if (props.activity.resource_type === "draft") {
             editDraftMutation.mutate({
                 name: editName(),
+                description: editDescription(),
                 public: editPublic()
             });
         } else if (props.activity.resource_type === "canvas") {
-            editCanvasMutation.mutate(editName());
+            editCanvasMutation.mutate({
+                name: editName(),
+                description: editDescription()
+            });
         }
     };
 
@@ -337,7 +352,16 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                 <div class="flex items-center gap-4 overflow-hidden overflow-ellipsis p-4">
                     <div class="flex flex-col gap-3">
                         <span class="text-center text-5xl">{getIcon()}</span>
-                        <Show when={props.activity.is_owner}>
+                        <Show
+                            when={props.activity.is_owner}
+                            fallback={
+                                <span
+                                    class={`rounded px-2 py-1 text-center text-xs ${colors.badge}`}
+                                >
+                                    Shared
+                                </span>
+                            }
+                        >
                             <div
                                 ref={shareButtonRef}
                                 class="relative"
@@ -406,22 +430,22 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                             </div>
                         </Show>
                     </div>
-                    <div class="flex max-w-full flex-col gap-1">
+                    <div class="flex max-w-full flex-col gap-2">
                         <div class="flex items-center gap-2">
                             <span
                                 class={`text-lg font-semibold ${colors.text} max-w-full overflow-hidden`}
                             >
                                 {props.activity.resource_name}
                             </span>
-                            {!props.activity.is_owner && (
-                                <span class={`rounded px-2 py-1 text-xs ${colors.badge}`}>
-                                    Shared
-                                </span>
-                            )}
                         </div>
                         <span class="text-sm text-slate-400">
                             {formatTimestamp(props.activity.timestamp)}
                         </span>
+                        <Show when={props.activity.description}>
+                            <p class="line-clamp-2 text-sm text-slate-300">
+                                {props.activity.description}
+                            </p>
+                        </Show>
                     </div>
                 </div>
             </div>
@@ -607,6 +631,20 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                 onInput={(e) => setEditName(e.currentTarget.value)}
                                 class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-500"
                             />
+                        </div>
+                        <div class="mb-4">
+                            <label class="mb-2 block text-sm font-medium text-slate-200">
+                                Description (optional)
+                            </label>
+                            <textarea
+                                value={editDescription()}
+                                onInput={(e) => setEditDescription(e.currentTarget.value)}
+                                rows={3}
+                                class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            />
+                            <p class="mt-1 text-xs text-slate-400">
+                                {editDescription().length}/1000 characters
+                            </p>
                         </div>
                         <Show when={props.activity.resource_type === "draft"}>
                             <div class="mb-4">

@@ -13,6 +13,10 @@ const Canvas = sequelize.define("Canvas", {
     type: DataTypes.STRING,
     defaultValue: "New Draft",
   },
+  description: {
+    type: DataTypes.TEXT,
+    defaultValue: "",
+  },
 });
 
 const UserCanvas = sequelize.define("UserCanvas", {
