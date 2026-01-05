@@ -77,6 +77,7 @@ router.post("/", protect, async (req, res) => {
       positionY,
       picks,
       description,
+      icon,
     } = req.body;
 
     let finalName = name || "New Draft";
@@ -100,6 +101,7 @@ router.post("/", protect, async (req, res) => {
       picks: picks,
       type: draftType,
       description: description,
+      icon: icon || "",
     });
 
     if (canvas_id) {
@@ -156,7 +158,7 @@ router.delete("/:id", protect, async (req, res) => {
 
 router.put("/:id", protect, async (req, res) => {
   try {
-    const { name, description, public: publicStatus, type } = req.body;
+    const { name, description, public: publicStatus, type, icon } = req.body;
     const draft = await Draft.findByPk(req.params.id);
 
     if (!draft) {
@@ -208,6 +210,10 @@ router.put("/:id", protect, async (req, res) => {
 
     if (description !== undefined) {
       draft.description = description;
+    }
+
+    if (icon !== undefined) {
+      draft.icon = icon;
     }
 
     await draft.save();

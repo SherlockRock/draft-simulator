@@ -1,7 +1,9 @@
-import { createSignal, createEffect } from "solid-js";
+import { createSignal, createEffect, Show } from "solid-js";
 import { Dialog } from "./Dialog";
 import { createDraft } from "../utils/actions";
 import toast from "solid-toast";
+import { IconPicker } from "./IconPicker";
+import { champions } from "../utils/constants";
 
 interface CreateDraftDialogProps {
     isOpen: () => boolean;
@@ -13,6 +15,8 @@ export const CreateDraftDialog = (props: CreateDraftDialogProps) => {
     const [name, setName] = createSignal("");
     const [description, setDescription] = createSignal("");
     const [isPublic, setIsPublic] = createSignal(true);
+    const [icon, setIcon] = createSignal("");
+    const [showIconPicker, setShowIconPicker] = createSignal(false);
     const [isSubmitting, setIsSubmitting] = createSignal(false);
     const [errors, setErrors] = createSignal<Record<string, string>>({});
 
@@ -22,6 +26,7 @@ export const CreateDraftDialog = (props: CreateDraftDialogProps) => {
             setName("");
             setDescription("");
             setIsPublic(true);
+            setIcon("");
             setErrors({});
         }
     });
@@ -66,7 +71,8 @@ export const CreateDraftDialog = (props: CreateDraftDialogProps) => {
             const result = await createDraft({
                 name: name().trim(),
                 description: description().trim() || undefined,
-                public: isPublic()
+                public: isPublic(),
+                icon: icon()
             });
 
             toast.success("Draft created successfully!");
@@ -157,6 +163,57 @@ export const CreateDraftDialog = (props: CreateDraftDialogProps) => {
                             </div>
                         </div>
 
+                        <div class="mb-4">
+                            <label class="mb-2 block text-sm font-medium text-slate-300">
+                                Icon (optional)
+                            </label>
+                            <button
+                                type="button"
+                                onClick={() => setShowIconPicker(true)}
+                                class="flex h-16 w-full items-center gap-3 rounded border border-slate-500 bg-slate-600 px-3 py-2 text-slate-50 hover:bg-slate-500"
+                            >
+                                <Show
+                                    when={icon()}
+                                    fallback={
+                                        <div class="flex h-12 w-12 items-center justify-center rounded bg-slate-700">
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                class="h-6 w-6 text-slate-400"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    d="M12 4v16m8-8H4"
+                                                />
+                                            </svg>
+                                        </div>
+                                    }
+                                >
+                                    <div class="flex h-12 w-12 items-center justify-center overflow-hidden rounded">
+                                        <Show
+                                            when={!isNaN(parseInt(icon()!))}
+                                            fallback={
+                                                <span class="text-3xl">{icon()}</span>
+                                            }
+                                        >
+                                            <img
+                                                src={champions[parseInt(icon()!)].img}
+                                                alt={champions[parseInt(icon()!)].name}
+                                                class="h-full w-full object-cover"
+                                            />
+                                        </Show>
+                                    </div>
+                                </Show>
+                                <span class="text-sm text-slate-300">
+                                    {icon() ? "Change icon" : "Select an icon"}
+                                </span>
+                            </button>
+                        </div>
+
                         <div class="mb-6">
                             <label class="flex items-center">
                                 <input
@@ -186,6 +243,13 @@ export const CreateDraftDialog = (props: CreateDraftDialogProps) => {
                             </button>
                         </div>
                     </form>
+
+                    <IconPicker
+                        isOpen={showIconPicker}
+                        onClose={() => setShowIconPicker(false)}
+                        onSelect={(selectedIcon) => setIcon(selectedIcon)}
+                        currentIcon={icon()}
+                    />
                 </div>
             }
         />

@@ -70,6 +70,7 @@ export const editDraft = async (
         name?: string;
         description?: string;
         public?: boolean;
+        icon?: string;
     }
 ) => {
     const res = await fetch(`${BASE_URL}/drafts/${id}`, {
@@ -189,6 +190,7 @@ export const generateNewCanvas = async (draftId: string) => {
 export const createCanvas = async (data: {
     name: string;
     description?: string;
+    icon?: string;
 }): Promise<{
     success: boolean;
     canvas: { id: string; name: string; description?: string; drafts: any[] };
@@ -211,6 +213,7 @@ export const updateCanvasName = async (data: {
     canvasId: string;
     name: string;
     description?: string;
+    icon?: string;
 }) => {
     const res = await fetch(`${BASE_URL}/canvas/${data.canvasId}/name`, {
         method: "PATCH",
@@ -218,7 +221,11 @@ export const updateCanvasName = async (data: {
             "Content-Type": "application/json"
         },
         credentials: "include",
-        body: JSON.stringify({ name: data.name, description: data.description })
+        body: JSON.stringify({
+            name: data.name,
+            description: data.description,
+            icon: data.icon
+        })
     });
 
     if (!res.ok) {
@@ -563,6 +570,7 @@ export const createDraft = async (data: {
     public: boolean;
     description?: string;
     type?: "standalone" | "canvas" | "versus";
+    icon?: string;
 }): Promise<{ id: string; name: string; public: boolean; type: string }> => {
     const res = await fetch(`${BASE_URL}/drafts`, {
         method: "POST",
@@ -573,7 +581,8 @@ export const createDraft = async (data: {
         body: JSON.stringify({
             name: data.name,
             public: data.public,
-            description: data.description
+            description: data.description,
+            icon: data.icon
         })
     });
 

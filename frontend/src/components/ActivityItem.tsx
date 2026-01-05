@@ -13,6 +13,8 @@ import {
 import toast from "solid-toast";
 import { Dialog } from "./Dialog";
 import { ManageUsersDialog } from "./ManageUsersDialog";
+import { IconPicker } from "./IconPicker";
+import { champions } from "../utils/constants";
 
 interface Activity {
     resource_type: "draft" | "canvas" | "versus";
@@ -20,6 +22,7 @@ interface Activity {
     resource_name: string;
     description?: string;
     public?: boolean;
+    icon?: string;
     timestamp: string;
     created_at: string;
     is_owner: boolean;
@@ -42,6 +45,8 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
         props.activity.description || ""
     );
     const [editPublic, setEditPublic] = createSignal(false);
+    const [editIcon, setEditIcon] = createSignal("");
+    const [showIconPicker, setShowIconPicker] = createSignal(false);
 
     let sharePopupRef: HTMLDivElement | undefined;
     let shareButtonRef: HTMLDivElement | undefined;
@@ -153,12 +158,16 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     }));
 
     const editDraftMutation = useMutation(() => ({
-        mutationFn: (data: { name: string; description?: string; public: boolean }) =>
-            editDraft(props.activity.resource_id, data),
+        mutationFn: (data: {
+            name: string;
+            description?: string;
+            public: boolean;
+            icon?: string;
+        }) => editDraft(props.activity.resource_id, data),
         onSuccess: () => {
             setIsEditOpen(false);
             toast.success("Draft updated successfully");
-            // Optionally invalidate activity queries here
+            queryClient.invalidateQueries({ queryKey: ["recentActivity"] });
         },
         onError: () => {
             toast.error("Failed to update");
@@ -166,23 +175,24 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     }));
 
     const editCanvasMutation = useMutation(() => ({
-        mutationFn: (data: { name: string; description?: string }) =>
+        mutationFn: (data: { name: string; description?: string; icon?: string }) =>
             updateCanvasName({
                 canvasId: props.activity.resource_id,
                 name: data.name,
-                description: data.description
+                description: data.description,
+                icon: data.icon
             }),
         onSuccess: () => {
             setIsEditOpen(false);
             toast.success("Canvas updated successfully");
-            // Optionally invalidate activity queries here
+            queryClient.invalidateQueries({ queryKey: ["recentActivity"] });
         },
         onError: () => {
             toast.error("Failed to update");
         }
     }));
 
-    const getIcon = () => {
+    const getDefaultIcon = () => {
         switch (props.activity.resource_type) {
             case "draft":
                 return "📄";
@@ -193,6 +203,12 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
             default:
                 return "📄";
         }
+    };
+
+    const isChampionIcon = () => {
+        if (!props.activity.icon) return false;
+        const num = parseInt(props.activity.icon);
+        return !isNaN(num) && num >= 0 && num < champions.length;
     };
 
     const getColorClasses = () => {
@@ -232,9 +248,10 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
         const date = new Date(timestamp);
         const now = new Date();
         const diffMs = now.getTime() - date.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMs / 3600000);
-        const diffDays = Math.floor(diffMs / 86400000);
+        const diffMsFinal = diffMs < 0 ? 0 : diffMs;
+        const diffMins = Math.floor(diffMsFinal / 60000);
+        const diffHours = Math.floor(diffMsFinal / 3600000);
+        const diffDays = Math.floor(diffMsFinal / 86400000);
 
         if (diffMins < 60) {
             return `${diffMins} min${diffMins !== 1 ? "s" : ""} ago`;
@@ -265,6 +282,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
         setEditName(props.activity.resource_name);
         setEditDescription(props.activity.description || "");
         setEditPublic(props.activity.public ?? false);
+        setEditIcon(props.activity.icon || "");
         setIsEditOpen(true);
     };
 
@@ -314,12 +332,14 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
             editDraftMutation.mutate({
                 name: editName(),
                 description: editDescription(),
-                public: editPublic()
+                public: editPublic(),
+                icon: editIcon()
             });
         } else if (props.activity.resource_type === "canvas") {
             editCanvasMutation.mutate({
                 name: editName(),
-                description: editDescription()
+                description: editDescription(),
+                icon: editIcon()
             });
         }
     };
@@ -349,9 +369,37 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
             class={`relative flex cursor-pointer flex-col gap-4 rounded-lg border-2 transition-all ${colors.border} ${colors.bg}`}
         >
             <div class="flex items-center justify-between">
-                <div class="flex items-center gap-4 overflow-hidden overflow-ellipsis p-4">
+                <div class="flex gap-4 overflow-hidden overflow-ellipsis p-4">
                     <div class="flex flex-col gap-3">
-                        <span class="text-center text-5xl">{getIcon()}</span>
+                        <div class="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden">
+                            <Show
+                                when={props.activity.icon}
+                                fallback={
+                                    <span class="text-center text-[48px] leading-none">
+                                        {getDefaultIcon()}
+                                    </span>
+                                }
+                            >
+                                <Show
+                                    when={isChampionIcon()}
+                                    fallback={
+                                        <span class="text-center text-[48px] leading-none">
+                                            {props.activity.icon}
+                                        </span>
+                                    }
+                                >
+                                    <img
+                                        src={
+                                            champions[parseInt(props.activity.icon!)].img
+                                        }
+                                        alt={
+                                            champions[parseInt(props.activity.icon!)].name
+                                        }
+                                        class="h-14 w-14 rounded object-cover"
+                                    />
+                                </Show>
+                            </Show>
+                        </div>
                         <Show
                             when={props.activity.is_owner}
                             fallback={
@@ -430,7 +478,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                             </div>
                         </Show>
                     </div>
-                    <div class="flex max-w-full flex-col gap-2">
+                    <div class="flex max-w-full flex-col justify-center gap-2">
                         <div class="flex items-center gap-2">
                             <span
                                 class={`text-lg font-semibold ${colors.text} max-w-full overflow-hidden`}
@@ -646,6 +694,58 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                 {editDescription().length}/1000 characters
                             </p>
                         </div>
+                        <div class="mb-4">
+                            <label class="mb-2 block text-sm font-medium text-slate-200">
+                                Icon (optional)
+                            </label>
+                            <button
+                                type="button"
+                                onClick={() => setShowIconPicker(true)}
+                                class="flex h-16 w-full items-center gap-3 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 hover:bg-slate-600"
+                            >
+                                <Show
+                                    when={editIcon()}
+                                    fallback={
+                                        <div class="flex h-12 w-12 items-center justify-center rounded bg-slate-800">
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                class="h-6 w-6 text-slate-400"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    d="M12 4v16m8-8H4"
+                                                />
+                                            </svg>
+                                        </div>
+                                    }
+                                >
+                                    <div class="flex h-12 w-12 items-center justify-center overflow-hidden rounded">
+                                        <Show
+                                            when={!isNaN(parseInt(editIcon()!))}
+                                            fallback={
+                                                <span class="text-3xl">{editIcon()}</span>
+                                            }
+                                        >
+                                            <img
+                                                src={champions[parseInt(editIcon()!)].img}
+                                                alt={
+                                                    champions[parseInt(editIcon()!)].name
+                                                }
+                                                class="h-full w-full object-cover"
+                                            />
+                                        </Show>
+                                    </div>
+                                </Show>
+                                <span class="text-sm text-slate-300">
+                                    {editIcon() ? "Change icon" : "Select an icon"}
+                                </span>
+                            </button>
+                        </div>
                         <Show when={props.activity.resource_type === "draft"}>
                             <div class="mb-4">
                                 <label class="flex items-center gap-2 text-sm font-medium text-slate-200">
@@ -678,6 +778,14 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                     </div>
                 </div>
             </Show>
+
+            {/* Icon Picker */}
+            <IconPicker
+                isOpen={showIconPicker}
+                onClose={() => setShowIconPicker(false)}
+                onSelect={(selectedIcon) => setEditIcon(selectedIcon)}
+                currentIcon={editIcon()}
+            />
 
             {/* Manage Users Dialog */}
             <Dialog

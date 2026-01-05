@@ -13,23 +13,19 @@ Canvas Functionality:
     when traversing canvas auto minimize left menu?
     clicking to select a champ from the dropdown keeps the dropdown open
     canvas selector should use searchable select
-    Canvas creation coming soon! in the style of draft creation
 
 Short Term:
     convert to standalone functionality is a bit wonky
-    draft creation public briefly went to true before navigating away
-    anon user functionality is broken
     clean up panel ui
-    customizable icons for activities
     delete draft functionality
-    weird auth flow when a user was signed in but became outdated
     searchable select need to fix arrow key controls
+    weird auth flow when a user was signed in but became outdated
     server tweaks when json token is too old? then draft wasn't loading for some reason
     Bottom of champ list doesn't display right when uneven number of champs
     Allow non signed in users to see a non saving draft
+    anon user functionality is broken
     need to handle all cases where res.ok is false
     fix or remove current user count
-    new draft button disabled when viewing new draft screen
     activities include who edited
 
 Long Term:

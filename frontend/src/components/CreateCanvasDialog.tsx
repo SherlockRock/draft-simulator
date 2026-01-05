@@ -1,7 +1,9 @@
-import { createSignal, createEffect } from "solid-js";
+import { createSignal, createEffect, Show } from "solid-js";
 import { Dialog } from "./Dialog";
 import { createCanvas } from "../utils/actions";
 import toast from "solid-toast";
+import { IconPicker } from "./IconPicker";
+import { champions } from "../utils/constants";
 
 interface CreateCanvasDialogProps {
     isOpen: () => boolean;
@@ -12,6 +14,8 @@ interface CreateCanvasDialogProps {
 export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
     const [name, setName] = createSignal("");
     const [description, setDescription] = createSignal("");
+    const [icon, setIcon] = createSignal("");
+    const [showIconPicker, setShowIconPicker] = createSignal(false);
     const [isSubmitting, setIsSubmitting] = createSignal(false);
     const [errors, setErrors] = createSignal<Record<string, string>>({});
 
@@ -20,6 +24,7 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
         if (props.isOpen()) {
             setName("");
             setDescription("");
+            setIcon("");
             setErrors({});
         }
     });
@@ -63,7 +68,8 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
         try {
             const result = await createCanvas({
                 name: name().trim(),
-                description: description().trim() || undefined
+                description: description().trim() || undefined,
+                icon: icon()
             });
 
             toast.success("Canvas created successfully!");
@@ -156,6 +162,57 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
                             </div>
                         </div>
 
+                        <div class="mb-6">
+                            <label class="mb-2 block text-sm font-medium text-slate-300">
+                                Icon (optional)
+                            </label>
+                            <button
+                                type="button"
+                                onClick={() => setShowIconPicker(true)}
+                                class="flex h-16 w-full items-center gap-3 rounded border border-slate-500 bg-slate-600 px-3 py-2 text-slate-50 hover:bg-slate-500"
+                            >
+                                <Show
+                                    when={icon()}
+                                    fallback={
+                                        <div class="flex h-12 w-12 items-center justify-center rounded bg-slate-700">
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                class="h-6 w-6 text-slate-400"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    d="M12 4v16m8-8H4"
+                                                />
+                                            </svg>
+                                        </div>
+                                    }
+                                >
+                                    <div class="flex h-12 w-12 items-center justify-center overflow-hidden rounded">
+                                        <Show
+                                            when={!isNaN(parseInt(icon()!))}
+                                            fallback={
+                                                <span class="text-3xl">{icon()}</span>
+                                            }
+                                        >
+                                            <img
+                                                src={champions[parseInt(icon()!)].img}
+                                                alt={champions[parseInt(icon()!)].name}
+                                                class="h-full w-full object-cover"
+                                            />
+                                        </Show>
+                                    </div>
+                                </Show>
+                                <span class="text-sm text-slate-300">
+                                    {icon() ? "Change icon" : "Select an icon"}
+                                </span>
+                            </button>
+                        </div>
+
                         <div class="flex items-center justify-end gap-2">
                             <button
                                 type="button"
@@ -173,6 +230,13 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
                             </button>
                         </div>
                     </form>
+
+                    <IconPicker
+                        isOpen={showIconPicker}
+                        onClose={() => setShowIconPicker(false)}
+                        onSelect={(selectedIcon) => setIcon(selectedIcon)}
+                        currentIcon={icon()}
+                    />
                 </div>
             }
         />

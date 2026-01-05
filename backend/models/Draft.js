@@ -25,6 +25,12 @@ const Draft = sequelize.define("Draft", {
   },
   description: {
     type: DataTypes.TEXT,
+    allowNull: false,
+    defaultValue: "",
+  },
+  icon: {
+    type: DataTypes.TEXT,
+    allowNull: false,
     defaultValue: "",
   },
   // Future: Folder support per canvas

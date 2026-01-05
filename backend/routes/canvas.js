@@ -249,7 +249,7 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    const { draftId, name, description } = req.body;
+    const { draftId, name, description, icon } = req.body;
     const user = await getUserFromRequest(req);
 
     if (!user) {
@@ -261,6 +261,7 @@ router.post("/", async (req, res) => {
       const canvas = await Canvas.create({
         name: name || "New Canvas",
         description: description,
+        icon: icon || "",
       });
 
       await UserCanvas.create({
@@ -292,6 +293,7 @@ router.post("/", async (req, res) => {
     const canvas = await Canvas.create({
       name: name || draft.name + " Canvas",
       description: description,
+      icon: icon || "",
     });
     const canvasDraft = await CanvasDraft.create({
       canvas_id: canvas.id,
@@ -410,7 +412,7 @@ router.patch("/:canvasId/viewport", async (req, res) => {
 router.patch("/:canvasId/name", protect, async (req, res) => {
   try {
     const { canvasId } = req.params;
-    const { name, description } = req.body;
+    const { name, description, icon } = req.body;
 
     if (!name || typeof name !== "string") {
       return res.status(400).json({ error: "Invalid canvas name" });
@@ -438,6 +440,9 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
     canvas.name = name;
     if (description !== undefined) {
       canvas.description = description;
+    }
+    if (icon !== undefined) {
+      canvas.icon = icon;
     }
     await canvas.save();
 

@@ -15,6 +15,12 @@ const Canvas = sequelize.define("Canvas", {
   },
   description: {
     type: DataTypes.TEXT,
+    allowNull: false,
+    defaultValue: "",
+  },
+  icon: {
+    type: DataTypes.TEXT,
+    allowNull: false,
     defaultValue: "",
   },
 });

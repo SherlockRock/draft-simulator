@@ -36,7 +36,7 @@ router.get("/recent", async (req, res) => {
             },
             order: [["updatedAt", "DESC"]],
             limit: fetchLimit,
-            attributes: ["id", "name", "description", "public", "type", "updatedAt", "createdAt"],
+            attributes: ["id", "name", "description", "public", "type", "icon", "updatedAt", "createdAt"],
           });
 
     // Get drafts shared with user (standalone and versus only) if needed
@@ -49,7 +49,7 @@ router.get("/recent", async (req, res) => {
             },
             order: [["updatedAt", "DESC"]],
             limit: fetchLimit,
-            attributes: ["id", "name", "description", "public", "type", "updatedAt", "createdAt"],
+            attributes: ["id", "name", "description", "public", "type", "icon", "updatedAt", "createdAt"],
             joinTableAttributes: [],
           });
 
@@ -71,7 +71,7 @@ router.get("/recent", async (req, res) => {
             ],
             order: [["updatedAt", "DESC"]],
             limit: fetchLimit,
-            attributes: ["id", "name", "description", "updatedAt", "createdAt"],
+            attributes: ["id", "name", "description", "icon", "updatedAt", "createdAt"],
           });
 
     // Transform drafts to activity format
@@ -82,6 +82,7 @@ router.get("/recent", async (req, res) => {
         resource_name: draft.name,
         description: draft.description,
         public: draft.public,
+        icon: draft.icon,
         timestamp: draft.updatedAt,
         created_at: draft.createdAt,
         is_owner: true,
@@ -93,6 +94,7 @@ router.get("/recent", async (req, res) => {
         resource_name: draft.name,
         description: draft.description,
         public: draft.public,
+        icon: draft.icon,
         timestamp: draft.updatedAt,
         created_at: draft.createdAt,
         is_owner: false,
@@ -106,6 +108,7 @@ router.get("/recent", async (req, res) => {
       resource_id: canvas.id,
       resource_name: canvas.name,
       description: canvas.description,
+      icon: canvas.icon,
       timestamp: canvas.updatedAt,
       created_at: canvas.createdAt,
       is_owner: true, // We don't track canvas ownership separately
