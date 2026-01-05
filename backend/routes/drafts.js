@@ -16,9 +16,10 @@ router.get("/dropdown", async (req, res) => {
     }
 
     const ownedDrafts = await Draft.findAll({
-      where: { owner_id: user.id },
+      where: { owner_id: user.id, type: "standalone" },
     });
     const sharedDrafts = await user.getSharedDrafts({
+      where: { type: "standalone" },
       joinTableAttributes: [],
     });
     const allDrafts = [...ownedDrafts, ...sharedDrafts];
@@ -103,6 +104,9 @@ router.post("/", protect, async (req, res) => {
         positionX: positionX || 50,
         positionY: positionY || 50,
       });
+      canvas.updatedAt = new Date();
+      await canvas.save();
+
       const canvasDrafts = await CanvasDraft.findAll({
         where: { canvas_id: canvas_id },
         attributes: ["positionX", "positionY"],

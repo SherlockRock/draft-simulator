@@ -9,8 +9,18 @@ Canvas Functionality:
         "view" button needs to change in tandem with this
     manage connection type/color?
         allow for text or champion icons to identify meaning of branch
+    move controls to top center?
+    when traversing canvas auto minimize left menu?
+    clicking to select a champ from the dropdown keeps the dropdown open
+    canvas selector should use searchable select
+    Canvas creation coming soon! in the style of draft creation
 
 Short Term:
+    convert to standalone functionality is a bit wonky
+    draft creation public briefly went to true before navigating away
+    anon user functionality is broken
+    clean up panel ui
+    customizable icons for activities
     delete draft functionality
     weird auth flow when a user was signed in but became outdated
     searchable select need to fix arrow key controls

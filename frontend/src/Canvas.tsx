@@ -5,7 +5,9 @@ import {
     createSignal,
     createEffect,
     Show,
-    createMemo
+    createMemo,
+    Setter,
+    Accessor
 } from "solid-js";
 import { createStore } from "solid-js/store";
 import {
@@ -38,6 +40,8 @@ import { Dialog } from "./components/Dialog";
 import { ConnectionComponent, ConnectionPreview } from "./components/Connections";
 import { AnchorPoints } from "./components/AnchorPoints";
 import { AnchorType } from "./utils/types";
+import { useCanvasContext } from "./workflows/CanvasWorkflow";
+import { cardHeight, cardWidth } from "./utils/helpers";
 
 type cardProps = {
     canvasDraft: CanvasDraft;
@@ -58,6 +62,7 @@ type cardProps = {
     onSelectFocus: (draftId: string, selectIndex: number) => void;
     onSelectNext: () => void;
     onSelectPrevious: () => void;
+    canEdit: boolean;
 };
 
 const CanvasCard = (props: cardProps) => {
@@ -138,7 +143,7 @@ const CanvasCard = (props: cardProps) => {
                 left: `${screenPos().x}px`,
                 top: `${screenPos().y}px`,
                 width: props.layoutToggle() ? "700px" : "350px",
-                cursor: props.isConnectionMode ? "default" : "move",
+                cursor: props.isConnectionMode || !props.canEdit ? "default" : "move",
                 transform: `scale(${props.viewport().zoom})`,
                 "transform-origin": "top left"
             }}
@@ -179,7 +184,7 @@ const CanvasCard = (props: cardProps) => {
                                 )
                             }
                             class="bg-transparent font-bold text-slate-50"
-                            disabled={props.isConnectionMode}
+                            disabled={props.isConnectionMode || !props.canEdit}
                         />
                         <div class="flex items-center gap-1">
                             <span
@@ -205,8 +210,22 @@ const CanvasCard = (props: cardProps) => {
                         <div class="group relative">
                             <button
                                 onClick={handleViewClick}
-                                class={`mr-1 flex size-7 items-center justify-center rounded ${props.canvasDraft.Draft.type === "canvas" ? "bg-orange-400" : "bg-cyan-400"} ${props.isConnectionMode ? "" : "cursor-pointer hover:bg-opacity-80"}`}
-                                disabled={props.isConnectionMode}
+                                class={`mr-1 flex size-7 items-center justify-center rounded ${props.canvasDraft.Draft.type === "canvas" ? "bg-orange-400" : "bg-cyan-400"}`}
+                                classList={{
+                                    "opacity-50 cursor-not-allowed":
+                                        props.isConnectionMode ||
+                                        (props.canvasDraft.Draft.type === "canvas" &&
+                                            !props.canEdit),
+                                    "cursor-pointer hover:bg-opacity-80":
+                                        !props.isConnectionMode &&
+                                        (props.canvasDraft.Draft.type !== "canvas" ||
+                                            props.canEdit)
+                                }}
+                                disabled={
+                                    props.isConnectionMode ||
+                                    (props.canvasDraft.Draft.type === "canvas" &&
+                                        !props.canEdit)
+                                }
                             >
                                 <Show
                                     when={props.canvasDraft.Draft.type === "canvas"}
@@ -250,8 +269,14 @@ const CanvasCard = (props: cardProps) => {
                         <div class="group relative">
                             <button
                                 onClick={() => props.addBox(props.canvasDraft)}
-                                class={`mr-1 flex size-7 items-center justify-center rounded bg-green-400 ${props.isConnectionMode ? "" : "cursor-pointer hover:bg-green-700"}`}
-                                disabled={props.isConnectionMode}
+                                class="mr-1 flex size-7 items-center justify-center rounded bg-green-400"
+                                classList={{
+                                    "opacity-50 cursor-not-allowed":
+                                        props.isConnectionMode || !props.canEdit,
+                                    "cursor-pointer hover:bg-green-700":
+                                        !props.isConnectionMode && props.canEdit
+                                }}
+                                disabled={props.isConnectionMode || !props.canEdit}
                             >
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
@@ -276,8 +301,14 @@ const CanvasCard = (props: cardProps) => {
                                 onClick={() =>
                                     props.deleteBox(props.canvasDraft.Draft.id)
                                 }
-                                class={`flex size-7 items-center justify-center rounded bg-red-400 ${props.isConnectionMode ? "" : "cursor-pointer hover:bg-red-600"}`}
-                                disabled={props.isConnectionMode}
+                                class="flex size-7 items-center justify-center rounded bg-red-400"
+                                classList={{
+                                    "opacity-50 cursor-not-allowed":
+                                        props.isConnectionMode || !props.canEdit,
+                                    "cursor-pointer hover:bg-red-600":
+                                        !props.isConnectionMode && props.canEdit
+                                }}
+                                disabled={props.isConnectionMode || !props.canEdit}
                             >
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
@@ -320,7 +351,7 @@ const CanvasCard = (props: cardProps) => {
                             draft={props.canvasDraft.Draft}
                             indexToShorthand={indexToShorthand()}
                             layoutToggle={props.layoutToggle}
-                            disabled={props.isConnectionMode}
+                            disabled={props.isConnectionMode || !props.canEdit}
                             focusedDraftId={props.focusedDraftId}
                             focusedSelectIndex={props.focusedSelectIndex}
                             onFocus={() =>
@@ -394,8 +425,12 @@ type CanvasComponentProps = {
     refetch: () => void;
     layoutToggle: () => boolean;
     setLayoutToggle: (val: boolean) => void;
-    viewport: () => Viewport;
-    setViewport: (vp: Viewport) => void;
+    viewport: Accessor<Viewport>;
+    setViewport: Setter<Viewport>;
+};
+
+const hasEditPermissions = (userPermissions?: string) => {
+    return userPermissions === "edit" || userPermissions === "admin";
 };
 
 const CanvasComponent = (props: CanvasComponentProps) => {
@@ -403,6 +438,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const queryClient = useQueryClient();
     const accessor = useUser();
     const socketAccessor = accessor()[2];
+    const canvasContext = useCanvasContext();
     const [canvasDrafts, setCanvasDrafts] = createStore<CanvasDraft[]>([]);
     const [connections, setConnections] = createStore<Connection[]>([]);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = createSignal(false);
@@ -456,6 +492,35 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     let canvasContainerRef: HTMLDivElement | undefined;
     let svgRef: SVGSVGElement | undefined;
+
+    // Function to navigate viewport to a draft's position
+    const navigateToDraft = (positionX: number, positionY: number) => {
+        if (canvasContainerRef) {
+            const container = canvasContainerRef.getBoundingClientRect();
+            const currentWidth = cardWidth(props.layoutToggle());
+            const currentHeight = cardHeight(props.layoutToggle());
+            props.setViewport((prev) => ({
+                ...prev,
+                x:
+                    positionX -
+                    container.width / 2 / prev.zoom +
+                    currentWidth / 2 / prev.zoom,
+                y:
+                    positionY -
+                    container.height / 2 / prev.zoom +
+                    currentHeight / 2 / prev.zoom
+            }));
+        }
+    };
+
+    // Set the navigation callback in the context
+    createEffect(() => {
+        canvasContext.setNavigateToDraftCallback(() => navigateToDraft);
+
+        onCleanup(() => {
+            canvasContext.setNavigateToDraftCallback(null);
+        });
+    });
 
     const updateCanvasNameMutation = useMutation(() => ({
         mutationFn: updateCanvasName,
@@ -633,11 +698,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 );
                 setViewportInitialized(true);
             }
+
+            // Multi-context room joins: join canvas room + all draft rooms
             socketAccessor().emit("joinRoom", params.id);
             props.canvasData.drafts.forEach((draft: CanvasDraft) => {
                 socketAccessor().emit("joinRoom", draft.Draft.id);
             });
         }
+
+        onCleanup(() => {
+            if (props.canvasData && canvasDrafts.length === 0) {
+                socketAccessor().emit("leaveRoom", params.id);
+                props.canvasData.drafts.forEach((draft: CanvasDraft) => {
+                    socketAccessor().emit("leaveRoom", draft.Draft.id);
+                });
+            }
+        });
     });
 
     createEffect(() => {
@@ -932,6 +1008,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const onBoxMouseDown = (draftId: string, e: MouseEvent) => {
         if (isConnectionMode()) return;
+        if (!hasEditPermissions(props.canvasData?.userPermissions)) return;
 
         const target = e.target as HTMLElement;
         if (target.closest("select, button, input")) {
@@ -979,6 +1056,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const onBackgroundDoubleClick = (e: MouseEvent) => {
         if (isConnectionMode()) return;
+        if (!hasEditPermissions(props.canvasData?.userPermissions)) return;
 
         const target = e.target as HTMLElement;
         if (target === canvasContainerRef || canvasContainerRef?.contains(target)) {
@@ -1158,13 +1236,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 const deltaX = e.clientX - state.panStartX;
                 const deltaY = e.clientY - state.panStartY;
                 const vp = props.viewport();
-
-                props.setViewport({
+                const holdViewport = {
                     ...vp,
                     x: state.viewportStartX - deltaX / vp.zoom,
                     y: state.viewportStartY - deltaY / vp.zoom
-                });
-                debouncedSaveViewport(vp);
+                };
+                props.setViewport(holdViewport);
+                debouncedSaveViewport(holdViewport);
             } else if (state.activeBoxId !== null) {
                 const worldCoords = screenToWorld(e.clientX, e.clientY);
                 const newX = worldCoords.x - state.offsetX;
@@ -1323,18 +1401,23 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         }}
                         class="rounded border border-slate-500 bg-slate-600 px-3 py-1.5 text-slate-50 shadow focus:border-teal-400 focus:outline-none"
                         placeholder="Canvas Name"
-                        disabled={isConnectionMode()}
+                        disabled={
+                            isConnectionMode() ||
+                            !hasEditPermissions(props.canvasData?.userPermissions)
+                        }
                     />
-                    <button
-                        onClick={toggleConnectionMode}
-                        class="rounded px-4 py-2 font-semibold text-white shadow transition-colors"
-                        classList={{
-                            "bg-blue-600 hover:bg-blue-700": !isConnectionMode(),
-                            "bg-green-600 hover:bg-green-700": isConnectionMode()
-                        }}
-                    >
-                        {isConnectionMode() ? "✓ Connection Mode" : "Connection Mode"}
-                    </button>
+                    <Show when={hasEditPermissions(props.canvasData?.userPermissions)}>
+                        <button
+                            onClick={toggleConnectionMode}
+                            class="rounded px-4 py-2 font-semibold text-white shadow transition-colors"
+                            classList={{
+                                "bg-blue-600 hover:bg-blue-700": !isConnectionMode(),
+                                "bg-green-600 hover:bg-green-700": isConnectionMode()
+                            }}
+                        >
+                            {isConnectionMode() ? "✓ Connection Mode" : "Connection Mode"}
+                        </button>
+                    </Show>
                     <div class="rounded border border-slate-500 bg-slate-600 px-3 py-1.5 text-center text-slate-50 shadow">
                         Zoom: {Math.round(props.viewport().zoom * 100)}%
                     </div>
@@ -1412,6 +1495,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             onSelectFocus={onSelectFocus}
                             onSelectNext={onSelectNext}
                             onSelectPrevious={onSelectPrevious}
+                            canEdit={hasEditPermissions(
+                                props.canvasData?.userPermissions
+                            )}
                         />
                     )}
                 </For>

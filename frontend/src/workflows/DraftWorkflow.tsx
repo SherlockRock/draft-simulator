@@ -1,26 +1,50 @@
-import { createResource, createEffect, Show } from "solid-js";
-import { useParams } from "@solidjs/router";
+import {
+    Component,
+    createResource,
+    createEffect,
+    createContext,
+    useContext,
+    Setter,
+    Resource
+} from "solid-js";
+import { useParams, RouteSectionProps } from "@solidjs/router";
 import { useUser } from "../userProvider";
-import { fetchDefaultDraft, fetchDraftList } from "../utils/actions";
-import NavBar from "../NavBar";
+import { fetchDraftList, fetchDefaultDraft } from "../utils/actions";
+import FlowPanel from "../components/FlowPanel";
 import DraftList from "../DraftList";
 import Chat from "../Chat";
-import CreateDraft from "../CreateDraft";
-import Draft from "../Draft";
-import ConnectionBanner from "../ConnectionBanner";
 import { VersionFooter } from "../components/VersionFooter";
 
-const DraftWorkflow = () => {
+// Create context for sharing draft state with children
+type DraftContextType = {
+    draft: Resource<any>;
+    mutateDraft: Setter<any>;
+    draftList: Resource<any>;
+    mutateDraftList: Setter<any>;
+};
+
+const DraftContext = createContext<DraftContextType>();
+
+export const useDraftContext = () => {
+    const context = useContext(DraftContext);
+    if (!context) {
+        throw new Error("useDraftContext must be used within DraftWorkFlow");
+    }
+    return context;
+};
+
+const DraftWorkflow: Component<RouteSectionProps> = (props) => {
     const params = useParams();
     const accessor = useUser();
     const [user, , socketAccessor] = accessor();
 
-    const [draft, { mutate: mutateDraft, refetch: refetchDraft }] = createResource(
-        () => (params.id !== undefined ? String(params.id) : null),
-        fetchDefaultDraft
-    );
     const [draftList, { mutate: mutateDraftList, refetch: refetchDraftList }] =
         createResource<any[]>(fetchDraftList);
+
+    const [draft, { mutate: mutateDraft, refetch: refetchDraft }] = createResource(
+        () => (params.id !== undefined && params.id !== "new" ? String(params.id) : null),
+        fetchDefaultDraft
+    );
 
     let previousUser = user();
 
@@ -28,6 +52,9 @@ const DraftWorkflow = () => {
         const currentUser = user();
         if (currentUser === undefined) {
             mutateDraftList([]);
+            if (draft()?.public !== true) {
+                mutateDraft(null);
+            }
         } else if (currentUser !== previousUser) {
             refetchDraftList();
             refetchDraft();
@@ -35,40 +62,44 @@ const DraftWorkflow = () => {
         previousUser = currentUser;
     });
 
-    const clearDraftList = () => {
-        mutateDraftList([]);
-        if (draft()?.public !== true) {
+    // Clear draft when navigating away from detail view to dashboard
+    createEffect(() => {
+        if (!params.id) {
             mutateDraft(null);
         }
-    };
+    });
+
+    // Check if we're on a detail view (has an id param)
+    const isDetailView = () => !!params.id;
 
     return (
-        <div class="flex h-full gap-2">
-            <NavBar handleLogOut={clearDraftList}>
-                <DraftList
-                    currentDraft={draft}
-                    mutateDraft={mutateDraft}
-                    draftList={draftList}
-                    mutateDraftList={mutateDraftList}
-                    socket={socketAccessor}
-                />
-                <div class="flex-1">
-                    <Chat currentDraft={draft()?.id || ""} socket={socketAccessor()} />
-                </div>
-                <VersionFooter />
-            </NavBar>
-            <div class="flex-1 overflow-y-auto">
-                <ConnectionBanner />
-                <Show
-                    when={draft()}
-                    fallback={
-                        <CreateDraft draftList={draftList} mutate={mutateDraftList} />
-                    }
-                >
-                    <Draft draft={draft} mutate={mutateDraft} />
-                </Show>
+        <DraftContext.Provider value={{ draft, mutateDraft, draftList, mutateDraftList }}>
+            <div class="flex flex-1 overflow-hidden">
+                <FlowPanel flow="draft">
+                    <div class="flex h-full flex-col justify-between gap-4 pt-4">
+                        <DraftList
+                            currentDraft={draft}
+                            mutateDraft={mutateDraft}
+                            draftList={draftList}
+                            mutateDraftList={mutateDraftList}
+                            socket={socketAccessor}
+                        />
+                        {/* Only show Chat when viewing a specific draft */}
+                        {isDetailView() && (
+                            <div class="flex-1">
+                                <Chat
+                                    currentDraft={params.id || ""}
+                                    socket={socketAccessor()}
+                                />
+                            </div>
+                        )}
+                        <VersionFooter />
+                    </div>
+                </FlowPanel>
+                {/* Child routes (dashboard or detail view) render here */}
+                {props.children}
             </div>
-        </div>
+        </DraftContext.Provider>
     );
 };
 

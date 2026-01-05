@@ -170,7 +170,12 @@ export const CanvasSelect = (props: props) => {
                 keys={["ArrowUp", "ArrowDown", "Escape"]}
             />
             <div onFocusIn={onFocusIn} onFocusOut={onFocusOut} tabIndex={0}>
-                <div class="flex w-40 items-center gap-2 rounded bg-slate-800 p-1 text-left text-sm hover:bg-slate-700">
+                <div
+                    class="flex w-40 items-center gap-2 rounded bg-slate-800 p-1 text-left text-sm"
+                    classList={{
+                        "hover:bg-slate-700": !props.disabled
+                    }}
+                >
                     <Show
                         when={selectedChampion() !== null}
                         fallback={

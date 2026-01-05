@@ -12,11 +12,12 @@ const userRoutes = require("./routes/users");
 const shareRoutes = require("./routes/shares");
 const authRoutes = require("./routes/auth");
 const canvasRoutes = require("./routes/canvas");
+const activityRoutes = require("./routes/activity");
 const Draft = require("./models/Draft");
 const User = require("./models/User");
 const setupAssociations = require("./models/associations");
 const socketService = require("./middleware/socketService");
-const { UserCanvas } = require("./models/Canvas");
+const { UserCanvas, CanvasDraft } = require("./models/Canvas");
 require("dotenv").config();
 
 async function main() {
@@ -57,6 +58,7 @@ async function main() {
   app.use("/api/users", userRoutes);
   app.use("/api/shares", shareRoutes);
   app.use("/api/canvas", canvasRoutes);
+  app.use("/api/activity", activityRoutes);
 
   let server;
   if (process.env.ENVIRONMENT === "development") {
@@ -116,14 +118,26 @@ async function main() {
     socket.on("newDraft", async (data) => {
       try {
         if ("id" in data && data.picks.length === 20) {
-          Draft.update({ picks: data.picks }, { where: { id: data.id } });
+          await Draft.update({ picks: data.picks }, { where: { id: data.id } });
+
+          // Multi-context broadcast: send to draft room
+          io.to(data.id).emit("draftUpdate", data, data.id);
+
+          // Find all canvases containing this draft
+          const canvasDrafts = await CanvasDraft.findAll({
+            where: { draft_id: data.id },
+          });
+
+          // Broadcast to each canvas room
+          for (const cd of canvasDrafts) {
+            io.to(cd.canvas_id).emit("draftUpdate", data, data.id);
+          }
         }
       } catch (e) {
         console.log(e);
         // TODO handle the failure
         return;
       }
-      io.to(data.id).emit("draftUpdate", data, data.id);
     });
 
     socket.on("joinRoom", async (room) => {

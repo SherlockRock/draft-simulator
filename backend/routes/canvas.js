@@ -12,6 +12,55 @@ const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
 const { draftHasSharedWithUser } = require("../helpers.js");
 
+// Helper function to touch canvas updatedAt timestamp
+async function touchCanvasTimestamp(canvasId) {
+  const now = new Date();
+
+  // Fetch the canvas instance and save it to trigger updatedAt
+  const canvas = await Canvas.findByPk(canvasId);
+  if (canvas) {
+    canvas.changed("updatedAt", true);
+    await canvas.save({ silent: false });
+  }
+}
+
+// Get all canvases for the current user
+router.get("/", async (req, res) => {
+  try {
+    const user = await getUserFromRequest(req);
+
+    if (!user) {
+      return res.json([]);
+    }
+
+    const canvases = await Canvas.findAll({
+      include: [
+        {
+          model: User,
+          through: {
+            model: UserCanvas,
+            where: { user_id: user.id },
+          },
+          attributes: [],
+          required: true,
+        },
+      ],
+      order: [["updatedAt", "DESC"]],
+    });
+
+    res.json(
+      canvases.map((canvas) => ({
+        id: canvas.id,
+        name: canvas.name,
+        updatedAt: canvas.updatedAt,
+      }))
+    );
+  } catch (error) {
+    console.error("Error fetching canvas list:", error);
+    res.status(500).json({ error: "Failed to fetch canvas list" });
+  }
+});
+
 router.get("/:canvasId", async (req, res) => {
   try {
     const user = await getUserFromRequest(req);
@@ -99,6 +148,9 @@ router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
     );
 
     if (affectedRows > 0) {
+      // Update canvas timestamp
+      await touchCanvasTimestamp(canvasId);
+
       res.status(200).json({ success: true, message: "Position updated" });
     } else {
       res
@@ -160,11 +212,15 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
     });
 
     if (affectedRows > 0) {
+      await touchCanvasTimestamp(canvasId);
+
       const canvas = await Canvas.findByPk(canvasId);
       const canvasDrafts = await CanvasDraft.findAll({
         where: { canvas_id: canvasId },
         attributes: ["positionX", "positionY"],
-        include: [{ model: Draft, attributes: ["name", "id", "picks", "type"] }],
+        include: [
+          { model: Draft, attributes: ["name", "id", "picks", "type"] },
+        ],
         raw: true,
         nest: true,
       });
@@ -579,6 +635,8 @@ router.post("/:canvasId/connections", protect, async (req, res) => {
       style: style || "solid",
     });
 
+    await touchCanvasTimestamp(canvasId);
+
     res.status(201).json({
       success: true,
       connection: connection.toJSON(),
@@ -691,6 +749,7 @@ router.patch(
       }
 
       await connection.save();
+      await touchCanvasTimestamp(canvasId);
 
       res.status(200).json({
         success: true,
@@ -742,6 +801,8 @@ router.delete(
       });
 
       if (affectedRows > 0) {
+        await touchCanvasTimestamp(canvasId);
+
         res.status(200).json({
           success: true,
           message: "Connection deleted",
@@ -829,6 +890,7 @@ router.post(
       connection.vertices = vertices;
       connection.changed("vertices", true);
       await connection.save();
+      await touchCanvasTimestamp(canvasId);
 
       res.status(201).json({
         success: true,
@@ -908,6 +970,7 @@ router.put(
       connection.vertices = vertices;
       connection.changed("vertices", true);
       await connection.save();
+      await touchCanvasTimestamp(canvasId);
 
       res.status(200).json({
         success: true,
@@ -971,6 +1034,7 @@ router.delete(
       connection.vertices = filteredVertices;
       connection.changed("vertices", true);
       await connection.save();
+      await touchCanvasTimestamp(canvasId);
 
       res.status(200).json({
         success: true,

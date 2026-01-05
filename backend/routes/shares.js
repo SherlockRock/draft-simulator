@@ -5,6 +5,7 @@ const Draft = require("../models/Draft");
 const { Canvas, UserCanvas } = require("../models/Canvas");
 const User = require("../models/User");
 const { protect, getUserFromRequest } = require("../middleware/auth");
+const DraftShare = require("../models/DraftShare");
 
 router.post("/:draftId/share", protect, async (req, res) => {
   try {
@@ -68,7 +69,7 @@ router.post("/:draftId/generate-link", protect, async (req, res) => {
 router.get("/verify-link", async (req, res) => {
   try {
     const user = await getUserFromRequest(req);
-
+    console.log("VERIFY LINK - USER:", user);
     if (!user) {
       console.log("NO USER - Returning 401");
       return res.status(401).json({ error: "Not authenticated" });
@@ -88,8 +89,8 @@ router.get("/verify-link", async (req, res) => {
       return res.status(404).json({ error: "Draft not found" });
     }
 
-    const existingAccess = await User.getSharedWith({
-      where: { id: user.id },
+    const existingAccess = await DraftShare.findAll({
+      where: { draft_id: draft.id, user_id: user.id },
     });
 
     if (!existingAccess.length > 0) {

@@ -84,7 +84,9 @@ function DraftDetails(props: props) {
 
     const onFocusOut = () => {
         setIsFocused(false);
-        setIsEditingName(false);
+        if (isEditingName()) {
+            handleNameChange();
+        }
     };
 
     const handleKeyEvent = (key: Key) => {

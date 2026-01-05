@@ -494,3 +494,60 @@ export const deleteConnection = async (data: {
 
     return response.json();
 };
+
+export const fetchRecentActivity = async (
+    page: number = 0,
+    resourceType?: "draft" | "canvas"
+) => {
+    const params = new URLSearchParams({ page: page.toString() });
+    if (resourceType) {
+        params.append("resource_type", resourceType);
+    }
+
+    const res = await fetch(`${BASE_URL}/activity/recent?${params}`, {
+        method: "GET",
+        credentials: "include"
+    });
+
+    if (!res.ok) {
+        throw new Error("Failed to fetch recent activity");
+    }
+
+    return await res.json();
+};
+
+export const fetchCanvasList = async () => {
+    const res = await fetch(`${BASE_URL}/canvas`, {
+        method: "GET",
+        credentials: "include"
+    });
+
+    if (!res.ok) {
+        throw new Error("Failed to fetch canvas list");
+    }
+
+    return await res.json();
+};
+
+export const createDraft = async (
+    type: "standalone" | "canvas" | "versus" = "standalone"
+) => {
+    const res = await fetch(`${BASE_URL}/drafts`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            name: "New Draft",
+            public: true,
+            type
+        })
+    });
+
+    if (!res.ok) {
+        throw new Error("Failed to create draft");
+    }
+
+    return await res.json();
+};

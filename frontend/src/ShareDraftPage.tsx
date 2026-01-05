@@ -21,7 +21,7 @@ const ShareDraftPage = () => {
 
                 if (response.ok) {
                     const data = await response.json();
-                    toast.success("Canvas Shared Successfully");
+                    toast.success("Draft Shared Successfully");
                     navigate(`/draft/${data.draftId}`);
                 } else {
                     const error = await response.json();

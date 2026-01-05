@@ -39,7 +39,7 @@ function DraftList(props: props) {
             props.mutateDraft(null);
             props.socket().emit("leaveRoom", currentDraft.id);
         }
-        navigate(`/`);
+        navigate(`/draft/new`);
     };
 
     const drafts = createMemo(() => {
@@ -70,7 +70,7 @@ function DraftList(props: props) {
                     class="flex-1 flex-shrink-0 rounded-md bg-teal-700 px-3 py-2.5 font-medium text-slate-200 hover:bg-teal-400"
                     onClick={handleNewDraft}
                 >
-                    New Draft
+                    Create New Draft
                 </button>
                 <button
                     hidden={!props.currentDraft()}

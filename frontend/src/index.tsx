@@ -6,11 +6,17 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 import "./index.css";
 import App from "./App";
 import { UserWrapper } from "./UserWrapper";
-import DraftWorkflow from "./workflows/DraftWorkflow";
-import CanvasWorkflow from "./workflows/CanvasWorkflow";
 import AuthCallback from "./AuthCallback";
 import ShareDraftPage from "./ShareDraftPage";
 import ShareCanvasPage from "./ShareCanvasPage";
+import HomePage from "./pages/HomePage";
+import DraftFlowDashboard from "./pages/DraftFlowDashboard";
+import CanvasFlowDashboard from "./pages/CanvasFlowDashboard";
+import VersusFlowDashboard from "./pages/VersusFlowDashboard";
+import DraftDetailView from "./pages/DraftDetailView";
+import CanvasDetailView from "./pages/CanvasDetailView";
+import DraftWorkflow from "./workflows/DraftWorkflow";
+import CanvasWorkflow from "./workflows/CanvasWorkflow";
 
 const root = document.getElementById("root");
 
@@ -30,9 +36,19 @@ render(
                 <Route path="/share/canvas" component={ShareCanvasPage} />
                 <Route path="/" component={UserWrapper}>
                     <Route path="/oauth2callback" component={AuthCallback} />
-                    <Route path="/" component={DraftWorkflow} />
-                    <Route path="/draft/:id" component={DraftWorkflow} />
-                    <Route path="/canvas/:id" component={CanvasWorkflow} />
+                    <Route path="/" component={HomePage} />
+                    <Route path="/draft" component={DraftWorkflow}>
+                        <Route path="/" component={DraftFlowDashboard} />
+                        <Route path="/new" component={DraftDetailView} />
+                        <Route path="/:id" component={DraftDetailView} />
+                    </Route>
+                    <Route path="/canvas" component={CanvasWorkflow}>
+                        <Route path="/" component={CanvasFlowDashboard} />
+                        <Route path="/:id" component={CanvasDetailView} />
+                    </Route>
+                    <Route path="/versus" component={VersusFlowDashboard} />
+                    <Route path="/versus/:id" component={DraftDetailView} />
+                    <Route path="*" component={HomePage} />
                 </Route>
             </Router>
         </QueryClientProvider>
