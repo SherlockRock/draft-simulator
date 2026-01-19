@@ -22,6 +22,12 @@ export type draft = {
     picks: string[];
     owner_id: string;
     type: "canvas" | "standalone" | "versus";
+    versus_draft_id?: string;
+    seriesIndex?: number;
+    completed?: boolean;
+    winner?: "blue" | "red" | null;
+    description?: string;
+    icon?: string;
 };
 
 export type CanvasUser = {
@@ -73,4 +79,77 @@ export type ContextMenuAction = {
 export type ContextMenuPosition = {
     x: number; // Screen coordinates
     y: number; // Screen coordinates
+};
+
+export type VersusDraft = {
+    id: string;
+    name: string;
+    blueTeamName: string;
+    redTeamName: string;
+    description?: string;
+    length: number;
+    competitive: boolean;
+    icon?: string;
+    type?: string;
+    shareLink: string;
+    owner_id: string;
+    createdAt: string;
+    updatedAt: string;
+    Drafts?: draft[];
+};
+
+export type VersusParticipant = {
+    id: string;
+    versus_draft_id: string;
+    user_id?: string;
+    role: "blue_captain" | "red_captain" | "spectator";
+    socketId?: string;
+    isConnected: boolean;
+    lastSeenAt: string;
+};
+
+export type VersusPickOrderItem = {
+    team: "blue" | "red";
+    type: "ban" | "pick";
+    slot: number;
+};
+
+export type VersusState = {
+    draftId: string;
+    currentPickIndex: number;
+    timerStartedAt: number | null;
+    isPaused: boolean;
+    readyStatus: {
+        blue: boolean;
+        red: boolean;
+    };
+    completed: boolean;
+    winner?: "blue" | "red" | null;
+};
+
+export type VersusSessionState = {
+    versusDraft: VersusDraft | null;
+    participants: VersusParticipant[];
+    myParticipant: VersusParticipant | null;
+    connected: boolean;
+    error: string | null;
+};
+
+export type VersusJoinResponse = {
+    success: boolean;
+    versusDraft: VersusDraft;
+    participants: VersusParticipant[];
+    myParticipant: VersusParticipant | null;
+    availableRoles: {
+        blue_captain: boolean;
+        red_captain: boolean;
+        spectator: boolean;
+    };
+    autoJoinedRole?: "blue_captain" | "red_captain" | "spectator";
+};
+
+export type VersusRoleSelectResponse = {
+    success: boolean;
+    participant: VersusParticipant;
+    reclaimToken: string;
 };

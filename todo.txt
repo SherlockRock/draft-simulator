@@ -1,3 +1,15 @@
+Versus functionality:
+    indicators for when each team is ready
+    hover and selection functionality still not working properly
+        select will need to include a socket call
+    declaring a winner should be possible from the series page
+    champs need to be searchable/sortable
+    when you create a draft and then click draft 1 it should then ask you for your role, insteadd of defaulting to spec
+    landing page needs content for flowpanel
+    change picks posts game needs more working
+    choosing winner also needs work
+    updating versus isn't working
+
 Canvas Functionality:
     replace draft list button Functionality with right click menus?
     editing from the manage canvas' dialog

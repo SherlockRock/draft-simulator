@@ -17,6 +17,10 @@ import DraftDetailView from "./pages/DraftDetailView";
 import CanvasDetailView from "./pages/CanvasDetailView";
 import DraftWorkflow from "./workflows/DraftWorkflow";
 import CanvasWorkflow from "./workflows/CanvasWorkflow";
+import VersusWorkflow from "./workflows/VersusWorkflow";
+import VersusSeriesOverview from "./pages/VersusSeriesOverview";
+import VersusRoleSelection from "./pages/VersusRoleSelection";
+import VersusDraftView from "./pages/VersusDraftView";
 
 const root = document.getElementById("root");
 
@@ -46,8 +50,12 @@ render(
                         <Route path="/" component={CanvasFlowDashboard} />
                         <Route path="/:id" component={CanvasDetailView} />
                     </Route>
-                    <Route path="/versus" component={VersusFlowDashboard} />
-                    <Route path="/versus/:id" component={DraftDetailView} />
+                    <Route path="/versus" component={VersusWorkflow}>
+                        <Route path="/" component={VersusFlowDashboard} />
+                        <Route path="/join/:linkToken" component={VersusRoleSelection} />
+                        <Route path="/:id" component={VersusSeriesOverview} />
+                        <Route path="/:id/draft/:draftId" component={VersusDraftView} />
+                    </Route>
                     <Route path="*" component={HomePage} />
                 </Route>
             </Router>

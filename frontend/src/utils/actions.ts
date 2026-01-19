@@ -133,6 +133,19 @@ export const generateShareLink = async (draftId: string) => {
     return shareLink;
 };
 
+export const generateVersusShareLink = async (versusDraftId: string) => {
+    const res = await fetch(`${BASE_URL}/versus-drafts/${versusDraftId}`, {
+        method: "GET",
+        credentials: "include"
+    });
+    if (!res.ok) {
+        throw new Error("Failed to fetch versus draft");
+    }
+    const versusDraft = await res.json();
+    // Return the full join URL
+    return `${window.location.origin}/versus/join/${versusDraft.shareLink}`;
+};
+
 export const generateCanvasShareLink = async (
     canvasId: string,
     permissions: "view" | "edit" = "view"
@@ -269,24 +282,33 @@ export const handleRevoke = async () => {
 };
 
 export const handleLogin = () => {
-    const googleLoginURL = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${import.meta.env.VITE_GOOGLE_CLIENT_ID}&redirect_uri=${window.location.origin}/oauth2callback&response_type=code&scope=openid%20profile%20email`;
+    const returnTo = window.location.pathname;
+
+    // Just encode the returnTo path directly as state
+    const state = btoa(returnTo);
+
+    const googleLoginURL = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${import.meta.env.VITE_GOOGLE_CLIENT_ID}&redirect_uri=${window.location.origin}/oauth2callback&response_type=code&scope=openid%20profile%20email&state=${encodeURIComponent(state)}`;
     window.location.href = googleLoginURL;
 };
 
-export const handleGoogleLogin = async (code: string) => {
+export const handleGoogleLogin = async (code: string, state: string) => {
+    console.log("code", code);
+    console.log("state", state);
     const res = await fetch(`${BASE_URL}/auth/google/callback`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
         },
         credentials: "include",
-        body: JSON.stringify({ code })
+        body: JSON.stringify({ code, state })
     });
+    console.log("res", res);
     if (!res.ok) {
         return null;
     }
-    const { user } = await res.json();
-    return user;
+    // console.log("res json", await res.json());
+    const { user, returnTo } = await res.json();
+    return { user, returnTo };
 };
 
 export const updateCanvasDraftPosition = async (data: {
@@ -533,7 +555,7 @@ export const deleteConnection = async (data: {
 
 export const fetchRecentActivity = async (
     page: number = 0,
-    resourceType?: "draft" | "canvas"
+    resourceType?: "draft" | "canvas" | "versus"
 ) => {
     const params = new URLSearchParams({ page: page.toString() });
     if (resourceType) {

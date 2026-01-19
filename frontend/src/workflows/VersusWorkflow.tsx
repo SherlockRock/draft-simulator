@@ -43,6 +43,11 @@ export type DraftCallbacks = {
     isMyTurn: () => boolean;
     hasPendingPick: () => boolean;
     draftStarted: () => boolean;
+    // Pick change functionality
+    handleRequestPickChange: (pickIndex: number, newChampion: string) => void;
+    handleApprovePickChange: (requestId: string) => void;
+    handleRejectPickChange: (requestId: string) => void;
+    pendingPickChangeRequest: () => any;
 };
 
 // Create context for sharing versus state with children
@@ -107,7 +112,9 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
     );
 
     // Draft-specific state registration (for VersusDraftView to expose its state)
-    const [activeDraftState, setActiveDraftState] = createSignal<ActiveDraftState | null>(null);
+    const [activeDraftState, setActiveDraftState] = createSignal<ActiveDraftState | null>(
+        null
+    );
     const [draftCallbacks, setDraftCallbacks] = createSignal<DraftCallbacks | null>(null);
 
     // Debug: Log context changes
@@ -124,7 +131,10 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
 
     // Debug: Log currentVersusDraftId changes
     createEffect(() => {
-        console.log("[VersusWorkflow] currentVersusDraftId changed to:", currentVersusDraftId());
+        console.log(
+            "[VersusWorkflow] currentVersusDraftId changed to:",
+            currentVersusDraftId()
+        );
     });
 
     // Join response handler
@@ -161,7 +171,10 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         });
 
         // Track the current versus draft ID
-        console.log("[VersusWorkflow] Updating currentVersusDraftId to:", response.versusDraft.id);
+        console.log(
+            "[VersusWorkflow] Updating currentVersusDraftId to:",
+            response.versusDraft.id
+        );
         setCurrentVersusDraftId(response.versusDraft.id);
 
         // If auto-joined with a valid role, navigate to series overview
@@ -478,13 +491,7 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         });
 
         // Prerequisites for any join
-        if (
-            !sock ||
-            !ready ||
-            pendingJoin() ||
-            !sock.connected ||
-            contextConnected
-        ) {
+        if (!sock || !ready || pendingJoin() || !sock.connected || contextConnected) {
             console.log("[VersusWorkflow] Join blocked:", {
                 noSocket: !sock,
                 notReady: !ready,

@@ -2,24 +2,29 @@ import {
     Accessor,
     createContext,
     createMemo,
-    createResource,
-    onMount,
     useContext,
     onCleanup,
     JSX,
     createEffect,
     createSignal
 } from "solid-js";
-import { fetchUserDetails, handleGoogleLogin } from "./utils/actions";
+import { useQuery, useQueryClient } from "@tanstack/solid-query";
+import { fetchUserDetails, handleGoogleLogin, handleRevoke } from "./utils/actions";
 import { io, Socket } from "socket.io-client";
+import { useNavigate } from "@solidjs/router";
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
+
+export type ConnectionInfo = {
+    status: ConnectionStatus;
+    reconnectAttempts: number;
+};
 
 const socketOptions = {
     pingInterval: 25000,
     pingTimeout: 5000,
     reconnection: true,
-    reconnectionAttempts: Infinity,
+    reconnectionAttempts: 3,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000
 };
@@ -31,45 +36,145 @@ const createAuthenticatedSocket = () =>
 
 const UserContext = createContext<Accessor<Array<any>>>();
 
-const shouldFetchUser = () => {
-    return !window.location.pathname.includes("/oauth2callback");
-};
-
 export function UserProvider(props: { children: JSX.Element }) {
-    const [user, { mutate, refetch }] = createResource(shouldFetchUser, fetchUserDetails);
+    const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const [currentSocket, setCurrentSocket] = createSignal<Socket | undefined>(undefined);
     const [connectionStatus, setConnectionStatus] =
         createSignal<ConnectionStatus>("connecting");
-    const login = async (code: string) => {
-        const user = await handleGoogleLogin(code);
-        mutate(user);
-        return user;
+    const [reconnectAttempts, setReconnectAttempts] = createSignal(0);
+
+    // Manual reconnect function - forces a new socket connection
+    const manualReconnect = () => {
+        const socket = currentSocket();
+        if (socket) {
+            console.log(">>> Manual reconnect triggered");
+            setReconnectAttempts(0);
+            setConnectionStatus("connecting");
+            socket.connect();
+        }
     };
-    const logout = () => {
-        mutate(undefined);
+
+    const isOAuthCallback = () => window.location.pathname.includes("/oauth2callback");
+
+    const userQuery = useQuery(() => {
+        const enabled = !isOAuthCallback();
+        console.log(
+            ">>> Creating query, enabled:",
+            enabled,
+            "path:",
+            window.location.pathname
+        );
+
+        return {
+            queryKey: ["user"],
+            queryFn: fetchUserDetails,
+            enabled: enabled,
+            staleTime: 1000 * 60 * 60 * 24, // 24 hours
+            retry: false
+        };
+    });
+
+    const login = async (code: string, state: string) => {
+        const res = await handleGoogleLogin(code, state);
+        console.log("User logged in:", res);
+        userQuery.refetch();
+        console.log("Redirecting to:", res?.returnTo ?? "/");
+        navigate(res?.returnTo ?? "/", { replace: true });
+        return res?.user;
     };
+
+    const logout = async () => {
+        await handleRevoke();
+        queryClient.setQueryData(["user"], null);
+    };
+
+    // Create a compatibility wrapper that mimics the old createResource API
+    const userAccessor = () => userQuery.data;
+    // Add query state properties to the accessor function for advanced usage
+    Object.defineProperty(userAccessor, "loading", {
+        get: () => userQuery.isLoading
+    });
+    Object.defineProperty(userAccessor, "error", {
+        get: () => userQuery.error
+    });
+    Object.defineProperty(userAccessor, "isLoading", {
+        get: () => userQuery.isLoading
+    });
+    Object.defineProperty(userAccessor, "isError", {
+        get: () => userQuery.isError
+    });
+
+    const connectionInfo = createMemo<ConnectionInfo>(() => ({
+        status: connectionStatus(),
+        reconnectAttempts: reconnectAttempts()
+    }));
+
     const holdUser = createMemo(() => [
-        user,
+        userAccessor,
         {
             login,
-            logout
+            logout,
+            refetch: userQuery.refetch,
+            reconnect: manualReconnect
         },
         currentSocket,
-        connectionStatus
+        connectionStatus,
+        connectionInfo
     ]);
 
     createEffect(() => {
-        const currentUser = user();
+        // Explicitly track query status to ensure effect re-runs
+        const status = userQuery.status;
+        const currentUser = userQuery.data;
+        const isLoading = userQuery.isLoading;
+        const isError = userQuery.isError;
+        const isFetching = userQuery.isFetching;
+
+        console.log(
+            ">>> UserProvider effect running",
+            "status:",
+            status,
+            "currentUser:",
+            currentUser?.id || "anonymous",
+            "isLoading:",
+            isLoading,
+            "isFetching:",
+            isFetching,
+            "isError:",
+            isError
+        );
+
+        // Don't create socket while user is still loading or fetching
+        if (isLoading || isFetching) {
+            console.log(">>> User still loading/fetching, skipping socket creation");
+            setCurrentSocket(undefined);
+            setConnectionStatus("connecting");
+            return;
+        }
+
+        // Handle error state (treat as anonymous)
+        if (isError) {
+            console.log(">>> User fetch error, treating as anonymous");
+        }
+
+        console.log(">>> User loaded successfully, creating socket");
+
         let newSocket: Socket | undefined;
         if (currentUser) {
+            console.log(">>> Creating authenticated socket");
             newSocket = createAuthenticatedSocket();
         } else {
+            console.log(">>> Creating anonymous socket");
             newSocket = createAnonymousSocket();
         }
 
         newSocket.on("connect", () => {
             console.log("Socket.IO: Connected! ID:", newSocket.id);
+            console.log(">>> UserProvider: Socket connected, updating connection status");
             setConnectionStatus("connected");
+            setReconnectAttempts(0);
+            // Don't re-set currentSocket - it's already set and re-setting causes cleanup
         });
 
         newSocket.on("disconnect", (reason) => {
@@ -79,52 +184,59 @@ export function UserProvider(props: { children: JSX.Element }) {
 
         newSocket.on("connect_error", (err) => {
             console.error("Socket.IO: Connection Error!", err.message);
-            setConnectionStatus("error");
+            // Don't set status to "error" here - let auto-reconnect continue
+            // Status will be set to "error" by reconnect_failed after all attempts exhausted
         });
 
-        newSocket.on("reconnect", (attemptNumber) => {
-            console.log("Socket.IO: Reconnected!", attemptNumber);
+        // Socket.io manager events for reconnection tracking
+        newSocket.io.on("reconnect", (attemptNumber) => {
+            console.log("Socket.IO: Reconnected after", attemptNumber, "attempts");
             setConnectionStatus("connected");
+            setReconnectAttempts(0);
         });
 
-        newSocket.on("reconnecting", (attemptNumber) => {
-            console.log("Socket.IO: Reconnecting...", attemptNumber);
+        newSocket.io.on("reconnect_attempt", (attemptNumber) => {
+            console.log("Socket.IO: Reconnect attempt", attemptNumber);
             setConnectionStatus("connecting");
+            setReconnectAttempts(attemptNumber);
         });
 
-        newSocket.on("reconnect_failed", () => {
+        newSocket.io.on("reconnect_failed", () => {
             console.error("Socket.IO: Reconnection Failed Permanently!");
             setConnectionStatus("error");
         });
 
+        console.log(
+            ">>> UserProvider: Setting currentSocket to:",
+            newSocket?.id,
+            "connected:",
+            newSocket?.connected
+        );
         setCurrentSocket(newSocket);
 
         onCleanup(() => {
-            console.log("Cleaning up effect, disconnecting socket:", newSocket?.id);
-            if (newSocket && newSocket.connected) {
+            console.log(">>> UserProvider cleanup running!");
+            console.log(
+                ">>> Cleaning up socket:",
+                newSocket?.id,
+                "connected:",
+                newSocket?.connected
+            );
+            if (newSocket) {
                 newSocket.disconnect();
                 newSocket.off("disconnect");
                 newSocket.off("connect_error");
-                newSocket.off("reconnect");
-                newSocket.off("reconnecting");
-                newSocket.off("reconnect_failed");
                 newSocket.off("connect");
+                // Clean up manager events
+                newSocket.io.off("reconnect");
+                newSocket.io.off("reconnect_attempt");
+                newSocket.io.off("reconnect_failed");
+                console.log(">>> Socket disconnected and cleaned up");
             }
         });
     });
 
-    onMount(() => {
-        const interval = setInterval(
-            () => {
-                refetch();
-            },
-            24 * 60 * 60 * 1000 // 24 hours in milliseconds
-        );
-
-        onCleanup(() => {
-            clearInterval(interval);
-        });
-    });
+    // TanStack Query handles refetching automatically with staleTime
 
     return (
         <UserContext.Provider value={holdUser}>

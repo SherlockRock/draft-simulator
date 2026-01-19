@@ -6,7 +6,11 @@ const App: Component<RouteSectionProps<unknown>> = (props) => {
     return (
         <div class="h-screen overflow-clip bg-slate-700">
             {props.children}
-            <Toaster />
+            <Toaster
+                toastOptions={{
+                    duration: 3000
+                }}
+            />
         </div>
     );
 };

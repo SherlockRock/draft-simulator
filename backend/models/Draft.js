@@ -64,6 +64,29 @@ const Draft = sequelize.define("Draft", {
       "",
     ],
   },
+  versus_draft_id: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: {
+      model: "VersusDrafts",
+      key: "id",
+    },
+  },
+  seriesIndex: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  completed: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
+  winner: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    validate: {
+      isIn: [["blue", "red", null]],
+    },
+  },
 });
 
 module.exports = Draft;

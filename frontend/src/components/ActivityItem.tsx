@@ -3,6 +3,7 @@ import { useNavigate } from "@solidjs/router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/solid-query";
 import {
     generateShareLink,
+    generateVersusShareLink,
     generateCanvasShareLink,
     editDraft,
     updateCanvasName,
@@ -14,6 +15,7 @@ import toast from "solid-toast";
 import { Dialog } from "./Dialog";
 import { ManageUsersDialog } from "./ManageUsersDialog";
 import { IconPicker } from "./IconPicker";
+import { IconDisplay } from "./IconDisplay";
 import { champions } from "../utils/constants";
 
 interface Activity {
@@ -27,6 +29,11 @@ interface Activity {
     created_at: string;
     is_owner: boolean;
     draft_type?: "standalone" | "canvas" | "versus";
+    // Versus-specific fields
+    blueTeamName?: string;
+    redTeamName?: string;
+    length?: number;
+    competitive?: boolean;
 }
 
 interface ActivityItemProps {
@@ -55,11 +62,10 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     const shareLinkQuery = useQuery(() => ({
         queryKey: ["shareLink", props.activity.resource_type, props.activity.resource_id],
         queryFn: () => {
-            if (
-                props.activity.resource_type === "draft" ||
-                props.activity.resource_type === "versus"
-            ) {
+            if (props.activity.resource_type === "draft") {
                 return generateShareLink(props.activity.resource_id);
+            } else if (props.activity.resource_type === "versus") {
+                return generateVersusShareLink(props.activity.resource_id);
             }
             return Promise.resolve("");
         },
@@ -203,12 +209,6 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
             default:
                 return "📄";
         }
-    };
-
-    const isChampionIcon = () => {
-        if (!props.activity.icon) return false;
-        const num = parseInt(props.activity.icon);
-        return !isNaN(num) && num >= 0 && num < champions.length;
     };
 
     const getColorClasses = () => {
@@ -371,35 +371,11 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
             <div class="flex items-center justify-between">
                 <div class="flex gap-4 overflow-hidden overflow-ellipsis p-4">
                     <div class="flex flex-col gap-3">
-                        <div class="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden">
-                            <Show
-                                when={props.activity.icon}
-                                fallback={
-                                    <span class="text-center text-[48px] leading-none">
-                                        {getDefaultIcon()}
-                                    </span>
-                                }
-                            >
-                                <Show
-                                    when={isChampionIcon()}
-                                    fallback={
-                                        <span class="text-center text-[48px] leading-none">
-                                            {props.activity.icon}
-                                        </span>
-                                    }
-                                >
-                                    <img
-                                        src={
-                                            champions[parseInt(props.activity.icon!)].img
-                                        }
-                                        alt={
-                                            champions[parseInt(props.activity.icon!)].name
-                                        }
-                                        class="h-14 w-14 rounded object-cover"
-                                    />
-                                </Show>
-                            </Show>
-                        </div>
+                        <IconDisplay
+                            icon={props.activity.icon}
+                            defaultIcon={getDefaultIcon()}
+                            size="md"
+                        />
                         <Show
                             when={props.activity.is_owner}
                             fallback={
@@ -486,6 +462,27 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                 {props.activity.resource_name}
                             </span>
                         </div>
+                        <Show when={props.activity.resource_type === "versus"}>
+                            <div class="flex items-center gap-2 text-sm">
+                                <span class="text-blue-400">
+                                    {props.activity.blueTeamName}
+                                </span>
+                                <span class="text-slate-500">vs</span>
+                                <span class="text-red-400">
+                                    {props.activity.redTeamName}
+                                </span>
+                                <span class="text-slate-500">•</span>
+                                <span class="text-slate-400">
+                                    Bo{props.activity.length}
+                                </span>
+                                <Show when={props.activity.competitive}>
+                                    <span class="text-slate-500">•</span>
+                                    <span class="rounded bg-orange-500/20 px-2 py-0.5 text-xs text-orange-300">
+                                        Competitive
+                                    </span>
+                                </Show>
+                            </div>
+                        </Show>
                         <span class="text-sm text-slate-400">
                             {formatTimestamp(props.activity.timestamp)}
                         </span>

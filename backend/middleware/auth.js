@@ -37,4 +37,12 @@ const protect = async (req, res, next) => {
   }
 };
 
-module.exports = { protect, getUserFromRequest };
+const authenticate = protect; // Alias for consistency
+
+const optionalAuth = async (req, res, next) => {
+  const user = await getUserFromRequest(req);
+  req.user = user || null;
+  next();
+};
+
+module.exports = { protect, authenticate, optionalAuth, getUserFromRequest };

@@ -4,3 +4,4 @@ dist
 *.crt
 *.pem
 *.key
+*.local.md

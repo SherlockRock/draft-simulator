@@ -13,11 +13,16 @@ const shareRoutes = require("./routes/shares");
 const authRoutes = require("./routes/auth");
 const canvasRoutes = require("./routes/canvas");
 const activityRoutes = require("./routes/activity");
+const versusRoutes = require("./routes/versus");
 const Draft = require("./models/Draft");
 const User = require("./models/User");
 const setupAssociations = require("./models/associations");
 const socketService = require("./middleware/socketService");
 const { UserCanvas, CanvasDraft } = require("./models/Canvas");
+const { setupVersusHandlers } = require("./socketHandlers/versusHandlers");
+const { initializeTimerService } = require("./services/versusTimerService");
+const HeartbeatManager = require("./services/heartbeatManager");
+const VersusSessionManager = require("./services/versusSessionManager");
 require("dotenv").config();
 
 async function main() {
@@ -59,6 +64,7 @@ async function main() {
   app.use("/api/shares", shareRoutes);
   app.use("/api/canvas", canvasRoutes);
   app.use("/api/activity", activityRoutes);
+  app.use("/api/versus-drafts", versusRoutes);
 
   let server;
   if (process.env.ENVIRONMENT === "development") {
@@ -80,6 +86,11 @@ async function main() {
   });
 
   socketService.init(io);
+
+  // Initialize versus timer service
+  initializeTimerService(io);
+  const heartbeatManager = new HeartbeatManager(io);
+  const versusSessionManager = new VersusSessionManager(heartbeatManager);
 
   io.use(async (socket, next) => {
     const handshake = socket.handshake;
@@ -115,6 +126,11 @@ async function main() {
 
   io.on("connection", (socket) => {
     console.log(`New client connected: ${socket.id}`);
+
+    // Set up versus-specific handlers
+    setupVersusHandlers(io, socket, versusSessionManager);
+    heartbeatManager.registerClient(socket, socket.id);
+
     socket.on("newDraft", async (data) => {
       try {
         if ("id" in data && data.picks.length === 20) {

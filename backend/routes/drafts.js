@@ -274,4 +274,27 @@ router.get("/:draftId/canvases", async (req, res) => {
   }
 });
 
+// POST /api/drafts/:id/complete - Mark draft as complete with winner (for versus drafts)
+router.post("/:id/complete", protect, async (req, res) => {
+  try {
+    const { winner } = req.body;
+
+    const draft = await Draft.findByPk(req.params.id);
+
+    if (!draft) {
+      return res.status(404).json({ error: "Draft not found" });
+    }
+
+    await draft.update({
+      completed: true,
+      winner: winner || null,
+    });
+
+    res.json(draft);
+  } catch (error) {
+    console.error("Error completing draft:", error);
+    res.status(500).json({ error: "Failed to complete draft" });
+  }
+});
+
 module.exports = router;

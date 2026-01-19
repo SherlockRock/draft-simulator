@@ -1,13 +1,14 @@
 import { Component, Show, createMemo } from "solid-js";
 import { useParams } from "@solidjs/router";
-import { useVersusContext, ActiveDraftState, DraftCallbacks } from "../workflows/VersusWorkflow";
+import { useVersusContext } from "../workflows/VersusWorkflow";
 import { VersusChatPanel } from "./VersusChatPanel";
 import { PickChangeModal } from "./PickChangeModal";
 import { VersionFooter } from "./VersionFooter";
 
 const VersusFlowPanelContent: Component = () => {
     const params = useParams<{ id: string; draftId: string; linkToken: string }>();
-    const { versusContext, socket, activeDraftState, draftCallbacks } = useVersusContext();
+    const { versusContext, socket, activeDraftState, draftCallbacks } =
+        useVersusContext();
 
     const versusDraft = createMemo(() => versusContext().versusDraft);
     const myParticipant = createMemo(() => versusContext().myParticipant);
@@ -60,7 +61,7 @@ const VersusFlowPanelContent: Component = () => {
                                 </div>
                                 <div class="text-base font-bold text-teal-400">
                                     {draftState()?.draft?.seriesIndex !== undefined
-                                        ? (draftState()!.draft.seriesIndex + 1)
+                                        ? draftState()!.draft.seriesIndex + 1
                                         : "—"}
                                 </div>
                             </div>
@@ -78,7 +79,13 @@ const VersusFlowPanelContent: Component = () => {
                     </div>
 
                     {/* Draft Status Indicator - Paused */}
-                    <Show when={isInDraftView() && draftState()?.isPaused && callbacks()?.draftStarted()}>
+                    <Show
+                        when={
+                            isInDraftView() &&
+                            draftState()?.isPaused &&
+                            callbacks()?.draftStarted()
+                        }
+                    >
                         <div class="mt-3 rounded-lg border-2 border-yellow-500/50 bg-yellow-500/10 px-3 py-2 text-center backdrop-blur-sm">
                             <div class="flex items-center justify-center gap-2">
                                 <span class="text-sm">⏸️</span>
@@ -108,16 +115,16 @@ const VersusFlowPanelContent: Component = () => {
                             </button>
                         </Show>
 
-                        {/* Pick Change Modal - placeholder, will be connected in Task 6 */}
-                        <Show when={draftState()?.draft}>
+                        {/* Pick Change Modal */}
+                        <Show when={draftState()?.draft && callbacks()}>
                             <PickChangeModal
                                 draft={draftState()!.draft}
                                 myRole={myRole}
                                 isCompetitive={versusDraft()!.competitive}
-                                pendingRequest={null}
-                                onRequestChange={() => {}}
-                                onApproveChange={() => {}}
-                                onRejectChange={() => {}}
+                                pendingRequest={callbacks()!.pendingPickChangeRequest()}
+                                onRequestChange={callbacks()!.handleRequestPickChange}
+                                onApproveChange={callbacks()!.handleApprovePickChange}
+                                onRejectChange={callbacks()!.handleRejectPickChange}
                             />
                         </Show>
                     </div>

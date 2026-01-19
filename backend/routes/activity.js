@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Draft = require("../models/Draft");
 const { Canvas, UserCanvas } = require("../models/Canvas");
+const VersusDraft = require("../models/VersusDraft");
 const User = require("../models/User");
 const { getUserFromRequest } = require("../middleware/auth");
 const { Op } = require("sequelize");
@@ -25,37 +26,57 @@ router.get("/recent", async (req, res) => {
     // Fetch more items than needed to ensure proper pagination after sorting
     const fetchLimit = 50;
 
-    // Get user's owned drafts (standalone and versus only) if needed
+    // Get user's owned drafts (standalone only - versus series drafts are excluded) if needed
     const ownedDrafts =
-      resourceType === "canvas"
+      resourceType === "canvas" || resourceType === "versus"
         ? []
         : await Draft.findAll({
             where: {
               owner_id: user.id,
               type: { [Op.in]: ["standalone", "versus"] },
+              versus_draft_id: null, // Exclude drafts that are part of a versus series
             },
             order: [["updatedAt", "DESC"]],
             limit: fetchLimit,
-            attributes: ["id", "name", "description", "public", "type", "icon", "updatedAt", "createdAt"],
+            attributes: [
+              "id",
+              "name",
+              "description",
+              "public",
+              "type",
+              "icon",
+              "updatedAt",
+              "createdAt",
+            ],
           });
 
-    // Get drafts shared with user (standalone and versus only) if needed
+    // Get drafts shared with user (standalone only - versus series drafts are excluded) if needed
     const sharedDrafts =
-      resourceType === "canvas"
+      resourceType === "canvas" || resourceType === "versus"
         ? []
         : await user.getSharedDrafts({
             where: {
-              type: { [Op.in]: ["standalone", "versus"] },
+              type: { [Op.in]: ["standalone"] },
+              versus_draft_id: null, // Exclude drafts that are part of a versus series
             },
             order: [["updatedAt", "DESC"]],
             limit: fetchLimit,
-            attributes: ["id", "name", "description", "public", "type", "icon", "updatedAt", "createdAt"],
+            attributes: [
+              "id",
+              "name",
+              "description",
+              "public",
+              "type",
+              "icon",
+              "updatedAt",
+              "createdAt",
+            ],
             joinTableAttributes: [],
           });
 
     // Get user's canvases if needed
     const canvases =
-      resourceType === "draft"
+      resourceType === "draft" || resourceType === "versus"
         ? []
         : await Canvas.findAll({
             include: [
@@ -71,7 +92,36 @@ router.get("/recent", async (req, res) => {
             ],
             order: [["updatedAt", "DESC"]],
             limit: fetchLimit,
-            attributes: ["id", "name", "description", "icon", "updatedAt", "createdAt"],
+            attributes: [
+              "id",
+              "name",
+              "description",
+              "icon",
+              "updatedAt",
+              "createdAt",
+            ],
+          });
+
+    // Get user's versus drafts if needed
+    const versusDrafts =
+      resourceType === "draft" || resourceType === "canvas"
+        ? []
+        : await VersusDraft.findAll({
+            where: { owner_id: user.id },
+            order: [["updatedAt", "DESC"]],
+            limit: fetchLimit,
+            attributes: [
+              "id",
+              "name",
+              "blueTeamName",
+              "redTeamName",
+              "description",
+              "length",
+              "competitive",
+              "updatedAt",
+              "createdAt",
+              "icon",
+            ],
           });
 
     // Transform drafts to activity format
@@ -114,10 +164,28 @@ router.get("/recent", async (req, res) => {
       is_owner: true, // We don't track canvas ownership separately
     }));
 
+    // Transform versus drafts to activity format
+    const versusActivities = versusDrafts.map((versus) => ({
+      resource_type: "versus",
+      resource_id: versus.id,
+      resource_name: versus.name,
+      description: versus.description,
+      blueTeamName: versus.blueTeamName,
+      redTeamName: versus.redTeamName,
+      length: versus.length,
+      competitive: versus.competitive,
+      timestamp: versus.updatedAt,
+      created_at: versus.createdAt,
+      icon: versus.icon,
+      is_owner: true,
+    }));
+
     // Combine and sort by timestamp
-    const allActivities = [...draftActivities, ...canvasActivities].sort(
-      (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
-    );
+    const allActivities = [
+      ...draftActivities,
+      ...canvasActivities,
+      ...versusActivities,
+    ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     // Paginate the results
     const paginatedActivities = allActivities.slice(offset, offset + pageSize);
     const hasMore = offset + pageSize < allActivities.length;

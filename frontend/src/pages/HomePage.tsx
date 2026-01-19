@@ -64,11 +64,10 @@ const HomePage: Component = () => {
                         />
                         <FlowCard
                             title="Versus"
-                            description="Coming soon"
+                            description="Head-to-head competitive draft series"
                             icon="⚔️"
                             onClick={() => navigate("/versus")}
                             flowType="versus"
-                            disabled
                         />
                     </div>
                 </div>

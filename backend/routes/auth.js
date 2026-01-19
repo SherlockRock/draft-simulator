@@ -12,11 +12,11 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
-  `${process.env.FRONTEND_ORIGIN}/oauth2callback`
+  `${process.env.FRONTEND_ORIGIN}/oauth2callback`,
 );
 
 router.post("/google/callback", async (req, res) => {
-  const { code } = req.body;
+  const { code, state } = req.body;
 
   if (!code) {
     return res.status(400).json({ error: "Code is required" });
@@ -82,7 +82,7 @@ router.post("/google/callback", async (req, res) => {
       process.env.REFRESH_TOKEN_SECRET,
       {
         expiresIn: "30d",
-      }
+      },
     );
 
     res.cookie("accessToken", accessToken, {
@@ -107,7 +107,25 @@ router.post("/google/callback", async (req, res) => {
       console.error("Error creating new token:", error);
     }
 
-    res.json({ user });
+    // Decode and validate state
+    let returnTo = "/";
+    if (state) {
+      console.log("state", state);
+      try {
+        returnTo = Buffer.from(state, "base64").toString();
+      } catch (e) {
+        console.error("Invalid state parameter:", e);
+      }
+    }
+    console.log("returnTo", returnTo);
+    console.log({
+      user,
+      returnTo, // Send returnTo back to frontend
+    });
+    res.json({
+      user,
+      returnTo, // Send returnTo back to frontend
+    });
   } catch (error) {
     console.error("Error during Google OAuth callback:", error);
     res.status(500).json({ error: "Authentication failed" });

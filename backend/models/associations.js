@@ -3,6 +3,8 @@ const User = require("./User");
 const Draft = require("./Draft");
 const DraftShare = require("./DraftShare");
 const { Canvas, UserCanvas, CanvasDraft, CanvasShare } = require("./Canvas");
+const VersusDraft = require("./VersusDraft");
+const VersusParticipant = require("./VersusParticipant");
 
 const setupAssociations = () => {
   User.hasMany(UserToken);
@@ -56,6 +58,32 @@ const setupAssociations = () => {
     foreignKey: "canvas_id",
     onDelete: "CASCADE",
   });
+
+  // Versus Draft associations
+  User.hasMany(VersusDraft, { foreignKey: "owner_id" });
+  VersusDraft.belongsTo(User, { as: "owner", foreignKey: "owner_id" });
+
+  VersusDraft.hasMany(Draft, {
+    as: "Drafts",
+    foreignKey: "versus_draft_id",
+    onDelete: "CASCADE",
+  });
+  Draft.belongsTo(VersusDraft, {
+    foreignKey: "versus_draft_id",
+    onDelete: "CASCADE",
+  });
+
+  VersusDraft.hasMany(VersusParticipant, {
+    foreignKey: "versus_draft_id",
+    onDelete: "CASCADE",
+  });
+  VersusParticipant.belongsTo(VersusDraft, {
+    foreignKey: "versus_draft_id",
+    onDelete: "CASCADE",
+  });
+
+  User.hasMany(VersusParticipant, { foreignKey: "user_id" });
+  VersusParticipant.belongsTo(User, { foreignKey: "user_id" });
 };
 
 module.exports = setupAssociations;
