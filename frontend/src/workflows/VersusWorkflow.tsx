@@ -11,8 +11,7 @@ import {
 import { useParams, useNavigate, RouteSectionProps } from "@solidjs/router";
 import { useUser } from "../userProvider";
 import FlowPanel from "../components/FlowPanel";
-import { VersionFooter } from "../components/VersionFooter";
-import { VersusChatPanel } from "../components/VersusChatPanel";
+import VersusFlowPanelContent from "../components/VersusFlowPanelContent";
 import {
     VersusDraft,
     VersusParticipant,
@@ -629,9 +628,6 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         setDraftCallbacks(null);
     };
 
-    // Check if we're on a draft view (has both id and draftId params)
-    const isDraftView = () => !!params.id && !!params.draftId;
-
     const contextValue: VersusWorkflowContextValue = {
         versusContext,
         selectRole,
@@ -649,28 +645,13 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
     return (
         <VersusWorkflowContext.Provider value={contextValue}>
             <div class="flex flex-1 overflow-hidden">
-                {/* Hide FlowPanel when viewing individual draft or role selection */}
-                <Show when={!isDraftView() && !params.linkToken}>
+                {/* FlowPanel - always visible except during role selection */}
+                <Show when={!params.linkToken}>
                     <FlowPanel flow="versus">
-                        <div class="flex h-full flex-col justify-between gap-4 pt-4">
-                            <div class="min-h-0 flex-1">
-                                <Show
-                                    when={versusContext().versusDraft && currentSocket()}
-                                >
-                                    <VersusChatPanel
-                                        socket={currentSocket()}
-                                        versusDraftId={versusContext().versusDraft!.id}
-                                        currentRole={
-                                            versusContext().myParticipant?.role || null
-                                        }
-                                    />
-                                </Show>
-                            </div>
-                            <VersionFooter />
-                        </div>
+                        <VersusFlowPanelContent />
                     </FlowPanel>
                 </Show>
-                {/* Child routes (dashboard, role selection, series overview, or draft view) render here */}
+                {/* Child routes render here */}
                 {props.children}
             </div>
         </VersusWorkflowContext.Provider>
