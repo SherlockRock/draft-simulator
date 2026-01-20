@@ -267,6 +267,22 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
             });
         };
 
+        // Draft status update handler (for completion status sync)
+        const handleDraftStatusUpdate = (data: { draftId: string; completed: boolean }) => {
+            setVersusContext((prev) => {
+                if (!prev.versusDraft?.Drafts) return prev;
+                return {
+                    ...prev,
+                    versusDraft: {
+                        ...prev.versusDraft,
+                        Drafts: prev.versusDraft.Drafts.map((d) =>
+                            d.id === data.draftId ? { ...d, completed: data.completed } : d
+                        ),
+                    },
+                };
+            });
+        };
+
         // Register listeners
         sock.on("versusJoinResponse", handleJoinResponse);
         sock.on("versusParticipantsUpdate", handleParticipantUpdate);
@@ -275,6 +291,7 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         sock.on("newVersusMessage", handleNewVersusMessage);
         sock.on("versusUserCountUpdate", handleVersusUserCountUpdate);
         sock.on("versusWinnerUpdate", handleWinnerUpdate);
+        sock.on("versusDraftStatusUpdate", handleDraftStatusUpdate);
 
         // Mark this socket as having listeners
         socketWithListeners = sock;
@@ -298,6 +315,7 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
             sock.off("newVersusMessage");
             sock.off("versusUserCountUpdate");
             sock.off("versusWinnerUpdate");
+            sock.off("versusDraftStatusUpdate");
         });
 
         return currentRun;

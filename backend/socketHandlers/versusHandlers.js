@@ -1063,6 +1063,14 @@ async function processPickLock(io, draftId, team) {
     draft.completed = true;
     state.timerStartedAt = null;
     await draft.save();
+
+    // Also broadcast to versus room so series overview updates
+    if (draft.versus_draft_id) {
+      io.to(`versus:${draft.versus_draft_id}`).emit("versusDraftStatusUpdate", {
+        draftId,
+        completed: true,
+      });
+    }
   }
 
   // Broadcast update

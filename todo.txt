@@ -10,6 +10,9 @@ Versus functionality:
     choosing winner also needs work
     updating versus isn't working
     draft completeness not getting updated live
+    once winner is calculated for comp games remaining games should not display?
+    anonymouse people should be able ot make drafts
+    reconnect not correctly sending out role claim
 
 Canvas Functionality:
     replace draft list button Functionality with right click menus?
