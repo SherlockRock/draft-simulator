@@ -5,7 +5,8 @@ import {
     createContext,
     useContext,
     Setter,
-    Resource
+    Resource,
+    Show
 } from "solid-js";
 import { useParams, RouteSectionProps } from "@solidjs/router";
 import { useUser } from "../userProvider";
@@ -75,27 +76,26 @@ const DraftWorkflow: Component<RouteSectionProps> = (props) => {
     return (
         <DraftContext.Provider value={{ draft, mutateDraft, draftList, mutateDraftList }}>
             <div class="flex flex-1 overflow-hidden">
-                <FlowPanel flow="draft">
-                    <div class="flex h-full flex-col justify-between gap-4 pt-4">
-                        <DraftList
-                            currentDraft={draft}
-                            mutateDraft={mutateDraft}
-                            draftList={draftList}
-                            mutateDraftList={mutateDraftList}
-                            socket={socketAccessor}
-                        />
-                        {/* Only show Chat when viewing a specific draft */}
-                        {isDetailView() && (
+                <Show when={isDetailView()}>
+                    <FlowPanel flow="draft">
+                        <div class="flex h-full flex-col justify-between gap-4 pt-4">
+                            <DraftList
+                                currentDraft={draft}
+                                mutateDraft={mutateDraft}
+                                draftList={draftList}
+                                mutateDraftList={mutateDraftList}
+                                socket={socketAccessor}
+                            />
                             <div class="flex-1">
                                 <Chat
                                     currentDraft={params.id || ""}
                                     socket={socketAccessor()}
                                 />
                             </div>
-                        )}
-                        <VersionFooter />
-                    </div>
-                </FlowPanel>
+                            <VersionFooter />
+                        </div>
+                    </FlowPanel>
+                </Show>
                 {/* Child routes (dashboard or detail view) render here */}
                 {props.children}
             </div>

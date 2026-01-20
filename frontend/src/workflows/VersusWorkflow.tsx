@@ -551,8 +551,8 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
     return (
         <VersusWorkflowContext.Provider value={contextValue}>
             <div class="flex flex-1 overflow-hidden">
-                {/* FlowPanel - always visible except during role selection */}
-                <Show when={!params.linkToken}>
+                {/* FlowPanel - visible in detail view, hidden on dashboard and during role selection */}
+                <Show when={!params.linkToken && params.id}>
                     <FlowPanel flow="versus">
                         <VersusFlowPanelContent />
                     </FlowPanel>

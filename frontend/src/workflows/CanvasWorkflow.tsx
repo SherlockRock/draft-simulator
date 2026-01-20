@@ -228,7 +228,8 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                 }
             />
             <div class="flex flex-1 overflow-hidden">
-                <FlowPanel flow="canvas">
+                <Show when={isDetailView()}>
+                    <FlowPanel flow="canvas">
                     <div class="flex h-full flex-col gap-2 pt-4">
                         {/* Canvas Selector */}
                         <CanvasSelector selectedId={params.id} />
@@ -394,6 +395,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                         <VersionFooter />
                     </div>
                 </FlowPanel>
+                </Show>
                 {/* Child routes (dashboard or detail view) render here */}
                 {props.children}
             </div>
