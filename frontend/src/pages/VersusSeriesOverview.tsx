@@ -81,7 +81,7 @@ const VersusSeriesOverview: Component = () => {
         sock.emit("versusReportWinner", {
             versusDraftId: vd.id,
             draftId,
-            winner,
+            winner
         });
     };
 
@@ -387,59 +387,66 @@ const VersusSeriesOverview: Component = () => {
                                                             {index() + 1}
                                                         </div>
 
-                                                        <div>
-                                                            <div class="flex items-center gap-3">
-                                                                <h3 class="font-semibold text-slate-100">
-                                                                    Game {index() + 1}
-                                                                </h3>
+                                                        <div class="flex items-center gap-3">
+                                                            <h3 class="font-semibold text-slate-100">
+                                                                Game {index() + 1}
+                                                            </h3>
 
-                                                                {/* Status indicator */}
-                                                                <span
-                                                                    class={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                                                                        status ===
-                                                                        "complete"
-                                                                            ? "bg-green-500/20 text-green-300"
-                                                                            : status ===
-                                                                                "active"
-                                                                              ? "bg-teal-500/20 text-teal-300"
-                                                                              : status ===
-                                                                                  "locked"
-                                                                                ? "bg-slate-700/50 text-slate-500"
-                                                                                : "bg-slate-700/50 text-slate-400"
-                                                                    }`}
-                                                                >
-                                                                    {status === "complete"
-                                                                        ? "Complete"
+                                                            {/* Status indicator */}
+                                                            <span
+                                                                class={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                                                    status === "complete"
+                                                                        ? "bg-green-500/20 text-green-300"
                                                                         : status ===
                                                                             "active"
-                                                                          ? "In Progress"
+                                                                          ? "bg-teal-500/20 text-teal-300"
                                                                           : status ===
                                                                               "locked"
-                                                                            ? "Locked"
-                                                                            : "Upcoming"}
-                                                                </span>
-                                                            </div>
+                                                                            ? "bg-slate-700/50 text-slate-500"
+                                                                            : "bg-slate-700/50 text-slate-400"
+                                                                }`}
+                                                            >
+                                                                {status === "complete"
+                                                                    ? "Complete"
+                                                                    : status === "active"
+                                                                      ? "In Progress"
+                                                                      : status ===
+                                                                          "locked"
+                                                                        ? "Locked"
+                                                                        : "Upcoming"}
+                                                            </span>
 
                                                             {/* Winner display / reporter */}
                                                             <Show when={draft.completed}>
-                                                                <div class="mt-1.5">
-                                                                    <WinnerReporter
-                                                                        draftId={draft.id}
-                                                                        blueTeamName={versusDraft()!.blueTeamName}
-                                                                        redTeamName={versusDraft()!.redTeamName}
-                                                                        currentWinner={draft.winner}
-                                                                        canEdit={canReportWinner(
-                                                                            draft,
-                                                                            versusDraft()!,
-                                                                            myRole(),
-                                                                            userId()
-                                                                        )}
-                                                                        onReportWinner={(winner) =>
-                                                                            handleReportWinner(draft.id, winner)
-                                                                        }
-                                                                        compact={true}
-                                                                    />
-                                                                </div>
+                                                                <WinnerReporter
+                                                                    draftId={draft.id}
+                                                                    blueTeamName={
+                                                                        versusDraft()!
+                                                                            .blueTeamName
+                                                                    }
+                                                                    redTeamName={
+                                                                        versusDraft()!
+                                                                            .redTeamName
+                                                                    }
+                                                                    currentWinner={
+                                                                        draft.winner
+                                                                    }
+                                                                    canEdit={canReportWinner(
+                                                                        draft,
+                                                                        versusDraft()!,
+                                                                        myRole(),
+                                                                        userId()
+                                                                    )}
+                                                                    onReportWinner={(
+                                                                        winner
+                                                                    ) =>
+                                                                        handleReportWinner(
+                                                                            draft.id,
+                                                                            winner
+                                                                        )
+                                                                    }
+                                                                    compact={true}
+                                                                />
                                                             </Show>
                                                         </div>
                                                     </div>
