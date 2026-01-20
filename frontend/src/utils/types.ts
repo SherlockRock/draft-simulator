@@ -81,6 +81,13 @@ export type ContextMenuPosition = {
     y: number; // Screen coordinates
 };
 
+export type ChatMessage = {
+    username: string;
+    role: "blue_captain" | "red_captain" | "spectator";
+    message: string;
+    timestamp: number;
+};
+
 export type VersusDraft = {
     id: string;
     name: string;

@@ -17,7 +17,8 @@ import {
     VersusParticipant,
     VersusSessionState,
     VersusJoinResponse,
-    VersusRoleSelectResponse
+    VersusRoleSelectResponse,
+    ChatMessage
 } from "../utils/types";
 import { saveVersusRole, getVersusRole } from "../utils/versusStorage";
 import { Socket } from "socket.io-client";
@@ -67,6 +68,11 @@ type VersusWorkflowContextValue = {
     draftCallbacks: () => DraftCallbacks | null;
     registerDraftCallbacks: (callbacks: DraftCallbacks) => void;
     unregisterDraftCallbacks: () => void;
+
+    // Chat state (lifted to context to persist across FlowPanel open/close)
+    chatMessages: () => ChatMessage[];
+    addChatMessage: (message: ChatMessage) => void;
+    chatUserCount: () => number;
 };
 
 const VersusWorkflowContext = createContext<VersusWorkflowContextValue>();
@@ -116,6 +122,14 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         null
     );
     const [draftCallbacks, setDraftCallbacks] = createSignal<DraftCallbacks | null>(null);
+
+    // Chat state (lifted to context to persist across FlowPanel open/close)
+    const [chatMessages, setChatMessages] = createSignal<ChatMessage[]>([]);
+    const [chatUserCount, setChatUserCount] = createSignal(0);
+
+    const addChatMessage = (message: ChatMessage) => {
+        setChatMessages((prev) => [...prev, message]);
+    };
 
     // Debug: Log context changes
     createEffect(() => {
@@ -325,11 +339,23 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
             toast.error(data.error);
         };
 
+        // Chat message handler (lifted to context for persistence)
+        const handleNewVersusMessage = (data: ChatMessage) => {
+            addChatMessage(data);
+        };
+
+        // Chat user count handler
+        const handleVersusUserCountUpdate = (count: number) => {
+            setChatUserCount(count);
+        };
+
         // Register listeners
         sock.on("versusJoinResponse", handleJoinResponse);
         sock.on("versusParticipantsUpdate", handleParticipantUpdate);
         sock.on("versusDraftUpdate", handleVersusDraftUpdate);
         sock.on("versusError", handleVersusError);
+        sock.on("newVersusMessage", handleNewVersusMessage);
+        sock.on("versusUserCountUpdate", handleVersusUserCountUpdate);
 
         console.log("Socket listeners registered on:", sock.id);
         console.log("Socket connected:", sock.connected);
@@ -361,7 +387,8 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
             sock.off("versusParticipantsUpdate");
             sock.off("versusDraftUpdate");
             sock.off("versusError");
-            sock.off("test-response");
+            sock.off("newVersusMessage");
+            sock.off("versusUserCountUpdate");
         });
 
         return currentRun;
@@ -452,6 +479,10 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
                 connected: false,
                 error: null
             });
+
+            // Clear chat messages when switching series
+            setChatMessages([]);
+            setChatUserCount(0);
 
             // Clear pending join so the new join can happen
             setPendingJoin(null);
@@ -595,6 +626,10 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
             connected: false,
             error: null
         });
+
+        // Clear chat messages when leaving session
+        setChatMessages([]);
+        setChatUserCount(0);
     };
 
     const releaseRole = () => {
@@ -646,7 +681,10 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         unregisterDraftState,
         draftCallbacks,
         registerDraftCallbacks,
-        unregisterDraftCallbacks
+        unregisterDraftCallbacks,
+        chatMessages,
+        addChatMessage,
+        chatUserCount
     };
 
     return (

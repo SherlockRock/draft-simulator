@@ -135,7 +135,7 @@ const VersusFlowPanelContent: Component = () => {
             <Show when={isConnected() && versusDraft() && socket()}>
                 <div class="min-h-0 flex-1">
                     <VersusChatPanel
-                        socket={socket()}
+                        socket={socket()!}
                         versusDraftId={versusDraft()!.id}
                         currentRole={myRole()}
                     />

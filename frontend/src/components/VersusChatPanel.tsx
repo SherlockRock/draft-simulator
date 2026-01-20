@@ -1,12 +1,6 @@
-import { Component, For, createSignal, createEffect, onCleanup } from "solid-js";
+import { Component, For, createSignal } from "solid-js";
 import { useUser } from "../userProvider";
-
-interface ChatMessage {
-    username: string;
-    role: "blue_captain" | "red_captain" | "spectator";
-    message: string;
-    timestamp: number;
-}
+import { useVersusContext } from "../workflows/VersusWorkflow";
 
 interface VersusChatPanelProps {
     socket: any;
@@ -17,29 +11,9 @@ interface VersusChatPanelProps {
 export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
     const accessor = useUser();
     const [user] = accessor();
+    const { chatMessages } = useVersusContext();
     const [messageInput, setMessageInput] = createSignal("");
-    const [messages, setMessages] = createSignal<ChatMessage[]>([]);
-    const [userCount, setUserCount] = createSignal(0);
     let messagesEndRef: HTMLDivElement | undefined;
-
-    // Socket effect to listen for incoming messages
-    createEffect(() => {
-        const socket = props.socket;
-        if (!socket) return;
-
-        socket.on("newVersusMessage", (data: ChatMessage) => {
-            setMessages((prev) => [...prev, data]);
-        });
-
-        socket.on("versusUserCountUpdate", (count: number) => {
-            setUserCount(count);
-        });
-
-        onCleanup(() => {
-            socket.off("newVersusMessage");
-            socket.off("versusUserCountUpdate");
-        });
-    });
 
     const handleSend = (e: Event) => {
         e.preventDefault();
@@ -69,39 +43,19 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
         }
     };
 
-    const getRoleTag = (role: string) => {
-        switch (role) {
-            case "blue_captain":
-                return "[BLU]";
-            case "red_captain":
-                return "[RED]";
-            default:
-                return "[SPEC]";
-        }
-    };
-
     return (
         <div class="flex h-full flex-col">
             <div class="flex flex-1 flex-col rounded-md border border-slate-500 bg-slate-700">
                 {/* Header */}
                 <div class="flex justify-between border-b border-slate-500 p-2 text-sm font-medium text-slate-50">
                     <p>Series Chat</p>
-                    <p class="flex items-center gap-1.5 text-slate-400">
-                        <span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                        {userCount()} online
-                    </p>
                 </div>
 
                 {/* Messages */}
                 <div class="flex-1 overflow-y-auto p-2">
-                    <For each={messages()}>
+                    <For each={chatMessages()}>
                         {(msg) => (
                             <div class="mb-2 flex flex-wrap text-sm">
-                                <span
-                                    class={`font-mono text-xs ${getUsernameColor(msg.role)} opacity-70`}
-                                >
-                                    {getRoleTag(msg.role)}
-                                </span>
                                 <span
                                     class={`pl-1 font-medium ${getUsernameColor(msg.role)}`}
                                 >
