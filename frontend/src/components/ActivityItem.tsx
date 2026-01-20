@@ -366,21 +366,30 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     return (
         <div
             onClick={handleClick}
-            class={`relative flex cursor-pointer flex-col gap-4 rounded-lg border-2 transition-all ${colors.border} ${colors.bg}`}
+            class={`relative flex cursor-pointer flex-col rounded-lg border-2 transition-all ${colors.border} ${colors.bg}`}
         >
-            <div class="flex items-center justify-between">
-                <div class="flex gap-4 overflow-hidden overflow-ellipsis p-4">
-                    <div class="flex flex-col gap-3">
-                        <IconDisplay
-                            icon={props.activity.icon}
-                            defaultIcon={getDefaultIcon()}
-                            size="md"
-                        />
+            {/* Header section: icon spans title + team names rows */}
+            <div class="flex gap-3 p-4 pb-2">
+                <IconDisplay
+                    icon={props.activity.icon}
+                    defaultIcon={getDefaultIcon()}
+                    size="md"
+                />
+                {/* Right side: title row + team names row */}
+                <div class="flex min-w-0 flex-1 flex-col gap-1">
+                    {/* Title row: title + actions */}
+                    <div class="flex items-center gap-2">
+                        <span
+                            class={`min-w-0 flex-1 truncate text-lg font-semibold ${colors.text}`}
+                        >
+                            {props.activity.resource_name}
+                        </span>
+                        {/* Actions/badge */}
                         <Show
                             when={props.activity.is_owner}
                             fallback={
                                 <span
-                                    class={`rounded px-2 py-1 text-center text-xs ${colors.badge}`}
+                                    class={`shrink-0 rounded px-2 py-1 text-center text-xs ${colors.badge}`}
                                 >
                                     Shared
                                 </span>
@@ -388,10 +397,10 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                         >
                             <div
                                 ref={shareButtonRef}
-                                class="relative"
+                                class="relative shrink-0"
                                 onFocusOut={handleShareFocusOut}
                             >
-                                <div class="flex justify-center gap-2">
+                                <div class="flex items-center gap-2">
                                     <Show
                                         when={props.activity.resource_type === "canvas"}
                                     >
@@ -454,45 +463,54 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                             </div>
                         </Show>
                     </div>
-                    <div class="flex max-w-full flex-col justify-center gap-2">
-                        <div class="flex items-center gap-2">
-                            <span
-                                class={`text-lg font-semibold ${colors.text} max-w-full overflow-hidden`}
-                            >
-                                {props.activity.resource_name}
+                    {/* Team names row (versus only) */}
+                    <Show when={props.activity.resource_type === "versus"}>
+                        <div class="flex flex-wrap items-center gap-x-2 text-sm">
+                            <span class="text-blue-400">
+                                {props.activity.blueTeamName}
                             </span>
+                            <span class="text-slate-500">vs</span>
+                            <span class="text-red-400">{props.activity.redTeamName}</span>
                         </div>
-                        <Show when={props.activity.resource_type === "versus"}>
-                            <div class="flex items-center gap-2 text-sm">
-                                <span class="text-blue-400">
-                                    {props.activity.blueTeamName}
-                                </span>
-                                <span class="text-slate-500">vs</span>
-                                <span class="text-red-400">
-                                    {props.activity.redTeamName}
-                                </span>
-                                <span class="text-slate-500">•</span>
-                                <span class="text-slate-400">
-                                    Bo{props.activity.length}
-                                </span>
-                                <Show when={props.activity.competitive}>
-                                    <span class="text-slate-500">•</span>
-                                    <span class="rounded bg-orange-500/20 px-2 py-0.5 text-xs text-orange-300">
-                                        Competitive
-                                    </span>
-                                </Show>
-                            </div>
-                        </Show>
+                    </Show>
+                </div>
+            </div>
+
+            {/* Description - full width from left edge */}
+            <Show when={props.activity.description}>
+                <p class="line-clamp-2 px-4 text-sm text-slate-300">
+                    {props.activity.description}
+                </p>
+            </Show>
+
+            {/* Spacer to push footer to bottom */}
+            <div class="flex-1" />
+
+            {/* Footer row: timestamp left, badges right */}
+            <div class="flex items-center justify-between px-4 pb-3 pt-2">
+                <span class="text-sm text-slate-400">
+                    {formatTimestamp(props.activity.timestamp)}
+                </span>
+                <Show when={props.activity.resource_type === "versus"}>
+                    <div class="flex items-center gap-2">
                         <span class="text-sm text-slate-400">
-                            {formatTimestamp(props.activity.timestamp)}
+                            Bo{props.activity.length}
                         </span>
-                        <Show when={props.activity.description}>
-                            <p class="line-clamp-2 text-sm text-slate-300">
-                                {props.activity.description}
-                            </p>
+                        <span class="text-slate-500">•</span>
+                        <Show
+                            when={props.activity.competitive}
+                            fallback={
+                                <span class="rounded bg-teal-500/20 px-2 py-0.5 text-xs text-teal-300">
+                                    Scrim
+                                </span>
+                            }
+                        >
+                            <span class="rounded bg-orange-500/20 px-2 py-0.5 text-xs text-orange-300">
+                                Competitive
+                            </span>
                         </Show>
                     </div>
-                </div>
+                </Show>
             </div>
 
             {/* Share Popup - positioned at card level to avoid overflow clipping */}

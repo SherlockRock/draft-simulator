@@ -37,7 +37,7 @@ const HomePage: Component = () => {
 
     return (
         <div class="flex-1 overflow-auto bg-slate-900">
-            <div class="mx-auto max-w-6xl p-8">
+            <div class="mx-auto max-w-7xl p-8">
                 <h1 class="mb-8 text-4xl font-bold text-slate-50">
                     Welcome to Draft Simulator
                 </h1>
