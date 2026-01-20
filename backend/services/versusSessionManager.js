@@ -159,6 +159,16 @@ class VersusSessionManager {
       participant.lastSeenAt = Date.now();
     }
   }
+
+  /**
+   * Get participant by socket ID
+   */
+  getParticipantBySocket(versusDraftId, socketId) {
+    const session = this.sessions.get(versusDraftId);
+    if (!session) return null;
+    return session.participants.get(socketId) || null;
+  }
 }
+
 
 module.exports = VersusSessionManager;

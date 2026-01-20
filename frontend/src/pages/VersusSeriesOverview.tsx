@@ -5,11 +5,17 @@ import toast from "solid-toast";
 import { useVersusContext } from "../workflows/VersusWorkflow";
 import { RoleSwitcher } from "../components/RoleSwitcher";
 import { IconDisplay } from "../components/IconDisplay";
+import { WinnerReporter } from "../components/WinnerReporter";
+import { canReportWinner } from "../utils/versusPermissions";
+import { useUser } from "../userProvider";
 
 const VersusSeriesOverview: Component = () => {
     const params = useParams();
     const navigate = useNavigate();
-    const { versusContext } = useVersusContext();
+    const { versusContext, socket } = useVersusContext();
+    const accessor = useUser();
+    const [user] = accessor();
+    const userId = createMemo(() => user()?.id || null);
 
     const [copied, setCopied] = createSignal(false);
     const [showSharePopover, setShowSharePopover] = createSignal(false);
@@ -66,6 +72,18 @@ const VersusSeriesOverview: Component = () => {
     };
 
     const getWinsNeeded = () => Math.ceil((versusDraft()?.length || 1) / 2);
+
+    const handleReportWinner = (draftId: string, winner: "blue" | "red") => {
+        const sock = socket();
+        const vd = versusDraft();
+        if (!sock || !vd) return;
+
+        sock.emit("versusReportWinner", {
+            versusDraftId: vd.id,
+            draftId,
+            winner,
+        });
+    };
 
     return (
         <div class="flex-1 overflow-auto bg-slate-950">
@@ -402,22 +420,25 @@ const VersusSeriesOverview: Component = () => {
                                                                 </span>
                                                             </div>
 
-                                                            {/* Winner display */}
-                                                            <Show when={winner}>
-                                                                <div class="mt-1.5 flex items-center gap-2 text-sm">
-                                                                    <span class="text-slate-500">
-                                                                        Winner:
-                                                                    </span>
-                                                                    <span
-                                                                        class={`font-medium ${
-                                                                            draft.winner ===
-                                                                            "blue"
-                                                                                ? "text-blue-400"
-                                                                                : "text-red-400"
-                                                                        }`}
-                                                                    >
-                                                                        {winner}
-                                                                    </span>
+                                                            {/* Winner display / reporter */}
+                                                            <Show when={draft.completed}>
+                                                                <div class="mt-1.5">
+                                                                    <WinnerReporter
+                                                                        draftId={draft.id}
+                                                                        blueTeamName={versusDraft()!.blueTeamName}
+                                                                        redTeamName={versusDraft()!.redTeamName}
+                                                                        currentWinner={draft.winner}
+                                                                        canEdit={canReportWinner(
+                                                                            draft,
+                                                                            versusDraft()!,
+                                                                            myRole(),
+                                                                            userId()
+                                                                        )}
+                                                                        onReportWinner={(winner) =>
+                                                                            handleReportWinner(draft.id, winner)
+                                                                        }
+                                                                        compact={true}
+                                                                    />
                                                                 </div>
                                                             </Show>
                                                         </div>

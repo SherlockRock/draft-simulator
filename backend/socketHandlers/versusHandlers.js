@@ -971,6 +971,74 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       console.error("Error sending versus message:", error);
     }
   });
+
+  // Report winner for a draft
+  socket.on("versusReportWinner", async (data) => {
+    try {
+      const { versusDraftId, draftId, winner } = data;
+
+      if (!["blue", "red"].includes(winner)) {
+        return socket.emit("versusError", { error: "Invalid winner value" });
+      }
+
+      const draft = await Draft.findByPk(draftId);
+      if (!draft) {
+        return socket.emit("versusError", { error: "Draft not found" });
+      }
+
+      if (!draft.completed) {
+        return socket.emit("versusError", { error: "Draft is not completed" });
+      }
+
+      const versusDraft = await VersusDraft.findByPk(versusDraftId, {
+        include: [{ model: Draft, as: "Drafts" }],
+        order: [[{ model: Draft, as: "Drafts" }, "seriesIndex", "ASC"]],
+      });
+
+      if (!versusDraft) {
+        return socket.emit("versusError", { error: "Versus draft not found" });
+      }
+
+      // Get participant info for this socket
+      const participant = versusSessionManager.getParticipantBySocket(
+        versusDraftId,
+        socket.id
+      );
+
+      const isCaptain =
+        participant?.role === "blue_captain" ||
+        participant?.role === "red_captain";
+      const isOwner = socket.user?.id === versusDraft.owner_id;
+
+      // Determine if this is the "current" game (latest completed, no newer completed drafts)
+      const drafts = versusDraft.Drafts || [];
+      const draftIndex = drafts.findIndex((d) => d.id === draftId);
+      const hasNewerCompletedDraft = drafts
+        .slice(draftIndex + 1)
+        .some((d) => d.completed);
+
+      // Permission check: current game = captains, past games = owner only
+      const canReport = hasNewerCompletedDraft ? isOwner : isCaptain || isOwner;
+
+      if (!canReport) {
+        return socket.emit("versusError", {
+          error: "You don't have permission to report the winner",
+        });
+      }
+
+      // Update the draft winner
+      await draft.update({ winner });
+
+      // Broadcast to all participants
+      io.to(`versus:${versusDraftId}`).emit("versusWinnerUpdate", {
+        draftId,
+        winner,
+      });
+    } catch (error) {
+      console.error("Error reporting winner:", error);
+      socket.emit("versusError", { error: "Failed to report winner" });
+    }
+  });
 }
 
 // Helper function to process pick lock (used by timer and manual lock-in)

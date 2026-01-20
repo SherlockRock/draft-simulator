@@ -4,11 +4,17 @@ import { useVersusContext } from "../workflows/VersusWorkflow";
 import { VersusChatPanel } from "./VersusChatPanel";
 import { PickChangeModal } from "./PickChangeModal";
 import { VersionFooter } from "./VersionFooter";
+import { WinnerReporter } from "./WinnerReporter";
+import { canReportWinner } from "../utils/versusPermissions";
+import { useUser } from "../userProvider";
 
 const VersusFlowPanelContent: Component = () => {
     const params = useParams<{ id: string; draftId: string; linkToken: string }>();
     const { versusContext, socket, activeDraftState, draftCallbacks } =
         useVersusContext();
+    const accessor = useUser();
+    const [user] = accessor();
+    const userId = createMemo(() => user()?.id || null);
 
     const versusDraft = createMemo(() => versusContext().versusDraft);
     const myParticipant = createMemo(() => versusContext().myParticipant);
@@ -35,6 +41,26 @@ const VersusFlowPanelContent: Component = () => {
 
     const draftState = createMemo(() => activeDraftState());
     const callbacks = createMemo(() => draftCallbacks());
+
+    const canEditWinner = createMemo(() => {
+        const draft = draftState()?.draft;
+        const vd = versusDraft();
+        if (!draft || !vd) return false;
+        return canReportWinner(draft, vd, myRole(), userId());
+    });
+
+    const handleReportWinner = (winner: "blue" | "red") => {
+        const sock = socket();
+        const vd = versusDraft();
+        const draft = draftState()?.draft;
+        if (!sock || !vd || !draft) return;
+
+        sock.emit("versusReportWinner", {
+            versusDraftId: vd.id,
+            draftId: draft.id,
+            winner,
+        });
+    };
 
     return (
         <div class="flex h-full flex-col gap-4 pt-4">
@@ -99,14 +125,14 @@ const VersusFlowPanelContent: Component = () => {
             </Show>
 
             {/* Draft Controls Section - only when viewing a draft */}
-            <Show when={isInDraftView() && draftState() && callbacks() && !isSpectator()}>
+            <Show when={isInDraftView() && draftState() && ((callbacks() && !isSpectator()) || draftState()?.completed)}>
                 <div class="border-b border-slate-700 pb-4">
                     <h3 class="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                        Draft Controls
+                        {draftState()?.completed ? "Game Result" : "Draft Controls"}
                     </h3>
                     <div class="space-y-2">
                         {/* Pause Button */}
-                        <Show when={callbacks()?.draftStarted()}>
+                        <Show when={callbacks()?.draftStarted() && !draftState()?.completed && !isSpectator()}>
                             <button
                                 onClick={() => callbacks()?.handlePause()}
                                 class="w-full rounded-lg border-2 border-slate-600/50 bg-slate-700 px-3 py-2 text-xs font-bold text-slate-200 transition-all hover:border-slate-500 hover:bg-slate-600 active:scale-[0.98]"
@@ -116,7 +142,7 @@ const VersusFlowPanelContent: Component = () => {
                         </Show>
 
                         {/* Pick Change Modal */}
-                        <Show when={draftState()?.draft && callbacks()}>
+                        <Show when={draftState()?.draft && callbacks() && !isSpectator()}>
                             <PickChangeModal
                                 draft={draftState()!.draft}
                                 myRole={myRole}
@@ -125,6 +151,18 @@ const VersusFlowPanelContent: Component = () => {
                                 onRequestChange={callbacks()!.handleRequestPickChange}
                                 onApproveChange={callbacks()!.handleApprovePickChange}
                                 onRejectChange={callbacks()!.handleRejectPickChange}
+                            />
+                        </Show>
+
+                        {/* Winner Reporter - shown when draft is completed */}
+                        <Show when={draftState()?.completed && draftState()?.draft}>
+                            <WinnerReporter
+                                draftId={draftState()!.draft.id}
+                                blueTeamName={versusDraft()!.blueTeamName}
+                                redTeamName={versusDraft()!.redTeamName}
+                                currentWinner={draftState()!.draft.winner}
+                                canEdit={canEditWinner()}
+                                onReportWinner={handleReportWinner}
                             />
                         </Show>
                     </div>

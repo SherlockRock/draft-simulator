@@ -251,6 +251,22 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
             setChatUserCount(count);
         };
 
+        // Winner update handler
+        const handleWinnerUpdate = (data: { draftId: string; winner: "blue" | "red" }) => {
+            setVersusContext((prev) => {
+                if (!prev.versusDraft?.Drafts) return prev;
+                return {
+                    ...prev,
+                    versusDraft: {
+                        ...prev.versusDraft,
+                        Drafts: prev.versusDraft.Drafts.map((d) =>
+                            d.id === data.draftId ? { ...d, winner: data.winner } : d
+                        ),
+                    },
+                };
+            });
+        };
+
         // Register listeners
         sock.on("versusJoinResponse", handleJoinResponse);
         sock.on("versusParticipantsUpdate", handleParticipantUpdate);
@@ -258,6 +274,7 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         sock.on("versusError", handleVersusError);
         sock.on("newVersusMessage", handleNewVersusMessage);
         sock.on("versusUserCountUpdate", handleVersusUserCountUpdate);
+        sock.on("versusWinnerUpdate", handleWinnerUpdate);
 
         // Mark this socket as having listeners
         socketWithListeners = sock;
@@ -280,6 +297,7 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
             sock.off("versusError");
             sock.off("newVersusMessage");
             sock.off("versusUserCountUpdate");
+            sock.off("versusWinnerUpdate");
         });
 
         return currentRun;

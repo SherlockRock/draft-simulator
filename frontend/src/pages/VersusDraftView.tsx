@@ -239,6 +239,20 @@ const VersusDraftView: Component = () => {
             });
         });
 
+        // Listen for winner updates
+        socket.on("versusWinnerUpdate", (data: { draftId: string; winner: "blue" | "red" }) => {
+            if (data.draftId === params.draftId) {
+                mutateDraft((prev) => ({
+                    ...prev!,
+                    winner: data.winner
+                }));
+                setVersusState((prev) => ({
+                    ...prev,
+                    winner: data.winner
+                }));
+            }
+        });
+
         onCleanup(() => {
             socket.emit("leaveVersusDraft", {
                 versusDraftId: params.id,
@@ -255,6 +269,7 @@ const VersusDraftView: Component = () => {
             socket.off("pickChangeRequested");
             socket.off("pickChangeRejected");
             socket.off("roleAvailable");
+            socket.off("versusWinnerUpdate");
         });
     });
 
