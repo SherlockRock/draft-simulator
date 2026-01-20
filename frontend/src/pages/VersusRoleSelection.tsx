@@ -1,4 +1,5 @@
 import { Component, createSignal, Show, createMemo } from "solid-js";
+import toast from "solid-toast";
 import { useVersusContext } from "../workflows/VersusWorkflow";
 import { IconDisplay } from "../components/IconDisplay";
 
@@ -6,6 +7,7 @@ const VersusRoleSelection: Component = () => {
     const { versusContext, selectRole } = useVersusContext();
     const [isJoining, setIsJoining] = createSignal(false);
     const [selectedRole, setSelectedRole] = createSignal<string | null>(null);
+    const [copied, setCopied] = createSignal(false);
 
     const versusDraft = createMemo(() => versusContext().versusDraft);
     const participants = createMemo(() => versusContext().participants);
@@ -32,6 +34,16 @@ const VersusRoleSelection: Component = () => {
                 setIsJoining(false);
                 setSelectedRole(null);
             }, 2000);
+        }
+    };
+
+    const handleCopyLink = () => {
+        if (versusDraft()) {
+            const link = `${window.location.origin}/versus/join/${versusDraft()!.shareLink}`;
+            navigator.clipboard.writeText(link);
+            setCopied(true);
+            toast.success("Link copied to clipboard");
+            setTimeout(() => setCopied(false), 2000);
         }
     };
 
@@ -162,6 +174,52 @@ const VersusRoleSelection: Component = () => {
                                         </span>
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* Share button */}
+                            <div class="border-t border-slate-700/50 px-6 py-4">
+                                <button
+                                    onClick={handleCopyLink}
+                                    class="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2.5 text-sm font-medium text-slate-200 transition-all hover:border-slate-500 hover:bg-slate-700"
+                                >
+                                    {copied() ? (
+                                        <>
+                                            <svg
+                                                class="h-4 w-4 text-emerald-400"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    d="M5 13l4 4L19 7"
+                                                />
+                                            </svg>
+                                            <span class="text-emerald-400">
+                                                Link Copied!
+                                            </span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg
+                                                class="h-4 w-4"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                                                />
+                                            </svg>
+                                            Share Invite Link
+                                        </>
+                                    )}
+                                </button>
                             </div>
                         </div>
 

@@ -86,7 +86,7 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
             const versusDraft = await response.json();
             toast.success("Versus draft created successfully!");
             props.onClose();
-            navigate(`/versus/${versusDraft.id}`);
+            navigate(`/versus/join/${versusDraft.shareLink}`);
         } catch (error) {
             toast.error("Failed to create versus draft");
             console.error(error);
