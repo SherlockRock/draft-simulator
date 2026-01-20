@@ -59,7 +59,7 @@ const VersusDraft = sequelize.define("VersusDraft", {
   },
   owner_id: {
     type: DataTypes.UUID,
-    allowNull: false,
+    allowNull: true,
   },
 });
 

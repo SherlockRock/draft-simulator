@@ -27,7 +27,7 @@ router.get("/", authenticate, async (req, res) => {
 });
 
 // POST /api/versus-drafts - Create new versus draft
-router.post("/", authenticate, async (req, res) => {
+router.post("/", optionalAuth, async (req, res) => {
   try {
     const {
       name,
@@ -40,6 +40,8 @@ router.post("/", authenticate, async (req, res) => {
       type,
     } = req.body;
 
+    const ownerId = req.user?.id || null;
+
     // Create versus draft
     const versusDraft = await VersusDraft.create({
       name,
@@ -50,7 +52,7 @@ router.post("/", authenticate, async (req, res) => {
       competitive: competitive || false,
       icon: icon || "",
       type: type || "standard",
-      owner_id: req.user.id,
+      owner_id: ownerId,
     });
 
     // Create series drafts
@@ -62,7 +64,7 @@ router.post("/", authenticate, async (req, res) => {
           type: "versus",
           versus_draft_id: versusDraft.id,
           seriesIndex: i,
-          owner_id: req.user.id,
+          owner_id: ownerId,
           description: description || "",
         }),
       );
