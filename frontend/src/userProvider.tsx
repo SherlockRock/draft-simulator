@@ -48,7 +48,6 @@ export function UserProvider(props: { children: JSX.Element }) {
     const manualReconnect = () => {
         const socket = currentSocket();
         if (socket) {
-            console.log(">>> Manual reconnect triggered");
             setReconnectAttempts(0);
             setConnectionStatus("connecting");
             socket.connect();
@@ -59,12 +58,6 @@ export function UserProvider(props: { children: JSX.Element }) {
 
     const userQuery = useQuery(() => {
         const enabled = !isOAuthCallback();
-        console.log(
-            ">>> Creating query, enabled:",
-            enabled,
-            "path:",
-            window.location.pathname
-        );
 
         return {
             queryKey: ["user"],
@@ -77,9 +70,7 @@ export function UserProvider(props: { children: JSX.Element }) {
 
     const login = async (code: string, state: string) => {
         const res = await handleGoogleLogin(code, state);
-        console.log("User logged in:", res);
         userQuery.refetch();
-        console.log("Redirecting to:", res?.returnTo ?? "/");
         navigate(res?.returnTo ?? "/", { replace: true });
         return res?.user;
     };
@@ -125,113 +116,60 @@ export function UserProvider(props: { children: JSX.Element }) {
 
     createEffect(() => {
         // Explicitly track query status to ensure effect re-runs
-        const status = userQuery.status;
         const currentUser = userQuery.data;
         const isLoading = userQuery.isLoading;
-        const isError = userQuery.isError;
         const isFetching = userQuery.isFetching;
-
-        console.log(
-            ">>> UserProvider effect running",
-            "status:",
-            status,
-            "currentUser:",
-            currentUser?.id || "anonymous",
-            "isLoading:",
-            isLoading,
-            "isFetching:",
-            isFetching,
-            "isError:",
-            isError
-        );
 
         // Don't create socket while user is still loading or fetching
         if (isLoading || isFetching) {
-            console.log(">>> User still loading/fetching, skipping socket creation");
             setCurrentSocket(undefined);
             setConnectionStatus("connecting");
             return;
         }
 
-        // Handle error state (treat as anonymous)
-        if (isError) {
-            console.log(">>> User fetch error, treating as anonymous");
-        }
-
-        console.log(">>> User loaded successfully, creating socket");
-
         let newSocket: Socket | undefined;
         if (currentUser) {
-            console.log(">>> Creating authenticated socket");
             newSocket = createAuthenticatedSocket();
         } else {
-            console.log(">>> Creating anonymous socket");
             newSocket = createAnonymousSocket();
         }
 
         newSocket.on("connect", () => {
-            console.log("Socket.IO: Connected! ID:", newSocket.id);
-            console.log(">>> UserProvider: Socket connected, updating connection status");
             setConnectionStatus("connected");
             setReconnectAttempts(0);
             // Don't re-set currentSocket - it's already set and re-setting causes cleanup
         });
 
-        newSocket.on("disconnect", (reason) => {
-            console.warn("Socket.IO: Disconnected! Reason:", reason);
+        newSocket.on("disconnect", () => {
             setConnectionStatus("disconnected");
         });
 
-        newSocket.on("connect_error", (err) => {
-            console.error("Socket.IO: Connection Error!", err.message);
-            // Don't set status to "error" here - let auto-reconnect continue
-            // Status will be set to "error" by reconnect_failed after all attempts exhausted
-        });
-
         // Socket.io manager events for reconnection tracking
-        newSocket.io.on("reconnect", (attemptNumber) => {
-            console.log("Socket.IO: Reconnected after", attemptNumber, "attempts");
+        newSocket.io.on("reconnect", () => {
             setConnectionStatus("connected");
             setReconnectAttempts(0);
         });
 
         newSocket.io.on("reconnect_attempt", (attemptNumber) => {
-            console.log("Socket.IO: Reconnect attempt", attemptNumber);
             setConnectionStatus("connecting");
             setReconnectAttempts(attemptNumber);
         });
 
         newSocket.io.on("reconnect_failed", () => {
-            console.error("Socket.IO: Reconnection Failed Permanently!");
             setConnectionStatus("error");
         });
 
-        console.log(
-            ">>> UserProvider: Setting currentSocket to:",
-            newSocket?.id,
-            "connected:",
-            newSocket?.connected
-        );
         setCurrentSocket(newSocket);
 
         onCleanup(() => {
-            console.log(">>> UserProvider cleanup running!");
-            console.log(
-                ">>> Cleaning up socket:",
-                newSocket?.id,
-                "connected:",
-                newSocket?.connected
-            );
             if (newSocket) {
                 newSocket.disconnect();
                 newSocket.off("disconnect");
-                newSocket.off("connect_error");
                 newSocket.off("connect");
                 // Clean up manager events
                 newSocket.io.off("reconnect");
                 newSocket.io.off("reconnect_attempt");
                 newSocket.io.off("reconnect_failed");
-                console.log(">>> Socket disconnected and cleaned up");
             }
         });
     });

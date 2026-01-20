@@ -111,6 +111,7 @@ export type VersusParticipant = {
     user_id?: string;
     role: "blue_captain" | "red_captain" | "spectator";
     socketId?: string;
+    reclaimToken?: string;
     isConnected: boolean;
     lastSeenAt: string;
 };

@@ -292,8 +292,6 @@ export const handleLogin = () => {
 };
 
 export const handleGoogleLogin = async (code: string, state: string) => {
-    console.log("code", code);
-    console.log("state", state);
     const res = await fetch(`${BASE_URL}/auth/google/callback`, {
         method: "POST",
         headers: {
@@ -302,11 +300,9 @@ export const handleGoogleLogin = async (code: string, state: string) => {
         credentials: "include",
         body: JSON.stringify({ code, state })
     });
-    console.log("res", res);
     if (!res.ok) {
         return null;
     }
-    // console.log("res json", await res.json());
     const { user, returnTo } = await res.json();
     return { user, returnTo };
 };

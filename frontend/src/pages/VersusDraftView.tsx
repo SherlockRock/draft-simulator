@@ -89,9 +89,7 @@ const VersusDraftView: Component = () => {
         const socket = socketAccessor();
         const role = myRole();
         const pId = participantId();
-        console.log(socket, role, pId);
 
-        console.log("Joining versus draft room");
         if (!socket) {
             return null;
         }
@@ -242,7 +240,6 @@ const VersusDraftView: Component = () => {
         });
 
         onCleanup(() => {
-            console.log("Leaving versus draft room");
             socket.emit("leaveVersusDraft", {
                 versusDraftId: params.id,
                 participantId: pId
@@ -292,7 +289,6 @@ const VersusDraftView: Component = () => {
 
         const currentPick = VERSUS_PICK_ORDER[state.currentPickIndex];
         const myTeam = myRole()?.includes("blue") ? "blue" : "red";
-        console.log(currentPick, myTeam, currentPick?.team === myTeam);
         return currentPick?.team === myTeam;
     };
 
@@ -327,8 +323,6 @@ const VersusDraftView: Component = () => {
     };
 
     const handleChampionSelect = (championIndex: string) => {
-        console.log("Champion selected:", championIndex);
-        console.log("Is my turn?", isMyTurn());
         if (!isMyTurn() || isSpectator()) return;
 
         // Clicking a champion saves it as pending pick (visible to all)

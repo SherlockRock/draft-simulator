@@ -13,16 +13,6 @@ function uuidv4() {
 }
 
 function setupVersusHandlers(io, socket, versusSessionManager) {
-  // Test handler to verify socket connection
-  socket.on("test-request", (data) => {
-    console.log("TEST: Received test-request from socket", socket.id, data);
-    socket.emit("test-response", {
-      message: "Test response from backend",
-      socketId: socket.id,
-    });
-    console.log("TEST: Emitted test-response to socket", socket.id);
-  });
-
   // Join versus session (initial handshake)
   socket.on("versusJoin", async (data) => {
     try {
