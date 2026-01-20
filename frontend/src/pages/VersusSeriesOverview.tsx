@@ -445,7 +445,6 @@ const VersusSeriesOverview: Component = () => {
                                                                             winner
                                                                         )
                                                                     }
-                                                                    compact={true}
                                                                 />
                                                             </Show>
                                                         </div>

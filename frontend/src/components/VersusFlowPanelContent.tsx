@@ -156,14 +156,16 @@ const VersusFlowPanelContent: Component = () => {
 
                         {/* Winner Reporter - shown when draft is completed */}
                         <Show when={draftState()?.completed && draftState()?.draft}>
-                            <WinnerReporter
-                                draftId={draftState()!.draft.id}
-                                blueTeamName={versusDraft()!.blueTeamName}
-                                redTeamName={versusDraft()!.redTeamName}
-                                currentWinner={draftState()!.draft.winner}
-                                canEdit={canEditWinner()}
-                                onReportWinner={handleReportWinner}
-                            />
+                            <div class="pt-1">
+                                <WinnerReporter
+                                    draftId={draftState()!.draft.id}
+                                    blueTeamName={versusDraft()!.blueTeamName}
+                                    redTeamName={versusDraft()!.redTeamName}
+                                    currentWinner={draftState()!.draft.winner}
+                                    canEdit={canEditWinner()}
+                                    onReportWinner={handleReportWinner}
+                                />
+                            </div>
                         </Show>
                     </div>
                 </div>

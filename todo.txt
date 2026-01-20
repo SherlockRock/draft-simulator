@@ -9,6 +9,7 @@ Versus functionality:
     change picks posts game needs more working
     choosing winner also needs work
     updating versus isn't working
+    draft completeness not getting updated live
 
 Canvas Functionality:
     replace draft list button Functionality with right click menus?
