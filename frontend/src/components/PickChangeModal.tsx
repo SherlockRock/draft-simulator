@@ -93,7 +93,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
             <Show when={props.draft?.completed && !isSpectator()}>
                 <button
                     onClick={handleOpenModal}
-                    class="rounded-lg border-2 border-teal-600/50 bg-teal-600/10 px-4 py-2 font-semibold text-teal-400 transition-all hover:border-teal-500 hover:bg-teal-600/20"
+                    class="w-full rounded-lg border-2 border-teal-600/50 bg-teal-600/10 px-4 py-2 font-semibold text-teal-400 transition-all hover:border-teal-500 hover:bg-teal-600/20"
                 >
                     Request Pick Change
                 </button>
