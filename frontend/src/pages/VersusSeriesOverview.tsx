@@ -8,6 +8,8 @@ import { IconDisplay } from "../components/IconDisplay";
 import { WinnerReporter } from "../components/WinnerReporter";
 import { canReportWinner } from "../utils/versusPermissions";
 import { useUser } from "../userProvider";
+import { EditVersusDraftDialog } from "../components/EditVersusDraftDialog";
+import { useQueryClient } from "@tanstack/solid-query";
 
 const VersusSeriesOverview: Component = () => {
     const params = useParams();
@@ -19,12 +21,20 @@ const VersusSeriesOverview: Component = () => {
 
     const [copied, setCopied] = createSignal(false);
     const [showSharePopover, setShowSharePopover] = createSignal(false);
+    const [showEditDialog, setShowEditDialog] = createSignal(false);
+    const queryClient = useQueryClient();
 
     const versusDraft = createMemo(() => versusContext().versusDraft);
     const myParticipant = createMemo(() => versusContext().myParticipant);
     const isConnected = createMemo(() => versusContext().connected);
 
     const myRole = createMemo(() => myParticipant()?.role || null);
+
+    const isOwner = createMemo(() => {
+        const vd = versusDraft();
+        const uid = userId();
+        return vd && uid && vd.owner_id === uid;
+    });
 
     const handleCopyLink = () => {
         if (versusDraft()) {
@@ -113,8 +123,32 @@ const VersusSeriesOverview: Component = () => {
                                 currentRole={myRole() || "spectator"}
                             />
 
-                            {/* Share popover */}
-                            <div class="relative">
+                            <div class="flex items-center gap-2">
+                                {/* Edit button - only for owner */}
+                                <Show when={isOwner()}>
+                                    <button
+                                        onClick={() => setShowEditDialog(true)}
+                                        class="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/80 px-4 py-2 text-sm font-medium text-slate-300 transition-all hover:border-slate-600 hover:bg-slate-700/80 hover:text-slate-100"
+                                    >
+                                        <svg
+                                            class="h-4 w-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                            />
+                                        </svg>
+                                        Edit
+                                    </button>
+                                </Show>
+
+                                {/* Share popover */}
+                                <div class="relative">
                                 <button
                                     onClick={() =>
                                         setShowSharePopover(!showSharePopover())
@@ -224,6 +258,7 @@ const VersusSeriesOverview: Component = () => {
                                         onClick={() => setShowSharePopover(false)}
                                     />
                                 </Show>
+                                </div>
                             </div>
                         </div>
 
@@ -495,6 +530,18 @@ const VersusSeriesOverview: Component = () => {
                             </div>
                         </div>
                     </div>
+
+                    {/* Edit Dialog */}
+                    <Show when={versusDraft()}>
+                        <EditVersusDraftDialog
+                            isOpen={showEditDialog}
+                            onClose={() => setShowEditDialog(false)}
+                            versusDraft={versusDraft()!}
+                            onSuccess={() => {
+                                queryClient.invalidateQueries({ queryKey: ["versus", params.id] });
+                            }}
+                        />
+                    </Show>
                 </Show>
             </Show>
         </div>
