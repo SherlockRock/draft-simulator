@@ -287,6 +287,7 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         sock.on("versusJoinResponse", handleJoinResponse);
         sock.on("versusParticipantsUpdate", handleParticipantUpdate);
         sock.on("versusDraftUpdate", handleVersusDraftUpdate);
+        sock.on("versusSeriesUpdate", handleVersusDraftUpdate);
         sock.on("versusError", handleVersusError);
         sock.on("newVersusMessage", handleNewVersusMessage);
         sock.on("versusUserCountUpdate", handleVersusUserCountUpdate);
@@ -311,6 +312,7 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
             sock.off("versusRoleSelectResponse");
             sock.off("versusParticipantsUpdate");
             sock.off("versusDraftUpdate");
+            sock.off("versusSeriesUpdate");
             sock.off("versusError");
             sock.off("newVersusMessage");
             sock.off("versusUserCountUpdate");
