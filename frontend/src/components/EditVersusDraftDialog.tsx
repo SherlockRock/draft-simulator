@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show } from "solid-js";
+import { createSignal, createEffect, createMemo, Show } from "solid-js";
 import { Dialog } from "./Dialog";
 import toast from "solid-toast";
 import { IconPicker } from "./IconPicker";
@@ -21,8 +21,16 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
     const [icon, setIcon] = createSignal("");
     const [showIconPicker, setShowIconPicker] = createSignal(false);
     const [type, setType] = createSignal("standard");
+    const [length, setLength] = createSignal(1);
     const [isSubmitting, setIsSubmitting] = createSignal(false);
     const [errors, setErrors] = createSignal<Record<string, string>>({});
+
+    const hasStarted = createMemo(() => {
+        const drafts = props.versusDraft.Drafts || [];
+        if (drafts.length === 0) return false;
+        const firstDraft = drafts[0];
+        return firstDraft.picks && firstDraft.picks.some((p: string | null) => p && p !== "");
+    });
 
     createEffect(() => {
         if (props.isOpen()) {
@@ -33,6 +41,7 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
             setCompetitive(props.versusDraft.competitive || false);
             setIcon(props.versusDraft.icon || "");
             setType(props.versusDraft.type || "standard");
+            setLength(props.versusDraft.length || 1);
             setErrors({});
         }
     });
@@ -74,7 +83,8 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
                         description: description().trim() || undefined,
                         competitive: competitive(),
                         icon: icon(),
-                        type: type()
+                        type: type(),
+                        length: length()
                     })
                 }
             );
@@ -220,20 +230,40 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
                             </button>
                         </div>
 
-                        <div>
-                            <label class="mb-2 block text-sm font-medium text-slate-300">
-                                Draft Type
-                            </label>
-                            <select
-                                value={type()}
-                                onChange={(e) => setType(e.currentTarget.value)}
-                                class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-teal-500 focus:outline-none"
-                            >
-                                <option value="standard">Standard</option>
-                                <option value="fearless">Fearless</option>
-                                <option value="ironman">Ironman</option>
-                            </select>
-                        </div>
+                        <Show when={!hasStarted()}>
+                            <div>
+                                <label class="mb-2 block text-sm font-medium text-slate-300">
+                                    Draft Type
+                                </label>
+                                <select
+                                    value={type()}
+                                    onChange={(e) => setType(e.currentTarget.value)}
+                                    class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-teal-500 focus:outline-none"
+                                >
+                                    <option value="standard">Standard</option>
+                                    <option value="fearless">Fearless</option>
+                                    <option value="ironman">Ironman</option>
+                                </select>
+                            </div>
+                        </Show>
+
+                        <Show when={!hasStarted()}>
+                            <div>
+                                <label class="mb-2 block text-sm font-medium text-slate-300">
+                                    Series Length
+                                </label>
+                                <select
+                                    value={length()}
+                                    onChange={(e) => setLength(parseInt(e.currentTarget.value))}
+                                    class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-teal-500 focus:outline-none"
+                                >
+                                    <option value={1}>Best of 1</option>
+                                    <option value={3}>Best of 3</option>
+                                    <option value={5}>Best of 5</option>
+                                    <option value={7}>Best of 7</option>
+                                </select>
+                            </div>
+                        </Show>
 
                         <div>
                             <label class="flex items-center space-x-2">
@@ -265,7 +295,7 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
                                 Cancel
                             </button>
                             <button
-                                type="submit" // TODO: This needs a real submit fucnction
+                                type="submit"
                                 class="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 disabled:opacity-50"
                                 disabled={isSubmitting()}
                             >
