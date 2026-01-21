@@ -5,6 +5,8 @@ const Draft = require("../models/Draft");
 const User = require("../models/User");
 const { authenticate, optionalAuth } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
+const sequelize = require("../config/database");
+const { Op } = require("sequelize");
 
 // GET /api/versus-drafts - Get all versus drafts for current user
 router.get("/", authenticate, async (req, res) => {
@@ -126,23 +128,80 @@ router.get("/:id/drafts", optionalAuth, async (req, res) => {
 
 // PUT /api/versus-drafts/:id - Update versus draft
 router.put("/:id", authenticate, async (req, res) => {
+  const transaction = await sequelize.transaction();
+
   try {
-    const versusDraft = await VersusDraft.findByPk(req.params.id);
+    const versusDraft = await VersusDraft.findByPk(req.params.id, { transaction });
 
     if (!versusDraft) {
+      await transaction.rollback();
       return res.status(404).json({ error: "Versus draft not found" });
     }
 
     if (versusDraft.owner_id !== req.user.id) {
+      await transaction.rollback();
       return res.status(403).json({ error: "Not authorized" });
     }
 
     const { name, description, competitive, icon, type, blueTeamName, redTeamName, length } = req.body;
 
     // Check if series has started (any picks made in first draft)
-    const drafts = await versusDraft.getDrafts({ order: [['seriesIndex', 'ASC']] });
+    const drafts = await versusDraft.getDrafts({ order: [['seriesIndex', 'ASC']], transaction });
     const firstDraft = drafts[0];
     const hasStarted = firstDraft && firstDraft.picks && firstDraft.picks.some(p => p && p !== "");
+
+    // Handle series length changes (only if series hasn't started)
+    if (!hasStarted && length !== undefined && length !== drafts.length) {
+      const delta = length - drafts.length;
+
+      if (delta > 0) {
+        // Increasing length - create new drafts
+        const newDraftPromises = [];
+        const seriesName = name || versusDraft.name;
+        const draftType = type || versusDraft.type || "standard";
+
+        for (let i = 0; i < delta; i++) {
+          const newSeriesIndex = drafts.length + i;
+          newDraftPromises.push(
+            Draft.create({
+              name: `${seriesName} - Game ${newSeriesIndex + 1}`,
+              type: "versus",
+              versus_draft_id: versusDraft.id,
+              seriesIndex: newSeriesIndex,
+              owner_id: versusDraft.owner_id,
+              description: "",
+              picks: Array(20).fill(""),
+              completed: false,
+              winner: null,
+            }, { transaction })
+          );
+        }
+        await Promise.all(newDraftPromises);
+      } else {
+        // Decreasing length - check and delete drafts
+        const draftsToDelete = drafts.filter(d => d.seriesIndex >= length);
+
+        // Check if any drafts to delete have picks
+        for (const draft of draftsToDelete) {
+          const hasPicks = draft.picks && draft.picks.some(p => p && p !== "");
+          if (hasPicks) {
+            await transaction.rollback();
+            return res.status(400).json({
+              error: `Cannot reduce series length - Game ${draft.seriesIndex + 1} has already started`
+            });
+          }
+        }
+
+        // Delete the drafts
+        await Draft.destroy({
+          where: {
+            versus_draft_id: versusDraft.id,
+            seriesIndex: { [Op.gte]: length }
+          },
+          transaction
+        });
+      }
+    }
 
     await versusDraft.update({
       ...(name && { name }),
@@ -154,15 +213,24 @@ router.put("/:id", authenticate, async (req, res) => {
       // Only allow type/length changes if series hasn't started
       ...(!hasStarted && type !== undefined && { type }),
       ...(!hasStarted && length !== undefined && { length }),
+    }, { transaction });
+
+    await transaction.commit();
+
+    // Reload with drafts included for the response and socket broadcast
+    const updatedVersusDraft = await VersusDraft.findByPk(versusDraft.id, {
+      include: [{ model: Draft, as: "Drafts" }],
+      order: [[{ model: Draft, as: "Drafts" }, "seriesIndex", "ASC"]]
     });
 
     // Broadcast update to all connected participants
     socketService.emitToRoom(`versus:${versusDraft.id}`, "versusSeriesUpdate", {
-      versusDraft: versusDraft.toJSON(),
+      versusDraft: updatedVersusDraft.toJSON(),
     });
 
-    res.json(versusDraft);
+    res.json(updatedVersusDraft);
   } catch (error) {
+    await transaction.rollback();
     console.error("Error updating versus draft:", error);
     res.status(500).json({ error: "Failed to update versus draft" });
   }
