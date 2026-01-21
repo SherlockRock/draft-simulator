@@ -9,7 +9,8 @@ import {
     updateCanvasName,
     fetchCanvasUsers,
     updateCanvasUserPermission,
-    removeUserFromCanvas
+    removeUserFromCanvas,
+    editVersusDraft
 } from "../utils/actions";
 import toast from "solid-toast";
 import { Dialog } from "./Dialog";
@@ -54,6 +55,9 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     const [editPublic, setEditPublic] = createSignal(false);
     const [editIcon, setEditIcon] = createSignal("");
     const [showIconPicker, setShowIconPicker] = createSignal(false);
+    const [editBlueTeamName, setEditBlueTeamName] = createSignal("");
+    const [editRedTeamName, setEditRedTeamName] = createSignal("");
+    const [editCompetitive, setEditCompetitive] = createSignal(false);
 
     let sharePopupRef: HTMLDivElement | undefined;
     let shareButtonRef: HTMLDivElement | undefined;
@@ -108,6 +112,22 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
         if (hasError && isShareOpen()) {
             toast.error("Failed to generate share link");
             setIsShareOpen(false);
+        }
+    });
+
+    createEffect(() => {
+        if (isEditOpen()) {
+            setEditName(props.activity.resource_name);
+            setEditDescription(props.activity.description || "");
+            setEditIcon(props.activity.icon || "");
+            if (props.activity.resource_type === "versus") {
+                setEditBlueTeamName(props.activity.blueTeamName || "Blue Team");
+                setEditRedTeamName(props.activity.redTeamName || "Red Team");
+                setEditCompetitive(props.activity.competitive || false);
+            }
+            if (props.activity.resource_type === "draft") {
+                setEditPublic(props.activity.public || false);
+            }
         }
     });
 
@@ -195,6 +215,25 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
         },
         onError: () => {
             toast.error("Failed to update");
+        }
+    }));
+
+    const editVersusMutation = useMutation(() => ({
+        mutationFn: (data: {
+            name: string;
+            description: string;
+            blueTeamName: string;
+            redTeamName: string;
+            competitive: boolean;
+            icon: string;
+        }) => editVersusDraft(props.activity.resource_id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["recentActivity"] });
+            toast.success("Versus draft updated");
+            setIsEditOpen(false);
+        },
+        onError: () => {
+            toast.error("Failed to update versus draft");
         }
     }));
 
@@ -339,6 +378,15 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
             editCanvasMutation.mutate({
                 name: editName(),
                 description: editDescription(),
+                icon: editIcon()
+            });
+        } else if (props.activity.resource_type === "versus") {
+            editVersusMutation.mutate({
+                name: editName(),
+                description: editDescription(),
+                blueTeamName: editBlueTeamName(),
+                redTeamName: editRedTeamName(),
+                competitive: editCompetitive(),
                 icon: editIcon()
             });
         }
@@ -761,6 +809,46 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                 </span>
                             </button>
                         </div>
+                        <Show when={props.activity.resource_type === "versus"}>
+                            <div class="mb-4 grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="mb-2 block text-sm font-medium text-slate-200">
+                                        Blue Team
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editBlueTeamName()}
+                                        onInput={(e) => setEditBlueTeamName(e.currentTarget.value)}
+                                        class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+                                <div>
+                                    <label class="mb-2 block text-sm font-medium text-slate-200">
+                                        Red Team
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editRedTeamName()}
+                                        onInput={(e) => setEditRedTeamName(e.currentTarget.value)}
+                                        class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-red-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                                    />
+                                </div>
+                            </div>
+                            <div class="mb-4">
+                                <label class="flex items-center gap-2 text-sm font-medium text-slate-200">
+                                    <input
+                                        type="checkbox"
+                                        checked={editCompetitive()}
+                                        onChange={(e) => setEditCompetitive(e.currentTarget.checked)}
+                                        class="h-4 w-4 rounded border-slate-600 bg-slate-700 text-teal-500 focus:ring-2 focus:ring-teal-500"
+                                    />
+                                    Competitive Mode
+                                </label>
+                                <p class="mt-1 text-xs text-slate-400">
+                                    Pauses and pick changes require approval from both teams
+                                </p>
+                            </div>
+                        </Show>
                         <Show when={props.activity.resource_type === "draft"}>
                             <div class="mb-4">
                                 <label class="flex items-center gap-2 text-sm font-medium text-slate-200">
