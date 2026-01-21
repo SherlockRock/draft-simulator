@@ -146,6 +146,31 @@ export const generateVersusShareLink = async (versusDraftId: string) => {
     return `${window.location.origin}/versus/join/${versusDraft.shareLink}`;
 };
 
+export const editVersusDraft = async (
+    versusDraftId: string,
+    data: {
+        name?: string;
+        description?: string;
+        blueTeamName?: string;
+        redTeamName?: string;
+        competitive?: boolean;
+        icon?: string;
+        type?: string;
+        length?: number;
+    }
+) => {
+    const res = await fetch(`${BASE_URL}/versus-drafts/${versusDraftId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+        throw new Error("Failed to update versus draft");
+    }
+    return res.json();
+};
+
 export const generateCanvasShareLink = async (
     canvasId: string,
     permissions: "view" | "edit" = "view"
