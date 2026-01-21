@@ -136,14 +136,23 @@ router.put("/:id", authenticate, async (req, res) => {
       return res.status(403).json({ error: "Not authorized" });
     }
 
-    const { name, description, competitive, icon, type } = req.body;
+    const { name, description, competitive, icon, type, blueTeamName, redTeamName, length } = req.body;
+
+    // Check if series has started (any picks made in first draft)
+    const drafts = await versusDraft.getDrafts({ order: [['seriesIndex', 'ASC']] });
+    const firstDraft = drafts[0];
+    const hasStarted = firstDraft && firstDraft.picks && firstDraft.picks.some(p => p && p !== "");
 
     await versusDraft.update({
       ...(name && { name }),
       ...(description !== undefined && { description }),
       ...(competitive !== undefined && { competitive }),
       ...(icon !== undefined && { icon }),
-      ...(type !== undefined && { type }),
+      ...(blueTeamName && { blueTeamName }),
+      ...(redTeamName && { redTeamName }),
+      // Only allow type/length changes if series hasn't started
+      ...(!hasStarted && type !== undefined && { type }),
+      ...(!hasStarted && length !== undefined && { length }),
     });
 
     res.json(versusDraft);
