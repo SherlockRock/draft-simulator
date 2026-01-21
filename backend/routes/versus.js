@@ -4,6 +4,7 @@ const VersusDraft = require("../models/VersusDraft");
 const Draft = require("../models/Draft");
 const User = require("../models/User");
 const { authenticate, optionalAuth } = require("../middleware/auth");
+const socketService = require("../middleware/socketService");
 
 // GET /api/versus-drafts - Get all versus drafts for current user
 router.get("/", authenticate, async (req, res) => {
@@ -153,6 +154,11 @@ router.put("/:id", authenticate, async (req, res) => {
       // Only allow type/length changes if series hasn't started
       ...(!hasStarted && type !== undefined && { type }),
       ...(!hasStarted && length !== undefined && { length }),
+    });
+
+    // Broadcast update to all connected participants
+    socketService.emitToRoom(`versus:${versusDraft.id}`, "versusSeriesUpdate", {
+      versusDraft: versusDraft.toJSON(),
     });
 
     res.json(versusDraft);
