@@ -1,6 +1,8 @@
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, createEffect, For, Show } from "solid-js";
 import { Dialog } from "./Dialog";
-import { champions } from "../utils/constants";
+import { champions, EMOJI_OPTIONS, championCategories, emojiCategories } from "../utils/constants";
+import { useFilterableItems } from "../hooks/useFilterableItems";
+import { FilterBar } from "./FilterBar";
 
 interface IconPickerProps {
     isOpen: () => boolean;
@@ -9,115 +11,27 @@ interface IconPickerProps {
     currentIcon?: string;
 }
 
-// Common emojis for selection
-const EMOJI_OPTIONS = [
-    "⚔️",
-    "🛡️",
-    "🏹",
-    "🗡️",
-    "🪓",
-    "🔱",
-    "⚡",
-    "🔥",
-    "❄️",
-    "💧",
-    "🌟",
-    "✨",
-    "💫",
-    "🌙",
-    "☀️",
-    "🌈",
-    "☁️",
-    "💨",
-    "🌊",
-    "🌋",
-    "👑",
-    "💎",
-    "🏆",
-    "🎯",
-    "🎮",
-    "🎲",
-    "🎭",
-    "🎨",
-    "🎪",
-    "🎬",
-    "🦁",
-    "🐉",
-    "🦅",
-    "🐺",
-    "🐯",
-    "🦈",
-    "🦂",
-    "🐍",
-    "🕷️",
-    "🦇",
-    "💀",
-    "👻",
-    "👹",
-    "👺",
-    "🤖",
-    "👽",
-    "🧙",
-    "🧚",
-    "🧛",
-    "🧟",
-    "🐲",
-    "🦖",
-    "🦕",
-    "🐙",
-    "🦑",
-    "🦎",
-    "🐢",
-    "🦀",
-    "🦞",
-    "🦐",
-    "⭐",
-    "🌠",
-    "💥",
-    "🔆",
-    "🌌",
-    "🌃",
-    "🌆",
-    "🏔️",
-    "🗻",
-    "🏰",
-    "🗿",
-    "🗝️",
-    "📜",
-    "📖",
-    "🔮",
-    "🪄",
-    "💊",
-    "🧪",
-    "⚗️",
-    "🔬",
-    "🧬",
-    "🦴",
-    "🧿",
-    "📿",
-    "🎃",
-    "👁️",
-    "🧠",
-    "❤️",
-    "💙",
-    "💚",
-    "💛",
-    "💜",
-    "🖤",
-    "🤍",
-    "🧡",
-    "🍃",
-    "🌿",
-    "🍀",
-    "🌺",
-    "🌸",
-    "🌼",
-    "🥀",
-    "🪴"
-];
-
 export const IconPicker = (props: IconPickerProps) => {
     const [activeTab, setActiveTab] = createSignal<"champions" | "emojis">("champions");
+
+    // Champion filtering
+    const championFilter = useFilterableItems({
+        items: champions,
+        categoryMap: championCategories
+    });
+
+    // Emoji filtering
+    const emojiFilter = useFilterableItems({
+        items: EMOJI_OPTIONS,
+        categoryMap: emojiCategories
+    });
+
+    // Clear filters when switching tabs
+    createEffect(() => {
+        const tab = activeTab();
+        championFilter.clearFilters();
+        emojiFilter.clearFilters();
+    });
 
     const handleChampionSelect = (index: number) => {
         props.onSelect(index.toString());
@@ -177,13 +91,24 @@ export const IconPicker = (props: IconPickerProps) => {
                     {/* Content */}
                     <div class="max-h-[60vh] overflow-y-auto overflow-x-hidden">
                         <Show when={activeTab() === "champions"}>
+                            <div class="mb-2 p-2">
+                                <FilterBar
+                                    searchText={championFilter.searchText}
+                                    onSearchChange={championFilter.setSearchText}
+                                    selectedCategory={championFilter.selectedCategory}
+                                    onCategoryChange={championFilter.setSelectedCategory}
+                                    categories={championFilter.categories}
+                                    searchPlaceholder="Search champions..."
+                                    categoryPlaceholder="Role"
+                                />
+                            </div>
                             <div class="grid grid-cols-8 gap-2 p-2 sm:grid-cols-10 md:grid-cols-12">
-                                <For each={champions}>
-                                    {(champion, index) => (
+                                <For each={championFilter.filteredItems()}>
+                                    {({ item: champion, originalIndex }) => (
                                         <button
-                                            onClick={() => handleChampionSelect(index())}
+                                            onClick={() => handleChampionSelect(originalIndex)}
                                             class={`group relative aspect-square overflow-hidden rounded border-2 transition-all hover:scale-105 ${
-                                                props.currentIcon === index().toString()
+                                                props.currentIcon === originalIndex.toString()
                                                     ? "border-teal-400 ring-2 ring-teal-400"
                                                     : "border-slate-600 hover:border-teal-500"
                                             }`}
@@ -206,18 +131,30 @@ export const IconPicker = (props: IconPickerProps) => {
                         </Show>
 
                         <Show when={activeTab() === "emojis"}>
+                            <div class="mb-2 p-2">
+                                <FilterBar
+                                    searchText={emojiFilter.searchText}
+                                    onSearchChange={emojiFilter.setSearchText}
+                                    selectedCategory={emojiFilter.selectedCategory}
+                                    onCategoryChange={emojiFilter.setSelectedCategory}
+                                    categories={emojiFilter.categories}
+                                    searchPlaceholder="Search emojis..."
+                                    categoryPlaceholder="Category"
+                                />
+                            </div>
                             <div class="grid grid-cols-8 gap-2 p-2 sm:grid-cols-10 md:grid-cols-12">
-                                <For each={EMOJI_OPTIONS}>
-                                    {(emoji) => (
+                                <For each={emojiFilter.filteredItems()}>
+                                    {({ item: emojiItem }) => (
                                         <button
-                                            onClick={() => handleEmojiSelect(emoji)}
+                                            onClick={() => handleEmojiSelect(emojiItem.emoji)}
                                             class={`flex aspect-square items-center justify-center rounded border-2 text-3xl transition-all hover:scale-105 ${
-                                                props.currentIcon === emoji
+                                                props.currentIcon === emojiItem.emoji
                                                     ? "border-teal-400 bg-slate-700 ring-2 ring-teal-400"
                                                     : "border-slate-600 bg-slate-800 hover:border-teal-500 hover:bg-slate-700"
                                             }`}
+                                            title={emojiItem.name}
                                         >
-                                            {emoji}
+                                            {emojiItem.emoji}
                                         </button>
                                     )}
                                 </For>
