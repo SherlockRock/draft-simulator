@@ -374,6 +374,14 @@ export const supportChamps = [
 
 export const sortOptions = ["Top", "Jungle", "Mid", "Bot", "Support"];
 
+export const championCategories: Record<string, number[]> = {
+    Top: topChamps,
+    Jungle: jungleChamps,
+    Mid: midChamps,
+    Bot: botChamps,
+    Support: supportChamps
+};
+
 export const indexToShorthandHorizontal = [
     "Ban 1",
     "Ban 3",
