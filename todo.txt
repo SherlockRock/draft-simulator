@@ -1,6 +1,5 @@
 Versus functionality:
     champs need to be searchable/sortable
-    change picks posts game needs more working
     once winner is calculated for comp games remaining games should not display?
     First pick vs red/blue
 

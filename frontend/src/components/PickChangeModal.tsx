@@ -28,6 +28,23 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
     const isSpectator = () => props.myRole() === "spectator";
     const myTeam = () => (props.myRole()?.includes("blue") ? "blue" : "red");
 
+    // Get my team's bans for selection
+    const getMyBans = () => {
+        if (!props.draft) return [];
+        const picks = props.draft.picks || [];
+        const team = myTeam();
+
+        if (team === "blue") {
+            return picks
+                .slice(0, 5)
+                .map((champion, idx) => ({ champion, pickIndex: idx }));
+        } else {
+            return picks
+                .slice(5, 10)
+                .map((champion, idx) => ({ champion, pickIndex: idx + 5 }));
+        }
+    };
+
     // Get my team's picks for selection
     const getMyPicks = () => {
         if (!props.draft) return [];
@@ -117,33 +134,70 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                             </p>
                         </Show>
 
-                        {/* Step 1: Select which pick to change */}
+                        {/* Step 1: Select which ban or pick to change */}
                         <div class="mb-6">
                             <h3 class="mb-2 text-lg font-semibold text-slate-200">
-                                Step 1: Select pick to change
+                                Step 1: Select ban or pick to change
                             </h3>
-                            <div class="grid grid-cols-5 gap-2">
-                                <For each={getMyPicks()}>
-                                    {(pick, idx) => (
-                                        <button
-                                            onClick={() =>
-                                                handleSelectPick(pick.pickIndex)
-                                            }
-                                            class={`rounded-lg border-2 p-3 text-center transition-all ${
-                                                selectedPickIndex() === pick.pickIndex
-                                                    ? "border-teal-500 bg-teal-600/20"
-                                                    : "border-slate-600 bg-slate-700 hover:border-slate-500"
-                                            }`}
-                                        >
-                                            <div class="text-xs text-slate-400">
-                                                Pick {idx() + 1}
-                                            </div>
-                                            <div class="mt-1 text-sm font-semibold text-slate-200">
-                                                {getChampionName(pick.champion)}
-                                            </div>
-                                        </button>
-                                    )}
-                                </For>
+
+                            {/* Bans Section */}
+                            <div class="mb-4">
+                                <div class="mb-2 text-sm font-medium text-slate-400">
+                                    Bans
+                                </div>
+                                <div class="grid grid-cols-5 gap-2">
+                                    <For each={getMyBans()}>
+                                        {(ban, idx) => (
+                                            <button
+                                                onClick={() =>
+                                                    handleSelectPick(ban.pickIndex)
+                                                }
+                                                class={`rounded-lg border-2 p-3 text-center transition-all ${
+                                                    selectedPickIndex() === ban.pickIndex
+                                                        ? "border-teal-500 bg-teal-600/20"
+                                                        : "border-slate-600 bg-slate-700 hover:border-slate-500"
+                                                }`}
+                                            >
+                                                <div class="text-xs text-slate-400">
+                                                    Ban {idx() + 1}
+                                                </div>
+                                                <div class="mt-1 text-sm font-semibold text-slate-200">
+                                                    {getChampionName(ban.champion)}
+                                                </div>
+                                            </button>
+                                        )}
+                                    </For>
+                                </div>
+                            </div>
+
+                            {/* Picks Section */}
+                            <div>
+                                <div class="mb-2 text-sm font-medium text-slate-400">
+                                    Picks
+                                </div>
+                                <div class="grid grid-cols-5 gap-2">
+                                    <For each={getMyPicks()}>
+                                        {(pick, idx) => (
+                                            <button
+                                                onClick={() =>
+                                                    handleSelectPick(pick.pickIndex)
+                                                }
+                                                class={`rounded-lg border-2 p-3 text-center transition-all ${
+                                                    selectedPickIndex() === pick.pickIndex
+                                                        ? "border-teal-500 bg-teal-600/20"
+                                                        : "border-slate-600 bg-slate-700 hover:border-slate-500"
+                                                }`}
+                                            >
+                                                <div class="text-xs text-slate-400">
+                                                    Pick {idx() + 1}
+                                                </div>
+                                                <div class="mt-1 text-sm font-semibold text-slate-200">
+                                                    {getChampionName(pick.champion)}
+                                                </div>
+                                            </button>
+                                        )}
+                                    </For>
+                                </div>
                             </div>
                         </div>
 
@@ -153,8 +207,8 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                 <h3 class="mb-2 text-lg font-semibold text-slate-200">
                                     Step 2: Select new champion
                                 </h3>
-                                <div class="max-h-64 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-4">
-                                    <div class="grid grid-cols-6 gap-2">
+                                <div class="max-h-72 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-4">
+                                    <div class="grid grid-cols-10 gap-1">
                                         <For each={champions}>
                                             {(champion, index) => {
                                                 const champIndex = () => String(index());
@@ -173,15 +227,20 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                                             )
                                                         }
                                                         disabled={isAlreadyPicked()}
-                                                        class={`rounded border p-2 text-center text-xs transition-all ${
+                                                        title={champion.name}
+                                                        class={`h-12 w-12 flex-shrink-0 rounded border-2 transition-all ${
                                                             isSelected()
-                                                                ? "border-teal-500 bg-teal-600/20 text-slate-50"
+                                                                ? "border-teal-500"
                                                                 : isAlreadyPicked()
-                                                                  ? "cursor-not-allowed border-slate-800 bg-slate-800 text-slate-600"
-                                                                  : "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-500"
+                                                                  ? "cursor-not-allowed border-transparent opacity-30"
+                                                                  : "border-transparent hover:border-slate-500"
                                                         }`}
                                                     >
-                                                        {champion.name}
+                                                        <img
+                                                            src={champion.img}
+                                                            alt={champion.name}
+                                                            class={`h-full w-full rounded ${isAlreadyPicked() ? "grayscale" : ""}`}
+                                                        />
                                                     </button>
                                                 );
                                             }}

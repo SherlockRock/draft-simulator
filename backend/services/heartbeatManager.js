@@ -5,8 +5,8 @@ class HeartbeatManager {
     this.clients = new Map(); // socketId -> client data
     this.usersByRole = new Map(); // role -> Set of userIds
     this.userSockets = new Map(); // userId -> Set of socketIds (for multiple tabs)
-    this.heartbeatInterval = 10000; // 10 seconds - reduced for testing
-    this.timeoutThreshold = 30000; // 30 seconds - reduced for testing
+    this.heartbeatInterval = 60000;
+    this.timeoutThreshold = 300000;
 
     this.checkInterval = setInterval(() => {
       this.checkStaleConnections();
