@@ -22,8 +22,10 @@ import { ReadyButton } from "../components/ReadyButton";
 import { WinnerDeclarationModal } from "../components/WinnerDeclarationModal";
 import { PauseRequestModal } from "../components/PauseRequestModal";
 import { RoleSwitcher } from "../components/RoleSwitcher";
-import { champions } from "../utils/constants";
+import { champions, championCategories } from "../utils/constants";
 import toast from "solid-toast";
+import { useFilterableItems } from "../hooks/useFilterableItems";
+import { FilterBar } from "../components/FilterBar";
 
 const fetchVersusDraft = async (id: string): Promise<VersusDraft> => {
     const response = await fetch(
@@ -86,6 +88,19 @@ const VersusDraftView: Component = () => {
     const [countdownValue, setCountdownValue] = createSignal(3);
     const [pendingPickChangeRequest, setPendingPickChangeRequest] =
         createSignal<any>(null);
+
+    // Champion filtering
+    const {
+        searchText,
+        setSearchText,
+        selectedCategory,
+        setSelectedCategory,
+        filteredItems: filteredChampions,
+        categories: championCategoryList
+    } = useFilterableItems({
+        items: champions,
+        categoryMap: championCategories
+    });
 
     // Socket.IO setup - only run when socket/role/participant change, not when draft updates
     createEffect(() => {
@@ -841,20 +856,31 @@ const VersusDraftView: Component = () => {
 
                         {/* Champion Grid */}
                         <div class="w-96 border-l border-slate-700 bg-slate-800 pb-4 pl-0 pr-0 pt-4">
-                            <div class="mb-4 px-4 text-lg font-semibold text-slate-200">
+                            <div class="mb-2 px-4 text-lg font-semibold text-slate-200">
                                 Champions
+                            </div>
+                            <div class="px-4 pb-2">
+                                <FilterBar
+                                    searchText={searchText}
+                                    onSearchChange={setSearchText}
+                                    selectedCategory={selectedCategory}
+                                    onCategoryChange={setSelectedCategory}
+                                    categories={championCategoryList}
+                                    searchPlaceholder="Search champions..."
+                                    categoryPlaceholder="Role"
+                                />
                             </div>
                             <div
                                 class="grid grid-cols-4 gap-2 overflow-y-auto px-4 py-2"
-                                style={{ height: "calc(100vh - 200px)" }}
+                                style={{ height: "calc(100vh - 260px)" }}
                             >
-                                <For each={champions}>
-                                    {(champ, index) => {
+                                <For each={filteredChampions()}>
+                                    {({ item: champ, originalIndex }) => {
                                         const isPicked = () =>
-                                            draft()!.picks.includes(String(index()));
+                                            draft()!.picks.includes(String(originalIndex));
                                         const isPendingSelection = () =>
                                             getCurrentPendingChampion() ===
-                                                String(index()) && isMyTurn();
+                                                String(originalIndex) && isMyTurn();
                                         const canSelect = () =>
                                             isMyTurn() &&
                                             !isPicked() &&
@@ -864,7 +890,7 @@ const VersusDraftView: Component = () => {
                                             <button
                                                 onClick={() =>
                                                     canSelect() &&
-                                                    handleChampionSelect(String(index()))
+                                                    handleChampionSelect(String(originalIndex))
                                                 }
                                                 class={`relative h-16 w-16 rounded border-2 transition-all ${
                                                     isPicked() && !isPendingSelection()
@@ -875,6 +901,7 @@ const VersusDraftView: Component = () => {
                                                             ? "cursor-pointer border-teal-500 hover:scale-105 hover:border-teal-400"
                                                             : "cursor-not-allowed border-slate-700 opacity-50"
                                                 }`}
+                                                title={champ.name}
                                             >
                                                 <img
                                                     src={champ.img}
