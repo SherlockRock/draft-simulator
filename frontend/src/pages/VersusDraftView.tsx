@@ -48,7 +48,10 @@ const VersusDraftView: Component = () => {
     const params = useParams<{ id: string; draftId: string }>();
     const navigate = useNavigate();
     const accessor = useUser();
-    const [, , socketAccessor] = accessor();
+    const [, , socketAccessor, connectionStatusAccessor] = accessor();
+
+    // Track disconnection state for reconnection handling
+    const [wasDisconnected, setWasDisconnected] = createSignal(false);
 
     // Get role and participant info from context (single source of truth)
     const {
@@ -271,6 +274,28 @@ const VersusDraftView: Component = () => {
             socket.off("roleAvailable");
             socket.off("versusWinnerUpdate");
         });
+    });
+
+    // Track disconnection and rejoin draft room on reconnect
+    createEffect(() => {
+        const status = connectionStatusAccessor();
+
+        if (status === "disconnected" || status === "connecting") {
+            setWasDisconnected(true);
+        } else if (status === "connected" && wasDisconnected()) {
+            setWasDisconnected(false);
+
+            // Reconnected - rejoin the draft room
+            const socket = socketAccessor();
+            if (socket) {
+                socket.emit("joinVersusDraft", {
+                    versusDraftId: params.id,
+                    draftId: params.draftId,
+                    role: myRole(),
+                    participantId: participantId()
+                });
+            }
+        }
     });
 
     // Register draft state with workflow context for FlowPanel

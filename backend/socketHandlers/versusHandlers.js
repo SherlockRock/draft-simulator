@@ -379,6 +379,103 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
     }
   });
 
+  // Request sync after reconnection
+  socket.on("versusRequestSync", async (data) => {
+    try {
+      const { versusDraftId, storedRole } = data;
+
+      const versusDraft = await VersusDraft.findByPk(versusDraftId, {
+        include: [{ model: Draft, as: "Drafts" }],
+        order: [[{ model: Draft, as: "Drafts" }, "seriesIndex", "ASC"]],
+      });
+
+      if (!versusDraft) {
+        return socket.emit("versusError", { error: "Versus draft not found" });
+      }
+
+      // Rejoin the versus room (lost on disconnect)
+      socket.join(`versus:${versusDraftId}`);
+
+      let myParticipant = null;
+
+      // Attempt to re-register participant with stored role
+      if (storedRole && storedRole.reclaimToken) {
+        const dbParticipant = await VersusParticipant.findOne({
+          where: {
+            versus_draft_id: versusDraftId,
+            reclaimToken: storedRole.reclaimToken,
+          },
+        });
+
+        if (dbParticipant) {
+          const roleAvailable = versusSessionManager.isRoleAvailable(
+            versusDraftId,
+            dbParticipant.role
+          );
+
+          if (roleAvailable) {
+            const visitorId = socket.user?.id || socket.id;
+            myParticipant = versusSessionManager.addParticipant(
+              versusDraftId,
+              socket,
+              visitorId,
+              dbParticipant.role,
+              dbParticipant.id
+            );
+
+            // Update DB record with new reclaim token
+            await dbParticipant.update({
+              reclaimToken: myParticipant.reclaimToken,
+              lastSeenAt: new Date(),
+            });
+
+            console.log(
+              `User reclaimed role on reconnect: ${dbParticipant.role}`
+            );
+          }
+        }
+      }
+
+      const participants = versusSessionManager.getParticipants(versusDraftId);
+
+      // If we didn't re-register, check if already registered (shouldn't happen but be safe)
+      if (!myParticipant) {
+        const existing = versusSessionManager.getParticipantBySocket(
+          versusDraftId,
+          socket.id
+        );
+        if (existing) {
+          myParticipant = existing;
+        }
+      }
+
+      socket.emit("versusSyncResponse", {
+        versusDraft: versusDraft.toJSON(),
+        participants,
+        myParticipant: myParticipant
+          ? {
+              id: myParticipant.participantId,
+              versus_draft_id: versusDraftId,
+              visitorId: myParticipant.visitorId,
+              role: myParticipant.role,
+              socketId: myParticipant.socketId,
+              isConnected: true,
+              lastSeenAt: new Date(myParticipant.lastSeenAt).toISOString(),
+              reclaimToken: myParticipant.reclaimToken,
+            }
+          : null,
+      });
+
+      // Broadcast updated participants to everyone
+      io.to(`versus:${versusDraftId}`).emit("versusParticipantsUpdate", {
+        participants,
+      });
+    } catch (error) {
+      console.error("Error in versusRequestSync:", error);
+      socket.emit("versusError", { error: "Failed to sync versus session" });
+    }
+  });
+
   // Join versus draft room (for draft view)
   socket.on("joinVersusDraft", async (data) => {
     try {

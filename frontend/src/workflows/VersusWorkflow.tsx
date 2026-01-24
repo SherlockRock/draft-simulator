@@ -110,6 +110,8 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
     const [currentVersusDraftId, setCurrentVersusDraftId] = createSignal<string | null>(
         null
     );
+    // Track disconnection state for sync on reconnect
+    const [wasDisconnected, setWasDisconnected] = createSignal(false);
 
     // Draft-specific state registration (for VersusDraftView to expose its state)
     const [activeDraftState, setActiveDraftState] = createSignal<ActiveDraftState | null>(
@@ -252,7 +254,10 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         };
 
         // Winner update handler
-        const handleWinnerUpdate = (data: { draftId: string; winner: "blue" | "red" }) => {
+        const handleWinnerUpdate = (data: {
+            draftId: string;
+            winner: "blue" | "red";
+        }) => {
             setVersusContext((prev) => {
                 if (!prev.versusDraft?.Drafts) return prev;
                 return {
@@ -261,14 +266,17 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
                         ...prev.versusDraft,
                         Drafts: prev.versusDraft.Drafts.map((d) =>
                             d.id === data.draftId ? { ...d, winner: data.winner } : d
-                        ),
-                    },
+                        )
+                    }
                 };
             });
         };
 
         // Draft status update handler (for completion status sync)
-        const handleDraftStatusUpdate = (data: { draftId: string; completed: boolean }) => {
+        const handleDraftStatusUpdate = (data: {
+            draftId: string;
+            completed: boolean;
+        }) => {
             setVersusContext((prev) => {
                 if (!prev.versusDraft?.Drafts) return prev;
                 return {
@@ -276,11 +284,37 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
                     versusDraft: {
                         ...prev.versusDraft,
                         Drafts: prev.versusDraft.Drafts.map((d) =>
-                            d.id === data.draftId ? { ...d, completed: data.completed } : d
-                        ),
-                    },
+                            d.id === data.draftId
+                                ? { ...d, completed: data.completed }
+                                : d
+                        )
+                    }
                 };
             });
+        };
+
+        // Sync response handler (for reconnection sync)
+        const handleSyncResponse = (data: {
+            versusDraft: VersusDraft;
+            participants: VersusParticipant[];
+            myParticipant: (VersusParticipant & { reclaimToken?: string }) | null;
+        }) => {
+            setVersusContext((prev) => ({
+                ...prev,
+                versusDraft: data.versusDraft,
+                participants: data.participants,
+                myParticipant: data.myParticipant ?? prev.myParticipant
+            }));
+
+            // Save updated role data with new reclaim token
+            if (data.myParticipant && data.myParticipant.reclaimToken) {
+                saveVersusRole(data.versusDraft.id, {
+                    role: data.myParticipant.role,
+                    participantId: data.myParticipant.id,
+                    reclaimToken: data.myParticipant.reclaimToken,
+                    timestamp: Date.now()
+                });
+            }
         };
 
         // Register listeners
@@ -293,6 +327,7 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         sock.on("versusUserCountUpdate", handleVersusUserCountUpdate);
         sock.on("versusWinnerUpdate", handleWinnerUpdate);
         sock.on("versusDraftStatusUpdate", handleDraftStatusUpdate);
+        sock.on("versusSyncResponse", handleSyncResponse);
 
         // Mark this socket as having listeners
         socketWithListeners = sock;
@@ -308,8 +343,8 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
             }
 
             // Clean up all listeners from this specific socket instance
+            // Note: versusRoleSelectResponse is managed by a separate effect
             sock.off("versusJoinResponse");
-            sock.off("versusRoleSelectResponse");
             sock.off("versusParticipantsUpdate");
             sock.off("versusDraftUpdate");
             sock.off("versusSeriesUpdate");
@@ -318,6 +353,7 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
             sock.off("versusUserCountUpdate");
             sock.off("versusWinnerUpdate");
             sock.off("versusDraftStatusUpdate");
+            sock.off("versusSyncResponse");
         });
 
         return currentRun;
@@ -363,6 +399,28 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         onCleanup(() => {
             sock.off("versusRoleSelectResponse");
         });
+    });
+
+    // Track disconnection and request sync on reconnect
+    createEffect(() => {
+        const status = connectionStatusAccessor();
+
+        if (status === "disconnected" || status === "connecting") {
+            setWasDisconnected(true);
+        } else if (status === "connected" && wasDisconnected()) {
+            setWasDisconnected(false);
+
+            // Reconnected - request fresh data and re-register participant
+            const sock = currentSocket();
+            const versusDraft = versusContext().versusDraft;
+            if (sock && versusDraft) {
+                const storedRole = getVersusRole(versusDraft.id);
+                sock.emit("versusRequestSync", {
+                    versusDraftId: versusDraft.id,
+                    storedRole: storedRole
+                });
+            }
+        }
     });
 
     // Detect navigation between different versus series and reset context

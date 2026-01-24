@@ -1,13 +1,8 @@
 Versus functionality:
-    indicators for when each team is ready
-    hover and selection functionality still not working properly
-        select will need to include a socket call
-    declaring a winner should be possible from the series page
     champs need to be searchable/sortable
     change picks posts game needs more working
-    updating versus isn't working
     once winner is calculated for comp games remaining games should not display?
-    reconnect not correctly sending out role claim
+    First pick vs red/blue
 
 Canvas Functionality:
     replace draft list button Functionality with right click menus?
@@ -26,6 +21,8 @@ Canvas Functionality:
     canvas selector should use searchable select
 
 Short Term:
+    action needs to start within a few clicks
+    things you need to be signed in for should not display if user is anon
     convert to standalone functionality is a bit wonky
     clean up panel ui
     delete draft functionality
