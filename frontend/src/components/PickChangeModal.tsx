@@ -1,6 +1,8 @@
 import { Component, Show, For, createSignal } from "solid-js";
 import { draft } from "../utils/types";
-import { champions } from "../utils/constants";
+import { champions, championCategories } from "../utils/constants";
+import { useFilterableItems } from "../hooks/useFilterableItems";
+import { FilterBar } from "./FilterBar";
 
 interface PickChangeRequest {
     requestId: string;
@@ -27,6 +29,20 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
 
     const isSpectator = () => props.myRole() === "spectator";
     const myTeam = () => (props.myRole()?.includes("blue") ? "blue" : "red");
+
+    // Champion filtering for Step 2
+    const {
+        searchText,
+        setSearchText,
+        selectedCategory,
+        setSelectedCategory,
+        filteredItems: filteredChampions,
+        categories: championCategoryList,
+        clearFilters
+    } = useFilterableItems({
+        items: champions,
+        categoryMap: championCategories
+    });
 
     // Get my team's bans for selection
     const getMyBans = () => {
@@ -77,6 +93,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
         setIsOpen(true);
         setSelectedPickIndex(null);
         setSelectedChampion(null);
+        clearFilters();
     };
 
     const handleSelectPick = (pickIndex: number) => {
@@ -207,11 +224,22 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                 <h3 class="mb-2 text-lg font-semibold text-slate-200">
                                     Step 2: Select new champion
                                 </h3>
+                                <div class="mb-2">
+                                    <FilterBar
+                                        searchText={searchText}
+                                        onSearchChange={setSearchText}
+                                        selectedCategory={selectedCategory}
+                                        onCategoryChange={setSelectedCategory}
+                                        categories={championCategoryList}
+                                        searchPlaceholder="Search champions..."
+                                        categoryPlaceholder="Role"
+                                    />
+                                </div>
                                 <div class="max-h-72 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-4">
                                     <div class="grid grid-cols-10 gap-1">
-                                        <For each={champions}>
-                                            {(champion, index) => {
-                                                const champIndex = () => String(index());
+                                        <For each={filteredChampions()}>
+                                            {({ item: champion, originalIndex }) => {
+                                                const champIndex = () => String(originalIndex);
                                                 const isAlreadyPicked = () =>
                                                     props.draft?.picks?.includes(
                                                         champIndex()
