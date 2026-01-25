@@ -1126,6 +1126,10 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       // Update the draft winner
       await draft.update({ winner });
 
+      // Update parent VersusDraft so it appears in recent activity
+      versusDraft.changed("updatedAt", true);
+      await versusDraft.save();
+
       // Broadcast to all participants
       io.to(`versus:${versusDraftId}`).emit("versusWinnerUpdate", {
         draftId,
@@ -1163,6 +1167,13 @@ async function processPickLock(io, draftId, team) {
 
     // Also broadcast to versus room so series overview updates
     if (draft.versus_draft_id) {
+      // Update parent VersusDraft so it appears in recent activity
+      const versusDraft = await VersusDraft.findByPk(draft.versus_draft_id);
+      if (versusDraft) {
+        versusDraft.changed("updatedAt", true);
+        await versusDraft.save();
+      }
+
       io.to(`versus:${draft.versus_draft_id}`).emit("versusDraftStatusUpdate", {
         draftId,
         completed: true,
