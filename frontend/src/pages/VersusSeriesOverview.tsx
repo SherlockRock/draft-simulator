@@ -48,6 +48,8 @@ const VersusSeriesOverview: Component = () => {
 
     const getDraftStatus = (draft: draft, index: number) => {
         if (draft.completed) return "complete";
+        // If series already decided, remaining games are locked
+        if (isSeriesDecided()) return "locked";
         const drafts = versusDraft()?.Drafts || [];
         if (index > 0) {
             const allPreviousCompleted = drafts.slice(0, index).every((d) => d.completed);
@@ -58,6 +60,11 @@ const VersusSeriesOverview: Component = () => {
     };
 
     const isDraftAccessible = (index: number) => {
+        // If series already decided, only completed games are accessible
+        if (isSeriesDecided()) {
+            const drafts = versusDraft()?.Drafts || [];
+            return drafts[index]?.completed === true;
+        }
         const drafts = versusDraft()?.Drafts || [];
         if (index === 0) return true;
         return drafts.slice(0, index).every((d) => d.completed);
@@ -82,6 +89,12 @@ const VersusSeriesOverview: Component = () => {
     };
 
     const getWinsNeeded = () => Math.ceil((versusDraft()?.length || 1) / 2);
+
+    const isSeriesDecided = createMemo(() => {
+        const { blueWins, redWins } = getSeriesScore();
+        const winsNeeded = getWinsNeeded();
+        return blueWins >= winsNeeded || redWins >= winsNeeded;
+    });
 
     const handleReportWinner = (draftId: string, winner: "blue" | "red") => {
         reportWinner(draftId, winner);
