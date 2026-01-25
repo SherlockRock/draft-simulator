@@ -150,6 +150,18 @@ router.put("/:id", authenticate, async (req, res) => {
     const firstDraft = drafts[0];
     const hasStarted = firstDraft && firstDraft.picks && firstDraft.picks.some(p => p && p !== "");
 
+    // Check if Game 2 has started (for type change validation)
+    const game2 = drafts.find(d => d.seriesIndex === 1);
+    const game2HasStarted = game2 && game2.picks && game2.picks.some(p => p && p !== "");
+
+    // Validate type change - allowed until Game 2 starts
+    if (type !== undefined && type !== versusDraft.type && game2HasStarted) {
+      await transaction.rollback();
+      return res.status(400).json({
+        error: "Cannot change series type after Game 2 has started"
+      });
+    }
+
     // Handle series length changes (only if series hasn't started)
     if (!hasStarted && length !== undefined && length !== drafts.length) {
       const delta = length - drafts.length;
@@ -210,8 +222,8 @@ router.put("/:id", authenticate, async (req, res) => {
       ...(icon !== undefined && { icon }),
       ...(blueTeamName && { blueTeamName }),
       ...(redTeamName && { redTeamName }),
-      // Only allow type/length changes if series hasn't started
-      ...(!hasStarted && type !== undefined && { type }),
+      // Type changes allowed until Game 2 starts, length changes only before series starts
+      ...(!game2HasStarted && type !== undefined && { type }),
       ...(!hasStarted && length !== undefined && { length }),
     }, { transaction });
 

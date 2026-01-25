@@ -29,7 +29,9 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
         const drafts = props.versusDraft.Drafts || [];
         if (drafts.length === 0) return false;
         const firstDraft = drafts[0];
-        return firstDraft.picks && firstDraft.picks.some((p: string | null) => p && p !== "");
+        return (
+            firstDraft.picks && firstDraft.picks.some((p: string | null) => p && p !== "")
+        );
     });
 
     createEffect(() => {
@@ -254,7 +256,9 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
                                 </label>
                                 <select
                                     value={length()}
-                                    onChange={(e) => setLength(parseInt(e.currentTarget.value))}
+                                    onChange={(e) =>
+                                        setLength(parseInt(e.currentTarget.value))
+                                    }
                                     class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-teal-500 focus:outline-none"
                                 >
                                     <option value={1}>Best of 1</option>

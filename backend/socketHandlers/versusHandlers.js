@@ -6,6 +6,7 @@ const {
   VERSUS_PICK_ORDER,
   getPicksArrayIndex,
 } = require("../utils/versusPickOrder");
+const { getRestrictedChampions } = require("../utils/seriesRestrictions");
 const crypto = require("crypto");
 
 function uuidv4() {
@@ -648,6 +649,27 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         return socket.emit("error", {
           message: "Champion already picked/banned",
         });
+      }
+
+      // Check series restrictions (Fearless/Ironman modes)
+      if (draft.versus_draft_id) {
+        const versusDraft = await VersusDraft.findByPk(draft.versus_draft_id, {
+          include: [{ model: Draft, as: "Drafts" }],
+        });
+
+        if (versusDraft) {
+          const restrictedChampions = getRestrictedChampions(
+            versusDraft.type,
+            versusDraft.Drafts,
+            draft.seriesIndex
+          );
+
+          if (restrictedChampions.includes(champion)) {
+            return socket.emit("error", {
+              message: "Champion restricted from previous games in this series",
+            });
+          }
+        }
       }
 
       // Save the pending pick (do NOT advance currentPickIndex)

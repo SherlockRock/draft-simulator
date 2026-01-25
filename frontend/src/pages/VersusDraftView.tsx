@@ -26,6 +26,11 @@ import { champions, championCategories } from "../utils/constants";
 import toast from "solid-toast";
 import { useFilterableItems } from "../hooks/useFilterableItems";
 import { FilterBar } from "../components/FilterBar";
+import BlankSquare from "/src/assets/BlankSquare.webp";
+import {
+    getRestrictedChampions,
+    getRestrictedChampionsByGame
+} from "../utils/seriesRestrictions";
 
 const fetchVersusDraft = async (id: string): Promise<VersusDraft> => {
     const response = await fetch(
@@ -88,6 +93,7 @@ const VersusDraftView: Component = () => {
     const [countdownValue, setCountdownValue] = createSignal(3);
     const [pendingPickChangeRequest, setPendingPickChangeRequest] =
         createSignal<any>(null);
+    const [activeTab, setActiveTab] = createSignal<"pick" | "restricted">("pick");
 
     // Champion filtering
     const {
@@ -540,6 +546,36 @@ const VersusDraftView: Component = () => {
 
     const draftStarted = () => versusState().timerStartedAt !== null;
 
+    // Compute restricted champions for Fearless/Ironman modes
+    const restrictedChampions = createMemo(() => {
+        const vd = versusDraft();
+        const d = draft();
+        if (!vd || !d) return [];
+        return getRestrictedChampions(
+            vd.type || "standard",
+            vd.Drafts || [],
+            d.seriesIndex ?? 0
+        );
+    });
+
+    // Compute restricted champions by game for Restricted tab display
+    const restrictedByGame = createMemo(() => {
+        const vd = versusDraft();
+        const d = draft();
+        if (!vd || !d) return [];
+        return getRestrictedChampionsByGame(
+            vd.type || "standard",
+            vd.Drafts || [],
+            d.seriesIndex ?? 0
+        );
+    });
+
+    // Check if Restricted tab should be shown (not Standard mode)
+    const showRestrictedTab = createMemo(() => {
+        const vd = versusDraft();
+        return vd && vd.type && vd.type !== "standard";
+    });
+
     // Check if the current pick slot has a pending champion selected
     const hasPendingPick = (): boolean => {
         const state = versusState();
@@ -690,7 +726,7 @@ const VersusDraftView: Component = () => {
                                         <For each={getTeamBans("blue")}>
                                             {(ban, index) => (
                                                 <div
-                                                    class={`h-12 w-12 rounded border-2 bg-slate-800 transition-all ${
+                                                    class={`h-14 w-14 rounded border-2 bg-slate-800 transition-all ${
                                                         isBanActive("blue", index())
                                                             ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
                                                             : "border-blue-600/30"
@@ -714,7 +750,7 @@ const VersusDraftView: Component = () => {
                                         <For each={getTeamBans("red")}>
                                             {(ban, index) => (
                                                 <div
-                                                    class={`h-12 w-12 rounded border-2 bg-slate-800 transition-all ${
+                                                    class={`h-14 w-14 rounded border-2 bg-slate-800 transition-all ${
                                                         isBanActive("red", index())
                                                             ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
                                                             : "border-red-600/30"
@@ -764,7 +800,7 @@ const VersusDraftView: Component = () => {
                                                                 champions[parseInt(pick)]
                                                                     .name
                                                             }
-                                                            class="h-12 w-12 rounded object-cover"
+                                                            class="h-14 w-14 rounded object-cover"
                                                         />
                                                         <span class="text-sm text-slate-200">
                                                             {
@@ -804,7 +840,7 @@ const VersusDraftView: Component = () => {
                                                                 champions[parseInt(pick)]
                                                                     .name
                                                             }
-                                                            class="h-12 w-12 rounded object-cover"
+                                                            class="h-14 w-14 rounded object-cover"
                                                         />
                                                         <span class="text-sm text-slate-200">
                                                             {
@@ -857,69 +893,378 @@ const VersusDraftView: Component = () => {
                             </Show>
                         </div>
 
-                        {/* Champion Grid */}
-                        <div class="w-96 border-l border-slate-700 bg-slate-800 pb-4 pl-0 pr-0 pt-4">
-                            <div class="mb-2 px-4 text-lg font-semibold text-slate-200">
-                                Champions
+                        {/* Champion Panel with Tabs */}
+                        <div class="flex w-96 flex-col border-l border-slate-700 bg-slate-800">
+                            {/* Tab Buttons */}
+                            <div class="flex border-b border-slate-700">
+                                <button
+                                    onClick={() => setActiveTab("pick")}
+                                    class={`flex-1 px-4 py-3 text-sm font-semibold transition-colors ${
+                                        activeTab() === "pick"
+                                            ? "border-b-2 border-teal-400 bg-slate-700/50 text-teal-400"
+                                            : "text-slate-400 hover:bg-slate-700/30 hover:text-slate-200"
+                                    }`}
+                                >
+                                    Pick
+                                </button>
+                                <Show when={showRestrictedTab()}>
+                                    <button
+                                        onClick={() => setActiveTab("restricted")}
+                                        class={`flex-1 px-4 py-3 text-sm font-semibold transition-colors ${
+                                            activeTab() === "restricted"
+                                                ? "border-b-2 border-teal-400 bg-slate-700/50 text-teal-400"
+                                                : "text-slate-400 hover:bg-slate-700/30 hover:text-slate-200"
+                                        }`}
+                                    >
+                                        Restricted
+                                    </button>
+                                </Show>
                             </div>
-                            <div class="px-4 pb-2">
-                                <FilterBar
-                                    searchText={searchText}
-                                    onSearchChange={setSearchText}
-                                    selectedCategory={selectedCategory}
-                                    onCategoryChange={setSelectedCategory}
-                                    categories={championCategoryList}
-                                    searchPlaceholder="Search champions..."
-                                    categoryPlaceholder="Role"
-                                />
-                            </div>
-                            <div
-                                class="grid grid-cols-4 gap-2 overflow-y-auto px-4 py-2"
-                                style={{ height: "calc(100vh - 260px)" }}
-                            >
-                                <For each={filteredChampions()}>
-                                    {({ item: champ, originalIndex }) => {
-                                        const isPicked = () =>
-                                            draft()!.picks.includes(
-                                                String(originalIndex)
-                                            );
-                                        const isPendingSelection = () =>
-                                            getCurrentPendingChampion() ===
-                                                String(originalIndex) && isMyTurn();
-                                        const canSelect = () =>
-                                            isMyTurn() &&
-                                            !isPicked() &&
-                                            !versusState().isPaused;
 
-                                        return (
-                                            <button
-                                                onClick={() =>
-                                                    canSelect() &&
-                                                    handleChampionSelect(
+                            {/* Pick Tab Content */}
+                            <Show when={activeTab() === "pick"}>
+                                <div class="flex flex-1 flex-col overflow-hidden pb-4 pt-4">
+                                    <div class="px-4 pb-2">
+                                        <FilterBar
+                                            searchText={searchText}
+                                            onSearchChange={setSearchText}
+                                            selectedCategory={selectedCategory}
+                                            onCategoryChange={setSelectedCategory}
+                                            categories={championCategoryList}
+                                            searchPlaceholder="Search champions..."
+                                            categoryPlaceholder="Role"
+                                        />
+                                    </div>
+                                    <div
+                                        class="grid grid-cols-5 gap-2 overflow-y-auto px-4 py-2"
+                                        style={{ height: "calc(100vh - 300px)" }}
+                                    >
+                                        <For each={filteredChampions()}>
+                                            {({ item: champ, originalIndex }) => {
+                                                const isPicked = () =>
+                                                    draft()!.picks.includes(
                                                         String(originalIndex)
-                                                    )
-                                                }
-                                                class={`relative h-16 w-16 rounded border-2 transition-all ${
-                                                    isPicked() && !isPendingSelection()
-                                                        ? "cursor-not-allowed border-slate-700 opacity-30"
-                                                        : isPendingSelection()
-                                                          ? "scale-110 cursor-pointer border-4 border-yellow-400 ring-4 ring-yellow-400/50"
-                                                          : canSelect()
-                                                            ? "cursor-pointer border-teal-500 hover:scale-105 hover:border-teal-400"
-                                                            : "cursor-not-allowed border-slate-700 opacity-50"
-                                                }`}
-                                                title={champ.name}
-                                            >
-                                                <img
-                                                    src={champ.img}
-                                                    alt={champ.name}
-                                                    class="h-full w-full rounded object-cover"
-                                                />
-                                            </button>
-                                        );
-                                    }}
-                                </For>
-                            </div>
+                                                    );
+                                                const isSeriesRestricted = () =>
+                                                    restrictedChampions().includes(
+                                                        String(originalIndex)
+                                                    );
+                                                const isPendingSelection = () =>
+                                                    getCurrentPendingChampion() ===
+                                                        String(originalIndex) &&
+                                                    isMyTurn();
+                                                const canSelect = () =>
+                                                    isMyTurn() &&
+                                                    !isPicked() &&
+                                                    !isSeriesRestricted() &&
+                                                    !versusState().isPaused;
+
+                                                return (
+                                                    <button
+                                                        onClick={() =>
+                                                            canSelect() &&
+                                                            handleChampionSelect(
+                                                                String(originalIndex)
+                                                            )
+                                                        }
+                                                        class={`relative h-14 w-14 overflow-hidden rounded border-2 transition-all ${
+                                                            (isPicked() ||
+                                                                isSeriesRestricted()) &&
+                                                            !isPendingSelection()
+                                                                ? "cursor-not-allowed border-slate-700 opacity-30"
+                                                                : isPendingSelection()
+                                                                  ? "scale-110 cursor-pointer border-4 border-yellow-400 ring-4 ring-yellow-400/50"
+                                                                  : canSelect()
+                                                                    ? "cursor-pointer border-teal-500 hover:scale-105 hover:border-teal-400"
+                                                                    : "cursor-not-allowed border-slate-700 opacity-50"
+                                                        }`}
+                                                        title={champ.name}
+                                                    >
+                                                        <img
+                                                            src={champ.img}
+                                                            alt={champ.name}
+                                                            class="h-full w-full object-cover"
+                                                        />
+                                                    </button>
+                                                );
+                                            }}
+                                        </For>
+                                    </div>
+                                </div>
+                            </Show>
+
+                            {/* Restricted Tab Content */}
+                            <Show when={activeTab() === "restricted"}>
+                                <div
+                                    class="flex-1 overflow-y-auto px-4 py-4"
+                                    style={{ height: "calc(100vh - 300px)" }}
+                                >
+                                    <Show
+                                        when={restrictedByGame().length > 0}
+                                        fallback={
+                                            <div class="flex h-full items-center justify-center text-sm text-slate-500">
+                                                No previous games
+                                            </div>
+                                        }
+                                    >
+                                        <For each={restrictedByGame()}>
+                                            {(game, index) => (
+                                                <div class="mb-4">
+                                                    <Show when={index() > 0}>
+                                                        <div class="mb-4 border-t border-slate-700" />
+                                                    </Show>
+                                                    <div class="mb-3 text-sm font-semibold text-slate-300">
+                                                        Game {game.gameNumber}
+                                                    </div>
+
+                                                    {/* Bans (Ironman only) */}
+                                                    <Show
+                                                        when={
+                                                            versusDraft()?.type ===
+                                                            "ironman"
+                                                        }
+                                                    >
+                                                        <div class="mb-3">
+                                                            <div class="mb-2 text-sm font-medium text-blue-400">
+                                                                Blue Bans
+                                                            </div>
+                                                            <div class="grid grid-cols-5 gap-2">
+                                                                <For each={game.blueBans}>
+                                                                    {(champId) => (
+                                                                        <div class="relative h-14 w-14 overflow-hidden rounded border-2 border-blue-600/30 bg-slate-700">
+                                                                            <Show
+                                                                                when={
+                                                                                    champId &&
+                                                                                    champId !==
+                                                                                        ""
+                                                                                }
+                                                                                fallback={
+                                                                                    <img
+                                                                                        src={
+                                                                                            BlankSquare
+                                                                                        }
+                                                                                        alt="Empty"
+                                                                                        class="h-full w-full object-cover"
+                                                                                    />
+                                                                                }
+                                                                            >
+                                                                                <img
+                                                                                    src={
+                                                                                        champions[
+                                                                                            parseInt(
+                                                                                                champId
+                                                                                            )
+                                                                                        ]
+                                                                                            .img
+                                                                                    }
+                                                                                    alt={
+                                                                                        champions[
+                                                                                            parseInt(
+                                                                                                champId
+                                                                                            )
+                                                                                        ]
+                                                                                            .name
+                                                                                    }
+                                                                                    class="h-full w-full object-cover opacity-50"
+                                                                                    title={
+                                                                                        champions[
+                                                                                            parseInt(
+                                                                                                champId
+                                                                                            )
+                                                                                        ]
+                                                                                            .name
+                                                                                    }
+                                                                                />
+                                                                                <div class="absolute inset-0 flex items-center justify-center bg-black/30">
+                                                                                    <span class="text-lg text-red-500">
+                                                                                        ✕
+                                                                                    </span>
+                                                                                </div>
+                                                                            </Show>
+                                                                        </div>
+                                                                    )}
+                                                                </For>
+                                                            </div>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <div class="mb-2 text-sm font-medium text-red-400">
+                                                                Red Bans
+                                                            </div>
+                                                            <div class="grid grid-cols-5 gap-2">
+                                                                <For each={game.redBans}>
+                                                                    {(champId) => (
+                                                                        <div class="relative h-14 w-14 overflow-hidden rounded border-2 border-red-600/30 bg-slate-700">
+                                                                            <Show
+                                                                                when={
+                                                                                    champId &&
+                                                                                    champId !==
+                                                                                        ""
+                                                                                }
+                                                                                fallback={
+                                                                                    <img
+                                                                                        src={
+                                                                                            BlankSquare
+                                                                                        }
+                                                                                        alt="Empty"
+                                                                                        class="h-full w-full object-cover"
+                                                                                    />
+                                                                                }
+                                                                            >
+                                                                                <img
+                                                                                    src={
+                                                                                        champions[
+                                                                                            parseInt(
+                                                                                                champId
+                                                                                            )
+                                                                                        ]
+                                                                                            .img
+                                                                                    }
+                                                                                    alt={
+                                                                                        champions[
+                                                                                            parseInt(
+                                                                                                champId
+                                                                                            )
+                                                                                        ]
+                                                                                            .name
+                                                                                    }
+                                                                                    class="h-full w-full object-cover opacity-50"
+                                                                                    title={
+                                                                                        champions[
+                                                                                            parseInt(
+                                                                                                champId
+                                                                                            )
+                                                                                        ]
+                                                                                            .name
+                                                                                    }
+                                                                                />
+                                                                                <div class="absolute inset-0 flex items-center justify-center bg-black/30">
+                                                                                    <span class="text-lg text-red-500">
+                                                                                        ✕
+                                                                                    </span>
+                                                                                </div>
+                                                                            </Show>
+                                                                        </div>
+                                                                    )}
+                                                                </For>
+                                                            </div>
+                                                        </div>
+                                                    </Show>
+
+                                                    {/* Picks (always shown for Fearless/Ironman) */}
+                                                    <div class="mb-3">
+                                                        <div class="mb-2 text-sm font-medium text-blue-400">
+                                                            Blue Picks
+                                                        </div>
+                                                        <div class="grid grid-cols-5 gap-2">
+                                                            <For each={game.bluePicks}>
+                                                                {(champId) => (
+                                                                    <div class="h-14 w-14 overflow-hidden rounded border-2 border-blue-600/30 bg-slate-700">
+                                                                        <Show
+                                                                            when={
+                                                                                champId &&
+                                                                                champId !==
+                                                                                    ""
+                                                                            }
+                                                                            fallback={
+                                                                                <img
+                                                                                    src={
+                                                                                        BlankSquare
+                                                                                    }
+                                                                                    alt="Empty"
+                                                                                    class="h-full w-full object-cover"
+                                                                                />
+                                                                            }
+                                                                        >
+                                                                            <img
+                                                                                src={
+                                                                                    champions[
+                                                                                        parseInt(
+                                                                                            champId
+                                                                                        )
+                                                                                    ].img
+                                                                                }
+                                                                                alt={
+                                                                                    champions[
+                                                                                        parseInt(
+                                                                                            champId
+                                                                                        )
+                                                                                    ].name
+                                                                                }
+                                                                                class="h-full w-full object-cover"
+                                                                                title={
+                                                                                    champions[
+                                                                                        parseInt(
+                                                                                            champId
+                                                                                        )
+                                                                                    ].name
+                                                                                }
+                                                                            />
+                                                                        </Show>
+                                                                    </div>
+                                                                )}
+                                                            </For>
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div class="mb-2 text-sm font-medium text-red-400">
+                                                            Red Picks
+                                                        </div>
+                                                        <div class="grid grid-cols-5 gap-2">
+                                                            <For each={game.redPicks}>
+                                                                {(champId) => (
+                                                                    <div class="h-14 w-14 overflow-hidden rounded border-2 border-red-600/30 bg-slate-700">
+                                                                        <Show
+                                                                            when={
+                                                                                champId &&
+                                                                                champId !==
+                                                                                    ""
+                                                                            }
+                                                                            fallback={
+                                                                                <img
+                                                                                    src={
+                                                                                        BlankSquare
+                                                                                    }
+                                                                                    alt="Empty"
+                                                                                    class="h-full w-full object-cover"
+                                                                                />
+                                                                            }
+                                                                        >
+                                                                            <img
+                                                                                src={
+                                                                                    champions[
+                                                                                        parseInt(
+                                                                                            champId
+                                                                                        )
+                                                                                    ].img
+                                                                                }
+                                                                                alt={
+                                                                                    champions[
+                                                                                        parseInt(
+                                                                                            champId
+                                                                                        )
+                                                                                    ].name
+                                                                                }
+                                                                                class="h-full w-full object-cover"
+                                                                                title={
+                                                                                    champions[
+                                                                                        parseInt(
+                                                                                            champId
+                                                                                        )
+                                                                                    ].name
+                                                                                }
+                                                                            />
+                                                                        </Show>
+                                                                    </div>
+                                                                )}
+                                                            </For>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </For>
+                                    </Show>
+                                </div>
+                            </Show>
                         </div>
                     </div>
 
