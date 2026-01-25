@@ -1,7 +1,8 @@
 Versus functionality:
-    champs need to be searchable/sortable
     once winner is calculated for comp games remaining games should not display?
     First pick vs red/blue
+    doing a draft should count as recent activity
+    not sure how I feel about the current draft name system
 
 Canvas Functionality:
     replace draft list button Functionality with right click menus?

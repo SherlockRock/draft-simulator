@@ -14,7 +14,7 @@ import { useQueryClient } from "@tanstack/solid-query";
 const VersusSeriesOverview: Component = () => {
     const params = useParams();
     const navigate = useNavigate();
-    const { versusContext, socket } = useVersusContext();
+    const { versusContext, reportWinner } = useVersusContext();
     const accessor = useUser();
     const [user] = accessor();
     const userId = createMemo(() => user()?.id || null);
@@ -84,15 +84,7 @@ const VersusSeriesOverview: Component = () => {
     const getWinsNeeded = () => Math.ceil((versusDraft()?.length || 1) / 2);
 
     const handleReportWinner = (draftId: string, winner: "blue" | "red") => {
-        const sock = socket();
-        const vd = versusDraft();
-        if (!sock || !vd) return;
-
-        sock.emit("versusReportWinner", {
-            versusDraftId: vd.id,
-            draftId,
-            winner
-        });
+        reportWinner(draftId, winner);
     };
 
     return (

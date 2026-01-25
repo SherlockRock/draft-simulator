@@ -10,7 +10,7 @@ import { useUser } from "../userProvider";
 
 const VersusFlowPanelContent: Component = () => {
     const params = useParams<{ id: string; draftId: string; linkToken: string }>();
-    const { versusContext, socket, activeDraftState, draftCallbacks } =
+    const { versusContext, socket, activeDraftState, draftCallbacks, reportWinner } =
         useVersusContext();
     const accessor = useUser();
     const [user] = accessor();
@@ -50,16 +50,9 @@ const VersusFlowPanelContent: Component = () => {
     });
 
     const handleReportWinner = (winner: "blue" | "red") => {
-        const sock = socket();
-        const vd = versusDraft();
         const draft = draftState()?.draft;
-        if (!sock || !vd || !draft) return;
-
-        sock.emit("versusReportWinner", {
-            versusDraftId: vd.id,
-            draftId: draft.id,
-            winner
-        });
+        if (!draft) return;
+        reportWinner(draft.id, winner);
     };
 
     return (

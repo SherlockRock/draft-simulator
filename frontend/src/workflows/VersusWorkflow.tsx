@@ -73,6 +73,9 @@ type VersusWorkflowContextValue = {
     chatMessages: () => ChatMessage[];
     addChatMessage: (message: ChatMessage) => void;
     chatUserCount: () => number;
+
+    // Winner reporting with optimistic update
+    reportWinner: (draftId: string, winner: "blue" | "red") => void;
 };
 
 const VersusWorkflowContext = createContext<VersusWorkflowContextValue>();
@@ -591,6 +594,33 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         setDraftCallbacks(null);
     };
 
+    const reportWinner = (draftId: string, winner: "blue" | "red") => {
+        const sock = currentSocket();
+        const vd = versusContext().versusDraft;
+        if (!sock || !vd) return;
+
+        // Optimistic update - update local state immediately
+        setVersusContext((prev) => {
+            if (!prev.versusDraft?.Drafts) return prev;
+            return {
+                ...prev,
+                versusDraft: {
+                    ...prev.versusDraft,
+                    Drafts: prev.versusDraft.Drafts.map((d) =>
+                        d.id === draftId ? { ...d, winner } : d
+                    )
+                }
+            };
+        });
+
+        // Emit socket event for other users
+        sock.emit("versusReportWinner", {
+            versusDraftId: vd.id,
+            draftId,
+            winner
+        });
+    };
+
     const contextValue: VersusWorkflowContextValue = {
         versusContext,
         selectRole,
@@ -605,7 +635,8 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         unregisterDraftCallbacks,
         chatMessages,
         addChatMessage,
-        chatUserCount
+        chatUserCount,
+        reportWinner
     };
 
     return (
