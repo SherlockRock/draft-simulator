@@ -239,7 +239,8 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                     <div class="grid grid-cols-10 gap-1">
                                         <For each={filteredChampions()}>
                                             {({ item: champion, originalIndex }) => {
-                                                const champIndex = () => String(originalIndex);
+                                                const champIndex = () =>
+                                                    String(originalIndex);
                                                 const isAlreadyPicked = () =>
                                                     props.draft?.picks?.includes(
                                                         champIndex()

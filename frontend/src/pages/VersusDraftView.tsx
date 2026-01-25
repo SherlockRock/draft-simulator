@@ -258,18 +258,21 @@ const VersusDraftView: Component = () => {
         });
 
         // Listen for winner updates
-        socket.on("versusWinnerUpdate", (data: { draftId: string; winner: "blue" | "red" }) => {
-            if (data.draftId === params.draftId) {
-                mutateDraft((prev) => ({
-                    ...prev!,
-                    winner: data.winner
-                }));
-                setVersusState((prev) => ({
-                    ...prev,
-                    winner: data.winner
-                }));
+        socket.on(
+            "versusWinnerUpdate",
+            (data: { draftId: string; winner: "blue" | "red" }) => {
+                if (data.draftId === params.draftId) {
+                    mutateDraft((prev) => ({
+                        ...prev!,
+                        winner: data.winner
+                    }));
+                    setVersusState((prev) => ({
+                        ...prev,
+                        winner: data.winner
+                    }));
+                }
             }
-        });
+        );
 
         onCleanup(() => {
             socket.emit("leaveVersusDraft", {
@@ -877,7 +880,9 @@ const VersusDraftView: Component = () => {
                                 <For each={filteredChampions()}>
                                     {({ item: champ, originalIndex }) => {
                                         const isPicked = () =>
-                                            draft()!.picks.includes(String(originalIndex));
+                                            draft()!.picks.includes(
+                                                String(originalIndex)
+                                            );
                                         const isPendingSelection = () =>
                                             getCurrentPendingChampion() ===
                                                 String(originalIndex) && isMyTurn();
@@ -890,7 +895,9 @@ const VersusDraftView: Component = () => {
                                             <button
                                                 onClick={() =>
                                                     canSelect() &&
-                                                    handleChampionSelect(String(originalIndex))
+                                                    handleChampionSelect(
+                                                        String(originalIndex)
+                                                    )
                                                 }
                                                 class={`relative h-16 w-16 rounded border-2 transition-all ${
                                                     isPicked() && !isPendingSelection()

@@ -14,7 +14,7 @@ export const Dialog = (props: {
                 }
             }}
         >
-            <div class="rounded-lg bg-slate-700 p-6 shadow-lg">{props.body}</div>
+            <div class="rounded-lg bg-slate-800 p-6 shadow-lg">{props.body}</div>
         </div>
     </Show>
 );

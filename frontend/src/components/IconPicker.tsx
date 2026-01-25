@@ -1,6 +1,11 @@
 import { createSignal, createEffect, For, Show } from "solid-js";
 import { Dialog } from "./Dialog";
-import { champions, EMOJI_OPTIONS, championCategories, emojiCategories } from "../utils/constants";
+import {
+    champions,
+    EMOJI_OPTIONS,
+    championCategories,
+    emojiCategories
+} from "../utils/constants";
 import { useFilterableItems } from "../hooks/useFilterableItems";
 import { FilterBar } from "./FilterBar";
 
@@ -28,7 +33,6 @@ export const IconPicker = (props: IconPickerProps) => {
 
     // Clear filters when switching tabs
     createEffect(() => {
-        const tab = activeTab();
         championFilter.clearFilters();
         emojiFilter.clearFilters();
     });
@@ -53,7 +57,7 @@ export const IconPicker = (props: IconPickerProps) => {
             isOpen={props.isOpen}
             onCancel={props.onClose}
             body={
-                <div class="w-[90vw] max-w-4xl">
+                <div class="h-[65vh] w-[90vw] max-w-4xl">
                     <div class="mb-4 flex items-center justify-between">
                         <h2 class="text-xl font-bold text-slate-50">Select Icon</h2>
                         <button
@@ -89,7 +93,7 @@ export const IconPicker = (props: IconPickerProps) => {
                     </div>
 
                     {/* Content */}
-                    <div class="max-h-[60vh] overflow-y-auto overflow-x-hidden">
+                    <div class="h-[50vh] overflow-y-auto overflow-x-hidden">
                         <Show when={activeTab() === "champions"}>
                             <div class="mb-2 p-2">
                                 <FilterBar
@@ -106,9 +110,12 @@ export const IconPicker = (props: IconPickerProps) => {
                                 <For each={championFilter.filteredItems()}>
                                     {({ item: champion, originalIndex }) => (
                                         <button
-                                            onClick={() => handleChampionSelect(originalIndex)}
+                                            onClick={() =>
+                                                handleChampionSelect(originalIndex)
+                                            }
                                             class={`group relative aspect-square overflow-hidden rounded border-2 transition-all hover:scale-105 ${
-                                                props.currentIcon === originalIndex.toString()
+                                                props.currentIcon ===
+                                                originalIndex.toString()
                                                     ? "border-teal-400 ring-2 ring-teal-400"
                                                     : "border-slate-600 hover:border-teal-500"
                                             }`}
@@ -146,7 +153,9 @@ export const IconPicker = (props: IconPickerProps) => {
                                 <For each={emojiFilter.filteredItems()}>
                                     {({ item: emojiItem }) => (
                                         <button
-                                            onClick={() => handleEmojiSelect(emojiItem.emoji)}
+                                            onClick={() =>
+                                                handleEmojiSelect(emojiItem.emoji)
+                                            }
                                             class={`flex aspect-square items-center justify-center rounded border-2 text-3xl transition-all hover:scale-105 ${
                                                 props.currentIcon === emojiItem.emoji
                                                     ? "border-teal-400 bg-slate-700 ring-2 ring-teal-400"

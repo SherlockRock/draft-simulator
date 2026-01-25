@@ -63,12 +63,12 @@ const VersusSeriesOverview: Component = () => {
         return drafts.slice(0, index).every((d) => d.completed);
     };
 
-    const getWinnerDisplay = (winner?: "blue" | "red" | null) => {
-        if (!winner) return null;
-        return winner === "blue"
-            ? versusDraft()?.blueTeamName
-            : versusDraft()?.redTeamName;
-    };
+    // const getWinnerDisplay = (winner?: "blue" | "red" | null) => {
+    //     if (!winner) return null;
+    //     return winner === "blue"
+    //         ? versusDraft()?.blueTeamName
+    //         : versusDraft()?.redTeamName;
+    // };
 
     const getSeriesScore = () => {
         const drafts = versusDraft()?.Drafts || [];
@@ -149,115 +149,115 @@ const VersusSeriesOverview: Component = () => {
 
                                 {/* Share popover */}
                                 <div class="relative">
-                                <button
-                                    onClick={() =>
-                                        setShowSharePopover(!showSharePopover())
-                                    }
-                                    class={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
-                                        showSharePopover()
-                                            ? "border-teal-500/50 bg-slate-700/80 text-teal-300"
-                                            : "border-slate-700 bg-slate-800/80 text-slate-300 hover:border-slate-600 hover:bg-slate-700/80 hover:text-slate-100"
-                                    }`}
-                                >
-                                    <svg
-                                        class="h-4 w-4"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                        stroke-width="2"
+                                    <button
+                                        onClick={() =>
+                                            setShowSharePopover(!showSharePopover())
+                                        }
+                                        class={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
+                                            showSharePopover()
+                                                ? "border-teal-500/50 bg-slate-700/80 text-teal-300"
+                                                : "border-slate-700 bg-slate-800/80 text-slate-300 hover:border-slate-600 hover:bg-slate-700/80 hover:text-slate-100"
+                                        }`}
                                     >
-                                        <path
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-                                        />
-                                    </svg>
-                                    Invite
-                                    <svg
-                                        class={`h-3 w-3 transition-transform ${showSharePopover() ? "rotate-180" : ""}`}
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                        stroke-width="2"
-                                    >
-                                        <path
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            d="M19 9l-7 7-7-7"
-                                        />
-                                    </svg>
-                                </button>
+                                        <svg
+                                            class="h-4 w-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                                            />
+                                        </svg>
+                                        Invite
+                                        <svg
+                                            class={`h-3 w-3 transition-transform ${showSharePopover() ? "rotate-180" : ""}`}
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                d="M19 9l-7 7-7-7"
+                                            />
+                                        </svg>
+                                    </button>
 
-                                <Show when={showSharePopover()}>
-                                    <div class="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-xl border border-slate-600/50 bg-slate-800 shadow-xl">
-                                        <div class="border-b border-slate-700/50 bg-slate-800/80 px-4 py-3">
-                                            <div class="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                                                Invite Link
+                                    <Show when={showSharePopover()}>
+                                        <div class="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-xl border border-slate-600/50 bg-slate-800 shadow-xl">
+                                            <div class="border-b border-slate-700/50 bg-slate-800/80 px-4 py-3">
+                                                <div class="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                                                    Invite Link
+                                                </div>
+                                                <p class="mt-1 text-sm text-slate-400">
+                                                    Share to invite captains or spectators
+                                                </p>
                                             </div>
-                                            <p class="mt-1 text-sm text-slate-400">
-                                                Share to invite captains or spectators
-                                            </p>
-                                        </div>
 
-                                        <div class="p-3">
-                                            <div class="flex gap-2">
-                                                <input
-                                                    type="text"
-                                                    readOnly
-                                                    value={`${window.location.origin}/versus/join/${versusDraft()!.shareLink}`}
-                                                    class="flex-1 rounded-lg border border-slate-600 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 focus:outline-none"
-                                                />
-                                                <button
-                                                    onClick={handleCopyLink}
-                                                    class="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-2 text-sm font-medium text-white transition-all hover:bg-teal-500"
-                                                >
-                                                    {copied() ? (
-                                                        <>
-                                                            <svg
-                                                                class="h-4 w-4"
-                                                                fill="none"
-                                                                viewBox="0 0 24 24"
-                                                                stroke="currentColor"
-                                                                stroke-width="2"
-                                                            >
-                                                                <path
-                                                                    stroke-linecap="round"
-                                                                    stroke-linejoin="round"
-                                                                    d="M5 13l4 4L19 7"
-                                                                />
-                                                            </svg>
-                                                            Copied
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <svg
-                                                                class="h-4 w-4"
-                                                                fill="none"
-                                                                viewBox="0 0 24 24"
-                                                                stroke="currentColor"
-                                                                stroke-width="2"
-                                                            >
-                                                                <path
-                                                                    stroke-linecap="round"
-                                                                    stroke-linejoin="round"
-                                                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                                                />
-                                                            </svg>
-                                                            Copy
-                                                        </>
-                                                    )}
-                                                </button>
+                                            <div class="p-3">
+                                                <div class="flex gap-2">
+                                                    <input
+                                                        type="text"
+                                                        readOnly
+                                                        value={`${window.location.origin}/versus/join/${versusDraft()!.shareLink}`}
+                                                        class="flex-1 rounded-lg border border-slate-600 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                                                    />
+                                                    <button
+                                                        onClick={handleCopyLink}
+                                                        class="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-2 text-sm font-medium text-white transition-all hover:bg-teal-500"
+                                                    >
+                                                        {copied() ? (
+                                                            <>
+                                                                <svg
+                                                                    class="h-4 w-4"
+                                                                    fill="none"
+                                                                    viewBox="0 0 24 24"
+                                                                    stroke="currentColor"
+                                                                    stroke-width="2"
+                                                                >
+                                                                    <path
+                                                                        stroke-linecap="round"
+                                                                        stroke-linejoin="round"
+                                                                        d="M5 13l4 4L19 7"
+                                                                    />
+                                                                </svg>
+                                                                Copied
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <svg
+                                                                    class="h-4 w-4"
+                                                                    fill="none"
+                                                                    viewBox="0 0 24 24"
+                                                                    stroke="currentColor"
+                                                                    stroke-width="2"
+                                                                >
+                                                                    <path
+                                                                        stroke-linecap="round"
+                                                                        stroke-linejoin="round"
+                                                                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                                                    />
+                                                                </svg>
+                                                                Copy
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </Show>
+                                    </Show>
 
-                                <Show when={showSharePopover()}>
-                                    <div
-                                        class="fixed inset-0 z-40"
-                                        onClick={() => setShowSharePopover(false)}
-                                    />
-                                </Show>
+                                    <Show when={showSharePopover()}>
+                                        <div
+                                            class="fixed inset-0 z-40"
+                                            onClick={() => setShowSharePopover(false)}
+                                        />
+                                    </Show>
                                 </div>
                             </div>
                         </div>
@@ -376,7 +376,6 @@ const VersusSeriesOverview: Component = () => {
                                     {(draft, index) => {
                                         const status = getDraftStatus(draft, index());
                                         const accessible = isDraftAccessible(index());
-                                        const winner = getWinnerDisplay(draft.winner);
 
                                         return (
                                             <div
@@ -538,7 +537,9 @@ const VersusSeriesOverview: Component = () => {
                             onClose={() => setShowEditDialog(false)}
                             versusDraft={versusDraft()!}
                             onSuccess={() => {
-                                queryClient.invalidateQueries({ queryKey: ["versus", params.id] });
+                                queryClient.invalidateQueries({
+                                    queryKey: ["versus", params.id]
+                                });
                             }}
                         />
                     </Show>

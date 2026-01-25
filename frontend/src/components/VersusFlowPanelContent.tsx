@@ -58,7 +58,7 @@ const VersusFlowPanelContent: Component = () => {
         sock.emit("versusReportWinner", {
             versusDraftId: vd.id,
             draftId: draft.id,
-            winner,
+            winner
         });
     };
 
@@ -125,14 +125,26 @@ const VersusFlowPanelContent: Component = () => {
             </Show>
 
             {/* Draft Controls Section - only when viewing a draft */}
-            <Show when={isInDraftView() && draftState() && ((callbacks() && !isSpectator()) || draftState()?.completed)}>
+            <Show
+                when={
+                    isInDraftView() &&
+                    draftState() &&
+                    ((callbacks() && !isSpectator()) || draftState()?.completed)
+                }
+            >
                 <div class="border-b border-slate-700 pb-4">
                     <h3 class="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
                         {draftState()?.completed ? "Game Result" : "Draft Controls"}
                     </h3>
                     <div class="space-y-2">
                         {/* Pause Button */}
-                        <Show when={callbacks()?.draftStarted() && !draftState()?.completed && !isSpectator()}>
+                        <Show
+                            when={
+                                callbacks()?.draftStarted() &&
+                                !draftState()?.completed &&
+                                !isSpectator()
+                            }
+                        >
                             <button
                                 onClick={() => callbacks()?.handlePause()}
                                 class="w-full rounded-lg border-2 border-slate-600/50 bg-slate-700 px-3 py-2 text-xs font-bold text-slate-200 transition-all hover:border-slate-500 hover:bg-slate-600 active:scale-[0.98]"

@@ -49,7 +49,9 @@ export function useFilterableItems<T extends FilterableItem>(
         // Filter by category first (if selected)
         if (category && options.categoryMap && options.categoryMap[category]) {
             const allowedIndices = new Set(options.categoryMap[category]);
-            result = result.filter(({ originalIndex }) => allowedIndices.has(originalIndex));
+            result = result.filter(({ originalIndex }) =>
+                allowedIndices.has(originalIndex)
+            );
         }
 
         // Then filter by search text

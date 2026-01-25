@@ -106,7 +106,6 @@ function DraftList(props: props) {
                 isOpen={showCreateDialog}
                 onClose={() => setShowCreateDialog(false)}
                 onSuccess={handleDraftCreated}
-                initialType="standalone"
             />
         </div>
     );

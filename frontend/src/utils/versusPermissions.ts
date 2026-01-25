@@ -13,9 +13,7 @@ export function canReportWinner(
     const draftIndex = drafts.findIndex((d) => d.id === targetDraft.id);
 
     // Check if there's a newer completed draft
-    const hasNewerCompletedDraft = drafts
-        .slice(draftIndex + 1)
-        .some((d) => d.completed);
+    const hasNewerCompletedDraft = drafts.slice(draftIndex + 1).some((d) => d.completed);
 
     const isCaptain = myRole === "blue_captain" || myRole === "red_captain";
     const isOwner = userId === versusDraft.owner_id;

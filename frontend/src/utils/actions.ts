@@ -163,7 +163,7 @@ export const editVersusDraft = async (
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(data),
+        body: JSON.stringify(data)
     });
     if (!res.ok) {
         throw new Error("Failed to update versus draft");
