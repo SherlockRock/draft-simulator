@@ -576,6 +576,22 @@ const VersusDraftView: Component = () => {
         return vd && vd.type && vd.type !== "standard";
     });
 
+    // Get the next game in the series (if any)
+    const nextGame = createMemo(() => {
+        const vd = versusDraft();
+        const d = draft();
+        if (!vd || !d || !vd.Drafts) return null;
+
+        const currentIndex = d.seriesIndex ?? 0;
+        const nextIndex = currentIndex + 1;
+
+        // No next game if we're at the end of the series
+        if (nextIndex >= vd.length) return null;
+
+        // Find the next game by seriesIndex
+        return vd.Drafts.find((game) => game.seriesIndex === nextIndex) || null;
+    });
+
     // Check if the current pick slot has a pending champion selected
     const hasPendingPick = (): boolean => {
         const state = versusState();
@@ -630,7 +646,7 @@ const VersusDraftView: Component = () => {
                         <div class="flex items-center gap-4">
                             <button
                                 onClick={() => navigate(`/versus/${params.id}`)}
-                                class="group flex items-center gap-2 text-slate-400 transition-colors hover:text-slate-200"
+                                class="group flex items-center gap-2 text-teal-400 transition-colors hover:text-teal-300"
                             >
                                 <span class="transition-transform group-hover:-translate-x-1">
                                     ←
@@ -644,11 +660,32 @@ const VersusDraftView: Component = () => {
                             />
                         </div>
 
-                        <VersusTimer
-                            timerStartedAt={versusState().timerStartedAt}
-                            duration={30}
-                            isPaused={versusState().isPaused}
-                        />
+                        <Show
+                            when={!versusState().completed}
+                            fallback={
+                                <Show when={nextGame()}>
+                                    <button
+                                        onClick={() =>
+                                            navigate(
+                                                `/versus/${params.id}/draft/${nextGame()!.id}`
+                                            )
+                                        }
+                                        class="group flex items-center gap-2 text-teal-400 transition-colors hover:text-teal-300"
+                                    >
+                                        <span class="text-sm font-medium">Next Game</span>
+                                        <span class="transition-transform group-hover:translate-x-1">
+                                            →
+                                        </span>
+                                    </button>
+                                </Show>
+                            }
+                        >
+                            <VersusTimer
+                                timerStartedAt={versusState().timerStartedAt}
+                                duration={30}
+                                isPaused={versusState().isPaused}
+                            />
+                        </Show>
                     </div>
 
                     {/* Main Content */}
