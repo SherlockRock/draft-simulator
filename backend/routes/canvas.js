@@ -5,6 +5,7 @@ const {
   UserCanvas,
   CanvasDraft,
   CanvasConnection,
+  CanvasGroup,
 } = require("../models/Canvas.js");
 const Draft = require("../models/Draft.js");
 const User = require("../models/User.js");
