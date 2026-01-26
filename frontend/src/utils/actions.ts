@@ -1,4 +1,4 @@
-import { CanvasDraft, Viewport, CanvasUser, draft, Connection } from "./types";
+import { CanvasDraft, Viewport, CanvasUser, draft, Connection, VersusDraft } from "./types";
 
 export const BASE_URL =
     import.meta.env.VITE_ENVIRONMENT === "production"
@@ -633,5 +633,110 @@ export const createDraft = async (data: {
         throw new Error("Failed to create draft");
     }
 
+    return await res.json();
+};
+
+export const importDraftToCanvas = async (data: {
+    canvasId: string;
+    draftId: string;
+    positionX?: number;
+    positionY?: number;
+}): Promise<{ success: boolean; canvasDraft: CanvasDraft }> => {
+    const res = await fetch(`${BASE_URL}/canvas/${data.canvasId}/import/draft`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            draftId: data.draftId,
+            positionX: data.positionX,
+            positionY: data.positionY
+        })
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to import draft");
+    }
+    return await res.json();
+};
+
+export const importSeriesToCanvas = async (data: {
+    canvasId: string;
+    versusDraftId: string;
+    positionX?: number;
+    positionY?: number;
+}): Promise<{ success: boolean; group: any }> => {
+    const res = await fetch(`${BASE_URL}/canvas/${data.canvasId}/import/series`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            versusDraftId: data.versusDraftId,
+            positionX: data.positionX,
+            positionY: data.positionY
+        })
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to import series");
+    }
+    return await res.json();
+};
+
+export const fetchStandaloneDrafts = async (): Promise<any[]> => {
+    const res = await fetch(`${BASE_URL}/drafts?type=standalone`, {
+        method: "GET",
+        credentials: "include"
+    });
+    if (!res.ok) {
+        throw new Error("Failed to fetch standalone drafts");
+    }
+    return await res.json();
+};
+
+export const fetchUserVersusSeries = async (): Promise<VersusDraft[]> => {
+    const res = await fetch(`${BASE_URL}/versus-drafts`, {
+        method: "GET",
+        credentials: "include"
+    });
+    if (!res.ok) {
+        throw new Error("Failed to fetch versus series");
+    }
+    return await res.json();
+};
+
+export const deleteCanvasGroup = async (data: {
+    canvasId: string;
+    groupId: string;
+}): Promise<{ success: boolean }> => {
+    const res = await fetch(`${BASE_URL}/canvas/${data.canvasId}/group/${data.groupId}`, {
+        method: "DELETE",
+        credentials: "include"
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to delete group");
+    }
+    return await res.json();
+};
+
+export const updateCanvasGroupPosition = async (data: {
+    canvasId: string;
+    groupId: string;
+    positionX: number;
+    positionY: number;
+}): Promise<{ success: boolean }> => {
+    const res = await fetch(`${BASE_URL}/canvas/${data.canvasId}/group/${data.groupId}/position`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            positionX: data.positionX,
+            positionY: data.positionY
+        })
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to update group position");
+    }
     return await res.json();
 };

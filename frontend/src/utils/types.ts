@@ -1,12 +1,38 @@
 export type CanvasDraft = {
     positionX: number;
     positionY: number;
+    is_locked?: boolean;
+    group_id?: string | null;
+    source_type?: "canvas" | "standalone" | "versus";
     Draft: {
         name: string;
         id: string;
         picks: string[];
         type: "canvas" | "standalone" | "versus";
+        versus_draft_id?: string;
+        seriesIndex?: number;
+        completed?: boolean;
+        winner?: "blue" | "red" | null;
     };
+};
+
+export type CanvasGroup = {
+    id: string;
+    canvas_id: string;
+    name: string;
+    type: "series" | "custom";
+    positionX: number;
+    positionY: number;
+    versus_draft_id?: string;
+    metadata: {
+        blueTeamName?: string;
+        redTeamName?: string;
+        length?: number;
+        competitive?: boolean;
+        seriesType?: string;
+    };
+    isInProgress?: boolean;
+    CanvasDrafts?: CanvasDraft[];
 };
 
 export type Viewport = {
