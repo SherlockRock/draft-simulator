@@ -9,6 +9,7 @@ const {
 } = require("../models/Canvas.js");
 const Draft = require("../models/Draft.js");
 const User = require("../models/User.js");
+const VersusDraft = require("../models/VersusDraft.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
 const { draftHasSharedWithUser } = require("../helpers.js");
@@ -93,8 +94,11 @@ router.get("/:canvasId", async (req, res) => {
 
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvas.id },
-      attributes: ["positionX", "positionY"],
-      include: [{ model: Draft, attributes: ["name", "id", "picks", "type"] }],
+      attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
+      include: [{
+        model: Draft,
+        attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"]
+      }],
       raw: true,
       nest: true,
     });
@@ -104,16 +108,25 @@ router.get("/:canvasId", async (req, res) => {
       raw: true,
     });
 
+    const groups = await CanvasGroup.findAll({
+      where: { canvas_id: canvas.id },
+      include: [{ model: VersusDraft }],
+    });
+
     res.json({
       name: canvas.name,
       drafts: canvasDrafts,
       connections: connections,
+      groups: groups.map((g) => ({
+        ...g.toJSON(),
+        isInProgress: g.VersusDraft ? !g.VersusDraft.Drafts?.every((d) => d.completed) : false,
+      })),
       lastViewport: {
         x: userCanvas.lastViewportX,
         y: userCanvas.lastViewportY,
         zoom: userCanvas.lastZoomLevel,
       },
-      userPermissions: userCanvas.permissions, // Include user's permissions
+      userPermissions: userCanvas.permissions,
     });
   } catch (error) {
     console.log("Error loading canvas:", error);
@@ -318,6 +331,340 @@ router.post("/", async (req, res) => {
   } catch (error) {
     console.error("Failed to save canvas:", error);
     res.status(500).json({ error: "Failed to save canvas" });
+  }
+});
+
+// Import existing standalone draft to canvas
+router.post("/:canvasId/import/draft", protect, async (req, res) => {
+  try {
+    const { canvasId } = req.params;
+    const { draftId, positionX, positionY } = req.body;
+
+    if (!draftId) {
+      return res.status(400).json({ error: "draftId is required" });
+    }
+
+    const userCanvas = await UserCanvas.findOne({
+      where: { canvas_id: canvasId, user_id: req.user.id },
+    });
+
+    if (
+      !userCanvas ||
+      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
+    ) {
+      return res.status(403).json({
+        error: "Forbidden: You don't have permission to edit this canvas",
+      });
+    }
+
+    const draft = await Draft.findByPk(draftId);
+    if (!draft) {
+      return res.status(404).json({ error: "Draft not found" });
+    }
+
+    // Check user has access to the draft
+    if (draft.owner_id !== req.user.id && !draft.public) {
+      const isSharedWith = await draftHasSharedWithUser(draft, req.user);
+      if (!isSharedWith) {
+        return res.status(403).json({ error: "Not authorized to use this draft" });
+      }
+    }
+
+    // Determine if draft is from versus series (locked) or standalone (editable)
+    const isLocked = draft.type === "versus" || !!draft.versus_draft_id;
+    const sourceType = draft.versus_draft_id ? "versus" : (draft.type || "standalone");
+
+    const canvasDraft = await CanvasDraft.create({
+      canvas_id: canvasId,
+      draft_id: draftId,
+      positionX: positionX ?? 50,
+      positionY: positionY ?? 50,
+      is_locked: isLocked,
+      source_type: sourceType,
+    });
+
+    await touchCanvasTimestamp(canvasId);
+
+    // Fetch the full canvas data for socket broadcast
+    const canvasDrafts = await CanvasDraft.findAll({
+      where: { canvas_id: canvasId },
+      attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
+      include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex"] }],
+      raw: true,
+      nest: true,
+    });
+
+    const connections = await CanvasConnection.findAll({
+      where: { canvas_id: canvasId },
+      raw: true,
+    });
+
+    const canvas = await Canvas.findByPk(canvasId);
+
+    res.status(201).json({
+      success: true,
+      canvasDraft: {
+        ...canvasDraft.toJSON(),
+        Draft: draft.toJSON(),
+      },
+    });
+
+    socketService.emitToRoom(canvasId, "canvasUpdate", {
+      canvas: canvas.toJSON(),
+      drafts: canvasDrafts,
+      connections: connections,
+    });
+  } catch (error) {
+    console.error("Failed to import draft:", error);
+    res.status(500).json({ error: "Failed to import draft" });
+  }
+});
+
+// Import versus series as a group
+router.post("/:canvasId/import/series", protect, async (req, res) => {
+  const t = await Canvas.sequelize.transaction();
+  try {
+    const { canvasId } = req.params;
+    const { versusDraftId, positionX, positionY } = req.body;
+
+    if (!versusDraftId) {
+      return res.status(400).json({ error: "versusDraftId is required" });
+    }
+
+    const userCanvas = await UserCanvas.findOne({
+      where: { canvas_id: canvasId, user_id: req.user.id },
+    });
+
+    if (
+      !userCanvas ||
+      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
+    ) {
+      await t.rollback();
+      return res.status(403).json({
+        error: "Forbidden: You don't have permission to edit this canvas",
+      });
+    }
+
+    const versusDraft = await VersusDraft.findByPk(versusDraftId, {
+      include: [{ model: Draft, as: "Drafts" }],
+    });
+
+    if (!versusDraft) {
+      await t.rollback();
+      return res.status(404).json({ error: "Versus series not found" });
+    }
+
+    // Create the group container
+    const group = await CanvasGroup.create(
+      {
+        canvas_id: canvasId,
+        name: versusDraft.name,
+        type: "series",
+        positionX: positionX ?? 50,
+        positionY: positionY ?? 50,
+        versus_draft_id: versusDraftId,
+        metadata: {
+          blueTeamName: versusDraft.blueTeamName,
+          redTeamName: versusDraft.redTeamName,
+          length: versusDraft.length,
+          competitive: versusDraft.competitive,
+          seriesType: versusDraft.type,
+        },
+      },
+      { transaction: t }
+    );
+
+    // Create CanvasDraft for each game in the series
+    const drafts = versusDraft.Drafts || [];
+    const sortedDrafts = [...drafts].sort((a, b) => a.seriesIndex - b.seriesIndex);
+
+    const createdCanvasDrafts = [];
+    for (let i = 0; i < sortedDrafts.length; i++) {
+      const draft = sortedDrafts[i];
+      const canvasDraft = await CanvasDraft.create(
+        {
+          canvas_id: canvasId,
+          draft_id: draft.id,
+          positionX: 20 + i * 380, // Horizontal layout within group
+          positionY: 60,
+          is_locked: true,
+          group_id: group.id,
+          source_type: "versus",
+        },
+        { transaction: t }
+      );
+      createdCanvasDrafts.push({
+        ...canvasDraft.toJSON(),
+        Draft: draft.toJSON(),
+      });
+    }
+
+    await t.commit();
+    await touchCanvasTimestamp(canvasId);
+
+    // Fetch all groups for response
+    const groups = await CanvasGroup.findAll({
+      where: { canvas_id: canvasId },
+      include: [
+        {
+          model: CanvasDraft,
+          include: [{ model: Draft }],
+        },
+      ],
+    });
+
+    // Fetch full canvas data for socket broadcast
+    const canvasDrafts = await CanvasDraft.findAll({
+      where: { canvas_id: canvasId },
+      attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
+      include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex"] }],
+      raw: true,
+      nest: true,
+    });
+
+    const connections = await CanvasConnection.findAll({
+      where: { canvas_id: canvasId },
+      raw: true,
+    });
+
+    const canvas = await Canvas.findByPk(canvasId);
+
+    res.status(201).json({
+      success: true,
+      group: {
+        ...group.toJSON(),
+        CanvasDrafts: createdCanvasDrafts,
+      },
+    });
+
+    socketService.emitToRoom(canvasId, "canvasUpdate", {
+      canvas: canvas.toJSON(),
+      drafts: canvasDrafts,
+      connections: connections,
+      groups: groups.map((g) => g.toJSON()),
+    });
+  } catch (error) {
+    await t.rollback();
+    console.error("Failed to import series:", error);
+    res.status(500).json({ error: "Failed to import series" });
+  }
+});
+
+// Delete a group from canvas
+router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
+  const t = await Canvas.sequelize.transaction();
+  try {
+    const { canvasId, groupId } = req.params;
+
+    const userCanvas = await UserCanvas.findOne({
+      where: { canvas_id: canvasId, user_id: req.user.id },
+    });
+
+    if (
+      !userCanvas ||
+      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
+    ) {
+      await t.rollback();
+      return res.status(403).json({
+        error: "Forbidden: You don't have permission to edit this canvas",
+      });
+    }
+
+    // Delete all CanvasDrafts in the group
+    await CanvasDraft.destroy({
+      where: { group_id: groupId, canvas_id: canvasId },
+      transaction: t,
+    });
+
+    // Delete the group
+    const affectedRows = await CanvasGroup.destroy({
+      where: { id: groupId, canvas_id: canvasId },
+      transaction: t,
+    });
+
+    if (affectedRows === 0) {
+      await t.rollback();
+      return res.status(404).json({ error: "Group not found" });
+    }
+
+    await t.commit();
+    await touchCanvasTimestamp(canvasId);
+
+    // Fetch updated canvas data
+    const canvasDrafts = await CanvasDraft.findAll({
+      where: { canvas_id: canvasId },
+      attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
+      include: [{ model: Draft, attributes: ["name", "id", "picks", "type"] }],
+      raw: true,
+      nest: true,
+    });
+
+    const connections = await CanvasConnection.findAll({
+      where: { canvas_id: canvasId },
+      raw: true,
+    });
+
+    const groups = await CanvasGroup.findAll({
+      where: { canvas_id: canvasId },
+    });
+
+    const canvas = await Canvas.findByPk(canvasId);
+
+    res.status(200).json({ success: true, message: "Group deleted" });
+
+    socketService.emitToRoom(canvasId, "canvasUpdate", {
+      canvas: canvas.toJSON(),
+      drafts: canvasDrafts,
+      connections: connections,
+      groups: groups.map((g) => g.toJSON()),
+    });
+  } catch (error) {
+    await t.rollback();
+    console.error("Failed to delete group:", error);
+    res.status(500).json({ error: "Failed to delete group" });
+  }
+});
+
+// Update group position
+router.put("/:canvasId/group/:groupId/position", protect, async (req, res) => {
+  try {
+    const { canvasId, groupId } = req.params;
+    const { positionX, positionY } = req.body;
+
+    const userCanvas = await UserCanvas.findOne({
+      where: { canvas_id: canvasId, user_id: req.user.id },
+    });
+
+    if (
+      !userCanvas ||
+      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
+    ) {
+      return res.status(403).json({
+        error: "Forbidden: You don't have permission to edit this canvas",
+      });
+    }
+
+    const [affectedRows] = await CanvasGroup.update(
+      { positionX, positionY },
+      { where: { id: groupId, canvas_id: canvasId } }
+    );
+
+    if (affectedRows === 0) {
+      return res.status(404).json({ error: "Group not found" });
+    }
+
+    await touchCanvasTimestamp(canvasId);
+
+    res.status(200).json({ success: true, message: "Group position updated" });
+
+    socketService.emitToRoom(canvasId, "groupMoved", {
+      groupId,
+      positionX,
+      positionY,
+    });
+  } catch (error) {
+    console.error("Failed to update group position:", error);
+    res.status(500).json({ error: "Failed to update group position" });
   }
 });
 
