@@ -55,6 +55,16 @@ const CanvasDraft = sequelize.define("CanvasDraft", {
   },
   positionX: { type: DataTypes.FLOAT, defaultValue: 50 },
   positionY: { type: DataTypes.FLOAT, defaultValue: 50 },
+  is_locked: { type: DataTypes.BOOLEAN, defaultValue: false },
+  group_id: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: { model: "CanvasGroups", key: "id" },
+  },
+  source_type: {
+    type: DataTypes.ENUM("canvas", "standalone", "versus"),
+    defaultValue: "canvas",
+  },
 });
 
 const CanvasShare = sequelize.define("CanvasShare", {
@@ -103,10 +113,41 @@ const CanvasConnection = sequelize.define("CanvasConnection", {
   },
 });
 
+const CanvasGroup = sequelize.define("CanvasGroup", {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  canvas_id: {
+    type: DataTypes.UUID,
+    references: { model: Canvas, key: "id" },
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  type: {
+    type: DataTypes.ENUM("series", "custom"),
+    defaultValue: "series",
+  },
+  positionX: { type: DataTypes.FLOAT, defaultValue: 50 },
+  positionY: { type: DataTypes.FLOAT, defaultValue: 50 },
+  versus_draft_id: {
+    type: DataTypes.UUID,
+    allowNull: true,
+  },
+  metadata: {
+    type: DataTypes.JSONB,
+    defaultValue: {},
+  },
+});
+
 module.exports = {
   Canvas,
   UserCanvas,
   CanvasDraft,
   CanvasShare,
   CanvasConnection,
+  CanvasGroup,
 };
