@@ -37,6 +37,7 @@ import { useUser } from "./userProvider";
 import { CanvasDraft, draft, Viewport, Connection } from "./utils/types";
 import { CanvasSelect } from "./components/CanvasSelect";
 import { Dialog } from "./components/Dialog";
+import { ImportToCanvasDialog } from "./components/ImportToCanvasDialog";
 import { ConnectionComponent, ConnectionPreview } from "./components/Connections";
 import { AnchorPoints } from "./components/AnchorPoints";
 import { AnchorType } from "./utils/types";
@@ -184,7 +185,7 @@ const CanvasCard = (props: cardProps) => {
                                 )
                             }
                             class="bg-transparent font-bold text-slate-50"
-                            disabled={props.isConnectionMode || !props.canEdit}
+                            disabled={props.isConnectionMode || !props.canEdit || !!props.canvasDraft.is_locked}
                         />
                         <div class="flex items-center gap-1">
                             <span
@@ -204,6 +205,18 @@ const CanvasCard = (props: cardProps) => {
                                       ? "Stand Alone Draft"
                                       : "Versus Draft"}
                             </span>
+                            <Show when={props.canvasDraft.is_locked}>
+                                <span
+                                    class="cursor-help rounded bg-slate-500/30 px-1.5 py-0.5 text-xs text-slate-300"
+                                    title={
+                                        props.canvasDraft.Draft.versus_draft_id
+                                            ? `Game ${(props.canvasDraft.Draft.seriesIndex ?? 0) + 1} of imported series`
+                                            : "Imported from versus series"
+                                    }
+                                >
+                                    Locked
+                                </span>
+                            </Show>
                         </div>
                     </div>
                     <div class="flex gap-1">
@@ -351,7 +364,7 @@ const CanvasCard = (props: cardProps) => {
                             draft={props.canvasDraft.Draft}
                             indexToShorthand={indexToShorthand()}
                             layoutToggle={props.layoutToggle}
-                            disabled={props.isConnectionMode || !props.canEdit}
+                            disabled={props.isConnectionMode || !props.canEdit || !!props.canvasDraft.is_locked}
                             focusedDraftId={props.focusedDraftId}
                             focusedSelectIndex={props.focusedSelectIndex}
                             onFocus={() =>
@@ -489,6 +502,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     });
     const [focusedDraftId, setFocusedDraftId] = createSignal<string | null>(null);
     const [focusedSelectIndex, setFocusedSelectIndex] = createSignal<number>(-1);
+    const [isImportDialogOpen, setIsImportDialogOpen] = createSignal(false);
+    const [importPosition, setImportPosition] = createSignal({ x: 0, y: 0 });
 
     let canvasContainerRef: HTMLDivElement | undefined;
     let svgRef: SVGSVGElement | undefined;
@@ -519,6 +534,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
         onCleanup(() => {
             canvasContext.setNavigateToDraftCallback(null);
+        });
+    });
+
+    // Set the import callback in the context
+    createEffect(() => {
+        canvasContext.setImportCallback(() => () => {
+            // Calculate center of viewport
+            const vp = props.viewport();
+            const centerX = vp.x + (window.innerWidth / 2) / vp.zoom;
+            const centerY = vp.y + (window.innerHeight / 2) / vp.zoom;
+            setImportPosition({ x: centerX, y: centerY });
+            setIsImportDialogOpen(true);
+        });
+
+        onCleanup(() => {
+            canvasContext.setImportCallback(null);
         });
     });
 
@@ -1529,6 +1560,21 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 </button>
                             </div>
                         </>
+                    }
+                />
+                <Dialog
+                    isOpen={isImportDialogOpen}
+                    onCancel={() => setIsImportDialogOpen(false)}
+                    body={
+                        <ImportToCanvasDialog
+                            canvasId={params.id}
+                            positionX={importPosition().x}
+                            positionY={importPosition().y}
+                            onClose={() => setIsImportDialogOpen(false)}
+                            onSuccess={() => {
+                                queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+                            }}
+                        />
                     }
                 />
             </div>

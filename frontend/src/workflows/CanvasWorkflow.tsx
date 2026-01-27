@@ -45,6 +45,8 @@ type CanvasContextType = {
     setNavigateToDraftCallback: Setter<
         ((positionX: number, positionY: number) => void) | null
     >;
+    importCallback: Accessor<(() => void) | null>;
+    setImportCallback: Setter<(() => void) | null>;
 };
 
 const CanvasContext = createContext<CanvasContextType>();
@@ -78,6 +80,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     const [navigateToDraftCallback, setNavigateToDraftCallback] = createSignal<
         ((positionX: number, positionY: number) => void) | null
     >(null);
+    const [importCallback, setImportCallback] = createSignal<(() => void) | null>(null);
     const [isManageUsersOpen, setIsManageUsersOpen] = createSignal(false);
     const [isSharePopperOpen, setIsSharePopperOpen] = createSignal(false);
     const [copied, setCopied] = createSignal("");
@@ -212,7 +215,9 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                 createDraftCallback,
                 setCreateDraftCallback,
                 navigateToDraftCallback,
-                setNavigateToDraftCallback
+                setNavigateToDraftCallback,
+                importCallback,
+                setImportCallback
             }}
         >
             <Dialog
@@ -252,6 +257,15 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                             }}
                                         >
                                             Create Draft
+                                        </button>
+                                        <button
+                                            class="rounded-md bg-teal-700 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-teal-400"
+                                            onClick={() => {
+                                                const callback = importCallback();
+                                                if (callback) callback();
+                                            }}
+                                        >
+                                            Import
                                         </button>
                                     </Show>
                                     <Show when={hasAdminPermissions()}>
