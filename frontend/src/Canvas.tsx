@@ -735,6 +735,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         if (props.canvasData && canvasDrafts.length === 0) {
             setCanvasDrafts(props.canvasData.drafts ?? []);
             setConnections(props.canvasData.connections ?? []);
+            setCanvasGroups(props.canvasData.groups ?? []);
             if (!viewportInitialized()) {
                 props.setViewport(
                     props.canvasData.lastViewport ?? { x: 0, y: 0, zoom: 1 }
@@ -766,9 +767,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 canvas: { id: string; name: string };
                 drafts: CanvasDraft[];
                 connections: Connection[];
+                groups?: CanvasGroup[];
             }) => {
                 setCanvasDrafts(data.drafts);
                 setConnections(data.connections);
+                setCanvasGroups(data.groups ?? []);
                 queryClient.setQueryData(["canvas", params.id], (oldData: any) => {
                     return { ...oldData, name: data.canvas.name };
                 });
@@ -873,6 +876,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 );
             }
         );
+        socketAccessor().on(
+            "groupMoved",
+            (data: { groupId: string; positionX: number; positionY: number }) => {
+                const gState = groupDragState();
+                if (gState.activeGroupId !== data.groupId) {
+                    setCanvasGroups(
+                        (g) => g.id === data.groupId,
+                        { positionX: data.positionX, positionY: data.positionY }
+                    );
+                }
+            }
+        );
         onCleanup(() => {
             socketAccessor().off("canvasUpdate");
             socketAccessor().off("draftUpdate");
@@ -884,6 +899,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             socketAccessor().off("vertexMoved");
             socketAccessor().off("vertexUpdated");
             socketAccessor().off("vertexDeleted");
+            socketAccessor().off("groupMoved");
         });
     });
 
