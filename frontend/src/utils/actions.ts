@@ -1,4 +1,4 @@
-import { CanvasDraft, Viewport, CanvasUser, draft, Connection, VersusDraft } from "./types";
+import { CanvasDraft, Viewport, CanvasUser, draft, Connection, VersusDraft, CanvasGroup } from "./types";
 
 export const BASE_URL =
     import.meta.env.VITE_ENVIRONMENT === "production"
@@ -191,6 +191,7 @@ export type CanvasResposnse = {
     name: string;
     drafts: CanvasDraft[];
     connections: Connection[];
+    groups: CanvasGroup[];
     lastViewport: Viewport;
     userPermissions: "view" | "edit" | "admin";
 };
