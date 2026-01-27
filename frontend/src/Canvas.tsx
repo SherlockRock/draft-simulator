@@ -34,7 +34,7 @@ import {
 import { useNavigate, useParams } from "@solidjs/router";
 import { toast } from "solid-toast";
 import { useUser } from "./userProvider";
-import { CanvasDraft, draft, Viewport, Connection } from "./utils/types";
+import { CanvasDraft, draft, Viewport, Connection, CanvasGroup } from "./utils/types";
 import { CanvasSelect } from "./components/CanvasSelect";
 import { Dialog } from "./components/Dialog";
 import { ImportToCanvasDialog } from "./components/ImportToCanvasDialog";
@@ -454,6 +454,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const canvasContext = useCanvasContext();
     const [canvasDrafts, setCanvasDrafts] = createStore<CanvasDraft[]>([]);
     const [connections, setConnections] = createStore<Connection[]>([]);
+    const [canvasGroups, setCanvasGroups] = createStore<CanvasGroup[]>([]);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = createSignal(false);
     const [draftToDelete, setDraftToDelete] = createSignal<CanvasDraft | null>(null);
     const [viewportInitialized, setViewportInitialized] = createSignal(false);
@@ -500,10 +501,21 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         offsetX: 0,
         offsetY: 0
     });
+    const [groupDragState, setGroupDragState] = createSignal<{
+        activeGroupId: string | null;
+        offsetX: number;
+        offsetY: number;
+    }>({
+        activeGroupId: null,
+        offsetX: 0,
+        offsetY: 0
+    });
     const [focusedDraftId, setFocusedDraftId] = createSignal<string | null>(null);
     const [focusedSelectIndex, setFocusedSelectIndex] = createSignal<number>(-1);
     const [isImportDialogOpen, setIsImportDialogOpen] = createSignal(false);
     const [importPosition, setImportPosition] = createSignal({ x: 0, y: 0 });
+    const [isDeleteGroupDialogOpen, setIsDeleteGroupDialogOpen] = createSignal(false);
+    const [groupToDelete, setGroupToDelete] = createSignal<CanvasGroup | null>(null);
 
     let canvasContainerRef: HTMLDivElement | undefined;
     let svgRef: SVGSVGElement | undefined;
