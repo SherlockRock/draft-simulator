@@ -35,6 +35,34 @@ router.get("/dropdown", async (req, res) => {
   }
 });
 
+// Get user's drafts with optional type filter
+router.get("/", async (req, res) => {
+  try {
+    const user = await getUserFromRequest(req);
+
+    if (!user) {
+      return res.json([]);
+    }
+
+    const { type } = req.query;
+
+    let whereClause = { owner_id: user.id };
+    if (type) {
+      whereClause.type = type;
+    }
+
+    const drafts = await Draft.findAll({
+      where: whereClause,
+      order: [["updatedAt", "DESC"]],
+    });
+
+    res.json(drafts);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server Error" });
+  }
+});
+
 router.get("/:id", async (req, res) => {
   try {
     const draft = await Draft.findByPk(req.params.id);

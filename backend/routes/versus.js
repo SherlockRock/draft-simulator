@@ -13,13 +13,14 @@ router.get("/", authenticate, async (req, res) => {
   try {
     const versusDrafts = await VersusDraft.findAll({
       where: { owner_id: req.user.id },
-      order: [["createdAt", "DESC"]],
       include: [
         {
           model: Draft,
           as: "Drafts",
+          attributes: ["id", "name", "picks", "seriesIndex", "completed", "winner"],
         },
       ],
+      order: [["updatedAt", "DESC"]],
     });
 
     res.json(versusDrafts);
