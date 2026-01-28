@@ -1365,6 +1365,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 return;
             }
 
+            const gState = groupDragState();
+            if (gState.activeGroupId) {
+                const worldCoords = screenToWorld(e.clientX, e.clientY);
+                const newX = worldCoords.x - gState.offsetX;
+                const newY = worldCoords.y - gState.offsetY;
+                setCanvasGroups(
+                    (g) => g.id === gState.activeGroupId,
+                    { positionX: newX, positionY: newY }
+                );
+                debouncedEmitGroupMove(gState.activeGroupId, newX, newY);
+                return;
+            }
+
             const state = dragState();
 
             if (state.isPanning) {
@@ -1413,6 +1426,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 setVertexDragState({
                     connectionId: null,
                     vertexId: null,
+                    offsetX: 0,
+                    offsetY: 0
+                });
+                return;
+            }
+
+            const gState = groupDragState();
+            if (gState.activeGroupId) {
+                const group = canvasGroups.find((g) => g.id === gState.activeGroupId);
+                if (group) {
+                    updateGroupPositionMutation.mutate({
+                        canvasId: params.id,
+                        groupId: gState.activeGroupId,
+                        positionX: group.positionX,
+                        positionY: group.positionY
+                    });
+                }
+                setGroupDragState({
+                    activeGroupId: null,
                     offsetX: 0,
                     offsetY: 0
                 });
