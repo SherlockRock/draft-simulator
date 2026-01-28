@@ -45,6 +45,7 @@ import { AnchorPoints } from "./components/AnchorPoints";
 import { AnchorType } from "./utils/types";
 import { useCanvasContext } from "./workflows/CanvasWorkflow";
 import { cardHeight, cardWidth } from "./utils/helpers";
+import { SeriesGroupContainer } from "./components/SeriesGroupContainer";
 
 type cardProps = {
     canvasDraft: CanvasDraft;
@@ -66,6 +67,10 @@ type cardProps = {
     onSelectNext: () => void;
     onSelectPrevious: () => void;
     canEdit: boolean;
+    // Props for grouped mode
+    isGrouped?: boolean;
+    groupPosition?: { x: number; y: number };
+    relativePosition?: { x: number; y: number };
 };
 
 const CanvasCard = (props: cardProps) => {
@@ -109,8 +114,14 @@ const CanvasCard = (props: cardProps) => {
             y: (worldY - vp.y) * vp.zoom
         };
     };
-    const screenPos = () =>
-        worldToScreen(props.canvasDraft.positionX, props.canvasDraft.positionY);
+    const screenPos = () => {
+        if (props.isGrouped && props.groupPosition && props.relativePosition) {
+            const absoluteX = props.groupPosition.x + props.relativePosition.x;
+            const absoluteY = props.groupPosition.y + props.relativePosition.y + 56; // 56 = header height
+            return worldToScreen(absoluteX, absoluteY);
+        }
+        return worldToScreen(props.canvasDraft.positionX, props.canvasDraft.positionY);
+    };
 
     const draftArrayMemo = createMemo(() =>
         props.layoutToggle()
@@ -146,12 +157,12 @@ const CanvasCard = (props: cardProps) => {
                 left: `${screenPos().x}px`,
                 top: `${screenPos().y}px`,
                 width: props.layoutToggle() ? "700px" : "350px",
-                cursor: props.isConnectionMode || !props.canEdit ? "default" : "move",
+                cursor: props.isConnectionMode || !props.canEdit || props.isGrouped ? "default" : "move",
                 transform: `scale(${props.viewport().zoom})`,
                 "transform-origin": "top left"
             }}
             onMouseDown={(e) => {
-                if (!props.isConnectionMode) {
+                if (!props.isConnectionMode && !props.isGrouped) {
                     props.onBoxMouseDown(props.canvasDraft.Draft.id, e);
                 }
             }}
@@ -518,6 +529,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [importPosition, setImportPosition] = createSignal({ x: 0, y: 0 });
     const [isDeleteGroupDialogOpen, setIsDeleteGroupDialogOpen] = createSignal(false);
     const [groupToDelete, setGroupToDelete] = createSignal<CanvasGroup | null>(null);
+
+    const ungroupedDrafts = createMemo(() =>
+        canvasDrafts.filter((cd) => !cd.group_id)
+    );
+
+    const getDraftsForGroup = (groupId: string) =>
+        canvasDrafts.filter((cd) => cd.group_id === groupId);
 
     let canvasContainerRef: HTMLDivElement | undefined;
     let svgRef: SVGSVGElement | undefined;
