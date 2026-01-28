@@ -49,9 +49,16 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
         return props.drafts.length > 0 && props.drafts.every((d) => d.Draft.completed);
     });
 
-    const seriesTypeLabel = createMemo(() => {
+    const seriesLengthLabel = createMemo(() => {
         const len = props.group.metadata.length ?? props.drafts.length;
         return `Bo${len}`;
+    });
+
+    const versusTypeLabel = createMemo(() => {
+        const type = props.group.metadata.seriesType;
+        if (!type) return null;
+        // Capitalize first letter
+        return type.charAt(0).toUpperCase() + type.slice(1);
     });
 
     return (
@@ -88,10 +95,24 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    {/* Series Type Badge */}
+                    {/* Series Length Badge */}
                     <span class="rounded bg-slate-600 px-2 py-0.5 text-xs text-slate-300">
-                        {seriesTypeLabel()}
+                        {seriesLengthLabel()}
                     </span>
+
+                    {/* Versus Type Badge */}
+                    <Show when={versusTypeLabel()}>
+                        <span
+                            class="rounded px-2 py-0.5 text-xs"
+                            classList={{
+                                "bg-blue-600/30 text-blue-300": props.group.metadata.seriesType === "standard",
+                                "bg-purple-600/30 text-purple-300": props.group.metadata.seriesType === "fearless",
+                                "bg-red-600/30 text-red-300": props.group.metadata.seriesType === "ironman"
+                            }}
+                        >
+                            {versusTypeLabel()}
+                        </span>
+                    </Show>
 
                     {/* Competitive Badge */}
                     <Show when={props.group.metadata.competitive}>
