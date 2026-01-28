@@ -29,7 +29,9 @@ import {
     createVertex,
     updateVertex,
     deleteVertex,
-    editDraft
+    editDraft,
+    deleteCanvasGroup,
+    updateCanvasGroupPosition
 } from "./utils/actions";
 import { useNavigate, useParams } from "@solidjs/router";
 import { toast } from "solid-toast";
@@ -703,6 +705,27 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     }));
 
+    const updateGroupPositionMutation = useMutation(() => ({
+        mutationFn: updateCanvasGroupPosition,
+        onError: (error: Error) => {
+            toast.error(`Failed to save group position: ${error.message}`);
+            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+        }
+    }));
+
+    const deleteGroupMutation = useMutation(() => ({
+        mutationFn: deleteCanvasGroup,
+        onSuccess: () => {
+            setIsDeleteGroupDialogOpen(false);
+            setGroupToDelete(null);
+            toast.success("Series removed from canvas");
+            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+        },
+        onError: (error: Error) => {
+            toast.error(`Error removing series: ${error.message}`);
+        }
+    }));
+
     const emitMove = (draftId: string, positionX: number, positionY: number) => {
         socketAccessor().emit("canvasObjectMove", {
             canvasId: params.id,
@@ -730,6 +753,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const debouncedEmitVertexMove = debounce(emitVertexMove, 25);
+
+    const emitGroupMove = (groupId: string, positionX: number, positionY: number) => {
+        socketAccessor().emit("groupMove", {
+            canvasId: params.id,
+            groupId,
+            positionX,
+            positionY
+        });
+    };
+
+    const debouncedEmitGroupMove = debounce(emitGroupMove, 25);
 
     createEffect(() => {
         if (props.canvasData && canvasDrafts.length === 0) {
@@ -1193,6 +1227,48 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const onSelectPrevious = () => {
         const holdSelectIndex = focusedSelectIndex();
         setFocusedSelectIndex(holdSelectIndex === 0 ? 19 : holdSelectIndex - 1);
+    };
+
+    const onGroupMouseDown = (groupId: string, e: MouseEvent) => {
+        if (isConnectionMode()) return;
+        if (!hasEditPermissions(props.canvasData?.userPermissions)) return;
+
+        const target = e.target as HTMLElement;
+        if (target.closest("button")) return;
+
+        e.preventDefault();
+        const group = canvasGroups.find((g) => g.id === groupId);
+        if (group) {
+            const worldCoords = screenToWorld(e.clientX, e.clientY);
+            setGroupDragState({
+                activeGroupId: groupId,
+                offsetX: worldCoords.x - group.positionX,
+                offsetY: worldCoords.y - group.positionY
+            });
+        }
+    };
+
+    const handleDeleteGroup = (groupId: string) => {
+        const group = canvasGroups.find((g) => g.id === groupId);
+        if (group) {
+            setGroupToDelete(group);
+            setIsDeleteGroupDialogOpen(true);
+        }
+    };
+
+    const onDeleteGroupConfirm = () => {
+        const group = groupToDelete();
+        if (group) {
+            deleteGroupMutation.mutate({
+                canvasId: params.id,
+                groupId: group.id
+            });
+        }
+    };
+
+    const onDeleteGroupCancel = () => {
+        setIsDeleteGroupDialogOpen(false);
+        setGroupToDelete(null);
     };
 
     const tabOrder = [
