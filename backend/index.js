@@ -216,6 +216,22 @@ async function main() {
       }
     });
 
+    socket.on("groupMove", async (data) => {
+      const userCanvas = await UserCanvas.findOne({
+        where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },
+      });
+      if (
+        (userCanvas && userCanvas.permissions === "edit") ||
+        userCanvas.permissions === "admin"
+      ) {
+        socket.to(data.canvasId).emit("groupMoved", {
+          groupId: data.groupId,
+          positionX: data.positionX,
+          positionY: data.positionY,
+        });
+      }
+    });
+
     socket.on("disconnecting", () => {
       for (const room of socket.rooms) {
         if (room !== socket.id) {
