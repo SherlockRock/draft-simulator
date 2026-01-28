@@ -505,23 +505,6 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
       });
     }
 
-    // Create connections between consecutive games to show series order
-    for (let i = 0; i < sortedDrafts.length - 1; i++) {
-      const sourceDraft = sortedDrafts[i];
-      const targetDraft = sortedDrafts[i + 1];
-
-      await CanvasConnection.create(
-        {
-          canvas_id: canvasId,
-          source_draft_ids: [{ draft_id: sourceDraft.id, anchor_type: "right" }],
-          target_draft_ids: [{ draft_id: targetDraft.id, anchor_type: "left" }],
-          vertices: [],
-          style: "solid",
-        },
-        { transaction: t }
-      );
-    }
-
     await t.commit();
     await touchCanvasTimestamp(canvasId);
 
