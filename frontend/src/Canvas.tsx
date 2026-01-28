@@ -1659,7 +1659,50 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         </Show>
                     </svg>
                 </div>
-                <For each={canvasDrafts}>
+                {/* Render Series Groups */}
+                <For each={canvasGroups}>
+                    {(group) => (
+                        <SeriesGroupContainer
+                            group={group}
+                            drafts={getDraftsForGroup(group.id)}
+                            viewport={props.viewport}
+                            onGroupMouseDown={onGroupMouseDown}
+                            onDeleteGroup={handleDeleteGroup}
+                            canEdit={hasEditPermissions(props.canvasData?.userPermissions)}
+                            isConnectionMode={isConnectionMode()}
+                            layoutToggle={props.layoutToggle}
+                            renderDraftCard={(cd, relativeX, relativeY) => (
+                                <CanvasCard
+                                    canvasDraft={cd}
+                                    addBox={addBox}
+                                    deleteBox={deleteBox}
+                                    handleNameChange={handleNameChange}
+                                    handlePickChange={handlePickChange}
+                                    viewport={props.viewport}
+                                    onBoxMouseDown={onBoxMouseDown}
+                                    layoutToggle={props.layoutToggle}
+                                    setLayoutToggle={props.setLayoutToggle}
+                                    isConnectionMode={isConnectionMode()}
+                                    onAnchorClick={onAnchorClick}
+                                    connectionSource={connectionSource}
+                                    sourceAnchor={sourceAnchor}
+                                    focusedDraftId={focusedDraftId}
+                                    focusedSelectIndex={focusedSelectIndex}
+                                    onSelectFocus={onSelectFocus}
+                                    onSelectNext={onSelectNext}
+                                    onSelectPrevious={onSelectPrevious}
+                                    canEdit={hasEditPermissions(props.canvasData?.userPermissions)}
+                                    isGrouped={true}
+                                    groupPosition={{ x: group.positionX, y: group.positionY }}
+                                    relativePosition={{ x: relativeX, y: relativeY }}
+                                />
+                            )}
+                        />
+                    )}
+                </For>
+
+                {/* Render Ungrouped Drafts */}
+                <For each={ungroupedDrafts()}>
                     {(cd) => (
                         <CanvasCard
                             canvasDraft={cd}
@@ -1729,6 +1772,37 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
                             }}
                         />
+                    }
+                />
+                <Dialog
+                    isOpen={isDeleteGroupDialogOpen}
+                    onCancel={onDeleteGroupCancel}
+                    body={
+                        <>
+                            <h3 class="mb-4 text-lg font-bold text-slate-50">
+                                Remove Series from Canvas?
+                            </h3>
+                            <p class="mb-4 text-slate-200">
+                                This will remove "{groupToDelete()?.name}" and all its games from this canvas.
+                            </p>
+                            <p class="mb-6 text-sm text-slate-400">
+                                The original series data will not be deleted - you can re-import it later.
+                            </p>
+                            <div class="flex justify-end gap-4">
+                                <button
+                                    onClick={onDeleteGroupCancel}
+                                    class="rounded bg-teal-700 px-4 py-2 text-slate-50 hover:bg-teal-400"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={onDeleteGroupConfirm}
+                                    class="rounded bg-red-400 px-4 py-2 text-slate-50 hover:bg-red-600"
+                                >
+                                    Remove
+                                </button>
+                            </div>
+                        </>
                     }
                 />
             </div>
