@@ -69,8 +69,6 @@ type cardProps = {
     canEdit: boolean;
     // Props for grouped mode
     isGrouped?: boolean;
-    groupPosition?: { x: number; y: number };
-    relativePosition?: { x: number; y: number };
 };
 
 const CanvasCard = (props: cardProps) => {
@@ -114,14 +112,8 @@ const CanvasCard = (props: cardProps) => {
             y: (worldY - vp.y) * vp.zoom
         };
     };
-    const screenPos = () => {
-        if (props.isGrouped && props.groupPosition && props.relativePosition) {
-            const absoluteX = props.groupPosition.x + props.relativePosition.x;
-            const absoluteY = props.groupPosition.y + props.relativePosition.y + 56; // 56 = header height
-            return worldToScreen(absoluteX, absoluteY);
-        }
-        return worldToScreen(props.canvasDraft.positionX, props.canvasDraft.positionY);
-    };
+    const screenPos = () =>
+        worldToScreen(props.canvasDraft.positionX, props.canvasDraft.positionY);
 
     const draftArrayMemo = createMemo(() =>
         props.layoutToggle()
@@ -148,18 +140,22 @@ const CanvasCard = (props: cardProps) => {
 
     return (
         <div
-            class="absolute z-30 flex flex-col rounded-md border border-slate-500 bg-slate-600 shadow-lg"
+            class="flex flex-col rounded-md border border-slate-500 bg-slate-600 shadow-lg"
             classList={{
+                "absolute z-30": !props.isGrouped,
                 "ring-4 ring-blue-400": props.isConnectionMode && !selected(),
-                "ring-4 ring-green-400": selected()
+                "ring-4 ring-green-400": selected(),
+                "flex-shrink-0": props.isGrouped
             }}
             style={{
-                left: `${screenPos().x}px`,
-                top: `${screenPos().y}px`,
+                ...(props.isGrouped ? {} : {
+                    left: `${screenPos().x}px`,
+                    top: `${screenPos().y}px`,
+                    transform: `scale(${props.viewport().zoom})`,
+                    "transform-origin": "top left"
+                }),
                 width: props.layoutToggle() ? "700px" : "350px",
-                cursor: props.isConnectionMode || !props.canEdit || props.isGrouped ? "default" : "move",
-                transform: `scale(${props.viewport().zoom})`,
-                "transform-origin": "top left"
+                cursor: props.isConnectionMode || !props.canEdit || props.isGrouped ? "default" : "move"
             }}
             onMouseDown={(e) => {
                 if (!props.isConnectionMode && !props.isGrouped) {
@@ -1670,8 +1666,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             onDeleteGroup={handleDeleteGroup}
                             canEdit={hasEditPermissions(props.canvasData?.userPermissions)}
                             isConnectionMode={isConnectionMode()}
-                            layoutToggle={props.layoutToggle}
-                            renderDraftCard={(cd, relativeX, relativeY) => (
+                            renderDraftCard={(cd) => (
                                 <CanvasCard
                                     canvasDraft={cd}
                                     addBox={addBox}
@@ -1693,8 +1688,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     onSelectPrevious={onSelectPrevious}
                                     canEdit={hasEditPermissions(props.canvasData?.userPermissions)}
                                     isGrouped={true}
-                                    groupPosition={{ x: group.positionX, y: group.positionY }}
-                                    relativePosition={{ x: relativeX, y: relativeY }}
                                 />
                             )}
                         />

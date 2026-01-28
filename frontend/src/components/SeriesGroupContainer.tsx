@@ -1,6 +1,5 @@
-import { For, Show, createMemo, Accessor } from "solid-js";
+import { For, Show, createMemo, Accessor, JSX } from "solid-js";
 import { CanvasDraft, CanvasGroup, Viewport } from "../utils/types";
-import { cardWidth, cardHeight } from "../utils/helpers";
 
 type SeriesGroupContainerProps = {
     group: CanvasGroup;
@@ -10,15 +9,14 @@ type SeriesGroupContainerProps = {
     onDeleteGroup: (groupId: string) => void;
     canEdit: boolean;
     isConnectionMode: boolean;
-    layoutToggle: () => boolean;
     // Pass-through for CanvasCard rendering
-    renderDraftCard: (draft: CanvasDraft, relativeX: number, relativeY: number) => any;
+    renderDraftCard: (draft: CanvasDraft) => JSX.Element;
 };
 
 // Constants for layout
 const HEADER_HEIGHT = 56;
 const PADDING = 20;
-const CARD_SPACING = 380;
+const CARD_GAP = 24;
 
 export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
     const worldToScreen = (worldX: number, worldY: number) => {
@@ -35,16 +33,6 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
         return [...props.drafts].sort(
             (a, b) => (a.Draft.seriesIndex ?? 0) - (b.Draft.seriesIndex ?? 0)
         );
-    });
-
-    const containerWidth = createMemo(() => {
-        const numDrafts = props.drafts.length;
-        const draftWidth = cardWidth(props.layoutToggle());
-        return PADDING * 2 + draftWidth + (numDrafts - 1) * CARD_SPACING;
-    });
-
-    const containerHeight = createMemo(() => {
-        return HEADER_HEIGHT + PADDING * 2 + cardHeight(props.layoutToggle());
     });
 
     const teamScore = createMemo(() => {
@@ -72,8 +60,6 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
             style={{
                 left: `${screenPos().x}px`,
                 top: `${screenPos().y}px`,
-                width: `${containerWidth()}px`,
-                height: `${containerHeight()}px`,
                 transform: `scale(${props.viewport().zoom})`,
                 "transform-origin": "top left"
             }}
@@ -152,14 +138,16 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                 </div>
             </div>
 
-            {/* Draft Cards Container */}
-            <div class="relative" style={{ height: `${containerHeight() - HEADER_HEIGHT}px` }}>
+            {/* Draft Cards Container - uses flexbox for layout */}
+            <div
+                class="flex items-start"
+                style={{
+                    padding: `${PADDING}px`,
+                    gap: `${CARD_GAP}px`
+                }}
+            >
                 <For each={sortedDrafts()}>
-                    {(draft, index) => {
-                        const relativeX = PADDING + index() * CARD_SPACING;
-                        const relativeY = PADDING;
-                        return props.renderDraftCard(draft, relativeX, relativeY);
-                    }}
+                    {(draft) => props.renderDraftCard(draft)}
                 </For>
             </div>
         </div>
