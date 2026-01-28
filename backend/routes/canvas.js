@@ -110,17 +110,23 @@ router.get("/:canvasId", async (req, res) => {
 
     const groups = await CanvasGroup.findAll({
       where: { canvas_id: canvas.id },
-      include: [{ model: VersusDraft }],
+    });
+
+    // Calculate isInProgress based on drafts in each group
+    const groupsWithProgress = groups.map((g) => {
+      const groupDrafts = canvasDrafts.filter((cd) => cd.group_id === g.id);
+      const isInProgress = groupDrafts.length > 0 && !groupDrafts.every((cd) => cd.Draft.completed);
+      return {
+        ...g.toJSON(),
+        isInProgress,
+      };
     });
 
     res.json({
       name: canvas.name,
       drafts: canvasDrafts,
       connections: connections,
-      groups: groups.map((g) => ({
-        ...g.toJSON(),
-        isInProgress: g.VersusDraft ? !g.VersusDraft.Drafts?.every((d) => d.completed) : false,
-      })),
+      groups: groupsWithProgress,
       lastViewport: {
         x: userCanvas.lastViewportX,
         y: userCanvas.lastViewportY,
@@ -485,8 +491,8 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
         {
           canvas_id: canvasId,
           draft_id: draft.id,
-          positionX: 20 + i * 380, // Horizontal layout within group
-          positionY: 60,
+          positionX: (positionX ?? 50) + i * 380, // Horizontal layout with spacing
+          positionY: positionY ?? 50,
           is_locked: true,
           group_id: group.id,
           source_type: "versus",
@@ -499,18 +505,29 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
       });
     }
 
+    // Create connections between consecutive games to show series order
+    for (let i = 0; i < sortedDrafts.length - 1; i++) {
+      const sourceDraft = sortedDrafts[i];
+      const targetDraft = sortedDrafts[i + 1];
+
+      await CanvasConnection.create(
+        {
+          canvas_id: canvasId,
+          source_draft_ids: [{ draft_id: sourceDraft.id, anchor_type: "right" }],
+          target_draft_ids: [{ draft_id: targetDraft.id, anchor_type: "left" }],
+          vertices: [],
+          style: "solid",
+        },
+        { transaction: t }
+      );
+    }
+
     await t.commit();
     await touchCanvasTimestamp(canvasId);
 
     // Fetch all groups for response
     const groups = await CanvasGroup.findAll({
       where: { canvas_id: canvasId },
-      include: [
-        {
-          model: CanvasDraft,
-          include: [{ model: Draft }],
-        },
-      ],
     });
 
     // Fetch full canvas data for socket broadcast
@@ -568,6 +585,40 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
       return res.status(403).json({
         error: "Forbidden: You don't have permission to edit this canvas",
       });
+    }
+
+    // Get draft IDs in the group
+    const groupDrafts = await CanvasDraft.findAll({
+      where: { group_id: groupId, canvas_id: canvasId },
+      attributes: ["draft_id"],
+      transaction: t,
+    });
+    const draftIdsToRemove = new Set(groupDrafts.map((d) => d.draft_id));
+
+    // Clean up connections involving these drafts
+    const allConnections = await CanvasConnection.findAll({
+      where: { canvas_id: canvasId },
+      transaction: t,
+    });
+
+    for (const conn of allConnections) {
+      const filteredSources = (conn.source_draft_ids || []).filter(
+        (src) => !draftIdsToRemove.has(src.draft_id)
+      );
+      const filteredTargets = (conn.target_draft_ids || []).filter(
+        (tgt) => !draftIdsToRemove.has(tgt.draft_id)
+      );
+
+      if (filteredSources.length === 0 || filteredTargets.length === 0) {
+        await conn.destroy({ transaction: t });
+      } else if (
+        filteredSources.length !== conn.source_draft_ids.length ||
+        filteredTargets.length !== conn.target_draft_ids.length
+      ) {
+        conn.source_draft_ids = filteredSources;
+        conn.target_draft_ids = filteredTargets;
+        await conn.save({ transaction: t });
+      }
     }
 
     // Delete all CanvasDrafts in the group
