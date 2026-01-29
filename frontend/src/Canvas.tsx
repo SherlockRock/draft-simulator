@@ -558,6 +558,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [createGroupPosition, setCreateGroupPosition] = createSignal({ x: 0, y: 0 });
     const [dragOverGroupId, setDragOverGroupId] = createSignal<string | null>(null);
     const [exitingGroupId, setExitingGroupId] = createSignal<string | null>(null);
+    const [contextMenuPosition, setContextMenuPosition] = createSignal<{ x: number; y: number } | null>(null);
+    const [contextMenuWorldPosition, setContextMenuWorldPosition] = createSignal({ x: 0, y: 0 });
 
     const ungroupedDrafts = createMemo(() => canvasDrafts.filter((cd) => !cd.group_id));
 
@@ -1413,6 +1415,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     };
 
+    const handleCanvasContextMenu = (e: MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.closest(".canvas-card") || target.closest(".group-container")) {
+            return;
+        }
+
+        e.preventDefault();
+
+        if (!hasEditPermissions(props.canvasData?.userPermissions)) return;
+
+        const worldPos = screenToWorld(e.clientX, e.clientY);
+        setContextMenuWorldPosition(worldPos);
+        setContextMenuPosition({ x: e.clientX, y: e.clientY });
+    };
+
+    const closeContextMenu = () => {
+        setContextMenuPosition(null);
+    };
+
     const tabOrder = [
         0, 10, 1, 11, 2, 12, 3, 13, 4, 14, 5, 15, 6, 16, 7, 17, 8, 18, 9, 19
     ];
@@ -1700,12 +1721,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         window.addEventListener("mousemove", onWindowMouseMove);
         window.addEventListener("mouseup", onWindowMouseUp);
         window.addEventListener("wheel", onWindowWheel, { passive: false });
+        window.addEventListener("click", closeContextMenu);
 
         onCleanup(() => {
             window.removeEventListener("keydown", onKeyDown);
             window.removeEventListener("mousemove", onWindowMouseMove);
             window.removeEventListener("mouseup", onWindowMouseUp);
             window.removeEventListener("wheel", onWindowWheel);
+            window.removeEventListener("click", closeContextMenu);
         });
     });
 
@@ -1753,7 +1776,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 </Show>
             }
         >
-            <div class="relative h-full w-full overflow-hidden" ref={canvasContainerRef}>
+            <div
+                class="relative h-full w-full overflow-hidden"
+                ref={canvasContainerRef}
+                onContextMenu={handleCanvasContextMenu}
+            >
                 <div class="absolute left-4 top-4 z-40 flex gap-2">
                     <input
                         type="text"
@@ -2012,38 +2039,87 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     }
                 />
                 <Dialog
+                    isOpen={isCreateGroupDialogOpen}
+                    onCancel={() => setIsCreateGroupDialogOpen(false)}
+                    body={
+                        <GroupNameDialog
+                            onConfirm={handleCreateGroup}
+                            onCancel={() => setIsCreateGroupDialogOpen(false)}
+                        />
+                    }
+                />
+                <Dialog
                     isOpen={isDeleteGroupDialogOpen}
                     onCancel={onDeleteGroupCancel}
                     body={
-                        <>
-                            <h3 class="mb-4 text-lg font-bold text-slate-50">
-                                Remove Series from Canvas?
-                            </h3>
-                            <p class="mb-4 text-slate-200">
-                                This will remove "{groupToDelete()?.name}" and all its
-                                games from this canvas.
-                            </p>
-                            <p class="mb-6 text-sm text-slate-400">
-                                The original series data will not be deleted - you can
-                                re-import it later.
-                            </p>
-                            <div class="flex justify-end gap-4">
-                                <button
-                                    onClick={onDeleteGroupCancel}
-                                    class="rounded bg-teal-700 px-4 py-2 text-slate-50 hover:bg-teal-400"
+                        <Show when={groupToDelete()}>
+                            {(group) => (
+                                <Show
+                                    when={group().type === "custom"}
+                                    fallback={
+                                        <>
+                                            <h3 class="mb-4 text-lg font-bold text-slate-50">
+                                                Remove Series from Canvas?
+                                            </h3>
+                                            <p class="mb-4 text-slate-200">
+                                                This will remove "{group().name}" and all its
+                                                games from this canvas.
+                                            </p>
+                                            <p class="mb-6 text-sm text-slate-400">
+                                                The original series data will not be deleted - you can
+                                                re-import it later.
+                                            </p>
+                                            <div class="flex justify-end gap-4">
+                                                <button
+                                                    onClick={onDeleteGroupCancel}
+                                                    class="rounded bg-teal-700 px-4 py-2 text-slate-50 hover:bg-teal-400"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteGroupWithChoice(false)}
+                                                    class="rounded bg-red-400 px-4 py-2 text-slate-50 hover:bg-red-600"
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+                                        </>
+                                    }
                                 >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={onDeleteGroupConfirm}
-                                    class="rounded bg-red-400 px-4 py-2 text-slate-50 hover:bg-red-600"
-                                >
-                                    Remove
-                                </button>
-                            </div>
-                        </>
+                                    <DeleteGroupDialog
+                                        group={group()}
+                                        draftCount={getDraftsForGroup(group().id).length}
+                                        onKeepDrafts={() => handleDeleteGroupWithChoice(true)}
+                                        onDeleteAll={() => handleDeleteGroupWithChoice(false)}
+                                        onCancel={onDeleteGroupCancel}
+                                    />
+                                </Show>
+                            )}
+                        </Show>
                     }
                 />
+                {/* Context Menu */}
+                <Show when={contextMenuPosition()}>
+                    <div
+                        class="fixed z-50 rounded-md bg-slate-700 py-1 shadow-lg border border-slate-500"
+                        style={{
+                            left: `${contextMenuPosition()!.x}px`,
+                            top: `${contextMenuPosition()!.y}px`
+                        }}
+                    >
+                        <button
+                            class="w-full px-4 py-2 text-left text-sm text-slate-200 hover:bg-slate-600"
+                            onClick={() => {
+                                const pos = contextMenuWorldPosition();
+                                setCreateGroupPosition(pos);
+                                setIsCreateGroupDialogOpen(true);
+                                closeContextMenu();
+                            }}
+                        >
+                            Create Group
+                        </button>
+                    </div>
+                </Show>
             </div>
         </Show>
     );
