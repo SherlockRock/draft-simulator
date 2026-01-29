@@ -31,7 +31,10 @@ import {
     deleteVertex,
     editDraft,
     deleteCanvasGroup,
-    updateCanvasGroupPosition
+    updateCanvasGroupPosition,
+    createCanvasGroup,
+    updateCanvasGroup,
+    updateCanvasDraft
 } from "./utils/actions";
 import { useNavigate, useParams } from "@solidjs/router";
 import { toast } from "solid-toast";
@@ -46,6 +49,9 @@ import { AnchorType } from "./utils/types";
 import { useCanvasContext } from "./workflows/CanvasWorkflow";
 import { cardHeight, cardWidth } from "./utils/helpers";
 import { SeriesGroupContainer } from "./components/SeriesGroupContainer";
+import { CustomGroupContainer } from "./components/CustomGroupContainer";
+import { GroupNameDialog } from "./components/GroupNameDialog";
+import { DeleteGroupDialog } from "./components/DeleteGroupDialog";
 
 type cardProps = {
     canvasDraft: CanvasDraft;
@@ -548,6 +554,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [importPosition, setImportPosition] = createSignal({ x: 0, y: 0 });
     const [isDeleteGroupDialogOpen, setIsDeleteGroupDialogOpen] = createSignal(false);
     const [groupToDelete, setGroupToDelete] = createSignal<CanvasGroup | null>(null);
+    const [isCreateGroupDialogOpen, setIsCreateGroupDialogOpen] = createSignal(false);
+    const [createGroupPosition, setCreateGroupPosition] = createSignal({ x: 0, y: 0 });
+    const [dragOverGroupId, setDragOverGroupId] = createSignal<string | null>(null);
+    const [exitingGroupId, setExitingGroupId] = createSignal<string | null>(null);
 
     const ungroupedDrafts = createMemo(() => canvasDrafts.filter((cd) => !cd.group_id));
 
@@ -760,11 +770,43 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     canvasDrafts.filter((cd) => cd.group_id !== deletedGroupId)
                 );
             }
-            toast.success("Series removed from canvas");
+            toast.success("Group removed from canvas");
             canvasContext.refetchCanvas();
         },
         onError: (error: Error) => {
-            toast.error(`Error removing series: ${error.message}`);
+            toast.error(`Error removing group: ${error.message}`);
+        }
+    }));
+
+    const createGroupMutation = useMutation(() => ({
+        mutationFn: createCanvasGroup,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+            toast.success("Group created");
+            setIsCreateGroupDialogOpen(false);
+        },
+        onError: (error: Error) => {
+            toast.error(`Failed to create group: ${error.message}`);
+        }
+    }));
+
+    const updateGroupMutation = useMutation(() => ({
+        mutationFn: updateCanvasGroup,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+        },
+        onError: (error: Error) => {
+            toast.error(`Failed to update group: ${error.message}`);
+        }
+    }));
+
+    const updateDraftGroupMutation = useMutation(() => ({
+        mutationFn: updateCanvasDraft,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+        },
+        onError: (error: Error) => {
+            toast.error(`Failed to update draft: ${error.message}`);
         }
     }));
 

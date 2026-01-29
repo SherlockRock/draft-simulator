@@ -50,6 +50,8 @@ type CanvasContextType = {
     >;
     importCallback: Accessor<(() => void) | null>;
     setImportCallback: Setter<(() => void) | null>;
+    createGroupCallback: Accessor<((positionX: number, positionY: number) => void) | null>;
+    setCreateGroupCallback: Setter<((positionX: number, positionY: number) => void) | null>;
 };
 
 const CanvasContext = createContext<CanvasContextType>();
@@ -84,6 +86,9 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         ((positionX: number, positionY: number) => void) | null
     >(null);
     const [importCallback, setImportCallback] = createSignal<(() => void) | null>(null);
+    const [createGroupCallback, setCreateGroupCallback] = createSignal<
+        ((positionX: number, positionY: number) => void) | null
+    >(null);
     const [isManageUsersOpen, setIsManageUsersOpen] = createSignal(false);
     const [isSharePopperOpen, setIsSharePopperOpen] = createSignal(false);
     const [copied, setCopied] = createSignal("");
@@ -221,7 +226,9 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                 navigateToDraftCallback,
                 setNavigateToDraftCallback,
                 importCallback,
-                setImportCallback
+                setImportCallback,
+                createGroupCallback,
+                setCreateGroupCallback
             }}
         >
             <Dialog
@@ -270,6 +277,17 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                             }}
                                         >
                                             Import
+                                        </button>
+                                        <button
+                                            class="rounded-md bg-teal-700 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-teal-400"
+                                            onClick={() => {
+                                                const callback = createGroupCallback();
+                                                if (callback) {
+                                                    callback(0, 0);
+                                                }
+                                            }}
+                                        >
+                                            New Group
                                         </button>
                                     </Show>
                                     <Show when={hasAdminPermissions()}>
