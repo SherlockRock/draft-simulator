@@ -142,7 +142,7 @@ router.get("/:canvasId", async (req, res) => {
 
 router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
   try {
-    const { positionX, positionY } = req.body;
+    const { positionX, positionY, group_id } = req.body;
     const { canvasId, draftId } = req.params;
 
     const userCanvas = await UserCanvas.findOne({
@@ -157,28 +157,59 @@ router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
       });
     }
 
-    const [affectedRows] = await CanvasDraft.update(
-      { positionX, positionY },
-      {
-        where: {
-          canvas_id: canvasId,
-          draft_id: draftId,
-        },
-      }
-    );
+    // Build update object
+    const updates = {};
+    if (typeof positionX === "number") updates.positionX = positionX;
+    if (typeof positionY === "number") updates.positionY = positionY;
+    if (group_id !== undefined) updates.group_id = group_id; // null to ungroup
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "No valid fields to update" });
+    }
+
+    const [affectedRows] = await CanvasDraft.update(updates, {
+      where: {
+        canvas_id: canvasId,
+        draft_id: draftId,
+      },
+    });
 
     if (affectedRows > 0) {
-      // Update canvas timestamp
       await touchCanvasTimestamp(canvasId);
 
-      res.status(200).json({ success: true, message: "Position updated" });
+      // If group assignment changed, emit full canvas update
+      if (group_id !== undefined) {
+        const canvasDrafts = await CanvasDraft.findAll({
+          where: { canvas_id: canvasId },
+          attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
+          include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] }],
+          raw: true,
+          nest: true,
+        });
+        const connections = await CanvasConnection.findAll({
+          where: { canvas_id: canvasId },
+          raw: true,
+        });
+        const groups = await CanvasGroup.findAll({
+          where: { canvas_id: canvasId },
+        });
+        const canvas = await Canvas.findByPk(canvasId);
+
+        socketService.emitToRoom(canvasId, "canvasUpdate", {
+          canvas: canvas.toJSON(),
+          drafts: canvasDrafts,
+          connections: connections,
+          groups: groups.map((g) => g.toJSON()),
+        });
+      }
+
+      res.status(200).json({ success: true, message: "Draft updated" });
     } else {
-      res
-        .status(404)
-        .json({ success: false, message: "Canvas draft not found" });
+      res.status(404).json({ success: false, message: "Canvas draft not found" });
     }
   } catch (error) {
-    res.status(500).json({ error: "Failed to update canvas draft position" });
+    console.error("Failed to update canvas draft:", error);
+    res.status(500).json({ error: "Failed to update canvas draft" });
   }
 });
 
@@ -659,6 +690,7 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
   const t = await Canvas.sequelize.transaction();
   try {
     const { canvasId, groupId } = req.params;
+    const keepDrafts = req.query.keepDrafts === "true";
 
     const userCanvas = await UserCanvas.findOne({
       where: { canvas_id: canvasId, user_id: req.user.id },
@@ -674,56 +706,71 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
       });
     }
 
-    // Get draft IDs in the group
-    const groupDrafts = await CanvasDraft.findAll({
-      where: { group_id: groupId, canvas_id: canvasId },
-      attributes: ["draft_id"],
-      transaction: t,
-    });
-    const draftIdsToRemove = new Set(groupDrafts.map((d) => d.draft_id));
-
-    // Clean up connections involving these drafts
-    const allConnections = await CanvasConnection.findAll({
-      where: { canvas_id: canvasId },
-      transaction: t,
-    });
-
-    for (const conn of allConnections) {
-      const filteredSources = (conn.source_draft_ids || []).filter(
-        (src) => !draftIdsToRemove.has(src.draft_id)
-      );
-      const filteredTargets = (conn.target_draft_ids || []).filter(
-        (tgt) => !draftIdsToRemove.has(tgt.draft_id)
-      );
-
-      if (filteredSources.length === 0 || filteredTargets.length === 0) {
-        await conn.destroy({ transaction: t });
-      } else if (
-        filteredSources.length !== conn.source_draft_ids.length ||
-        filteredTargets.length !== conn.target_draft_ids.length
-      ) {
-        conn.source_draft_ids = filteredSources;
-        conn.target_draft_ids = filteredTargets;
-        await conn.save({ transaction: t });
-      }
-    }
-
-    // Delete all CanvasDrafts in the group
-    await CanvasDraft.destroy({
-      where: { group_id: groupId, canvas_id: canvasId },
-      transaction: t,
-    });
-
-    // Delete the group
-    const affectedRows = await CanvasGroup.destroy({
+    const group = await CanvasGroup.findOne({
       where: { id: groupId, canvas_id: canvasId },
       transaction: t,
     });
 
-    if (affectedRows === 0) {
+    if (!group) {
       await t.rollback();
       return res.status(404).json({ error: "Group not found" });
     }
+
+    // Get draft IDs in the group
+    const groupDrafts = await CanvasDraft.findAll({
+      where: { group_id: groupId, canvas_id: canvasId },
+      transaction: t,
+    });
+    const draftIdsToRemove = new Set(groupDrafts.map((d) => d.draft_id));
+
+    if (keepDrafts) {
+      // Convert positions to absolute and ungroup
+      for (const draft of groupDrafts) {
+        await draft.update(
+          {
+            positionX: group.positionX + draft.positionX,
+            positionY: group.positionY + draft.positionY,
+            group_id: null,
+          },
+          { transaction: t }
+        );
+      }
+    } else {
+      // Clean up connections involving these drafts
+      const allConnections = await CanvasConnection.findAll({
+        where: { canvas_id: canvasId },
+        transaction: t,
+      });
+
+      for (const conn of allConnections) {
+        const filteredSources = (conn.source_draft_ids || []).filter(
+          (src) => !draftIdsToRemove.has(src.draft_id)
+        );
+        const filteredTargets = (conn.target_draft_ids || []).filter(
+          (tgt) => !draftIdsToRemove.has(tgt.draft_id)
+        );
+
+        if (filteredSources.length === 0 || filteredTargets.length === 0) {
+          await conn.destroy({ transaction: t });
+        } else if (
+          filteredSources.length !== conn.source_draft_ids.length ||
+          filteredTargets.length !== conn.target_draft_ids.length
+        ) {
+          conn.source_draft_ids = filteredSources;
+          conn.target_draft_ids = filteredTargets;
+          await conn.save({ transaction: t });
+        }
+      }
+
+      // Delete all CanvasDrafts in the group
+      await CanvasDraft.destroy({
+        where: { group_id: groupId, canvas_id: canvasId },
+        transaction: t,
+      });
+    }
+
+    // Delete the group
+    await group.destroy({ transaction: t });
 
     await t.commit();
     await touchCanvasTimestamp(canvasId);
@@ -763,11 +810,11 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
   }
 });
 
-// Update group position
-router.put("/:canvasId/group/:groupId/position", protect, async (req, res) => {
+// Update group (name, position, size)
+router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
   try {
     const { canvasId, groupId } = req.params;
-    const { positionX, positionY } = req.body;
+    const { name, positionX, positionY, width, height } = req.body;
 
     const userCanvas = await UserCanvas.findOne({
       where: { canvas_id: canvasId, user_id: req.user.id },
@@ -782,27 +829,70 @@ router.put("/:canvasId/group/:groupId/position", protect, async (req, res) => {
       });
     }
 
-    const [affectedRows] = await CanvasGroup.update(
-      { positionX, positionY },
-      { where: { id: groupId, canvas_id: canvasId } }
-    );
+    const group = await CanvasGroup.findOne({
+      where: { id: groupId, canvas_id: canvasId },
+    });
 
-    if (affectedRows === 0) {
+    if (!group) {
       return res.status(404).json({ error: "Group not found" });
     }
 
+    // Build update object with only provided fields
+    const updates = {};
+    if (name !== undefined && typeof name === "string" && name.trim().length > 0) {
+      updates.name = name.trim();
+    }
+    if (typeof positionX === "number") updates.positionX = positionX;
+    if (typeof positionY === "number") updates.positionY = positionY;
+    if (typeof width === "number" || width === null) updates.width = width;
+    if (typeof height === "number" || height === null) updates.height = height;
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "No valid fields to update" });
+    }
+
+    await group.update(updates);
     await touchCanvasTimestamp(canvasId);
 
-    res.status(200).json({ success: true, message: "Group position updated" });
+    res.status(200).json({ success: true, group: group.toJSON() });
 
-    socketService.emitToRoom(canvasId, "groupMoved", {
-      groupId,
-      positionX,
-      positionY,
-    });
+    // Emit appropriate socket event
+    if (updates.positionX !== undefined || updates.positionY !== undefined) {
+      socketService.emitToRoom(canvasId, "groupMoved", {
+        groupId,
+        positionX: group.positionX,
+        positionY: group.positionY,
+        width: group.width,
+        height: group.height,
+      });
+    } else {
+      // For name/size changes, emit full canvas update
+      const groups = await CanvasGroup.findAll({
+        where: { canvas_id: canvasId },
+      });
+      const canvasDrafts = await CanvasDraft.findAll({
+        where: { canvas_id: canvasId },
+        attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
+        include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] }],
+        raw: true,
+        nest: true,
+      });
+      const connections = await CanvasConnection.findAll({
+        where: { canvas_id: canvasId },
+        raw: true,
+      });
+      const canvas = await Canvas.findByPk(canvasId);
+
+      socketService.emitToRoom(canvasId, "canvasUpdate", {
+        canvas: canvas.toJSON(),
+        drafts: canvasDrafts,
+        connections: connections,
+        groups: groups.map((g) => g.toJSON()),
+      });
+    }
   } catch (error) {
-    console.error("Failed to update group position:", error);
-    res.status(500).json({ error: "Failed to update group position" });
+    console.error("Failed to update group:", error);
+    res.status(500).json({ error: "Failed to update group" });
   }
 });
 
