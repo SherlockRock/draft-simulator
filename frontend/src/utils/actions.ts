@@ -716,8 +716,14 @@ export const fetchUserVersusSeries = async (): Promise<VersusDraft[]> => {
 export const deleteCanvasGroup = async (data: {
     canvasId: string;
     groupId: string;
+    keepDrafts?: boolean;
 }): Promise<{ success: boolean }> => {
-    const res = await fetch(`${BASE_URL}/canvas/${data.canvasId}/group/${data.groupId}`, {
+    const params = new URLSearchParams();
+    if (data.keepDrafts !== undefined) {
+        params.append("keepDrafts", String(data.keepDrafts));
+    }
+    const url = `${BASE_URL}/canvas/${data.canvasId}/group/${data.groupId}${params.toString() ? `?${params}` : ""}`;
+    const res = await fetch(url, {
         method: "DELETE",
         credentials: "include"
     });
@@ -735,7 +741,7 @@ export const updateCanvasGroupPosition = async (data: {
     positionY: number;
 }): Promise<{ success: boolean }> => {
     const res = await fetch(
-        `${BASE_URL}/canvas/${data.canvasId}/group/${data.groupId}/position`,
+        `${BASE_URL}/canvas/${data.canvasId}/group/${data.groupId}`,
         {
             method: "PUT",
             credentials: "include",
@@ -749,6 +755,81 @@ export const updateCanvasGroupPosition = async (data: {
     if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || "Failed to update group position");
+    }
+    return await res.json();
+};
+
+export const createCanvasGroup = async (data: {
+    canvasId: string;
+    name: string;
+    positionX: number;
+    positionY: number;
+}): Promise<{ success: boolean; group: CanvasGroup }> => {
+    const res = await fetch(`${BASE_URL}/canvas/${data.canvasId}/group`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            name: data.name,
+            positionX: data.positionX,
+            positionY: data.positionY
+        })
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to create group");
+    }
+    return await res.json();
+};
+
+export const updateCanvasGroup = async (data: {
+    canvasId: string;
+    groupId: string;
+    name?: string;
+    positionX?: number;
+    positionY?: number;
+    width?: number | null;
+    height?: number | null;
+}): Promise<{ success: boolean; group: CanvasGroup }> => {
+    const res = await fetch(`${BASE_URL}/canvas/${data.canvasId}/group/${data.groupId}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            name: data.name,
+            positionX: data.positionX,
+            positionY: data.positionY,
+            width: data.width,
+            height: data.height
+        })
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to update group");
+    }
+    return await res.json();
+};
+
+export const updateCanvasDraft = async (data: {
+    canvasId: string;
+    draftId: string;
+    positionX?: number;
+    positionY?: number;
+    group_id?: string | null;
+}): Promise<{ success: boolean }> => {
+    const res = await fetch(`${BASE_URL}/canvas/${data.canvasId}/draft/${data.draftId}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            positionX: data.positionX,
+            positionY: data.positionY,
+            group_id: data.group_id
+        })
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to update draft");
     }
     return await res.json();
 };
