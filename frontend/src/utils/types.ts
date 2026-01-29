@@ -23,6 +23,8 @@ export type CanvasGroup = {
     type: "series" | "custom";
     positionX: number;
     positionY: number;
+    width?: number | null;
+    height?: number | null;
     versus_draft_id?: string;
     metadata: {
         blueTeamName?: string;

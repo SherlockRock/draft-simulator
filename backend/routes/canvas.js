@@ -582,6 +582,78 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
   }
 });
 
+// Create a custom group
+router.post("/:canvasId/group", protect, async (req, res) => {
+  try {
+    const { canvasId } = req.params;
+    const { name, positionX, positionY } = req.body;
+
+    if (!name || typeof name !== "string" || name.trim().length === 0) {
+      return res.status(400).json({ error: "Group name is required" });
+    }
+
+    const userCanvas = await UserCanvas.findOne({
+      where: { canvas_id: canvasId, user_id: req.user.id },
+    });
+
+    if (
+      !userCanvas ||
+      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
+    ) {
+      return res.status(403).json({
+        error: "Forbidden: You don't have permission to edit this canvas",
+      });
+    }
+
+    const group = await CanvasGroup.create({
+      canvas_id: canvasId,
+      name: name.trim(),
+      type: "custom",
+      positionX: positionX ?? 50,
+      positionY: positionY ?? 50,
+      width: 400,
+      height: 200,
+    });
+
+    await touchCanvasTimestamp(canvasId);
+
+    // Fetch all groups for socket broadcast
+    const groups = await CanvasGroup.findAll({
+      where: { canvas_id: canvasId },
+    });
+
+    const canvasDrafts = await CanvasDraft.findAll({
+      where: { canvas_id: canvasId },
+      attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
+      include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] }],
+      raw: true,
+      nest: true,
+    });
+
+    const connections = await CanvasConnection.findAll({
+      where: { canvas_id: canvasId },
+      raw: true,
+    });
+
+    const canvas = await Canvas.findByPk(canvasId);
+
+    res.status(201).json({
+      success: true,
+      group: group.toJSON(),
+    });
+
+    socketService.emitToRoom(canvasId, "canvasUpdate", {
+      canvas: canvas.toJSON(),
+      drafts: canvasDrafts,
+      connections: connections,
+      groups: groups.map((g) => g.toJSON()),
+    });
+  } catch (error) {
+    console.error("Failed to create group:", error);
+    res.status(500).json({ error: "Failed to create group" });
+  }
+});
+
 // Delete a group from canvas
 router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
   const t = await Canvas.sequelize.transaction();

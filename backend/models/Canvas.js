@@ -133,6 +133,8 @@ const CanvasGroup = sequelize.define("CanvasGroup", {
   },
   positionX: { type: DataTypes.FLOAT, defaultValue: 50 },
   positionY: { type: DataTypes.FLOAT, defaultValue: 50 },
+  width: { type: DataTypes.FLOAT, allowNull: true },
+  height: { type: DataTypes.FLOAT, allowNull: true },
   versus_draft_id: {
     type: DataTypes.UUID,
     allowNull: true,
