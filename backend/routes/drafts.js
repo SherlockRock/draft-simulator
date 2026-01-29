@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Draft = require("../models/Draft");
 const VersusDraft = require("../models/VersusDraft");
-const { CanvasDraft, Canvas, UserCanvas } = require("../models/Canvas.js");
+const { CanvasDraft, Canvas, UserCanvas, CanvasConnection, CanvasGroup } = require("../models/Canvas.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
 const { draftHasSharedWithUser } = require("../helpers.js");
@@ -149,16 +149,25 @@ router.post("/", protect, async (req, res) => {
 
       const canvasDrafts = await CanvasDraft.findAll({
         where: { canvas_id: canvas_id },
-        attributes: ["positionX", "positionY"],
+        attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
         include: [
-          { model: Draft, attributes: ["name", "id", "picks", "type"] },
+          { model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] },
         ],
         raw: true,
         nest: true,
       });
+      const connections = await CanvasConnection.findAll({
+        where: { canvas_id: canvas_id },
+        raw: true,
+      });
+      const groups = await CanvasGroup.findAll({
+        where: { canvas_id: canvas_id },
+      });
       socketService.emitToRoom(canvas_id, "canvasUpdate", {
         canvas: canvas.toJSON(),
         drafts: canvasDrafts,
+        connections: connections,
+        groups: groups.map((g) => g.toJSON()),
       });
     }
 

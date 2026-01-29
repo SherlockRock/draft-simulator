@@ -69,6 +69,7 @@ type cardProps = {
     canEdit: boolean;
     // Props for grouped mode
     isGrouped?: boolean;
+    groupType?: "series" | "custom";
 };
 
 const CanvasCard = (props: cardProps) => {
@@ -148,14 +149,19 @@ const CanvasCard = (props: cardProps) => {
                 "flex-shrink-0": props.isGrouped
             }}
             style={{
-                ...(props.isGrouped ? {} : {
-                    left: `${screenPos().x}px`,
-                    top: `${screenPos().y}px`,
-                    transform: `scale(${props.viewport().zoom})`,
-                    "transform-origin": "top left"
-                }),
+                ...(props.isGrouped
+                    ? {}
+                    : {
+                          left: `${screenPos().x}px`,
+                          top: `${screenPos().y}px`,
+                          transform: `scale(${props.viewport().zoom})`,
+                          "transform-origin": "top left"
+                      }),
                 width: props.layoutToggle() ? "700px" : "350px",
-                cursor: props.isConnectionMode || !props.canEdit || props.isGrouped ? "default" : "move"
+                cursor:
+                    props.isConnectionMode || !props.canEdit || props.isGrouped
+                        ? "default"
+                        : "move"
             }}
             onMouseDown={(e) => {
                 if (!props.isConnectionMode && !props.isGrouped) {
@@ -194,7 +200,11 @@ const CanvasCard = (props: cardProps) => {
                                 )
                             }
                             class="bg-transparent font-bold text-slate-50"
-                            disabled={props.isConnectionMode || !props.canEdit || !!props.canvasDraft.is_locked}
+                            disabled={
+                                props.isConnectionMode ||
+                                !props.canEdit ||
+                                !!props.canvasDraft.is_locked
+                            }
                         />
                         <div class="flex items-center gap-1">
                             <span
@@ -318,38 +328,47 @@ const CanvasCard = (props: cardProps) => {
                                 Copy Draft
                             </span>
                         </div>
-                        <div class="group relative">
-                            <button
-                                onClick={() =>
-                                    props.deleteBox(props.canvasDraft.Draft.id)
-                                }
-                                class="flex size-7 items-center justify-center rounded bg-red-400"
-                                classList={{
-                                    "opacity-50 cursor-not-allowed":
-                                        props.isConnectionMode || !props.canEdit,
-                                    "cursor-pointer hover:bg-red-600":
-                                        !props.isConnectionMode && props.canEdit
-                                }}
-                                disabled={props.isConnectionMode || !props.canEdit}
-                            >
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    class="h-4 w-4"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
+                        <Show
+                            when={
+                                !(
+                                    props.canvasDraft.is_locked &&
+                                    props.groupType === "series"
+                                )
+                            }
+                        >
+                            <div class="group relative">
+                                <button
+                                    onClick={() =>
+                                        props.deleteBox(props.canvasDraft.Draft.id)
+                                    }
+                                    class="flex size-7 items-center justify-center rounded bg-red-400"
+                                    classList={{
+                                        "opacity-50 cursor-not-allowed":
+                                            props.isConnectionMode || !props.canEdit,
+                                        "cursor-pointer hover:bg-red-600":
+                                            !props.isConnectionMode && props.canEdit
+                                    }}
+                                    disabled={props.isConnectionMode || !props.canEdit}
                                 >
-                                    <line x1="18" y1="6" x2="6" y2="18" />
-                                    <line x1="6" y1="6" x2="18" y2="18" />
-                                </svg>
-                            </button>
-                            <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
-                                Delete Draft
-                            </span>
-                        </div>
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        class="h-4 w-4"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <line x1="18" y1="6" x2="6" y2="18" />
+                                        <line x1="6" y1="6" x2="18" y2="18" />
+                                    </svg>
+                                </button>
+                                <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+                                    Delete Draft
+                                </span>
+                            </div>
+                        </Show>
                     </div>
                 </div>
             </div>
@@ -373,7 +392,11 @@ const CanvasCard = (props: cardProps) => {
                             draft={props.canvasDraft.Draft}
                             indexToShorthand={indexToShorthand()}
                             layoutToggle={props.layoutToggle}
-                            disabled={props.isConnectionMode || !props.canEdit || !!props.canvasDraft.is_locked}
+                            disabled={
+                                props.isConnectionMode ||
+                                !props.canEdit ||
+                                !!props.canvasDraft.is_locked
+                            }
                             focusedDraftId={props.focusedDraftId}
                             focusedSelectIndex={props.focusedSelectIndex}
                             onFocus={() =>
@@ -526,9 +549,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [isDeleteGroupDialogOpen, setIsDeleteGroupDialogOpen] = createSignal(false);
     const [groupToDelete, setGroupToDelete] = createSignal<CanvasGroup | null>(null);
 
-    const ungroupedDrafts = createMemo(() =>
-        canvasDrafts.filter((cd) => !cd.group_id)
-    );
+    const ungroupedDrafts = createMemo(() => canvasDrafts.filter((cd) => !cd.group_id));
 
     const getDraftsForGroup = (groupId: string) =>
         canvasDrafts.filter((cd) => cd.group_id === groupId);
@@ -570,8 +591,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         canvasContext.setImportCallback(() => () => {
             // Calculate center of viewport
             const vp = props.viewport();
-            const centerX = vp.x + (window.innerWidth / 2) / vp.zoom;
-            const centerY = vp.y + (window.innerHeight / 2) / vp.zoom;
+            const centerX = vp.x + window.innerWidth / 2 / vp.zoom;
+            const centerY = vp.y + window.innerHeight / 2 / vp.zoom;
             setImportPosition({ x: centerX, y: centerY });
             setIsImportDialogOpen(true);
         });
@@ -730,10 +751,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const deleteGroupMutation = useMutation(() => ({
         mutationFn: deleteCanvasGroup,
         onSuccess: () => {
+            const deletedGroupId = groupToDelete()?.id;
             setIsDeleteGroupDialogOpen(false);
             setGroupToDelete(null);
+            if (deletedGroupId) {
+                setCanvasGroups(canvasGroups.filter((g) => g.id !== deletedGroupId));
+                setCanvasDrafts(
+                    canvasDrafts.filter((cd) => cd.group_id !== deletedGroupId)
+                );
+            }
             toast.success("Series removed from canvas");
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+            canvasContext.refetchCanvas();
         },
         onError: (error: Error) => {
             toast.error(`Error removing series: ${error.message}`);
@@ -929,10 +957,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             (data: { groupId: string; positionX: number; positionY: number }) => {
                 const gState = groupDragState();
                 if (gState.activeGroupId !== data.groupId) {
-                    setCanvasGroups(
-                        (g) => g.id === data.groupId,
-                        { positionX: data.positionX, positionY: data.positionY }
-                    );
+                    setCanvasGroups((g) => g.id === data.groupId, {
+                        positionX: data.positionX,
+                        positionY: data.positionY
+                    });
                 }
             }
         );
@@ -1384,10 +1412,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 const worldCoords = screenToWorld(e.clientX, e.clientY);
                 const newX = worldCoords.x - gState.offsetX;
                 const newY = worldCoords.y - gState.offsetY;
-                setCanvasGroups(
-                    (g) => g.id === gState.activeGroupId,
-                    { positionX: newX, positionY: newY }
-                );
+                setCanvasGroups((g) => g.id === gState.activeGroupId, {
+                    positionX: newX,
+                    positionY: newY
+                });
                 debouncedEmitGroupMove(gState.activeGroupId, newX, newY);
                 return;
             }
@@ -1619,7 +1647,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     onMouseDown={onBackgroundMouseDown}
                     onDblClick={onBackgroundDoubleClick}
                 >
-                    <svg ref={svgRef} class="absolute inset-0 z-30 h-full w-full">
+                    <svg
+                        ref={svgRef}
+                        class="pointer-events-none absolute inset-0 z-30 h-full w-full"
+                    >
                         <For each={connections}>
                             {(connection) => (
                                 <ConnectionComponent
@@ -1664,7 +1695,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             viewport={props.viewport}
                             onGroupMouseDown={onGroupMouseDown}
                             onDeleteGroup={handleDeleteGroup}
-                            canEdit={hasEditPermissions(props.canvasData?.userPermissions)}
+                            canEdit={hasEditPermissions(
+                                props.canvasData?.userPermissions
+                            )}
                             isConnectionMode={isConnectionMode()}
                             renderDraftCard={(cd) => (
                                 <CanvasCard
@@ -1686,8 +1719,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     onSelectFocus={onSelectFocus}
                                     onSelectNext={onSelectNext}
                                     onSelectPrevious={onSelectPrevious}
-                                    canEdit={hasEditPermissions(props.canvasData?.userPermissions)}
+                                    canEdit={hasEditPermissions(
+                                        props.canvasData?.userPermissions
+                                    )}
                                     isGrouped={true}
+                                    groupType={group.type}
                                 />
                             )}
                         />
@@ -1762,7 +1798,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             positionY={importPosition().y}
                             onClose={() => setIsImportDialogOpen(false)}
                             onSuccess={() => {
-                                queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+                                canvasContext.refetchCanvas();
                             }}
                         />
                     }
@@ -1776,10 +1812,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 Remove Series from Canvas?
                             </h3>
                             <p class="mb-4 text-slate-200">
-                                This will remove "{groupToDelete()?.name}" and all its games from this canvas.
+                                This will remove "{groupToDelete()?.name}" and all its
+                                games from this canvas.
                             </p>
                             <p class="mb-6 text-sm text-slate-400">
-                                The original series data will not be deleted - you can re-import it later.
+                                The original series data will not be deleted - you can
+                                re-import it later.
                             </p>
                             <div class="flex justify-end gap-4">
                                 <button

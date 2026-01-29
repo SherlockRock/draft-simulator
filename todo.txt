@@ -5,6 +5,7 @@ Versus functionality:
     the unpickable because it isn't your turn UI should be more distinct from unpickable due to fearless
 
 Canvas Functionality:
+    import list should include shared items (only maters if I keep standalone drafts ig)
     replace draft list button Functionality with right click menus?
     editing from the manage canvas' dialog
     Export draft

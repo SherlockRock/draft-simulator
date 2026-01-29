@@ -1,4 +1,12 @@
-import { CanvasDraft, Viewport, CanvasUser, draft, Connection, VersusDraft, CanvasGroup } from "./types";
+import {
+    CanvasDraft,
+    Viewport,
+    CanvasUser,
+    draft,
+    Connection,
+    VersusDraft,
+    CanvasGroup
+} from "./types";
 
 export const BASE_URL =
     import.meta.env.VITE_ENVIRONMENT === "production"
@@ -726,15 +734,18 @@ export const updateCanvasGroupPosition = async (data: {
     positionX: number;
     positionY: number;
 }): Promise<{ success: boolean }> => {
-    const res = await fetch(`${BASE_URL}/canvas/${data.canvasId}/group/${data.groupId}/position`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            positionX: data.positionX,
-            positionY: data.positionY
-        })
-    });
+    const res = await fetch(
+        `${BASE_URL}/canvas/${data.canvasId}/group/${data.groupId}/position`,
+        {
+            method: "PUT",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                positionX: data.positionX,
+                positionY: data.positionY
+            })
+        }
+    );
     if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || "Failed to update group position");

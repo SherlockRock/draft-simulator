@@ -1,6 +1,11 @@
 import { Component, createSignal, For, Show, createMemo } from "solid-js";
-import { createQuery, createMutation, useQueryClient } from "@tanstack/solid-query";
-import { fetchStandaloneDrafts, fetchUserVersusSeries, importDraftToCanvas, importSeriesToCanvas } from "../utils/actions";
+import { useQuery, createMutation, useQueryClient } from "@tanstack/solid-query";
+import {
+    fetchStandaloneDrafts,
+    fetchUserVersusSeries,
+    importDraftToCanvas,
+    importSeriesToCanvas
+} from "../utils/actions";
 import { VersusDraft } from "../utils/types";
 import { champions } from "../utils/constants";
 import toast from "solid-toast";
@@ -22,14 +27,14 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
     const [expandedSeriesId, setExpandedSeriesId] = createSignal<string | null>(null);
     const [selectedGameId, setSelectedGameId] = createSignal<string | null>(null);
 
-    const draftsQuery = createQuery(() => ({
+    const draftsQuery = useQuery(() => ({
         queryKey: ["standaloneDrafts"],
-        queryFn: fetchStandaloneDrafts,
+        queryFn: fetchStandaloneDrafts
     }));
 
-    const seriesQuery = createQuery(() => ({
+    const seriesQuery = useQuery(() => ({
         queryKey: ["userVersusSeries"],
-        queryFn: fetchUserVersusSeries,
+        queryFn: fetchUserVersusSeries
     }));
 
     const importDraftMutation = createMutation(() => ({
@@ -38,7 +43,7 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                 canvasId: props.canvasId,
                 draftId,
                 positionX: props.positionX,
-                positionY: props.positionY,
+                positionY: props.positionY
             }),
         onSuccess: () => {
             toast.success("Draft imported to canvas");
@@ -48,7 +53,7 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
         },
         onError: (error: Error) => {
             toast.error(error.message);
-        },
+        }
     }));
 
     const importSeriesMutation = createMutation(() => ({
@@ -57,7 +62,7 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                 canvasId: props.canvasId,
                 versusDraftId,
                 positionX: props.positionX,
-                positionY: props.positionY,
+                positionY: props.positionY
             }),
         onSuccess: () => {
             toast.success("Series imported to canvas");
@@ -67,7 +72,7 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
         },
         onError: (error: Error) => {
             toast.error(error.message);
-        },
+        }
     }));
 
     const filteredDrafts = createMemo(() => {
@@ -91,13 +96,6 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
         return { blue, red };
     };
 
-    const isSeriesInProgress = (series: VersusDraft) => {
-        if (!series.Drafts || series.Drafts.length === 0) return true;
-        const winsNeeded = Math.ceil(series.length / 2);
-        const score = getSeriesScore(series);
-        return score.blue < winsNeeded && score.red < winsNeeded;
-    };
-
     const handleImport = () => {
         if (activeTab() === "drafts" && selectedDraftId()) {
             importDraftMutation.mutate(selectedDraftId()!);
@@ -118,7 +116,7 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
     };
 
     return (
-        <div class="flex flex-col gap-4 w-[500px]">
+        <div class="flex w-[500px] flex-col gap-4">
             <h2 class="text-lg font-bold text-slate-50">Import to Canvas</h2>
 
             {/* Tabs */}
@@ -127,7 +125,8 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                     class="rounded-md px-4 py-2 text-sm font-medium"
                     classList={{
                         "bg-teal-700 text-slate-50": activeTab() === "drafts",
-                        "bg-slate-700 text-slate-300 hover:bg-slate-600": activeTab() !== "drafts",
+                        "bg-slate-700 text-slate-300 hover:bg-slate-600":
+                            activeTab() !== "drafts"
                     }}
                     onClick={() => {
                         setActiveTab("drafts");
@@ -141,7 +140,8 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                     class="rounded-md px-4 py-2 text-sm font-medium"
                     classList={{
                         "bg-teal-700 text-slate-50": activeTab() === "series",
-                        "bg-slate-700 text-slate-300 hover:bg-slate-600": activeTab() !== "series",
+                        "bg-slate-700 text-slate-300 hover:bg-slate-600":
+                            activeTab() !== "series"
                     }}
                     onClick={() => {
                         setActiveTab("series");
@@ -170,25 +170,43 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                     >
                         <Show
                             when={filteredDrafts().length > 0}
-                            fallback={<div class="p-4 text-slate-400">No drafts found</div>}
+                            fallback={
+                                <div class="p-4 text-slate-400">No drafts found</div>
+                            }
                         >
                             <For each={filteredDrafts()}>
                                 {(draft: any) => (
                                     <div
                                         class="flex cursor-pointer items-center gap-3 border-b border-slate-700 px-4 py-3 hover:bg-slate-700"
                                         classList={{
-                                            "bg-teal-900/50": selectedDraftId() === draft.id,
+                                            "bg-teal-900/50":
+                                                selectedDraftId() === draft.id
                                         }}
                                         onClick={() => setSelectedDraftId(draft.id)}
                                     >
                                         <div class="flex flex-1 flex-col">
-                                            <span class="font-medium text-slate-50">{draft.name}</span>
+                                            <span class="font-medium text-slate-50">
+                                                {draft.name}
+                                            </span>
                                             <div class="flex gap-1">
-                                                <For each={draft.picks?.slice(10, 15) || []}>
+                                                <For
+                                                    each={
+                                                        draft.picks?.slice(10, 15) || []
+                                                    }
+                                                >
                                                     {(pick: string) => (
-                                                        <Show when={pick && champions[parseInt(pick)]}>
+                                                        <Show
+                                                            when={
+                                                                pick &&
+                                                                champions[parseInt(pick)]
+                                                            }
+                                                        >
                                                             <img
-                                                                src={champions[parseInt(pick)]?.icon}
+                                                                src={
+                                                                    champions[
+                                                                        parseInt(pick)
+                                                                    ]?.img
+                                                                }
                                                                 alt=""
                                                                 class="h-6 w-6 rounded"
                                                             />
@@ -211,20 +229,24 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                     >
                         <Show
                             when={filteredSeries().length > 0}
-                            fallback={<div class="p-4 text-slate-400">No series found</div>}
+                            fallback={
+                                <div class="p-4 text-slate-400">No series found</div>
+                            }
                         >
                             <For each={filteredSeries()}>
                                 {(series: VersusDraft) => {
                                     const score = getSeriesScore(series);
-                                    const inProgress = isSeriesInProgress(series);
-                                    const isExpanded = () => expandedSeriesId() === series.id;
+                                    const isExpanded = () =>
+                                        expandedSeriesId() === series.id;
 
                                     return (
                                         <div class="border-b border-slate-700">
                                             <div
                                                 class="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-slate-700"
                                                 classList={{
-                                                    "bg-teal-900/50": selectedSeriesId() === series.id && !selectedGameId(),
+                                                    "bg-teal-900/50":
+                                                        selectedSeriesId() ===
+                                                            series.id && !selectedGameId()
                                                 }}
                                                 onClick={() => {
                                                     if (isExpanded()) {
@@ -238,15 +260,44 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                                             >
                                                 <div class="flex flex-1 flex-col">
                                                     <div class="flex items-center gap-2">
-                                                        <span class="font-medium text-slate-50">{series.name}</span>
-                                                        <Show when={inProgress}>
-                                                            <span class="rounded bg-yellow-500/20 px-2 py-0.5 text-xs text-yellow-300">
-                                                                Live
-                                                            </span>
-                                                        </Show>
+                                                        <span class="font-medium text-slate-50">
+                                                            {series.name}
+                                                        </span>
+                                                        <span
+                                                            class="rounded px-2 py-0.5 text-xs capitalize"
+                                                            classList={{
+                                                                "bg-slate-500/30 text-slate-300":
+                                                                    !series.type ||
+                                                                    series.type ===
+                                                                        "standard",
+                                                                "bg-purple-500/30 text-purple-300":
+                                                                    series.type ===
+                                                                    "fearless",
+                                                                "bg-orange-500/30 text-orange-300":
+                                                                    series.type ===
+                                                                    "ironman"
+                                                            }}
+                                                        >
+                                                            {series.type || "standard"}
+                                                        </span>
+                                                        <span
+                                                            class="rounded px-2 py-0.5 text-xs"
+                                                            classList={{
+                                                                "bg-teal-500/30 text-teal-300":
+                                                                    series.competitive,
+                                                                "bg-slate-500/30 text-slate-400":
+                                                                    !series.competitive
+                                                            }}
+                                                        >
+                                                            {series.competitive
+                                                                ? "Competitive"
+                                                                : "Scrim"}
+                                                        </span>
                                                     </div>
                                                     <span class="text-sm text-slate-400">
-                                                        {series.blueTeamName} vs {series.redTeamName} ({score.blue}-{score.red})
+                                                        {series.blueTeamName} vs{" "}
+                                                        {series.redTeamName} ({score.blue}
+                                                        -{score.red})
                                                     </span>
                                                 </div>
                                                 <button
@@ -255,49 +306,101 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                                                         e.stopPropagation();
                                                         setSelectedSeriesId(series.id);
                                                         setSelectedGameId(null);
-                                                        importSeriesMutation.mutate(series.id);
+                                                        importSeriesMutation.mutate(
+                                                            series.id
+                                                        );
                                                     }}
                                                 >
                                                     Import Series
                                                 </button>
-                                                <span class="text-slate-400">{isExpanded() ? "▲" : "▼"}</span>
+                                                <span class="text-slate-400">
+                                                    {isExpanded() ? "▲" : "▼"}
+                                                </span>
                                             </div>
 
-                                            <Show when={isExpanded() && series.Drafts}>
-                                                <div class="bg-slate-900 px-4 py-2">
-                                                    <For each={series.Drafts}>
-                                                        {(draft, index) => (
-                                                            <div
-                                                                class="flex cursor-pointer items-center gap-2 rounded px-2 py-2 hover:bg-slate-800"
-                                                                classList={{
-                                                                    "bg-teal-900/50": selectedGameId() === draft.id,
-                                                                }}
-                                                                onClick={() => {
-                                                                    setSelectedGameId(draft.id);
-                                                                    setSelectedSeriesId(null);
-                                                                }}
-                                                            >
-                                                                <span class="text-sm text-slate-300">
-                                                                    Game {index() + 1}
-                                                                </span>
-                                                                <Show when={draft.completed}>
-                                                                    <span
-                                                                        class="text-xs"
-                                                                        classList={{
-                                                                            "text-blue-400": draft.winner === "blue",
-                                                                            "text-red-400": draft.winner === "red",
-                                                                        }}
-                                                                    >
-                                                                        {draft.winner === "blue" ? series.blueTeamName : series.redTeamName} wins
+                                            <Show
+                                                when={isExpanded() && series.Drafts}
+                                                keyed
+                                            >
+                                                {(drafts) => (
+                                                    <div class="bg-slate-900 px-4 py-2">
+                                                        <For
+                                                            each={[...drafts].sort(
+                                                                (a, b) =>
+                                                                    (a.seriesIndex ?? 0) -
+                                                                    (b.seriesIndex ?? 0)
+                                                            )}
+                                                        >
+                                                            {(draft) => (
+                                                                <div
+                                                                    class="flex cursor-pointer items-center gap-2 rounded px-2 py-2 hover:bg-slate-800"
+                                                                    classList={{
+                                                                        "bg-teal-900/50":
+                                                                            selectedGameId() ===
+                                                                            draft.id
+                                                                    }}
+                                                                    onClick={() => {
+                                                                        setSelectedGameId(
+                                                                            draft.id
+                                                                        );
+                                                                        setSelectedSeriesId(
+                                                                            null
+                                                                        );
+                                                                    }}
+                                                                >
+                                                                    <span class="text-sm text-slate-300">
+                                                                        Game{" "}
+                                                                        {(draft.seriesIndex ??
+                                                                            0) + 1}
                                                                     </span>
-                                                                </Show>
-                                                                <Show when={!draft.completed}>
-                                                                    <span class="text-xs text-slate-500">In progress</span>
-                                                                </Show>
-                                                            </div>
-                                                        )}
-                                                    </For>
-                                                </div>
+                                                                    <Show
+                                                                        when={
+                                                                            draft.completed &&
+                                                                            draft.winner
+                                                                        }
+                                                                    >
+                                                                        <span
+                                                                            class="text-xs"
+                                                                            classList={{
+                                                                                "text-blue-400":
+                                                                                    draft.winner ===
+                                                                                    "blue",
+                                                                                "text-red-400":
+                                                                                    draft.winner ===
+                                                                                    "red"
+                                                                            }}
+                                                                        >
+                                                                            {draft.winner ===
+                                                                            "blue"
+                                                                                ? series.blueTeamName
+                                                                                : series.redTeamName}{" "}
+                                                                            wins
+                                                                        </span>
+                                                                    </Show>
+                                                                    <Show
+                                                                        when={
+                                                                            draft.completed &&
+                                                                            !draft.winner
+                                                                        }
+                                                                    >
+                                                                        <span class="text-xs text-yellow-400">
+                                                                            Complete
+                                                                        </span>
+                                                                    </Show>
+                                                                    <Show
+                                                                        when={
+                                                                            !draft.completed
+                                                                        }
+                                                                    >
+                                                                        <span class="text-xs text-slate-500">
+                                                                            Incomplete
+                                                                        </span>
+                                                                    </Show>
+                                                                </div>
+                                                            )}
+                                                        </For>
+                                                    </div>
+                                                )}
                                             </Show>
                                         </div>
                                     );
@@ -318,10 +421,16 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                 </button>
                 <button
                     class="rounded-md bg-teal-700 px-4 py-2 text-sm text-slate-50 hover:bg-teal-600 disabled:opacity-50"
-                    disabled={!canImport() || importDraftMutation.isPending || importSeriesMutation.isPending}
+                    disabled={
+                        !canImport() ||
+                        importDraftMutation.isPending ||
+                        importSeriesMutation.isPending
+                    }
                     onClick={handleImport}
                 >
-                    {importDraftMutation.isPending || importSeriesMutation.isPending ? "Importing..." : "Import"}
+                    {importDraftMutation.isPending || importSeriesMutation.isPending
+                        ? "Importing..."
+                        : "Import"}
                 </button>
             </div>
         </div>

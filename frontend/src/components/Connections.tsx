@@ -250,6 +250,7 @@ export const ConnectionComponent = (props: {
     return (
         <>
             <g
+                class="pointer-events-auto"
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
             >

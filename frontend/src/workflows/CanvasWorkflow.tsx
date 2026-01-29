@@ -7,6 +7,7 @@ import {
     Setter,
     Resource,
     createSignal,
+    createMemo,
     Accessor,
     Show,
     For
@@ -28,11 +29,13 @@ import CanvasSelector from "../components/CanvasSelector";
 import { Dialog } from "../components/Dialog";
 import { ManageUsersDialog } from "../components/ManageUsersDialog";
 import toast from "solid-toast";
+import { CanvasGroup, CanvasDraft } from "../utils/types";
 
 // Create context for sharing canvas state with children
 type CanvasContextType = {
     canvas: Resource<any>;
     mutateCanvas: Setter<any>;
+    refetchCanvas: () => void;
     canvasList: Resource<any>;
     mutateCanvasList: Setter<any>;
     layoutToggle: Accessor<boolean>;
@@ -208,6 +211,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
             value={{
                 canvas,
                 mutateCanvas,
+                refetchCanvas,
                 canvasList,
                 mutateCanvasList,
                 layoutToggle,
@@ -380,32 +384,140 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
 
                             {/* Draft list when canvas is selected */}
                             <Show when={isDetailView() && canvas()?.drafts}>
-                                <div class="mt-4 flex flex-col gap-2 px-2">
-                                    <h3 class="text-sm font-semibold text-slate-300">
-                                        Drafts in Canvas
-                                    </h3>
-                                    <div class="flex flex-col gap-1">
-                                        <For each={canvas()?.drafts}>
-                                            {(canvasDraft) => (
-                                                <div
-                                                    class="cursor-pointer rounded-md bg-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-600"
-                                                    onClick={() => {
-                                                        const callback =
-                                                            navigateToDraftCallback();
-                                                        if (callback) {
-                                                            callback(
-                                                                canvasDraft.positionX,
-                                                                canvasDraft.positionY
-                                                            );
-                                                        }
-                                                    }}
-                                                >
-                                                    {canvasDraft.Draft.name}
-                                                </div>
-                                            )}
-                                        </For>
-                                    </div>
-                                </div>
+                                {(() => {
+                                    const groups = createMemo(
+                                        () => (canvas()?.groups ?? []) as CanvasGroup[]
+                                    );
+                                    const drafts = createMemo(
+                                        () => (canvas()?.drafts ?? []) as CanvasDraft[]
+                                    );
+                                    const ungroupedDrafts = createMemo(() =>
+                                        drafts().filter((d) => !d.group_id)
+                                    );
+                                    const getDraftsForGroup = (groupId: string) => {
+                                        const group = groups().find(
+                                            (g) => g.id === groupId
+                                        );
+                                        const groupDrafts = drafts().filter(
+                                            (d) => d.group_id === groupId
+                                        );
+                                        // Sort by seriesIndex if it's a series group
+                                        if (group?.type === "series") {
+                                            return [...groupDrafts].sort(
+                                                (a, b) =>
+                                                    (a.Draft.seriesIndex ?? 0) -
+                                                    (b.Draft.seriesIndex ?? 0)
+                                            );
+                                        }
+                                        return groupDrafts;
+                                    };
+
+                                    return (
+                                        <div class="mt-4 flex flex-col gap-2 px-2">
+                                            <h3 class="text-sm font-semibold text-slate-300">
+                                                Drafts in Canvas
+                                            </h3>
+                                            <div class="flex flex-col gap-1">
+                                                {/* Grouped drafts */}
+                                                <For each={groups()}>
+                                                    {(group) => (
+                                                        <div class="flex flex-col gap-1">
+                                                            <div
+                                                                class="flex cursor-pointer items-center gap-2 rounded-md bg-slate-600 px-2 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-500"
+                                                                onClick={() => {
+                                                                    const callback =
+                                                                        navigateToDraftCallback();
+                                                                    if (callback) {
+                                                                        callback(
+                                                                            group.positionX,
+                                                                            group.positionY
+                                                                        );
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <span class="text-slate-400">
+                                                                    {group.type ===
+                                                                    "series"
+                                                                        ? "Series"
+                                                                        : "Group"}
+                                                                </span>
+                                                                <span class="truncate">
+                                                                    {group.name}
+                                                                </span>
+                                                            </div>
+                                                            <For
+                                                                each={getDraftsForGroup(
+                                                                    group.id
+                                                                )}
+                                                            >
+                                                                {(canvasDraft, index) => {
+                                                                    // Calculate horizontal offset based on draft position in group
+                                                                    // Matches SeriesGroupContainer layout constants
+                                                                    const PADDING = 20;
+                                                                    const CARD_GAP = 24;
+                                                                    const cardWidth =
+                                                                        layoutToggle()
+                                                                            ? 700
+                                                                            : 350;
+                                                                    const offsetX =
+                                                                        PADDING +
+                                                                        index() *
+                                                                            (cardWidth +
+                                                                                CARD_GAP);
+
+                                                                    return (
+                                                                        <div
+                                                                            class="ml-3 cursor-pointer rounded-md bg-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-600"
+                                                                            onClick={() => {
+                                                                                const callback =
+                                                                                    navigateToDraftCallback();
+                                                                                if (
+                                                                                    callback
+                                                                                ) {
+                                                                                    callback(
+                                                                                        group.positionX +
+                                                                                            offsetX,
+                                                                                        group.positionY
+                                                                                    );
+                                                                                }
+                                                                            }}
+                                                                        >
+                                                                            {
+                                                                                canvasDraft
+                                                                                    .Draft
+                                                                                    .name
+                                                                            }
+                                                                        </div>
+                                                                    );
+                                                                }}
+                                                            </For>
+                                                        </div>
+                                                    )}
+                                                </For>
+                                                {/* Ungrouped drafts */}
+                                                <For each={ungroupedDrafts()}>
+                                                    {(canvasDraft) => (
+                                                        <div
+                                                            class="cursor-pointer rounded-md bg-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-600"
+                                                            onClick={() => {
+                                                                const callback =
+                                                                    navigateToDraftCallback();
+                                                                if (callback) {
+                                                                    callback(
+                                                                        canvasDraft.positionX,
+                                                                        canvasDraft.positionY
+                                                                    );
+                                                                }
+                                                            }}
+                                                        >
+                                                            {canvasDraft.Draft.name}
+                                                        </div>
+                                                    )}
+                                                </For>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </Show>
                             <div class="flex-1" />
                             <VersionFooter />

@@ -199,7 +199,40 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
       });
     }
 
-    // Update connections involving this draft
+    // Find all CanvasDraft records with this draft_id
+    const canvasDraftsToCheck = await CanvasDraft.findAll({
+      where: { canvas_id: canvasId, draft_id: draftId },
+    });
+
+    if (canvasDraftsToCheck.length === 0) {
+      return res.status(404).json({ success: false, message: "Canvas draft not found" });
+    }
+
+    // Find which ones are in series groups vs deletable (ungrouped or custom group)
+    const groupIds = canvasDraftsToCheck
+      .filter((cd) => cd.group_id)
+      .map((cd) => cd.group_id);
+
+    const seriesGroups = groupIds.length > 0
+      ? await CanvasGroup.findAll({
+          where: { id: groupIds, type: "series" },
+        })
+      : [];
+
+    const seriesGroupIds = new Set(seriesGroups.map((g) => g.id));
+
+    // Find a deletable draft (not in a series group)
+    const deletableDraft = canvasDraftsToCheck.find(
+      (cd) => !cd.group_id || !seriesGroupIds.has(cd.group_id)
+    );
+
+    if (!deletableDraft) {
+      return res.status(403).json({
+        error: "Cannot delete draft that is part of a series group. Remove the entire series instead.",
+      });
+    }
+
+    // Update connections involving this specific canvas draft
     const allConnections = await CanvasConnection.findAll({
       where: { canvas_id: canvasId },
     });
@@ -224,43 +257,37 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
       }
     }
 
-    const affectedRows = await CanvasDraft.destroy({
-      where: {
-        canvas_id: canvasId,
-        draft_id: draftId,
-      },
+    // Only delete the specific deletable draft, not all with the same draft_id
+    await deletableDraft.destroy();
+
+    await touchCanvasTimestamp(canvasId);
+
+    const canvas = await Canvas.findByPk(canvasId);
+    const canvasDrafts = await CanvasDraft.findAll({
+      where: { canvas_id: canvasId },
+      attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
+      include: [
+        { model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] },
+      ],
+      raw: true,
+      nest: true,
     });
-
-    if (affectedRows > 0) {
-      await touchCanvasTimestamp(canvasId);
-
-      const canvas = await Canvas.findByPk(canvasId);
-      const canvasDrafts = await CanvasDraft.findAll({
-        where: { canvas_id: canvasId },
-        attributes: ["positionX", "positionY"],
-        include: [
-          { model: Draft, attributes: ["name", "id", "picks", "type"] },
-        ],
-        raw: true,
-        nest: true,
-      });
-      const connections = await CanvasConnection.findAll({
-        where: { canvas_id: canvasId },
-        raw: true,
-      });
-      res
-        .status(200)
-        .json({ success: true, message: "Draft removed from canvas" });
-      socketService.emitToRoom(canvasId, "canvasUpdate", {
-        canvas: canvas.toJSON(),
-        drafts: canvasDrafts,
-        connections: connections,
-      });
-    } else {
-      res
-        .status(404)
-        .json({ success: false, message: "Canvas draft not found" });
-    }
+    const connections = await CanvasConnection.findAll({
+      where: { canvas_id: canvasId },
+      raw: true,
+    });
+    const groups = await CanvasGroup.findAll({
+      where: { canvas_id: canvasId },
+    });
+    res
+      .status(200)
+      .json({ success: true, message: "Draft removed from canvas" });
+    socketService.emitToRoom(canvasId, "canvasUpdate", {
+      canvas: canvas.toJSON(),
+      drafts: canvasDrafts,
+      connections: connections,
+      groups: groups.map((g) => g.toJSON()),
+    });
   } catch (error) {
     console.error("Failed to remove draft from canvas:", error);
     res.status(500).json({ error: "Failed to remove draft from canvas" });
@@ -395,7 +422,7 @@ router.post("/:canvasId/import/draft", protect, async (req, res) => {
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvasId },
       attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
-      include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex"] }],
+      include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] }],
       raw: true,
       nest: true,
     });
@@ -403,6 +430,10 @@ router.post("/:canvasId/import/draft", protect, async (req, res) => {
     const connections = await CanvasConnection.findAll({
       where: { canvas_id: canvasId },
       raw: true,
+    });
+
+    const groups = await CanvasGroup.findAll({
+      where: { canvas_id: canvasId },
     });
 
     const canvas = await Canvas.findByPk(canvasId);
@@ -419,6 +450,7 @@ router.post("/:canvasId/import/draft", protect, async (req, res) => {
       canvas: canvas.toJSON(),
       drafts: canvasDrafts,
       connections: connections,
+      groups: groups.map((g) => g.toJSON()),
     });
   } catch (error) {
     console.error("Failed to import draft:", error);
@@ -517,7 +549,7 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvasId },
       attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
-      include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex"] }],
+      include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] }],
       raw: true,
       nest: true,
     });
@@ -628,7 +660,7 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvasId },
       attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
-      include: [{ model: Draft, attributes: ["name", "id", "picks", "type"] }],
+      include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] }],
       raw: true,
       nest: true,
     });
@@ -830,8 +862,8 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
 
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvas.id },
-      attributes: ["positionX", "positionY"],
-      include: [{ model: Draft, attributes: ["name", "id", "picks", "type"] }],
+      attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
+      include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] }],
       raw: true,
       nest: true,
     });
@@ -839,6 +871,10 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
     const connections = await CanvasConnection.findAll({
       where: { canvas_id: canvas.id },
       raw: true,
+    });
+
+    const groups = await CanvasGroup.findAll({
+      where: { canvas_id: canvas.id },
     });
 
     const canvasJSON = canvas.toJSON();
@@ -853,6 +889,7 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
       canvas: canvas.toJSON(),
       drafts: canvasDrafts,
       connections: connections,
+      groups: groups.map((g) => g.toJSON()),
     });
   } catch (error) {
     console.error("Failed to update canvas name:", error);
