@@ -612,6 +612,21 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     });
 
+    // Set the create group callback in the context
+    createEffect(() => {
+        canvasContext.setCreateGroupCallback(() => (positionX: number, positionY: number) => {
+            const vp = props.viewport();
+            const centerX = positionX || vp.x + window.innerWidth / 2 / vp.zoom;
+            const centerY = positionY || vp.y + window.innerHeight / 2 / vp.zoom;
+            setCreateGroupPosition({ x: centerX, y: centerY });
+            setIsCreateGroupDialogOpen(true);
+        });
+
+        onCleanup(() => {
+            canvasContext.setCreateGroupCallback(null);
+        });
+    });
+
     const updateCanvasNameMutation = useMutation(() => ({
         mutationFn: updateCanvasName,
         onSuccess: (data: { name: string; id: string }) => {
@@ -1183,6 +1198,21 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         };
     };
 
+    const isPointInGroup = (x: number, y: number, group: CanvasGroup): boolean => {
+        const width = group.width ?? 400;
+        const height = group.height ?? 200;
+        return (
+            x >= group.positionX &&
+            x <= group.positionX + width &&
+            y >= group.positionY &&
+            y <= group.positionY + height
+        );
+    };
+
+    const findGroupAtPosition = (x: number, y: number): CanvasGroup | null => {
+        return canvasGroups.find((g) => g.type === "custom" && isPointInGroup(x, y, g)) ?? null;
+    };
+
     const onBoxMouseDown = (draftId: string, e: MouseEvent) => {
         if (isConnectionMode()) return;
         if (!hasEditPermissions(props.canvasData?.userPermissions)) return;
@@ -1340,12 +1370,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
-    const onDeleteGroupConfirm = () => {
+    const handleDeleteGroupWithChoice = (keepDrafts: boolean) => {
         const group = groupToDelete();
         if (group) {
             deleteGroupMutation.mutate({
                 canvasId: params.id,
-                groupId: group.id
+                groupId: group.id,
+                keepDrafts
             });
         }
     };
@@ -1353,6 +1384,33 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const onDeleteGroupCancel = () => {
         setIsDeleteGroupDialogOpen(false);
         setGroupToDelete(null);
+    };
+
+    const handleCreateGroup = (name: string) => {
+        const pos = createGroupPosition();
+        createGroupMutation.mutate({
+            canvasId: params.id,
+            name,
+            positionX: pos.x,
+            positionY: pos.y
+        });
+    };
+
+    const handleRenameGroup = (groupId: string, newName: string) => {
+        updateGroupMutation.mutate({
+            canvasId: params.id,
+            groupId,
+            name: newName
+        });
+    };
+
+    const handleResizeGroup = (groupId: string, width: number, height: number) => {
+        updateGroupMutation.mutate({
+            canvasId: params.id,
+            groupId,
+            width,
+            height
+        });
     };
 
     const tabOrder = [
@@ -1484,6 +1542,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     positionY: newY
                 });
                 debouncedEmitMove(state.activeBoxId, newX, newY);
+
+                // Check for group hover during draft drag
+                const hoverGroup = findGroupAtPosition(newX, newY);
+                const activeDraft = canvasDrafts.find((cd) => cd.Draft.id === state.activeBoxId);
+                const currentGroupId = activeDraft?.group_id;
+
+                if (hoverGroup && hoverGroup.id !== currentGroupId) {
+                    setDragOverGroupId(hoverGroup.id);
+                    if (currentGroupId) {
+                        setExitingGroupId(currentGroupId);
+                    }
+                } else {
+                    setDragOverGroupId(null);
+                    if (!hoverGroup && currentGroupId) {
+                        setExitingGroupId(currentGroupId);
+                    } else {
+                        setExitingGroupId(null);
+                    }
+                }
             }
         };
 
@@ -1541,14 +1618,52 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     (cd) => cd.Draft.id === state.activeBoxId
                 );
                 if (finalDraft) {
-                    updatePositionMutation.mutate({
-                        canvasId: params.id,
-                        draftId: state.activeBoxId,
-                        positionX: finalDraft.positionX,
-                        positionY: finalDraft.positionY
-                    });
+                    const dropGroup = findGroupAtPosition(finalDraft.positionX, finalDraft.positionY);
+
+                    // Check if dropped on a different group than current
+                    if (dropGroup && dropGroup.id !== finalDraft.group_id) {
+                        // Add to new group - convert position to group-relative
+                        const relativeX = finalDraft.positionX - dropGroup.positionX;
+                        const relativeY = finalDraft.positionY - dropGroup.positionY;
+
+                        updateDraftGroupMutation.mutate({
+                            canvasId: params.id,
+                            draftId: finalDraft.Draft.id,
+                            positionX: relativeX,
+                            positionY: relativeY,
+                            group_id: dropGroup.id
+                        });
+                    } else if (!dropGroup && finalDraft.group_id) {
+                        // Dropped outside all groups - ungroup if in a custom group
+                        const currentGroup = canvasGroups.find((g) => g.id === finalDraft.group_id);
+                        if (currentGroup && currentGroup.type === "custom") {
+                            // Convert to absolute position
+                            const absoluteX = currentGroup.positionX + finalDraft.positionX;
+                            const absoluteY = currentGroup.positionY + finalDraft.positionY;
+
+                            updateDraftGroupMutation.mutate({
+                                canvasId: params.id,
+                                draftId: finalDraft.Draft.id,
+                                positionX: absoluteX,
+                                positionY: absoluteY,
+                                group_id: null
+                            });
+                        }
+                    } else {
+                        // Just update position
+                        updatePositionMutation.mutate({
+                            canvasId: params.id,
+                            draftId: state.activeBoxId,
+                            positionX: finalDraft.positionX,
+                            positionY: finalDraft.positionY
+                        });
+                    }
                 }
             }
+
+            // Clear drag visual states
+            setDragOverGroupId(null);
+            setExitingGroupId(null);
 
             setDragState({
                 activeBoxId: null,
@@ -1728,47 +1843,98 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         </Show>
                     </svg>
                 </div>
-                {/* Render Series Groups */}
+                {/* Render Groups */}
                 <For each={canvasGroups}>
                     {(group) => (
-                        <SeriesGroupContainer
-                            group={group}
-                            drafts={getDraftsForGroup(group.id)}
-                            viewport={props.viewport}
-                            onGroupMouseDown={onGroupMouseDown}
-                            onDeleteGroup={handleDeleteGroup}
-                            canEdit={hasEditPermissions(
-                                props.canvasData?.userPermissions
-                            )}
-                            isConnectionMode={isConnectionMode()}
-                            renderDraftCard={(cd) => (
-                                <CanvasCard
-                                    canvasDraft={cd}
-                                    addBox={addBox}
-                                    deleteBox={deleteBox}
-                                    handleNameChange={handleNameChange}
-                                    handlePickChange={handlePickChange}
+                        <Show
+                            when={group.type === "series"}
+                            fallback={
+                                <CustomGroupContainer
+                                    group={group}
+                                    drafts={getDraftsForGroup(group.id)}
                                     viewport={props.viewport}
-                                    onBoxMouseDown={onBoxMouseDown}
-                                    layoutToggle={props.layoutToggle}
-                                    setLayoutToggle={props.setLayoutToggle}
-                                    isConnectionMode={isConnectionMode()}
-                                    onAnchorClick={onAnchorClick}
-                                    connectionSource={connectionSource}
-                                    sourceAnchor={sourceAnchor}
-                                    focusedDraftId={focusedDraftId}
-                                    focusedSelectIndex={focusedSelectIndex}
-                                    onSelectFocus={onSelectFocus}
-                                    onSelectNext={onSelectNext}
-                                    onSelectPrevious={onSelectPrevious}
+                                    onGroupMouseDown={onGroupMouseDown}
+                                    onDeleteGroup={handleDeleteGroup}
+                                    onRenameGroup={handleRenameGroup}
+                                    onResizeGroup={handleResizeGroup}
                                     canEdit={hasEditPermissions(
                                         props.canvasData?.userPermissions
                                     )}
-                                    isGrouped={true}
-                                    groupType={group.type}
-                                />
-                            )}
-                        />
+                                    isConnectionMode={isConnectionMode()}
+                                    isDragTarget={dragOverGroupId() === group.id}
+                                    isExitingSource={exitingGroupId() === group.id}
+                                >
+                                    <For each={getDraftsForGroup(group.id)}>
+                                        {(cd) => (
+                                            <CanvasCard
+                                                canvasDraft={cd}
+                                                addBox={addBox}
+                                                deleteBox={deleteBox}
+                                                handleNameChange={handleNameChange}
+                                                handlePickChange={handlePickChange}
+                                                viewport={props.viewport}
+                                                onBoxMouseDown={onBoxMouseDown}
+                                                layoutToggle={props.layoutToggle}
+                                                setLayoutToggle={props.setLayoutToggle}
+                                                isConnectionMode={isConnectionMode()}
+                                                onAnchorClick={onAnchorClick}
+                                                connectionSource={connectionSource}
+                                                sourceAnchor={sourceAnchor}
+                                                focusedDraftId={focusedDraftId}
+                                                focusedSelectIndex={focusedSelectIndex}
+                                                onSelectFocus={onSelectFocus}
+                                                onSelectNext={onSelectNext}
+                                                onSelectPrevious={onSelectPrevious}
+                                                canEdit={hasEditPermissions(
+                                                    props.canvasData?.userPermissions
+                                                )}
+                                                isGrouped={true}
+                                                groupType="custom"
+                                            />
+                                        )}
+                                    </For>
+                                </CustomGroupContainer>
+                            }
+                        >
+                            <SeriesGroupContainer
+                                group={group}
+                                drafts={getDraftsForGroup(group.id)}
+                                viewport={props.viewport}
+                                onGroupMouseDown={onGroupMouseDown}
+                                onDeleteGroup={handleDeleteGroup}
+                                canEdit={hasEditPermissions(
+                                    props.canvasData?.userPermissions
+                                )}
+                                isConnectionMode={isConnectionMode()}
+                                renderDraftCard={(cd) => (
+                                    <CanvasCard
+                                        canvasDraft={cd}
+                                        addBox={addBox}
+                                        deleteBox={deleteBox}
+                                        handleNameChange={handleNameChange}
+                                        handlePickChange={handlePickChange}
+                                        viewport={props.viewport}
+                                        onBoxMouseDown={onBoxMouseDown}
+                                        layoutToggle={props.layoutToggle}
+                                        setLayoutToggle={props.setLayoutToggle}
+                                        isConnectionMode={isConnectionMode()}
+                                        onAnchorClick={onAnchorClick}
+                                        connectionSource={connectionSource}
+                                        sourceAnchor={sourceAnchor}
+                                        focusedDraftId={focusedDraftId}
+                                        focusedSelectIndex={focusedSelectIndex}
+                                        onSelectFocus={onSelectFocus}
+                                        onSelectNext={onSelectNext}
+                                        onSelectPrevious={onSelectPrevious}
+                                        canEdit={hasEditPermissions(
+                                            props.canvasData?.userPermissions
+                                        )}
+                                        isGrouped={true}
+                                        groupType="series"
+                                    />
+                                )}
+                            />
+                        </Show>
                     )}
                 </For>
 
