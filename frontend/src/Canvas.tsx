@@ -1502,6 +1502,23 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const GROUP_PADDING = 16;
 
+    const computeMinGroupSize = (groupId: string) => {
+        const drafts = getDraftsForGroup(groupId);
+        if (drafts.length === 0) return { minWidth: 0, minHeight: 0 };
+
+        const cw = cardWidth(props.layoutToggle());
+        const ch = cardHeight(props.layoutToggle());
+
+        let maxRight = 0;
+        let maxBottom = 0;
+        for (const d of drafts) {
+            maxRight = Math.max(maxRight, d.positionX + cw + GROUP_PADDING);
+            maxBottom = Math.max(maxBottom, d.positionY + ch + GROUP_PADDING);
+        }
+
+        return { minWidth: maxRight, minHeight: maxBottom };
+    };
+
     const maybeExpandGroup = (
         group: CanvasGroup,
         draftRelX: number,
@@ -2061,6 +2078,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     isConnectionMode={isConnectionMode()}
                                     isDragTarget={dragOverGroupId() === group.id}
                                     isExitingSource={exitingGroupId() === group.id}
+                                    contentMinWidth={
+                                        computeMinGroupSize(group.id).minWidth
+                                    }
+                                    contentMinHeight={
+                                        computeMinGroupSize(group.id).minHeight
+                                    }
                                 >
                                     <For each={getDraftsForGroup(group.id)}>
                                         {(cd) => (

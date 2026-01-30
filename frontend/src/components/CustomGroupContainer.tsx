@@ -14,6 +14,8 @@ type CustomGroupContainerProps = {
     isConnectionMode: boolean;
     isDragTarget: boolean;
     isExitingSource: boolean;
+    contentMinWidth: number;
+    contentMinHeight: number;
     children: JSX.Element;
 };
 
@@ -28,6 +30,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
     const [editName, setEditName] = createSignal(props.group.name);
     const [localWidth, setLocalWidth] = createSignal<number | null>(null);
     const [localHeight, setLocalHeight] = createSignal<number | null>(null);
+    const [isResizeClamped, setIsResizeClamped] = createSignal(false);
 
     const worldToScreen = (worldX: number, worldY: number) => {
         const vp = props.viewport();
@@ -65,6 +68,9 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         }
     };
 
+    const effectiveMinWidth = () => Math.max(MIN_WIDTH, props.contentMinWidth);
+    const effectiveMinHeight = () => Math.max(MIN_HEIGHT, props.contentMinHeight);
+
     const handleResizeMouseDown = (e: MouseEvent) => {
         if (!props.canEdit) return;
         e.preventDefault();
@@ -79,8 +85,13 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         const handleMouseMove = (moveEvent: MouseEvent) => {
             const deltaX = (moveEvent.clientX - startX) / zoom;
             const deltaY = (moveEvent.clientY - startY) / zoom;
-            const newWidth = Math.max(MIN_WIDTH, startWidth + deltaX);
-            const newHeight = Math.max(MIN_HEIGHT, startHeight + deltaY);
+            const rawWidth = startWidth + deltaX;
+            const rawHeight = startHeight + deltaY;
+            const minW = effectiveMinWidth();
+            const minH = effectiveMinHeight();
+            const newWidth = Math.max(minW, rawWidth);
+            const newHeight = Math.max(minH, rawHeight);
+            setIsResizeClamped(rawWidth < minW || rawHeight < minH);
             setLocalWidth(newWidth);
             setLocalHeight(newHeight);
             props.onResizeGroup(props.group.id, newWidth, newHeight);
@@ -89,6 +100,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         const handleMouseUp = () => {
             const finalWidth = groupWidth();
             const finalHeight = groupHeight();
+            setIsResizeClamped(false);
             setLocalWidth(null);
             setLocalHeight(null);
             props.onResizeEnd(props.group.id, finalWidth, finalHeight);
@@ -106,7 +118,9 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         <div
             class="absolute z-20 rounded-lg border-2 bg-slate-700 shadow-xl"
             classList={{
-                "border-slate-500": !props.isDragTarget && !props.isExitingSource,
+                "border-slate-500":
+                    !props.isDragTarget && !props.isExitingSource && !isResizeClamped(),
+                "border-red-500 ring-2 ring-red-500/30": isResizeClamped(),
                 "border-teal-400 ring-2 ring-teal-400/50": props.isDragTarget,
                 "border-slate-600 opacity-75": props.isExitingSource,
                 "border-dashed": draftCount() === 0
