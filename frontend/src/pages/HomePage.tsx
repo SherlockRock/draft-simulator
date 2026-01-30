@@ -47,14 +47,7 @@ const HomePage: Component = () => {
                     <h2 class="mb-4 text-2xl font-semibold text-slate-200">
                         Choose Your Workflow
                     </h2>
-                    <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        <FlowCard
-                            title="Draft"
-                            description="Create and manage individual drafts"
-                            icon="📄"
-                            onClick={() => navigate("/draft")}
-                            flowType="draft"
-                        />
+                    <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
                         <FlowCard
                             title="Canvas"
                             description="Visual workspace for organizing drafts"
