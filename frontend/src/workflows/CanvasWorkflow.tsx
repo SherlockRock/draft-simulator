@@ -50,8 +50,12 @@ type CanvasContextType = {
     >;
     importCallback: Accessor<(() => void) | null>;
     setImportCallback: Setter<(() => void) | null>;
-    createGroupCallback: Accessor<((positionX: number, positionY: number) => void) | null>;
-    setCreateGroupCallback: Setter<((positionX: number, positionY: number) => void) | null>;
+    createGroupCallback: Accessor<
+        ((positionX: number, positionY: number) => void) | null
+    >;
+    setCreateGroupCallback: Setter<
+        ((positionX: number, positionY: number) => void) | null
+    >;
 };
 
 const CanvasContext = createContext<CanvasContextType>();
@@ -431,7 +435,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                     };
 
                                     return (
-                                        <div class="mt-4 flex flex-col gap-2 px-2">
+                                        <div class="mt-4 flex min-h-0 flex-col gap-2 overflow-y-auto px-2">
                                             <h3 class="text-sm font-semibold text-slate-300">
                                                 Drafts in Canvas
                                             </h3>
@@ -469,19 +473,41 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                 )}
                                                             >
                                                                 {(canvasDraft, index) => {
-                                                                    // Calculate horizontal offset based on draft position in group
-                                                                    // Matches SeriesGroupContainer layout constants
-                                                                    const PADDING = 20;
-                                                                    const CARD_GAP = 24;
-                                                                    const cardWidth =
-                                                                        layoutToggle()
-                                                                            ? 700
-                                                                            : 350;
-                                                                    const offsetX =
-                                                                        PADDING +
-                                                                        index() *
-                                                                            (cardWidth +
-                                                                                CARD_GAP);
+                                                                    const getNavPosition =
+                                                                        () => {
+                                                                            if (
+                                                                                group.type ===
+                                                                                "custom"
+                                                                            ) {
+                                                                                // Custom groups use free-form positions
+                                                                                return {
+                                                                                    x:
+                                                                                        group.positionX +
+                                                                                        canvasDraft.positionX,
+                                                                                    y:
+                                                                                        group.positionY +
+                                                                                        canvasDraft.positionY
+                                                                                };
+                                                                            }
+                                                                            // Series groups use horizontal layout
+                                                                            const PADDING = 20;
+                                                                            const CARD_GAP = 24;
+                                                                            const cw =
+                                                                                layoutToggle()
+                                                                                    ? 700
+                                                                                    : 350;
+                                                                            const offsetX =
+                                                                                PADDING +
+                                                                                index() *
+                                                                                    (cw +
+                                                                                        CARD_GAP);
+                                                                            return {
+                                                                                x:
+                                                                                    group.positionX +
+                                                                                    offsetX,
+                                                                                y: group.positionY
+                                                                            };
+                                                                        };
 
                                                                     return (
                                                                         <div
@@ -492,10 +518,11 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                                 if (
                                                                                     callback
                                                                                 ) {
+                                                                                    const pos =
+                                                                                        getNavPosition();
                                                                                     callback(
-                                                                                        group.positionX +
-                                                                                            offsetX,
-                                                                                        group.positionY
+                                                                                        pos.x,
+                                                                                        pos.y
                                                                                     );
                                                                                 }
                                                                             }}

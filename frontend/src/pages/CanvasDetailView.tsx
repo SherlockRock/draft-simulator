@@ -3,7 +3,7 @@ import { postNewDraft } from "../utils/actions";
 import CanvasComponent from "../Canvas";
 import ConnectionBanner from "../ConnectionBanner";
 import { useNavigate, useParams } from "@solidjs/router";
-import { useMutation, useQueryClient } from "@tanstack/solid-query";
+import { useMutation } from "@tanstack/solid-query";
 import { Viewport } from "../utils/types";
 import toast from "solid-toast";
 import { AuthGuard } from "../components/AuthGuard";
@@ -13,7 +13,6 @@ import { useCanvasContext } from "../workflows/CanvasWorkflow";
 const CanvasDetailView: Component = () => {
     const params = useParams();
     const navigate = useNavigate();
-    const queryClient = useQueryClient();
     const { canvas, layoutToggle, setCreateDraftCallback } = useCanvasContext();
     const [viewport, setViewport] = createSignal<Viewport>({ x: 0, y: 0, zoom: 1 });
     let canvasContainerRef: HTMLDivElement | undefined;
@@ -41,7 +40,6 @@ const CanvasDetailView: Component = () => {
             positionY: number;
         }) => postNewDraft(data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
             toast.success("Successfully created new draft!");
         },
         onError: (error) => {

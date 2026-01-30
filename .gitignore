@@ -5,3 +5,4 @@ dist
 *.pem
 *.key
 *.local.md
+*-design.md

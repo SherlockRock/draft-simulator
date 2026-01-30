@@ -9,6 +9,7 @@ type CustomGroupContainerProps = {
     onDeleteGroup: (groupId: string) => void;
     onRenameGroup: (groupId: string, newName: string) => void;
     onResizeGroup: (groupId: string, width: number, height: number) => void;
+    onResizeEnd: (groupId: string, width: number, height: number) => void;
     canEdit: boolean;
     isConnectionMode: boolean;
     isDragTarget: boolean;
@@ -18,13 +19,15 @@ type CustomGroupContainerProps = {
 
 const MIN_WIDTH = 200;
 const MIN_HEIGHT = 150;
-const HEADER_HEIGHT = 48;
+export const CUSTOM_GROUP_HEADER_HEIGHT = 48;
+const HEADER_HEIGHT = CUSTOM_GROUP_HEADER_HEIGHT;
 const PADDING = 16;
 
 export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
     const [isEditing, setIsEditing] = createSignal(false);
     const [editName, setEditName] = createSignal(props.group.name);
-    const [isResizing, setIsResizing] = createSignal(false);
+    const [localWidth, setLocalWidth] = createSignal<number | null>(null);
+    const [localHeight, setLocalHeight] = createSignal<number | null>(null);
 
     const worldToScreen = (worldX: number, worldY: number) => {
         const vp = props.viewport();
@@ -36,8 +39,8 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
 
     const screenPos = () => worldToScreen(props.group.positionX, props.group.positionY);
 
-    const groupWidth = () => props.group.width ?? 400;
-    const groupHeight = () => props.group.height ?? 200;
+    const groupWidth = () => localWidth() ?? props.group.width ?? 400;
+    const groupHeight = () => localHeight() ?? props.group.height ?? 200;
 
     const handleNameClick = () => {
         if (!props.canEdit) return;
@@ -66,7 +69,6 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         if (!props.canEdit) return;
         e.preventDefault();
         e.stopPropagation();
-        setIsResizing(true);
 
         const startX = e.clientX;
         const startY = e.clientY;
@@ -79,11 +81,17 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
             const deltaY = (moveEvent.clientY - startY) / zoom;
             const newWidth = Math.max(MIN_WIDTH, startWidth + deltaX);
             const newHeight = Math.max(MIN_HEIGHT, startHeight + deltaY);
+            setLocalWidth(newWidth);
+            setLocalHeight(newHeight);
             props.onResizeGroup(props.group.id, newWidth, newHeight);
         };
 
         const handleMouseUp = () => {
-            setIsResizing(false);
+            const finalWidth = groupWidth();
+            const finalHeight = groupHeight();
+            setLocalWidth(null);
+            setLocalHeight(null);
+            props.onResizeEnd(props.group.id, finalWidth, finalHeight);
             window.removeEventListener("mousemove", handleMouseMove);
             window.removeEventListener("mouseup", handleMouseUp);
         };
@@ -126,12 +134,12 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                     }
                 }}
             >
-                <div class="flex items-center gap-2 min-w-0 flex-1">
+                <div class="flex min-w-0 flex-1 items-center gap-2">
                     <Show
                         when={isEditing()}
                         fallback={
                             <span
-                                class="font-semibold text-slate-50 cursor-text truncate"
+                                class="cursor-text truncate font-semibold text-slate-50"
                                 onClick={handleNameClick}
                             >
                                 {props.group.name}
@@ -144,11 +152,11 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                             onInput={(e) => setEditName(e.currentTarget.value)}
                             onBlur={handleNameBlur}
                             onKeyDown={handleNameKeyDown}
-                            class="bg-slate-700 text-slate-50 font-semibold px-1 rounded border border-slate-500 outline-none focus:border-teal-400 w-full"
+                            class="w-full rounded border border-slate-500 bg-slate-700 px-1 font-semibold text-slate-50 outline-none focus:border-teal-400"
                             autofocus
                         />
                     </Show>
-                    <span class="text-xs text-slate-400 flex-shrink-0">
+                    <span class="flex-shrink-0 text-xs text-slate-400">
                         {draftCount()} draft{draftCount() !== 1 ? "s" : ""}
                     </span>
                 </div>
@@ -190,7 +198,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 <Show
                     when={draftCount() > 0}
                     fallback={
-                        <div class="flex h-full items-center justify-center text-slate-500 text-sm">
+                        <div class="flex h-full items-center justify-center text-sm text-slate-500">
                             Drag drafts here
                         </div>
                     }
@@ -202,15 +210,20 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
             {/* Resize handle */}
             <Show when={props.canEdit}>
                 <div
-                    class="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize"
+                    class="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize"
                     onMouseDown={handleResizeMouseDown}
                 >
                     <svg
-                        class="w-3 h-3 text-slate-500 absolute bottom-1 right-1"
+                        class="absolute bottom-1 right-1 h-3 w-3 text-slate-500"
                         fill="currentColor"
                         viewBox="0 0 10 10"
                     >
-                        <path d="M9 1L1 9M9 5L5 9M9 9L9 9" stroke="currentColor" stroke-width="1.5" fill="none" />
+                        <path
+                            d="M9 1L1 9M9 5L5 9M9 9L9 9"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            fill="none"
+                        />
                     </svg>
                 </div>
             </Show>

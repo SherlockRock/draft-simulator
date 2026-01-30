@@ -49,7 +49,10 @@ import { AnchorType } from "./utils/types";
 import { useCanvasContext } from "./workflows/CanvasWorkflow";
 import { cardHeight, cardWidth } from "./utils/helpers";
 import { SeriesGroupContainer } from "./components/SeriesGroupContainer";
-import { CustomGroupContainer } from "./components/CustomGroupContainer";
+import {
+    CustomGroupContainer,
+    CUSTOM_GROUP_HEADER_HEIGHT
+} from "./components/CustomGroupContainer";
 import { GroupNameDialog } from "./components/GroupNameDialog";
 import { DeleteGroupDialog } from "./components/DeleteGroupDialog";
 
@@ -149,28 +152,38 @@ const CanvasCard = (props: cardProps) => {
         <div
             class="flex flex-col rounded-md border border-slate-500 bg-slate-600 shadow-lg"
             classList={{
-                "absolute z-30": !props.isGrouped,
+                "absolute z-30": !props.isGrouped || props.groupType === "custom",
                 "ring-4 ring-blue-400": props.isConnectionMode && !selected(),
                 "ring-4 ring-green-400": selected(),
-                "flex-shrink-0": props.isGrouped
+                "flex-shrink-0": props.isGrouped && props.groupType === "series"
             }}
             style={{
-                ...(props.isGrouped
-                    ? {}
-                    : {
-                          left: `${screenPos().x}px`,
-                          top: `${screenPos().y}px`,
-                          transform: `scale(${props.viewport().zoom})`,
-                          "transform-origin": "top left"
-                      }),
+                ...(props.isGrouped && props.groupType === "custom"
+                    ? {
+                          left: `${props.canvasDraft.positionX}px`,
+                          top: `${props.canvasDraft.positionY - CUSTOM_GROUP_HEADER_HEIGHT}px`
+                      }
+                    : props.isGrouped
+                      ? {}
+                      : {
+                            left: `${screenPos().x}px`,
+                            top: `${screenPos().y}px`,
+                            transform: `scale(${props.viewport().zoom})`,
+                            "transform-origin": "top left"
+                        }),
                 width: props.layoutToggle() ? "700px" : "350px",
                 cursor:
-                    props.isConnectionMode || !props.canEdit || props.isGrouped
+                    props.isConnectionMode ||
+                    !props.canEdit ||
+                    (props.isGrouped && props.groupType === "series")
                         ? "default"
                         : "move"
             }}
             onMouseDown={(e) => {
-                if (!props.isConnectionMode && !props.isGrouped) {
+                if (
+                    !props.isConnectionMode &&
+                    (!props.isGrouped || props.groupType === "custom")
+                ) {
                     props.onBoxMouseDown(props.canvasDraft.Draft.id, e);
                 }
             }}
@@ -513,6 +526,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         activeBoxId: string | null;
         offsetX: number;
         offsetY: number;
+        dragGroupId: string | null;
         isPanning: boolean;
         panStartX: number;
         panStartY: number;
@@ -522,6 +536,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         activeBoxId: null,
         offsetX: 0,
         offsetY: 0,
+        dragGroupId: null,
         isPanning: false,
         panStartX: 0,
         panStartY: 0,
@@ -558,8 +573,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [createGroupPosition, setCreateGroupPosition] = createSignal({ x: 0, y: 0 });
     const [dragOverGroupId, setDragOverGroupId] = createSignal<string | null>(null);
     const [exitingGroupId, setExitingGroupId] = createSignal<string | null>(null);
-    const [contextMenuPosition, setContextMenuPosition] = createSignal<{ x: number; y: number } | null>(null);
-    const [contextMenuWorldPosition, setContextMenuWorldPosition] = createSignal({ x: 0, y: 0 });
+    const [contextMenuPosition, setContextMenuPosition] = createSignal<{
+        x: number;
+        y: number;
+    } | null>(null);
+    const [contextMenuWorldPosition, setContextMenuWorldPosition] = createSignal({
+        x: 0,
+        y: 0
+    });
 
     const ungroupedDrafts = createMemo(() => canvasDrafts.filter((cd) => !cd.group_id));
 
@@ -616,13 +637,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     // Set the create group callback in the context
     createEffect(() => {
-        canvasContext.setCreateGroupCallback(() => (positionX: number, positionY: number) => {
-            const vp = props.viewport();
-            const centerX = positionX || vp.x + window.innerWidth / 2 / vp.zoom;
-            const centerY = positionY || vp.y + window.innerHeight / 2 / vp.zoom;
-            setCreateGroupPosition({ x: centerX, y: centerY });
-            setIsCreateGroupDialogOpen(true);
-        });
+        canvasContext.setCreateGroupCallback(
+            () => (positionX: number, positionY: number) => {
+                const vp = props.viewport();
+                const centerX = positionX || vp.x + window.innerWidth / 2 / vp.zoom;
+                const centerY = positionY || vp.y + window.innerHeight / 2 / vp.zoom;
+                setCreateGroupPosition({ x: centerX, y: centerY });
+                setIsCreateGroupDialogOpen(true);
+            }
+        );
 
         onCleanup(() => {
             canvasContext.setCreateGroupCallback(null);
@@ -655,7 +678,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             return postNewDraft(data);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
             toast.success("Successfully created new draft!");
         },
         onError: (error) => {
@@ -690,7 +712,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             setIsDeleteDialogOpen(false);
             setDraftToDelete(null);
             toast.success("Successfully deleted draft");
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
         },
         onError: (error: Error) => {
             toast.error(`Error deleting draft: ${error.message}`);
@@ -819,8 +840,23 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const updateDraftGroupMutation = useMutation(() => ({
         mutationFn: updateCanvasDraft,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+        onSuccess: (_data, variables) => {
+            canvasContext.mutateCanvas((prev: CanvasResposnse | undefined) => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
+                    drafts: prev.drafts.map((d) =>
+                        d.Draft.id === variables.draftId
+                            ? {
+                                  ...d,
+                                  group_id: variables.group_id ?? null,
+                                  positionX: variables.positionX ?? d.positionX,
+                                  positionY: variables.positionY ?? d.positionY
+                              }
+                            : d
+                    )
+                };
+            });
         },
         onError: (error: Error) => {
             toast.error(`Failed to update draft: ${error.message}`);
@@ -866,6 +902,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const debouncedEmitGroupMove = debounce(emitGroupMove, 25);
 
+    const emitGroupResize = (groupId: string, width: number, height: number) => {
+        socketAccessor().emit("groupResize", {
+            canvasId: params.id,
+            groupId,
+            width,
+            height
+        });
+    };
+
+    const debouncedEmitGroupResize = debounce(emitGroupResize, 25);
+
     createEffect(() => {
         if (props.canvasData && canvasDrafts.length === 0) {
             setCanvasDrafts(props.canvasData.drafts ?? []);
@@ -907,8 +954,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 setCanvasDrafts(data.drafts);
                 setConnections(data.connections);
                 setCanvasGroups(data.groups ?? []);
-                queryClient.setQueryData(["canvas", params.id], (oldData: any) => {
-                    return { ...oldData, name: data.canvas.name };
+                canvasContext.mutateCanvas((prev: CanvasResposnse | undefined) => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        name: data.canvas.name,
+                        drafts: data.drafts,
+                        groups: data.groups ?? prev.groups
+                    };
                 });
             }
         );
@@ -1023,6 +1076,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 }
             }
         );
+        socketAccessor().on(
+            "groupResized",
+            (data: { groupId: string; width: number; height: number }) => {
+                setCanvasGroups((g) => g.id === data.groupId, {
+                    width: data.width,
+                    height: data.height
+                });
+            }
+        );
         onCleanup(() => {
             socketAccessor().off("canvasUpdate");
             socketAccessor().off("draftUpdate");
@@ -1035,6 +1097,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             socketAccessor().off("vertexUpdated");
             socketAccessor().off("vertexDeleted");
             socketAccessor().off("groupMoved");
+            socketAccessor().off("groupResized");
         });
     });
 
@@ -1212,7 +1275,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const findGroupAtPosition = (x: number, y: number): CanvasGroup | null => {
-        return canvasGroups.find((g) => g.type === "custom" && isPointInGroup(x, y, g)) ?? null;
+        return (
+            canvasGroups.find((g) => g.type === "custom" && isPointInGroup(x, y, g)) ??
+            null
+        );
     };
 
     const onBoxMouseDown = (draftId: string, e: MouseEvent) => {
@@ -1227,10 +1293,23 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const cd = canvasDrafts.find((b) => b.Draft.id === draftId);
         if (cd) {
             const worldCoords = screenToWorld(e.clientX, e.clientY);
+
+            // For custom-grouped drafts, compute offset using world position
+            const customGroup = cd.group_id
+                ? canvasGroups.find((g) => g.id === cd.group_id && g.type === "custom")
+                : null;
+            const worldX = customGroup
+                ? customGroup.positionX + cd.positionX
+                : cd.positionX;
+            const worldY = customGroup
+                ? customGroup.positionY + cd.positionY
+                : cd.positionY;
+
             setDragState({
                 activeBoxId: draftId,
-                offsetX: worldCoords.x - cd.positionX,
-                offsetY: worldCoords.y - cd.positionY,
+                offsetX: worldCoords.x - worldX,
+                offsetY: worldCoords.y - worldY,
+                dragGroupId: customGroup ? customGroup.id : null,
                 isPanning: false,
                 panStartX: 0,
                 panStartY: 0,
@@ -1254,6 +1333,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 activeBoxId: null,
                 offsetX: 0,
                 offsetY: 0,
+                dragGroupId: null,
                 isPanning: true,
                 panStartX: e.clientX,
                 panStartY: e.clientY,
@@ -1407,12 +1487,48 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleResizeGroup = (groupId: string, width: number, height: number) => {
+        setCanvasGroups((g) => g.id === groupId, { width, height });
+        debouncedEmitGroupResize(groupId, width, height);
+    };
+
+    const handleResizeEnd = (groupId: string, width: number, height: number) => {
         updateGroupMutation.mutate({
             canvasId: params.id,
             groupId,
             width,
             height
         });
+    };
+
+    const GROUP_PADDING = 16;
+
+    const maybeExpandGroup = (
+        group: CanvasGroup,
+        draftRelX: number,
+        draftRelY: number
+    ) => {
+        const cw = cardWidth(props.layoutToggle());
+        const ch = cardHeight(props.layoutToggle());
+        const currentWidth = group.width ?? 400;
+        const currentHeight = group.height ?? 200;
+
+        const neededWidth = draftRelX + cw + GROUP_PADDING;
+        const neededHeight = draftRelY + ch + GROUP_PADDING;
+
+        if (neededWidth > currentWidth || neededHeight > currentHeight) {
+            const newWidth = Math.max(currentWidth, neededWidth);
+            const newHeight = Math.max(currentHeight, neededHeight);
+            setCanvasGroups((g) => g.id === group.id, {
+                width: newWidth,
+                height: newHeight
+            });
+            updateGroupMutation.mutate({
+                canvasId: params.id,
+                groupId: group.id,
+                width: newWidth,
+                height: newHeight
+            });
+        }
     };
 
     const handleCanvasContextMenu = (e: MouseEvent) => {
@@ -1430,7 +1546,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setContextMenuPosition({ x: e.clientX, y: e.clientY });
     };
 
-    const closeContextMenu = () => {
+    const closeContextMenu = (e?: MouseEvent) => {
+        if (e && (e.target as HTMLElement).closest(".canvas-context-menu")) return;
         setContextMenuPosition(null);
     };
 
@@ -1556,18 +1673,32 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 debouncedSaveViewport(holdViewport);
             } else if (state.activeBoxId !== null) {
                 const worldCoords = screenToWorld(e.clientX, e.clientY);
-                const newX = worldCoords.x - state.offsetX;
-                const newY = worldCoords.y - state.offsetY;
-                setCanvasDrafts((cd) => cd.Draft.id === state.activeBoxId, {
-                    positionX: newX,
-                    positionY: newY
-                });
-                debouncedEmitMove(state.activeBoxId, newX, newY);
+                const newWorldX = worldCoords.x - state.offsetX;
+                const newWorldY = worldCoords.y - state.offsetY;
 
-                // Check for group hover during draft drag
-                const hoverGroup = findGroupAtPosition(newX, newY);
-                const activeDraft = canvasDrafts.find((cd) => cd.Draft.id === state.activeBoxId);
-                const currentGroupId = activeDraft?.group_id;
+                if (state.dragGroupId) {
+                    // Dragging within a custom group — store group-relative position
+                    const group = canvasGroups.find((g) => g.id === state.dragGroupId);
+                    if (group) {
+                        setCanvasDrafts((cd) => cd.Draft.id === state.activeBoxId, {
+                            positionX: newWorldX - group.positionX,
+                            positionY: newWorldY - group.positionY
+                        });
+                    }
+                } else {
+                    setCanvasDrafts((cd) => cd.Draft.id === state.activeBoxId, {
+                        positionX: newWorldX,
+                        positionY: newWorldY
+                    });
+                    debouncedEmitMove(state.activeBoxId, newWorldX, newWorldY);
+                }
+
+                // Check for group hover during draft drag (always in world coords)
+                const hoverGroup = findGroupAtPosition(newWorldX, newWorldY);
+                const currentGroupId =
+                    state.dragGroupId ||
+                    canvasDrafts.find((cd) => cd.Draft.id === state.activeBoxId)
+                        ?.group_id;
 
                 if (hoverGroup && hoverGroup.id !== currentGroupId) {
                     setDragOverGroupId(hoverGroup.id);
@@ -1639,13 +1770,35 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     (cd) => cd.Draft.id === state.activeBoxId
                 );
                 if (finalDraft) {
-                    const dropGroup = findGroupAtPosition(finalDraft.positionX, finalDraft.positionY);
+                    // Convert to world coords for group detection
+                    let worldX: number, worldY: number;
+                    if (state.dragGroupId) {
+                        const sourceGroup = canvasGroups.find(
+                            (g) => g.id === state.dragGroupId
+                        );
+                        worldX = sourceGroup
+                            ? sourceGroup.positionX + finalDraft.positionX
+                            : finalDraft.positionX;
+                        worldY = sourceGroup
+                            ? sourceGroup.positionY + finalDraft.positionY
+                            : finalDraft.positionY;
+                    } else {
+                        worldX = finalDraft.positionX;
+                        worldY = finalDraft.positionY;
+                    }
 
-                    // Check if dropped on a different group than current
+                    const dropGroup = findGroupAtPosition(worldX, worldY);
+
                     if (dropGroup && dropGroup.id !== finalDraft.group_id) {
-                        // Add to new group - convert position to group-relative
-                        const relativeX = finalDraft.positionX - dropGroup.positionX;
-                        const relativeY = finalDraft.positionY - dropGroup.positionY;
+                        // Moving to a different group
+                        const relativeX = worldX - dropGroup.positionX;
+                        const relativeY = worldY - dropGroup.positionY;
+
+                        setCanvasDrafts((cd) => cd.Draft.id === state.activeBoxId, {
+                            positionX: relativeX,
+                            positionY: relativeY,
+                            group_id: dropGroup.id
+                        });
 
                         updateDraftGroupMutation.mutate({
                             canvasId: params.id,
@@ -1654,30 +1807,46 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             positionY: relativeY,
                             group_id: dropGroup.id
                         });
+
+                        maybeExpandGroup(dropGroup, relativeX, relativeY);
                     } else if (!dropGroup && finalDraft.group_id) {
                         // Dropped outside all groups - ungroup if in a custom group
-                        const currentGroup = canvasGroups.find((g) => g.id === finalDraft.group_id);
+                        const currentGroup = canvasGroups.find(
+                            (g) => g.id === finalDraft.group_id
+                        );
                         if (currentGroup && currentGroup.type === "custom") {
-                            // Convert to absolute position
-                            const absoluteX = currentGroup.positionX + finalDraft.positionX;
-                            const absoluteY = currentGroup.positionY + finalDraft.positionY;
+                            // Store world-absolute position and clear group
+                            setCanvasDrafts((cd) => cd.Draft.id === state.activeBoxId, {
+                                positionX: worldX,
+                                positionY: worldY,
+                                group_id: null
+                            });
 
                             updateDraftGroupMutation.mutate({
                                 canvasId: params.id,
                                 draftId: finalDraft.Draft.id,
-                                positionX: absoluteX,
-                                positionY: absoluteY,
+                                positionX: worldX,
+                                positionY: worldY,
                                 group_id: null
                             });
                         }
                     } else {
-                        // Just update position
+                        // Same group or ungrouped — save position
                         updatePositionMutation.mutate({
                             canvasId: params.id,
                             draftId: state.activeBoxId,
                             positionX: finalDraft.positionX,
                             positionY: finalDraft.positionY
                         });
+
+                        // Auto-expand if repositioned within a custom group
+                        if (state.dragGroupId && dropGroup) {
+                            maybeExpandGroup(
+                                dropGroup,
+                                finalDraft.positionX,
+                                finalDraft.positionY
+                            );
+                        }
                     }
                 }
             }
@@ -1690,6 +1859,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 activeBoxId: null,
                 offsetX: 0,
                 offsetY: 0,
+                dragGroupId: null,
                 isPanning: false,
                 panStartX: 0,
                 panStartY: 0,
@@ -1721,14 +1891,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         window.addEventListener("mousemove", onWindowMouseMove);
         window.addEventListener("mouseup", onWindowMouseUp);
         window.addEventListener("wheel", onWindowWheel, { passive: false });
-        window.addEventListener("click", closeContextMenu);
+        window.addEventListener("mousedown", closeContextMenu);
 
         onCleanup(() => {
             window.removeEventListener("keydown", onKeyDown);
             window.removeEventListener("mousemove", onWindowMouseMove);
             window.removeEventListener("mouseup", onWindowMouseUp);
             window.removeEventListener("wheel", onWindowWheel);
-            window.removeEventListener("click", closeContextMenu);
+            window.removeEventListener("mousedown", closeContextMenu);
         });
     });
 
@@ -1884,6 +2054,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     onDeleteGroup={handleDeleteGroup}
                                     onRenameGroup={handleRenameGroup}
                                     onResizeGroup={handleResizeGroup}
+                                    onResizeEnd={handleResizeEnd}
                                     canEdit={hasEditPermissions(
                                         props.canvasData?.userPermissions
                                     )}
@@ -2062,12 +2233,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 Remove Series from Canvas?
                                             </h3>
                                             <p class="mb-4 text-slate-200">
-                                                This will remove "{group().name}" and all its
-                                                games from this canvas.
+                                                This will remove "{group().name}" and all
+                                                its games from this canvas.
                                             </p>
                                             <p class="mb-6 text-sm text-slate-400">
-                                                The original series data will not be deleted - you can
-                                                re-import it later.
+                                                The original series data will not be
+                                                deleted - you can re-import it later.
                                             </p>
                                             <div class="flex justify-end gap-4">
                                                 <button
@@ -2077,7 +2248,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                     Cancel
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDeleteGroupWithChoice(false)}
+                                                    onClick={() =>
+                                                        handleDeleteGroupWithChoice(false)
+                                                    }
                                                     class="rounded bg-red-400 px-4 py-2 text-slate-50 hover:bg-red-600"
                                                 >
                                                     Remove
@@ -2089,8 +2262,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     <DeleteGroupDialog
                                         group={group()}
                                         draftCount={getDraftsForGroup(group().id).length}
-                                        onKeepDrafts={() => handleDeleteGroupWithChoice(true)}
-                                        onDeleteAll={() => handleDeleteGroupWithChoice(false)}
+                                        onKeepDrafts={() =>
+                                            handleDeleteGroupWithChoice(true)
+                                        }
+                                        onDeleteAll={() =>
+                                            handleDeleteGroupWithChoice(false)
+                                        }
                                         onCancel={onDeleteGroupCancel}
                                     />
                                 </Show>
@@ -2101,12 +2278,29 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 {/* Context Menu */}
                 <Show when={contextMenuPosition()}>
                     <div
-                        class="fixed z-50 rounded-md bg-slate-700 py-1 shadow-lg border border-slate-500"
+                        class="canvas-context-menu fixed z-50 rounded-md border border-slate-500 bg-slate-700 py-1 shadow-lg"
                         style={{
                             left: `${contextMenuPosition()!.x}px`,
                             top: `${contextMenuPosition()!.y}px`
                         }}
                     >
+                        <button
+                            class="w-full px-4 py-2 text-left text-sm text-slate-200 hover:bg-slate-600"
+                            onClick={() => {
+                                const pos = contextMenuWorldPosition();
+                                newDraftMutation.mutate({
+                                    name: "New Draft",
+                                    picks: Array(20).fill(""),
+                                    public: false,
+                                    canvas_id: params.id,
+                                    positionX: pos.x,
+                                    positionY: pos.y
+                                });
+                                closeContextMenu();
+                            }}
+                        >
+                            Create Draft
+                        </button>
                         <button
                             class="w-full px-4 py-2 text-left text-sm text-slate-200 hover:bg-slate-600"
                             onClick={() => {

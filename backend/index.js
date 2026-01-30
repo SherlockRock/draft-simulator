@@ -232,6 +232,22 @@ async function main() {
       }
     });
 
+    socket.on("groupResize", async (data) => {
+      const userCanvas = await UserCanvas.findOne({
+        where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },
+      });
+      if (
+        (userCanvas && userCanvas.permissions === "edit") ||
+        userCanvas.permissions === "admin"
+      ) {
+        socket.to(data.canvasId).emit("groupResized", {
+          groupId: data.groupId,
+          width: data.width,
+          height: data.height,
+        });
+      }
+    });
+
     socket.on("disconnecting", () => {
       for (const room of socket.rooms) {
         if (room !== socket.id) {
