@@ -254,8 +254,10 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                 <Show when={isDetailView()}>
                     <FlowPanel flow="canvas">
                         <div class="flex h-full flex-col gap-2 pt-4">
-                            {/* Canvas Selector */}
-                            <CanvasSelector selectedId={params.id} />
+                            {/* Canvas Selector - hidden when viewing a draft */}
+                            <Show when={!isDraftView()}>
+                                <CanvasSelector selectedId={params.id} />
+                            </Show>
 
                             {/* Control buttons - hidden when viewing a draft */}
                             <Show when={isDetailView() && !isDraftView()}>
