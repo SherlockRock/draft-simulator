@@ -822,19 +822,3 @@ export const updateCanvasDraft = async (data: {
     }
     return await res.json();
 };
-
-export const fetchCanvasContext = async (canvasId: string) => {
-    const res = await fetch(`${BASE_URL}/canvas/${canvasId}`, {
-        method: "GET",
-        credentials: "include"
-    });
-
-    if (!res.ok) return { canvas: null, drafts: [], groups: [] };
-
-    const canvasData = await res.json();
-    return {
-        canvas: { id: canvasId, name: canvasData.name },
-        drafts: canvasData.drafts || [],
-        groups: canvasData.groups || []
-    };
-};

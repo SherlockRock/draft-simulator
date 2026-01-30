@@ -12,7 +12,7 @@ import {
     Show,
     For
 } from "solid-js";
-import { useParams, RouteSectionProps } from "@solidjs/router";
+import { useParams, useNavigate, RouteSectionProps } from "@solidjs/router";
 import { useQueryClient, useMutation, useQuery } from "@tanstack/solid-query";
 import { useUser } from "../userProvider";
 import {
@@ -118,8 +118,11 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         }
     });
 
+    const navigate = useNavigate();
+
     // Check if we're on a detail view (has an id param)
     const isDetailView = () => !!params.id;
+    const isDraftView = () => !!params.draftId;
 
     const hasAdminPermissions = () => canvas()?.userPermissions === "admin";
     const hasEditPermissions = () =>
@@ -254,8 +257,8 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                             {/* Canvas Selector */}
                             <CanvasSelector selectedId={params.id} />
 
-                            {/* Control buttons when canvas is selected */}
-                            <Show when={isDetailView()}>
+                            {/* Control buttons - hidden when viewing a draft */}
+                            <Show when={isDetailView() && !isDraftView()}>
                                 <div class="flex flex-col gap-2">
                                     <button
                                         class="rounded-md bg-teal-700 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-teal-400"
@@ -404,6 +407,17 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                 </div>
                             </Show>
 
+                            {/* Back to canvas link when viewing a draft */}
+                            <Show when={isDraftView()}>
+                                <button
+                                    onClick={() => navigate(`/canvas/${params.id}`)}
+                                    class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-300 hover:bg-slate-700"
+                                >
+                                    <span>&larr;</span>
+                                    <span>Back to {canvas()?.name || "Canvas"}</span>
+                                </button>
+                            </Show>
+
                             {/* Draft list when canvas is selected */}
                             <Show when={isDetailView() && canvas()?.drafts}>
                                 {(() => {
@@ -511,27 +525,25 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
 
                                                                     return (
                                                                         <div
-                                                                            class="ml-3 cursor-pointer rounded-md bg-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-600"
+                                                                            class={`ml-3 cursor-pointer rounded-md px-3 py-2 text-sm transition-colors ${
+                                                                                isDraftView() && canvasDraft.Draft.id === params.draftId
+                                                                                    ? "bg-slate-600 text-slate-50"
+                                                                                    : "bg-slate-700 text-slate-200 hover:bg-slate-600"
+                                                                            }`}
                                                                             onClick={() => {
-                                                                                const callback =
-                                                                                    navigateToDraftCallback();
-                                                                                if (
-                                                                                    callback
-                                                                                ) {
-                                                                                    const pos =
-                                                                                        getNavPosition();
-                                                                                    callback(
-                                                                                        pos.x,
-                                                                                        pos.y
-                                                                                    );
+                                                                                if (isDraftView()) {
+                                                                                    navigate(`/canvas/${params.id}/draft/${canvasDraft.Draft.id}`);
+                                                                                } else {
+                                                                                    const callback =
+                                                                                        navigateToDraftCallback();
+                                                                                    if (callback) {
+                                                                                        const pos = getNavPosition();
+                                                                                        callback(pos.x, pos.y);
+                                                                                    }
                                                                                 }
                                                                             }}
                                                                         >
-                                                                            {
-                                                                                canvasDraft
-                                                                                    .Draft
-                                                                                    .name
-                                                                            }
+                                                                            {canvasDraft.Draft.name}
                                                                         </div>
                                                                     );
                                                                 }}
@@ -543,15 +555,23 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                 <For each={ungroupedDrafts()}>
                                                     {(canvasDraft) => (
                                                         <div
-                                                            class="cursor-pointer rounded-md bg-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-600"
+                                                            class={`cursor-pointer rounded-md px-3 py-2 text-sm transition-colors ${
+                                                                isDraftView() && canvasDraft.Draft.id === params.draftId
+                                                                    ? "bg-slate-600 text-slate-50"
+                                                                    : "bg-slate-700 text-slate-200 hover:bg-slate-600"
+                                                            }`}
                                                             onClick={() => {
-                                                                const callback =
-                                                                    navigateToDraftCallback();
-                                                                if (callback) {
-                                                                    callback(
-                                                                        canvasDraft.positionX,
-                                                                        canvasDraft.positionY
-                                                                    );
+                                                                if (isDraftView()) {
+                                                                    navigate(`/canvas/${params.id}/draft/${canvasDraft.Draft.id}`);
+                                                                } else {
+                                                                    const callback =
+                                                                        navigateToDraftCallback();
+                                                                    if (callback) {
+                                                                        callback(
+                                                                            canvasDraft.positionX,
+                                                                            canvasDraft.positionY
+                                                                        );
+                                                                    }
                                                                 }
                                                             }}
                                                         >
