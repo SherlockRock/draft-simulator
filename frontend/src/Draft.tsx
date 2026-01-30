@@ -91,7 +91,7 @@ function Draft(props: props) {
         const holdDraft = props.draft();
         if (holdDraft && anonDraft()) {
             setAnonDraft(false);
-            navigate(`/draft/${holdDraft.id}`, { replace: true });
+            navigate(`/canvas/${params.id}/draft/${holdDraft.id}`, { replace: true });
             socketAccessor().emit("joinRoom", holdDraft.id);
         }
     });
@@ -147,7 +147,7 @@ function Draft(props: props) {
         }));
         socketAccessor().emit("newDraft", {
             picks: holdPicks,
-            id: params.id
+            id: params.draftId
         });
         setSelectedChampion("");
         setCurrentDragged("");

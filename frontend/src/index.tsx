@@ -10,7 +10,7 @@ import AuthCallback from "./AuthCallback";
 import ShareDraftPage from "./ShareDraftPage";
 import ShareCanvasPage from "./ShareCanvasPage";
 import HomePage from "./pages/HomePage";
-import DraftFlowDashboard from "./pages/DraftFlowDashboard";
+
 import CanvasFlowDashboard from "./pages/CanvasFlowDashboard";
 import VersusFlowDashboard from "./pages/VersusFlowDashboard";
 import DraftDetailView from "./pages/DraftDetailView";
@@ -41,14 +41,12 @@ render(
                 <Route path="/" component={UserWrapper}>
                     <Route path="/oauth2callback" component={AuthCallback} />
                     <Route path="/" component={HomePage} />
-                    <Route path="/draft" component={DraftWorkflow}>
-                        <Route path="/" component={DraftFlowDashboard} />
-                        <Route path="/new" component={DraftDetailView} />
-                        <Route path="/:id" component={DraftDetailView} />
-                    </Route>
                     <Route path="/canvas" component={CanvasWorkflow}>
                         <Route path="/" component={CanvasFlowDashboard} />
                         <Route path="/:id" component={CanvasDetailView} />
+                        <Route path="/:id/draft/:draftId" component={DraftWorkflow}>
+                            <Route path="/" component={DraftDetailView} />
+                        </Route>
                     </Route>
                     <Route path="/versus" component={VersusWorkflow}>
                         <Route path="/" component={VersusFlowDashboard} />

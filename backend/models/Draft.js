@@ -17,10 +17,10 @@ const Draft = sequelize.define("Draft", {
   },
   type: {
     type: DataTypes.STRING,
-    defaultValue: "standalone",
+    defaultValue: "canvas",
     allowNull: false,
     validate: {
-      isIn: [["canvas", "standalone", "versus"]],
+      isIn: [["canvas", "versus"]],
     },
   },
   description: {

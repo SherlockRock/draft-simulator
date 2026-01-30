@@ -48,17 +48,6 @@ export const postNewDraft = async (data: {
     return hold;
 };
 
-export const fetchDraftList = async () => {
-    const res = await fetch(`${BASE_URL}/drafts/dropdown`, {
-        method: "GET",
-        credentials: "include"
-    });
-    if (!res.ok) {
-        throw new Error("Failed to fetch draft list");
-    }
-    return await res.json();
-};
-
 export const fetchDefaultDraft = async (id: string | null): Promise<draft | null> => {
     if (!id || id === "oauth2callback") return null;
     const res = await fetch(`${BASE_URL}/drafts/${id}`, {

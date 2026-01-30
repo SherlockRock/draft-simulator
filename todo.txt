@@ -5,7 +5,6 @@ Versus functionality:
     the unpickable because it isn't your turn UI should be more distinct from unpickable due to fearless
 
 Canvas Functionality:
-    link to fearless series from group header
     "Locked" is not explained in the UI
     import list should include shared items (only maters if I keep standalone drafts ig)
     replace draft list button Functionality with right click menus?
@@ -24,7 +23,7 @@ Canvas Functionality:
     canvas selector should use searchable select
 
 Short Term:
-    if you view a locked draft directly it is editable
+    if you view a locked draft directly it is editable -> should fix during canvas draft overhaul
     sometimes clicking canvas edit dialog jsut sends me to the canvas instead of letting me interact
     action needs to start within a few clicks
     things you need to be signed in for should not display if user is anon
