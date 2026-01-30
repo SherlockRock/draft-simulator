@@ -1,4 +1,5 @@
 import { For, Show, createMemo, Accessor, JSX } from "solid-js";
+import { useNavigate } from "@solidjs/router";
 import { CanvasDraft, CanvasGroup, Viewport } from "../utils/types";
 
 type SeriesGroupContainerProps = {
@@ -19,6 +20,8 @@ const PADDING = 20;
 const CARD_GAP = 24;
 
 export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
+    const navigate = useNavigate();
+
     const worldToScreen = (worldX: number, worldY: number) => {
         const vp = props.viewport();
         return {
@@ -83,6 +86,32 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
             >
                 <div class="flex items-center gap-3">
                     <span class="font-semibold text-slate-50">{props.group.name}</span>
+
+                    {/* Navigate to Series Overview */}
+                    <Show when={props.group.versus_draft_id}>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/versus/${props.group.versus_draft_id}`);
+                            }}
+                            class="rounded p-1 text-slate-400 hover:bg-slate-600 hover:text-teal-400"
+                            title="Go to series overview"
+                        >
+                            <svg
+                                class="h-4 w-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                                />
+                            </svg>
+                        </button>
+                    </Show>
 
                     {/* Team Score */}
                     <div class="flex items-center gap-2 text-sm">
