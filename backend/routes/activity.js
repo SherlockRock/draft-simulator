@@ -5,7 +5,7 @@ const { Canvas, UserCanvas } = require("../models/Canvas");
 const VersusDraft = require("../models/VersusDraft");
 const User = require("../models/User");
 const { getUserFromRequest } = require("../middleware/auth");
-const { Op } = require("sequelize");
+
 
 router.get("/recent", async (req, res) => {
   try {
@@ -33,8 +33,8 @@ router.get("/recent", async (req, res) => {
         : await Draft.findAll({
             where: {
               owner_id: user.id,
-              type: { [Op.in]: ["standalone", "versus"] },
-              versus_draft_id: null, // Exclude drafts that are part of a versus series
+              type: "versus",
+              versus_draft_id: null,
             },
             order: [["updatedAt", "DESC"]],
             limit: fetchLimit,
@@ -50,29 +50,7 @@ router.get("/recent", async (req, res) => {
             ],
           });
 
-    // Get drafts shared with user (standalone only - versus series drafts are excluded) if needed
-    const sharedDrafts =
-      resourceType === "canvas" || resourceType === "versus"
-        ? []
-        : await user.getSharedDrafts({
-            where: {
-              type: { [Op.in]: ["standalone"] },
-              versus_draft_id: null, // Exclude drafts that are part of a versus series
-            },
-            order: [["updatedAt", "DESC"]],
-            limit: fetchLimit,
-            attributes: [
-              "id",
-              "name",
-              "description",
-              "public",
-              "type",
-              "icon",
-              "updatedAt",
-              "createdAt",
-            ],
-            joinTableAttributes: [],
-          });
+    const sharedDrafts = [];
 
     // Get user's canvases if needed
     const canvases =
