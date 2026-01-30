@@ -11,7 +11,6 @@ const GlobalNavBar: Component = () => {
 
     const activeFlow = () => {
         const path = location.pathname;
-        if (path.startsWith("/draft")) return "draft";
         if (path.startsWith("/canvas")) return "canvas";
         if (path.startsWith("/versus")) return "versus";
         return null;
@@ -38,17 +37,6 @@ const GlobalNavBar: Component = () => {
                 >
                     <span>🏠</span>
                     <span>Home</span>
-                </button>
-                <button
-                    onClick={() => navigate("/draft")}
-                    class={`flex items-center gap-2 rounded-md px-4 py-2 font-medium transition-colors ${
-                        activeFlow() === "draft"
-                            ? "bg-blue-600 text-white"
-                            : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-                    }`}
-                >
-                    <span>📄</span>
-                    <span>Draft</span>
                 </button>
                 <button
                     onClick={() => navigate("/canvas")}
