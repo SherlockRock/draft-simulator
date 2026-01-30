@@ -44,7 +44,7 @@ render(
                     <Route path="/canvas" component={CanvasWorkflow}>
                         <Route path="/" component={CanvasFlowDashboard} />
                         <Route path="/:id" component={CanvasDetailView} />
-                        <Route path="/:canvasId/draft/:draftId" component={DraftWorkflow}>
+                        <Route path="/:id/draft/:draftId" component={DraftWorkflow}>
                             <Route path="/" component={DraftDetailView} />
                         </Route>
                     </Route>

@@ -44,7 +44,7 @@ const DraftWorkflow: Component<RouteSectionProps> = (props) => {
     );
 
     const [canvasContext] = createResource(
-        () => (params.canvasId ? String(params.canvasId) : null),
+        () => (params.id ? String(params.id) : null),
         fetchCanvasContext
     );
 
@@ -93,7 +93,7 @@ const DraftWorkflow: Component<RouteSectionProps> = (props) => {
                         {/* Back to canvas link */}
                         <Show when={canvasContext()?.canvas}>
                             <button
-                                onClick={() => navigate(`/canvas/${params.canvasId}`)}
+                                onClick={() => navigate(`/canvas/${params.id}`)}
                                 class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-300 hover:bg-slate-700"
                             >
                                 <span>&larr;</span>
@@ -114,7 +114,7 @@ const DraftWorkflow: Component<RouteSectionProps> = (props) => {
                                             <div class="flex flex-col gap-1">
                                                 <div
                                                     class="flex cursor-pointer items-center gap-2 rounded-md bg-slate-600 px-2 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-500"
-                                                    onClick={() => navigate(`/canvas/${params.canvasId}`)}
+                                                    onClick={() => navigate(`/canvas/${params.id}`)}
                                                 >
                                                     <span class="text-slate-400">
                                                         {group.type === "series" ? "Series" : "Group"}
@@ -131,7 +131,7 @@ const DraftWorkflow: Component<RouteSectionProps> = (props) => {
                                                                     ? "bg-slate-600 text-slate-50"
                                                                     : "bg-slate-700 text-slate-200 hover:bg-slate-600"
                                                             }`}
-                                                            onClick={() => navigate(`/canvas/${params.canvasId}/draft/${draftId(canvasDraft)}`)}
+                                                            onClick={() => navigate(`/canvas/${params.id}/draft/${draftId(canvasDraft)}`)}
                                                         >
                                                             {draftName(canvasDraft)}
                                                         </div>
@@ -149,7 +149,7 @@ const DraftWorkflow: Component<RouteSectionProps> = (props) => {
                                                         ? "bg-slate-600 text-slate-50"
                                                         : "bg-slate-700 text-slate-200 hover:bg-slate-600"
                                                 }`}
-                                                onClick={() => navigate(`/canvas/${params.canvasId}/draft/${draftId(canvasDraft)}`)}
+                                                onClick={() => navigate(`/canvas/${params.id}/draft/${draftId(canvasDraft)}`)}
                                             >
                                                 {draftName(canvasDraft)}
                                             </div>

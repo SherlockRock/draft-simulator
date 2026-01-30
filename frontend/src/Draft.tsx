@@ -91,7 +91,7 @@ function Draft(props: props) {
         const holdDraft = props.draft();
         if (holdDraft && anonDraft()) {
             setAnonDraft(false);
-            navigate(`/canvas/${params.canvasId}/draft/${holdDraft.id}`, { replace: true });
+            navigate(`/canvas/${params.id}/draft/${holdDraft.id}`, { replace: true });
             socketAccessor().emit("joinRoom", holdDraft.id);
         }
     });
