@@ -833,3 +833,33 @@ export const updateCanvasDraft = async (data: {
     }
     return await res.json();
 };
+
+export const fetchCanvasSiblingDrafts = async (draftId: string) => {
+    // First get the canvases this draft belongs to
+    const canvasRes = await fetch(`${BASE_URL}/drafts/${draftId}/canvases`, {
+        method: "GET",
+        credentials: "include"
+    });
+
+    if (!canvasRes.ok) return { canvas: null, drafts: [] };
+
+    const { canvases } = await canvasRes.json();
+    if (!canvases || canvases.length === 0) return { canvas: null, drafts: [] };
+
+    // Use the first canvas
+    const canvas = canvases[0];
+
+    // Fetch the canvas details to get all its drafts
+    const detailRes = await fetch(`${BASE_URL}/canvas/${canvas.id}`, {
+        method: "GET",
+        credentials: "include"
+    });
+
+    if (!detailRes.ok) return { canvas, drafts: [] };
+
+    const canvasData = await detailRes.json();
+    return {
+        canvas: { id: canvas.id, name: canvas.name },
+        drafts: canvasData.drafts || []
+    };
+};
