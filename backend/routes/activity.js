@@ -6,7 +6,6 @@ const VersusDraft = require("../models/VersusDraft");
 const User = require("../models/User");
 const { getUserFromRequest } = require("../middleware/auth");
 
-
 router.get("/recent", async (req, res) => {
   try {
     const user = await getUserFromRequest(req);
@@ -49,8 +48,6 @@ router.get("/recent", async (req, res) => {
               "createdAt",
             ],
           });
-
-    const sharedDrafts = [];
 
     // Get user's canvases if needed
     const canvases =
@@ -114,18 +111,6 @@ router.get("/recent", async (req, res) => {
         timestamp: draft.updatedAt,
         created_at: draft.createdAt,
         is_owner: true,
-        draft_type: draft.type,
-      })),
-      ...sharedDrafts.map((draft) => ({
-        resource_type: "draft",
-        resource_id: draft.id,
-        resource_name: draft.name,
-        description: draft.description,
-        public: draft.public,
-        icon: draft.icon,
-        timestamp: draft.updatedAt,
-        created_at: draft.createdAt,
-        is_owner: false,
         draft_type: draft.type,
       })),
     ];

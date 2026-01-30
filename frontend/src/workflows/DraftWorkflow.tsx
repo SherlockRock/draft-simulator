@@ -2,6 +2,7 @@ import {
     Component,
     createResource,
     createEffect,
+    createMemo,
     createContext,
     useContext,
     Setter,
@@ -13,7 +14,6 @@ import { useParams, useNavigate, RouteSectionProps } from "@solidjs/router";
 import { useUser } from "../userProvider";
 import { fetchDefaultDraft, fetchCanvasSiblingDrafts } from "../utils/actions";
 import FlowPanel from "../components/FlowPanel";
-import Chat from "../Chat";
 import { VersionFooter } from "../components/VersionFooter";
 
 // Keep the context — DraftDetailView still uses it
@@ -36,7 +36,7 @@ const DraftWorkflow: Component<RouteSectionProps> = (props) => {
     const params = useParams();
     const navigate = useNavigate();
     const accessor = useUser();
-    const [user, , socketAccessor] = accessor();
+    const [user] = accessor();
 
     const [draft, { mutate: mutateDraft, refetch: refetchDraft }] = createResource(
         () => (params.id ? String(params.id) : null),
@@ -48,6 +48,26 @@ const DraftWorkflow: Component<RouteSectionProps> = (props) => {
         () => (params.id ? String(params.id) : null),
         fetchCanvasSiblingDrafts
     );
+
+    const groups = createMemo(() => canvasContext()?.groups || []);
+
+    const ungroupedDrafts = createMemo(() => {
+        const drafts = canvasContext()?.drafts || [];
+        return drafts.filter((d: any) => !d.group_id);
+    });
+
+    const getDraftsForGroup = (groupId: string) => {
+        const drafts = canvasContext()?.drafts || [];
+        const groupDrafts = drafts.filter((d: any) => d.group_id === groupId);
+        const group = groups().find((g: any) => g.id === groupId);
+        if (group?.type === "series") {
+            groupDrafts.sort(
+                (a: any, b: any) =>
+                    (a.Draft?.seriesIndex ?? 0) - (b.Draft?.seriesIndex ?? 0)
+            );
+        }
+        return groupDrafts;
+    };
 
     let previousUser = user();
 
@@ -62,6 +82,9 @@ const DraftWorkflow: Component<RouteSectionProps> = (props) => {
         }
         previousUser = currentUser;
     });
+
+    const draftId = (d: any) => d.Draft?.id || d.id;
+    const draftName = (d: any) => d.Draft?.name || d.name;
 
     return (
         <DraftContext.Provider value={{ draft, mutateDraft }}>
@@ -79,25 +102,58 @@ const DraftWorkflow: Component<RouteSectionProps> = (props) => {
                             </button>
                         </Show>
 
-                        {/* Sibling drafts list */}
+                        {/* Sibling drafts list — matches canvas sidebar styling */}
                         <Show when={canvasContext()?.drafts?.length}>
-                            <div class="flex flex-col gap-1">
-                                <div class="px-3 text-xs font-medium uppercase tracking-wider text-slate-400">
-                                    Canvas Drafts
-                                </div>
-                                <div class="flex flex-col gap-0.5 overflow-y-auto">
-                                    <For each={canvasContext()!.drafts}>
-                                        {(siblingDraft: any) => (
-                                            <button
-                                                onClick={() => navigate(`/draft/${siblingDraft.Draft?.id || siblingDraft.id}`)}
-                                                class={`rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                                                    (siblingDraft.Draft?.id || siblingDraft.id) === params.id
+                            <div class="flex min-h-0 flex-col gap-2 overflow-y-auto px-2">
+                                <h3 class="text-sm font-semibold text-slate-300">
+                                    Drafts in Canvas
+                                </h3>
+                                <div class="flex flex-col gap-1">
+                                    {/* Grouped drafts */}
+                                    <For each={groups()}>
+                                        {(group: any) => (
+                                            <div class="flex flex-col gap-1">
+                                                <div
+                                                    class="flex cursor-pointer items-center gap-2 rounded-md bg-slate-600 px-2 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-500"
+                                                    onClick={() => navigate(`/canvas/${canvasContext()!.canvas!.id}`)}
+                                                >
+                                                    <span class="text-slate-400">
+                                                        {group.type === "series" ? "Series" : "Group"}
+                                                    </span>
+                                                    <span class="truncate">
+                                                        {group.name}
+                                                    </span>
+                                                </div>
+                                                <For each={getDraftsForGroup(group.id)}>
+                                                    {(canvasDraft: any) => (
+                                                        <div
+                                                            class={`ml-3 cursor-pointer rounded-md px-3 py-2 text-sm transition-colors ${
+                                                                draftId(canvasDraft) === params.id
+                                                                    ? "bg-slate-600 text-slate-50"
+                                                                    : "bg-slate-700 text-slate-200 hover:bg-slate-600"
+                                                            }`}
+                                                            onClick={() => navigate(`/draft/${draftId(canvasDraft)}`)}
+                                                        >
+                                                            {draftName(canvasDraft)}
+                                                        </div>
+                                                    )}
+                                                </For>
+                                            </div>
+                                        )}
+                                    </For>
+                                    {/* Ungrouped drafts */}
+                                    <For each={ungroupedDrafts()}>
+                                        {(canvasDraft: any) => (
+                                            <div
+                                                class={`cursor-pointer rounded-md px-3 py-2 text-sm transition-colors ${
+                                                    draftId(canvasDraft) === params.id
                                                         ? "bg-slate-600 text-slate-50"
-                                                        : "text-slate-300 hover:bg-slate-700"
+                                                        : "bg-slate-700 text-slate-200 hover:bg-slate-600"
                                                 }`}
+                                                onClick={() => navigate(`/draft/${draftId(canvasDraft)}`)}
                                             >
-                                                {siblingDraft.Draft?.name || siblingDraft.name}
-                                            </button>
+                                                {draftName(canvasDraft)}
+                                            </div>
                                         )}
                                     </For>
                                 </div>
@@ -111,13 +167,7 @@ const DraftWorkflow: Component<RouteSectionProps> = (props) => {
                             </div>
                         </Show>
 
-                        {/* Chat */}
-                        <div class="flex-1">
-                            <Chat
-                                currentDraft={params.id || ""}
-                                socket={socketAccessor()}
-                            />
-                        </div>
+                        <div class="flex-1" />
                         <VersionFooter />
                     </div>
                 </FlowPanel>

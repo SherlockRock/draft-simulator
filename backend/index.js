@@ -170,15 +170,6 @@ async function main() {
       io.to(room).emit("userCountUpdate", roomSize);
     });
 
-    socket.on("newMessage", async (req) => {
-      const username = socket.user ? socket.user.name : socket.id;
-      io.to(req.room).emit("chatMessage", {
-        username,
-        socketId: socket.id,
-        chat: req.message,
-      });
-    });
-
     socket.on("canvasObjectMove", async (data) => {
       const userCanvas = await UserCanvas.findOne({
         where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },

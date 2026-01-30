@@ -830,10 +830,10 @@ export const fetchCanvasSiblingDrafts = async (draftId: string) => {
         credentials: "include"
     });
 
-    if (!canvasRes.ok) return { canvas: null, drafts: [] };
+    if (!canvasRes.ok) return { canvas: null, drafts: [], groups: [] };
 
     const { canvases } = await canvasRes.json();
-    if (!canvases || canvases.length === 0) return { canvas: null, drafts: [] };
+    if (!canvases || canvases.length === 0) return { canvas: null, drafts: [], groups: [] };
 
     // Use the first canvas
     const canvas = canvases[0];
@@ -844,11 +844,12 @@ export const fetchCanvasSiblingDrafts = async (draftId: string) => {
         credentials: "include"
     });
 
-    if (!detailRes.ok) return { canvas, drafts: [] };
+    if (!detailRes.ok) return { canvas, drafts: [], groups: [] };
 
     const canvasData = await detailRes.json();
     return {
         canvas: { id: canvas.id, name: canvas.name },
-        drafts: canvasData.drafts || []
+        drafts: canvasData.drafts || [],
+        groups: canvasData.groups || []
     };
 };
