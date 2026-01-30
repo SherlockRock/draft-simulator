@@ -83,36 +83,9 @@ type cardProps = {
 
 const CanvasCard = (props: cardProps) => {
     const navigate = useNavigate();
-    const queryClient = useQueryClient();
-    const params = useParams();
     const [nameSignal, setNameSignal] = createSignal(props.canvasDraft.Draft.name);
-    const [isConversionDialogOpen, setIsConversionDialogOpen] = createSignal(false);
-
-    const convertToStandaloneMutation = useMutation(() => ({
-        mutationFn: (draftId: string) => {
-            return editDraft(draftId, { type: "standalone" });
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
-            toast.success("Draft converted to standalone!");
-            setIsConversionDialogOpen(false);
-            navigate(`/draft/${props.canvasDraft.Draft.id}`);
-        },
-        onError: (error: Error) => {
-            toast.error(`Failed to convert draft: ${error.message}`);
-        }
-    }));
-
     const handleViewClick = () => {
-        if (props.canvasDraft.Draft.type === "canvas") {
-            setIsConversionDialogOpen(true);
-        } else {
-            navigate(`/draft/${props.canvasDraft.Draft.id}`);
-        }
-    };
-
-    const handleConvertConfirm = () => {
-        convertToStandaloneMutation.mutate(props.canvasDraft.Draft.id);
+        navigate(`/draft/${props.canvasDraft.Draft.id}`);
     };
 
     const worldToScreen = (worldX: number, worldY: number) => {
@@ -261,60 +234,29 @@ const CanvasCard = (props: cardProps) => {
                         <div class="group relative">
                             <button
                                 onClick={handleViewClick}
-                                class={`mr-1 flex size-7 items-center justify-center rounded ${props.canvasDraft.Draft.type === "canvas" ? "bg-orange-400" : "bg-cyan-400"}`}
+                                class="mr-1 flex size-7 items-center justify-center rounded bg-cyan-400"
                                 classList={{
-                                    "opacity-50 cursor-not-allowed":
-                                        props.isConnectionMode ||
-                                        (props.canvasDraft.Draft.type === "canvas" &&
-                                            !props.canEdit),
-                                    "cursor-pointer hover:bg-opacity-80":
-                                        !props.isConnectionMode &&
-                                        (props.canvasDraft.Draft.type !== "canvas" ||
-                                            props.canEdit)
+                                    "opacity-50 cursor-not-allowed": props.isConnectionMode,
+                                    "cursor-pointer hover:bg-opacity-80": !props.isConnectionMode
                                 }}
-                                disabled={
-                                    props.isConnectionMode ||
-                                    (props.canvasDraft.Draft.type === "canvas" &&
-                                        !props.canEdit)
-                                }
+                                disabled={props.isConnectionMode}
                             >
-                                <Show
-                                    when={props.canvasDraft.Draft.type === "canvas"}
-                                    fallback={
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            class="h-4 w-4"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            stroke-width="2"
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                        >
-                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                                            <circle cx="12" cy="12" r="3" />
-                                        </svg>
-                                    }
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    class="h-4 w-4"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
                                 >
-                                    <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        class="h-4 w-4"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        stroke-width="2"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                    >
-                                        <line x1="5" y1="12" x2="19" y2="12" />
-                                        <polyline points="12 5 19 12 12 19" />
-                                    </svg>
-                                </Show>
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                    <circle cx="12" cy="12" r="3" />
+                                </svg>
                             </button>
                             <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
-                                {props.canvasDraft.Draft.type === "canvas"
-                                    ? "Convert to Stand Alone"
-                                    : "View as Stand Alone"}
+                                View Full Screen
                             </span>
                         </div>
                         <div class="group relative">
@@ -427,44 +369,6 @@ const CanvasCard = (props: cardProps) => {
                     )}
                 </For>
             </div>
-            <Dialog
-                isOpen={isConversionDialogOpen}
-                onCancel={() => setIsConversionDialogOpen(false)}
-                body={
-                    <>
-                        <h3 class="mb-4 text-lg font-bold text-slate-50">
-                            Convert to Standalone Draft?
-                        </h3>
-                        <p class="mb-6 text-slate-200">
-                            This will convert "{props.canvasDraft.Draft.name}" from a
-                            canvas-only draft to a standalone draft. You'll be able to
-                            view and edit it independently, and it will no longer be
-                            restricted to this canvas.
-                        </p>
-                        <p class="mb-6 text-sm text-slate-300">
-                            The draft will remain on this canvas, but you'll be able to
-                            access it from your drafts list.
-                        </p>
-                        <div class="flex justify-end gap-4">
-                            <button
-                                onClick={() => setIsConversionDialogOpen(false)}
-                                class="rounded bg-slate-500 px-4 py-2 text-slate-50 hover:bg-slate-600"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleConvertConfirm}
-                                class="rounded bg-orange-500 px-4 py-2 text-slate-50 hover:bg-orange-600"
-                                disabled={convertToStandaloneMutation.isPending}
-                            >
-                                {convertToStandaloneMutation.isPending
-                                    ? "Converting..."
-                                    : "Convert to Standalone"}
-                            </button>
-                        </div>
-                    </>
-                }
-            />
         </div>
     );
 };
