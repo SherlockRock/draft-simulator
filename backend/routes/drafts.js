@@ -5,6 +5,7 @@ const VersusDraft = require("../models/VersusDraft");
 const { CanvasDraft, Canvas, UserCanvas, CanvasConnection, CanvasGroup } = require("../models/Canvas.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
+const { Op } = require("sequelize");
 const { draftHasSharedWithUser } = require("../helpers.js");
 const User = require("../models/User.js");
 
@@ -17,10 +18,10 @@ router.get("/dropdown", async (req, res) => {
     }
 
     const ownedDrafts = await Draft.findAll({
-      where: { owner_id: user.id, type: "standalone" },
+      where: { owner_id: user.id, type: { [Op.ne]: "versus" } },
     });
     const sharedDrafts = await user.getSharedDrafts({
-      where: { type: "standalone" },
+      where: { type: { [Op.ne]: "versus" } },
       joinTableAttributes: [],
     });
     const allDrafts = [...ownedDrafts, ...sharedDrafts];
@@ -110,7 +111,7 @@ router.post("/", protect, async (req, res) => {
     } = req.body;
 
     let finalName = name || "New Draft";
-    let draftType = "standalone";
+    let draftType = "canvas";
 
     if (canvas_id) {
       const canvas = await Canvas.findByPk(canvas_id);
@@ -196,7 +197,7 @@ router.delete("/:id", protect, async (req, res) => {
 
 router.put("/:id", protect, async (req, res) => {
   try {
-    const { name, description, public: publicStatus, type, icon } = req.body;
+    const { name, description, public: publicStatus, icon } = req.body;
     const draft = await Draft.findByPk(req.params.id);
 
     if (!draft) {
@@ -207,13 +208,6 @@ router.put("/:id", protect, async (req, res) => {
       return res
         .status(403)
         .json({ error: "Not authorized to edit this draft" });
-    }
-
-    if (type !== undefined && type !== draft.type) {
-      // Only allow canvas -> standalone conversion
-      if (draft.type !== "versus") {
-        draft.type = type;
-      }
     }
 
     // Handle name change for canvas drafts with uniqueness validation
