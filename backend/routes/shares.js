@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
 const Draft = require("../models/Draft");
-const { Canvas, UserCanvas } = require("../models/Canvas");
+const { Canvas, UserCanvas, CanvasDraft } = require("../models/Canvas");
 const User = require("../models/User");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const DraftShare = require("../models/DraftShare");
@@ -97,7 +97,16 @@ router.get("/verify-link", async (req, res) => {
       await draft.addSharedWith(user, { through: { access_level: "viewer" } });
     }
 
-    res.json({ success: true, draftId: draft.id });
+    // Look up the canvas this draft belongs to
+    const canvasDraft = await CanvasDraft.findOne({
+      where: { draft_id: draft.id },
+    });
+
+    res.json({
+      success: true,
+      draftId: draft.id,
+      canvasId: canvasDraft?.canvas_id || null,
+    });
   } catch (err) {
     console.error("SHARE VERIFICATION ERROR:", err);
     if (err.name === "TokenExpiredError") {

@@ -22,7 +22,11 @@ const ShareDraftPage = () => {
                 if (response.ok) {
                     const data = await response.json();
                     toast.success("Draft Shared Successfully");
-                    navigate(`/draft/${data.draftId}`);
+                    if (data.canvasId) {
+                        navigate(`/canvas/${data.canvasId}/draft/${data.draftId}`);
+                    } else {
+                        navigate("/");
+                    }
                 } else {
                     const error = await response.json();
                     toast.error(`Share verification failed: ${error}`);

@@ -41,12 +41,12 @@ render(
                 <Route path="/" component={UserWrapper}>
                     <Route path="/oauth2callback" component={AuthCallback} />
                     <Route path="/" component={HomePage} />
-                    <Route path="/draft/:id" component={DraftWorkflow}>
-                        <Route path="/" component={DraftDetailView} />
-                    </Route>
                     <Route path="/canvas" component={CanvasWorkflow}>
                         <Route path="/" component={CanvasFlowDashboard} />
                         <Route path="/:id" component={CanvasDetailView} />
+                        <Route path="/:canvasId/draft/:draftId" component={DraftWorkflow}>
+                            <Route path="/" component={DraftDetailView} />
+                        </Route>
                     </Route>
                     <Route path="/versus" component={VersusWorkflow}>
                         <Route path="/" component={VersusFlowDashboard} />

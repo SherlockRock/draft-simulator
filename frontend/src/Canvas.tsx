@@ -57,6 +57,7 @@ import { GroupNameDialog } from "./components/GroupNameDialog";
 import { DeleteGroupDialog } from "./components/DeleteGroupDialog";
 
 type cardProps = {
+    canvasId: string;
     canvasDraft: CanvasDraft;
     addBox: (fromBox: CanvasDraft) => void;
     deleteBox: (draftId: string) => void;
@@ -85,7 +86,7 @@ const CanvasCard = (props: cardProps) => {
     const navigate = useNavigate();
     const [nameSignal, setNameSignal] = createSignal(props.canvasDraft.Draft.name);
     const handleViewClick = () => {
-        navigate(`/draft/${props.canvasDraft.Draft.id}`);
+        navigate(`/canvas/${props.canvasId}/draft/${props.canvasDraft.Draft.id}`);
     };
 
     const worldToScreen = (worldX: number, worldY: number) => {
@@ -1992,6 +1993,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     <For each={getDraftsForGroup(group.id)}>
                                         {(cd) => (
                                             <CanvasCard
+                                                canvasId={params.id}
                                                 canvasDraft={cd}
                                                 addBox={addBox}
                                                 deleteBox={deleteBox}
@@ -2067,6 +2069,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 <For each={ungroupedDrafts()}>
                     {(cd) => (
                         <CanvasCard
+                            canvasId={params.id}
                             canvasDraft={cd}
                             addBox={addBox}
                             deleteBox={deleteBox}
