@@ -2035,6 +2035,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 isConnectionMode={isConnectionMode()}
                                 renderDraftCard={(cd) => (
                                     <CanvasCard
+                                        canvasId={params.id}
                                         canvasDraft={cd}
                                         addBox={addBox}
                                         deleteBox={deleteBox}
