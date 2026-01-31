@@ -9,11 +9,13 @@ import toast from "solid-toast";
 import { AuthGuard } from "../components/AuthGuard";
 import { cardHeight, cardWidth } from "../utils/helpers";
 import { useCanvasContext } from "../workflows/CanvasWorkflow";
+import { localNewDraft } from "../utils/useLocalCanvasMutations";
+import { getLocalCanvas } from "../utils/localCanvasStore";
 
 const CanvasDetailView: Component = () => {
     const params = useParams();
     const navigate = useNavigate();
-    const { canvas, layoutToggle, setCreateDraftCallback } = useCanvasContext();
+    const { canvas, mutateCanvas, layoutToggle, setCreateDraftCallback } = useCanvasContext();
     const [viewport, setViewport] = createSignal<Viewport>({ x: 0, y: 0, zoom: 1 });
     let canvasContainerRef: HTMLDivElement | undefined;
 
@@ -59,14 +61,35 @@ const CanvasDetailView: Component = () => {
             const positionX = centerWorldX - currentWidth / 2;
             const positionY = centerWorldY - currentHeight / 2;
 
-            newDraftMutation.mutate({
-                name: "New Draft",
-                picks: Array(20).fill(""),
-                public: false,
-                canvas_id: params.id,
-                positionX,
-                positionY
-            });
+            if (params.id === "local") {
+                localNewDraft({
+                    name: "New Draft",
+                    picks: Array(20).fill(""),
+                    positionX,
+                    positionY
+                });
+                const local = getLocalCanvas();
+                if (local) {
+                    mutateCanvas({
+                        name: local.name,
+                        drafts: local.drafts,
+                        connections: local.connections,
+                        groups: local.groups,
+                        lastViewport: local.viewport,
+                        userPermissions: "admin"
+                    });
+                }
+                toast.success("Successfully created new draft!");
+            } else {
+                newDraftMutation.mutate({
+                    name: "New Draft",
+                    picks: Array(20).fill(""),
+                    public: false,
+                    canvas_id: params.id,
+                    positionX,
+                    positionY
+                });
+            }
         }
     };
 
@@ -79,8 +102,10 @@ const CanvasDetailView: Component = () => {
         });
     });
 
+    const isLocalMode = () => params.id === "local";
+
     return (
-        <AuthGuard requireAuth={true}>
+        <AuthGuard requireAuth={!isLocalMode()}>
             <div ref={canvasContainerRef} class="flex-1 overflow-hidden">
                 <ConnectionBanner />
                 <CanvasComponent

@@ -23,6 +23,7 @@ import {
     removeUserFromCanvas,
     generateCanvasShareLink
 } from "../utils/actions";
+import { getLocalCanvas, hasLocalCanvas } from "../utils/localCanvasStore";
 import FlowPanel from "../components/FlowPanel";
 import { VersionFooter } from "../components/VersionFooter";
 import CanvasSelector from "../components/CanvasSelector";
@@ -75,11 +76,34 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     const [user] = accessor();
 
     const [canvasList, { mutate: mutateCanvasList, refetch: refetchCanvasList }] =
-        createResource<any[]>(fetchCanvasList);
+        createResource<any[]>(async () => {
+            if (!user()) {
+                if (hasLocalCanvas()) {
+                    const local = getLocalCanvas()!;
+                    return [{ id: "local", name: local.name, updatedAt: local.createdAt }];
+                }
+                return [];
+            }
+            return fetchCanvasList();
+        });
 
     const [canvas, { mutate: mutateCanvas, refetch: refetchCanvas }] = createResource(
         () => (params.id !== undefined ? String(params.id) : null),
-        fetchCanvas
+        async (id: string) => {
+            if (id === "local") {
+                const local = getLocalCanvas();
+                if (!local) return undefined;
+                return {
+                    name: local.name,
+                    drafts: local.drafts,
+                    connections: local.connections,
+                    groups: local.groups,
+                    lastViewport: local.viewport,
+                    userPermissions: "admin" as const
+                };
+            }
+            return fetchCanvas(id);
+        }
     );
 
     const [layoutToggle, setLayoutToggle] = createSignal(false);
@@ -102,8 +126,10 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     createEffect(() => {
         const currentUser = user();
         if (currentUser === undefined) {
-            mutateCanvasList([]);
-            mutateCanvas(undefined);
+            refetchCanvasList();
+            if (params.id && params.id !== "local") {
+                mutateCanvas(undefined);
+            }
         } else if (currentUser !== previousUser) {
             refetchCanvasList();
             refetchCanvas();
@@ -299,7 +325,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                             New Group
                                         </button>
                                     </Show>
-                                    <Show when={hasAdminPermissions()}>
+                                    <Show when={hasAdminPermissions() && params.id !== "local"}>
                                         <button
                                             class="rounded-md bg-teal-700 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-teal-400"
                                             onClick={() => setIsManageUsersOpen(true)}
