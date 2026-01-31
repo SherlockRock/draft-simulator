@@ -289,14 +289,14 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                             <Show when={isDetailView() && !isDraftView()}>
                                 <div class="flex flex-col gap-2">
                                     <button
-                                        class="rounded-md bg-teal-700 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-teal-400"
+                                        class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
                                         onClick={() => setLayoutToggle((prev) => !prev)}
                                     >
                                         Swap Orientation
                                     </button>
                                     <Show when={hasEditPermissions()}>
                                         <button
-                                            class="rounded-md bg-teal-700 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-teal-400"
+                                            class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
                                             onClick={() => {
                                                 const callback = importCallback();
                                                 if (callback) callback();
@@ -307,7 +307,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                     </Show>
                                     <Show when={hasAdminPermissions() && params.id !== "local"}>
                                         <button
-                                            class="rounded-md bg-teal-700 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-teal-400"
+                                            class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
                                             onClick={() => setIsManageUsersOpen(true)}
                                         >
                                             Manage Users
@@ -318,7 +318,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                         >
                                             <button
                                                 onClick={handleShareCanvas}
-                                                class="w-full rounded-md bg-teal-700 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-teal-400"
+                                                class="w-full rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
                                             >
                                                 Share
                                             </button>
@@ -353,7 +353,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                         onClick={
                                                                             handleCopyViewLink
                                                                         }
-                                                                        class="rounded-md bg-teal-400 px-2 py-1 text-xs text-slate-50 hover:bg-teal-700 disabled:opacity-50"
+                                                                        class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
                                                                         disabled={
                                                                             !viewShareLinkQuery.data
                                                                         }
@@ -394,7 +394,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                         onClick={
                                                                             handleCopyEditLink
                                                                         }
-                                                                        class="rounded-md bg-teal-400 px-2 py-1 text-xs text-slate-50 hover:bg-teal-700 disabled:opacity-50"
+                                                                        class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
                                                                         disabled={
                                                                             !editShareLinkQuery.data
                                                                         }
