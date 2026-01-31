@@ -52,6 +52,26 @@ import { AnchorPoints } from "./components/AnchorPoints";
 import { AnchorType } from "./utils/types";
 import { useCanvasContext } from "./workflows/CanvasWorkflow";
 import { cardHeight, cardWidth } from "./utils/helpers";
+import {
+    localUpdateCanvasName,
+    localNewDraft,
+    localEditDraft,
+    localUpdateDraftPosition,
+    localDeleteDraft,
+    localUpdateViewport,
+    localCreateConnection,
+    localUpdateConnection,
+    localDeleteConnection,
+    localCreateVertex,
+    localUpdateVertex,
+    localDeleteVertex,
+    localCreateGroup,
+    localUpdateGroupPosition,
+    localUpdateGroup,
+    localDeleteGroup,
+    localUpdateDraftGroup
+} from "./utils/useLocalCanvasMutations";
+import { getLocalCanvas, saveLocalCanvas } from "./utils/localCanvasStore";
 import { SeriesGroupContainer } from "./components/SeriesGroupContainer";
 import {
     CustomGroupContainer,
@@ -414,6 +434,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const accessor = useUser();
     const socketAccessor = accessor()[2];
     const canvasContext = useCanvasContext();
+
+    const isLocalMode = () => params.id === "local";
+
+    // Helper to refresh canvas data from localStorage after a local mutation
+    const refreshFromLocal = () => {
+        const local = getLocalCanvas();
+        if (local) {
+            setCanvasDrafts(local.drafts);
+            setConnections(local.connections);
+            setCanvasGroups(local.groups);
+        }
+    };
+
     const [canvasDrafts, setCanvasDrafts] = createStore<CanvasDraft[]>([]);
     const [connections, setConnections] = createStore<Connection[]>([]);
     const [canvasGroups, setCanvasGroups] = createStore<CanvasGroup[]>([]);
@@ -778,6 +811,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     }));
 
     const emitMove = (draftId: string, positionX: number, positionY: number) => {
+        if (isLocalMode()) return;
         socketAccessor().emit("canvasObjectMove", {
             canvasId: params.id,
             draftId,
@@ -794,6 +828,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         x: number,
         y: number
     ) => {
+        if (isLocalMode()) return;
         socketAccessor().emit("vertexMove", {
             canvasId: params.id,
             connectionId,
@@ -806,6 +841,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const debouncedEmitVertexMove = debounce(emitVertexMove, 25);
 
     const emitGroupMove = (groupId: string, positionX: number, positionY: number) => {
+        if (isLocalMode()) return;
         socketAccessor().emit("groupMove", {
             canvasId: params.id,
             groupId,
@@ -817,6 +853,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const debouncedEmitGroupMove = debounce(emitGroupMove, 25);
 
     const emitGroupResize = (groupId: string, width: number, height: number) => {
+        if (isLocalMode()) return;
         socketAccessor().emit("groupResize", {
             canvasId: params.id,
             groupId,
@@ -840,14 +877,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             }
 
             // Multi-context room joins: join canvas room + all draft rooms
-            socketAccessor().emit("joinRoom", params.id);
-            props.canvasData.drafts.forEach((draft: CanvasDraft) => {
-                socketAccessor().emit("joinRoom", draft.Draft.id);
-            });
+            if (!isLocalMode()) {
+                socketAccessor().emit("joinRoom", params.id);
+                props.canvasData.drafts.forEach((draft: CanvasDraft) => {
+                    socketAccessor().emit("joinRoom", draft.Draft.id);
+                });
+            }
         }
 
         onCleanup(() => {
-            if (props.canvasData && canvasDrafts.length === 0) {
+            if (props.canvasData && canvasDrafts.length === 0 && !isLocalMode()) {
                 socketAccessor().emit("leaveRoom", params.id);
                 props.canvasData.drafts.forEach((draft: CanvasDraft) => {
                     socketAccessor().emit("leaveRoom", draft.Draft.id);
@@ -857,6 +896,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     });
 
     createEffect(() => {
+        if (isLocalMode()) return;
         socketAccessor().on(
             "canvasUpdate",
             (data: {
@@ -1017,22 +1057,38 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const handleCanvasNameChange = (newName: string) => {
         if (newName.trim() && newName !== props.canvasData?.name) {
-            updateCanvasNameMutation.mutate({
-                canvasId: params.id,
-                name: newName
-            });
+            if (isLocalMode()) {
+                localUpdateCanvasName({ name: newName });
+                toast.success("Canvas name updated");
+            } else {
+                updateCanvasNameMutation.mutate({
+                    canvasId: params.id,
+                    name: newName
+                });
+            }
         }
     };
 
     const addBox = (fromBox: CanvasDraft) => {
-        newDraftMutation.mutate({
-            name: fromBox.Draft.name,
-            picks: fromBox.Draft.picks,
-            public: false,
-            canvas_id: params.id,
-            positionX: fromBox.positionX + 100,
-            positionY: fromBox.positionY + 100
-        });
+        if (isLocalMode()) {
+            localNewDraft({
+                name: fromBox.Draft.name,
+                picks: fromBox.Draft.picks,
+                positionX: fromBox.positionX + 100,
+                positionY: fromBox.positionY + 100
+            });
+            refreshFromLocal();
+            toast.success("Successfully created new draft!");
+        } else {
+            newDraftMutation.mutate({
+                name: fromBox.Draft.name,
+                picks: fromBox.Draft.picks,
+                public: false,
+                canvas_id: params.id,
+                positionX: fromBox.positionX + 100,
+                positionY: fromBox.positionY + 100
+            });
+        }
     };
 
     const deleteBox = (draftId: string) => {
@@ -1055,21 +1111,43 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             (Draft) => {
                 const holdPicks = [...Draft.picks];
                 holdPicks[pickIndex] = champIndex !== -1 ? String(champIndex) : "";
-                socketAccessor().emit("newDraft", {
-                    picks: holdPicks,
-                    id: draftId
-                });
+                if (!isLocalMode()) {
+                    socketAccessor().emit("newDraft", {
+                        picks: holdPicks,
+                        id: draftId
+                    });
+                }
                 return { ...Draft, picks: holdPicks };
             }
         );
+
+        // Persist to localStorage in local mode
+        if (isLocalMode()) {
+            const local = getLocalCanvas();
+            if (local) {
+                const draft = local.drafts.find((d) => d.Draft.id === draftId);
+                if (draft) {
+                    const holdPicks = [...draft.Draft.picks];
+                    holdPicks[pickIndex] = champIndex !== -1 ? String(champIndex) : "";
+                    draft.Draft.picks = holdPicks;
+                    saveLocalCanvas(local);
+                }
+            }
+        }
     };
 
     const handleNameChange = (draftId: string, newName: string) => {
-        editDraftMutation.mutate({
-            id: draftId,
-            name: newName,
-            public: false
-        });
+        if (isLocalMode()) {
+            localEditDraft(draftId, { name: newName });
+            refreshFromLocal();
+            toast.success("Successfully edited draft!");
+        } else {
+            editDraftMutation.mutate({
+                id: draftId,
+                name: newName,
+                public: false
+            });
+        }
     };
 
     const clearConnectionSelection = () => {
@@ -1088,11 +1166,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
         // If a vertex is selected, add this draft as target
         if (selectedVertex) {
-            updateConnectionMutation.mutate({
-                canvasId: params.id,
-                connectionId: selectedVertex.connectionId,
-                addTarget: { draftId, anchorType }
-            });
+            if (isLocalMode()) {
+                localUpdateConnection({
+                    connectionId: selectedVertex.connectionId,
+                    addTarget: { draftId, anchorType }
+                });
+                refreshFromLocal();
+                toast.success("Connection updated!");
+            } else {
+                updateConnectionMutation.mutate({
+                    canvasId: params.id,
+                    connectionId: selectedVertex.connectionId,
+                    addTarget: { draftId, anchorType }
+                });
+            }
             setSelectedVertexForConnection(null);
             return;
         }
@@ -1100,11 +1187,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         // If a group is the source, create group-to-draft connection
         if (groupSource) {
             const srcAnchor = sourceAnchor();
-            createConnectionMutation.mutate({
-                canvasId: params.id,
-                sourceDraftIds: [{ groupId: groupSource, anchorType: srcAnchor?.type }],
-                targetDraftIds: [{ draftId, anchorType }]
-            });
+            if (isLocalMode()) {
+                localCreateConnection({
+                    sourceDraftIds: [{ groupId: groupSource, anchorType: srcAnchor?.type }],
+                    targetDraftIds: [{ draftId, anchorType }]
+                });
+                refreshFromLocal();
+                toast.success("Connection created!");
+            } else {
+                createConnectionMutation.mutate({
+                    canvasId: params.id,
+                    sourceDraftIds: [{ groupId: groupSource, anchorType: srcAnchor?.type }],
+                    targetDraftIds: [{ draftId, anchorType }]
+                });
+            }
             clearConnectionSelection();
             return;
         }
@@ -1117,11 +1213,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         } else if (source !== draftId) {
             // Different draft clicked - create new connection
             const srcAnchor = sourceAnchor();
-            createConnectionMutation.mutate({
-                canvasId: params.id,
-                sourceDraftIds: [{ draftId: source, anchorType: srcAnchor?.type }],
-                targetDraftIds: [{ draftId, anchorType }]
-            });
+            if (isLocalMode()) {
+                localCreateConnection({
+                    sourceDraftIds: [{ draftId: source, anchorType: srcAnchor?.type }],
+                    targetDraftIds: [{ draftId, anchorType }]
+                });
+                refreshFromLocal();
+                toast.success("Connection created!");
+            } else {
+                createConnectionMutation.mutate({
+                    canvasId: params.id,
+                    sourceDraftIds: [{ draftId: source, anchorType: srcAnchor?.type }],
+                    targetDraftIds: [{ draftId, anchorType }]
+                });
+            }
             clearConnectionSelection();
         } else if (source === draftId) {
             clearConnectionSelection();
@@ -1137,11 +1242,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
         // If a vertex is selected, add this group as target
         if (selectedVertex) {
-            updateConnectionMutation.mutate({
-                canvasId: params.id,
-                connectionId: selectedVertex.connectionId,
-                addTarget: { groupId, anchorType }
-            });
+            if (isLocalMode()) {
+                localUpdateConnection({
+                    connectionId: selectedVertex.connectionId,
+                    addTarget: { groupId, anchorType }
+                });
+                refreshFromLocal();
+                toast.success("Connection updated!");
+            } else {
+                updateConnectionMutation.mutate({
+                    canvasId: params.id,
+                    connectionId: selectedVertex.connectionId,
+                    addTarget: { groupId, anchorType }
+                });
+            }
             setSelectedVertexForConnection(null);
             return;
         }
@@ -1149,11 +1263,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         // If a draft source is selected, create draft-to-group connection
         if (source) {
             const srcAnchor = sourceAnchor();
-            createConnectionMutation.mutate({
-                canvasId: params.id,
-                sourceDraftIds: [{ draftId: source, anchorType: srcAnchor?.type }],
-                targetDraftIds: [{ groupId, anchorType }]
-            });
+            if (isLocalMode()) {
+                localCreateConnection({
+                    sourceDraftIds: [{ draftId: source, anchorType: srcAnchor?.type }],
+                    targetDraftIds: [{ groupId, anchorType }]
+                });
+                refreshFromLocal();
+                toast.success("Connection created!");
+            } else {
+                createConnectionMutation.mutate({
+                    canvasId: params.id,
+                    sourceDraftIds: [{ draftId: source, anchorType: srcAnchor?.type }],
+                    targetDraftIds: [{ groupId, anchorType }]
+                });
+            }
             clearConnectionSelection();
             return;
         }
@@ -1163,13 +1286,24 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             if (groupSource !== groupId) {
                 // Different group - create group-to-group connection
                 const srcAnchor = sourceAnchor();
-                createConnectionMutation.mutate({
-                    canvasId: params.id,
-                    sourceDraftIds: [
-                        { groupId: groupSource, anchorType: srcAnchor?.type }
-                    ],
-                    targetDraftIds: [{ groupId, anchorType }]
-                });
+                if (isLocalMode()) {
+                    localCreateConnection({
+                        sourceDraftIds: [
+                            { groupId: groupSource, anchorType: srcAnchor?.type }
+                        ],
+                        targetDraftIds: [{ groupId, anchorType }]
+                    });
+                    refreshFromLocal();
+                    toast.success("Connection created!");
+                } else {
+                    createConnectionMutation.mutate({
+                        canvasId: params.id,
+                        sourceDraftIds: [
+                            { groupId: groupSource, anchorType: srcAnchor?.type }
+                        ],
+                        targetDraftIds: [{ groupId, anchorType }]
+                    });
+                }
             }
             clearConnectionSelection();
             return;
@@ -1183,10 +1317,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleDeleteConnection = (connectionId: string) => {
-        deleteConnectionMutation.mutate({
-            canvasId: params.id,
-            connectionId
-        });
+        if (isLocalMode()) {
+            localDeleteConnection(connectionId);
+            refreshFromLocal();
+            toast.success("Connection deleted!");
+        } else {
+            deleteConnectionMutation.mutate({
+                canvasId: params.id,
+                connectionId
+            });
+        }
     };
 
     const toggleConnectionMode = () => {
@@ -1203,18 +1343,36 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const srcAnchor = sourceAnchor();
 
         if (source && srcAnchor) {
-            updateConnectionMutation.mutate({
-                canvasId: params.id,
-                connectionId,
-                addSource: { draftId: source, anchorType: srcAnchor.type }
-            });
+            if (isLocalMode()) {
+                localUpdateConnection({
+                    connectionId,
+                    addSource: { draftId: source, anchorType: srcAnchor.type }
+                });
+                refreshFromLocal();
+                toast.success("Connection updated!");
+            } else {
+                updateConnectionMutation.mutate({
+                    canvasId: params.id,
+                    connectionId,
+                    addSource: { draftId: source, anchorType: srcAnchor.type }
+                });
+            }
             clearConnectionSelection();
         } else if (groupSource && srcAnchor) {
-            updateConnectionMutation.mutate({
-                canvasId: params.id,
-                connectionId,
-                addSource: { groupId: groupSource, anchorType: srcAnchor.type }
-            });
+            if (isLocalMode()) {
+                localUpdateConnection({
+                    connectionId,
+                    addSource: { groupId: groupSource, anchorType: srcAnchor.type }
+                });
+                refreshFromLocal();
+                toast.success("Connection updated!");
+            } else {
+                updateConnectionMutation.mutate({
+                    canvasId: params.id,
+                    connectionId,
+                    addSource: { groupId: groupSource, anchorType: srcAnchor.type }
+                });
+            }
             clearConnectionSelection();
         }
     };
@@ -1227,21 +1385,39 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const srcAnchor = sourceAnchor();
 
         if (source && srcAnchor) {
-            updateConnectionMutation.mutate({
-                canvasId: params.id,
-                connectionId,
-                addSource: { draftId: source, anchorType: srcAnchor.type }
-            });
+            if (isLocalMode()) {
+                localUpdateConnection({
+                    connectionId,
+                    addSource: { draftId: source, anchorType: srcAnchor.type }
+                });
+                refreshFromLocal();
+                toast.success("Connection updated!");
+            } else {
+                updateConnectionMutation.mutate({
+                    canvasId: params.id,
+                    connectionId,
+                    addSource: { draftId: source, anchorType: srcAnchor.type }
+                });
+            }
             clearConnectionSelection();
             return;
         }
 
         if (groupSource && srcAnchor) {
-            updateConnectionMutation.mutate({
-                canvasId: params.id,
-                connectionId,
-                addSource: { groupId: groupSource, anchorType: srcAnchor.type }
-            });
+            if (isLocalMode()) {
+                localUpdateConnection({
+                    connectionId,
+                    addSource: { groupId: groupSource, anchorType: srcAnchor.type }
+                });
+                refreshFromLocal();
+                toast.success("Connection updated!");
+            } else {
+                updateConnectionMutation.mutate({
+                    canvasId: params.id,
+                    connectionId,
+                    addSource: { groupId: groupSource, anchorType: srcAnchor.type }
+                });
+            }
             clearConnectionSelection();
             return;
         }
@@ -1351,22 +1527,37 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             const worldX = canvasRelativeX / vp.zoom + vp.x;
             const worldY = canvasRelativeY / vp.zoom + vp.y;
 
-            newDraftMutation.mutate({
-                name: "New Draft",
-                picks: Array(20).fill(""),
-                public: false,
-                canvas_id: params.id,
-                positionX: worldX,
-                positionY: worldY
-            });
+            if (isLocalMode()) {
+                localNewDraft({
+                    name: "New Draft",
+                    picks: Array(20).fill(""),
+                    positionX: worldX,
+                    positionY: worldY
+                });
+                refreshFromLocal();
+                toast.success("Successfully created new draft!");
+            } else {
+                newDraftMutation.mutate({
+                    name: "New Draft",
+                    picks: Array(20).fill(""),
+                    public: false,
+                    canvas_id: params.id,
+                    positionX: worldX,
+                    positionY: worldY
+                });
+            }
         }
     };
 
     const debouncedSaveViewport = debounce((viewport: Viewport) => {
-        updateViewportMutation.mutate({
-            canvasId: params.id,
-            viewport
-        });
+        if (isLocalMode()) {
+            localUpdateViewport(viewport);
+        } else {
+            updateViewportMutation.mutate({
+                canvasId: params.id,
+                viewport
+            });
+        }
     }, 1000);
 
     const onVertexDragStart = (
@@ -1387,20 +1578,31 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleCreateVertex = (connectionId: string, x: number, y: number) => {
-        createVertexMutation.mutate({
-            canvasId: params.id,
-            connectionId,
-            x,
-            y
-        });
+        if (isLocalMode()) {
+            localCreateVertex({ connectionId, x, y });
+            refreshFromLocal();
+        } else {
+            createVertexMutation.mutate({
+                canvasId: params.id,
+                connectionId,
+                x,
+                y
+            });
+        }
     };
 
     const handleDeleteVertex = (connectionId: string, vertexId: string) => {
-        deleteVertexMutation.mutate({
-            canvasId: params.id,
-            connectionId,
-            vertexId
-        });
+        if (isLocalMode()) {
+            localDeleteVertex({ connectionId, vertexId });
+            refreshFromLocal();
+            toast.success("Vertex deleted!");
+        } else {
+            deleteVertexMutation.mutate({
+                canvasId: params.id,
+                connectionId,
+                vertexId
+            });
+        }
     };
 
     const onSelectFocus = (draftId: string, selectIndex: number) => {
@@ -1448,11 +1650,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const handleDeleteGroupWithChoice = (keepDrafts: boolean) => {
         const group = groupToDelete();
         if (group) {
-            deleteGroupMutation.mutate({
-                canvasId: params.id,
-                groupId: group.id,
-                keepDrafts
-            });
+            if (isLocalMode()) {
+                localDeleteGroup(group.id, keepDrafts);
+                setIsDeleteGroupDialogOpen(false);
+                setGroupToDelete(null);
+                refreshFromLocal();
+                toast.success("Group removed from canvas");
+            } else {
+                deleteGroupMutation.mutate({
+                    canvasId: params.id,
+                    groupId: group.id,
+                    keepDrafts
+                });
+            }
         }
     };
 
@@ -1463,20 +1673,36 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const handleCreateGroup = (name: string) => {
         const pos = createGroupPosition();
-        createGroupMutation.mutate({
-            canvasId: params.id,
-            name,
-            positionX: pos.x,
-            positionY: pos.y
-        });
+        if (isLocalMode()) {
+            localCreateGroup({
+                name,
+                positionX: pos.x,
+                positionY: pos.y
+            });
+            refreshFromLocal();
+            toast.success("Group created");
+            setIsCreateGroupDialogOpen(false);
+        } else {
+            createGroupMutation.mutate({
+                canvasId: params.id,
+                name,
+                positionX: pos.x,
+                positionY: pos.y
+            });
+        }
     };
 
     const handleRenameGroup = (groupId: string, newName: string) => {
-        updateGroupMutation.mutate({
-            canvasId: params.id,
-            groupId,
-            name: newName
-        });
+        if (isLocalMode()) {
+            localUpdateGroup({ groupId, name: newName });
+            refreshFromLocal();
+        } else {
+            updateGroupMutation.mutate({
+                canvasId: params.id,
+                groupId,
+                name: newName
+            });
+        }
     };
 
     const handleResizeGroup = (groupId: string, width: number, height: number) => {
@@ -1485,12 +1711,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleResizeEnd = (groupId: string, width: number, height: number) => {
-        updateGroupMutation.mutate({
-            canvasId: params.id,
-            groupId,
-            width,
-            height
-        });
+        if (isLocalMode()) {
+            localUpdateGroup({ groupId, width, height });
+            refreshFromLocal();
+        } else {
+            updateGroupMutation.mutate({
+                canvasId: params.id,
+                groupId,
+                width,
+                height
+            });
+        }
     };
 
     const GROUP_PADDING = 16;
@@ -1532,12 +1763,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 width: newWidth,
                 height: newHeight
             });
-            updateGroupMutation.mutate({
-                canvasId: params.id,
-                groupId: group.id,
-                width: newWidth,
-                height: newHeight
-            });
+            if (isLocalMode()) {
+                localUpdateGroup({ groupId: group.id, width: newWidth, height: newHeight });
+            } else {
+                updateGroupMutation.mutate({
+                    canvasId: params.id,
+                    groupId: group.id,
+                    width: newWidth,
+                    height: newHeight
+                });
+            }
         }
     };
 
@@ -1741,13 +1976,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 );
 
                 if (connection && vertex) {
-                    updateVertexMutation.mutate({
-                        canvasId: params.id,
-                        connectionId: vertexDrag.connectionId,
-                        vertexId: vertexDrag.vertexId,
-                        x: vertex.x,
-                        y: vertex.y
-                    });
+                    if (isLocalMode()) {
+                        localUpdateVertex({
+                            connectionId: vertexDrag.connectionId,
+                            vertexId: vertexDrag.vertexId,
+                            x: vertex.x,
+                            y: vertex.y
+                        });
+                    } else {
+                        updateVertexMutation.mutate({
+                            canvasId: params.id,
+                            connectionId: vertexDrag.connectionId,
+                            vertexId: vertexDrag.vertexId,
+                            x: vertex.x,
+                            y: vertex.y
+                        });
+                    }
                 }
 
                 setVertexDragState({
@@ -1763,12 +2007,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             if (gState.activeGroupId) {
                 const group = canvasGroups.find((g) => g.id === gState.activeGroupId);
                 if (group) {
-                    updateGroupPositionMutation.mutate({
-                        canvasId: params.id,
-                        groupId: gState.activeGroupId,
-                        positionX: group.positionX,
-                        positionY: group.positionY
-                    });
+                    if (isLocalMode()) {
+                        localUpdateGroupPosition({
+                            groupId: gState.activeGroupId,
+                            positionX: group.positionX,
+                            positionY: group.positionY
+                        });
+                    } else {
+                        updateGroupPositionMutation.mutate({
+                            canvasId: params.id,
+                            groupId: gState.activeGroupId,
+                            positionX: group.positionX,
+                            positionY: group.positionY
+                        });
+                    }
                 }
                 setGroupDragState({
                     activeGroupId: null,
@@ -1814,13 +2066,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             group_id: dropGroup.id
                         });
 
-                        updateDraftGroupMutation.mutate({
-                            canvasId: params.id,
-                            draftId: finalDraft.Draft.id,
-                            positionX: relativeX,
-                            positionY: relativeY,
-                            group_id: dropGroup.id
-                        });
+                        if (isLocalMode()) {
+                            localUpdateDraftGroup({
+                                draftId: finalDraft.Draft.id,
+                                positionX: relativeX,
+                                positionY: relativeY,
+                                group_id: dropGroup.id
+                            });
+                        } else {
+                            updateDraftGroupMutation.mutate({
+                                canvasId: params.id,
+                                draftId: finalDraft.Draft.id,
+                                positionX: relativeX,
+                                positionY: relativeY,
+                                group_id: dropGroup.id
+                            });
+                        }
 
                         maybeExpandGroup(dropGroup, relativeX, relativeY);
                     } else if (!dropGroup && finalDraft.group_id) {
@@ -1836,22 +2097,39 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 group_id: null
                             });
 
-                            updateDraftGroupMutation.mutate({
-                                canvasId: params.id,
-                                draftId: finalDraft.Draft.id,
-                                positionX: worldX,
-                                positionY: worldY,
-                                group_id: null
-                            });
+                            if (isLocalMode()) {
+                                localUpdateDraftGroup({
+                                    draftId: finalDraft.Draft.id,
+                                    positionX: worldX,
+                                    positionY: worldY,
+                                    group_id: null
+                                });
+                            } else {
+                                updateDraftGroupMutation.mutate({
+                                    canvasId: params.id,
+                                    draftId: finalDraft.Draft.id,
+                                    positionX: worldX,
+                                    positionY: worldY,
+                                    group_id: null
+                                });
+                            }
                         }
                     } else {
                         // Same group or ungrouped — save position
-                        updatePositionMutation.mutate({
-                            canvasId: params.id,
-                            draftId: state.activeBoxId,
-                            positionX: finalDraft.positionX,
-                            positionY: finalDraft.positionY
-                        });
+                        if (isLocalMode()) {
+                            localUpdateDraftPosition({
+                                draftId: state.activeBoxId,
+                                positionX: finalDraft.positionX,
+                                positionY: finalDraft.positionY
+                            });
+                        } else {
+                            updatePositionMutation.mutate({
+                                canvasId: params.id,
+                                draftId: state.activeBoxId,
+                                positionX: finalDraft.positionX,
+                                positionY: finalDraft.positionY
+                            });
+                        }
 
                         // Auto-expand if repositioned within a custom group
                         if (state.dragGroupId && dropGroup) {
@@ -1922,10 +2200,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const onDelete = () => {
         if (draftToDelete()) {
-            deleteDraftMutation.mutate({
-                canvas: params.id,
-                draft: draftToDelete()!.Draft.id
-            });
+            if (isLocalMode()) {
+                localDeleteDraft(draftToDelete()!.Draft.id);
+                setIsDeleteDialogOpen(false);
+                setDraftToDelete(null);
+                refreshFromLocal();
+                toast.success("Successfully deleted draft");
+            } else {
+                deleteDraftMutation.mutate({
+                    canvas: params.id,
+                    draft: draftToDelete()!.Draft.id
+                });
+            }
         }
     };
 
@@ -2338,14 +2624,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             class="w-full px-4 py-2 text-left text-sm text-slate-200 hover:bg-slate-600"
                             onClick={() => {
                                 const pos = contextMenuWorldPosition();
-                                newDraftMutation.mutate({
-                                    name: "New Draft",
-                                    picks: Array(20).fill(""),
-                                    public: false,
-                                    canvas_id: params.id,
-                                    positionX: pos.x,
-                                    positionY: pos.y
-                                });
+                                if (isLocalMode()) {
+                                    localNewDraft({
+                                        name: "New Draft",
+                                        picks: Array(20).fill(""),
+                                        positionX: pos.x,
+                                        positionY: pos.y
+                                    });
+                                    refreshFromLocal();
+                                    toast.success("Successfully created new draft!");
+                                } else {
+                                    newDraftMutation.mutate({
+                                        name: "New Draft",
+                                        picks: Array(20).fill(""),
+                                        public: false,
+                                        canvas_id: params.id,
+                                        positionX: pos.x,
+                                        positionY: pos.y
+                                    });
+                                }
                                 closeContextMenu();
                             }}
                         >
