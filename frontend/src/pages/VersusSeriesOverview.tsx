@@ -3,7 +3,6 @@ import { useParams, useNavigate } from "@solidjs/router";
 import { draft } from "../utils/types";
 import toast from "solid-toast";
 import { useVersusContext } from "../workflows/VersusWorkflow";
-import { RoleSwitcher } from "../components/RoleSwitcher";
 import { IconDisplay } from "../components/IconDisplay";
 import { WinnerReporter } from "../components/WinnerReporter";
 import { canReportWinner } from "../utils/versusPermissions";
@@ -121,13 +120,8 @@ const VersusSeriesOverview: Component = () => {
                     </div>
 
                     <div class="relative mx-auto max-w-5xl px-6 py-8">
-                        {/* Top bar: Role switcher + Share popover */}
-                        <div class="mb-8 flex items-center justify-between">
-                            <RoleSwitcher
-                                versusDraftId={params.id}
-                                currentRole={myRole() || "spectator"}
-                            />
-
+                        {/* Top bar: Share popover + Edit */}
+                        <div class="mb-8 flex items-center justify-end">
                             <div class="flex items-center gap-2">
                                 {/* Edit button - only for owner */}
                                 <Show when={isOwner()}>
@@ -346,7 +340,7 @@ const VersusSeriesOverview: Component = () => {
                                                         getSeriesScore().redWins
                                                 }
                                             >
-                                                <div class="mt-1 inline-block rounded-full bg-blue-500/20 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-blue-300">
+                                                <div class="mt-1 inline-block rounded bg-blue-500/20 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-blue-300">
                                                     Winner
                                                 </div>
                                             </Show>
@@ -357,7 +351,7 @@ const VersusSeriesOverview: Component = () => {
                                     </div>
 
                                     {/* VS badge */}
-                                    <div class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full border-2 border-slate-600 bg-slate-900 text-sm font-black tracking-tighter text-slate-500">
+                                    <div class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg border-2 border-slate-600 bg-slate-900 text-sm font-black tracking-tighter text-slate-500">
                                         VS
                                     </div>
 
@@ -378,7 +372,7 @@ const VersusSeriesOverview: Component = () => {
                                                         getSeriesScore().blueWins
                                                 }
                                             >
-                                                <div class="mt-1 inline-block rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-red-300">
+                                                <div class="mt-1 inline-block rounded bg-red-500/20 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-red-300">
                                                     Winner
                                                 </div>
                                             </Show>
@@ -460,7 +454,7 @@ const VersusSeriesOverview: Component = () => {
 
                                                             {/* Status indicator */}
                                                             <span
-                                                                class={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                                                class={`rounded px-2.5 py-0.5 text-xs font-medium ${
                                                                     status === "complete"
                                                                         ? "bg-green-500/20 text-green-300"
                                                                         : status ===

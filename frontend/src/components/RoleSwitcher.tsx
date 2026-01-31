@@ -45,15 +45,13 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
         };
     };
 
-    const styles = getRoleStyles();
-
     return (
         <div class="relative">
             <button
                 onClick={() => setIsOpen(!isOpen())}
-                class={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium shadow-lg transition-colors ${styles.pill}`}
+                class={`flex w-full items-center justify-between rounded border px-4 py-2 text-sm font-medium shadow-lg transition-colors ${getRoleStyles().pill}`}
             >
-                <div class={`h-2 w-2 rounded-full ${styles.dot}`} />
+                <div class={`h-2 w-2 rounded-full ${getRoleStyles().dot}`} />
                 <span>{getRoleDisplay()}</span>
                 <svg
                     class={`h-3 w-3 transition-transform ${isOpen() ? "rotate-180" : ""}`}
@@ -76,7 +74,7 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
                         <div class="text-xs font-semibold uppercase tracking-wider text-slate-500">
                             Your Role
                         </div>
-                        <div class={`mt-1 text-lg font-bold ${styles.text}`}>
+                        <div class={`mt-1 text-lg font-bold ${getRoleStyles().text}`}>
                             {getRoleDisplay()}
                         </div>
                     </div>

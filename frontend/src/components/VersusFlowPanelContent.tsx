@@ -7,6 +7,7 @@ import { VersionFooter } from "./VersionFooter";
 import { WinnerReporter } from "./WinnerReporter";
 import { canReportWinner } from "../utils/versusPermissions";
 import { useUser } from "../userProvider";
+import { RoleSwitcher } from "./RoleSwitcher";
 
 const VersusFlowPanelContent: Component = () => {
     const params = useParams<{ id: string; draftId: string; linkToken: string }>();
@@ -24,18 +25,6 @@ const VersusFlowPanelContent: Component = () => {
     // Determine current view
     const isInDraftView = createMemo(() => !!params.draftId);
     const isInSeries = createMemo(() => !!params.id && !params.linkToken);
-
-    const formatRole = (role: string | null) => {
-        if (role === "blue_captain") return "Blue Captain";
-        if (role === "red_captain") return "Red Captain";
-        return "Spectator";
-    };
-
-    const getRoleColor = (role: string | null) => {
-        if (role === "blue_captain") return "text-blue-400";
-        if (role === "red_captain") return "text-red-400";
-        return "text-slate-400";
-    };
 
     const isSpectator = () => myRole() === "spectator";
 
@@ -60,25 +49,18 @@ const VersusFlowPanelContent: Component = () => {
             {/* Match Info Section - shown when in a series */}
             <Show when={isInSeries() && versusDraft()}>
                 <div class="px-1 pb-4">
-                    {/* Series header with name */}
-                    <h2 class="mb-2 text-base font-bold leading-tight text-slate-100">
-                        {versusDraft()!.name}
-                    </h2>
+                    {/* Series info card */}
+                    <div class="rounded-lg border border-slate-700/50 bg-slate-900/40 p-3">
+                        <h2 class="text-base font-bold leading-tight text-slate-100">
+                            {versusDraft()!.name}
+                        </h2>
+                    </div>
 
-                    {/* Compact metadata row */}
-                    <div class="flex items-center gap-3 text-sm text-slate-400">
-                        <Show when={isInDraftView() && draftState()}>
-                            <span>
-                                Game{" "}
-                                <span class="font-bold text-slate-200">
-                                    {draftState()?.draft?.seriesIndex !== undefined
-                                        ? draftState()!.draft.seriesIndex + 1
-                                        : "—"}
-                                </span>
-                            </span>
-                            <span class="text-slate-600">|</span>
-                        </Show>
-                        <span class={getRoleColor(myRole())}>{formatRole(myRole())}</span>
+                    <div class="mt-2">
+                        <RoleSwitcher
+                            versusDraftId={params.id}
+                            currentRole={myRole() || "spectator"}
+                        />
                     </div>
 
                     {/* Draft Status Indicator - Paused */}

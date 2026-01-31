@@ -72,7 +72,7 @@ const VersusRoleSelection: Component = () => {
                             }
                         >
                             <div class="rounded-2xl border border-red-500/20 bg-slate-900/80 p-8 backdrop-blur-sm">
-                                <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10">
+                                <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-lg bg-red-500/10">
                                     <svg
                                         class="h-8 w-8 text-red-400"
                                         fill="none"
@@ -100,7 +100,7 @@ const VersusRoleSelection: Component = () => {
                     when={versusDraft()}
                     fallback={
                         <div class="relative z-10 rounded-2xl border border-slate-700/50 bg-slate-900/80 p-8 text-center backdrop-blur-sm">
-                            <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/10">
+                            <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-lg bg-amber-500/10">
                                 <svg
                                     class="h-8 w-8 text-amber-400"
                                     fill="none"
@@ -192,7 +192,7 @@ const VersusRoleSelection: Component = () => {
                                             {versusDraft()!.blueTeamName}
                                         </span>
                                     </div>
-                                    <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-slate-600 bg-slate-800 text-xs font-bold text-slate-500">
+                                    <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-slate-600 bg-slate-800 text-xs font-bold text-slate-500">
                                         VS
                                     </div>
                                     <div class="flex-1 text-left">
@@ -311,7 +311,7 @@ const VersusRoleSelection: Component = () => {
                                             <div class="h-4 w-4 animate-spin rounded-full border-2 border-blue-400/30 border-t-blue-400" />
                                         </Show>
                                         <span
-                                            class={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                                            class={`rounded px-2.5 py-1 text-xs font-medium ${
                                                 isRoleTaken("blue_captain")
                                                     ? "bg-slate-700 text-slate-500"
                                                     : "bg-emerald-500/15 text-emerald-400"
@@ -380,7 +380,7 @@ const VersusRoleSelection: Component = () => {
                                             <div class="h-4 w-4 animate-spin rounded-full border-2 border-red-400/30 border-t-red-400" />
                                         </Show>
                                         <span
-                                            class={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                                            class={`rounded px-2.5 py-1 text-xs font-medium ${
                                                 isRoleTaken("red_captain")
                                                     ? "bg-slate-700 text-slate-500"
                                                     : "bg-emerald-500/15 text-emerald-400"
@@ -440,7 +440,7 @@ const VersusRoleSelection: Component = () => {
                                         >
                                             <div class="h-4 w-4 animate-spin rounded-full border-2 border-slate-400/30 border-t-slate-400" />
                                         </Show>
-                                        <span class="rounded-full bg-slate-700/50 px-2.5 py-1 text-xs font-medium text-slate-400">
+                                        <span class="rounded bg-slate-700/50 px-2.5 py-1 text-xs font-medium text-slate-400">
                                             Always Open
                                         </span>
                                     </div>

@@ -6,7 +6,7 @@ interface FlowPanelProps {
 }
 
 const FlowPanel: Component<FlowPanelProps> = (props) => {
-    const [isExpanded, setIsExpanded] = createSignal(false);
+    const [isExpanded, setIsExpanded] = createSignal(true);
 
     return (
         <div

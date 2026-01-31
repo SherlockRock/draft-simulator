@@ -21,7 +21,6 @@ import { VersusTimer } from "../components/VersusTimer";
 import { ReadyButton } from "../components/ReadyButton";
 import { WinnerDeclarationModal } from "../components/WinnerDeclarationModal";
 import { PauseRequestModal } from "../components/PauseRequestModal";
-import { RoleSwitcher } from "../components/RoleSwitcher";
 import { champions, championCategories } from "../utils/constants";
 import toast from "solid-toast";
 import { useFilterableItems } from "../hooks/useFilterableItems";
@@ -653,11 +652,6 @@ const VersusDraftView: Component = () => {
                                 </span>
                                 <span class="text-sm font-medium">Back to Series</span>
                             </button>
-
-                            <RoleSwitcher
-                                versusDraftId={params.id}
-                                currentRole={myRole() || "spectator"}
-                            />
                         </div>
 
                         <Show
@@ -701,7 +695,7 @@ const VersusDraftView: Component = () => {
                                     </div>
                                     <Show when={!draftStarted()}>
                                         <div
-                                            class={`flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${
+                                            class={`flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${
                                                 versusState().readyStatus.blue
                                                     ? "border border-emerald-500/50 bg-emerald-500/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
                                                     : "border border-slate-600/50 bg-slate-700/50 text-slate-500"
@@ -722,7 +716,12 @@ const VersusDraftView: Component = () => {
                                         </div>
                                     </Show>
                                 </div>
-                                <div class="text-slate-500">vs</div>
+                                <div class="flex flex-col items-center gap-1">
+                                    <span class="rounded bg-slate-700 px-2 py-0.5 text-xs font-semibold text-slate-300">
+                                        Game {(draft()?.seriesIndex ?? 0) + 1}
+                                    </span>
+                                    <span class="text-slate-500">vs</span>
+                                </div>
                                 {/* Red Team */}
                                 <div class="flex flex-col items-end gap-2">
                                     <div class="text-xl font-bold text-red-400">
@@ -730,7 +729,7 @@ const VersusDraftView: Component = () => {
                                     </div>
                                     <Show when={!draftStarted()}>
                                         <div
-                                            class={`flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${
+                                            class={`flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${
                                                 versusState().readyStatus.red
                                                     ? "border border-emerald-500/50 bg-emerald-500/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
                                                     : "border border-slate-600/50 bg-slate-700/50 text-slate-500"
