@@ -78,7 +78,7 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
                     <input
                         type="text"
                         placeholder="Type a message..."
-                        class="w-40 flex-1 rounded-l-md border-none bg-slate-600 px-3 py-1 text-sm text-slate-50 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-teal-500/50"
+                        class="w-40 flex-1 rounded-l-md border-none bg-slate-600 px-3 py-1 text-sm text-slate-50 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-orange-500/50"
                         value={messageInput()}
                         onInput={(e) => setMessageInput(e.currentTarget.value)}
                         maxLength={500}
@@ -86,7 +86,7 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
                     <button
                         type="submit"
                         disabled={!messageInput().trim()}
-                        class="rounded-r-md bg-teal-700 px-3 py-1 text-sm font-medium text-slate-50 transition-colors hover:bg-teal-400 disabled:cursor-not-allowed disabled:opacity-40"
+                        class="rounded-r-md bg-orange-700 px-3 py-1 text-sm font-medium text-slate-50 transition-colors hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                         Send
                     </button>
