@@ -12,6 +12,7 @@ import ShareCanvasPage from "./ShareCanvasPage";
 import HomePage from "./pages/HomePage";
 
 import CanvasFlowDashboard from "./pages/CanvasFlowDashboard";
+import CanvasEntryRedirect from "./components/CanvasEntryRedirect";
 import VersusFlowDashboard from "./pages/VersusFlowDashboard";
 import DraftDetailView from "./pages/DraftDetailView";
 import CanvasDetailView from "./pages/CanvasDetailView";
@@ -42,7 +43,8 @@ render(
                     <Route path="/oauth2callback" component={AuthCallback} />
                     <Route path="/" component={HomePage} />
                     <Route path="/canvas" component={CanvasWorkflow}>
-                        <Route path="/" component={CanvasFlowDashboard} />
+                        <Route path="/" component={CanvasEntryRedirect} />
+                        <Route path="/dashboard" component={CanvasFlowDashboard} />
                         <Route path="/:id" component={CanvasDetailView} />
                         <Route path="/:id/draft/:draftId" component={DraftWorkflow}>
                             <Route path="/" component={DraftDetailView} />
