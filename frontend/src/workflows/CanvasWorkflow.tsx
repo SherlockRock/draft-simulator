@@ -298,31 +298,11 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                         <button
                                             class="rounded-md bg-teal-700 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-teal-400"
                                             onClick={() => {
-                                                const callback = createDraftCallback();
-                                                if (callback) callback();
-                                            }}
-                                        >
-                                            Create Draft
-                                        </button>
-                                        <button
-                                            class="rounded-md bg-teal-700 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-teal-400"
-                                            onClick={() => {
                                                 const callback = importCallback();
                                                 if (callback) callback();
                                             }}
                                         >
                                             Import
-                                        </button>
-                                        <button
-                                            class="rounded-md bg-teal-700 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-teal-400"
-                                            onClick={() => {
-                                                const callback = createGroupCallback();
-                                                if (callback) {
-                                                    callback(0, 0);
-                                                }
-                                            }}
-                                        >
-                                            New Group
                                         </button>
                                     </Show>
                                     <Show when={hasAdminPermissions() && params.id !== "local"}>
