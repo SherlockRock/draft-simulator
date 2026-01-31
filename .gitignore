@@ -6,3 +6,4 @@ dist
 *.key
 *.local.md
 *-design.md
+.worktrees
