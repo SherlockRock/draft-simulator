@@ -139,20 +139,47 @@ const VersusRoleSelection: Component = () => {
                                         {versusDraft()!.name}
                                     </h1>
                                     <div class="mt-1 flex items-center gap-2 text-sm">
-                                        <span class="rounded-md bg-slate-700/60 px-2 py-0.5 text-slate-300">
-                                            Best of {versusDraft()!.length}
+                                        <span
+                                            class={`rounded-md px-2 py-0.5 ${
+                                                versusDraft()!.length === 1
+                                                    ? "bg-indigo-500/20 text-indigo-300"
+                                                    : versusDraft()!.length === 3
+                                                      ? "bg-teal-500/20 text-teal-300"
+                                                      : versusDraft()!.length === 5
+                                                        ? "bg-emerald-500/20 text-emerald-300"
+                                                        : "bg-pink-500/20 text-pink-300"
+                                            }`}
+                                        >
+                                            Bo{versusDraft()!.length}
                                         </span>
                                         <span
                                             class={`rounded-md px-2 py-0.5 ${
                                                 versusDraft()!.competitive
                                                     ? "bg-amber-500/20 text-amber-300"
-                                                    : "bg-slate-700/60 text-slate-400"
+                                                    : "bg-sky-500/20 text-sky-300"
                                             }`}
                                         >
                                             {versusDraft()!.competitive
                                                 ? "Competitive"
                                                 : "Scrim"}
                                         </span>
+                                        <Show when={versusDraft()!.type}>
+                                            <span
+                                                class={`rounded-md px-2 py-0.5 ${
+                                                    versusDraft()!.type === "fearless"
+                                                        ? "bg-fuchsia-500/20 text-fuchsia-300"
+                                                        : versusDraft()!.type ===
+                                                            "ironman"
+                                                          ? "bg-lime-500/20 text-lime-300"
+                                                          : "bg-cyan-500/20 text-cyan-300"
+                                                }`}
+                                            >
+                                                {versusDraft()!
+                                                    .type!.charAt(0)
+                                                    .toUpperCase() +
+                                                    versusDraft()!.type!.slice(1)}
+                                            </span>
+                                        </Show>
                                     </div>
                                 </div>
                             </div>

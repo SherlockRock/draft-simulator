@@ -35,6 +35,7 @@ interface Activity {
     redTeamName?: string;
     length?: number;
     competitive?: boolean;
+    type?: string;
 }
 
 interface ActivityItemProps {
@@ -541,20 +542,47 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                 </span>
                 <Show when={props.activity.resource_type === "versus"}>
                     <div class="flex items-center gap-2">
-                        <span class="text-sm text-slate-400">
+                        <span
+                            class="rounded px-2 py-0.5 text-xs"
+                            classList={{
+                                "bg-indigo-500/20 text-indigo-300":
+                                    props.activity.length === 1,
+                                "bg-teal-500/20 text-teal-300":
+                                    props.activity.length === 3,
+                                "bg-emerald-500/20 text-emerald-300":
+                                    props.activity.length === 5,
+                                "bg-pink-500/20 text-pink-300":
+                                    props.activity.length === 7
+                            }}
+                        >
                             Bo{props.activity.length}
                         </span>
-                        <span class="text-slate-500">•</span>
                         <Show
                             when={props.activity.competitive}
                             fallback={
-                                <span class="rounded bg-teal-500/20 px-2 py-0.5 text-xs text-teal-300">
+                                <span class="rounded bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
                                     Scrim
                                 </span>
                             }
                         >
-                            <span class="rounded bg-orange-500/20 px-2 py-0.5 text-xs text-orange-300">
+                            <span class="rounded bg-amber-500/20 px-2 py-0.5 text-xs text-amber-300">
                                 Competitive
+                            </span>
+                        </Show>
+                        <Show when={props.activity.type}>
+                            <span
+                                class="rounded px-2 py-0.5 text-xs"
+                                classList={{
+                                    "bg-cyan-500/20 text-cyan-300":
+                                        props.activity.type === "standard",
+                                    "bg-fuchsia-500/20 text-fuchsia-300":
+                                        props.activity.type === "fearless",
+                                    "bg-lime-500/20 text-lime-300":
+                                        props.activity.type === "ironman"
+                                }}
+                            >
+                                {props.activity.type!.charAt(0).toUpperCase() +
+                                    props.activity.type!.slice(1)}
                             </span>
                         </Show>
                     </div>
@@ -818,7 +846,9 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                     <input
                                         type="text"
                                         value={editBlueTeamName()}
-                                        onInput={(e) => setEditBlueTeamName(e.currentTarget.value)}
+                                        onInput={(e) =>
+                                            setEditBlueTeamName(e.currentTarget.value)
+                                        }
                                         class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                 </div>
@@ -829,7 +859,9 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                     <input
                                         type="text"
                                         value={editRedTeamName()}
-                                        onInput={(e) => setEditRedTeamName(e.currentTarget.value)}
+                                        onInput={(e) =>
+                                            setEditRedTeamName(e.currentTarget.value)
+                                        }
                                         class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-red-400 focus:outline-none focus:ring-2 focus:ring-red-500"
                                     />
                                 </div>
@@ -839,13 +871,16 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                     <input
                                         type="checkbox"
                                         checked={editCompetitive()}
-                                        onChange={(e) => setEditCompetitive(e.currentTarget.checked)}
+                                        onChange={(e) =>
+                                            setEditCompetitive(e.currentTarget.checked)
+                                        }
                                         class="h-4 w-4 rounded border-slate-600 bg-slate-700 text-teal-500 focus:ring-2 focus:ring-teal-500"
                                     />
                                     Competitive Mode
                                 </label>
                                 <p class="mt-1 text-xs text-slate-400">
-                                    Pauses and pick changes require approval from both teams
+                                    Pauses and pick changes require approval from both
+                                    teams
                                 </p>
                             </div>
                         </Show>

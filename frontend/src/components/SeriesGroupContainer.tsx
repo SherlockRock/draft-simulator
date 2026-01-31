@@ -129,7 +129,22 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
 
                 <div class="flex items-center gap-2">
                     {/* Series Length Badge */}
-                    <span class="rounded bg-slate-600 px-2 py-0.5 text-xs text-slate-300">
+                    <span
+                        class="rounded px-2 py-0.5 text-xs"
+                        classList={{
+                            "bg-indigo-500/20 text-indigo-300":
+                                (props.group.metadata.length ?? props.drafts.length) ===
+                                1,
+                            "bg-teal-500/20 text-teal-300":
+                                (props.group.metadata.length ?? props.drafts.length) ===
+                                3,
+                            "bg-emerald-500/20 text-emerald-300":
+                                (props.group.metadata.length ?? props.drafts.length) ===
+                                5,
+                            "bg-pink-500/20 text-pink-300":
+                                (props.group.metadata.length ?? props.drafts.length) === 7
+                        }}
+                    >
                         {seriesLengthLabel()}
                     </span>
 
@@ -138,11 +153,11 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                         <span
                             class="rounded px-2 py-0.5 text-xs"
                             classList={{
-                                "bg-blue-600/30 text-blue-300":
+                                "bg-cyan-500/20 text-cyan-300":
                                     props.group.metadata.seriesType === "standard",
-                                "bg-purple-600/30 text-purple-300":
+                                "bg-fuchsia-500/20 text-fuchsia-300":
                                     props.group.metadata.seriesType === "fearless",
-                                "bg-red-600/30 text-red-300":
+                                "bg-lime-500/20 text-lime-300":
                                     props.group.metadata.seriesType === "ironman"
                             }}
                         >
@@ -152,13 +167,13 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
 
                     {/* Competitive Badge */}
                     <Show when={props.group.metadata.competitive}>
-                        <span class="rounded bg-amber-600/30 px-2 py-0.5 text-xs text-amber-300">
+                        <span class="rounded bg-amber-500/20 px-2 py-0.5 text-xs text-amber-300">
                             Competitive
                         </span>
                     </Show>
                     <Show when={!props.group.metadata.competitive}>
-                        <span class="rounded bg-slate-600 px-2 py-0.5 text-xs text-slate-400">
-                            Casual
+                        <span class="rounded bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
+                            Scrim
                         </span>
                     </Show>
 
