@@ -127,7 +127,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
             <Show when={props.draft?.completed && !isSpectator()}>
                 <button
                     onClick={handleOpenModal}
-                    class="w-full rounded border border-teal-600/40 bg-teal-600/10 px-3 py-1.5 text-sm font-medium text-teal-400 transition-all hover:border-teal-500/60 hover:bg-teal-600/15"
+                    class="w-full rounded border border-orange-600/40 bg-orange-600/10 px-3 py-1.5 text-sm font-medium text-orange-400 transition-all hover:border-orange-500/60 hover:bg-orange-600/15"
                 >
                     Request Pick Change
                 </button>
@@ -146,7 +146,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                             </p>
                         </Show>
                         <Show when={!props.isCompetitive}>
-                            <p class="mb-4 text-sm text-teal-400">
+                            <p class="mb-4 text-sm text-orange-400">
                                 Scrim Mode: Change will be applied immediately
                             </p>
                         </Show>
@@ -171,7 +171,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                                 }
                                                 class={`rounded-lg border-2 p-3 text-center transition-all ${
                                                     selectedPickIndex() === ban.pickIndex
-                                                        ? "border-teal-500 bg-teal-600/20"
+                                                        ? "border-orange-500 bg-orange-600/20"
                                                         : "border-slate-600 bg-slate-700 hover:border-slate-500"
                                                 }`}
                                             >
@@ -201,7 +201,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                                 }
                                                 class={`rounded-lg border-2 p-3 text-center transition-all ${
                                                     selectedPickIndex() === pick.pickIndex
-                                                        ? "border-teal-500 bg-teal-600/20"
+                                                        ? "border-orange-500 bg-orange-600/20"
                                                         : "border-slate-600 bg-slate-700 hover:border-slate-500"
                                                 }`}
                                             >
@@ -259,7 +259,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                                         title={champion.name}
                                                         class={`h-12 w-12 flex-shrink-0 rounded border-2 transition-all ${
                                                             isSelected()
-                                                                ? "border-teal-500"
+                                                                ? "border-orange-500"
                                                                 : isAlreadyPicked()
                                                                   ? "cursor-not-allowed border-transparent opacity-30"
                                                                   : "border-transparent hover:border-slate-500"
@@ -292,7 +292,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                 disabled={
                                     selectedPickIndex() === null || !selectedChampion()
                                 }
-                                class="flex-1 rounded-lg border-2 border-teal-600/50 bg-teal-600/10 px-4 py-3 font-semibold text-teal-400 transition-all hover:border-teal-500 hover:bg-teal-600/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                class="flex-1 rounded-lg border-2 border-orange-600/50 bg-orange-600/10 px-4 py-3 font-semibold text-orange-400 transition-all hover:border-orange-500 hover:bg-orange-600/20 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 Submit Request
                             </button>
@@ -338,7 +338,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                 <div class="text-2xl text-slate-500">→</div>
                                 <div class="text-center">
                                     <div class="text-xs text-slate-500">New</div>
-                                    <div class="font-semibold text-teal-400">
+                                    <div class="font-semibold text-orange-400">
                                         {getChampionName(
                                             props.pendingRequest!.newChampion
                                         )}
@@ -356,7 +356,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                             </button>
                             <button
                                 onClick={handleApprove}
-                                class="flex-1 rounded-lg border-2 border-teal-600/50 bg-teal-600/10 px-4 py-3 font-semibold text-teal-400 transition-all hover:border-teal-500 hover:bg-teal-600/20"
+                                class="flex-1 rounded-lg border-2 border-orange-600/50 bg-orange-600/10 px-4 py-3 font-semibold text-orange-400 transition-all hover:border-orange-500 hover:bg-orange-600/20"
                             >
                                 Approve
                             </button>

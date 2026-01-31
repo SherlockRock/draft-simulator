@@ -58,7 +58,7 @@ export const PauseRequestModal: Component<PauseRequestModalProps> = (props) => {
                         </button>
                         <button
                             onClick={props.onApprove}
-                            class="flex-1 rounded-lg border-2 border-teal-600/50 bg-teal-600/10 px-4 py-3 font-semibold text-teal-400 transition-all hover:border-teal-500 hover:bg-teal-600/20"
+                            class="flex-1 rounded-lg border-2 border-orange-600/50 bg-orange-600/10 px-4 py-3 font-semibold text-orange-400 transition-all hover:border-orange-500 hover:bg-orange-600/20"
                         >
                             Approve
                         </button>
