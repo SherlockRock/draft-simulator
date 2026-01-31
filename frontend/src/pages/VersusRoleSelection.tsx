@@ -64,7 +64,7 @@ const VersusRoleSelection: Component = () => {
                             when={error()}
                             fallback={
                                 <div class="flex flex-col items-center gap-4">
-                                    <div class="h-8 w-8 animate-spin rounded-full border-2 border-slate-600 border-t-teal-400" />
+                                    <div class="h-8 w-8 animate-spin rounded-full border-2 border-slate-600 border-t-orange-400" />
                                     <span class="text-slate-400">
                                         Connecting to session...
                                     </span>
