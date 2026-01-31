@@ -2,6 +2,8 @@ import { Component, For, Show, createResource, createSignal } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { fetchCanvasList } from "../utils/actions";
 import { CreateCanvasDialog } from "./CreateCanvasDialog";
+import { useUser } from "../userProvider";
+import { getLocalCanvas, hasLocalCanvas } from "../utils/localCanvasStore";
 
 interface Canvas {
     id: string;
@@ -15,7 +17,18 @@ interface CanvasSelectorProps {
 
 const CanvasSelector: Component<CanvasSelectorProps> = (props) => {
     const navigate = useNavigate();
-    const [canvases] = createResource<Canvas[]>(fetchCanvasList);
+    const accessor = useUser();
+    const [user] = accessor();
+    const [canvases] = createResource<Canvas[]>(async () => {
+        if (!user()) {
+            if (hasLocalCanvas()) {
+                const local = getLocalCanvas()!;
+                return [{ id: "local", name: local.name, updatedAt: local.createdAt }];
+            }
+            return [];
+        }
+        return fetchCanvasList();
+    });
     const [showCreateDialog, setShowCreateDialog] = createSignal(false);
 
     const handleSelect = (canvasId: string) => {
