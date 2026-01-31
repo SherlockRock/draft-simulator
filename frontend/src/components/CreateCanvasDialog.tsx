@@ -4,6 +4,8 @@ import { createCanvas } from "../utils/actions";
 import toast from "solid-toast";
 import { IconPicker } from "./IconPicker";
 import { champions } from "../utils/constants";
+import { useUser } from "../userProvider";
+import { createEmptyLocalCanvas, saveLocalCanvas } from "../utils/localCanvasStore";
 
 interface CreateCanvasDialogProps {
     isOpen: () => boolean;
@@ -12,6 +14,8 @@ interface CreateCanvasDialogProps {
 }
 
 export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
+    const accessor = useUser();
+    const [user] = accessor();
     const [name, setName] = createSignal("");
     const [description, setDescription] = createSignal("");
     const [icon, setIcon] = createSignal("");
@@ -66,14 +70,26 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
 
         setIsSubmitting(true);
         try {
-            const result = await createCanvas({
-                name: name().trim(),
-                description: description().trim() || undefined,
-                icon: icon()
-            });
+            if (!user()) {
+                // Anon user: create local canvas
+                const local = createEmptyLocalCanvas(
+                    name().trim(),
+                    description().trim() || undefined,
+                    icon()
+                );
+                saveLocalCanvas(local);
+                toast.success("Canvas created!");
+                props.onSuccess?.("local");
+            } else {
+                const result = await createCanvas({
+                    name: name().trim(),
+                    description: description().trim() || undefined,
+                    icon: icon()
+                });
 
-            toast.success("Canvas created successfully!");
-            props.onSuccess?.(result.canvas.id);
+                toast.success("Canvas created successfully!");
+                props.onSuccess?.(result.canvas.id);
+            }
         } catch (error) {
             toast.error("Failed to create canvas");
             console.error(error);

@@ -1,4 +1,4 @@
-import { Component, For, Show, Switch, Match, onCleanup, createSignal } from "solid-js";
+import { Component, For, Show, Switch, Match, onCleanup, createSignal, createEffect } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { useInfiniteQuery } from "@tanstack/solid-query";
 import TutorialStep from "../components/TutorialStep";
@@ -6,12 +6,20 @@ import ActivityItem from "../components/ActivityItem";
 import { fetchRecentActivity } from "../utils/actions";
 import { useUser } from "../userProvider";
 import { CreateCanvasDialog } from "../components/CreateCanvasDialog";
+import { hasLocalCanvas } from "../utils/localCanvasStore";
 
 const CanvasFlowDashboard: Component = () => {
     const navigate = useNavigate();
     const context = useUser();
     const [user] = context();
     const [showCreateDialog, setShowCreateDialog] = createSignal(false);
+
+    // Auto-redirect anon users with existing local canvas
+    createEffect(() => {
+        if (!user() && hasLocalCanvas()) {
+            navigate("/canvas/local");
+        }
+    });
 
     const activitiesQuery = useInfiniteQuery(() => ({
         queryKey: ["recentActivity", "canvas"],
