@@ -646,7 +646,7 @@ const VersusDraftView: Component = () => {
                         <div class="flex items-center gap-4">
                             <button
                                 onClick={() => navigate(`/versus/${params.id}`)}
-                                class="group flex items-center gap-2 text-teal-400 transition-colors hover:text-teal-300"
+                                class="group flex items-center gap-2 text-orange-400 transition-colors hover:text-orange-300"
                             >
                                 <span class="transition-transform group-hover:-translate-x-1">
                                     ←
@@ -670,7 +670,7 @@ const VersusDraftView: Component = () => {
                                                 `/versus/${params.id}/draft/${nextGame()!.id}`
                                             )
                                         }
-                                        class="group flex items-center gap-2 text-teal-400 transition-colors hover:text-teal-300"
+                                        class="group flex items-center gap-2 text-orange-400 transition-colors hover:text-orange-300"
                                     >
                                         <span class="text-sm font-medium">Next Game</span>
                                         <span class="transition-transform group-hover:translate-x-1">
@@ -938,7 +938,7 @@ const VersusDraftView: Component = () => {
                                     onClick={() => setActiveTab("pick")}
                                     class={`flex-1 px-4 py-3 text-sm font-semibold transition-colors ${
                                         activeTab() === "pick"
-                                            ? "border-b-2 border-teal-400 bg-slate-700/50 text-teal-400"
+                                            ? "border-b-2 border-orange-400 bg-slate-700/50 text-orange-400"
                                             : "text-slate-400 hover:bg-slate-700/30 hover:text-slate-200"
                                     }`}
                                 >
@@ -949,7 +949,7 @@ const VersusDraftView: Component = () => {
                                         onClick={() => setActiveTab("restricted")}
                                         class={`flex-1 px-4 py-3 text-sm font-semibold transition-colors ${
                                             activeTab() === "restricted"
-                                                ? "border-b-2 border-teal-400 bg-slate-700/50 text-teal-400"
+                                                ? "border-b-2 border-orange-400 bg-slate-700/50 text-orange-400"
                                                 : "text-slate-400 hover:bg-slate-700/30 hover:text-slate-200"
                                         }`}
                                     >
@@ -1012,7 +1012,7 @@ const VersusDraftView: Component = () => {
                                                                 : isPendingSelection()
                                                                   ? "scale-110 cursor-pointer border-4 border-yellow-400 ring-4 ring-yellow-400/50"
                                                                   : canSelect()
-                                                                    ? "cursor-pointer border-teal-500 hover:scale-105 hover:border-teal-400"
+                                                                    ? "cursor-pointer border-orange-500 hover:scale-105 hover:border-orange-400"
                                                                     : "cursor-not-allowed border-slate-700 opacity-50"
                                                         }`}
                                                         title={champ.name}
@@ -1328,7 +1328,7 @@ const VersusDraftView: Component = () => {
                     <Show when={isCountingDown()}>
                         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
                             <div class="text-center">
-                                <div class="mb-4 animate-pulse text-9xl font-bold text-teal-400">
+                                <div class="mb-4 animate-pulse text-9xl font-bold text-orange-400">
                                     {countdownValue()}
                                 </div>
                                 <p class="text-2xl font-semibold text-slate-300">
