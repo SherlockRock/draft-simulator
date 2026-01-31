@@ -280,8 +280,8 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                 <Show when={isDetailView()}>
                     <FlowPanel flow="canvas">
                         <div class="flex h-full flex-col gap-2 pt-4">
-                            {/* Canvas Selector - hidden when viewing a draft */}
-                            <Show when={!isDraftView()}>
+                            {/* Canvas Selector - hidden when viewing a draft or in local mode */}
+                            <Show when={!isDraftView() && params.id !== "local"}>
                                 <CanvasSelector selectedId={params.id} />
                             </Show>
 
