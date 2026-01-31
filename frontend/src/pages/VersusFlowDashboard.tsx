@@ -64,18 +64,13 @@ const VersusFlowDashboard: Component = () => {
                                 </li>
                                 <li class="flex items-start gap-2">
                                     <span class="mt-2.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-orange-400" />
-                                    Choose between Competitive mode (requires approval) or
-                                    Scrim mode (instant)
-                                </li>
-                                <li class="flex items-start gap-2">
-                                    <span class="mt-2.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-orange-400" />
                                     Share a single link for others to join as Blue
                                     Captain, Red Captain, or Spectator
                                 </li>
                                 <li class="flex items-start gap-2">
                                     <span class="mt-2.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-orange-400" />
-                                    Real-time drafting with 30-second pick timers and
-                                    auto-lock
+                                    Choose between Fearless, Standard, or Ironman draft
+                                    styles
                                 </li>
                             </ul>
 

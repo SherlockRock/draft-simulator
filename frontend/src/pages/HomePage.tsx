@@ -54,6 +54,13 @@ const HomePage: Component = () => {
                             icon="🎨"
                             onClick={() => navigate("/canvas")}
                             flowType="canvas"
+                            bullets={[
+                                "Create and position draft cards anywhere on the canvas",
+                                "Draw connections between related drafts",
+                                "Collaborate with teammates in real-time",
+                                "Organize complex draft scenarios and strategies",
+                                "Directly Import Versus Series and Drafts"
+                            ]}
                         />
                         <FlowCard
                             title="Versus"
@@ -61,6 +68,12 @@ const HomePage: Component = () => {
                             icon="⚔️"
                             onClick={() => navigate("/versus")}
                             flowType="versus"
+                            bullets={[
+                                "Create head-to-head competitive draft series (Best of 1, 3, 5, or 7)",
+                                "Share a single link for others to join as Blue Captain, Red Captain, or Spectator",
+                                "Choose between Fearless, Standard, or Ironman draft styles",
+                                "Utilize pauses and champion swap requests to prevent headaches"
+                            ]}
                         />
                     </div>
                 </div>

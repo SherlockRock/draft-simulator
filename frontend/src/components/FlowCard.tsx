@@ -1,4 +1,4 @@
-import { Component } from "solid-js";
+import { Component, For, Show } from "solid-js";
 
 interface FlowCardProps {
     title: string;
@@ -7,6 +7,7 @@ interface FlowCardProps {
     onClick: () => void;
     disabled?: boolean;
     flowType?: "draft" | "canvas" | "versus";
+    bullets?: string[];
 }
 
 const FlowCard: Component<FlowCardProps> = (props) => {
@@ -27,15 +28,44 @@ const FlowCard: Component<FlowCardProps> = (props) => {
         }
     };
 
+    const getBulletColor = () => {
+        switch (props.flowType) {
+            case "draft":
+                return "bg-blue-400";
+            case "canvas":
+                return "bg-purple-400";
+            case "versus":
+                return "bg-orange-400";
+            default:
+                return "bg-teal-400";
+        }
+    };
+
     return (
         <button
             onClick={props.onClick}
             disabled={props.disabled}
-            class={`flex flex-col items-center gap-4 rounded-lg border-2 p-8 transition-all ${getColorClasses()}`}
+            class={`flex flex-col items-start gap-4 rounded-xl border-2 p-10 transition-all ${getColorClasses()}`}
         >
-            <span class="text-5xl">{props.icon}</span>
-            <h3 class="text-3xl font-bold">{props.title}</h3>
-            <p class="text-center text-base text-slate-400">{props.description}</p>
+            <div class="flex items-center gap-3">
+                <span class="text-5xl">{props.icon}</span>
+                <h3 class="text-3xl font-bold">{props.title}</h3>
+            </div>
+            <p class="text-base text-slate-400">{props.description}</p>
+            <Show when={props.bullets && props.bullets.length > 0}>
+                <ul class="space-y-2 text-left text-sm text-slate-300">
+                    <For each={props.bullets}>
+                        {(bullet) => (
+                            <li class="flex items-start gap-2">
+                                <span
+                                    class={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${getBulletColor()}`}
+                                />
+                                {bullet}
+                            </li>
+                        )}
+                    </For>
+                </ul>
+            </Show>
         </button>
     );
 };
