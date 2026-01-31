@@ -78,7 +78,6 @@ import {
     CustomGroupContainer,
     CUSTOM_GROUP_HEADER_HEIGHT
 } from "./components/CustomGroupContainer";
-import { GroupNameDialog } from "./components/GroupNameDialog";
 import { DeleteGroupDialog } from "./components/DeleteGroupDialog";
 
 type cardProps = {
@@ -517,7 +516,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [importPosition, setImportPosition] = createSignal({ x: 0, y: 0 });
     const [isDeleteGroupDialogOpen, setIsDeleteGroupDialogOpen] = createSignal(false);
     const [groupToDelete, setGroupToDelete] = createSignal<CanvasGroup | null>(null);
-    const [isCreateGroupDialogOpen, setIsCreateGroupDialogOpen] = createSignal(false);
     const [createGroupPosition, setCreateGroupPosition] = createSignal({ x: 0, y: 0 });
     const [dragOverGroupId, setDragOverGroupId] = createSignal<string | null>(null);
     const [exitingGroupId, setExitingGroupId] = createSignal<string | null>(null);
@@ -591,7 +589,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 const centerX = positionX || vp.x + window.innerWidth / 2 / vp.zoom;
                 const centerY = positionY || vp.y + window.innerHeight / 2 / vp.zoom;
                 setCreateGroupPosition({ x: centerX, y: centerY });
-                setIsCreateGroupDialogOpen(true);
+                handleCreateGroup();
             }
         );
 
@@ -769,7 +767,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
             toast.success("Group created");
-            setIsCreateGroupDialogOpen(false);
         },
         onError: (error: Error) => {
             toast.error(`Failed to create group: ${error.message}`);
@@ -1429,9 +1426,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const screenToWorld = (screenX: number, screenY: number) => {
         const vp = props.viewport();
+        const rect = canvasContainerRef?.getBoundingClientRect();
+        const canvasX = rect ? screenX - rect.left : screenX;
+        const canvasY = rect ? screenY - rect.top : screenY;
         return {
-            x: screenX / vp.zoom + vp.x,
-            y: screenY / vp.zoom + vp.y
+            x: canvasX / vp.zoom + vp.x,
+            y: canvasY / vp.zoom + vp.y
         };
     };
 
@@ -1672,21 +1672,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setGroupToDelete(null);
     };
 
-    const handleCreateGroup = (name: string) => {
+    const handleCreateGroup = () => {
         const pos = createGroupPosition();
         if (isLocalMode()) {
             localCreateGroup({
-                name,
                 positionX: pos.x,
                 positionY: pos.y
             });
             refreshFromLocal();
             toast.success("Group created");
-            setIsCreateGroupDialogOpen(false);
         } else {
             createGroupMutation.mutate({
                 canvasId: params.id,
-                name,
                 positionX: pos.x,
                 positionY: pos.y
             });
@@ -2559,16 +2556,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     }
                 />
                 <Dialog
-                    isOpen={isCreateGroupDialogOpen}
-                    onCancel={() => setIsCreateGroupDialogOpen(false)}
-                    body={
-                        <GroupNameDialog
-                            onConfirm={handleCreateGroup}
-                            onCancel={() => setIsCreateGroupDialogOpen(false)}
-                        />
-                    }
-                />
-                <Dialog
                     isOpen={isDeleteGroupDialogOpen}
                     onCancel={onDeleteGroupCancel}
                     body={
@@ -2666,7 +2653,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             onClick={() => {
                                 const pos = contextMenuWorldPosition();
                                 setCreateGroupPosition(pos);
-                                setIsCreateGroupDialogOpen(true);
+                                handleCreateGroup();
                                 closeContextMenu();
                             }}
                         >

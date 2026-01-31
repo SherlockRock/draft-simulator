@@ -751,7 +751,7 @@ export const updateCanvasGroupPosition = async (data: {
 
 export const createCanvasGroup = async (data: {
     canvasId: string;
-    name: string;
+    name?: string;
     positionX: number;
     positionY: number;
 }): Promise<{ success: boolean; group: CanvasGroup }> => {

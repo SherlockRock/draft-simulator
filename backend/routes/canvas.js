@@ -12,7 +12,7 @@ const User = require("../models/User.js");
 const VersusDraft = require("../models/VersusDraft.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
-const { draftHasSharedWithUser } = require("../helpers.js");
+const { draftHasSharedWithUser, generateUniqueCanvasGroupName } = require("../helpers.js");
 
 // Helper function to touch canvas updatedAt timestamp
 async function touchCanvasTimestamp(canvasId) {
@@ -619,10 +619,6 @@ router.post("/:canvasId/group", protect, async (req, res) => {
     const { canvasId } = req.params;
     const { name, positionX, positionY } = req.body;
 
-    if (!name || typeof name !== "string" || name.trim().length === 0) {
-      return res.status(400).json({ error: "Group name is required" });
-    }
-
     const userCanvas = await UserCanvas.findOne({
       where: { canvas_id: canvasId, user_id: req.user.id },
     });
@@ -636,9 +632,13 @@ router.post("/:canvasId/group", protect, async (req, res) => {
       });
     }
 
+    const groupName = name && typeof name === "string" && name.trim().length > 0
+      ? name.trim()
+      : await generateUniqueCanvasGroupName("New Group", canvasId);
+
     const group = await CanvasGroup.create({
       canvas_id: canvasId,
-      name: name.trim(),
+      name: groupName,
       type: "custom",
       positionX: positionX ?? 50,
       positionY: positionY ?? 50,

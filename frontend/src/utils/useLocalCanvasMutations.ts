@@ -2,7 +2,9 @@ import { CanvasDraft, Connection, CanvasGroup, Viewport } from "./types";
 import { getLocalCanvas, saveLocalCanvas, LocalCanvas } from "./localCanvasStore";
 
 // Helper: read, apply, save, return
-const mutateLocal = <T>(fn: (canvas: LocalCanvas) => { canvas: LocalCanvas; result: T }): T => {
+const mutateLocal = <T>(
+    fn: (canvas: LocalCanvas) => { canvas: LocalCanvas; result: T }
+): T => {
     const canvas = getLocalCanvas();
     if (!canvas) throw new Error("No local canvas");
     const { canvas: updated, result } = fn(canvas);
@@ -79,10 +81,10 @@ export const localDeleteDraft = (draftId: string) => {
         // Also remove connections referencing this draft
         canvas.connections = canvas.connections.filter((c) => {
             const srcRefs = c.source_draft_ids.some(
-                (e) => ("draft_id" in e && e.draft_id === draftId)
+                (e) => "draft_id" in e && e.draft_id === draftId
             );
             const tgtRefs = c.target_draft_ids.some(
-                (e) => ("draft_id" in e && e.draft_id === draftId)
+                (e) => "draft_id" in e && e.draft_id === draftId
             );
             return !srcRefs && !tgtRefs;
         });
@@ -110,13 +112,27 @@ export const localCreateConnection = (data: {
             canvas_id: "local",
             source_draft_ids: data.sourceDraftIds.map((e) =>
                 e.groupId
-                    ? { type: "group" as const, group_id: e.groupId, anchor_type: (e.anchorType ?? "bottom") as any }
-                    : { draft_id: e.draftId!, anchor_type: (e.anchorType ?? "bottom") as any }
+                    ? {
+                          type: "group" as const,
+                          group_id: e.groupId,
+                          anchor_type: (e.anchorType ?? "bottom") as any
+                      }
+                    : {
+                          draft_id: e.draftId!,
+                          anchor_type: (e.anchorType ?? "bottom") as any
+                      }
             ),
             target_draft_ids: data.targetDraftIds.map((e) =>
                 e.groupId
-                    ? { type: "group" as const, group_id: e.groupId, anchor_type: (e.anchorType ?? "top") as any }
-                    : { draft_id: e.draftId!, anchor_type: (e.anchorType ?? "top") as any }
+                    ? {
+                          type: "group" as const,
+                          group_id: e.groupId,
+                          anchor_type: (e.anchorType ?? "top") as any
+                      }
+                    : {
+                          draft_id: e.draftId!,
+                          anchor_type: (e.anchorType ?? "top") as any
+                      }
             ),
             vertices: data.vertices ?? [],
             style: data.style ?? "solid"
@@ -136,14 +152,28 @@ export const localUpdateConnection = (data: {
         if (conn) {
             if (data.addSource) {
                 const endpoint = data.addSource.groupId
-                    ? { type: "group" as const, group_id: data.addSource.groupId, anchor_type: (data.addSource.anchorType ?? "bottom") as any }
-                    : { draft_id: data.addSource.draftId!, anchor_type: (data.addSource.anchorType ?? "bottom") as any };
+                    ? {
+                          type: "group" as const,
+                          group_id: data.addSource.groupId,
+                          anchor_type: (data.addSource.anchorType ?? "bottom") as any
+                      }
+                    : {
+                          draft_id: data.addSource.draftId!,
+                          anchor_type: (data.addSource.anchorType ?? "bottom") as any
+                      };
                 conn.source_draft_ids.push(endpoint);
             }
             if (data.addTarget) {
                 const endpoint = data.addTarget.groupId
-                    ? { type: "group" as const, group_id: data.addTarget.groupId, anchor_type: (data.addTarget.anchorType ?? "top") as any }
-                    : { draft_id: data.addTarget.draftId!, anchor_type: (data.addTarget.anchorType ?? "top") as any };
+                    ? {
+                          type: "group" as const,
+                          group_id: data.addTarget.groupId,
+                          anchor_type: (data.addTarget.anchorType ?? "top") as any
+                      }
+                    : {
+                          draft_id: data.addTarget.draftId!,
+                          anchor_type: (data.addTarget.anchorType ?? "top") as any
+                      };
                 conn.target_draft_ids.push(endpoint);
             }
         }
@@ -191,14 +221,14 @@ export const localUpdateVertex = (data: {
                 vertex.y = data.y;
             }
         }
-        return { canvas, result: { success: true, vertex: { id: data.vertexId, x: data.x, y: data.y } } };
+        return {
+            canvas,
+            result: { success: true, vertex: { id: data.vertexId, x: data.x, y: data.y } }
+        };
     });
 };
 
-export const localDeleteVertex = (data: {
-    connectionId: string;
-    vertexId: string;
-}) => {
+export const localDeleteVertex = (data: { connectionId: string; vertexId: string }) => {
     return mutateLocal((canvas) => {
         const conn = canvas.connections.find((c) => c.id === data.connectionId);
         if (conn) {
@@ -208,16 +238,21 @@ export const localDeleteVertex = (data: {
     });
 };
 
-export const localCreateGroup = (data: {
-    name: string;
-    positionX: number;
-    positionY: number;
-}) => {
+export const localCreateGroup = (data: { positionX: number; positionY: number }) => {
     return mutateLocal((canvas) => {
+        const existingNames = new Set(canvas.groups.map((g) => g.name));
+        let name = "New Group";
+        if (existingNames.has(name)) {
+            let counter = 1;
+            while (existingNames.has(`New Group ${counter}`)) {
+                counter++;
+            }
+            name = `New Group ${counter}`;
+        }
         const group: CanvasGroup = {
             id: crypto.randomUUID(),
             canvas_id: "local",
-            name: data.name,
+            name,
             type: "custom",
             positionX: data.positionX,
             positionY: data.positionY,

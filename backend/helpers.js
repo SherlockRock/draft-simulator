@@ -112,9 +112,55 @@ async function generateUniqueCanvasDraftName(
   return candidateName;
 }
 
+/**
+ * Generates a unique name for a group within a specific canvas.
+ * If the name exists, appends " 1", " 2", etc. until a unique name is found.
+ *
+ * @param {string} baseName - The desired group name
+ * @param {string} canvasId - The canvas ID to check uniqueness within
+ * @returns {Promise<string>} - A unique name for the group
+ */
+async function generateUniqueCanvasGroupName(baseName, canvasId) {
+  const { CanvasGroup } = require("./models/Canvas");
+
+  const groups = await CanvasGroup.findAll({
+    where: { canvas_id: canvasId },
+    attributes: ["name"],
+  });
+
+  const existingNames = new Set(groups.map((g) => g.name));
+
+  if (!existingNames.has(baseName)) {
+    return baseName;
+  }
+
+  const numberMatch = baseName.match(/^(.+?)\s+(\d+)$/);
+  let baseNameWithoutNumber;
+  let startingCounter;
+
+  if (numberMatch) {
+    baseNameWithoutNumber = numberMatch[1];
+    startingCounter = parseInt(numberMatch[2], 10) + 1;
+  } else {
+    baseNameWithoutNumber = baseName;
+    startingCounter = 1;
+  }
+
+  let counter = startingCounter;
+  let candidateName = `${baseNameWithoutNumber} ${counter}`;
+
+  while (existingNames.has(candidateName)) {
+    counter++;
+    candidateName = `${baseNameWithoutNumber} ${counter}`;
+  }
+
+  return candidateName;
+}
+
 module.exports = {
   encrypt,
   decrypt,
   draftHasSharedWithUser,
   generateUniqueCanvasDraftName,
+  generateUniqueCanvasGroupName,
 };
