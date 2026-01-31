@@ -2260,7 +2260,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 e.currentTarget.blur();
                             }
                         }}
-                        class="rounded border border-slate-500 bg-slate-600 px-3 py-1.5 text-slate-50 shadow focus:border-teal-400 focus:outline-none"
+                        class="rounded border border-slate-500 bg-slate-600 px-3 py-1.5 text-slate-50 shadow focus:border-purple-400 focus:outline-none"
                         placeholder="Canvas Name"
                         disabled={
                             isConnectionMode() ||
@@ -2284,7 +2284,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     </div>
                     <button
                         onClick={resetViewport}
-                        class="rounded border border-slate-500 bg-teal-700 px-3 py-1.5 text-slate-50 shadow hover:bg-teal-400"
+                        class="rounded border border-slate-500 bg-purple-600 px-3 py-1.5 text-slate-50 shadow hover:bg-purple-500"
                     >
                         Reset View
                     </button>
@@ -2526,7 +2526,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             <div class="flex justify-end gap-4">
                                 <button
                                     onClick={onCancel}
-                                    class="rounded bg-teal-700 px-4 py-2 text-slate-50 hover:bg-teal-400"
+                                    class="rounded bg-purple-600 px-4 py-2 text-slate-50 hover:bg-purple-500"
                                 >
                                     Cancel
                                 </button>
@@ -2579,7 +2579,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                             <div class="flex justify-end gap-4">
                                                 <button
                                                     onClick={onDeleteGroupCancel}
-                                                    class="rounded bg-teal-700 px-4 py-2 text-slate-50 hover:bg-teal-400"
+                                                    class="rounded bg-purple-600 px-4 py-2 text-slate-50 hover:bg-purple-500"
                                                 >
                                                     Cancel
                                                 </button>
