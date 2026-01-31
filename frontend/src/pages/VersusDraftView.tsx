@@ -640,7 +640,7 @@ const VersusDraftView: Component = () => {
             fallback={<div class="p-8">Loading...</div>}
         >
             <Show when={versusDraft() && draft()}>
-                <div class="flex h-full w-full flex-col bg-slate-900">
+                <div class="flex h-full min-w-0 flex-1 flex-col bg-slate-900">
                     {/* Streamlined Top Bar */}
                     <div class="flex items-center justify-between border-b border-slate-700 bg-slate-800/50 px-6 py-3 backdrop-blur-sm">
                         <div class="flex items-center gap-4">

@@ -10,8 +10,8 @@ const FlowPanel: Component<FlowPanelProps> = (props) => {
 
     return (
         <div
-            class={`flex flex-col bg-slate-800 transition-all duration-300 ${
-                isExpanded() ? "w-[max(20vw,300px)]" : "w-6"
+            class={`flex flex-col border-r border-slate-700/50 bg-slate-800 transition-all duration-300 ${
+                isExpanded() ? "w-[max(18vw,260px)]" : "w-5"
             }`}
         >
             <div class="flex h-full">
@@ -21,16 +21,16 @@ const FlowPanel: Component<FlowPanelProps> = (props) => {
                     }`}
                 >
                     <Show when={isExpanded()}>
-                        <div class="flex h-full flex-1 flex-col gap-4 px-4">
+                        <div class="flex h-full flex-1 flex-col px-3">
                             {props.children}
                         </div>
                     </Show>
                 </div>
                 <button
                     onClick={() => setIsExpanded(!isExpanded())}
-                    class="flex w-6 items-center justify-center bg-slate-900 transition-colors hover:bg-slate-700"
+                    class="flex w-5 items-center justify-center border-l border-slate-700/30 bg-slate-800 transition-colors hover:bg-slate-700"
                 >
-                    <span class="text-xs text-slate-400">
+                    <span class="text-[10px] text-slate-500">
                         {isExpanded() ? "◀" : "▶"}
                     </span>
                 </button>

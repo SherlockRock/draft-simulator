@@ -26,12 +26,12 @@ export const WinnerReporter: Component<WinnerReporterProps> = (props) => {
     const redSelected = () => props.currentWinner === "red";
 
     return (
-        <div onClick={handleContainerClick} class="inline-flex items-center">
-            <div class="flex items-center overflow-hidden rounded-lg border border-slate-600/50 bg-slate-900/80">
+        <div onClick={handleContainerClick}>
+            <div class="flex overflow-hidden rounded border border-slate-600/40">
                 <button
                     onClick={(e) => handleSelect(e, "blue")}
                     disabled={!props.canEdit}
-                    class={`group/btn flex items-center gap-1.5 border-r border-slate-600/50 px-2.5 py-1 text-xs font-medium transition-all ${
+                    class={`group/btn flex flex-1 items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-all ${
                         blueSelected()
                             ? "bg-blue-500/30 text-blue-300"
                             : props.canEdit
@@ -40,18 +40,19 @@ export const WinnerReporter: Component<WinnerReporterProps> = (props) => {
                     } ${props.canEdit ? "cursor-pointer" : "cursor-default"}`}
                 >
                     <span
-                        class={`h-1.5 w-1.5 rounded-full transition-opacity ${
+                        class={`h-1.5 w-1.5 rounded-full transition-all ${
                             blueSelected()
                                 ? "bg-blue-400"
                                 : "bg-blue-500 opacity-40 group-hover/btn:opacity-70"
                         }`}
                     />
-                    <span class="max-w-[60px] truncate">{props.blueTeamName}</span>
+                    <span class="truncate">{props.blueTeamName}</span>
                 </button>
+                <div class="w-px self-stretch bg-slate-600/40" />
                 <button
                     onClick={(e) => handleSelect(e, "red")}
                     disabled={!props.canEdit}
-                    class={`group/btn flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium transition-all ${
+                    class={`group/btn flex flex-1 items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-all ${
                         redSelected()
                             ? "bg-red-500/30 text-red-300"
                             : props.canEdit
@@ -59,9 +60,9 @@ export const WinnerReporter: Component<WinnerReporterProps> = (props) => {
                               : "text-red-400/40"
                     } ${props.canEdit ? "cursor-pointer" : "cursor-default"}`}
                 >
-                    <span class="max-w-[60px] truncate">{props.redTeamName}</span>
+                    <span class="truncate">{props.redTeamName}</span>
                     <span
-                        class={`h-1.5 w-1.5 rounded-full transition-opacity ${
+                        class={`h-1.5 w-1.5 rounded-full transition-all ${
                             redSelected()
                                 ? "bg-red-400"
                                 : "bg-red-500 opacity-40 group-hover/btn:opacity-70"

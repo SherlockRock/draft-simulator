@@ -56,45 +56,29 @@ const VersusFlowPanelContent: Component = () => {
     };
 
     return (
-        <div class="flex h-full flex-col gap-4 pt-4">
+        <div class="flex h-full flex-col pt-4">
             {/* Match Info Section - shown when in a series */}
             <Show when={isInSeries() && versusDraft()}>
-                <div class="border-b border-slate-700 pb-4">
-                    {/* Series Name */}
-                    <div class="mb-3">
-                        <div class="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                            Series
-                        </div>
-                        <h2 class="text-sm font-bold leading-tight text-slate-100">
-                            {versusDraft()!.name}
-                        </h2>
-                    </div>
+                <div class="px-1 pb-4">
+                    {/* Series header with name */}
+                    <h2 class="mb-2 text-base font-bold leading-tight text-slate-100">
+                        {versusDraft()!.name}
+                    </h2>
 
-                    {/* Match Details Grid */}
-                    <div class="grid grid-cols-2 gap-2">
-                        {/* Game Number - only when in draft view */}
+                    {/* Compact metadata row */}
+                    <div class="flex items-center gap-3 text-sm text-slate-400">
                         <Show when={isInDraftView() && draftState()}>
-                            <div class="rounded-lg bg-slate-900/50 p-2 ring-1 ring-slate-700/50">
-                                <div class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                                    Game
-                                </div>
-                                <div class="text-base font-bold text-teal-400">
+                            <span>
+                                Game{" "}
+                                <span class="font-bold text-slate-200">
                                     {draftState()?.draft?.seriesIndex !== undefined
                                         ? draftState()!.draft.seriesIndex + 1
                                         : "—"}
-                                </div>
-                            </div>
+                                </span>
+                            </span>
+                            <span class="text-slate-600">|</span>
                         </Show>
-
-                        {/* Your Role */}
-                        <div class="rounded-lg bg-slate-900/50 p-2 ring-1 ring-slate-700/50">
-                            <div class="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                                Role
-                            </div>
-                            <div class={`text-base font-bold ${getRoleColor(myRole())}`}>
-                                {formatRole(myRole())}
-                            </div>
-                        </div>
+                        <span class={getRoleColor(myRole())}>{formatRole(myRole())}</span>
                     </div>
 
                     {/* Draft Status Indicator - Paused */}
@@ -105,13 +89,11 @@ const VersusFlowPanelContent: Component = () => {
                             callbacks()?.draftStarted()
                         }
                     >
-                        <div class="mt-3 rounded-lg border-2 border-yellow-500/50 bg-yellow-500/10 px-3 py-2 text-center backdrop-blur-sm">
-                            <div class="flex items-center justify-center gap-2">
-                                <span class="text-sm">⏸️</span>
-                                <span class="text-xs font-bold uppercase tracking-wider text-yellow-400">
-                                    Draft Paused
-                                </span>
-                            </div>
+                        <div class="mt-3 flex items-center gap-2 rounded border border-yellow-500/30 bg-yellow-500/10 px-3 py-1.5">
+                            <div class="h-1.5 w-1.5 animate-pulse rounded-full bg-yellow-400" />
+                            <span class="text-xs font-semibold text-yellow-400">
+                                Paused
+                            </span>
                         </div>
                     </Show>
                 </div>
@@ -125,11 +107,25 @@ const VersusFlowPanelContent: Component = () => {
                     ((callbacks() && !isSpectator()) || draftState()?.completed)
                 }
             >
-                <div class="border-b border-slate-700 pb-4">
-                    <h3 class="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                        {draftState()?.completed ? "Game Result" : "Draft Controls"}
-                    </h3>
+                <div class="border-t border-slate-700/50 px-1 py-4">
                     <div class="space-y-2">
+                        {/* Winner Reporter - shown when draft is completed */}
+                        <Show when={draftState()?.completed && draftState()?.draft}>
+                            <div>
+                                <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                                    Winner
+                                </div>
+                                <WinnerReporter
+                                    draftId={draftState()!.draft.id}
+                                    blueTeamName={versusDraft()!.blueTeamName}
+                                    redTeamName={versusDraft()!.redTeamName}
+                                    currentWinner={draftState()!.draft.winner}
+                                    canEdit={canEditWinner()}
+                                    onReportWinner={handleReportWinner}
+                                />
+                            </div>
+                        </Show>
+
                         {/* Pause Button */}
                         <Show
                             when={
@@ -140,7 +136,7 @@ const VersusFlowPanelContent: Component = () => {
                         >
                             <button
                                 onClick={() => callbacks()?.handlePause()}
-                                class="w-full rounded-lg border-2 border-slate-600/50 bg-slate-700 px-3 py-2 text-xs font-bold text-slate-200 transition-all hover:border-slate-500 hover:bg-slate-600 active:scale-[0.98]"
+                                class="w-full rounded border border-slate-600/50 bg-slate-700/50 px-3 py-1.5 text-sm font-medium text-slate-300 transition-all hover:bg-slate-600/50 active:scale-[0.98]"
                             >
                                 {draftState()?.isPaused ? "Resume Draft" : "Pause Draft"}
                             </button>
@@ -158,27 +154,13 @@ const VersusFlowPanelContent: Component = () => {
                                 onRejectChange={callbacks()!.handleRejectPickChange}
                             />
                         </Show>
-
-                        {/* Winner Reporter - shown when draft is completed */}
-                        <Show when={draftState()?.completed && draftState()?.draft}>
-                            <div class="pt-1">
-                                <WinnerReporter
-                                    draftId={draftState()!.draft.id}
-                                    blueTeamName={versusDraft()!.blueTeamName}
-                                    redTeamName={versusDraft()!.redTeamName}
-                                    currentWinner={draftState()!.draft.winner}
-                                    canEdit={canEditWinner()}
-                                    onReportWinner={handleReportWinner}
-                                />
-                            </div>
-                        </Show>
                     </div>
                 </div>
             </Show>
 
             {/* Chat Section - always visible when connected */}
             <Show when={isConnected() && versusDraft() && socket()}>
-                <div class="min-h-0 flex-1">
+                <div class="min-h-0 flex-1 border-t border-slate-700/50">
                     <VersusChatPanel
                         socket={socket()!}
                         versusDraftId={versusDraft()!.id}
