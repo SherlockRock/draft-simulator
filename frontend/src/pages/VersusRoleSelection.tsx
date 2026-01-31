@@ -185,7 +185,7 @@ const VersusRoleSelection: Component = () => {
                                     {copied() ? (
                                         <>
                                             <svg
-                                                class="h-4 w-4 text-emerald-400"
+                                                class="h-4 w-4 text-orange-400"
                                                 fill="none"
                                                 viewBox="0 0 24 24"
                                                 stroke="currentColor"
@@ -197,7 +197,7 @@ const VersusRoleSelection: Component = () => {
                                                     d="M5 13l4 4L19 7"
                                                 />
                                             </svg>
-                                            <span class="text-emerald-400">
+                                            <span class="text-orange-400">
                                                 Link Copied!
                                             </span>
                                         </>
