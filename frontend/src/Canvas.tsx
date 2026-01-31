@@ -72,6 +72,7 @@ import {
     localUpdateDraftGroup
 } from "./utils/useLocalCanvasMutations";
 import { getLocalCanvas, saveLocalCanvas } from "./utils/localCanvasStore";
+import { handleLogin } from "./utils/actions";
 import { SeriesGroupContainer } from "./components/SeriesGroupContainer";
 import {
     CustomGroupContainer,
@@ -2291,6 +2292,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         Reset View
                     </button>
                 </div>
+                <Show when={isLocalMode()}>
+                    <div class="absolute right-4 top-4 z-40 flex items-center gap-2 rounded-lg border border-yellow-600/30 bg-yellow-900/40 px-3 py-1.5 text-xs text-yellow-300 shadow-lg backdrop-blur-sm">
+                        <span>Local only</span>
+                        <span class="text-yellow-500">&mdash;</span>
+                        <button
+                            onClick={() => handleLogin()}
+                            class="font-medium text-yellow-200 underline underline-offset-2 hover:text-yellow-100"
+                        >
+                            Sign in to save
+                        </button>
+                    </div>
+                </Show>
                 <Show when={props.isFetching}>
                     <div class="rounded border bg-blue-100 px-3 py-1 text-sm text-blue-800 shadow">
                         Syncing...
