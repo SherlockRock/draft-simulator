@@ -50,7 +50,7 @@ export const VersusTimer: Component<VersusTimerProps> = (props) => {
                         ? "text-yellow-500"
                         : isLowTime()
                           ? "text-red-500"
-                          : "text-teal-400"
+                          : "text-orange-400"
                 }`}
             >
                 {timeRemaining()}s
