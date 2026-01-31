@@ -11,7 +11,7 @@ const FlowPanel: Component<FlowPanelProps> = (props) => {
     return (
         <div
             class={`flex flex-col border-r border-slate-700/50 bg-slate-800 transition-all duration-300 ${
-                isExpanded() ? "w-44" : "w-5"
+                isExpanded() ? "w-[max(18vw,260px)]" : "w-5"
             }`}
         >
             <div class="flex h-full">

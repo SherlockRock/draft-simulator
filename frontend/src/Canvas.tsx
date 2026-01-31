@@ -2272,7 +2272,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             onClick={toggleConnectionMode}
                             class="rounded px-4 py-2 font-semibold text-white shadow transition-colors"
                             classList={{
-                                "bg-blue-600 hover:bg-blue-700": !isConnectionMode(),
+                                "bg-purple-600 hover:bg-purple-700": !isConnectionMode(),
                                 "bg-green-600 hover:bg-green-700": isConnectionMode()
                             }}
                         >

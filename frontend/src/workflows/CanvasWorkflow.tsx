@@ -295,35 +295,42 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                         Swap Orientation
                                     </button>
                                     <Show when={hasEditPermissions()}>
-                                        <button
-                                            class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
-                                            onClick={() => {
-                                                const callback = importCallback();
-                                                if (callback) callback();
-                                            }}
+                                        <Show
+                                            when={hasAdminPermissions() && params.id !== "local"}
+                                            fallback={
+                                                <button
+                                                    class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
+                                                    onClick={() => {
+                                                        const callback = importCallback();
+                                                        if (callback) callback();
+                                                    }}
+                                                >
+                                                    Import
+                                                </button>
+                                            }
                                         >
-                                            Import
-                                        </button>
-                                    </Show>
-                                    <Show when={hasAdminPermissions() && params.id !== "local"}>
-                                        <button
-                                            class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
-                                            onClick={() => setIsManageUsersOpen(true)}
-                                        >
-                                            Manage Users
-                                        </button>
-                                        <div
-                                            class="relative"
-                                            onFocusOut={handleShareFocusOut}
-                                        >
-                                            <button
-                                                onClick={handleShareCanvas}
-                                                class="w-full rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
-                                            >
-                                                Share
-                                            </button>
+                                            <div class="grid grid-cols-2 gap-2">
+                                                <button
+                                                    class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
+                                                    onClick={() => {
+                                                        const callback = importCallback();
+                                                        if (callback) callback();
+                                                    }}
+                                                >
+                                                    Import
+                                                </button>
+                                                <div
+                                                    class="relative"
+                                                    onFocusOut={handleShareFocusOut}
+                                                >
+                                                    <button
+                                                        onClick={handleShareCanvas}
+                                                        class="w-full rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
+                                                    >
+                                                        Share
+                                                    </button>
                                             {isSharePopperOpen() && (
-                                                <div class="absolute left-0 top-full z-10 mt-2 w-full rounded-md bg-slate-600 p-3 shadow-lg">
+                                                <div class="absolute left-0 top-full z-10 mt-2 min-w-[250px] rounded-md bg-slate-600 p-3 shadow-lg">
                                                     <div class="space-y-3">
                                                         <div>
                                                             <p class="mb-1 text-xs font-medium text-slate-300">
@@ -411,6 +418,14 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                 </div>
                                             )}
                                         </div>
+                                            </div>
+                                            <button
+                                                class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
+                                                onClick={() => setIsManageUsersOpen(true)}
+                                            >
+                                                Manage Users
+                                            </button>
+                                        </Show>
                                     </Show>
                                 </div>
                             </Show>
