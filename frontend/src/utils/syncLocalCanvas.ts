@@ -1,5 +1,5 @@
 import { getLocalCanvas, clearLocalCanvas } from "./localCanvasStore";
-import { createCanvas, postNewDraft, createCanvasGroup, updateCanvasDraft, createConnection } from "./actions";
+import { createCanvas, postNewDraft, createCanvasGroup, updateCanvasGroup, updateCanvasDraft, createConnection, updateCanvasViewport } from "./actions";
 
 export const syncLocalCanvasToServer = async (): Promise<string | null> => {
     const local = getLocalCanvas();
@@ -17,7 +17,10 @@ export const syncLocalCanvasToServer = async (): Promise<string | null> => {
     const draftIdMap = new Map<string, string>();
     const groupIdMap = new Map<string, string>();
 
-    // Step 2: Create groups first (drafts reference groups)
+    // Step 2: Save viewport
+    await updateCanvasViewport({ canvasId, viewport: local.viewport });
+
+    // Step 3: Create groups first (drafts reference groups)
     for (const group of local.groups) {
         const result = await createCanvasGroup({
             canvasId,
@@ -26,6 +29,16 @@ export const syncLocalCanvasToServer = async (): Promise<string | null> => {
             positionY: group.positionY
         });
         groupIdMap.set(group.id, result.group.id);
+
+        // Set width/height if they were customized
+        if (group.width != null || group.height != null) {
+            await updateCanvasGroup({
+                canvasId,
+                groupId: result.group.id,
+                width: group.width,
+                height: group.height
+            });
+        }
     }
 
     // Step 3: Create drafts
