@@ -113,7 +113,7 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                                 type="text"
                                 value={name()}
                                 onInput={(e) => setName(e.currentTarget.value)}
-                                class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-teal-500 focus:outline-none"
+                                class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-orange-500 focus:outline-none"
                                 placeholder="Enter series name"
                             />
                             {errors().name && (
@@ -166,7 +166,7 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                             <textarea
                                 value={description()}
                                 onInput={(e) => setDescription(e.currentTarget.value)}
-                                class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-teal-500 focus:outline-none"
+                                class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-orange-500 focus:outline-none"
                                 rows="3"
                                 placeholder="Add a description..."
                             />
@@ -230,7 +230,7 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                             <select
                                 value={type()}
                                 onChange={(e) => setType(e.currentTarget.value)}
-                                class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-teal-500 focus:outline-none"
+                                class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-orange-500 focus:outline-none"
                             >
                                 <option value="standard">Standard</option>
                                 <option value="fearless">Fearless</option>
@@ -247,7 +247,7 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                                 onChange={(e) =>
                                     setLength(parseInt(e.currentTarget.value))
                                 }
-                                class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-teal-500 focus:outline-none"
+                                class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-orange-500 focus:outline-none"
                             >
                                 <option value="1">Best of 1</option>
                                 <option value="3">Best of 3</option>
@@ -264,7 +264,7 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                                     onChange={(e) =>
                                         setCompetitive(e.currentTarget.checked)
                                     }
-                                    class="h-4 w-4 rounded border-slate-600 bg-slate-700 text-teal-500 focus:ring-teal-500"
+                                    class="h-4 w-4 rounded border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500"
                                 />
                                 <span class="text-sm text-slate-300">
                                     Competitive Mode
@@ -287,7 +287,7 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                             </button>
                             <button
                                 type="submit"
-                                class="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 disabled:opacity-50"
+                                class="rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-500 disabled:opacity-50"
                                 disabled={isSubmitting()}
                             >
                                 {isSubmitting() ? "Creating..." : "Create Series"}
