@@ -769,6 +769,34 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
       });
     }
 
+    // Clean up any connection endpoints that reference this group
+    const allConnsForGroup = await CanvasConnection.findAll({
+      where: { canvas_id: canvasId },
+      transaction: t,
+    });
+
+    for (const conn of allConnsForGroup) {
+      const filteredSources = (conn.source_draft_ids || []).filter(
+        (src) => !(src.type === "group" && src.group_id === groupId)
+      );
+      const filteredTargets = (conn.target_draft_ids || []).filter(
+        (tgt) => !(tgt.type === "group" && tgt.group_id === groupId)
+      );
+
+      if (filteredSources.length === 0 || filteredTargets.length === 0) {
+        await conn.destroy({ transaction: t });
+      } else if (
+        filteredSources.length !== conn.source_draft_ids.length ||
+        filteredTargets.length !== conn.target_draft_ids.length
+      ) {
+        conn.source_draft_ids = filteredSources;
+        conn.target_draft_ids = filteredTargets;
+        conn.changed("source_draft_ids", true);
+        conn.changed("target_draft_ids", true);
+        await conn.save({ transaction: t });
+      }
+    }
+
     // Delete the group
     await group.destroy({ transaction: t });
 
@@ -1211,15 +1239,27 @@ router.post("/:canvasId/connections", protect, async (req, res) => {
       });
     }
 
-    // Validate all draft IDs exist on this canvas
+    // Validate all endpoint IDs exist on this canvas
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvasId },
       attributes: ["draft_id"],
     });
     const validDraftIds = new Set(canvasDrafts.map((cd) => cd.draft_id));
 
+    const canvasGroups = await CanvasGroup.findAll({
+      where: { canvas_id: canvasId },
+      attributes: ["id"],
+    });
+    const validGroupIds = new Set(canvasGroups.map((g) => g.id));
+
     for (const src of sourceDraftIds) {
-      if (!validDraftIds.has(src.draftId)) {
+      if (src.groupId) {
+        if (!validGroupIds.has(src.groupId)) {
+          return res.status(400).json({
+            error: `Source group ${src.groupId} not found on canvas`,
+          });
+        }
+      } else if (!validDraftIds.has(src.draftId)) {
         return res.status(400).json({
           error: `Source draft ${src.draftId} not found on canvas`,
         });
@@ -1227,7 +1267,13 @@ router.post("/:canvasId/connections", protect, async (req, res) => {
     }
 
     for (const tgt of targetDraftIds) {
-      if (!validDraftIds.has(tgt.draftId)) {
+      if (tgt.groupId) {
+        if (!validGroupIds.has(tgt.groupId)) {
+          return res.status(400).json({
+            error: `Target group ${tgt.groupId} not found on canvas`,
+          });
+        }
+      } else if (!validDraftIds.has(tgt.draftId)) {
         return res.status(400).json({
           error: `Target draft ${tgt.draftId} not found on canvas`,
         });
@@ -1235,15 +1281,15 @@ router.post("/:canvasId/connections", protect, async (req, res) => {
     }
 
     // Transform to backend format
-    const sourceDraftIdsFormatted = sourceDraftIds.map((src) => ({
-      draft_id: src.draftId,
-      anchor_type: src.anchorType || "top",
-    }));
+    const formatEndpoint = (ep) => {
+      if (ep.groupId) {
+        return { type: "group", group_id: ep.groupId, anchor_type: ep.anchorType || "top" };
+      }
+      return { type: "draft", draft_id: ep.draftId, anchor_type: ep.anchorType || "top" };
+    };
 
-    const targetDraftIdsFormatted = targetDraftIds.map((tgt) => ({
-      draft_id: tgt.draftId,
-      anchor_type: tgt.anchorType || "top",
-    }));
+    const sourceDraftIdsFormatted = sourceDraftIds.map(formatEndpoint);
+    const targetDraftIdsFormatted = targetDraftIds.map(formatEndpoint);
 
     const connection = await CanvasConnection.create({
       canvas_id: canvasId,
@@ -1307,28 +1353,46 @@ router.patch(
         });
       }
 
-      // Validate draft exists on canvas
+      // Validate endpoints exist on canvas
       const canvasDrafts = await CanvasDraft.findAll({
         where: { canvas_id: canvasId },
         attributes: ["draft_id"],
       });
       const validDraftIds = new Set(canvasDrafts.map((cd) => cd.draft_id));
 
+      const canvasGroups = await CanvasGroup.findAll({
+        where: { canvas_id: canvasId },
+        attributes: ["id"],
+      });
+      const validGroupIds = new Set(canvasGroups.map((g) => g.id));
+
+      const formatEndpoint = (ep) => {
+        if (ep.groupId) {
+          return { type: "group", group_id: ep.groupId, anchor_type: ep.anchorType || "top" };
+        }
+        return { type: "draft", draft_id: ep.draftId, anchor_type: ep.anchorType || "top" };
+      };
+
       if (addSource) {
-        if (!validDraftIds.has(addSource.draftId)) {
+        if (addSource.groupId) {
+          if (!validGroupIds.has(addSource.groupId)) {
+            return res.status(400).json({
+              error: `Group ${addSource.groupId} not found on canvas`,
+            });
+          }
+        } else if (!validDraftIds.has(addSource.draftId)) {
           return res.status(400).json({
             error: `Draft ${addSource.draftId} not found on canvas`,
           });
         }
 
-        const newSource = {
-          draft_id: addSource.draftId,
-          anchor_type: addSource.anchorType || "top",
-        };
+        const newSource = formatEndpoint(addSource);
 
         // Check if already exists
-        const exists = connection.source_draft_ids.some(
-          (src) => src.draft_id === newSource.draft_id
+        const exists = connection.source_draft_ids.some((src) =>
+          newSource.type === "group"
+            ? src.type === "group" && src.group_id === newSource.group_id
+            : src.draft_id === newSource.draft_id
         );
 
         if (!exists) {
@@ -1341,20 +1405,25 @@ router.patch(
       }
 
       if (addTarget) {
-        if (!validDraftIds.has(addTarget.draftId)) {
+        if (addTarget.groupId) {
+          if (!validGroupIds.has(addTarget.groupId)) {
+            return res.status(400).json({
+              error: `Group ${addTarget.groupId} not found on canvas`,
+            });
+          }
+        } else if (!validDraftIds.has(addTarget.draftId)) {
           return res.status(400).json({
             error: `Draft ${addTarget.draftId} not found on canvas`,
           });
         }
 
-        const newTarget = {
-          draft_id: addTarget.draftId,
-          anchor_type: addTarget.anchorType || "top",
-        };
+        const newTarget = formatEndpoint(addTarget);
 
         // Check if already exists
-        const exists = connection.target_draft_ids.some(
-          (tgt) => tgt.draft_id === newTarget.draft_id
+        const exists = connection.target_draft_ids.some((tgt) =>
+          newTarget.type === "group"
+            ? tgt.type === "group" && tgt.group_id === newTarget.group_id
+            : tgt.draft_id === newTarget.draft_id
         );
 
         if (!exists) {
