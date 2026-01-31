@@ -107,7 +107,7 @@ const VersusSeriesOverview: Component = () => {
                 fallback={
                     <div class="flex h-full items-center justify-center">
                         <div class="flex items-center gap-3 text-slate-400">
-                            <div class="h-5 w-5 animate-spin rounded-full border-2 border-slate-600 border-t-teal-400" />
+                            <div class="h-5 w-5 animate-spin rounded-full border-2 border-slate-600 border-t-orange-400" />
                             <span>Connecting to session...</span>
                         </div>
                     </div>
@@ -160,7 +160,7 @@ const VersusSeriesOverview: Component = () => {
                                         }
                                         class={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
                                             showSharePopover()
-                                                ? "border-teal-500/50 bg-slate-700/80 text-teal-300"
+                                                ? "border-orange-500/50 bg-slate-700/80 text-orange-300"
                                                 : "border-slate-700 bg-slate-800/80 text-slate-300 hover:border-slate-600 hover:bg-slate-700/80 hover:text-slate-100"
                                         }`}
                                     >
@@ -214,7 +214,7 @@ const VersusSeriesOverview: Component = () => {
                                                     />
                                                     <button
                                                         onClick={handleCopyLink}
-                                                        class="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-2 text-sm font-medium text-white transition-all hover:bg-teal-500"
+                                                        class="flex items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-2 text-sm font-medium text-white transition-all hover:bg-orange-500"
                                                     >
                                                         {copied() ? (
                                                             <>
@@ -419,7 +419,7 @@ const VersusSeriesOverview: Component = () => {
                                                                         ? "bg-blue-500/20 text-blue-300"
                                                                         : "bg-red-500/20 text-red-300"
                                                                     : status === "active"
-                                                                      ? "bg-teal-500/20 text-teal-300"
+                                                                      ? "bg-orange-500/20 text-orange-300"
                                                                       : "bg-slate-700/50 text-slate-500"
                                                             }`}
                                                         >
@@ -438,7 +438,7 @@ const VersusSeriesOverview: Component = () => {
                                                                         ? "bg-green-500/20 text-green-300"
                                                                         : status ===
                                                                             "active"
-                                                                          ? "bg-teal-500/20 text-teal-300"
+                                                                          ? "bg-orange-500/20 text-orange-300"
                                                                           : status ===
                                                                               "locked"
                                                                             ? "bg-slate-700/50 text-slate-500"
