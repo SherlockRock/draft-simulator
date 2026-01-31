@@ -78,7 +78,7 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
                     <input
                         type="text"
                         placeholder="Type a message..."
-                        class="w-40 flex-1 rounded-l-md border-none bg-slate-600 px-3 py-1 text-sm text-slate-50 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-orange-500/50"
+                        class="min-w-0 flex-1 rounded-l-md border-none bg-slate-600 px-3 py-1 text-sm text-slate-50 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-orange-500/50"
                         value={messageInput()}
                         onInput={(e) => setMessageInput(e.currentTarget.value)}
                         maxLength={500}
