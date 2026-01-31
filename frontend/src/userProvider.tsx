@@ -12,6 +12,8 @@ import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import { fetchUserDetails, handleGoogleLogin, handleRevoke } from "./utils/actions";
 import { io, Socket } from "socket.io-client";
 import { useNavigate } from "@solidjs/router";
+import { syncLocalCanvasToServer } from "./utils/syncLocalCanvas";
+import toast from "solid-toast";
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 
@@ -71,6 +73,20 @@ export function UserProvider(props: { children: JSX.Element }) {
     const login = async (code: string, state: string) => {
         const res = await handleGoogleLogin(code, state);
         userQuery.refetch();
+
+        // Check for local canvas to sync
+        try {
+            const syncedCanvasId = await syncLocalCanvasToServer();
+            if (syncedCanvasId) {
+                toast.success("Your canvas has been saved to your account!");
+                navigate(`/canvas/${syncedCanvasId}`, { replace: true });
+                return res?.user;
+            }
+        } catch (error) {
+            console.error("Failed to sync local canvas:", error);
+            toast.error("Couldn't save your local canvas. It's still stored locally.");
+        }
+
         navigate(res?.returnTo ?? "/", { replace: true });
         return res?.user;
     };
