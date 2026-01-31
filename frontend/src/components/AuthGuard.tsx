@@ -13,7 +13,7 @@ export const AuthGuard = (props: AuthGuardProps) => {
 
     return (
         <Show
-            when={props.requireAuth && userAccessor() !== undefined}
+            when={!props.requireAuth || userAccessor() !== undefined}
             fallback={
                 <div class="flex h-full items-center justify-center bg-slate-800">
                     <div class="align-center flex flex-col items-center">
