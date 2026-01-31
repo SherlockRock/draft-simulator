@@ -1,5 +1,5 @@
 import { Show, createSignal, createMemo, Accessor, JSX } from "solid-js";
-import { CanvasDraft, CanvasGroup, Viewport } from "../utils/types";
+import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/types";
 
 type CustomGroupContainerProps = {
     group: CanvasGroup;
@@ -16,6 +16,9 @@ type CustomGroupContainerProps = {
     isExitingSource: boolean;
     contentMinWidth: number;
     contentMinHeight: number;
+    onSelectAnchor?: (groupId: string, anchorType: AnchorType) => void;
+    isGroupSelected?: boolean;
+    sourceAnchor?: { type: AnchorType } | null;
     children: JSX.Element;
 };
 
@@ -221,6 +224,19 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 </Show>
             </div>
 
+            {/* Group anchor points for connections */}
+            <Show when={props.isConnectionMode && props.onSelectAnchor}>
+                <GroupAnchorPoints
+                    groupId={props.group.id}
+                    width={groupWidth()}
+                    height={groupHeight()}
+                    zoom={props.viewport().zoom}
+                    onSelectAnchor={props.onSelectAnchor!}
+                    isSelected={props.isGroupSelected ?? false}
+                    sourceAnchor={props.sourceAnchor ?? null}
+                />
+            </Show>
+
             {/* Resize handle */}
             <Show when={props.canEdit}>
                 <div
@@ -241,6 +257,86 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                     </svg>
                 </div>
             </Show>
+        </div>
+    );
+};
+
+const GroupAnchorPoints = (props: {
+    groupId: string;
+    width: number;
+    height: number;
+    zoom: number;
+    onSelectAnchor: (groupId: string, anchorType: AnchorType) => void;
+    isSelected: boolean;
+    sourceAnchor: { type: AnchorType } | null;
+}) => {
+    const anchorSize = () => Math.max(8, 10 / props.zoom);
+
+    const anchorClass = (type: AnchorType) =>
+        `pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full ${
+            props.isSelected && props.sourceAnchor?.type === type
+                ? "bg-purple-400 hover:bg-purple-600"
+                : "bg-orange-400 hover:bg-orange-500"
+        }`;
+
+    return (
+        <div class="pointer-events-none absolute inset-0">
+            {/* Top */}
+            <div
+                class={anchorClass("top")}
+                style={{
+                    width: `${anchorSize()}px`,
+                    height: `${anchorSize()}px`,
+                    left: `${props.width / 2}px`,
+                    top: "0px"
+                }}
+                onMouseDown={(e) => {
+                    e.stopPropagation();
+                    props.onSelectAnchor(props.groupId, "top");
+                }}
+            />
+            {/* Bottom */}
+            <div
+                class={anchorClass("bottom")}
+                style={{
+                    width: `${anchorSize()}px`,
+                    height: `${anchorSize()}px`,
+                    left: `${props.width / 2}px`,
+                    top: `${props.height}px`
+                }}
+                onMouseDown={(e) => {
+                    e.stopPropagation();
+                    props.onSelectAnchor(props.groupId, "bottom");
+                }}
+            />
+            {/* Left */}
+            <div
+                class={anchorClass("left")}
+                style={{
+                    width: `${anchorSize()}px`,
+                    height: `${anchorSize()}px`,
+                    left: "0px",
+                    top: `${props.height / 2}px`
+                }}
+                onMouseDown={(e) => {
+                    e.stopPropagation();
+                    props.onSelectAnchor(props.groupId, "left");
+                }}
+            />
+            {/* Right */}
+            <div
+                class={anchorClass("right")}
+                style={{
+                    width: `${anchorSize()}px`,
+                    height: `${anchorSize()}px`,
+                    left: `${props.width}px`,
+                    top: `${props.height / 2}px`
+                }}
+                onMouseDown={(e) => {
+                    e.stopPropagation();
+                    props.onSelectAnchor(props.groupId, "right");
+                }}
+            />
         </div>
     );
 };

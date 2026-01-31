@@ -78,10 +78,9 @@ export type AnchorPosition = {
     y: number;
 };
 
-export type ConnectionEndpoint = {
-    draft_id: string;
-    anchor_type: AnchorType;
-};
+export type ConnectionEndpoint =
+    | { type?: "draft"; draft_id: string; anchor_type: AnchorType }
+    | { type: "group"; group_id: string; anchor_type: AnchorType };
 
 export type Vertex = {
     id: string;

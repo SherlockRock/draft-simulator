@@ -1,18 +1,26 @@
-import { CanvasDraft, AnchorType, Viewport, AnchorPosition } from "./types";
+import { CanvasDraft, CanvasGroup, AnchorType, Viewport, AnchorPosition } from "./types";
 
 export const cardHeight = (layoutToggle: boolean) => (layoutToggle ? 297 : 500);
 export const cardWidth = (layoutToggle: boolean) => (layoutToggle ? 700 : 350);
 
 /**
- * Calculates the world coordinates for an anchor point
+ * Calculates the world coordinates for an anchor point.
+ * When a group is provided, the draft's coordinates are treated as group-relative
+ * and offset by the group's world position (plus header height).
  */
 export const getAnchorWorldPosition = (
     draft: CanvasDraft,
     anchorType: AnchorType,
-    layoutToggle: boolean
+    layoutToggle: boolean,
+    group?: CanvasGroup | null
 ): AnchorPosition => {
-    const baseX = draft.positionX;
-    const baseY = draft.positionY;
+    let baseX = draft.positionX;
+    let baseY = draft.positionY;
+
+    if (group) {
+        baseX += group.positionX;
+        baseY += group.positionY;
+    }
 
     const currentWidth = cardWidth(layoutToggle);
     const currentHeight = cardHeight(layoutToggle);
@@ -79,15 +87,55 @@ export const screenToWorld = (
 };
 
 /**
+ * Calculates the world coordinates for a group's anchor point,
+ * using the group's position, width, and height.
+ */
+export const getGroupAnchorWorldPosition = (
+    group: CanvasGroup,
+    anchorType: AnchorType
+): AnchorPosition => {
+    const baseX = group.positionX;
+    const baseY = group.positionY;
+    const w = group.width ?? 400;
+    const h = group.height ?? 200;
+
+    switch (anchorType) {
+        case "top":
+            return { x: baseX + w / 2, y: baseY };
+        case "bottom":
+            return { x: baseX + w / 2, y: baseY + h };
+        case "left":
+            return { x: baseX, y: baseY + h / 2 };
+        case "right":
+            return { x: baseX + w, y: baseY + h / 2 };
+        default:
+            return { x: baseX + w / 2, y: baseY + h / 2 };
+    }
+};
+
+/**
+ * Gets the screen position for a group's anchor point
+ */
+export const getGroupAnchorScreenPosition = (
+    group: CanvasGroup,
+    anchorType: AnchorType,
+    viewport: Viewport
+): AnchorPosition => {
+    const worldPos = getGroupAnchorWorldPosition(group, anchorType);
+    return worldToScreen(worldPos.x, worldPos.y, viewport);
+};
+
+/**
  * Gets the screen position for an anchor point
  */
 export const getAnchorScreenPosition = (
     draft: CanvasDraft,
     anchorType: AnchorType,
     layoutToggle: boolean,
-    viewport: Viewport
+    viewport: Viewport,
+    group?: CanvasGroup | null
 ): AnchorPosition => {
-    const worldPos = getAnchorWorldPosition(draft, anchorType, layoutToggle);
+    const worldPos = getAnchorWorldPosition(draft, anchorType, layoutToggle, group);
     return worldToScreen(worldPos.x, worldPos.y, viewport);
 };
 

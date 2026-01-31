@@ -408,10 +408,14 @@ export const removeUserFromCanvas = async (canvasId: string, userId: string) => 
     return await res.json();
 };
 
+type ConnectionEndpointInput =
+    | { draftId: string; anchorType?: string }
+    | { groupId: string; anchorType?: string };
+
 export const createConnection = async (data: {
     canvasId: string;
-    sourceDraftIds: Array<{ draftId: string; anchorType?: string }>;
-    targetDraftIds: Array<{ draftId: string; anchorType?: string }>;
+    sourceDraftIds: Array<ConnectionEndpointInput>;
+    targetDraftIds: Array<ConnectionEndpointInput>;
     style?: "solid" | "dashed" | "dotted";
     vertices?: Array<{ id: string; x: number; y: number }>;
 }): Promise<{ success: boolean; connection: Connection }> => {
@@ -526,8 +530,8 @@ export const deleteVertex = async (data: {
 export const updateConnection = async (data: {
     canvasId: string;
     connectionId: string;
-    addSource?: { draftId: string; anchorType?: string };
-    addTarget?: { draftId: string; anchorType?: string };
+    addSource?: ConnectionEndpointInput;
+    addTarget?: ConnectionEndpointInput;
 }): Promise<{ success: boolean; connection: Connection }> => {
     const response = await fetch(
         `${BASE_URL}/canvas/${data.canvasId}/connections/${data.connectionId}`,
@@ -729,18 +733,15 @@ export const updateCanvasGroupPosition = async (data: {
     positionX: number;
     positionY: number;
 }): Promise<{ success: boolean }> => {
-    const res = await fetch(
-        `${BASE_URL}/canvas/${data.canvasId}/group/${data.groupId}`,
-        {
-            method: "PUT",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                positionX: data.positionX,
-                positionY: data.positionY
-            })
-        }
-    );
+    const res = await fetch(`${BASE_URL}/canvas/${data.canvasId}/group/${data.groupId}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            positionX: data.positionX,
+            positionY: data.positionY
+        })
+    });
     if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || "Failed to update group position");

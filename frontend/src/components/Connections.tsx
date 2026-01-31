@@ -2,6 +2,7 @@ import { createSignal, Show, createMemo, For } from "solid-js";
 import { Portal } from "solid-js/web";
 import {
     CanvasDraft,
+    CanvasGroup,
     Connection,
     Viewport,
     ContextMenuPosition,
@@ -9,6 +10,7 @@ import {
 } from "../utils/types";
 import {
     getAnchorScreenPosition,
+    getGroupAnchorScreenPosition,
     worldToScreen,
     screenToWorld,
     cardWidth,
@@ -20,6 +22,7 @@ import { VertexComponent } from "./Vertex";
 export const ConnectionComponent = (props: {
     connection: Connection;
     drafts: CanvasDraft[];
+    groups: CanvasGroup[];
     viewport: () => Viewport;
     onDeleteConnection: (id: string) => void;
     onCreateVertex: (connectionId: string, x: number, y: number) => void;
@@ -51,35 +54,43 @@ export const ConnectionComponent = (props: {
         return props.drafts.find((d) => d.Draft.id === draftId);
     };
 
+    const findGroupForDraft = (draft: CanvasDraft): CanvasGroup | null => {
+        if (!draft.group_id) return null;
+        return props.groups.find((g) => g.id === draft.group_id) ?? null;
+    };
+
+    const resolveEndpointPosition = (endpoint: Connection["source_draft_ids"][0]) => {
+        if (endpoint.type === "group") {
+            const group = props.groups.find((g) => g.id === endpoint.group_id);
+            if (!group) return null;
+            return getGroupAnchorScreenPosition(
+                group,
+                endpoint.anchor_type,
+                props.viewport()
+            );
+        }
+        const draft = findDraft(endpoint.draft_id);
+        if (!draft) return null;
+        return getAnchorScreenPosition(
+            draft,
+            endpoint.anchor_type,
+            props.layoutToggle(),
+            props.viewport(),
+            findGroupForDraft(draft)
+        );
+    };
+
     const sourcePositions = createMemo(() => {
         if (!props.connection) return [];
         return props.connection.source_draft_ids
-            .map((src) => {
-                const draft = findDraft(src.draft_id);
-                if (!draft) return null;
-                return getAnchorScreenPosition(
-                    draft,
-                    src.anchor_type,
-                    props.layoutToggle(),
-                    props.viewport()
-                );
-            })
+            .map(resolveEndpointPosition)
             .filter(Boolean);
     });
 
     const targetPositions = createMemo(() => {
         if (!props.connection) return [];
         return props.connection.target_draft_ids
-            .map((tgt) => {
-                const draft = findDraft(tgt.draft_id);
-                if (!draft) return null;
-                return getAnchorScreenPosition(
-                    draft,
-                    tgt.anchor_type,
-                    props.layoutToggle(),
-                    props.viewport()
-                );
-            })
+            .map(resolveEndpointPosition)
             .filter(Boolean);
     });
 
@@ -381,6 +392,7 @@ export const ConnectionComponent = (props: {
 
 export const ConnectionPreview = (props: {
     startDraft: CanvasDraft;
+    startGroup?: CanvasGroup | null;
     sourceAnchor: { type: AnchorType } | null;
     mousePos: { x: number; y: number } | null;
     viewport: () => Viewport;
@@ -391,9 +403,15 @@ export const ConnectionPreview = (props: {
             const vp = props.viewport();
             const currentWidth = cardWidth(props.layoutToggle());
             const currentHeight = cardHeight(props.layoutToggle());
+            let baseX = props.startDraft.positionX;
+            let baseY = props.startDraft.positionY;
+            if (props.startGroup) {
+                baseX += props.startGroup.positionX;
+                baseY += props.startGroup.positionY;
+            }
             return {
-                x: (props.startDraft.positionX + currentWidth / 2 - vp.x) * vp.zoom,
-                y: (props.startDraft.positionY + currentHeight / 2 - vp.y) * vp.zoom
+                x: (baseX + currentWidth / 2 - vp.x) * vp.zoom,
+                y: (baseY + currentHeight / 2 - vp.y) * vp.zoom
             };
         }
 
@@ -401,6 +419,47 @@ export const ConnectionPreview = (props: {
             props.startDraft,
             props.sourceAnchor.type,
             props.layoutToggle(),
+            props.viewport(),
+            props.startGroup
+        );
+    };
+
+    return (
+        <Show when={props.mousePos}>
+            <line
+                x1={startPos().x}
+                y1={startPos().y}
+                x2={props.mousePos!.x}
+                y2={props.mousePos!.y}
+                stroke="#3b82f6"
+                stroke-width="2"
+                stroke-dasharray="4,4"
+                class="pointer-events-none"
+            />
+        </Show>
+    );
+};
+
+export const GroupConnectionPreview = (props: {
+    startGroup: CanvasGroup;
+    sourceAnchor: { type: AnchorType } | null;
+    mousePos: { x: number; y: number } | null;
+    viewport: () => Viewport;
+}) => {
+    const startPos = () => {
+        if (!props.sourceAnchor) {
+            const vp = props.viewport();
+            const w = props.startGroup.width ?? 400;
+            const h = props.startGroup.height ?? 200;
+            return {
+                x: (props.startGroup.positionX + w / 2 - vp.x) * vp.zoom,
+                y: (props.startGroup.positionY + h / 2 - vp.y) * vp.zoom
+            };
+        }
+
+        return getGroupAnchorScreenPosition(
+            props.startGroup,
+            props.sourceAnchor.type,
             props.viewport()
         );
     };
