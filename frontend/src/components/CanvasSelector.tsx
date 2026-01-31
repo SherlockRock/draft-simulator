@@ -67,7 +67,7 @@ const CanvasSelector: Component<CanvasSelectorProps> = (props) => {
 
             <button
                 onClick={handleCreateNew}
-                class="w-full rounded-md bg-purple-600 px-3 py-2 font-medium text-slate-200 transition-colors hover:bg-purple-500"
+                class="w-full rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
             >
                 Create New Canvas
             </button>

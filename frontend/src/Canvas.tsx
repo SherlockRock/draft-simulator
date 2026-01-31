@@ -2284,7 +2284,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     </div>
                     <button
                         onClick={resetViewport}
-                        class="rounded border border-slate-500 bg-purple-600 px-3 py-1.5 text-slate-50 shadow hover:bg-purple-500"
+                        class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
                     >
                         Reset View
                     </button>
