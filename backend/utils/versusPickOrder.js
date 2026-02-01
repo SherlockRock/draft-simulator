@@ -31,23 +31,35 @@ const VERSUS_PICK_ORDER = [
 ]; // Total: 20 items
 
 /**
+ * Returns the pick order with teams swapped when firstPick is "red".
+ * When firstPick is "blue" (default), returns the standard order unchanged.
+ * @param {string} firstPick - "blue" or "red"
+ * @returns {Array} - The effective pick order
+ */
+function getEffectivePickOrder(firstPick = "blue") {
+  if (firstPick === "blue") return VERSUS_PICK_ORDER;
+  return VERSUS_PICK_ORDER.map((item) => ({
+    ...item,
+    team: item.team === "blue" ? "red" : "blue",
+  }));
+}
+
+/**
  * Maps a current pick index to the corresponding index in the Draft.picks array
  * @param {number} currentPickIndex - Index in VERSUS_PICK_ORDER (0-19)
+ * @param {string} firstPick - "blue" or "red"
  * @returns {number} - Index in Draft.picks array (0-19)
  */
-function getPicksArrayIndex(currentPickIndex) {
-  const currentPick = VERSUS_PICK_ORDER[currentPickIndex];
+function getPicksArrayIndex(currentPickIndex, firstPick = "blue") {
+  const effectiveOrder = getEffectivePickOrder(firstPick);
+  const currentPick = effectiveOrder[currentPickIndex];
   const { team, type, slot } = currentPick;
 
   let picksIndex;
 
   if (type === "ban") {
-    // Bans: picks[0-9]
-    // Blue bans: 0-4, Red bans: 5-9
     picksIndex = team === "blue" ? slot : slot + 5;
   } else {
-    // Picks: picks[10-19]
-    // Blue picks: 10-14, Red picks: 15-19
     picksIndex = team === "blue" ? slot + 10 : slot + 15;
   }
 
@@ -58,29 +70,29 @@ function getPicksArrayIndex(currentPickIndex) {
  * Reverse mapping: given picks array, determine current pick index
  * Counts non-empty picks to determine where we are in the draft
  * @param {Array<string>} picks - Draft.picks array
+ * @param {string} firstPick - "blue" or "red"
  * @returns {number} - Next pick to make (index in VERSUS_PICK_ORDER)
  */
-function getCurrentPickIndexFromPicks(picks) {
+function getCurrentPickIndexFromPicks(picks, firstPick = "blue") {
   if (!picks || !Array.isArray(picks)) return 0;
 
-  let filledCount = 0;
+  const effectiveOrder = getEffectivePickOrder(firstPick);
 
-  // Count filled picks by iterating through VERSUS_PICK_ORDER
-  for (let i = 0; i < VERSUS_PICK_ORDER.length; i++) {
-    const picksIndex = getPicksArrayIndex(i);
+  for (let i = 0; i < effectiveOrder.length; i++) {
+    const picksIndex = getPicksArrayIndex(i, firstPick);
     if (picks[picksIndex] && picks[picksIndex] !== "") {
-      filledCount++;
+      continue;
     } else {
-      // First empty slot found
       return i;
     }
   }
 
-  return filledCount; // Draft complete if = 20
+  return effectiveOrder.length; // Draft complete if = 20
 }
 
 module.exports = {
   VERSUS_PICK_ORDER,
+  getEffectivePickOrder,
   getPicksArrayIndex,
   getCurrentPickIndexFromPicks,
 };
