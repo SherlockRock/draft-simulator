@@ -4,7 +4,9 @@ const VersusParticipant = require("../models/VersusParticipant");
 const { initializeState, getState } = require("../services/versusStateManager");
 const {
   VERSUS_PICK_ORDER,
+  getEffectivePickOrder,
   getPicksArrayIndex,
+  getCurrentPickIndexFromPicks,
 } = require("../utils/versusPickOrder");
 const { getRestrictedChampions } = require("../utils/seriesRestrictions");
 const crypto = require("crypto");
@@ -496,7 +498,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       // Initialize or get draft state
       const draft = await Draft.findByPk(draftId);
       if (draft) {
-        const state = initializeState(draftId, draft.picks);
+        const state = initializeState(draftId, draft.picks, draft.firstPick);
 
         // Send current state to joining client
         socket.emit("draftStateSync", {
@@ -512,11 +514,85 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
           readyStatus: state.readyStatus,
           completed: draft.completed,
           winner: draft.winner,
+          firstPick: draft.firstPick,
+          blueSideTeam: draft.blueSideTeam,
         });
       }
     } catch (error) {
       console.error("Error joining versus draft:", error);
       socket.emit("error", { message: "Failed to join versus draft" });
+    }
+  });
+
+  // Set game settings (first pick, side assignment)
+  socket.on("versusSetGameSettings", async (data) => {
+    try {
+      const { versusDraftId, draftId, firstPick, blueSideTeam } = data;
+
+      // Get participant info
+      const participant = versusSessionManager.getParticipantBySocket(
+        versusDraftId,
+        socket.id
+      );
+
+      const isCaptain =
+        participant?.role === "blue_captain" ||
+        participant?.role === "red_captain";
+
+      // Load versus draft for owner check
+      const versusDraft = await VersusDraft.findByPk(versusDraftId);
+      if (!versusDraft) {
+        return socket.emit("error", { message: "Versus draft not found" });
+      }
+
+      const isOwner = socket.user?.id === versusDraft.owner_id;
+
+      if (!isCaptain && !isOwner) {
+        return socket.emit("error", {
+          message: "Only captains and owner can change game settings",
+        });
+      }
+
+      const draft = await Draft.findByPk(draftId);
+      if (!draft) {
+        return socket.emit("error", { message: "Draft not found" });
+      }
+
+      // Don't allow changes after draft has started
+      const state = getState(draftId);
+      if (state && state.timerStartedAt !== null && state.currentPickIndex > 0) {
+        return socket.emit("error", {
+          message: "Cannot change settings after draft has started",
+        });
+      }
+
+      // Update fields
+      if (firstPick !== undefined && ["blue", "red"].includes(firstPick)) {
+        draft.firstPick = firstPick;
+        if (state) {
+          state.firstPick = firstPick;
+        }
+      }
+      if (blueSideTeam !== undefined && [1, 2].includes(blueSideTeam)) {
+        draft.blueSideTeam = blueSideTeam;
+      }
+
+      await draft.save();
+
+      // Broadcast to draft room
+      io.to(`draft:${draftId}`).emit("gameSettingsUpdate", {
+        draftId,
+        firstPick: draft.firstPick,
+        blueSideTeam: draft.blueSideTeam,
+      });
+
+      // Also broadcast to versus room so series overview updates
+      io.to(`versus:${versusDraftId}`).emit("versusSeriesUpdate", {
+        versusDraftId,
+      });
+    } catch (error) {
+      console.error("Error setting game settings:", error);
+      socket.emit("error", { message: "Failed to update game settings" });
     }
   });
 
@@ -548,6 +624,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
             draftId,
             timerStartedAt: state.timerStartedAt,
             currentPickIndex: state.currentPickIndex,
+            firstPick: state.firstPick || "blue",
           });
         }
       }
@@ -619,12 +696,13 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       const team = role.includes("blue") ? "blue" : "red";
 
       // Validate draft is not complete
-      if (state.currentPickIndex >= VERSUS_PICK_ORDER.length) {
+      const effectiveOrder = getEffectivePickOrder(state.firstPick || "blue");
+      if (state.currentPickIndex >= effectiveOrder.length) {
         return socket.emit("error", { message: "Draft is complete" });
       }
 
       // Validate it's this team's turn
-      const currentPick = VERSUS_PICK_ORDER[state.currentPickIndex];
+      const currentPick = effectiveOrder[state.currentPickIndex];
       if (currentPick.team !== team) {
         return socket.emit("error", { message: "Not your turn" });
       }
@@ -641,7 +719,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       }
 
       // Check if champion is already picked (excluding current pending slot)
-      const picksIndex = getPicksArrayIndex(state.currentPickIndex);
+      const picksIndex = getPicksArrayIndex(state.currentPickIndex, state.firstPick || "blue");
       const picksWithoutCurrent = draft.picks.filter(
         (_, idx) => idx !== picksIndex,
       );
@@ -1211,6 +1289,7 @@ async function processPickLock(io, draftId, team) {
     timerStartedAt: state.timerStartedAt,
     isPaused: state.isPaused,
     completed: draft.completed,
+    firstPick: state.firstPick || "blue",
   });
 }
 

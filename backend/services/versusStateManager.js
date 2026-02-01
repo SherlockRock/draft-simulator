@@ -10,16 +10,17 @@ const versusStates = new Map();
  * @param {Array<string>} picks - Current picks array from database
  * @returns {Object} - State object
  */
-function initializeState(draftId, picks = []) {
+function initializeState(draftId, picks = [], firstPick = "blue") {
   if (versusStates.has(draftId)) {
     return versusStates.get(draftId);
   }
 
-  const currentPickIndex = getCurrentPickIndexFromPicks(picks);
+  const currentPickIndex = getCurrentPickIndexFromPicks(picks, firstPick);
 
   const state = {
     draftId,
     currentPickIndex,
+    firstPick,
     timerStartedAt: null,
     isPaused: false,
     pauseRequestedBy: null,
