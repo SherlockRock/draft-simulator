@@ -76,6 +76,12 @@ type VersusWorkflowContextValue = {
 
     // Winner reporting with optimistic update
     reportWinner: (draftId: string, winner: "blue" | "red") => void;
+
+    // Game settings (first pick, side assignment)
+    setGameSettings: (
+        draftId: string,
+        settings: { firstPick?: "blue" | "red"; blueSideTeam?: 1 | 2 }
+    ) => void;
 };
 
 const VersusWorkflowContext = createContext<VersusWorkflowContextValue>();
@@ -621,6 +627,21 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         });
     };
 
+    const setGameSettings = (
+        draftId: string,
+        settings: { firstPick?: "blue" | "red"; blueSideTeam?: 1 | 2 }
+    ) => {
+        const sock = currentSocket();
+        const versusDraftId = versusContext().versusDraft?.id;
+        if (!sock || !versusDraftId) return;
+
+        sock.emit("versusSetGameSettings", {
+            versusDraftId,
+            draftId,
+            ...settings,
+        });
+    };
+
     const contextValue: VersusWorkflowContextValue = {
         versusContext,
         selectRole,
@@ -636,7 +657,8 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         chatMessages,
         addChatMessage,
         chatUserCount,
-        reportWinner
+        reportWinner,
+        setGameSettings
     };
 
     return (

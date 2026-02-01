@@ -5,6 +5,8 @@ import toast from "solid-toast";
 import { useVersusContext } from "../workflows/VersusWorkflow";
 import { IconDisplay } from "../components/IconDisplay";
 import { WinnerReporter } from "../components/WinnerReporter";
+import { FirstPickToggle } from "../components/FirstPickToggle";
+import { SideAssignmentToggle } from "../components/SideAssignmentToggle";
 import { canReportWinner } from "../utils/versusPermissions";
 import { useUser } from "../userProvider";
 import { EditVersusDraftDialog } from "../components/EditVersusDraftDialog";
@@ -13,7 +15,7 @@ import { useQueryClient } from "@tanstack/solid-query";
 const VersusSeriesOverview: Component = () => {
     const params = useParams();
     const navigate = useNavigate();
-    const { versusContext, reportWinner } = useVersusContext();
+    const { versusContext, reportWinner, setGameSettings } = useVersusContext();
     const accessor = useUser();
     const [user] = accessor();
     const userId = createMemo(() => user()?.id || null);
@@ -33,6 +35,12 @@ const VersusSeriesOverview: Component = () => {
         const vd = versusDraft();
         const uid = userId();
         return vd && uid && vd.owner_id === uid;
+    });
+
+    const canEditSettings = createMemo(() => {
+        const role = myRole();
+        const owner = isOwner();
+        return owner || role === "blue_captain" || role === "red_captain";
     });
 
     const handleCopyLink = () => {
@@ -481,12 +489,14 @@ const VersusSeriesOverview: Component = () => {
                                                                 <WinnerReporter
                                                                     draftId={draft.id}
                                                                     blueTeamName={
-                                                                        versusDraft()!
-                                                                            .blueTeamName
+                                                                        (draft.blueSideTeam || 1) === 1
+                                                                            ? versusDraft()!.blueTeamName
+                                                                            : versusDraft()!.redTeamName
                                                                     }
                                                                     redTeamName={
-                                                                        versusDraft()!
-                                                                            .redTeamName
+                                                                        (draft.blueSideTeam || 1) === 1
+                                                                            ? versusDraft()!.redTeamName
+                                                                            : versusDraft()!.blueTeamName
                                                                     }
                                                                     currentWinner={
                                                                         draft.winner
@@ -507,7 +517,55 @@ const VersusSeriesOverview: Component = () => {
                                                                     }
                                                                 />
                                                             </Show>
+
+                                                            {/* Read-only first pick label for completed games */}
+                                                            <Show when={draft.completed}>
+                                                                <span class="text-[10px] text-slate-500">
+                                                                    1st Pick: {
+                                                                        (() => {
+                                                                            const bst = draft.blueSideTeam || 1;
+                                                                            const blueName = bst === 1 ? versusDraft()!.blueTeamName : versusDraft()!.redTeamName;
+                                                                            const redName = bst === 1 ? versusDraft()!.redTeamName : versusDraft()!.blueTeamName;
+                                                                            return (draft.firstPick || "blue") === "blue" ? blueName : redName;
+                                                                        })()
+                                                                    }
+                                                                </span>
+                                                            </Show>
                                                         </div>
+
+                                                        {/* First pick and side assignment toggles for non-completed accessible games */}
+                                                        <Show when={getDraftStatus(draft, index()) !== "complete" && isDraftAccessible(index())}>
+                                                            <div class="mt-2 flex flex-col gap-1">
+                                                                <FirstPickToggle
+                                                                    draftId={draft.id}
+                                                                    blueTeamName={
+                                                                        (draft.blueSideTeam || 1) === 1
+                                                                            ? versusDraft()!.blueTeamName
+                                                                            : versusDraft()!.redTeamName
+                                                                    }
+                                                                    redTeamName={
+                                                                        (draft.blueSideTeam || 1) === 1
+                                                                            ? versusDraft()!.redTeamName
+                                                                            : versusDraft()!.blueTeamName
+                                                                    }
+                                                                    currentFirstPick={draft.firstPick || "blue"}
+                                                                    canEdit={canEditSettings()}
+                                                                    onSetFirstPick={(id, fp) =>
+                                                                        setGameSettings(id, { firstPick: fp })
+                                                                    }
+                                                                />
+                                                                <SideAssignmentToggle
+                                                                    draftId={draft.id}
+                                                                    teamOneName={versusDraft()!.blueTeamName}
+                                                                    teamTwoName={versusDraft()!.redTeamName}
+                                                                    blueSideTeam={(draft.blueSideTeam || 1) as 1 | 2}
+                                                                    canEdit={canEditSettings()}
+                                                                    onSetBlueSideTeam={(id, bst) =>
+                                                                        setGameSettings(id, { blueSideTeam: bst })
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        </Show>
                                                     </div>
 
                                                     {/* Right side: lock icon or arrow */}
