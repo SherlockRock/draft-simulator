@@ -87,6 +87,22 @@ const Draft = sequelize.define("Draft", {
       isIn: [["blue", "red", null]],
     },
   },
+  firstPick: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: "blue",
+    validate: {
+      isIn: [["blue", "red"]],
+    },
+  },
+  blueSideTeam: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 1,
+    validate: {
+      isIn: [[1, 2]],
+    },
+  },
 });
 
 module.exports = Draft;
