@@ -46,6 +46,16 @@ const VersusFlowPanelContent: Component = () => {
         return isCaptain || isOwner;
     });
 
+    // Derive per-game team names based on side assignment
+    const blueSideTeamName = createMemo(() => {
+        const bst = draftState()?.draft?.blueSideTeam ?? 1;
+        return bst === 1 ? versusDraft()!.blueTeamName : versusDraft()!.redTeamName;
+    });
+    const redSideTeamName = createMemo(() => {
+        const bst = draftState()?.draft?.blueSideTeam ?? 1;
+        return bst === 1 ? versusDraft()!.redTeamName : versusDraft()!.blueTeamName;
+    });
+
     const handleSetFirstPick = (draftId: string, firstPick: "blue" | "red") => {
         setGameSettings(draftId, { firstPick });
     };
@@ -111,8 +121,8 @@ const VersusFlowPanelContent: Component = () => {
                     <div class="rounded-lg border border-slate-700/50 bg-slate-900/40 p-3">
                         <FirstPickToggle
                             draftId={draftState()!.draft.id}
-                            blueTeamName={versusDraft()!.blueTeamName}
-                            redTeamName={versusDraft()!.redTeamName}
+                            blueTeamName={blueSideTeamName()}
+                            redTeamName={redSideTeamName()}
                             currentFirstPick={draftState()!.draft.firstPick || "blue"}
                             canEdit={canEditGameSettings()}
                             onSetFirstPick={handleSetFirstPick}
@@ -139,8 +149,8 @@ const VersusFlowPanelContent: Component = () => {
                                 </div>
                                 <WinnerReporter
                                     draftId={draftState()!.draft.id}
-                                    blueTeamName={versusDraft()!.blueTeamName}
-                                    redTeamName={versusDraft()!.redTeamName}
+                                    blueTeamName={blueSideTeamName()}
+                                    redTeamName={redSideTeamName()}
                                     currentWinner={draftState()!.draft.winner}
                                     canEdit={canEditWinner()}
                                     onReportWinner={handleReportWinner}

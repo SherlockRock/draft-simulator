@@ -587,9 +587,15 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       });
 
       // Also broadcast to versus room so series overview updates
-      io.to(`versus:${versusDraftId}`).emit("versusSeriesUpdate", {
-        versusDraftId,
+      const updatedVersusDraft = await VersusDraft.findByPk(versusDraftId, {
+        include: [{ model: Draft, as: "Drafts" }],
+        order: [[{ model: Draft, as: "Drafts" }, "seriesIndex", "ASC"]],
       });
+      if (updatedVersusDraft) {
+        io.to(`versus:${versusDraftId}`).emit("versusSeriesUpdate", {
+          versusDraft: updatedVersusDraft.toJSON(),
+        });
+      }
     } catch (error) {
       console.error("Error setting game settings:", error);
       socket.emit("error", { message: "Failed to update game settings" });
