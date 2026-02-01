@@ -57,6 +57,7 @@ type CanvasContextType = {
     setCreateGroupCallback: Setter<
         ((positionX: number, positionY: number) => void) | null
     >;
+    refetchCanvasList: () => void;
 };
 
 const CanvasContext = createContext<CanvasContextType>();
@@ -80,7 +81,9 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
             if (!user()) {
                 if (hasLocalCanvas()) {
                     const local = getLocalCanvas()!;
-                    return [{ id: "local", name: local.name, updatedAt: local.createdAt }];
+                    return [
+                        { id: "local", name: local.name, updatedAt: local.createdAt }
+                    ];
                 }
                 return [];
             }
@@ -261,7 +264,8 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                 importCallback,
                 setImportCallback,
                 createGroupCallback,
-                setCreateGroupCallback
+                setCreateGroupCallback,
+                refetchCanvasList
             }}
         >
             <Dialog
@@ -296,7 +300,10 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                     </button>
                                     <Show when={hasEditPermissions()}>
                                         <Show
-                                            when={hasAdminPermissions() && params.id !== "local"}
+                                            when={
+                                                hasAdminPermissions() &&
+                                                params.id !== "local"
+                                            }
                                             fallback={
                                                 <button
                                                     class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
@@ -329,95 +336,95 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                     >
                                                         Share
                                                     </button>
-                                            {isSharePopperOpen() && (
-                                                <div class="absolute left-0 top-full z-10 mt-2 min-w-[250px] rounded-md bg-slate-600 p-3 shadow-lg">
-                                                    <div class="space-y-3">
-                                                        <div>
-                                                            <p class="mb-1 text-xs font-medium text-slate-300">
-                                                                View Access
-                                                            </p>
-                                                            <Show
-                                                                when={
-                                                                    !viewShareLinkQuery.isPending
-                                                                }
-                                                                fallback={
-                                                                    <div class="text-xs text-slate-400">
-                                                                        Loading...
-                                                                    </div>
-                                                                }
-                                                            >
-                                                                <div class="flex flex-col gap-2">
-                                                                    <input
-                                                                        type="text"
-                                                                        readOnly
-                                                                        value={
-                                                                            viewShareLinkQuery.data ||
-                                                                            ""
+                                                    {isSharePopperOpen() && (
+                                                        <div class="absolute left-0 top-full z-10 mt-2 min-w-[250px] rounded-md bg-slate-600 p-3 shadow-lg">
+                                                            <div class="space-y-3">
+                                                                <div>
+                                                                    <p class="mb-1 text-xs font-medium text-slate-300">
+                                                                        View Access
+                                                                    </p>
+                                                                    <Show
+                                                                        when={
+                                                                            !viewShareLinkQuery.isPending
                                                                         }
-                                                                        class="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-slate-50"
-                                                                    />
-                                                                    <button
-                                                                        onClick={
-                                                                            handleCopyViewLink
-                                                                        }
-                                                                        class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
-                                                                        disabled={
-                                                                            !viewShareLinkQuery.data
+                                                                        fallback={
+                                                                            <div class="text-xs text-slate-400">
+                                                                                Loading...
+                                                                            </div>
                                                                         }
                                                                     >
-                                                                        {copied() ===
-                                                                        "view"
-                                                                            ? "✓"
-                                                                            : "Copy"}
-                                                                    </button>
+                                                                        <div class="flex flex-col gap-2">
+                                                                            <input
+                                                                                type="text"
+                                                                                readOnly
+                                                                                value={
+                                                                                    viewShareLinkQuery.data ||
+                                                                                    ""
+                                                                                }
+                                                                                class="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-slate-50"
+                                                                            />
+                                                                            <button
+                                                                                onClick={
+                                                                                    handleCopyViewLink
+                                                                                }
+                                                                                class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
+                                                                                disabled={
+                                                                                    !viewShareLinkQuery.data
+                                                                                }
+                                                                            >
+                                                                                {copied() ===
+                                                                                "view"
+                                                                                    ? "✓"
+                                                                                    : "Copy"}
+                                                                            </button>
+                                                                        </div>
+                                                                    </Show>
                                                                 </div>
-                                                            </Show>
-                                                        </div>
-                                                        <div>
-                                                            <p class="mb-1 text-xs font-medium text-slate-300">
-                                                                Edit Access
-                                                            </p>
-                                                            <Show
-                                                                when={
-                                                                    !editShareLinkQuery.isPending
-                                                                }
-                                                                fallback={
-                                                                    <div class="text-xs text-slate-400">
-                                                                        Loading...
-                                                                    </div>
-                                                                }
-                                                            >
-                                                                <div class="flex flex-col gap-2">
-                                                                    <input
-                                                                        type="text"
-                                                                        readOnly
-                                                                        value={
-                                                                            editShareLinkQuery.data ||
-                                                                            ""
+                                                                <div>
+                                                                    <p class="mb-1 text-xs font-medium text-slate-300">
+                                                                        Edit Access
+                                                                    </p>
+                                                                    <Show
+                                                                        when={
+                                                                            !editShareLinkQuery.isPending
                                                                         }
-                                                                        class="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-slate-50"
-                                                                    />
-                                                                    <button
-                                                                        onClick={
-                                                                            handleCopyEditLink
-                                                                        }
-                                                                        class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
-                                                                        disabled={
-                                                                            !editShareLinkQuery.data
+                                                                        fallback={
+                                                                            <div class="text-xs text-slate-400">
+                                                                                Loading...
+                                                                            </div>
                                                                         }
                                                                     >
-                                                                        {copied() ===
-                                                                        "edit"
-                                                                            ? "✓"
-                                                                            : "Copy"}
-                                                                    </button>
+                                                                        <div class="flex flex-col gap-2">
+                                                                            <input
+                                                                                type="text"
+                                                                                readOnly
+                                                                                value={
+                                                                                    editShareLinkQuery.data ||
+                                                                                    ""
+                                                                                }
+                                                                                class="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-slate-50"
+                                                                            />
+                                                                            <button
+                                                                                onClick={
+                                                                                    handleCopyEditLink
+                                                                                }
+                                                                                class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
+                                                                                disabled={
+                                                                                    !editShareLinkQuery.data
+                                                                                }
+                                                                            >
+                                                                                {copied() ===
+                                                                                "edit"
+                                                                                    ? "✓"
+                                                                                    : "Copy"}
+                                                                            </button>
+                                                                        </div>
+                                                                    </Show>
                                                                 </div>
-                                                            </Show>
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    )}
                                                 </div>
-                                            )}
-                                        </div>
                                             </div>
                                             <button
                                                 class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
@@ -549,24 +556,42 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                     return (
                                                                         <div
                                                                             class={`ml-3 cursor-pointer rounded-md px-3 py-2 text-sm transition-colors ${
-                                                                                isDraftView() && canvasDraft.Draft.id === params.draftId
+                                                                                isDraftView() &&
+                                                                                canvasDraft
+                                                                                    .Draft
+                                                                                    .id ===
+                                                                                    params.draftId
                                                                                     ? "bg-slate-600 text-slate-50"
                                                                                     : "bg-slate-700 text-slate-200 hover:bg-slate-600"
                                                                             }`}
                                                                             onClick={() => {
-                                                                                if (isDraftView()) {
-                                                                                    navigate(`/canvas/${params.id}/draft/${canvasDraft.Draft.id}`);
+                                                                                if (
+                                                                                    isDraftView()
+                                                                                ) {
+                                                                                    navigate(
+                                                                                        `/canvas/${params.id}/draft/${canvasDraft.Draft.id}`
+                                                                                    );
                                                                                 } else {
                                                                                     const callback =
                                                                                         navigateToDraftCallback();
-                                                                                    if (callback) {
-                                                                                        const pos = getNavPosition();
-                                                                                        callback(pos.x, pos.y);
+                                                                                    if (
+                                                                                        callback
+                                                                                    ) {
+                                                                                        const pos =
+                                                                                            getNavPosition();
+                                                                                        callback(
+                                                                                            pos.x,
+                                                                                            pos.y
+                                                                                        );
                                                                                     }
                                                                                 }
                                                                             }}
                                                                         >
-                                                                            {canvasDraft.Draft.name}
+                                                                            {
+                                                                                canvasDraft
+                                                                                    .Draft
+                                                                                    .name
+                                                                            }
                                                                         </div>
                                                                     );
                                                                 }}
@@ -579,13 +604,17 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                     {(canvasDraft) => (
                                                         <div
                                                             class={`cursor-pointer rounded-md px-3 py-2 text-sm transition-colors ${
-                                                                isDraftView() && canvasDraft.Draft.id === params.draftId
+                                                                isDraftView() &&
+                                                                canvasDraft.Draft.id ===
+                                                                    params.draftId
                                                                     ? "bg-slate-600 text-slate-50"
                                                                     : "bg-slate-700 text-slate-200 hover:bg-slate-600"
                                                             }`}
                                                             onClick={() => {
                                                                 if (isDraftView()) {
-                                                                    navigate(`/canvas/${params.id}/draft/${canvasDraft.Draft.id}`);
+                                                                    navigate(
+                                                                        `/canvas/${params.id}/draft/${canvasDraft.Draft.id}`
+                                                                    );
                                                                 } else {
                                                                     const callback =
                                                                         navigateToDraftCallback();

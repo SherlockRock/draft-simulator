@@ -452,7 +452,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [canvasGroups, setCanvasGroups] = createStore<CanvasGroup[]>([]);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = createSignal(false);
     const [draftToDelete, setDraftToDelete] = createSignal<CanvasDraft | null>(null);
-    const [viewportInitialized, setViewportInitialized] = createSignal(false);
+    const [loadedCanvasId, setLoadedCanvasId] = createSignal<string | null>(null);
     const [isConnectionMode, setIsConnectionMode] = createSignal(false);
     const [connectionSource, setConnectionSource] = createSignal<string | null>(null);
     const [groupConnectionSource, setGroupConnectionSource] = createSignal<string | null>(
@@ -863,34 +863,57 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const debouncedEmitGroupResize = debounce(emitGroupResize, 25);
 
     createEffect(() => {
-        if (props.canvasData && canvasDrafts.length === 0) {
-            setCanvasDrafts(props.canvasData.drafts ?? []);
-            setConnections(props.canvasData.connections ?? []);
-            setCanvasGroups(props.canvasData.groups ?? []);
-            if (!viewportInitialized()) {
-                props.setViewport(
-                    props.canvasData.lastViewport ?? { x: 0, y: 0, zoom: 1 }
-                );
-                setViewportInitialized(true);
-            }
+        const currentId = params.id;
+        const data = props.canvasData;
+        if (!data || currentId === loadedCanvasId()) return;
 
-            // Multi-context room joins: join canvas room + all draft rooms
-            if (!isLocalMode()) {
-                socketAccessor().emit("joinRoom", params.id);
-                props.canvasData.drafts.forEach((draft: CanvasDraft) => {
-                    socketAccessor().emit("joinRoom", draft.Draft.id);
-                });
-            }
+        // Leave old socket rooms if switching canvases
+        const prevId = loadedCanvasId();
+        if (prevId && !isLocalMode()) {
+            socketAccessor().emit("leaveRoom", prevId);
+            canvasDrafts.forEach((cd: CanvasDraft) => {
+                socketAccessor().emit("leaveRoom", cd.Draft.id);
+            });
         }
 
-        onCleanup(() => {
-            if (props.canvasData && canvasDrafts.length === 0 && !isLocalMode()) {
-                socketAccessor().emit("leaveRoom", params.id);
-                props.canvasData.drafts.forEach((draft: CanvasDraft) => {
-                    socketAccessor().emit("leaveRoom", draft.Draft.id);
-                });
-            }
-        });
+        // Reset stores with new canvas data
+        setCanvasDrafts(data.drafts ?? []);
+        setConnections(data.connections ?? []);
+        setCanvasGroups(data.groups ?? []);
+
+        // Reset viewport for the new canvas
+        props.setViewport(data.lastViewport ?? { x: 0, y: 0, zoom: 1 });
+
+        // Reset UI state
+        setIsConnectionMode(false);
+        setConnectionSource(null);
+        setGroupConnectionSource(null);
+        setSourceAnchor(null);
+        setSelectedVertexForConnection(null);
+        setContextMenuPosition(null);
+        setIsDeleteDialogOpen(false);
+        setDraftToDelete(null);
+
+        // Join new socket rooms
+        if (!isLocalMode()) {
+            socketAccessor().emit("joinRoom", currentId);
+            (data.drafts ?? []).forEach((draft: CanvasDraft) => {
+                socketAccessor().emit("joinRoom", draft.Draft.id);
+            });
+        }
+
+        setLoadedCanvasId(currentId);
+    });
+
+    // Leave socket rooms on component unmount
+    onCleanup(() => {
+        const prevId = loadedCanvasId();
+        if (prevId && !isLocalMode()) {
+            socketAccessor().emit("leaveRoom", prevId);
+            canvasDrafts.forEach((cd: CanvasDraft) => {
+                socketAccessor().emit("leaveRoom", cd.Draft.id);
+            });
+        }
     });
 
     createEffect(() => {
@@ -1187,7 +1210,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             const srcAnchor = sourceAnchor();
             if (isLocalMode()) {
                 localCreateConnection({
-                    sourceDraftIds: [{ groupId: groupSource, anchorType: srcAnchor?.type }],
+                    sourceDraftIds: [
+                        { groupId: groupSource, anchorType: srcAnchor?.type }
+                    ],
                     targetDraftIds: [{ draftId, anchorType }]
                 });
                 refreshFromLocal();
@@ -1195,7 +1220,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             } else {
                 createConnectionMutation.mutate({
                     canvasId: params.id,
-                    sourceDraftIds: [{ groupId: groupSource, anchorType: srcAnchor?.type }],
+                    sourceDraftIds: [
+                        { groupId: groupSource, anchorType: srcAnchor?.type }
+                    ],
                     targetDraftIds: [{ draftId, anchorType }]
                 });
             }
@@ -1762,7 +1789,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 height: newHeight
             });
             if (isLocalMode()) {
-                localUpdateGroup({ groupId: group.id, width: newWidth, height: newHeight });
+                localUpdateGroup({
+                    groupId: group.id,
+                    width: newWidth,
+                    height: newHeight
+                });
             } else {
                 updateGroupMutation.mutate({
                     canvasId: params.id,
