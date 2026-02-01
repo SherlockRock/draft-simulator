@@ -5,13 +5,14 @@ import { VersusChatPanel } from "./VersusChatPanel";
 import { PickChangeModal } from "./PickChangeModal";
 import { VersionFooter } from "./VersionFooter";
 import { WinnerReporter } from "./WinnerReporter";
+import { FirstPickToggle } from "./FirstPickToggle";
 import { canReportWinner } from "../utils/versusPermissions";
 import { useUser } from "../userProvider";
 import { RoleSwitcher } from "./RoleSwitcher";
 
 const VersusFlowPanelContent: Component = () => {
     const params = useParams<{ id: string; draftId: string; linkToken: string }>();
-    const { versusContext, socket, activeDraftState, draftCallbacks, reportWinner } =
+    const { versusContext, socket, activeDraftState, draftCallbacks, reportWinner, setGameSettings } =
         useVersusContext();
     const accessor = useUser();
     const [user] = accessor();
@@ -37,6 +38,17 @@ const VersusFlowPanelContent: Component = () => {
         if (!draft || !vd) return false;
         return canReportWinner(draft, vd, myRole(), userId());
     });
+
+    const canEditGameSettings = createMemo(() => {
+        const role = myRole();
+        const isCaptain = role === "blue_captain" || role === "red_captain";
+        const isOwner = userId() === versusDraft()?.owner_id;
+        return isCaptain || isOwner;
+    });
+
+    const handleSetFirstPick = (draftId: string, firstPick: "blue" | "red") => {
+        setGameSettings(draftId, { firstPick });
+    };
 
     const handleReportWinner = (winner: "blue" | "red") => {
         const draft = draftState()?.draft;
@@ -78,6 +90,34 @@ const VersusFlowPanelContent: Component = () => {
                             </span>
                         </div>
                     </Show>
+                </div>
+            </Show>
+
+            {/* Game Settings Section - shown before draft starts for captains/owner */}
+            <Show
+                when={
+                    isInDraftView() &&
+                    draftState()?.draft &&
+                    callbacks() &&
+                    !callbacks()!.draftStarted() &&
+                    !draftState()?.completed &&
+                    canEditGameSettings()
+                }
+            >
+                <div class="border-t border-slate-700/50 px-1 py-4">
+                    <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Game Settings
+                    </div>
+                    <div class="rounded-lg border border-slate-700/50 bg-slate-900/40 p-3">
+                        <FirstPickToggle
+                            draftId={draftState()!.draft.id}
+                            blueTeamName={versusDraft()!.blueTeamName}
+                            redTeamName={versusDraft()!.redTeamName}
+                            currentFirstPick={draftState()!.draft.firstPick || "blue"}
+                            canEdit={canEditGameSettings()}
+                            onSetFirstPick={handleSetFirstPick}
+                        />
+                    </div>
                 </div>
             </Show>
 
