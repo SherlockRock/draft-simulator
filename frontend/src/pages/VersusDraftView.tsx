@@ -16,7 +16,11 @@ import {
     DraftCallbacks
 } from "../workflows/VersusWorkflow";
 import { VersusDraft, draft, VersusState } from "../utils/types";
-import { VERSUS_PICK_ORDER, getPicksArrayIndex } from "../utils/versusPickOrder";
+import {
+    VERSUS_PICK_ORDER,
+    getEffectivePickOrder,
+    getPicksArrayIndex,
+} from "../utils/versusPickOrder";
 import { VersusTimer } from "../components/VersusTimer";
 import { ReadyButton } from "../components/ReadyButton";
 import { WinnerDeclarationModal } from "../components/WinnerDeclarationModal";
@@ -80,7 +84,9 @@ const VersusDraftView: Component = () => {
         timerStartedAt: null,
         isPaused: false,
         readyStatus: { blue: false, red: false },
-        completed: false
+        completed: false,
+        firstPick: "blue",
+        blueSideTeam: 1
     });
     const [showWinnerModal, setShowWinnerModal] = createSignal(false);
     const [showPauseRequest, setShowPauseRequest] = createSignal(false);
@@ -153,7 +159,9 @@ const VersusDraftView: Component = () => {
                 isPaused: data.isPaused,
                 readyStatus: data.readyStatus,
                 completed: data.completed,
-                winner: data.winner
+                winner: data.winner,
+                firstPick: data.firstPick,
+                blueSideTeam: data.blueSideTeam
             });
         });
 
@@ -170,7 +178,8 @@ const VersusDraftView: Component = () => {
             setVersusState((prev) => ({
                 ...prev,
                 timerStartedAt: data.timerStartedAt,
-                currentPickIndex: data.currentPickIndex
+                currentPickIndex: data.currentPickIndex,
+                firstPick: data.firstPick
             }));
             toast.success("Draft started!");
         });
@@ -262,6 +271,17 @@ const VersusDraftView: Component = () => {
             });
         });
 
+        // Listen for game settings updates (firstPick, blueSideTeam)
+        socket.on("gameSettingsUpdate", (data: any) => {
+            if (data.draftId === params.draftId) {
+                setVersusState((prev) => ({
+                    ...prev,
+                    firstPick: data.firstPick,
+                    blueSideTeam: data.blueSideTeam,
+                }));
+            }
+        });
+
         // Listen for winner updates
         socket.on(
             "versusWinnerUpdate",
@@ -296,6 +316,7 @@ const VersusDraftView: Component = () => {
             socket.off("pickChangeRejected");
             socket.off("roleAvailable");
             socket.off("versusWinnerUpdate");
+            socket.off("gameSettingsUpdate");
         });
     });
 
@@ -350,7 +371,8 @@ const VersusDraftView: Component = () => {
         const state = versusState();
         if (state.completed || !state.timerStartedAt) return false;
 
-        const currentPick = VERSUS_PICK_ORDER[state.currentPickIndex];
+        const effectiveOrder = getEffectivePickOrder(state.firstPick || "blue");
+        const currentPick = effectiveOrder[state.currentPickIndex];
         const myTeam = myRole()?.includes("blue") ? "blue" : "red";
         return currentPick?.team === myTeam;
     };
@@ -359,8 +381,9 @@ const VersusDraftView: Component = () => {
 
     const getCurrentPickInfo = () => {
         const state = versusState();
-        if (state.currentPickIndex >= VERSUS_PICK_ORDER.length) return null;
-        return VERSUS_PICK_ORDER[state.currentPickIndex];
+        const effectiveOrder = getEffectivePickOrder(state.firstPick || "blue");
+        if (state.currentPickIndex >= effectiveOrder.length) return null;
+        return effectiveOrder[state.currentPickIndex];
     };
 
     // Actions
@@ -526,7 +549,8 @@ const VersusDraftView: Component = () => {
         const state = versusState();
         if (!draftStarted() || state.completed) return false;
 
-        const currentPick = VERSUS_PICK_ORDER[state.currentPickIndex];
+        const effectiveOrder = getEffectivePickOrder(state.firstPick || "blue");
+        const currentPick = effectiveOrder[state.currentPickIndex];
         if (!currentPick || currentPick.type !== "ban") return false;
 
         return currentPick.team === team && currentPick.slot === slot;
@@ -537,13 +561,28 @@ const VersusDraftView: Component = () => {
         const state = versusState();
         if (!draftStarted() || state.completed) return false;
 
-        const currentPick = VERSUS_PICK_ORDER[state.currentPickIndex];
+        const effectiveOrder = getEffectivePickOrder(state.firstPick || "blue");
+        const currentPick = effectiveOrder[state.currentPickIndex];
         if (!currentPick || currentPick.type !== "pick") return false;
 
         return currentPick.team === team && currentPick.slot === slot;
     };
 
     const draftStarted = () => versusState().timerStartedAt !== null;
+
+    const blueSideTeamName = () => {
+        const vd = versusDraft();
+        const bst = versusState().blueSideTeam ?? draft()?.blueSideTeam ?? 1;
+        if (!vd) return "Blue Team";
+        return bst === 1 ? vd.blueTeamName : vd.redTeamName;
+    };
+
+    const redSideTeamName = () => {
+        const vd = versusDraft();
+        const bst = versusState().blueSideTeam ?? draft()?.blueSideTeam ?? 1;
+        if (!vd) return "Red Team";
+        return bst === 1 ? vd.redTeamName : vd.blueTeamName;
+    };
 
     // Compute restricted champions for Fearless/Ironman modes
     const restrictedChampions = createMemo(() => {
@@ -594,20 +633,22 @@ const VersusDraftView: Component = () => {
     // Check if the current pick slot has a pending champion selected
     const hasPendingPick = (): boolean => {
         const state = versusState();
-        if (state.completed || state.currentPickIndex >= VERSUS_PICK_ORDER.length)
+        const effectiveOrder = getEffectivePickOrder(state.firstPick || "blue");
+        if (state.completed || state.currentPickIndex >= effectiveOrder.length)
             return false;
         const picks = draft()?.picks || [];
-        const picksIndex = getPicksArrayIndex(state.currentPickIndex);
+        const picksIndex = getPicksArrayIndex(state.currentPickIndex, versusState().firstPick || "blue");
         return !!(picks[picksIndex] && picks[picksIndex] !== "");
     };
 
     // Get the current pending champion (for highlighting in the grid)
     const getCurrentPendingChampion = () => {
         const state = versusState();
-        if (state.completed || state.currentPickIndex >= VERSUS_PICK_ORDER.length)
+        const effectiveOrder = getEffectivePickOrder(state.firstPick || "blue");
+        if (state.completed || state.currentPickIndex >= effectiveOrder.length)
             return null;
         const picks = draft()?.picks || [];
-        const picksIndex = getPicksArrayIndex(state.currentPickIndex);
+        const picksIndex = getPicksArrayIndex(state.currentPickIndex, versusState().firstPick || "blue");
         return picks[picksIndex] || null;
     };
 
@@ -690,8 +731,13 @@ const VersusDraftView: Component = () => {
                             <div class="mb-4 flex items-center justify-between">
                                 {/* Blue Team */}
                                 <div class="flex flex-col items-start gap-2">
-                                    <div class="text-xl font-bold text-blue-400">
-                                        {versusDraft()!.blueTeamName}
+                                    <div class="flex items-center text-xl font-bold text-blue-400">
+                                        {blueSideTeamName()}
+                                        <Show when={(versusState().firstPick || "blue") === "blue"}>
+                                            <span class="ml-2 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400 border border-amber-500/30">
+                                                1st Pick
+                                            </span>
+                                        </Show>
                                     </div>
                                     <Show when={!draftStarted()}>
                                         <div
@@ -724,8 +770,13 @@ const VersusDraftView: Component = () => {
                                 </div>
                                 {/* Red Team */}
                                 <div class="flex flex-col items-end gap-2">
-                                    <div class="text-xl font-bold text-red-400">
-                                        {versusDraft()!.redTeamName}
+                                    <div class="flex items-center text-xl font-bold text-red-400">
+                                        {redSideTeamName()}
+                                        <Show when={(versusState().firstPick || "blue") === "red"}>
+                                            <span class="ml-2 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400 border border-amber-500/30">
+                                                1st Pick
+                                            </span>
+                                        </Show>
                                     </div>
                                     <Show when={!draftStarted()}>
                                         <div
