@@ -31,19 +31,29 @@ export const VERSUS_PICK_ORDER: VersusPickOrderItem[] = [
     { team: "red", type: "pick", slot: 4 }
 ];
 
-export function getPicksArrayIndex(currentPickIndex: number): number {
-    const currentPick = VERSUS_PICK_ORDER[currentPickIndex];
+export function getEffectivePickOrder(
+    firstPick: "blue" | "red" = "blue"
+): VersusPickOrderItem[] {
+    if (firstPick === "blue") return VERSUS_PICK_ORDER;
+    return VERSUS_PICK_ORDER.map((item) => ({
+        ...item,
+        team: item.team === "blue" ? "red" : "blue",
+    }));
+}
+
+export function getPicksArrayIndex(
+    currentPickIndex: number,
+    firstPick: "blue" | "red" = "blue"
+): number {
+    const effectiveOrder = getEffectivePickOrder(firstPick);
+    const currentPick = effectiveOrder[currentPickIndex];
     const { team, type, slot } = currentPick;
 
     let picksIndex: number;
 
     if (type === "ban") {
-        // Bans: picks[0-9]
-        // Blue bans: 0-4, Red bans: 5-9
         picksIndex = team === "blue" ? slot : slot + 5;
     } else {
-        // Picks: picks[10-19]
-        // Blue picks: 10-14, Red picks: 15-19
         picksIndex = team === "blue" ? slot + 10 : slot + 15;
     }
 

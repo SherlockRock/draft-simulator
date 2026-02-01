@@ -54,6 +54,8 @@ export type draft = {
     seriesIndex?: number;
     completed?: boolean;
     winner?: "blue" | "red" | null;
+    firstPick: "blue" | "red";
+    blueSideTeam: 1 | 2;
     description?: string;
     icon?: string;
 };
@@ -160,6 +162,8 @@ export type VersusState = {
     };
     completed: boolean;
     winner?: "blue" | "red" | null;
+    firstPick?: "blue" | "red";
+    blueSideTeam?: 1 | 2;
 };
 
 export type VersusSessionState = {
