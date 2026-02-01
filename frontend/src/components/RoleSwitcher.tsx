@@ -69,7 +69,7 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
             </button>
 
             <Show when={isOpen()}>
-                <div class="absolute left-0 top-12 z-50 w-64 overflow-hidden rounded-xl border border-slate-600/50 bg-slate-800 shadow-xl">
+                <div class="absolute left-0 top-12 z-50 w-full overflow-hidden rounded-xl border border-slate-600/50 bg-slate-800 shadow-xl">
                     <div class="border-b border-slate-700/50 bg-slate-800/80 px-4 py-3">
                         <div class="text-xs font-semibold uppercase tracking-wider text-slate-500">
                             Your Role
