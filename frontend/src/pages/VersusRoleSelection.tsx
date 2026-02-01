@@ -1,10 +1,10 @@
 import { Component, createSignal, Show, createMemo } from "solid-js";
 import toast from "solid-toast";
-import { useVersusContext } from "../workflows/VersusWorkflow";
+import { useVersusContext, getSuggestedRole } from "../workflows/VersusWorkflow";
 import { IconDisplay } from "../components/IconDisplay";
 
 const VersusRoleSelection: Component = () => {
-    const { versusContext, selectRole } = useVersusContext();
+    const { versusContext, selectRole, myTeamIdentity } = useVersusContext();
     const [isJoining, setIsJoining] = createSignal(false);
     const [selectedRole, setSelectedRole] = createSignal<string | null>(null);
     const [copied, setCopied] = createSignal(false);
@@ -13,6 +13,17 @@ const VersusRoleSelection: Component = () => {
     const participants = createMemo(() => versusContext().participants);
     const isConnected = createMemo(() => versusContext().connected);
     const error = createMemo(() => versusContext().error);
+
+    // Compute suggested role based on team identity and current game's side assignment
+    const suggestedRole = createMemo(() => {
+        const vd = versusDraft();
+        const identity = myTeamIdentity();
+        if (!vd || !identity) return null;
+        // Use the first draft's blueSideTeam as the current game context
+        const currentDraft = vd.Drafts?.[0];
+        const bst = currentDraft?.blueSideTeam || 1;
+        return getSuggestedRole(identity, bst, vd.blueTeamName, vd.redTeamName);
+    });
 
     const isRoleTaken = (role: "blue_captain" | "red_captain") => {
         const parts = participants();
@@ -249,6 +260,43 @@ const VersusRoleSelection: Component = () => {
                                 </button>
                             </div>
                         </div>
+
+                        {/* Smart re-prompt: suggested role based on team identity */}
+                        <Show when={suggestedRole()}>
+                            <div class="mb-4 rounded-lg border border-slate-600 bg-slate-700/50 p-4">
+                                <p class="text-sm text-slate-300">
+                                    You were on{" "}
+                                    <span class="font-semibold text-slate-100">
+                                        {myTeamIdentity()}
+                                    </span>
+                                    . This game, your team is on{" "}
+                                    <span
+                                        class={`font-semibold ${
+                                            suggestedRole() === "blue_captain"
+                                                ? "text-blue-400"
+                                                : "text-red-400"
+                                        }`}
+                                    >
+                                        {suggestedRole()?.includes("blue")
+                                            ? "blue"
+                                            : "red"}{" "}
+                                        side
+                                    </span>
+                                    .
+                                </p>
+                                <button
+                                    class="mt-2 rounded bg-teal-700 px-4 py-2 text-sm font-semibold text-slate-50 hover:bg-teal-600"
+                                    onClick={() => handleJoinRole(suggestedRole()!)}
+                                    disabled={isJoining()}
+                                >
+                                    Continue as{" "}
+                                    {suggestedRole()?.includes("blue")
+                                        ? "Blue"
+                                        : "Red"}{" "}
+                                    Captain
+                                </button>
+                            </div>
+                        </Show>
 
                         {/* Role selection */}
                         <div class="space-y-3">

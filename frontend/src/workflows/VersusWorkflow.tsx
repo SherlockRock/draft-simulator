@@ -51,6 +51,35 @@ export type DraftCallbacks = {
     pendingPickChangeRequest: () => any;
 };
 
+// Helper: compute team identity from role + side assignment
+const computeTeamIdentity = (
+    role: string,
+    blueSideTeam: number,
+    blueTeamName: string,
+    redTeamName: string
+): string => {
+    const isBlue = role.includes("blue");
+    const bst = blueSideTeam || 1;
+    if (isBlue) {
+        return bst === 1 ? blueTeamName : redTeamName;
+    } else {
+        return bst === 1 ? redTeamName : blueTeamName;
+    }
+};
+
+// Helper: compute suggested role for a new game based on team identity + side assignment
+export const getSuggestedRole = (
+    teamIdentity: string | null,
+    blueSideTeam: number,
+    blueTeamName: string,
+    redTeamName: string
+): "blue_captain" | "red_captain" | null => {
+    if (!teamIdentity) return null;
+    const bst = blueSideTeam || 1;
+    const blueTeam = bst === 1 ? blueTeamName : redTeamName;
+    return teamIdentity === blueTeam ? "blue_captain" : "red_captain";
+};
+
 // Create context for sharing versus state with children
 type VersusWorkflowContextValue = {
     versusContext: () => VersusSessionState;
@@ -82,6 +111,13 @@ type VersusWorkflowContextValue = {
         draftId: string,
         settings: { firstPick?: "blue" | "red"; blueSideTeam?: 1 | 2 }
     ) => void;
+
+    // Team identity tracking for per-game role re-prompt
+    myTeamIdentity: () => string | null;
+
+    // Per-game role confirmation tracking
+    isNewGame: (draftId: string) => boolean;
+    confirmGameRole: (draftId: string) => void;
 };
 
 const VersusWorkflowContext = createContext<VersusWorkflowContextValue>();
@@ -136,6 +172,33 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         setChatMessages((prev) => [...prev, message]);
     };
 
+    // Team identity tracking for per-game role re-prompt
+    const [myTeamIdentity, setMyTeamIdentity] = createSignal<string | null>(null);
+
+    // Restore team identity from sessionStorage on init
+    createEffect(() => {
+        const versusDraftId = params.id;
+        if (versusDraftId) {
+            const storedIdentity = sessionStorage.getItem(`teamIdentity:${versusDraftId}`);
+            if (storedIdentity) setMyTeamIdentity(storedIdentity);
+        }
+    });
+
+    // Per-game role confirmation: check if user needs to re-select for a new game
+    const isNewGame = (draftId: string): boolean => {
+        const versusDraftId = params.id;
+        if (!versusDraftId) return false;
+        const lastConfirmed = sessionStorage.getItem(`lastConfirmedDraft:${versusDraftId}`);
+        return lastConfirmed !== draftId;
+    };
+
+    const confirmGameRole = (draftId: string) => {
+        const versusDraftId = params.id;
+        if (versusDraftId) {
+            sessionStorage.setItem(`lastConfirmedDraft:${versusDraftId}`, draftId);
+        }
+    };
+
     // Join response handler
     const handleJoinResponse = (response: VersusJoinResponse) => {
         if (!response.success) {
@@ -174,6 +237,23 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
                 reclaimToken: response.myParticipant.reclaimToken,
                 timestamp: Date.now()
             });
+
+            // Compute and store team identity on auto-join/reconnect
+            if (response.autoJoinedRole !== "spectator") {
+                const currentDraft = response.versusDraft.Drafts?.[0];
+                const identity = computeTeamIdentity(
+                    response.autoJoinedRole,
+                    currentDraft?.blueSideTeam || 1,
+                    response.versusDraft.blueTeamName,
+                    response.versusDraft.redTeamName
+                );
+                setMyTeamIdentity(identity);
+                sessionStorage.setItem(
+                    `teamIdentity:${response.versusDraft.id}`,
+                    identity
+                );
+            }
+
             if (params.linkToken) {
                 // No auto-join, stay on role selection page
                 navigate(`/versus/${response.versusDraft.id}`);
@@ -397,6 +477,28 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
                     reclaimToken: response.reclaimToken,
                     timestamp: Date.now()
                 });
+
+                // Compute and store team identity for per-game role re-prompt
+                if (response.participant.role !== "spectator") {
+                    // Find the current draft's blueSideTeam from the Drafts array
+                    const currentDraftId = params.draftId;
+                    const currentDraft = currentDraftId
+                        ? versusDraft.Drafts?.find((d) => d.id === currentDraftId)
+                        : versusDraft.Drafts?.[0];
+                    const identity = computeTeamIdentity(
+                        response.participant.role,
+                        currentDraft?.blueSideTeam || 1,
+                        versusDraft.blueTeamName,
+                        versusDraft.redTeamName
+                    );
+                    setMyTeamIdentity(identity);
+                    sessionStorage.setItem(`teamIdentity:${versusDraft.id}`, identity);
+
+                    // Track which draft the user confirmed their role for
+                    if (currentDraftId) {
+                        confirmGameRole(currentDraftId);
+                    }
+                }
 
                 toast.success(`Joined as ${response.participant.role.replace("_", " ")}`);
 
@@ -658,7 +760,10 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         addChatMessage,
         chatUserCount,
         reportWinner,
-        setGameSettings
+        setGameSettings,
+        myTeamIdentity,
+        isNewGame,
+        confirmGameRole
     };
 
     return (

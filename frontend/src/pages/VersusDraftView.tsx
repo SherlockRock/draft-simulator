@@ -13,7 +13,8 @@ import { useUser } from "../userProvider";
 import {
     useVersusContext,
     ActiveDraftState,
-    DraftCallbacks
+    DraftCallbacks,
+    getSuggestedRole
 } from "../workflows/VersusWorkflow";
 import { VersusDraft, draft, VersusState } from "../utils/types";
 import {
@@ -25,6 +26,8 @@ import { VersusTimer } from "../components/VersusTimer";
 import { ReadyButton } from "../components/ReadyButton";
 import { WinnerDeclarationModal } from "../components/WinnerDeclarationModal";
 import { PauseRequestModal } from "../components/PauseRequestModal";
+import { FirstPickToggle } from "../components/FirstPickToggle";
+import { SideAssignmentToggle } from "../components/SideAssignmentToggle";
 import { champions, championCategories } from "../utils/constants";
 import toast from "solid-toast";
 import { useFilterableItems } from "../hooks/useFilterableItems";
@@ -69,11 +72,51 @@ const VersusDraftView: Component = () => {
         registerDraftState,
         unregisterDraftState,
         registerDraftCallbacks,
-        unregisterDraftCallbacks
+        unregisterDraftCallbacks,
+        setGameSettings,
+        isNewGame,
+        confirmGameRole,
+        myTeamIdentity
     } = useVersusContext();
     const myRole = createMemo(() => versusContext().myParticipant?.role || null);
     const participantId = createMemo(() => versusContext().myParticipant?.id || null);
     const [versusDraft] = createResource(() => params.id, fetchVersusDraft);
+
+    // Per-game role re-prompt: track whether user needs to confirm role for this game
+    const [needsGameConfirm, setNeedsGameConfirm] = createSignal(false);
+
+    createEffect(() => {
+        const role = myRole();
+        const draftId = params.draftId;
+        const identity = myTeamIdentity();
+
+        // Only prompt captains (not spectators) who have a team identity
+        // (meaning they've played at least one game in the series)
+        if (!role || role === "spectator" || !draftId || !identity) {
+            setNeedsGameConfirm(false);
+            return;
+        }
+
+        if (isNewGame(draftId)) {
+            setNeedsGameConfirm(true);
+        } else {
+            setNeedsGameConfirm(false);
+        }
+    });
+
+    const handleConfirmGame = () => {
+        confirmGameRole(params.draftId);
+        setNeedsGameConfirm(false);
+    };
+
+    // Compute suggested role for re-prompt overlay
+    const gameSuggestedRole = createMemo(() => {
+        const vd = versusDraft();
+        const identity = myTeamIdentity();
+        if (!vd || !identity) return null;
+        const bst = versusState().blueSideTeam || draft()?.blueSideTeam || 1;
+        return getSuggestedRole(identity, bst, vd.blueTeamName, vd.redTeamName);
+    });
     const [draft, { mutate: mutateDraft }] = createResource(
         () => params.draftId,
         fetchDraft
@@ -680,6 +723,54 @@ const VersusDraftView: Component = () => {
             fallback={<div class="p-8">Loading...</div>}
         >
             <Show when={versusDraft() && draft()}>
+                {/* Per-game role confirmation overlay */}
+                <Show when={needsGameConfirm()}>
+                    <div class="flex h-full min-w-0 flex-1 flex-col items-center justify-center bg-slate-900">
+                        <div class="w-full max-w-md rounded-2xl border border-slate-700/50 bg-slate-800/90 p-8 text-center shadow-2xl">
+                            <div class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
+                                Game {(draft()?.seriesIndex ?? 0) + 1}
+                            </div>
+                            <Show when={myTeamIdentity() && gameSuggestedRole()}>
+                                <p class="mb-2 text-sm text-slate-300">
+                                    You are on{" "}
+                                    <span class="font-semibold text-slate-100">
+                                        {myTeamIdentity()}
+                                    </span>
+                                    . This game, your team is on{" "}
+                                    <span
+                                        class={`font-semibold ${
+                                            gameSuggestedRole() === "blue_captain"
+                                                ? "text-blue-400"
+                                                : "text-red-400"
+                                        }`}
+                                    >
+                                        {gameSuggestedRole()?.includes("blue")
+                                            ? "blue"
+                                            : "red"}{" "}
+                                        side
+                                    </span>
+                                    .
+                                </p>
+                            </Show>
+                            <button
+                                class="mt-4 rounded bg-teal-700 px-6 py-2.5 text-sm font-semibold text-slate-50 hover:bg-teal-600 transition-colors"
+                                onClick={handleConfirmGame}
+                            >
+                                Continue to Draft
+                            </button>
+                            <button
+                                class="mt-2 block w-full text-xs text-slate-500 hover:text-slate-400 transition-colors"
+                                onClick={() => {
+                                    const vd = versusContext().versusDraft;
+                                    if (vd) navigate(`/versus/join/${vd.shareLink}`);
+                                }}
+                            >
+                                Switch teams or spectate
+                            </button>
+                        </div>
+                    </div>
+                </Show>
+                <Show when={!needsGameConfirm()}>
                 <div class="flex h-full min-w-0 flex-1 flex-col bg-slate-900">
                     {/* Streamlined Top Bar */}
                     <div class="flex items-center justify-between border-b border-slate-700 bg-slate-800/50 px-6 py-3 backdrop-blur-sm">
@@ -966,6 +1057,37 @@ const VersusDraftView: Component = () => {
                                             !isMyTurn() ||
                                             !hasPendingPick() ||
                                             versusState().isPaused
+                                        }
+                                    />
+                                </div>
+                            </Show>
+
+                            {/* Game Settings (pre-draft, captains only) */}
+                            <Show when={!draftStarted() && !isSpectator()}>
+                                <div class="mt-4 flex flex-col items-center gap-2">
+                                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                                        Game Settings
+                                    </span>
+                                    <FirstPickToggle
+                                        draftId={params.draftId}
+                                        blueTeamName={blueSideTeamName()}
+                                        redTeamName={redSideTeamName()}
+                                        currentFirstPick={versusState().firstPick || "blue"}
+                                        canEdit={true}
+                                        onSetFirstPick={(id, fp) =>
+                                            setGameSettings(id, { firstPick: fp })
+                                        }
+                                    />
+                                    <SideAssignmentToggle
+                                        draftId={params.draftId}
+                                        teamOneName={versusDraft()!.blueTeamName}
+                                        teamTwoName={versusDraft()!.redTeamName}
+                                        blueSideTeam={
+                                            (versusState().blueSideTeam || 1) as 1 | 2
+                                        }
+                                        canEdit={true}
+                                        onSetBlueSideTeam={(id, bst) =>
+                                            setGameSettings(id, { blueSideTeam: bst })
                                         }
                                     />
                                 </div>
@@ -1388,6 +1510,7 @@ const VersusDraftView: Component = () => {
                         </div>
                     </Show>
                 </div>
+                </Show>
             </Show>
         </Show>
     );
