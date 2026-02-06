@@ -779,8 +779,8 @@ const VersusDraftView: Component = () => {
                                 </div>
                                 <GameSettingsGrid
                                     draftId={params.draftId}
-                                    teamOneName={versusDraft()!.blueTeamName}
-                                    teamTwoName={versusDraft()!.redTeamName}
+                                    teamOneName={versusDraft()?.blueTeamName ?? ""}
+                                    teamTwoName={versusDraft()?.redTeamName ?? ""}
                                     blueSideTeam={
                                         (versusState().blueSideTeam || 1) as 1 | 2
                                     }
@@ -839,7 +839,7 @@ const VersusDraftView: Component = () => {
                                         <button
                                             onClick={() =>
                                                 navigate(
-                                                    `/versus/${params.id}/draft/${nextGame()!.id}`
+                                                    `/versus/${params.id}/draft/${nextGame()?.id ?? ""}`
                                                 )
                                             }
                                             class="group flex items-center gap-2 text-orange-400 transition-colors hover:text-orange-300"
@@ -1132,8 +1132,8 @@ const VersusDraftView: Component = () => {
                                 <Show when={getCurrentPickInfo()}>
                                     <div class="mt-4 text-center text-sm text-slate-400">
                                         Current:{" "}
-                                        {getCurrentPickInfo()!.team.toUpperCase()}{" "}
-                                        {getCurrentPickInfo()!.type}
+                                        {getCurrentPickInfo()?.team?.toUpperCase() ?? ""}{" "}
+                                        {getCurrentPickInfo()?.type ?? ""}
                                     </div>
                                 </Show>
                             </div>
@@ -1187,7 +1187,7 @@ const VersusDraftView: Component = () => {
                                             <For each={filteredChampions()}>
                                                 {({ item: champ, originalIndex }) => {
                                                     const isPicked = () =>
-                                                        draft()!.picks.includes(
+                                                        (draft()?.picks ?? []).includes(
                                                             String(originalIndex)
                                                         );
                                                     const isSeriesRestricted = () =>
@@ -1532,8 +1532,8 @@ const VersusDraftView: Component = () => {
                         {/* Modals */}
                         <WinnerDeclarationModal
                             isOpen={showWinnerModal()}
-                            blueTeamName={versusDraft()!.blueTeamName}
-                            redTeamName={versusDraft()!.redTeamName}
+                            blueTeamName={versusDraft()?.blueTeamName ?? ""}
+                            redTeamName={versusDraft()?.redTeamName ?? ""}
                             onDeclareWinner={handleDeclareWinner}
                             isSpectator={isSpectator()}
                         />
@@ -1542,8 +1542,8 @@ const VersusDraftView: Component = () => {
                             isOpen={showPauseRequest()}
                             requestType={pauseRequestType()}
                             requestingTeam={pauseRequestTeam()}
-                            blueTeamName={versusDraft()!.blueTeamName}
-                            redTeamName={versusDraft()!.redTeamName}
+                            blueTeamName={versusDraft()?.blueTeamName ?? ""}
+                            redTeamName={versusDraft()?.redTeamName ?? ""}
                             onApprove={handleApproveRequest}
                             onReject={handleRejectRequest}
                         />

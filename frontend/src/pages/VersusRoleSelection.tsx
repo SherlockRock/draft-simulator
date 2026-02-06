@@ -60,7 +60,7 @@ const VersusRoleSelection: Component = () => {
 
     const handleCopyLink = () => {
         if (versusDraft()) {
-            const link = `${window.location.origin}/versus/join/${versusDraft()!.shareLink}`;
+            const link = `${window.location.origin}/versus/join/${versusDraft()?.shareLink ?? ""}`;
             navigator.clipboard.writeText(link);
             setCopied(true);
             toast.success("Link copied to clipboard");
@@ -150,55 +150,55 @@ const VersusRoleSelection: Component = () => {
                         <div class="mb-6 overflow-hidden rounded-2xl border border-slate-700/50 bg-gradient-to-b from-slate-800/90 to-slate-900/90 shadow-2xl backdrop-blur-sm">
                             <div class="flex items-center gap-4 border-b border-slate-700/50 px-6 py-5">
                                 <IconDisplay
-                                    icon={versusDraft()!.icon}
+                                    icon={versusDraft()?.icon}
                                     defaultIcon="⚔️"
                                     size="md"
                                     className="rounded-xl border border-slate-600/50 bg-slate-800"
                                 />
                                 <div class="min-w-0 flex-1">
                                     <h1 class="truncate text-xl font-bold tracking-tight text-slate-50">
-                                        {versusDraft()!.name}
+                                        {versusDraft()?.name ?? ""}
                                     </h1>
                                     <div class="mt-1 flex items-center gap-2 text-sm">
                                         <span
                                             class={`rounded-md px-2 py-0.5 ${
-                                                versusDraft()!.length === 1
+                                                versusDraft()?.length === 1
                                                     ? "bg-indigo-500/20 text-indigo-300"
-                                                    : versusDraft()!.length === 3
+                                                    : versusDraft()?.length === 3
                                                       ? "bg-teal-500/20 text-teal-300"
-                                                      : versusDraft()!.length === 5
+                                                      : versusDraft()?.length === 5
                                                         ? "bg-emerald-500/20 text-emerald-300"
                                                         : "bg-pink-500/20 text-pink-300"
                                             }`}
                                         >
-                                            Bo{versusDraft()!.length}
+                                            Bo{versusDraft()?.length ?? 1}
                                         </span>
                                         <span
                                             class={`rounded-md px-2 py-0.5 ${
-                                                versusDraft()!.competitive
+                                                versusDraft()?.competitive
                                                     ? "bg-amber-500/20 text-amber-300"
                                                     : "bg-sky-500/20 text-sky-300"
                                             }`}
                                         >
-                                            {versusDraft()!.competitive
+                                            {versusDraft()?.competitive
                                                 ? "Competitive"
                                                 : "Scrim"}
                                         </span>
-                                        <Show when={versusDraft()!.type}>
+                                        <Show when={versusDraft()?.type}>
                                             <span
                                                 class={`rounded-md px-2 py-0.5 ${
-                                                    versusDraft()!.type === "fearless"
+                                                    versusDraft()?.type === "fearless"
                                                         ? "bg-fuchsia-500/20 text-fuchsia-300"
-                                                        : versusDraft()!.type ===
+                                                        : versusDraft()?.type ===
                                                             "ironman"
                                                           ? "bg-lime-500/20 text-lime-300"
                                                           : "bg-cyan-500/20 text-cyan-300"
                                                 }`}
                                             >
-                                                {versusDraft()!
-                                                    .type!.charAt(0)
-                                                    .toUpperCase() +
-                                                    versusDraft()!.type!.slice(1)}
+                                                {(
+                                                    versusDraft()?.type?.charAt(0) ?? ""
+                                                ).toUpperCase() +
+                                                    (versusDraft()?.type?.slice(1) ?? "")}
                                             </span>
                                         </Show>
                                     </div>
@@ -210,7 +210,7 @@ const VersusRoleSelection: Component = () => {
                                 <div class="flex items-center justify-center gap-4">
                                     <div class="flex-1 text-right">
                                         <span class="text-lg font-semibold text-blue-400">
-                                            {versusDraft()!.blueTeamName}
+                                            {versusDraft()?.blueTeamName ?? ""}
                                         </span>
                                     </div>
                                     <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-slate-600 bg-slate-800 text-xs font-bold text-slate-500">
@@ -218,7 +218,7 @@ const VersusRoleSelection: Component = () => {
                                     </div>
                                     <div class="flex-1 text-left">
                                         <span class="text-lg font-semibold text-red-400">
-                                            {versusDraft()!.redTeamName}
+                                            {versusDraft()?.redTeamName ?? ""}
                                         </span>
                                     </div>
                                 </div>
@@ -319,10 +319,12 @@ const VersusRoleSelection: Component = () => {
                                             <div
                                                 class={`font-semibold ${isRoleTaken("blue_captain") ? "text-slate-500" : "text-orange-400"}`}
                                             >
-                                                {versusDraft()!.blueTeamName} Captain
+                                                {versusDraft()?.blueTeamName ?? ""}{" "}
+                                                Captain
                                             </div>
                                             <div class="text-sm text-slate-500">
-                                                Captain for {versusDraft()!.blueTeamName}
+                                                Captain for{" "}
+                                                {versusDraft()?.blueTeamName ?? ""}
                                             </div>
                                         </div>
                                     </div>
@@ -396,10 +398,11 @@ const VersusRoleSelection: Component = () => {
                                             <div
                                                 class={`font-semibold ${isRoleTaken("red_captain") ? "text-slate-500" : "text-orange-400"}`}
                                             >
-                                                {versusDraft()!.redTeamName} Captain
+                                                {versusDraft()?.redTeamName ?? ""} Captain
                                             </div>
                                             <div class="text-sm text-slate-500">
-                                                Captain for {versusDraft()!.redTeamName}
+                                                Captain for{" "}
+                                                {versusDraft()?.redTeamName ?? ""}
                                             </div>
                                         </div>
                                     </div>

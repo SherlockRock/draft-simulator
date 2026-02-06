@@ -312,9 +312,9 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                             </h2>
                             <p class="text-slate-400">
                                 <span
-                                    class={`font-semibold ${getTeamColor(props.pendingRequest!.team)}`}
+                                    class={`font-semibold ${getTeamColor(props.pendingRequest?.team ?? "blue")}`}
                                 >
-                                    {props.pendingRequest!.team === "blue"
+                                    {props.pendingRequest?.team === "blue"
                                         ? "Blue Team"
                                         : "Red Team"}
                                 </span>{" "}
@@ -331,7 +331,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                     <div class="text-xs text-slate-500">Old</div>
                                     <div class="font-semibold text-red-400">
                                         {getChampionName(
-                                            props.pendingRequest!.oldChampion
+                                            props.pendingRequest?.oldChampion ?? ""
                                         )}
                                     </div>
                                 </div>
@@ -340,7 +340,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                     <div class="text-xs text-slate-500">New</div>
                                     <div class="font-semibold text-orange-400">
                                         {getChampionName(
-                                            props.pendingRequest!.newChampion
+                                            props.pendingRequest?.newChampion ?? ""
                                         )}
                                     </div>
                                 </div>

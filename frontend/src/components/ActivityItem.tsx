@@ -581,8 +581,8 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                         props.activity.type === "ironman"
                                 }}
                             >
-                                {props.activity.type!.charAt(0).toUpperCase() +
-                                    props.activity.type!.slice(1)}
+                                {(props.activity.type?.charAt(0) ?? "").toUpperCase() +
+                                    (props.activity.type?.slice(1) ?? "")}
                             </span>
                         </Show>
                     </div>

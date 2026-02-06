@@ -9,6 +9,7 @@ import { GameSettingsGrid } from "./GameSettingsGrid";
 import { canReportWinner } from "../utils/versusPermissions";
 import { useUser } from "../userProvider";
 import { RoleSwitcher } from "./RoleSwitcher";
+import toast from "solid-toast";
 
 const VersusFlowPanelContent: Component = () => {
     const params = useParams<{ id: string; draftId: string; linkToken: string }>();
@@ -34,6 +35,8 @@ const VersusFlowPanelContent: Component = () => {
     const isInSeries = createMemo(() => !!params.id && !params.linkToken);
 
     const isSpectator = () => myRole() === "spectator";
+
+    const fallbackAction = () => toast.error("Action unavailable — try refreshing");
 
     const draftState = createMemo(() => activeDraftState());
     const callbacks = createMemo(() => draftCallbacks());
@@ -84,7 +87,7 @@ const VersusFlowPanelContent: Component = () => {
                     {/* Series info card */}
                     <div class="rounded-lg border border-slate-700/50 bg-slate-900/40 p-3">
                         <h2 class="text-base font-bold leading-tight text-slate-100">
-                            {versusDraft()!.name}
+                            {versusDraft()?.name ?? ""}
                         </h2>
                     </div>
 
@@ -119,7 +122,7 @@ const VersusFlowPanelContent: Component = () => {
                     isInDraftView() &&
                     draftState()?.draft &&
                     callbacks() &&
-                    !callbacks()!.draftStarted() &&
+                    !callbacks()?.draftStarted() &&
                     !draftState()?.completed &&
                     canEditGameSettings()
                 }
@@ -129,11 +132,11 @@ const VersusFlowPanelContent: Component = () => {
                         Game Settings
                     </div>
                     <GameSettingsGrid
-                        draftId={draftState()!.draft.id}
-                        teamOneName={versusDraft()!.blueTeamName}
-                        teamTwoName={versusDraft()!.redTeamName}
-                        blueSideTeam={(draftState()!.draft.blueSideTeam || 1) as 1 | 2}
-                        firstPick={draftState()!.draft.firstPick || "blue"}
+                        draftId={draftState()?.draft?.id ?? ""}
+                        teamOneName={versusDraft()?.blueTeamName ?? ""}
+                        teamTwoName={versusDraft()?.redTeamName ?? ""}
+                        blueSideTeam={(draftState()?.draft?.blueSideTeam || 1) as 1 | 2}
+                        firstPick={draftState()?.draft?.firstPick || "blue"}
                         canEdit={canEditGameSettings()}
                         onSetFirstPick={handleSetFirstPick}
                         onSetBlueSideTeam={handleSetBlueSideTeam}
@@ -158,10 +161,10 @@ const VersusFlowPanelContent: Component = () => {
                                     Winner
                                 </div>
                                 <WinnerReporter
-                                    draftId={draftState()!.draft.id}
-                                    blueTeamName={blueSideTeamName()}
-                                    redTeamName={redSideTeamName()}
-                                    currentWinner={draftState()!.draft.winner}
+                                    draftId={draftState()?.draft?.id ?? ""}
+                                    blueTeamName={blueSideTeamName() ?? ""}
+                                    redTeamName={redSideTeamName() ?? ""}
+                                    currentWinner={draftState()?.draft?.winner}
                                     canEdit={canEditWinner()}
                                     onReportWinner={handleReportWinner}
                                 />
@@ -187,13 +190,19 @@ const VersusFlowPanelContent: Component = () => {
                         {/* Pick Change Modal */}
                         <Show when={draftState()?.draft && callbacks() && !isSpectator()}>
                             <PickChangeModal
-                                draft={draftState()!.draft}
+                                draft={draftState()?.draft}
                                 myRole={myRole}
-                                isCompetitive={versusDraft()!.competitive}
-                                pendingRequest={callbacks()!.pendingPickChangeRequest()}
-                                onRequestChange={callbacks()!.handleRequestPickChange}
-                                onApproveChange={callbacks()!.handleApprovePickChange}
-                                onRejectChange={callbacks()!.handleRejectPickChange}
+                                isCompetitive={versusDraft()?.competitive ?? false}
+                                pendingRequest={callbacks()?.pendingPickChangeRequest()}
+                                onRequestChange={
+                                    callbacks()?.handleRequestPickChange ?? fallbackAction
+                                }
+                                onApproveChange={
+                                    callbacks()?.handleApprovePickChange ?? fallbackAction
+                                }
+                                onRejectChange={
+                                    callbacks()?.handleRejectPickChange ?? fallbackAction
+                                }
                             />
                         </Show>
                     </div>
@@ -205,7 +214,7 @@ const VersusFlowPanelContent: Component = () => {
                 <div class="min-h-0 flex-1 border-t border-slate-700/50">
                     <VersusChatPanel
                         socket={socket()!}
-                        versusDraftId={versusDraft()!.id}
+                        versusDraftId={versusDraft()?.id ?? ""}
                         currentRole={myRole()}
                     />
                 </div>

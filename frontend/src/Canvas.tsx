@@ -2230,7 +2230,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const onDelete = () => {
         if (draftToDelete()) {
             if (isLocalMode()) {
-                localDeleteDraft(draftToDelete()!.Draft.id);
+                localDeleteDraft(draftToDelete()?.Draft?.id ?? "");
                 setIsDeleteDialogOpen(false);
                 setDraftToDelete(null);
                 refreshFromLocal();
@@ -2238,7 +2238,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             } else {
                 deleteDraftMutation.mutate({
                     canvas: params.id,
-                    draft: draftToDelete()!.Draft.id
+                    draft: draftToDelete()?.Draft?.id ?? ""
                 });
             }
         }
@@ -2647,8 +2647,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     <div
                         class="canvas-context-menu fixed z-50 rounded-md border border-slate-500 bg-slate-700 py-1 shadow-lg"
                         style={{
-                            left: `${contextMenuPosition()!.x}px`,
-                            top: `${contextMenuPosition()!.y}px`
+                            left: `${contextMenuPosition()?.x ?? 0}px`,
+                            top: `${contextMenuPosition()?.y ?? 0}px`
                         }}
                     >
                         <button

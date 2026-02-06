@@ -328,15 +328,15 @@ export const ConnectionComponent = (props: {
             <Show when={contextMenu()}>
                 <Portal>
                     <ContextMenu
-                        position={contextMenu()!.position}
+                        position={contextMenu()?.position ?? { x: 0, y: 0 }}
                         actions={[
-                            contextMenu()!.type === "vertex"
+                            contextMenu()?.type === "vertex"
                                 ? {
                                       label: "Delete Vertex",
                                       action: () => {
                                           props.onDeleteVertex(
                                               props.connection.id,
-                                              contextMenu()!.vertexId!
+                                              contextMenu()?.vertexId ?? ""
                                           );
                                           setContextMenu(null);
                                       },
@@ -429,8 +429,8 @@ export const ConnectionPreview = (props: {
             <line
                 x1={startPos().x}
                 y1={startPos().y}
-                x2={props.mousePos!.x}
-                y2={props.mousePos!.y}
+                x2={props.mousePos?.x ?? 0}
+                y2={props.mousePos?.y ?? 0}
                 stroke="#3b82f6"
                 stroke-width="2"
                 stroke-dasharray="4,4"
@@ -469,8 +469,8 @@ export const GroupConnectionPreview = (props: {
             <line
                 x1={startPos().x}
                 y1={startPos().y}
-                x2={props.mousePos!.x}
-                y2={props.mousePos!.y}
+                x2={props.mousePos?.x ?? 0}
+                y2={props.mousePos?.y ?? 0}
                 stroke="#3b82f6"
                 stroke-width="2"
                 stroke-dasharray="4,4"
