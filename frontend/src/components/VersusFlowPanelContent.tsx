@@ -5,15 +5,21 @@ import { VersusChatPanel } from "./VersusChatPanel";
 import { PickChangeModal } from "./PickChangeModal";
 import { VersionFooter } from "./VersionFooter";
 import { WinnerReporter } from "./WinnerReporter";
-import { FirstPickToggle } from "./FirstPickToggle";
+import { GameSettingsGrid } from "./GameSettingsGrid";
 import { canReportWinner } from "../utils/versusPermissions";
 import { useUser } from "../userProvider";
 import { RoleSwitcher } from "./RoleSwitcher";
 
 const VersusFlowPanelContent: Component = () => {
     const params = useParams<{ id: string; draftId: string; linkToken: string }>();
-    const { versusContext, socket, activeDraftState, draftCallbacks, reportWinner, setGameSettings } =
-        useVersusContext();
+    const {
+        versusContext,
+        socket,
+        activeDraftState,
+        draftCallbacks,
+        reportWinner,
+        setGameSettings
+    } = useVersusContext();
     const accessor = useUser();
     const [user] = accessor();
     const userId = createMemo(() => user()?.id || null);
@@ -49,15 +55,19 @@ const VersusFlowPanelContent: Component = () => {
     // Derive per-game team names based on side assignment
     const blueSideTeamName = createMemo(() => {
         const bst = draftState()?.draft?.blueSideTeam ?? 1;
-        return bst === 1 ? versusDraft()!.blueTeamName : versusDraft()!.redTeamName;
+        return bst === 1 ? versusDraft()?.blueTeamName : versusDraft()?.redTeamName;
     });
     const redSideTeamName = createMemo(() => {
         const bst = draftState()?.draft?.blueSideTeam ?? 1;
-        return bst === 1 ? versusDraft()!.redTeamName : versusDraft()!.blueTeamName;
+        return bst === 1 ? versusDraft()?.redTeamName : versusDraft()?.blueTeamName;
     });
 
     const handleSetFirstPick = (draftId: string, firstPick: "blue" | "red") => {
         setGameSettings(draftId, { firstPick });
+    };
+
+    const handleSetBlueSideTeam = (draftId: string, blueSideTeam: 1 | 2) => {
+        setGameSettings(draftId, { blueSideTeam });
     };
 
     const handleReportWinner = (winner: "blue" | "red") => {
@@ -118,16 +128,16 @@ const VersusFlowPanelContent: Component = () => {
                     <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Game Settings
                     </div>
-                    <div class="rounded-lg border border-slate-700/50 bg-slate-900/40 p-3">
-                        <FirstPickToggle
-                            draftId={draftState()!.draft.id}
-                            blueTeamName={blueSideTeamName()}
-                            redTeamName={redSideTeamName()}
-                            currentFirstPick={draftState()!.draft.firstPick || "blue"}
-                            canEdit={canEditGameSettings()}
-                            onSetFirstPick={handleSetFirstPick}
-                        />
-                    </div>
+                    <GameSettingsGrid
+                        draftId={draftState()!.draft.id}
+                        teamOneName={versusDraft()!.blueTeamName}
+                        teamTwoName={versusDraft()!.redTeamName}
+                        blueSideTeam={(draftState()!.draft.blueSideTeam || 1) as 1 | 2}
+                        firstPick={draftState()!.draft.firstPick || "blue"}
+                        canEdit={canEditGameSettings()}
+                        onSetFirstPick={handleSetFirstPick}
+                        onSetBlueSideTeam={handleSetBlueSideTeam}
+                    />
                 </div>
             </Show>
 

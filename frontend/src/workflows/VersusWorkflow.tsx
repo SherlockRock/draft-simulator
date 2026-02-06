@@ -175,12 +175,16 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
     // Team identity tracking for per-game role re-prompt
     const [myTeamIdentity, setMyTeamIdentity] = createSignal<string | null>(null);
 
-    // Restore team identity from sessionStorage on init
+    // Restore team identity from sessionStorage, scoped to the current series
     createEffect(() => {
-        const versusDraftId = params.id;
+        const versusDraftId = params.id || versusContext().versusDraft?.id;
         if (versusDraftId) {
-            const storedIdentity = sessionStorage.getItem(`teamIdentity:${versusDraftId}`);
-            if (storedIdentity) setMyTeamIdentity(storedIdentity);
+            const storedIdentity = sessionStorage.getItem(
+                `teamIdentity:${versusDraftId}`
+            );
+            setMyTeamIdentity(storedIdentity);
+        } else {
+            setMyTeamIdentity(null);
         }
     });
 
@@ -188,7 +192,9 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
     const isNewGame = (draftId: string): boolean => {
         const versusDraftId = params.id;
         if (!versusDraftId) return false;
-        const lastConfirmed = sessionStorage.getItem(`lastConfirmedDraft:${versusDraftId}`);
+        const lastConfirmed = sessionStorage.getItem(
+            `lastConfirmedDraft:${versusDraftId}`
+        );
         return lastConfirmed !== draftId;
     };
 
@@ -737,10 +743,24 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         const versusDraftId = versusContext().versusDraft?.id;
         if (!sock || !versusDraftId) return;
 
+        // Optimistic update so UI reacts immediately
+        setVersusContext((prev) => {
+            if (!prev.versusDraft?.Drafts) return prev;
+            return {
+                ...prev,
+                versusDraft: {
+                    ...prev.versusDraft,
+                    Drafts: prev.versusDraft.Drafts.map((d) =>
+                        d.id === draftId ? { ...d, ...settings } : d
+                    )
+                }
+            };
+        });
+
         sock.emit("versusSetGameSettings", {
             versusDraftId,
             draftId,
-            ...settings,
+            ...settings
         });
     };
 

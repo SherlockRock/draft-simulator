@@ -17,17 +17,12 @@ import {
     getSuggestedRole
 } from "../workflows/VersusWorkflow";
 import { VersusDraft, draft, VersusState } from "../utils/types";
-import {
-    VERSUS_PICK_ORDER,
-    getEffectivePickOrder,
-    getPicksArrayIndex,
-} from "../utils/versusPickOrder";
+import { getEffectivePickOrder, getPicksArrayIndex } from "../utils/versusPickOrder";
 import { VersusTimer } from "../components/VersusTimer";
 import { ReadyButton } from "../components/ReadyButton";
 import { WinnerDeclarationModal } from "../components/WinnerDeclarationModal";
 import { PauseRequestModal } from "../components/PauseRequestModal";
-import { FirstPickToggle } from "../components/FirstPickToggle";
-import { SideAssignmentToggle } from "../components/SideAssignmentToggle";
+import { GameSettingsGrid } from "../components/GameSettingsGrid";
 import { champions, championCategories } from "../utils/constants";
 import toast from "solid-toast";
 import { useFilterableItems } from "../hooks/useFilterableItems";
@@ -89,6 +84,14 @@ const VersusDraftView: Component = () => {
         const role = myRole();
         const draftId = params.draftId;
         const identity = myTeamIdentity();
+        const d = draft();
+        const state = versusState();
+
+        // Never show confirmation for completed or already-started games
+        if (d?.completed || state.completed || state.timerStartedAt !== null) {
+            setNeedsGameConfirm(false);
+            return;
+        }
 
         // Only prompt captains (not spectators) who have a team identity
         // (meaning they've played at least one game in the series)
@@ -107,6 +110,16 @@ const VersusDraftView: Component = () => {
     const handleConfirmGame = () => {
         confirmGameRole(params.draftId);
         setNeedsGameConfirm(false);
+    };
+
+    // Optimistic handlers for game settings in the confirmation overlay
+    const handleConfirmSetFirstPick = (id: string, fp: "blue" | "red") => {
+        setVersusState((prev) => ({ ...prev, firstPick: fp }));
+        setGameSettings(id, { firstPick: fp });
+    };
+    const handleConfirmSetBlueSideTeam = (id: string, bst: 1 | 2) => {
+        setVersusState((prev) => ({ ...prev, blueSideTeam: bst }));
+        setGameSettings(id, { blueSideTeam: bst });
     };
 
     // Compute suggested role for re-prompt overlay
@@ -320,7 +333,7 @@ const VersusDraftView: Component = () => {
                 setVersusState((prev) => ({
                     ...prev,
                     firstPick: data.firstPick,
-                    blueSideTeam: data.blueSideTeam,
+                    blueSideTeam: data.blueSideTeam
                 }));
             }
         });
@@ -680,7 +693,10 @@ const VersusDraftView: Component = () => {
         if (state.completed || state.currentPickIndex >= effectiveOrder.length)
             return false;
         const picks = draft()?.picks || [];
-        const picksIndex = getPicksArrayIndex(state.currentPickIndex, versusState().firstPick || "blue");
+        const picksIndex = getPicksArrayIndex(
+            state.currentPickIndex,
+            versusState().firstPick || "blue"
+        );
         return !!(picks[picksIndex] && picks[picksIndex] !== "");
     };
 
@@ -691,7 +707,10 @@ const VersusDraftView: Component = () => {
         if (state.completed || state.currentPickIndex >= effectiveOrder.length)
             return null;
         const picks = draft()?.picks || [];
-        const picksIndex = getPicksArrayIndex(state.currentPickIndex, versusState().firstPick || "blue");
+        const picksIndex = getPicksArrayIndex(
+            state.currentPickIndex,
+            versusState().firstPick || "blue"
+        );
         return picks[picksIndex] || null;
     };
 
@@ -726,790 +745,823 @@ const VersusDraftView: Component = () => {
                 {/* Per-game role confirmation overlay */}
                 <Show when={needsGameConfirm()}>
                     <div class="flex h-full min-w-0 flex-1 flex-col items-center justify-center bg-slate-900">
-                        <div class="w-full max-w-md rounded-2xl border border-slate-700/50 bg-slate-800/90 p-8 text-center shadow-2xl">
-                            <div class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
-                                Game {(draft()?.seriesIndex ?? 0) + 1}
+                        <div class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-700/50 bg-slate-800/90 shadow-2xl">
+                            <div class="p-8 text-center">
+                                <div class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
+                                    Game {(draft()?.seriesIndex ?? 0) + 1}
+                                </div>
+                                <Show when={myTeamIdentity() && gameSuggestedRole()}>
+                                    <p class="text-sm text-slate-300">
+                                        You are on{" "}
+                                        <span class="font-semibold text-slate-100">
+                                            {myTeamIdentity()}
+                                        </span>
+                                        . This game, your team is on{" "}
+                                        <span
+                                            class={`font-semibold ${
+                                                gameSuggestedRole() === "blue_captain"
+                                                    ? "text-blue-400"
+                                                    : "text-red-400"
+                                            }`}
+                                        >
+                                            {gameSuggestedRole()?.includes("blue")
+                                                ? "blue"
+                                                : "red"}{" "}
+                                            side
+                                        </span>
+                                        .
+                                    </p>
+                                </Show>
                             </div>
-                            <Show when={myTeamIdentity() && gameSuggestedRole()}>
-                                <p class="mb-2 text-sm text-slate-300">
-                                    You are on{" "}
-                                    <span class="font-semibold text-slate-100">
-                                        {myTeamIdentity()}
-                                    </span>
-                                    . This game, your team is on{" "}
-                                    <span
-                                        class={`font-semibold ${
-                                            gameSuggestedRole() === "blue_captain"
-                                                ? "text-blue-400"
-                                                : "text-red-400"
-                                        }`}
-                                    >
-                                        {gameSuggestedRole()?.includes("blue")
-                                            ? "blue"
-                                            : "red"}{" "}
-                                        side
-                                    </span>
-                                    .
-                                </p>
-                            </Show>
-                            <button
-                                class="mt-4 rounded bg-teal-700 px-6 py-2.5 text-sm font-semibold text-slate-50 hover:bg-teal-600 transition-colors"
-                                onClick={handleConfirmGame}
-                            >
-                                Continue to Draft
-                            </button>
-                            <button
-                                class="mt-2 block w-full text-xs text-slate-500 hover:text-slate-400 transition-colors"
-                                onClick={() => {
-                                    const vd = versusContext().versusDraft;
-                                    if (vd) navigate(`/versus/join/${vd.shareLink}`);
-                                }}
-                            >
-                                Switch teams or spectate
-                            </button>
+                            <div class="border-t border-slate-700/50 px-8 py-4">
+                                <div class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                                    Game Settings
+                                </div>
+                                <GameSettingsGrid
+                                    draftId={params.draftId}
+                                    teamOneName={versusDraft()!.blueTeamName}
+                                    teamTwoName={versusDraft()!.redTeamName}
+                                    blueSideTeam={
+                                        (versusState().blueSideTeam || 1) as 1 | 2
+                                    }
+                                    firstPick={versusState().firstPick || "blue"}
+                                    canEdit={true}
+                                    onSetBlueSideTeam={handleConfirmSetBlueSideTeam}
+                                    onSetFirstPick={handleConfirmSetFirstPick}
+                                />
+                            </div>
+                            <div class="border-t border-slate-700/50 px-8 pb-8 pt-4 text-center">
+                                <button
+                                    class="w-full rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-slate-50 transition-colors hover:bg-orange-500"
+                                    onClick={handleConfirmGame}
+                                >
+                                    Continue as{" "}
+                                    {gameSuggestedRole()?.includes("blue")
+                                        ? "Blue"
+                                        : "Red"}{" "}
+                                    Captain
+                                </button>
+                                <button
+                                    class="mt-2 block w-full text-xs text-slate-500 transition-colors hover:text-slate-400"
+                                    onClick={() => {
+                                        const vd = versusContext().versusDraft;
+                                        if (vd) navigate(`/versus/join/${vd.shareLink}`);
+                                    }}
+                                >
+                                    Switch teams or spectate
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </Show>
                 <Show when={!needsGameConfirm()}>
-                <div class="flex h-full min-w-0 flex-1 flex-col bg-slate-900">
-                    {/* Streamlined Top Bar */}
-                    <div class="flex items-center justify-between border-b border-slate-700 bg-slate-800/50 px-6 py-3 backdrop-blur-sm">
-                        <div class="flex items-center gap-4">
-                            <button
-                                onClick={() => navigate(`/versus/${params.id}`)}
-                                class="group flex items-center gap-2 text-orange-400 transition-colors hover:text-orange-300"
-                            >
-                                <span class="transition-transform group-hover:-translate-x-1">
-                                    ←
-                                </span>
-                                <span class="text-sm font-medium">Back to Series</span>
-                            </button>
-                        </div>
-
-                        <Show
-                            when={!versusState().completed}
-                            fallback={
-                                <Show when={nextGame()}>
-                                    <button
-                                        onClick={() =>
-                                            navigate(
-                                                `/versus/${params.id}/draft/${nextGame()!.id}`
-                                            )
-                                        }
-                                        class="group flex items-center gap-2 text-orange-400 transition-colors hover:text-orange-300"
-                                    >
-                                        <span class="text-sm font-medium">Next Game</span>
-                                        <span class="transition-transform group-hover:translate-x-1">
-                                            →
-                                        </span>
-                                    </button>
-                                </Show>
-                            }
-                        >
-                            <VersusTimer
-                                timerStartedAt={versusState().timerStartedAt}
-                                duration={30}
-                                isPaused={versusState().isPaused}
-                            />
-                        </Show>
-                    </div>
-
-                    {/* Main Content */}
-                    <div class="flex flex-1 overflow-hidden">
-                        {/* Drafts Display - now takes full remaining width */}
-                        <div class="flex flex-1 flex-col p-6">
-                            {/* Team Names */}
-                            <div class="mb-4 flex items-center justify-between">
-                                {/* Blue Team */}
-                                <div class="flex flex-col items-start gap-2">
-                                    <div class="flex items-center text-xl font-bold text-blue-400">
-                                        {blueSideTeamName()}
-                                        <Show when={(versusState().firstPick || "blue") === "blue"}>
-                                            <span class="ml-2 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400 border border-amber-500/30">
-                                                1st Pick
-                                            </span>
-                                        </Show>
-                                    </div>
-                                    <Show when={!draftStarted()}>
-                                        <div
-                                            class={`flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${
-                                                versusState().readyStatus.blue
-                                                    ? "border border-emerald-500/50 bg-emerald-500/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
-                                                    : "border border-slate-600/50 bg-slate-700/50 text-slate-500"
-                                            }`}
-                                        >
-                                            <div
-                                                class={`h-2 w-2 rounded-full transition-all duration-300 ${
-                                                    versusState().readyStatus.blue
-                                                        ? "animate-pulse bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
-                                                        : "bg-slate-500"
-                                                }`}
-                                            />
-                                            <span>
-                                                {versusState().readyStatus.blue
-                                                    ? "Ready"
-                                                    : "Not Ready"}
-                                            </span>
-                                        </div>
-                                    </Show>
-                                </div>
-                                <div class="flex flex-col items-center gap-1">
-                                    <span class="rounded bg-slate-700 px-2 py-0.5 text-xs font-semibold text-slate-300">
-                                        Game {(draft()?.seriesIndex ?? 0) + 1}
-                                    </span>
-                                    <span class="text-slate-500">vs</span>
-                                </div>
-                                {/* Red Team */}
-                                <div class="flex flex-col items-end gap-2">
-                                    <div class="flex items-center text-xl font-bold text-red-400">
-                                        {redSideTeamName()}
-                                        <Show when={(versusState().firstPick || "blue") === "red"}>
-                                            <span class="ml-2 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400 border border-amber-500/30">
-                                                1st Pick
-                                            </span>
-                                        </Show>
-                                    </div>
-                                    <Show when={!draftStarted()}>
-                                        <div
-                                            class={`flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${
-                                                versusState().readyStatus.red
-                                                    ? "border border-emerald-500/50 bg-emerald-500/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
-                                                    : "border border-slate-600/50 bg-slate-700/50 text-slate-500"
-                                            }`}
-                                        >
-                                            <div
-                                                class={`h-2 w-2 rounded-full transition-all duration-300 ${
-                                                    versusState().readyStatus.red
-                                                        ? "animate-pulse bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
-                                                        : "bg-slate-500"
-                                                }`}
-                                            />
-                                            <span>
-                                                {versusState().readyStatus.red
-                                                    ? "Ready"
-                                                    : "Not Ready"}
-                                            </span>
-                                        </div>
-                                    </Show>
-                                </div>
-                            </div>
-
-                            {/* Bans */}
-                            <div class="mb-6">
-                                <div class="mb-2 text-sm font-semibold text-slate-400">
-                                    Bans
-                                </div>
-                                <div class="flex justify-between gap-4">
-                                    <div class="flex gap-2">
-                                        <For each={getTeamBans("blue")}>
-                                            {(ban, index) => (
-                                                <div
-                                                    class={`h-14 w-14 rounded border-2 bg-slate-800 transition-all ${
-                                                        isBanActive("blue", index())
-                                                            ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
-                                                            : "border-blue-600/30"
-                                                    }`}
-                                                >
-                                                    <Show when={ban && ban !== ""}>
-                                                        <img
-                                                            src={
-                                                                champions[parseInt(ban)]
-                                                                    .img
-                                                            }
-                                                            alt=""
-                                                            class="h-full w-full rounded object-cover opacity-50"
-                                                        />
-                                                    </Show>
-                                                </div>
-                                            )}
-                                        </For>
-                                    </div>
-                                    <div class="flex gap-2">
-                                        <For each={getTeamBans("red")}>
-                                            {(ban, index) => (
-                                                <div
-                                                    class={`h-14 w-14 rounded border-2 bg-slate-800 transition-all ${
-                                                        isBanActive("red", index())
-                                                            ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
-                                                            : "border-red-600/30"
-                                                    }`}
-                                                >
-                                                    <Show when={ban && ban !== ""}>
-                                                        <img
-                                                            src={
-                                                                champions[parseInt(ban)]
-                                                                    .img
-                                                            }
-                                                            alt=""
-                                                            class="h-full w-full rounded object-cover opacity-50"
-                                                        />
-                                                    </Show>
-                                                </div>
-                                            )}
-                                        </For>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Picks */}
-                            <div class="mb-6 flex gap-8">
-                                {/* Blue Picks */}
-                                <div class="flex-1">
-                                    <div class="mb-2 text-sm font-semibold text-blue-400">
-                                        Blue Picks
-                                    </div>
-                                    <div class="space-y-2">
-                                        <For each={getTeamPicks("blue")}>
-                                            {(pick, index) => (
-                                                <div
-                                                    class={`flex h-16 items-center gap-3 rounded border-2 bg-slate-800 p-2 transition-all ${
-                                                        isPickActive("blue", index())
-                                                            ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
-                                                            : "border-blue-600/30"
-                                                    }`}
-                                                >
-                                                    <Show when={pick && pick !== ""}>
-                                                        <img
-                                                            src={
-                                                                champions[parseInt(pick)]
-                                                                    .img
-                                                            }
-                                                            alt={
-                                                                champions[parseInt(pick)]
-                                                                    .name
-                                                            }
-                                                            class="h-14 w-14 rounded object-cover"
-                                                        />
-                                                        <span class="text-sm text-slate-200">
-                                                            {
-                                                                champions[parseInt(pick)]
-                                                                    .name
-                                                            }
-                                                        </span>
-                                                    </Show>
-                                                </div>
-                                            )}
-                                        </For>
-                                    </div>
-                                </div>
-
-                                {/* Red Picks */}
-                                <div class="flex-1">
-                                    <div class="mb-2 text-sm font-semibold text-red-400">
-                                        Red Picks
-                                    </div>
-                                    <div class="space-y-2">
-                                        <For each={getTeamPicks("red")}>
-                                            {(pick, index) => (
-                                                <div
-                                                    class={`flex h-16 items-center gap-3 rounded border-2 bg-slate-800 p-2 transition-all ${
-                                                        isPickActive("red", index())
-                                                            ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
-                                                            : "border-red-600/30"
-                                                    }`}
-                                                >
-                                                    <Show when={pick && pick !== ""}>
-                                                        <img
-                                                            src={
-                                                                champions[parseInt(pick)]
-                                                                    .img
-                                                            }
-                                                            alt={
-                                                                champions[parseInt(pick)]
-                                                                    .name
-                                                            }
-                                                            class="h-14 w-14 rounded object-cover"
-                                                        />
-                                                        <span class="text-sm text-slate-200">
-                                                            {
-                                                                champions[parseInt(pick)]
-                                                                    .name
-                                                            }
-                                                        </span>
-                                                    </Show>
-                                                </div>
-                                            )}
-                                        </For>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Ready/Lock In Button */}
-                            <Show when={!versusState().completed}>
-                                <div class="flex justify-center">
-                                    <ReadyButton
-                                        isReady={
-                                            myRole()?.includes("blue")
-                                                ? versusState().readyStatus.blue
-                                                : versusState().readyStatus.red
-                                        }
-                                        opponentReady={
-                                            myRole()?.includes("blue")
-                                                ? versusState().readyStatus.red
-                                                : versusState().readyStatus.blue
-                                        }
-                                        draftStarted={draftStarted()}
-                                        isSpectator={isSpectator()}
-                                        onReady={handleReady}
-                                        onUnready={handleUnready}
-                                        onLockIn={handleLockIn}
-                                        disabled={
-                                            !isMyTurn() ||
-                                            !hasPendingPick() ||
-                                            versusState().isPaused
-                                        }
-                                    />
-                                </div>
-                            </Show>
-
-                            {/* Game Settings (pre-draft, captains only) */}
-                            <Show when={!draftStarted() && !isSpectator()}>
-                                <div class="mt-4 flex flex-col items-center gap-2">
-                                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                                        Game Settings
-                                    </span>
-                                    <FirstPickToggle
-                                        draftId={params.draftId}
-                                        blueTeamName={blueSideTeamName()}
-                                        redTeamName={redSideTeamName()}
-                                        currentFirstPick={versusState().firstPick || "blue"}
-                                        canEdit={true}
-                                        onSetFirstPick={(id, fp) =>
-                                            setGameSettings(id, { firstPick: fp })
-                                        }
-                                    />
-                                    <SideAssignmentToggle
-                                        draftId={params.draftId}
-                                        teamOneName={versusDraft()!.blueTeamName}
-                                        teamTwoName={versusDraft()!.redTeamName}
-                                        blueSideTeam={
-                                            (versusState().blueSideTeam || 1) as 1 | 2
-                                        }
-                                        canEdit={true}
-                                        onSetBlueSideTeam={(id, bst) =>
-                                            setGameSettings(id, { blueSideTeam: bst })
-                                        }
-                                    />
-                                </div>
-                            </Show>
-
-                            {/* Current Pick Info */}
-                            <Show when={getCurrentPickInfo()}>
-                                <div class="mt-4 text-center text-sm text-slate-400">
-                                    Current: {getCurrentPickInfo()!.team.toUpperCase()}{" "}
-                                    {getCurrentPickInfo()!.type}
-                                </div>
-                            </Show>
-                        </div>
-
-                        {/* Champion Panel with Tabs */}
-                        <div class="flex w-96 flex-col border-l border-slate-700 bg-slate-800">
-                            {/* Tab Buttons */}
-                            <div class="flex border-b border-slate-700">
+                    <div class="flex h-full min-w-0 flex-1 flex-col bg-slate-900">
+                        {/* Streamlined Top Bar */}
+                        <div class="flex items-center justify-between border-b border-slate-700 bg-slate-800/50 px-6 py-3 backdrop-blur-sm">
+                            <div class="flex items-center gap-4">
                                 <button
-                                    onClick={() => setActiveTab("pick")}
-                                    class={`flex-1 px-4 py-3 text-sm font-semibold transition-colors ${
-                                        activeTab() === "pick"
-                                            ? "border-b-2 border-orange-400 bg-slate-700/50 text-orange-400"
-                                            : "text-slate-400 hover:bg-slate-700/30 hover:text-slate-200"
-                                    }`}
+                                    onClick={() => navigate(`/versus/${params.id}`)}
+                                    class="group flex items-center gap-2 text-orange-400 transition-colors hover:text-orange-300"
                                 >
-                                    Pick
+                                    <span class="transition-transform group-hover:-translate-x-1">
+                                        ←
+                                    </span>
+                                    <span class="text-sm font-medium">
+                                        Back to Series
+                                    </span>
                                 </button>
-                                <Show when={showRestrictedTab()}>
+                            </div>
+
+                            <Show
+                                when={!versusState().completed}
+                                fallback={
+                                    <Show when={nextGame()}>
+                                        <button
+                                            onClick={() =>
+                                                navigate(
+                                                    `/versus/${params.id}/draft/${nextGame()!.id}`
+                                                )
+                                            }
+                                            class="group flex items-center gap-2 text-orange-400 transition-colors hover:text-orange-300"
+                                        >
+                                            <span class="text-sm font-medium">
+                                                Next Game
+                                            </span>
+                                            <span class="transition-transform group-hover:translate-x-1">
+                                                →
+                                            </span>
+                                        </button>
+                                    </Show>
+                                }
+                            >
+                                <VersusTimer
+                                    timerStartedAt={versusState().timerStartedAt}
+                                    duration={30}
+                                    isPaused={versusState().isPaused}
+                                />
+                            </Show>
+                        </div>
+
+                        {/* Main Content */}
+                        <div class="flex flex-1 overflow-hidden">
+                            {/* Drafts Display - now takes full remaining width */}
+                            <div class="flex flex-1 flex-col p-6">
+                                {/* Team Names */}
+                                <div class="mb-4 flex items-center justify-between">
+                                    {/* Blue Team */}
+                                    <div class="flex flex-col items-start gap-2">
+                                        <div class="flex items-center text-xl font-bold text-blue-400">
+                                            {blueSideTeamName()}
+                                            <Show
+                                                when={
+                                                    (versusState().firstPick ||
+                                                        "blue") === "blue"
+                                                }
+                                            >
+                                                <span class="ml-2 rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+                                                    1st Pick
+                                                </span>
+                                            </Show>
+                                        </div>
+                                        <Show when={!draftStarted()}>
+                                            <div
+                                                class={`flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${
+                                                    versusState().readyStatus.blue
+                                                        ? "border border-emerald-500/50 bg-emerald-500/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+                                                        : "border border-slate-600/50 bg-slate-700/50 text-slate-500"
+                                                }`}
+                                            >
+                                                <div
+                                                    class={`h-2 w-2 rounded-full transition-all duration-300 ${
+                                                        versusState().readyStatus.blue
+                                                            ? "animate-pulse bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
+                                                            : "bg-slate-500"
+                                                    }`}
+                                                />
+                                                <span>
+                                                    {versusState().readyStatus.blue
+                                                        ? "Ready"
+                                                        : "Not Ready"}
+                                                </span>
+                                            </div>
+                                        </Show>
+                                    </div>
+                                    <div class="flex flex-col items-center gap-1">
+                                        <span class="rounded bg-slate-700 px-2 py-0.5 text-xs font-semibold text-slate-300">
+                                            Game {(draft()?.seriesIndex ?? 0) + 1}
+                                        </span>
+                                        <span class="text-slate-500">vs</span>
+                                    </div>
+                                    {/* Red Team */}
+                                    <div class="flex flex-col items-end gap-2">
+                                        <div class="flex items-center text-xl font-bold text-red-400">
+                                            {redSideTeamName()}
+                                            <Show
+                                                when={
+                                                    (versusState().firstPick ||
+                                                        "blue") === "red"
+                                                }
+                                            >
+                                                <span class="ml-2 rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+                                                    1st Pick
+                                                </span>
+                                            </Show>
+                                        </div>
+                                        <Show when={!draftStarted()}>
+                                            <div
+                                                class={`flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${
+                                                    versusState().readyStatus.red
+                                                        ? "border border-emerald-500/50 bg-emerald-500/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+                                                        : "border border-slate-600/50 bg-slate-700/50 text-slate-500"
+                                                }`}
+                                            >
+                                                <div
+                                                    class={`h-2 w-2 rounded-full transition-all duration-300 ${
+                                                        versusState().readyStatus.red
+                                                            ? "animate-pulse bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
+                                                            : "bg-slate-500"
+                                                    }`}
+                                                />
+                                                <span>
+                                                    {versusState().readyStatus.red
+                                                        ? "Ready"
+                                                        : "Not Ready"}
+                                                </span>
+                                            </div>
+                                        </Show>
+                                    </div>
+                                </div>
+
+                                {/* Bans */}
+                                <div class="mb-6">
+                                    <div class="mb-2 text-sm font-semibold text-slate-400">
+                                        Bans
+                                    </div>
+                                    <div class="flex justify-between gap-4">
+                                        <div class="flex gap-2">
+                                            <For each={getTeamBans("blue")}>
+                                                {(ban, index) => (
+                                                    <div
+                                                        class={`h-14 w-14 rounded border-2 bg-slate-800 transition-all ${
+                                                            isBanActive("blue", index())
+                                                                ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
+                                                                : "border-blue-600/30"
+                                                        }`}
+                                                    >
+                                                        <Show when={ban && ban !== ""}>
+                                                            <img
+                                                                src={
+                                                                    champions[
+                                                                        parseInt(ban)
+                                                                    ].img
+                                                                }
+                                                                alt=""
+                                                                class="h-full w-full rounded object-cover opacity-50"
+                                                            />
+                                                        </Show>
+                                                    </div>
+                                                )}
+                                            </For>
+                                        </div>
+                                        <div class="flex gap-2">
+                                            <For each={getTeamBans("red")}>
+                                                {(ban, index) => (
+                                                    <div
+                                                        class={`h-14 w-14 rounded border-2 bg-slate-800 transition-all ${
+                                                            isBanActive("red", index())
+                                                                ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
+                                                                : "border-red-600/30"
+                                                        }`}
+                                                    >
+                                                        <Show when={ban && ban !== ""}>
+                                                            <img
+                                                                src={
+                                                                    champions[
+                                                                        parseInt(ban)
+                                                                    ].img
+                                                                }
+                                                                alt=""
+                                                                class="h-full w-full rounded object-cover opacity-50"
+                                                            />
+                                                        </Show>
+                                                    </div>
+                                                )}
+                                            </For>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Picks */}
+                                <div class="mb-6 flex gap-8">
+                                    {/* Blue Picks */}
+                                    <div class="flex-1">
+                                        <div class="mb-2 text-sm font-semibold text-blue-400">
+                                            Blue Picks
+                                        </div>
+                                        <div class="space-y-2">
+                                            <For each={getTeamPicks("blue")}>
+                                                {(pick, index) => (
+                                                    <div
+                                                        class={`flex h-16 items-center gap-3 rounded border-2 bg-slate-800 p-2 transition-all ${
+                                                            isPickActive("blue", index())
+                                                                ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
+                                                                : "border-blue-600/30"
+                                                        }`}
+                                                    >
+                                                        <Show when={pick && pick !== ""}>
+                                                            <img
+                                                                src={
+                                                                    champions[
+                                                                        parseInt(pick)
+                                                                    ].img
+                                                                }
+                                                                alt={
+                                                                    champions[
+                                                                        parseInt(pick)
+                                                                    ].name
+                                                                }
+                                                                class="h-14 w-14 rounded object-cover"
+                                                            />
+                                                            <span class="text-sm text-slate-200">
+                                                                {
+                                                                    champions[
+                                                                        parseInt(pick)
+                                                                    ].name
+                                                                }
+                                                            </span>
+                                                        </Show>
+                                                    </div>
+                                                )}
+                                            </For>
+                                        </div>
+                                    </div>
+
+                                    {/* Red Picks */}
+                                    <div class="flex-1">
+                                        <div class="mb-2 text-sm font-semibold text-red-400">
+                                            Red Picks
+                                        </div>
+                                        <div class="space-y-2">
+                                            <For each={getTeamPicks("red")}>
+                                                {(pick, index) => (
+                                                    <div
+                                                        class={`flex h-16 items-center gap-3 rounded border-2 bg-slate-800 p-2 transition-all ${
+                                                            isPickActive("red", index())
+                                                                ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
+                                                                : "border-red-600/30"
+                                                        }`}
+                                                    >
+                                                        <Show when={pick && pick !== ""}>
+                                                            <img
+                                                                src={
+                                                                    champions[
+                                                                        parseInt(pick)
+                                                                    ].img
+                                                                }
+                                                                alt={
+                                                                    champions[
+                                                                        parseInt(pick)
+                                                                    ].name
+                                                                }
+                                                                class="h-14 w-14 rounded object-cover"
+                                                            />
+                                                            <span class="text-sm text-slate-200">
+                                                                {
+                                                                    champions[
+                                                                        parseInt(pick)
+                                                                    ].name
+                                                                }
+                                                            </span>
+                                                        </Show>
+                                                    </div>
+                                                )}
+                                            </For>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Ready/Lock In Button */}
+                                <Show when={!versusState().completed}>
+                                    <div class="flex justify-center">
+                                        <ReadyButton
+                                            isReady={
+                                                myRole()?.includes("blue")
+                                                    ? versusState().readyStatus.blue
+                                                    : versusState().readyStatus.red
+                                            }
+                                            opponentReady={
+                                                myRole()?.includes("blue")
+                                                    ? versusState().readyStatus.red
+                                                    : versusState().readyStatus.blue
+                                            }
+                                            draftStarted={draftStarted()}
+                                            isSpectator={isSpectator()}
+                                            onReady={handleReady}
+                                            onUnready={handleUnready}
+                                            onLockIn={handleLockIn}
+                                            disabled={
+                                                !isMyTurn() ||
+                                                !hasPendingPick() ||
+                                                versusState().isPaused
+                                            }
+                                        />
+                                    </div>
+                                </Show>
+
+                                {/* Current Pick Info */}
+                                <Show when={getCurrentPickInfo()}>
+                                    <div class="mt-4 text-center text-sm text-slate-400">
+                                        Current:{" "}
+                                        {getCurrentPickInfo()!.team.toUpperCase()}{" "}
+                                        {getCurrentPickInfo()!.type}
+                                    </div>
+                                </Show>
+                            </div>
+
+                            {/* Champion Panel with Tabs */}
+                            <div class="flex w-96 flex-col border-l border-slate-700 bg-slate-800">
+                                {/* Tab Buttons */}
+                                <div class="flex border-b border-slate-700">
                                     <button
-                                        onClick={() => setActiveTab("restricted")}
+                                        onClick={() => setActiveTab("pick")}
                                         class={`flex-1 px-4 py-3 text-sm font-semibold transition-colors ${
-                                            activeTab() === "restricted"
+                                            activeTab() === "pick"
                                                 ? "border-b-2 border-orange-400 bg-slate-700/50 text-orange-400"
                                                 : "text-slate-400 hover:bg-slate-700/30 hover:text-slate-200"
                                         }`}
                                     >
-                                        Restricted
+                                        Pick
                                     </button>
-                                </Show>
-                            </div>
-
-                            {/* Pick Tab Content */}
-                            <Show when={activeTab() === "pick"}>
-                                <div class="flex flex-1 flex-col overflow-hidden pb-4 pt-4">
-                                    <div class="px-4 pb-2">
-                                        <FilterBar
-                                            searchText={searchText}
-                                            onSearchChange={setSearchText}
-                                            selectedCategory={selectedCategory}
-                                            onCategoryChange={setSelectedCategory}
-                                            categories={championCategoryList}
-                                            searchPlaceholder="Search champions..."
-                                            categoryPlaceholder="Role"
-                                        />
-                                    </div>
-                                    <div
-                                        class="grid grid-cols-5 gap-2 overflow-y-auto px-4 py-2"
-                                        style={{ height: "calc(100vh - 300px)" }}
-                                    >
-                                        <For each={filteredChampions()}>
-                                            {({ item: champ, originalIndex }) => {
-                                                const isPicked = () =>
-                                                    draft()!.picks.includes(
-                                                        String(originalIndex)
-                                                    );
-                                                const isSeriesRestricted = () =>
-                                                    restrictedChampions().includes(
-                                                        String(originalIndex)
-                                                    );
-                                                const isPendingSelection = () =>
-                                                    getCurrentPendingChampion() ===
-                                                        String(originalIndex) &&
-                                                    isMyTurn();
-                                                const canSelect = () =>
-                                                    isMyTurn() &&
-                                                    !isPicked() &&
-                                                    !isSeriesRestricted() &&
-                                                    !versusState().isPaused;
-
-                                                return (
-                                                    <button
-                                                        onClick={() =>
-                                                            canSelect() &&
-                                                            handleChampionSelect(
-                                                                String(originalIndex)
-                                                            )
-                                                        }
-                                                        class={`relative h-14 w-14 overflow-hidden rounded border-2 transition-all ${
-                                                            (isPicked() ||
-                                                                isSeriesRestricted()) &&
-                                                            !isPendingSelection()
-                                                                ? "cursor-not-allowed border-slate-700 opacity-30"
-                                                                : isPendingSelection()
-                                                                  ? "scale-110 cursor-pointer border-4 border-yellow-400 ring-4 ring-yellow-400/50"
-                                                                  : canSelect()
-                                                                    ? "cursor-pointer border-orange-500 hover:scale-105 hover:border-orange-400"
-                                                                    : "cursor-not-allowed border-slate-700 opacity-50"
-                                                        }`}
-                                                        title={champ.name}
-                                                    >
-                                                        <img
-                                                            src={champ.img}
-                                                            alt={champ.name}
-                                                            class="h-full w-full object-cover"
-                                                        />
-                                                    </button>
-                                                );
-                                            }}
-                                        </For>
-                                    </div>
-                                </div>
-                            </Show>
-
-                            {/* Restricted Tab Content */}
-                            <Show when={activeTab() === "restricted"}>
-                                <div
-                                    class="flex-1 overflow-y-auto px-4 py-4"
-                                    style={{ height: "calc(100vh - 300px)" }}
-                                >
-                                    <Show
-                                        when={restrictedByGame().length > 0}
-                                        fallback={
-                                            <div class="flex h-full items-center justify-center text-sm text-slate-500">
-                                                No previous games
-                                            </div>
-                                        }
-                                    >
-                                        <For each={restrictedByGame()}>
-                                            {(game, index) => (
-                                                <div class="mb-4">
-                                                    <Show when={index() > 0}>
-                                                        <div class="mb-4 border-t border-slate-700" />
-                                                    </Show>
-                                                    <div class="mb-3 text-sm font-semibold text-slate-300">
-                                                        Game {game.gameNumber}
-                                                    </div>
-
-                                                    {/* Bans (Ironman only) */}
-                                                    <Show
-                                                        when={
-                                                            versusDraft()?.type ===
-                                                            "ironman"
-                                                        }
-                                                    >
-                                                        <div class="mb-3">
-                                                            <div class="mb-2 text-sm font-medium text-blue-400">
-                                                                Blue Bans
-                                                            </div>
-                                                            <div class="grid grid-cols-5 gap-2">
-                                                                <For each={game.blueBans}>
-                                                                    {(champId) => (
-                                                                        <div class="relative h-14 w-14 overflow-hidden rounded border-2 border-blue-600/30 bg-slate-700">
-                                                                            <Show
-                                                                                when={
-                                                                                    champId &&
-                                                                                    champId !==
-                                                                                        ""
-                                                                                }
-                                                                                fallback={
-                                                                                    <img
-                                                                                        src={
-                                                                                            BlankSquare
-                                                                                        }
-                                                                                        alt="Empty"
-                                                                                        class="h-full w-full object-cover"
-                                                                                    />
-                                                                                }
-                                                                            >
-                                                                                <img
-                                                                                    src={
-                                                                                        champions[
-                                                                                            parseInt(
-                                                                                                champId
-                                                                                            )
-                                                                                        ]
-                                                                                            .img
-                                                                                    }
-                                                                                    alt={
-                                                                                        champions[
-                                                                                            parseInt(
-                                                                                                champId
-                                                                                            )
-                                                                                        ]
-                                                                                            .name
-                                                                                    }
-                                                                                    class="h-full w-full object-cover opacity-50"
-                                                                                    title={
-                                                                                        champions[
-                                                                                            parseInt(
-                                                                                                champId
-                                                                                            )
-                                                                                        ]
-                                                                                            .name
-                                                                                    }
-                                                                                />
-                                                                                <div class="absolute inset-0 flex items-center justify-center bg-black/30">
-                                                                                    <span class="text-lg text-red-500">
-                                                                                        ✕
-                                                                                    </span>
-                                                                                </div>
-                                                                            </Show>
-                                                                        </div>
-                                                                    )}
-                                                                </For>
-                                                            </div>
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <div class="mb-2 text-sm font-medium text-red-400">
-                                                                Red Bans
-                                                            </div>
-                                                            <div class="grid grid-cols-5 gap-2">
-                                                                <For each={game.redBans}>
-                                                                    {(champId) => (
-                                                                        <div class="relative h-14 w-14 overflow-hidden rounded border-2 border-red-600/30 bg-slate-700">
-                                                                            <Show
-                                                                                when={
-                                                                                    champId &&
-                                                                                    champId !==
-                                                                                        ""
-                                                                                }
-                                                                                fallback={
-                                                                                    <img
-                                                                                        src={
-                                                                                            BlankSquare
-                                                                                        }
-                                                                                        alt="Empty"
-                                                                                        class="h-full w-full object-cover"
-                                                                                    />
-                                                                                }
-                                                                            >
-                                                                                <img
-                                                                                    src={
-                                                                                        champions[
-                                                                                            parseInt(
-                                                                                                champId
-                                                                                            )
-                                                                                        ]
-                                                                                            .img
-                                                                                    }
-                                                                                    alt={
-                                                                                        champions[
-                                                                                            parseInt(
-                                                                                                champId
-                                                                                            )
-                                                                                        ]
-                                                                                            .name
-                                                                                    }
-                                                                                    class="h-full w-full object-cover opacity-50"
-                                                                                    title={
-                                                                                        champions[
-                                                                                            parseInt(
-                                                                                                champId
-                                                                                            )
-                                                                                        ]
-                                                                                            .name
-                                                                                    }
-                                                                                />
-                                                                                <div class="absolute inset-0 flex items-center justify-center bg-black/30">
-                                                                                    <span class="text-lg text-red-500">
-                                                                                        ✕
-                                                                                    </span>
-                                                                                </div>
-                                                                            </Show>
-                                                                        </div>
-                                                                    )}
-                                                                </For>
-                                                            </div>
-                                                        </div>
-                                                    </Show>
-
-                                                    {/* Picks (always shown for Fearless/Ironman) */}
-                                                    <div class="mb-3">
-                                                        <div class="mb-2 text-sm font-medium text-blue-400">
-                                                            Blue Picks
-                                                        </div>
-                                                        <div class="grid grid-cols-5 gap-2">
-                                                            <For each={game.bluePicks}>
-                                                                {(champId) => (
-                                                                    <div class="h-14 w-14 overflow-hidden rounded border-2 border-blue-600/30 bg-slate-700">
-                                                                        <Show
-                                                                            when={
-                                                                                champId &&
-                                                                                champId !==
-                                                                                    ""
-                                                                            }
-                                                                            fallback={
-                                                                                <img
-                                                                                    src={
-                                                                                        BlankSquare
-                                                                                    }
-                                                                                    alt="Empty"
-                                                                                    class="h-full w-full object-cover"
-                                                                                />
-                                                                            }
-                                                                        >
-                                                                            <img
-                                                                                src={
-                                                                                    champions[
-                                                                                        parseInt(
-                                                                                            champId
-                                                                                        )
-                                                                                    ].img
-                                                                                }
-                                                                                alt={
-                                                                                    champions[
-                                                                                        parseInt(
-                                                                                            champId
-                                                                                        )
-                                                                                    ].name
-                                                                                }
-                                                                                class="h-full w-full object-cover"
-                                                                                title={
-                                                                                    champions[
-                                                                                        parseInt(
-                                                                                            champId
-                                                                                        )
-                                                                                    ].name
-                                                                                }
-                                                                            />
-                                                                        </Show>
-                                                                    </div>
-                                                                )}
-                                                            </For>
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <div class="mb-2 text-sm font-medium text-red-400">
-                                                            Red Picks
-                                                        </div>
-                                                        <div class="grid grid-cols-5 gap-2">
-                                                            <For each={game.redPicks}>
-                                                                {(champId) => (
-                                                                    <div class="h-14 w-14 overflow-hidden rounded border-2 border-red-600/30 bg-slate-700">
-                                                                        <Show
-                                                                            when={
-                                                                                champId &&
-                                                                                champId !==
-                                                                                    ""
-                                                                            }
-                                                                            fallback={
-                                                                                <img
-                                                                                    src={
-                                                                                        BlankSquare
-                                                                                    }
-                                                                                    alt="Empty"
-                                                                                    class="h-full w-full object-cover"
-                                                                                />
-                                                                            }
-                                                                        >
-                                                                            <img
-                                                                                src={
-                                                                                    champions[
-                                                                                        parseInt(
-                                                                                            champId
-                                                                                        )
-                                                                                    ].img
-                                                                                }
-                                                                                alt={
-                                                                                    champions[
-                                                                                        parseInt(
-                                                                                            champId
-                                                                                        )
-                                                                                    ].name
-                                                                                }
-                                                                                class="h-full w-full object-cover"
-                                                                                title={
-                                                                                    champions[
-                                                                                        parseInt(
-                                                                                            champId
-                                                                                        )
-                                                                                    ].name
-                                                                                }
-                                                                            />
-                                                                        </Show>
-                                                                    </div>
-                                                                )}
-                                                            </For>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </For>
+                                    <Show when={showRestrictedTab()}>
+                                        <button
+                                            onClick={() => setActiveTab("restricted")}
+                                            class={`flex-1 px-4 py-3 text-sm font-semibold transition-colors ${
+                                                activeTab() === "restricted"
+                                                    ? "border-b-2 border-orange-400 bg-slate-700/50 text-orange-400"
+                                                    : "text-slate-400 hover:bg-slate-700/30 hover:text-slate-200"
+                                            }`}
+                                        >
+                                            Restricted
+                                        </button>
                                     </Show>
                                 </div>
-                            </Show>
-                        </div>
-                    </div>
 
-                    {/* Modals */}
-                    <WinnerDeclarationModal
-                        isOpen={showWinnerModal()}
-                        blueTeamName={versusDraft()!.blueTeamName}
-                        redTeamName={versusDraft()!.redTeamName}
-                        onDeclareWinner={handleDeclareWinner}
-                        isSpectator={isSpectator()}
-                    />
+                                {/* Pick Tab Content */}
+                                <Show when={activeTab() === "pick"}>
+                                    <div class="flex flex-1 flex-col overflow-hidden pb-4 pt-4">
+                                        <div class="px-4 pb-2">
+                                            <FilterBar
+                                                searchText={searchText}
+                                                onSearchChange={setSearchText}
+                                                selectedCategory={selectedCategory}
+                                                onCategoryChange={setSelectedCategory}
+                                                categories={championCategoryList}
+                                                searchPlaceholder="Search champions..."
+                                                categoryPlaceholder="Role"
+                                            />
+                                        </div>
+                                        <div
+                                            class="grid grid-cols-5 gap-2 overflow-y-auto px-4 py-2"
+                                            style={{ height: "calc(100vh - 300px)" }}
+                                        >
+                                            <For each={filteredChampions()}>
+                                                {({ item: champ, originalIndex }) => {
+                                                    const isPicked = () =>
+                                                        draft()!.picks.includes(
+                                                            String(originalIndex)
+                                                        );
+                                                    const isSeriesRestricted = () =>
+                                                        restrictedChampions().includes(
+                                                            String(originalIndex)
+                                                        );
+                                                    const isPendingSelection = () =>
+                                                        getCurrentPendingChampion() ===
+                                                            String(originalIndex) &&
+                                                        isMyTurn();
+                                                    const canSelect = () =>
+                                                        isMyTurn() &&
+                                                        !isPicked() &&
+                                                        !isSeriesRestricted() &&
+                                                        !versusState().isPaused;
 
-                    <PauseRequestModal
-                        isOpen={showPauseRequest()}
-                        requestType={pauseRequestType()}
-                        requestingTeam={pauseRequestTeam()}
-                        blueTeamName={versusDraft()!.blueTeamName}
-                        redTeamName={versusDraft()!.redTeamName}
-                        onApprove={handleApproveRequest}
-                        onReject={handleRejectRequest}
-                    />
+                                                    return (
+                                                        <button
+                                                            onClick={() =>
+                                                                canSelect() &&
+                                                                handleChampionSelect(
+                                                                    String(originalIndex)
+                                                                )
+                                                            }
+                                                            class={`relative h-14 w-14 overflow-hidden rounded border-2 transition-all ${
+                                                                (isPicked() ||
+                                                                    isSeriesRestricted()) &&
+                                                                !isPendingSelection()
+                                                                    ? "cursor-not-allowed border-slate-700 opacity-30"
+                                                                    : isPendingSelection()
+                                                                      ? "scale-110 cursor-pointer border-4 border-yellow-400 ring-4 ring-yellow-400/50"
+                                                                      : canSelect()
+                                                                        ? "cursor-pointer border-orange-500 hover:scale-105 hover:border-orange-400"
+                                                                        : "cursor-not-allowed border-slate-700 opacity-50"
+                                                            }`}
+                                                            title={champ.name}
+                                                        >
+                                                            <img
+                                                                src={champ.img}
+                                                                alt={champ.name}
+                                                                class="h-full w-full object-cover"
+                                                            />
+                                                        </button>
+                                                    );
+                                                }}
+                                            </For>
+                                        </div>
+                                    </div>
+                                </Show>
 
-                    {/* Resume Countdown Overlay */}
-                    <Show when={isCountingDown()}>
-                        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-                            <div class="text-center">
-                                <div class="mb-4 animate-pulse text-9xl font-bold text-orange-400">
-                                    {countdownValue()}
-                                </div>
-                                <p class="text-2xl font-semibold text-slate-300">
-                                    Resuming...
-                                </p>
+                                {/* Restricted Tab Content */}
+                                <Show when={activeTab() === "restricted"}>
+                                    <div
+                                        class="flex-1 overflow-y-auto px-4 py-4"
+                                        style={{ height: "calc(100vh - 300px)" }}
+                                    >
+                                        <Show
+                                            when={restrictedByGame().length > 0}
+                                            fallback={
+                                                <div class="flex h-full items-center justify-center text-sm text-slate-500">
+                                                    No previous games
+                                                </div>
+                                            }
+                                        >
+                                            <For each={restrictedByGame()}>
+                                                {(game, index) => (
+                                                    <div class="mb-4">
+                                                        <Show when={index() > 0}>
+                                                            <div class="mb-4 border-t border-slate-700" />
+                                                        </Show>
+                                                        <div class="mb-3 text-sm font-semibold text-slate-300">
+                                                            Game {game.gameNumber}
+                                                        </div>
+
+                                                        {/* Bans (Ironman only) */}
+                                                        <Show
+                                                            when={
+                                                                versusDraft()?.type ===
+                                                                "ironman"
+                                                            }
+                                                        >
+                                                            <div class="mb-3">
+                                                                <div class="mb-2 text-sm font-medium text-blue-400">
+                                                                    Blue Bans
+                                                                </div>
+                                                                <div class="grid grid-cols-5 gap-2">
+                                                                    <For
+                                                                        each={
+                                                                            game.blueBans
+                                                                        }
+                                                                    >
+                                                                        {(champId) => (
+                                                                            <div class="relative h-14 w-14 overflow-hidden rounded border-2 border-blue-600/30 bg-slate-700">
+                                                                                <Show
+                                                                                    when={
+                                                                                        champId &&
+                                                                                        champId !==
+                                                                                            ""
+                                                                                    }
+                                                                                    fallback={
+                                                                                        <img
+                                                                                            src={
+                                                                                                BlankSquare
+                                                                                            }
+                                                                                            alt="Empty"
+                                                                                            class="h-full w-full object-cover"
+                                                                                        />
+                                                                                    }
+                                                                                >
+                                                                                    <img
+                                                                                        src={
+                                                                                            champions[
+                                                                                                parseInt(
+                                                                                                    champId
+                                                                                                )
+                                                                                            ]
+                                                                                                .img
+                                                                                        }
+                                                                                        alt={
+                                                                                            champions[
+                                                                                                parseInt(
+                                                                                                    champId
+                                                                                                )
+                                                                                            ]
+                                                                                                .name
+                                                                                        }
+                                                                                        class="h-full w-full object-cover opacity-50"
+                                                                                        title={
+                                                                                            champions[
+                                                                                                parseInt(
+                                                                                                    champId
+                                                                                                )
+                                                                                            ]
+                                                                                                .name
+                                                                                        }
+                                                                                    />
+                                                                                    <div class="absolute inset-0 flex items-center justify-center bg-black/30">
+                                                                                        <span class="text-lg text-red-500">
+                                                                                            ✕
+                                                                                        </span>
+                                                                                    </div>
+                                                                                </Show>
+                                                                            </div>
+                                                                        )}
+                                                                    </For>
+                                                                </div>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <div class="mb-2 text-sm font-medium text-red-400">
+                                                                    Red Bans
+                                                                </div>
+                                                                <div class="grid grid-cols-5 gap-2">
+                                                                    <For
+                                                                        each={
+                                                                            game.redBans
+                                                                        }
+                                                                    >
+                                                                        {(champId) => (
+                                                                            <div class="relative h-14 w-14 overflow-hidden rounded border-2 border-red-600/30 bg-slate-700">
+                                                                                <Show
+                                                                                    when={
+                                                                                        champId &&
+                                                                                        champId !==
+                                                                                            ""
+                                                                                    }
+                                                                                    fallback={
+                                                                                        <img
+                                                                                            src={
+                                                                                                BlankSquare
+                                                                                            }
+                                                                                            alt="Empty"
+                                                                                            class="h-full w-full object-cover"
+                                                                                        />
+                                                                                    }
+                                                                                >
+                                                                                    <img
+                                                                                        src={
+                                                                                            champions[
+                                                                                                parseInt(
+                                                                                                    champId
+                                                                                                )
+                                                                                            ]
+                                                                                                .img
+                                                                                        }
+                                                                                        alt={
+                                                                                            champions[
+                                                                                                parseInt(
+                                                                                                    champId
+                                                                                                )
+                                                                                            ]
+                                                                                                .name
+                                                                                        }
+                                                                                        class="h-full w-full object-cover opacity-50"
+                                                                                        title={
+                                                                                            champions[
+                                                                                                parseInt(
+                                                                                                    champId
+                                                                                                )
+                                                                                            ]
+                                                                                                .name
+                                                                                        }
+                                                                                    />
+                                                                                    <div class="absolute inset-0 flex items-center justify-center bg-black/30">
+                                                                                        <span class="text-lg text-red-500">
+                                                                                            ✕
+                                                                                        </span>
+                                                                                    </div>
+                                                                                </Show>
+                                                                            </div>
+                                                                        )}
+                                                                    </For>
+                                                                </div>
+                                                            </div>
+                                                        </Show>
+
+                                                        {/* Picks (always shown for Fearless/Ironman) */}
+                                                        <div class="mb-3">
+                                                            <div class="mb-2 text-sm font-medium text-blue-400">
+                                                                Blue Picks
+                                                            </div>
+                                                            <div class="grid grid-cols-5 gap-2">
+                                                                <For
+                                                                    each={game.bluePicks}
+                                                                >
+                                                                    {(champId) => (
+                                                                        <div class="h-14 w-14 overflow-hidden rounded border-2 border-blue-600/30 bg-slate-700">
+                                                                            <Show
+                                                                                when={
+                                                                                    champId &&
+                                                                                    champId !==
+                                                                                        ""
+                                                                                }
+                                                                                fallback={
+                                                                                    <img
+                                                                                        src={
+                                                                                            BlankSquare
+                                                                                        }
+                                                                                        alt="Empty"
+                                                                                        class="h-full w-full object-cover"
+                                                                                    />
+                                                                                }
+                                                                            >
+                                                                                <img
+                                                                                    src={
+                                                                                        champions[
+                                                                                            parseInt(
+                                                                                                champId
+                                                                                            )
+                                                                                        ]
+                                                                                            .img
+                                                                                    }
+                                                                                    alt={
+                                                                                        champions[
+                                                                                            parseInt(
+                                                                                                champId
+                                                                                            )
+                                                                                        ]
+                                                                                            .name
+                                                                                    }
+                                                                                    class="h-full w-full object-cover"
+                                                                                    title={
+                                                                                        champions[
+                                                                                            parseInt(
+                                                                                                champId
+                                                                                            )
+                                                                                        ]
+                                                                                            .name
+                                                                                    }
+                                                                                />
+                                                                            </Show>
+                                                                        </div>
+                                                                    )}
+                                                                </For>
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <div class="mb-2 text-sm font-medium text-red-400">
+                                                                Red Picks
+                                                            </div>
+                                                            <div class="grid grid-cols-5 gap-2">
+                                                                <For each={game.redPicks}>
+                                                                    {(champId) => (
+                                                                        <div class="h-14 w-14 overflow-hidden rounded border-2 border-red-600/30 bg-slate-700">
+                                                                            <Show
+                                                                                when={
+                                                                                    champId &&
+                                                                                    champId !==
+                                                                                        ""
+                                                                                }
+                                                                                fallback={
+                                                                                    <img
+                                                                                        src={
+                                                                                            BlankSquare
+                                                                                        }
+                                                                                        alt="Empty"
+                                                                                        class="h-full w-full object-cover"
+                                                                                    />
+                                                                                }
+                                                                            >
+                                                                                <img
+                                                                                    src={
+                                                                                        champions[
+                                                                                            parseInt(
+                                                                                                champId
+                                                                                            )
+                                                                                        ]
+                                                                                            .img
+                                                                                    }
+                                                                                    alt={
+                                                                                        champions[
+                                                                                            parseInt(
+                                                                                                champId
+                                                                                            )
+                                                                                        ]
+                                                                                            .name
+                                                                                    }
+                                                                                    class="h-full w-full object-cover"
+                                                                                    title={
+                                                                                        champions[
+                                                                                            parseInt(
+                                                                                                champId
+                                                                                            )
+                                                                                        ]
+                                                                                            .name
+                                                                                    }
+                                                                                />
+                                                                            </Show>
+                                                                        </div>
+                                                                    )}
+                                                                </For>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </For>
+                                        </Show>
+                                    </div>
+                                </Show>
                             </div>
                         </div>
-                    </Show>
-                </div>
+
+                        {/* Modals */}
+                        <WinnerDeclarationModal
+                            isOpen={showWinnerModal()}
+                            blueTeamName={versusDraft()!.blueTeamName}
+                            redTeamName={versusDraft()!.redTeamName}
+                            onDeclareWinner={handleDeclareWinner}
+                            isSpectator={isSpectator()}
+                        />
+
+                        <PauseRequestModal
+                            isOpen={showPauseRequest()}
+                            requestType={pauseRequestType()}
+                            requestingTeam={pauseRequestTeam()}
+                            blueTeamName={versusDraft()!.blueTeamName}
+                            redTeamName={versusDraft()!.redTeamName}
+                            onApprove={handleApproveRequest}
+                            onReject={handleRejectRequest}
+                        />
+
+                        {/* Resume Countdown Overlay */}
+                        <Show when={isCountingDown()}>
+                            <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+                                <div class="text-center">
+                                    <div class="mb-4 animate-pulse text-9xl font-bold text-orange-400">
+                                        {countdownValue()}
+                                    </div>
+                                    <p class="text-2xl font-semibold text-slate-300">
+                                        Resuming...
+                                    </p>
+                                </div>
+                            </div>
+                        </Show>
+                    </div>
                 </Show>
             </Show>
         </Show>

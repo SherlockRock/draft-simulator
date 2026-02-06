@@ -3,6 +3,8 @@ Versus functionality:
         not sure how I feel about the current draft name system
     maybe fearless champs should have a different visual indicator?
     the unpickable because it isn't your turn UI should be more distinct from unpickable due to fearless
+    contiue as X role selction failed to check the versus keys
+    share button from within the draft view
 
 Canvas Functionality:
     "Locked" is not explained in the UI

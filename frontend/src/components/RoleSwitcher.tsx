@@ -9,7 +9,7 @@ interface RoleSwitcherProps {
 }
 
 export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
-    const { releaseRole } = useVersusContext();
+    const { releaseRole, versusContext } = useVersusContext();
     const [isOpen, setIsOpen] = createSignal(false);
 
     const handleSwitchRole = () => {
@@ -20,23 +20,20 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
     };
 
     const getRoleDisplay = () => {
-        if (props.currentRole === "blue_captain") return "Blue Captain";
-        if (props.currentRole === "red_captain") return "Red Captain";
+        const vd = versusContext().versusDraft;
+        if (props.currentRole === "blue_captain")
+            return vd ? `${vd.blueTeamName} Captain` : "Captain";
+        if (props.currentRole === "red_captain")
+            return vd ? `${vd.redTeamName} Captain` : "Captain";
         return "Spectator";
     };
 
     const getRoleStyles = () => {
-        if (props.currentRole === "blue_captain")
+        if (props.currentRole === "blue_captain" || props.currentRole === "red_captain")
             return {
-                pill: "bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30",
-                dot: "bg-blue-400",
-                text: "text-blue-400"
-            };
-        if (props.currentRole === "red_captain")
-            return {
-                pill: "bg-red-500/20 text-red-300 border-red-500/40 hover:bg-red-500/30",
-                dot: "bg-red-400",
-                text: "text-red-400"
+                pill: "bg-orange-500/20 text-orange-300 border-orange-500/40 hover:bg-orange-500/30",
+                dot: "bg-orange-400",
+                text: "text-orange-400"
             };
         return {
             pill: "bg-slate-600/30 text-slate-300 border-slate-500/40 hover:bg-slate-600/50",
