@@ -45,7 +45,7 @@ export const VersusTimer: Component<VersusTimerProps> = (props) => {
             fallback={<div class="text-2xl font-bold text-slate-400">--</div>}
         >
             <div
-                class={`text-3xl font-bold transition-colors ${
+                class={`flex h-14 flex-col text-center text-3xl font-bold transition-colors ${
                     props.isPaused
                         ? "text-yellow-500"
                         : isLowTime()
@@ -54,7 +54,7 @@ export const VersusTimer: Component<VersusTimerProps> = (props) => {
                 }`}
             >
                 {timeRemaining()}s
-                {props.isPaused && <span class="ml-2 text-sm">(Paused)</span>}
+                {props.isPaused && <span class="text-sm">(Paused)</span>}
             </div>
         </Show>
     );
