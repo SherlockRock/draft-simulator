@@ -156,22 +156,6 @@ const VersusFlowPanelContent: Component = () => {
                             currentRole={myRole() || "spectator"}
                         />
                     </div>
-
-                    {/* Draft Status Indicator - Paused */}
-                    <Show
-                        when={
-                            isInDraftView() &&
-                            draftState()?.isPaused &&
-                            callbacks()?.draftStarted()
-                        }
-                    >
-                        <div class="mt-3 flex items-center gap-2 rounded border border-yellow-500/30 bg-yellow-500/10 px-3 py-1.5">
-                            <div class="h-1.5 w-1.5 animate-pulse rounded-full bg-yellow-400" />
-                            <span class="text-xs font-semibold text-yellow-400">
-                                Paused
-                            </span>
-                        </div>
-                    </Show>
                 </div>
             </Show>
 
@@ -347,7 +331,11 @@ const VersusFlowPanelContent: Component = () => {
                         >
                             <button
                                 onClick={() => callbacks()?.handlePause()}
-                                class="w-full rounded border border-slate-600/50 bg-slate-700/50 px-3 py-1.5 text-sm font-medium text-slate-300 transition-all hover:bg-slate-600/50 active:scale-[0.98]"
+                                class={`w-full rounded px-3 py-1.5 text-sm font-medium transition-all active:scale-[0.98] ${
+                                    draftState()?.isPaused
+                                        ? "border border-yellow-500/60 bg-yellow-500/15 font-bold text-yellow-400 hover:bg-yellow-500/25"
+                                        : "border border-slate-600/50 bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
+                                }`}
                             >
                                 {draftState()?.isPaused ? "Resume Draft" : "Pause Draft"}
                             </button>

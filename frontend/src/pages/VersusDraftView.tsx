@@ -821,21 +821,21 @@ const VersusDraftView: Component = () => {
                             {/* Drafts Display - now takes full remaining width */}
                             <div class="flex flex-1 flex-col p-6">
                                 {/* Team Names */}
-                                <div class="mb-4 flex items-center justify-between">
+                                <div class="mb-4 flex items-center">
                                     {/* Blue Team */}
-                                    <div class="flex flex-col items-start gap-2">
-                                        <div class="flex items-center text-xl font-bold text-blue-400">
+                                    <div class="flex min-w-0 flex-1 flex-col items-start gap-2">
+                                        <Show
+                                            when={
+                                                (versusState().firstPick || "blue") ===
+                                                "blue"
+                                            }
+                                        >
+                                            <span class="rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+                                                1st Pick
+                                            </span>
+                                        </Show>
+                                        <div class="text-xl font-bold text-blue-400">
                                             {blueSideTeamName()}
-                                            <Show
-                                                when={
-                                                    (versusState().firstPick ||
-                                                        "blue") === "blue"
-                                                }
-                                            >
-                                                <span class="ml-2 rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
-                                                    1st Pick
-                                                </span>
-                                            </Show>
                                         </div>
                                         <Show when={!draftStarted()}>
                                             <div
@@ -897,19 +897,19 @@ const VersusDraftView: Component = () => {
                                         </Show>
                                     </div>
                                     {/* Red Team */}
-                                    <div class="flex flex-col items-end gap-2">
-                                        <div class="flex items-center text-xl font-bold text-red-400">
+                                    <div class="flex min-w-0 flex-1 flex-col items-end gap-2">
+                                        <Show
+                                            when={
+                                                (versusState().firstPick || "blue") ===
+                                                "red"
+                                            }
+                                        >
+                                            <span class="rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+                                                1st Pick
+                                            </span>
+                                        </Show>
+                                        <div class="text-xl font-bold text-red-400">
                                             {redSideTeamName()}
-                                            <Show
-                                                when={
-                                                    (versusState().firstPick ||
-                                                        "blue") === "red"
-                                                }
-                                            >
-                                                <span class="ml-2 rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
-                                                    1st Pick
-                                                </span>
-                                            </Show>
                                         </div>
                                         <Show when={!draftStarted()}>
                                             <div
@@ -1084,31 +1084,51 @@ const VersusDraftView: Component = () => {
                                     </div>
                                 </div>
 
-                                {/* Ready/Lock In Button */}
+                                {/* Ready/Lock In Button or Resume Button */}
                                 <Show when={!versusState().completed}>
                                     <div class="flex justify-center">
-                                        <ReadyButton
-                                            isReady={
-                                                myRole()?.includes("blue")
-                                                    ? versusState().readyStatus.blue
-                                                    : versusState().readyStatus.red
+                                        <Show
+                                            when={
+                                                versusState().isPaused &&
+                                                draftStarted() &&
+                                                !isSpectator()
                                             }
-                                            opponentReady={
-                                                myRole()?.includes("blue")
-                                                    ? versusState().readyStatus.red
-                                                    : versusState().readyStatus.blue
+                                            fallback={
+                                                <ReadyButton
+                                                    isReady={
+                                                        myRole()?.includes("blue")
+                                                            ? versusState().readyStatus
+                                                                  .blue
+                                                            : versusState().readyStatus
+                                                                  .red
+                                                    }
+                                                    opponentReady={
+                                                        myRole()?.includes("blue")
+                                                            ? versusState().readyStatus
+                                                                  .red
+                                                            : versusState().readyStatus
+                                                                  .blue
+                                                    }
+                                                    draftStarted={draftStarted()}
+                                                    isSpectator={isSpectator()}
+                                                    onReady={handleReady}
+                                                    onUnready={handleUnready}
+                                                    onLockIn={handleLockIn}
+                                                    disabled={
+                                                        !isMyTurn() ||
+                                                        !hasPendingPick() ||
+                                                        versusState().isPaused
+                                                    }
+                                                />
                                             }
-                                            draftStarted={draftStarted()}
-                                            isSpectator={isSpectator()}
-                                            onReady={handleReady}
-                                            onUnready={handleUnready}
-                                            onLockIn={handleLockIn}
-                                            disabled={
-                                                !isMyTurn() ||
-                                                !hasPendingPick() ||
-                                                versusState().isPaused
-                                            }
-                                        />
+                                        >
+                                            <button
+                                                onClick={handlePause}
+                                                class="rounded-lg border border-yellow-500/60 bg-yellow-500/15 px-12 py-4 text-[0.95rem] font-bold uppercase tracking-wider text-yellow-400 transition-all hover:bg-yellow-500/25"
+                                            >
+                                                Resume Draft
+                                            </button>
+                                        </Show>
                                     </div>
                                 </Show>
 

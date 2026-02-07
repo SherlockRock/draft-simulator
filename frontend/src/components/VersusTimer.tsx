@@ -44,17 +44,24 @@ export const VersusTimer: Component<VersusTimerProps> = (props) => {
             when={props.timerStartedAt}
             fallback={<div class="text-2xl font-bold text-slate-400">--</div>}
         >
-            <div
-                class={`flex h-14 flex-col text-center text-3xl font-bold transition-colors ${
-                    props.isPaused
-                        ? "text-yellow-500"
-                        : isLowTime()
-                          ? "text-red-500"
-                          : "text-orange-400"
-                }`}
-            >
-                {timeRemaining()}s
-                {props.isPaused && <span class="text-sm">(Paused)</span>}
+            <div class="text-center">
+                <Show
+                    when={!props.isPaused}
+                    fallback={
+                        <span class="inline-flex items-center gap-1.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 px-3.5 py-1 text-center text-sm font-bold uppercase tracking-wider text-yellow-400">
+                            <div class="h-2 w-2 animate-pulse rounded-full bg-yellow-400 shadow-[0_0_6px_rgba(250,204,21,0.6)]" />
+                            <p>Paused</p>
+                        </span>
+                    }
+                >
+                    <span
+                        class={`text-3xl font-bold transition-colors ${
+                            isLowTime() ? "text-red-500" : "text-orange-400"
+                        }`}
+                    >
+                        {timeRemaining()}s
+                    </span>
+                </Show>
             </div>
         </Show>
     );
