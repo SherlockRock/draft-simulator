@@ -865,7 +865,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     createEffect(() => {
         const currentId = params.id;
         const data = props.canvasData;
-        if (!data || currentId === loadedCanvasId()) return;
+        if (!data || props.isLoading || currentId === loadedCanvasId()) return;
 
         // Leave old socket rooms if switching canvases
         const prevId = loadedCanvasId();
