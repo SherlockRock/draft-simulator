@@ -688,6 +688,47 @@ const VersusDraftView: Component = () => {
         );
     });
 
+    // Map champion ID → { gameNumber, pickIndex } for overlay badges
+    const restrictedChampionGameMap = createMemo(() => {
+        const map = new Map<string, { gameNumber: number; pickIndex: number }>();
+        for (const game of restrictedByGame()) {
+            // blueBans → picks indices 0-4, redBans → 5-9
+            // bluePicks → 10-14, redPicks → 15-19
+            const entries: [string[], number][] = [
+                [game.blueBans, 0],
+                [game.redBans, 5],
+                [game.bluePicks, 10],
+                [game.redPicks, 15]
+            ];
+            for (const [arr, offset] of entries) {
+                arr.forEach((id, i) => {
+                    if (id && id !== "")
+                        map.set(id, {
+                            gameNumber: game.gameNumber,
+                            pickIndex: offset + i
+                        });
+                });
+            }
+        }
+        return map;
+    });
+
+    // Convert a picks array index (0-19) to a short draft position label (T1B1, T2P3, etc.)
+    const getDraftPositionLabel = (pickIndex: number): string => {
+        if (pickIndex < 5) return `T1B${pickIndex + 1}`;
+        if (pickIndex < 10) return `T2B${pickIndex - 4}`;
+        if (pickIndex < 15) return `T1P${pickIndex - 9}`;
+        return `T2P${pickIndex - 14}`;
+    };
+
+    // Convert a picks array index (0-19) to a full-text label for tooltips
+    const getDraftPositionText = (pickIndex: number): string => {
+        if (pickIndex < 5) return `Team 1 Ban ${pickIndex + 1}`;
+        if (pickIndex < 10) return `Team 2 Ban ${pickIndex - 4}`;
+        if (pickIndex < 15) return `Team 1 Pick ${pickIndex - 9}`;
+        return `Team 2 Pick ${pickIndex - 14}`;
+    };
+
     // Check if Restricted tab should be shown (not Standard mode)
     const showRestrictedTab = createMemo(() => {
         const vd = versusDraft();
@@ -1210,51 +1251,162 @@ const VersusDraftView: Component = () => {
                                         <div class="grid flex-1 grid-cols-5 content-start gap-2 overflow-y-auto px-4 py-2">
                                             <For each={filteredChampions()}>
                                                 {({ item: champ, originalIndex }) => {
+                                                    const champId = () =>
+                                                        String(originalIndex);
                                                     const isPicked = () =>
                                                         (draft()?.picks ?? []).includes(
-                                                            String(originalIndex)
+                                                            champId()
                                                         );
                                                     const isSeriesRestricted = () =>
                                                         restrictedChampions().includes(
-                                                            String(originalIndex)
+                                                            champId()
                                                         );
                                                     const isPendingSelection = () =>
                                                         getCurrentPendingChampion() ===
-                                                            String(originalIndex) &&
-                                                        isMyTurn();
+                                                            champId() && isMyTurn();
                                                     const canSelect = () =>
                                                         isMyTurn() &&
                                                         !isPicked() &&
                                                         !isSeriesRestricted() &&
                                                         !versusState().isPaused;
+                                                    const restrictionInfo = () =>
+                                                        restrictedChampionGameMap().get(
+                                                            champId()
+                                                        );
+                                                    const currentPickIndex = () => {
+                                                        const picks =
+                                                            draft()?.picks ?? [];
+                                                        return picks.indexOf(champId());
+                                                    };
+                                                    const currentGameNumber = () =>
+                                                        (draft()?.seriesIndex ?? 0) + 1;
+                                                    const getTooltip = () => {
+                                                        if (isSeriesRestricted()) {
+                                                            const info =
+                                                                restrictionInfo();
+                                                            const type =
+                                                                versusDraft()?.type ===
+                                                                "ironman"
+                                                                    ? "Ironman"
+                                                                    : "Fearless";
+                                                            return `${champ.name} - Game ${info?.gameNumber} ${getDraftPositionText(info?.pickIndex ?? 0)} (${type})`;
+                                                        }
+                                                        if (isPicked()) {
+                                                            const idx =
+                                                                currentPickIndex();
+                                                            return `${champ.name} - Game ${currentGameNumber()} ${getDraftPositionText(idx)}`;
+                                                        }
+                                                        return champ.name;
+                                                    };
+                                                    const hasStyledTooltip = () =>
+                                                        (isPicked() ||
+                                                            isSeriesRestricted()) &&
+                                                        !isPendingSelection();
 
                                                     return (
-                                                        <button
-                                                            onClick={() =>
-                                                                canSelect() &&
-                                                                handleChampionSelect(
-                                                                    String(originalIndex)
-                                                                )
-                                                            }
-                                                            class={`relative h-14 w-14 overflow-hidden rounded border-2 transition-all ${
-                                                                (isPicked() ||
-                                                                    isSeriesRestricted()) &&
-                                                                !isPendingSelection()
-                                                                    ? "cursor-not-allowed border-slate-700 opacity-30"
-                                                                    : isPendingSelection()
-                                                                      ? "scale-110 cursor-pointer border-4 border-yellow-400 ring-4 ring-yellow-400/50"
-                                                                      : canSelect()
-                                                                        ? "cursor-pointer border-orange-500 hover:scale-105 hover:border-orange-400"
-                                                                        : "cursor-not-allowed border-slate-700 opacity-50"
-                                                            }`}
-                                                            title={champ.name}
-                                                        >
-                                                            <img
-                                                                src={champ.img}
-                                                                alt={champ.name}
-                                                                class="h-full w-full object-cover"
-                                                            />
-                                                        </button>
+                                                        <div class="group relative">
+                                                            <button
+                                                                onClick={() =>
+                                                                    canSelect() &&
+                                                                    handleChampionSelect(
+                                                                        champId()
+                                                                    )
+                                                                }
+                                                                class={`relative h-14 w-14 overflow-hidden rounded border-2 transition-all ${
+                                                                    isPendingSelection()
+                                                                        ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
+                                                                        : isSeriesRestricted() &&
+                                                                            !isPendingSelection()
+                                                                          ? "cursor-not-allowed border-red-900"
+                                                                          : isPicked() &&
+                                                                              !isPendingSelection()
+                                                                            ? "cursor-not-allowed border-slate-700"
+                                                                            : canSelect()
+                                                                              ? "cursor-pointer border-slate-500 hover:scale-105 hover:border-slate-300"
+                                                                              : "cursor-default border-slate-600"
+                                                                }`}
+                                                                title={
+                                                                    hasStyledTooltip()
+                                                                        ? undefined
+                                                                        : champ.name
+                                                                }
+                                                            >
+                                                                <img
+                                                                    src={champ.img}
+                                                                    alt={champ.name}
+                                                                    class={`h-full w-full object-cover ${
+                                                                        (isPicked() ||
+                                                                            isSeriesRestricted()) &&
+                                                                        !isPendingSelection()
+                                                                            ? "opacity-40"
+                                                                            : ""
+                                                                    }`}
+                                                                />
+                                                                <Show
+                                                                    when={
+                                                                        isSeriesRestricted() &&
+                                                                        !isPendingSelection()
+                                                                    }
+                                                                >
+                                                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/80 px-1 py-px text-[9px] font-bold leading-tight text-red-300">
+                                                                        <span>
+                                                                            G
+                                                                            {
+                                                                                restrictionInfo()
+                                                                                    ?.gameNumber
+                                                                            }
+                                                                        </span>
+                                                                        <span>
+                                                                            {getDraftPositionLabel(
+                                                                                restrictionInfo()
+                                                                                    ?.pickIndex ??
+                                                                                    0
+                                                                            )}
+                                                                        </span>
+                                                                    </div>
+                                                                </Show>
+                                                                <Show
+                                                                    when={
+                                                                        isPicked() &&
+                                                                        !isSeriesRestricted() &&
+                                                                        !isPendingSelection()
+                                                                    }
+                                                                >
+                                                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/80 px-1 py-px text-[9px] font-bold leading-tight text-slate-300">
+                                                                        <span>
+                                                                            G
+                                                                            {currentGameNumber()}
+                                                                        </span>
+                                                                        <span>
+                                                                            {getDraftPositionLabel(
+                                                                                currentPickIndex()
+                                                                            )}
+                                                                        </span>
+                                                                    </div>
+                                                                </Show>
+                                                            </button>
+                                                            <Show
+                                                                when={
+                                                                    isSeriesRestricted() &&
+                                                                    !isPendingSelection()
+                                                                }
+                                                            >
+                                                                <div class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[10px] text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                                                                    {getTooltip()}
+                                                                </div>
+                                                            </Show>
+                                                            <Show
+                                                                when={
+                                                                    isPicked() &&
+                                                                    !isSeriesRestricted() &&
+                                                                    !isPendingSelection()
+                                                                }
+                                                            >
+                                                                <div class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[10px] text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                                                                    {getTooltip()}
+                                                                </div>
+                                                            </Show>
+                                                        </div>
                                                     );
                                                 }}
                                             </For>
