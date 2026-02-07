@@ -77,12 +77,11 @@ const VersusFlowPanelContent: Component = () => {
         return bst === 1 ? versusDraft()?.redTeamName : versusDraft()?.blueTeamName;
     });
 
-    const handleSetFirstPick = (draftId: string, firstPick: "blue" | "red") => {
-        setGameSettings(draftId, { firstPick });
-    };
-
-    const handleSetBlueSideTeam = (draftId: string, blueSideTeam: 1 | 2) => {
-        setGameSettings(draftId, { blueSideTeam });
+    const handleSettingsChange = (
+        draftId: string,
+        settings: { firstPick?: "blue" | "red"; blueSideTeam?: 1 | 2 }
+    ) => {
+        setGameSettings(draftId, settings);
     };
 
     const handleReportWinner = (winner: "blue" | "red") => {
@@ -106,7 +105,7 @@ const VersusFlowPanelContent: Component = () => {
         <div class="flex h-full flex-col pt-4">
             {/* Back to Series - shown when viewing a draft */}
             <Show when={isInDraftView() && isInSeries()}>
-                <div class="px-1 pb-3">
+                <div class="pb-3">
                     <button
                         onClick={() => navigate(`/versus/${params.id}`)}
                         class="group flex items-center gap-2 text-orange-400 transition-colors hover:text-orange-300"
@@ -121,7 +120,7 @@ const VersusFlowPanelContent: Component = () => {
 
             {/* Match Info Section - shown when in a series */}
             <Show when={isInSeries() && versusDraft()}>
-                <div class="px-1 pb-4">
+                <div class="pb-4">
                     {/* Series info card */}
                     <div class="flex items-center justify-between rounded-lg border border-slate-700/50 bg-slate-900/40 p-3">
                         <h2 class="text-base font-bold leading-tight text-slate-100">
@@ -170,7 +169,7 @@ const VersusFlowPanelContent: Component = () => {
                     canEditGameSettings()
                 }
             >
-                <div class="border-t border-slate-700/50 px-1 py-4">
+                <div class="border-t border-slate-700/50 py-4">
                     <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Game Settings
                     </div>
@@ -181,15 +180,14 @@ const VersusFlowPanelContent: Component = () => {
                         blueSideTeam={(draftState()?.draft?.blueSideTeam || 1) as 1 | 2}
                         firstPick={draftState()?.draft?.firstPick || "blue"}
                         canEdit={canEditGameSettings()}
-                        onSetFirstPick={handleSetFirstPick}
-                        onSetBlueSideTeam={handleSetBlueSideTeam}
+                        onSettingsChange={handleSettingsChange}
                     />
                 </div>
             </Show>
 
             {/* Invite Section */}
             <Show when={isInSeries() && versusDraft()}>
-                <div class="relative border-t border-slate-700/50 px-1 py-4">
+                <div class="relative border-t border-slate-700/50 py-4">
                     <button
                         onClick={() => setShowSharePopover(!showSharePopover())}
                         class={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all ${
@@ -302,7 +300,7 @@ const VersusFlowPanelContent: Component = () => {
                     ((callbacks() && !isSpectator()) || draftState()?.completed)
                 }
             >
-                <div class="border-t border-slate-700/50 px-1 py-4">
+                <div class="border-t border-slate-700/50 py-4">
                     <div class="space-y-2">
                         {/* Winner Reporter - shown when draft is completed */}
                         <Show when={draftState()?.completed && draftState()?.draft}>

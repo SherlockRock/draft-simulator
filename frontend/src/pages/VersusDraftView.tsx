@@ -58,9 +58,6 @@ const VersusDraftView: Component = () => {
     const accessor = useUser();
     const [, , socketAccessor, connectionStatusAccessor] = accessor();
 
-    // Track disconnection state for reconnection handling
-    const [wasDisconnected, setWasDisconnected] = createSignal(false);
-
     // Get role and participant info from context (single source of truth)
     const {
         versusContext,
@@ -75,7 +72,18 @@ const VersusDraftView: Component = () => {
     } = useVersusContext();
     const myRole = createMemo(() => versusContext().myParticipant?.role || null);
     const participantId = createMemo(() => versusContext().myParticipant?.id || null);
-    const [versusDraft] = createResource(() => params.id, fetchVersusDraft);
+    const [versusDraft, { mutate: mutateVersusDraft }] = createResource(
+        () => params.id,
+        fetchVersusDraft
+    );
+
+    // Sync context's versusDraft (updated via sockets) to local resource
+    createEffect(() => {
+        const contextVD = versusContext().versusDraft;
+        if (contextVD) {
+            mutateVersusDraft(contextVD);
+        }
+    });
 
     // Per-game role re-prompt: track whether user needs to confirm role for this game
     const [needsGameConfirm, setNeedsGameConfirm] = createSignal(false);
@@ -112,14 +120,14 @@ const VersusDraftView: Component = () => {
         setNeedsGameConfirm(false);
     };
 
-    // Optimistic handlers for game settings in the confirmation overlay
-    const handleConfirmSetFirstPick = (id: string, fp: "blue" | "red") => {
-        setVersusState((prev) => ({ ...prev, firstPick: fp }));
-        setGameSettings(id, { firstPick: fp });
-    };
-    const handleConfirmSetBlueSideTeam = (id: string, bst: 1 | 2) => {
-        setVersusState((prev) => ({ ...prev, blueSideTeam: bst }));
-        setGameSettings(id, { blueSideTeam: bst });
+    // Optimistic handler for game settings in the confirmation overlay
+    const handleConfirmSettingsChange = (
+        id: string,
+        settings: { firstPick?: "blue" | "red"; blueSideTeam?: 1 | 2 }
+    ) => {
+        setVersusState((prev) => ({ ...prev, ...settings }));
+        mutateDraft((prev) => (prev ? { ...prev, ...settings } : prev!));
+        setGameSettings(id, settings);
     };
 
     // Compute suggested role for re-prompt overlay
@@ -169,23 +177,23 @@ const VersusDraftView: Component = () => {
         categoryMap: championCategories
     });
 
-    // Socket.IO setup - only run when socket/role/participant change, not when draft updates
+    // Socket listener registration - only re-runs when socket instance changes
+    // Follows VersusWorkflow's deduplication pattern to avoid tearing down listeners
+    // when unrelated dependencies (role, participantId) change.
+    let draftSocketWithListeners: any = undefined;
+
     createEffect(() => {
         const socket = socketAccessor();
-        const role = myRole();
-        const pId = participantId();
+        const connectionStatus = connectionStatusAccessor();
 
-        if (!socket) {
-            return null;
+        if (!socket || !socket.connected || connectionStatus !== "connected") {
+            return;
         }
 
-        // Join versus draft room
-        socket.emit("joinVersusDraft", {
-            versusDraftId: params.id,
-            draftId: params.draftId,
-            role,
-            participantId: pId
-        });
+        // Skip if this socket already has listeners registered
+        if (draftSocketWithListeners === socket) {
+            return;
+        }
 
         socket.on("heartbeat", (data: any) => {
             if (
@@ -258,7 +266,7 @@ const VersusDraftView: Component = () => {
 
         // Listen for pause requests
         socket.on("pauseRequested", (data: any) => {
-            const myTeam = role?.includes("blue") ? "blue" : "red";
+            const myTeam = myRole()?.includes("blue") ? "blue" : "red";
             // Only show modal if it's NOT your team requesting
             if (data.team !== myTeam) {
                 setPauseRequestType("pause");
@@ -269,7 +277,7 @@ const VersusDraftView: Component = () => {
 
         // Listen for resume requests
         socket.on("resumeRequested", (data: any) => {
-            const myTeam = role?.includes("blue") ? "blue" : "red";
+            const myTeam = myRole()?.includes("blue") ? "blue" : "red";
             // Only show modal if it's NOT your team requesting
             if (data.team !== myTeam) {
                 setPauseRequestType("resume");
@@ -335,6 +343,15 @@ const VersusDraftView: Component = () => {
                     firstPick: data.firstPick,
                     blueSideTeam: data.blueSideTeam
                 }));
+                mutateDraft((prev) =>
+                    prev
+                        ? {
+                              ...prev,
+                              firstPick: data.firstPick,
+                              blueSideTeam: data.blueSideTeam
+                          }
+                        : prev!
+                );
             }
         });
 
@@ -355,11 +372,13 @@ const VersusDraftView: Component = () => {
             }
         );
 
+        draftSocketWithListeners = socket;
+
         onCleanup(() => {
-            socket.emit("leaveVersusDraft", {
-                versusDraftId: params.id,
-                participantId: pId
-            });
+            if (draftSocketWithListeners === socket) {
+                draftSocketWithListeners = undefined;
+            }
+            socket.off("heartbeat");
             socket.off("draftStateSync");
             socket.off("readyUpdate");
             socket.off("draftStarted");
@@ -376,26 +395,31 @@ const VersusDraftView: Component = () => {
         });
     });
 
-    // Track disconnection and rejoin draft room on reconnect
+    // Draft room membership - re-runs when socket, connection, role, or participant changes.
+    // Handles initial join, role changes, and reconnection (no separate reconnection effect needed).
     createEffect(() => {
-        const status = connectionStatusAccessor();
+        const socket = socketAccessor();
+        const connectionStatus = connectionStatusAccessor();
+        const role = myRole();
+        const pId = participantId();
 
-        if (status === "disconnected" || status === "connecting") {
-            setWasDisconnected(true);
-        } else if (status === "connected" && wasDisconnected()) {
-            setWasDisconnected(false);
-
-            // Reconnected - rejoin the draft room
-            const socket = socketAccessor();
-            if (socket) {
-                socket.emit("joinVersusDraft", {
-                    versusDraftId: params.id,
-                    draftId: params.draftId,
-                    role: myRole(),
-                    participantId: participantId()
-                });
-            }
+        if (!socket || !socket.connected || connectionStatus !== "connected") {
+            return;
         }
+
+        socket.emit("joinVersusDraft", {
+            versusDraftId: params.id,
+            draftId: params.draftId,
+            role,
+            participantId: pId
+        });
+
+        onCleanup(() => {
+            socket.emit("leaveVersusDraft", {
+                versusDraftId: params.id,
+                participantId: pId
+            });
+        });
     });
 
     // Register draft state with workflow context for FlowPanel
@@ -786,8 +810,7 @@ const VersusDraftView: Component = () => {
                                     }
                                     firstPick={versusState().firstPick || "blue"}
                                     canEdit={true}
-                                    onSetBlueSideTeam={handleConfirmSetBlueSideTeam}
-                                    onSetFirstPick={handleConfirmSetFirstPick}
+                                    onSettingsChange={handleConfirmSettingsChange}
                                 />
                             </div>
                             <div class="border-t border-slate-700/50 px-8 pb-8 pt-4 text-center">
@@ -808,7 +831,7 @@ const VersusDraftView: Component = () => {
                                         if (vd) navigate(`/versus/join/${vd.shareLink}`);
                                     }}
                                 >
-                                    Switch teams or spectate
+                                    Switch teams
                                 </button>
                             </div>
                         </div>

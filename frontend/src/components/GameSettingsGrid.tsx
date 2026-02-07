@@ -7,8 +7,10 @@ interface GameSettingsGridProps {
     blueSideTeam: 1 | 2;
     firstPick: "blue" | "red";
     canEdit: boolean;
-    onSetBlueSideTeam: (draftId: string, blueSideTeam: 1 | 2) => void;
-    onSetFirstPick: (draftId: string, firstPick: "blue" | "red") => void;
+    onSettingsChange: (
+        draftId: string,
+        settings: { firstPick?: "blue" | "red"; blueSideTeam?: 1 | 2 }
+    ) => void;
 }
 
 const GameSettingsGrid: Component<GameSettingsGridProps> = (props) => {
@@ -32,19 +34,26 @@ const GameSettingsGrid: Component<GameSettingsGridProps> = (props) => {
         // Flip firstPick to keep it pinned to the same team.
         // The model stores first pick as a side ("blue"/"red"), so swapping
         // which team is on blue means the firstPick value must also flip.
+        // Both are sent atomically to avoid race conditions from two separate socket events.
         const newFirstPick: "blue" | "red" = props.firstPick === "blue" ? "red" : "blue";
-        props.onSetBlueSideTeam(props.draftId, newBst);
-        props.onSetFirstPick(props.draftId, newFirstPick);
+        props.onSettingsChange(props.draftId, {
+            blueSideTeam: newBst,
+            firstPick: newFirstPick
+        });
     };
 
     const handleFirstPick = (teamOne: boolean) => {
         if (!props.canEdit) return;
         // Map team selection back to "blue"/"red" side
-        if (props.blueSideTeam === 1) {
-            props.onSetFirstPick(props.draftId, teamOne ? "blue" : "red");
-        } else {
-            props.onSetFirstPick(props.draftId, teamOne ? "red" : "blue");
-        }
+        const newFirstPick: "blue" | "red" =
+            props.blueSideTeam === 1
+                ? teamOne
+                    ? "blue"
+                    : "red"
+                : teamOne
+                  ? "red"
+                  : "blue";
+        props.onSettingsChange(props.draftId, { firstPick: newFirstPick });
     };
 
     const cellClass = (selected: boolean) =>
