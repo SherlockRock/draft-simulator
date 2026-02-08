@@ -1,5 +1,6 @@
 import {
     For,
+    Index,
     onMount,
     onCleanup,
     createSignal,
@@ -371,11 +372,11 @@ const CanvasCard = (props: cardProps) => {
                         : "grid grid-flow-col grid-cols-2 grid-rows-10 gap-2 p-2"
                 }
             >
-                <For each={draftArrayMemo()}>
+                <Index each={draftArrayMemo()}>
                     {(pick, index) => (
                         <CanvasSelect
-                            index={index}
-                            pick={pick}
+                            index={() => index}
+                            pick={pick()}
                             handlePickChange={props.handlePickChange}
                             draft={props.canvasDraft.Draft}
                             indexToShorthand={indexToShorthand()}
@@ -388,13 +389,13 @@ const CanvasCard = (props: cardProps) => {
                             focusedDraftId={props.focusedDraftId}
                             focusedSelectIndex={props.focusedSelectIndex}
                             onFocus={() =>
-                                props.onSelectFocus(props.canvasDraft.Draft.id, index())
+                                props.onSelectFocus(props.canvasDraft.Draft.id, index)
                             }
                             onSelectNext={props.onSelectNext}
                             onSelectPrevious={props.onSelectPrevious}
                         />
                     )}
-                </For>
+                </Index>
             </div>
         </div>
     );

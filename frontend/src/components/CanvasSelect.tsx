@@ -55,13 +55,16 @@ export const CanvasSelect = (props: props) => {
     });
 
     createEffect(() => {
-        if (
+        // Check props first to establish dependencies
+        const shouldFocus =
             props.focusedDraftId() === props.draft.id &&
             props.focusedSelectIndex() === props.index() &&
-            inputRef
-        ) {
-            inputRef.focus();
-        }
+            inputRef &&
+            document.activeElement !== inputRef;
+
+        if (!shouldFocus) return;
+
+        inputRef.focus();
     });
 
     // Auto-scroll effect when dropdown index changes
