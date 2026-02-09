@@ -28,10 +28,12 @@ const Canvas = sequelize.define("Canvas", {
 const UserCanvas = sequelize.define("UserCanvas", {
   user_id: {
     type: DataTypes.UUID,
+    primaryKey: true,
     references: { model: User, key: "id" },
   },
   canvas_id: {
     type: DataTypes.UUID,
+    primaryKey: true,
     references: { model: Canvas, key: "id" },
   },
   lastViewportX: { type: DataTypes.FLOAT, defaultValue: 0 },
