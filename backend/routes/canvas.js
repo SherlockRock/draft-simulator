@@ -990,12 +990,16 @@ router.patch("/:canvasId/viewport", async (req, res) => {
       return res.status(400).json({ error: "Invalid viewport data" });
     }
 
-    const [userCanvas] = await UserCanvas.findOrCreate({
+    const userCanvas = await UserCanvas.findOne({
       where: {
         canvas_id: canvasId,
         user_id: user.id,
       },
     });
+
+    if (!userCanvas) {
+      return res.status(403).json({ error: "Forbidden: You don't have access to this canvas" });
+    }
 
     userCanvas.lastViewportX = x;
     userCanvas.lastViewportY = y;

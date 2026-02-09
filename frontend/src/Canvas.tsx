@@ -101,7 +101,7 @@ type cardProps = {
     onSelectFocus: (draftId: string, selectIndex: number) => void;
     onSelectNext: () => void;
     onSelectPrevious: () => void;
-    canEdit: boolean;
+    canEdit: () => boolean;
     // Props for grouped mode
     isGrouped?: boolean;
     groupType?: "series" | "custom";
@@ -173,7 +173,7 @@ const CanvasCard = (props: cardProps) => {
                 width: props.layoutToggle() ? "700px" : "350px",
                 cursor:
                     props.isConnectionMode ||
-                    !props.canEdit ||
+                    !props.canEdit() ||
                     (props.isGrouped && props.groupType === "series")
                         ? "default"
                         : "move"
@@ -220,7 +220,7 @@ const CanvasCard = (props: cardProps) => {
                             class="bg-transparent font-bold text-slate-50"
                             disabled={
                                 props.isConnectionMode ||
-                                !props.canEdit ||
+                                !props.canEdit() ||
                                 !!props.canvasDraft.is_locked
                             }
                         />
@@ -293,11 +293,11 @@ const CanvasCard = (props: cardProps) => {
                                 class="mr-1 flex size-7 items-center justify-center rounded bg-green-400"
                                 classList={{
                                     "opacity-50 cursor-not-allowed":
-                                        props.isConnectionMode || !props.canEdit,
+                                        props.isConnectionMode || !props.canEdit(),
                                     "cursor-pointer hover:bg-green-700":
-                                        !props.isConnectionMode && props.canEdit
+                                        !props.isConnectionMode && props.canEdit()
                                 }}
-                                disabled={props.isConnectionMode || !props.canEdit}
+                                disabled={props.isConnectionMode || !props.canEdit()}
                             >
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
@@ -333,11 +333,11 @@ const CanvasCard = (props: cardProps) => {
                                     class="flex size-7 items-center justify-center rounded bg-red-400"
                                     classList={{
                                         "opacity-50 cursor-not-allowed":
-                                            props.isConnectionMode || !props.canEdit,
+                                            props.isConnectionMode || !props.canEdit(),
                                         "cursor-pointer hover:bg-red-600":
-                                            !props.isConnectionMode && props.canEdit
+                                            !props.isConnectionMode && props.canEdit()
                                     }}
-                                    disabled={props.isConnectionMode || !props.canEdit}
+                                    disabled={props.isConnectionMode || !props.canEdit()}
                                 >
                                     <svg
                                         xmlns="http://www.w3.org/2000/svg"
@@ -383,7 +383,7 @@ const CanvasCard = (props: cardProps) => {
                             layoutToggle={props.layoutToggle}
                             disabled={
                                 props.isConnectionMode ||
-                                !props.canEdit ||
+                                !props.canEdit() ||
                                 !!props.canvasDraft.is_locked
                             }
                             focusedDraftId={props.focusedDraftId}
@@ -425,16 +425,19 @@ type CanvasComponentProps = {
     setViewport: Setter<Viewport>;
 };
 
-const hasEditPermissions = (userPermissions?: string) => {
-    return userPermissions === "edit" || userPermissions === "admin";
-};
-
 const CanvasComponent = (props: CanvasComponentProps) => {
     const params = useParams();
     const queryClient = useQueryClient();
     const accessor = useUser();
     const socketAccessor = accessor()[2];
     const canvasContext = useCanvasContext();
+
+    // Reactive permission check - reads directly from context resource
+    // This ensures permissions update when navigating between canvases
+    const hasEditPermissions = () => {
+        const perms = canvasContext.canvas()?.userPermissions;
+        return perms === "edit" || perms === "admin";
+    };
 
     const isLocalMode = () => params.id === "local";
 
@@ -1092,6 +1095,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const addBox = (fromBox: CanvasDraft) => {
+        if (!hasEditPermissions()) return;
         if (isLocalMode()) {
             localNewDraft({
                 name: fromBox.Draft.name,
@@ -1114,6 +1118,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const deleteBox = (draftId: string) => {
+        if (!hasEditPermissions()) return;
         const draft = canvasDrafts.find((d) => d.Draft.id === draftId);
         if (draft) {
             setDraftToDelete(draft);
@@ -1126,6 +1131,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         pickIndex: number,
         championName: string
     ) => {
+        if (!hasEditPermissions()) return;
         const champIndex = champions.findIndex((value) => value.name === championName);
         setCanvasDrafts(
             (cd) => cd.Draft.id === draftId,
@@ -1159,6 +1165,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleNameChange = (draftId: string, newName: string) => {
+        if (!hasEditPermissions()) return;
         if (isLocalMode()) {
             localEditDraft(draftId, { name: newName });
             refreshFromLocal();
@@ -1483,7 +1490,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const onBoxMouseDown = (draftId: string, e: MouseEvent) => {
         if (isConnectionMode()) return;
-        if (!hasEditPermissions(props.canvasData?.userPermissions)) return;
+        if (!hasEditPermissions()) return;
 
         const target = e.target as HTMLElement;
         if (target.closest("select, button, input")) {
@@ -1543,7 +1550,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const onBackgroundDoubleClick = (e: MouseEvent) => {
         if (isConnectionMode()) return;
-        if (!hasEditPermissions(props.canvasData?.userPermissions)) return;
+        if (!hasEditPermissions()) return;
 
         const target = e.target as HTMLElement;
         if (target === canvasContainerRef || canvasContainerRef?.contains(target)) {
@@ -1651,7 +1658,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const onGroupMouseDown = (groupId: string, e: MouseEvent) => {
         if (isConnectionMode()) return;
-        if (!hasEditPermissions(props.canvasData?.userPermissions)) return;
+        if (!hasEditPermissions()) return;
 
         const target = e.target as HTMLElement;
         if (target.closest("button")) return;
@@ -1669,6 +1676,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleDeleteGroup = (groupId: string) => {
+        if (!hasEditPermissions()) return;
         const group = canvasGroups.find((g) => g.id === groupId);
         if (group) {
             setGroupToDelete(group);
@@ -1719,6 +1727,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleRenameGroup = (groupId: string, newName: string) => {
+        if (!hasEditPermissions()) return;
         if (isLocalMode()) {
             localUpdateGroup({ groupId, name: newName });
             refreshFromLocal();
@@ -1732,11 +1741,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleResizeGroup = (groupId: string, width: number, height: number) => {
+        if (!hasEditPermissions()) return;
         setCanvasGroups((g) => g.id === groupId, { width, height });
         debouncedEmitGroupResize(groupId, width, height);
     };
 
     const handleResizeEnd = (groupId: string, width: number, height: number) => {
+        if (!hasEditPermissions()) return;
         if (isLocalMode()) {
             localUpdateGroup({ groupId, width, height });
             refreshFromLocal();
@@ -1814,7 +1825,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
         e.preventDefault();
 
-        if (!hasEditPermissions(props.canvasData?.userPermissions)) return;
+        if (!hasEditPermissions()) return;
 
         const worldPos = screenToWorld(e.clientX, e.clientY);
         setContextMenuWorldPosition(worldPos);
@@ -2294,12 +2305,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         }}
                         class="rounded border border-slate-500 bg-slate-600 px-3 py-1.5 text-slate-50 shadow focus:border-purple-400 focus:outline-none"
                         placeholder="Canvas Name"
-                        disabled={
-                            isConnectionMode() ||
-                            !hasEditPermissions(props.canvasData?.userPermissions)
-                        }
+                        disabled={isConnectionMode() || !hasEditPermissions()}
                     />
-                    <Show when={hasEditPermissions(props.canvasData?.userPermissions)}>
+                    <Show when={hasEditPermissions()}>
                         <button
                             onClick={toggleConnectionMode}
                             class="rounded px-4 py-2 font-semibold text-white shadow transition-colors"
@@ -2421,9 +2429,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     onRenameGroup={handleRenameGroup}
                                     onResizeGroup={handleResizeGroup}
                                     onResizeEnd={handleResizeEnd}
-                                    canEdit={hasEditPermissions(
-                                        props.canvasData?.userPermissions
-                                    )}
+                                    canEdit={hasEditPermissions}
                                     isConnectionMode={isConnectionMode()}
                                     isDragTarget={dragOverGroupId() === group.id}
                                     isExitingSource={exitingGroupId() === group.id}
@@ -2459,9 +2465,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 onSelectFocus={onSelectFocus}
                                                 onSelectNext={onSelectNext}
                                                 onSelectPrevious={onSelectPrevious}
-                                                canEdit={hasEditPermissions(
-                                                    props.canvasData?.userPermissions
-                                                )}
+                                                canEdit={hasEditPermissions}
                                                 isGrouped={true}
                                                 groupType="custom"
                                             />
@@ -2476,9 +2480,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 viewport={props.viewport}
                                 onGroupMouseDown={onGroupMouseDown}
                                 onDeleteGroup={handleDeleteGroup}
-                                canEdit={hasEditPermissions(
-                                    props.canvasData?.userPermissions
-                                )}
+                                canEdit={hasEditPermissions}
                                 isConnectionMode={isConnectionMode()}
                                 renderDraftCard={(cd) => (
                                     <CanvasCard
@@ -2501,9 +2503,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         onSelectFocus={onSelectFocus}
                                         onSelectNext={onSelectNext}
                                         onSelectPrevious={onSelectPrevious}
-                                        canEdit={hasEditPermissions(
-                                            props.canvasData?.userPermissions
-                                        )}
+                                        canEdit={hasEditPermissions}
                                         isGrouped={true}
                                         groupType="series"
                                     />
@@ -2536,9 +2536,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             onSelectFocus={onSelectFocus}
                             onSelectNext={onSelectNext}
                             onSelectPrevious={onSelectPrevious}
-                            canEdit={hasEditPermissions(
-                                props.canvasData?.userPermissions
-                            )}
+                            canEdit={hasEditPermissions}
                         />
                     )}
                 </For>

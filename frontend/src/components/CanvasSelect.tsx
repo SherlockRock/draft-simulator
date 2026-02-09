@@ -113,7 +113,7 @@ export const CanvasSelect = (props: props) => {
     });
 
     const handleKeyEvent = (key: Key) => {
-        if (!isFocused()) return;
+        if (!isFocused() || props.disabled) return;
         switch (key) {
             case "ArrowUp":
                 if (dropdownOpen()) {
@@ -293,7 +293,7 @@ export const CanvasSelect = (props: props) => {
                     </Show>
                 </div>
 
-                <Show when={dropdownOpen()}>
+                <Show when={dropdownOpen() && !props.disabled}>
                     <div
                         ref={dropdownRef}
                         class="absolute z-10 mt-1 max-h-60 w-40 overflow-auto rounded border border-slate-500 bg-white shadow-lg"

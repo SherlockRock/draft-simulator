@@ -8,7 +8,7 @@ type SeriesGroupContainerProps = {
     viewport: Accessor<Viewport>;
     onGroupMouseDown: (groupId: string, e: MouseEvent) => void;
     onDeleteGroup: (groupId: string) => void;
-    canEdit: boolean;
+    canEdit: () => boolean;
     isConnectionMode: boolean;
     // Pass-through for CanvasCard rendering
     renderDraftCard: (draft: CanvasDraft) => JSX.Element;
@@ -80,7 +80,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                 class="flex items-center justify-between rounded-t-lg bg-slate-800 px-4"
                 style={{
                     height: `${HEADER_HEIGHT}px`,
-                    cursor: props.canEdit ? "move" : "default"
+                    cursor: props.canEdit() ? "move" : "default"
                 }}
                 onMouseDown={(e) => props.onGroupMouseDown(props.group.id, e)}
             >
@@ -200,7 +200,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                     </Show>
 
                     {/* Delete Button */}
-                    <Show when={props.canEdit}>
+                    <Show when={props.canEdit()}>
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();

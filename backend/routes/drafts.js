@@ -119,6 +119,13 @@ router.post("/", protect, async (req, res) => {
         return res.status(404).json({ error: "Canvas not found" });
       }
 
+      const userCanvas = await UserCanvas.findOne({
+        where: { canvas_id, user_id: req.user.id },
+      });
+      if (!userCanvas || (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")) {
+        return res.status(403).json({ error: "Forbidden: You don't have permission to edit this canvas" });
+      }
+
       draftType = "canvas";
       const { generateUniqueCanvasDraftName } = require("../helpers");
       finalName = await generateUniqueCanvasDraftName(finalName, canvas_id);

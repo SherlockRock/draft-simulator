@@ -10,7 +10,7 @@ type CustomGroupContainerProps = {
     onRenameGroup: (groupId: string, newName: string) => void;
     onResizeGroup: (groupId: string, width: number, height: number) => void;
     onResizeEnd: (groupId: string, width: number, height: number) => void;
-    canEdit: boolean;
+    canEdit: () => boolean;
     isConnectionMode: boolean;
     isDragTarget: boolean;
     isExitingSource: boolean;
@@ -49,7 +49,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
     const groupHeight = () => localHeight() ?? props.group.height ?? 200;
 
     const handleNameClick = () => {
-        if (!props.canEdit) return;
+        if (!props.canEdit()) return;
         setEditName(props.group.name);
         setIsEditing(true);
     };
@@ -75,7 +75,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
     const effectiveMinHeight = () => Math.max(MIN_HEIGHT, props.contentMinHeight);
 
     const handleResizeMouseDown = (e: MouseEvent) => {
-        if (!props.canEdit) return;
+        if (!props.canEdit()) return;
         e.preventDefault();
         e.stopPropagation();
 
@@ -143,7 +143,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 class="flex items-center justify-between rounded-t-lg bg-slate-800 px-3"
                 style={{
                     height: `${HEADER_HEIGHT}px`,
-                    cursor: props.canEdit ? "move" : "default"
+                    cursor: props.canEdit() ? "move" : "default"
                 }}
                 onMouseDown={(e) => {
                     if (!isEditing()) {
@@ -178,7 +178,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                     </span>
                 </div>
 
-                <Show when={props.canEdit}>
+                <Show when={props.canEdit()}>
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
@@ -238,7 +238,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
             </Show>
 
             {/* Resize handle */}
-            <Show when={props.canEdit}>
+            <Show when={props.canEdit()}>
                 <div
                     class="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize"
                     onMouseDown={handleResizeMouseDown}

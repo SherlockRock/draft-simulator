@@ -41,7 +41,7 @@ async function main() {
     cors({
       origin: process.env.FRONTEND_ORIGIN,
       credentials: true,
-    })
+    }),
   );
 
   /**
@@ -104,7 +104,7 @@ async function main() {
         if (token) {
           const decoded = jwt.verify(
             token.replace(/^accessToken=/, ""),
-            JWT_SECRET
+            JWT_SECRET,
           );
           const loggedInUser = await User.findOne({
             where: { id: decoded.id },
@@ -134,15 +134,51 @@ async function main() {
     socket.on("newDraft", async (data) => {
       try {
         if ("id" in data && data.picks.length === 20) {
-          await Draft.update({ picks: data.picks }, { where: { id: data.id } });
-
-          // Multi-context broadcast: send to draft room
-          io.to(data.id).emit("draftUpdate", data, data.id);
-
           // Find all canvases containing this draft
           const canvasDrafts = await CanvasDraft.findAll({
             where: { draft_id: data.id },
           });
+
+          if (canvasDrafts.length > 0) {
+            // Canvas draft: require sign-in and edit/admin on at least one canvas
+            if (!socket.user) {
+              return;
+            }
+            let hasPermission = false;
+            for (const cd of canvasDrafts) {
+              const userCanvas = await UserCanvas.findOne({
+                where: {
+                  canvas_id: cd.canvas_id,
+                  user_id: socket.user.dataValues.id,
+                },
+              });
+              if (
+                userCanvas &&
+                (userCanvas.permissions === "edit" ||
+                  userCanvas.permissions === "admin")
+              ) {
+                hasPermission = true;
+                break;
+              }
+            }
+            if (!hasPermission) {
+              return;
+            }
+          } else {
+            // Standalone draft: require sign-in and ownership
+            if (!socket.user) {
+              return;
+            }
+            const draft = await Draft.findByPk(data.id);
+            if (!draft || socket.user.dataValues.id !== draft.owner_id) {
+              return;
+            }
+          }
+
+          await Draft.update({ picks: data.picks }, { where: { id: data.id } });
+
+          // Multi-context broadcast: send to draft room
+          io.to(data.id).emit("draftUpdate", data, data.id);
 
           // Broadcast to each canvas room
           for (const cd of canvasDrafts) {
@@ -171,12 +207,14 @@ async function main() {
     });
 
     socket.on("canvasObjectMove", async (data) => {
+      if (!socket.user) return;
       const userCanvas = await UserCanvas.findOne({
         where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },
       });
       if (
-        (userCanvas && userCanvas.permissions === "edit") ||
-        userCanvas.permissions === "admin"
+        userCanvas &&
+        (userCanvas.permissions === "edit" ||
+          userCanvas.permissions === "admin")
       ) {
         io.to(data.canvasId).emit(
           "canvasObjectMoved",
@@ -185,18 +223,20 @@ async function main() {
             positionX: data.positionX,
             positionY: data.positionY,
           },
-          data.canvasId
+          data.canvasId,
         );
       }
     });
 
     socket.on("vertexMove", async (data) => {
+      if (!socket.user) return;
       const userCanvas = await UserCanvas.findOne({
         where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },
       });
       if (
-        (userCanvas && userCanvas.permissions === "edit") ||
-        userCanvas.permissions === "admin"
+        userCanvas &&
+        (userCanvas.permissions === "edit" ||
+          userCanvas.permissions === "admin")
       ) {
         io.to(data.canvasId).emit("vertexMoved", {
           connectionId: data.connectionId,
@@ -208,12 +248,14 @@ async function main() {
     });
 
     socket.on("groupMove", async (data) => {
+      if (!socket.user) return;
       const userCanvas = await UserCanvas.findOne({
         where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },
       });
       if (
-        (userCanvas && userCanvas.permissions === "edit") ||
-        userCanvas.permissions === "admin"
+        userCanvas &&
+        (userCanvas.permissions === "edit" ||
+          userCanvas.permissions === "admin")
       ) {
         socket.to(data.canvasId).emit("groupMoved", {
           groupId: data.groupId,
@@ -224,12 +266,14 @@ async function main() {
     });
 
     socket.on("groupResize", async (data) => {
+      if (!socket.user) return;
       const userCanvas = await UserCanvas.findOne({
         where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },
       });
       if (
-        (userCanvas && userCanvas.permissions === "edit") ||
-        userCanvas.permissions === "admin"
+        userCanvas &&
+        (userCanvas.permissions === "edit" ||
+          userCanvas.permissions === "admin")
       ) {
         socket.to(data.canvasId).emit("groupResized", {
           groupId: data.groupId,
