@@ -67,6 +67,14 @@ const CanvasDraft = sequelize.define("CanvasDraft", {
     type: DataTypes.ENUM("canvas", "standalone", "versus"),
     defaultValue: "canvas",
   },
+}, {
+  indexes: [
+    {
+      unique: true,
+      fields: ['draft_id', 'canvas_id'],
+      name: 'unique_draft_canvas'
+    }
+  ]
 });
 
 const CanvasShare = sequelize.define("CanvasShare", {
