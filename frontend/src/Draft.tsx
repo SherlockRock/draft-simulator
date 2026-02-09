@@ -72,6 +72,7 @@ const Droppable = (props: droppableProps) => {
 type props = {
     draft: Resource<any>;
     mutate: Setter<any>;
+    isLocked?: boolean;
 };
 
 function Draft(props: props) {
@@ -133,6 +134,7 @@ function Draft(props: props) {
     };
 
     const handlePick = (index: number, championId: string) => {
+        if (props.isLocked) return;
         const holdPicks = [
             ...props
                 .draft()
@@ -161,11 +163,13 @@ function Draft(props: props) {
     };
 
     const onDragStart: DragEventHandler = (args) => {
+        if (props.isLocked) return;
         setCurrentDragged(String(args.draggable.id).split("-")[1]);
     };
 
     // Clear activeChamp when drag ends
     const onDragEnd: DragEventHandler = (event) => {
+        if (props.isLocked) return;
         if (event.droppable) {
             handlePick(Number(event.droppable.id), currentDragged());
         } else {
@@ -195,6 +199,7 @@ function Draft(props: props) {
     };
 
     const handleSelectedChamp = (champ: string) => {
+        if (props.isLocked) return;
         if (!props.draft().picks.includes(champ)) {
             setSelectedChampion(champ);
         }
@@ -259,8 +264,24 @@ function Draft(props: props) {
                             <span>Error: {props.draft.error.message}</span>
                         </Match>
                         <Match when={props.draft()}>
+                            <Show when={props.isLocked}>
+                                <div class="mb-2 flex items-center justify-center gap-2 rounded bg-slate-700/50 py-2">
+                                    <span
+                                        class="cursor-help rounded bg-slate-500/30 px-2 py-1 text-sm text-slate-300"
+                                        title="This draft is from an imported series and cannot be edited"
+                                    >
+                                        Locked
+                                    </span>
+                                    <span class="text-sm text-slate-400">
+                                        This draft cannot be edited
+                                    </span>
+                                </div>
+                            </Show>
                             <div class="flex w-full justify-center self-center pt-2">
-                                <div class="flex w-full justify-evenly gap-1 self-center">
+                                <div
+                                    class="flex w-full justify-evenly gap-1 self-center"
+                                    classList={{ "pointer-events-none": props.isLocked }}
+                                >
                                     {/* All 10 bans */}
                                     <Index each={props.draft().picks.slice(0, 10)}>
                                         {(each, index) => (
@@ -313,7 +334,10 @@ function Draft(props: props) {
                                 </div>
                             </div>
                             <div class="flex max-h-[84%] w-full justify-center self-center pt-4">
-                                <div class="flex flex-col justify-between gap-1">
+                                <div
+                                    class="flex flex-col justify-between gap-1"
+                                    classList={{ "pointer-events-none": props.isLocked }}
+                                >
                                     {/* Blue Side Champions */}
                                     <Index each={props.draft().picks.slice(10, 15)}>
                                         {(each, index) => (
@@ -377,7 +401,13 @@ function Draft(props: props) {
                                     </div>
                                     <div class="custom-scrollbar h-[85vh] overflow-auto">
                                         <Droppable id={-1}>
-                                            <div class="grid grid-cols-5">
+                                            <div
+                                                class="grid grid-cols-5"
+                                                classList={{
+                                                    "pointer-events-none opacity-60":
+                                                        props.isLocked
+                                                }}
+                                            >
                                                 {/* Table Search Results */}
                                                 <For each={holdChamps()}>
                                                     {(champ, index) => (
@@ -407,7 +437,10 @@ function Draft(props: props) {
                                         </Droppable>
                                     </div>
                                 </div>
-                                <div class="flex flex-col justify-between gap-1">
+                                <div
+                                    class="flex flex-col justify-between gap-1"
+                                    classList={{ "pointer-events-none": props.isLocked }}
+                                >
                                     {/* Red Side Champions */}
                                     <Index each={props.draft().picks.slice(15, 20)}>
                                         {(each, index) => (

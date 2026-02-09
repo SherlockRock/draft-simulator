@@ -58,6 +58,7 @@ export type draft = {
     blueSideTeam: 1 | 2;
     description?: string;
     icon?: string;
+    is_locked?: boolean;
 };
 
 export type CanvasUser = {

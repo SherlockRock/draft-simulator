@@ -137,6 +137,7 @@ async function main() {
           // Find all canvases containing this draft
           const canvasDrafts = await CanvasDraft.findAll({
             where: { draft_id: data.id },
+            attributes: ["canvas_id", "is_locked"],
           });
 
           if (canvasDrafts.length > 0) {
@@ -162,6 +163,11 @@ async function main() {
               }
             }
             if (!hasPermission) {
+              return;
+            }
+            // Check if draft is locked in any canvas
+            const isLocked = canvasDrafts.some(cd => cd.is_locked);
+            if (isLocked) {
               return;
             }
           } else {

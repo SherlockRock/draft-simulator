@@ -2,7 +2,13 @@ const express = require("express");
 const router = express.Router();
 const Draft = require("../models/Draft");
 const VersusDraft = require("../models/VersusDraft");
-const { CanvasDraft, Canvas, UserCanvas, CanvasConnection, CanvasGroup } = require("../models/Canvas.js");
+const {
+  CanvasDraft,
+  Canvas,
+  UserCanvas,
+  CanvasConnection,
+  CanvasGroup,
+} = require("../models/Canvas.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
 const { Op } = require("sequelize");
@@ -26,7 +32,7 @@ router.get("/dropdown", async (req, res) => {
     });
     const allDrafts = [...ownedDrafts, ...sharedDrafts];
     const uniqueDrafts = Array.from(
-      new Map(allDrafts.map((draft) => [draft.id, draft])).values()
+      new Map(allDrafts.map((draft) => [draft.id, draft])).values(),
     );
 
     res.json(uniqueDrafts.map((draft) => ({ id: draft.id, name: draft.name })));
@@ -71,8 +77,17 @@ router.get("/:id", async (req, res) => {
       return res.status(404).json({ error: "Draft not found" });
     }
 
+    // Check if draft is locked in any canvas
+    const canvasDraft = await CanvasDraft.findOne({
+      where: { draft_id: draft.id },
+      attributes: ["is_locked"],
+    });
+    const is_locked = canvasDraft?.is_locked ?? false;
+
+    const draftWithLock = { ...draft.toJSON(), is_locked };
+
     if (draft.public) {
-      return res.json(draft);
+      return res.json(draftWithLock);
     }
 
     const user = await getUserFromRequest(req);
@@ -82,12 +97,12 @@ router.get("/:id", async (req, res) => {
     }
 
     if (draft.owner_id === user.id) {
-      return res.status(200).json(draft);
+      return res.status(200).json(draftWithLock);
     }
 
     const isSharedWith = await draftHasSharedWithUser(draft, user);
     if (isSharedWith) {
-      return res.status(200).json(draft);
+      return res.status(200).json(draftWithLock);
     }
 
     return res.status(403).json({ error: "Not authorized to view this draft" });
@@ -122,8 +137,16 @@ router.post("/", protect, async (req, res) => {
       const userCanvas = await UserCanvas.findOne({
         where: { canvas_id, user_id: req.user.id },
       });
-      if (!userCanvas || (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")) {
-        return res.status(403).json({ error: "Forbidden: You don't have permission to edit this canvas" });
+      if (
+        !userCanvas ||
+        (userCanvas.permissions !== "edit" &&
+          userCanvas.permissions !== "admin")
+      ) {
+        return res
+          .status(403)
+          .json({
+            error: "Forbidden: You don't have permission to edit this canvas",
+          });
       }
 
       draftType = "canvas";
@@ -157,9 +180,27 @@ router.post("/", protect, async (req, res) => {
 
       const canvasDrafts = await CanvasDraft.findAll({
         where: { canvas_id: canvas_id },
-        attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
+        attributes: [
+          "positionX",
+          "positionY",
+          "is_locked",
+          "group_id",
+          "source_type",
+        ],
         include: [
-          { model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] },
+          {
+            model: Draft,
+            attributes: [
+              "name",
+              "id",
+              "picks",
+              "type",
+              "versus_draft_id",
+              "seriesIndex",
+              "completed",
+              "winner",
+            ],
+          },
         ],
         raw: true,
         nest: true,
@@ -232,7 +273,7 @@ router.put("/:id", protect, async (req, res) => {
         const uniqueName = await generateUniqueCanvasDraftName(
           name,
           firstCanvasId,
-          draft.id
+          draft.id,
         );
 
         draft.name = uniqueName;

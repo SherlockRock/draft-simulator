@@ -17,7 +17,7 @@ const DraftDetailView: Component = () => {
                     </div>
                 }
             >
-                <Draft draft={draft} mutate={mutateDraft} />
+                <Draft draft={draft} mutate={mutateDraft} isLocked={draft()?.is_locked} />
             </Show>
         </div>
     );
