@@ -748,15 +748,11 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
             </Show>
 
             {/* Edit Dialog */}
-            <Show when={isEditOpen()}>
-                <div
-                    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-                    onClick={() => setIsEditOpen(false)}
-                >
-                    <div
-                        class="w-full max-w-md rounded-lg bg-slate-800 p-6 shadow-xl"
-                        onClick={(e) => e.stopPropagation()}
-                    >
+            <Dialog
+                isOpen={isEditOpen}
+                onCancel={() => setIsEditOpen(false)}
+                body={
+                    <div class="w-[28rem]">
                         <h3 class="mb-4 text-xl font-bold text-slate-50">
                             Edit {props.activity.resource_type}
                         </h3>
@@ -914,8 +910,8 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                             </button>
                         </div>
                     </div>
-                </div>
-            </Show>
+                }
+            />
 
             {/* Icon Picker */}
             <IconPicker
