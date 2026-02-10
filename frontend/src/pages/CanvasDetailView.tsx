@@ -1,7 +1,6 @@
 import { Component, createEffect, createSignal, onCleanup } from "solid-js";
 import { postNewDraft } from "../utils/actions";
 import CanvasComponent from "../Canvas";
-import ConnectionBanner from "../ConnectionBanner";
 import { useNavigate, useParams } from "@solidjs/router";
 import { useMutation } from "@tanstack/solid-query";
 import { Viewport } from "../utils/types";
@@ -15,7 +14,8 @@ import { getLocalCanvas } from "../utils/localCanvasStore";
 const CanvasDetailView: Component = () => {
     const params = useParams();
     const navigate = useNavigate();
-    const { canvas, mutateCanvas, layoutToggle, setCreateDraftCallback } = useCanvasContext();
+    const { canvas, mutateCanvas, layoutToggle, setCreateDraftCallback } =
+        useCanvasContext();
     const [viewport, setViewport] = createSignal<Viewport>({ x: 0, y: 0, zoom: 1 });
     let canvasContainerRef: HTMLDivElement | undefined;
 
@@ -107,7 +107,6 @@ const CanvasDetailView: Component = () => {
     return (
         <AuthGuard requireAuth={!isLocalMode()}>
             <div ref={canvasContainerRef} class="flex-1 overflow-hidden">
-                <ConnectionBanner />
                 <CanvasComponent
                     canvasData={canvas()}
                     isLoading={canvas.loading}

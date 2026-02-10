@@ -1,6 +1,5 @@
 import { Component, Show } from "solid-js";
 import Draft from "../Draft";
-import ConnectionBanner from "../ConnectionBanner";
 import { useDraftContext } from "../workflows/DraftWorkflow";
 
 const DraftDetailView: Component = () => {
@@ -8,7 +7,6 @@ const DraftDetailView: Component = () => {
 
     return (
         <div class="flex-1 overflow-y-auto">
-            <ConnectionBanner />
             <Show
                 when={draft()}
                 fallback={
