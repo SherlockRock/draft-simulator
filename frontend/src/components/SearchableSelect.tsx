@@ -1,6 +1,7 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
 import KeyEvent, { Key } from "../KeyEvent";
 import { sortOptions } from "../utils/constants";
+import { SelectTheme, getThemeColors } from "../utils/selectTheme";
 
 type props = {
     placeholder?: string;
@@ -9,12 +10,14 @@ type props = {
     selectText: string;
     setSelectText: (newValue: string) => void;
     onValidSelect?: (newValue: string) => void;
+    theme?: SelectTheme;
 };
 
 export const SearchableSelect = (props: props) => {
     const [isFocused, setIsFocused] = createSignal(false);
     const [dropdownOpen, setDropdownOpen] = createSignal(false);
     const [dropdownIndex, setDropdownIndex] = createSignal(-1);
+    const colors = () => getThemeColors(props.theme ?? "teal");
 
     const openDropdown = () => {
         setDropdownOpen(true);
@@ -99,7 +102,7 @@ export const SearchableSelect = (props: props) => {
                 keys={["Enter", "ArrowUp", "ArrowDown", "Escape"]}
             />
             <div
-                class="flex h-10 items-center rounded-md border border-teal-700 bg-slate-800"
+                class={`flex h-10 items-center rounded-md border bg-slate-800 ${colors().border}`}
                 onFocusIn={onFocusIn}
                 onFocusOut={onFocusOut}
                 tabIndex={0}
@@ -120,7 +123,7 @@ export const SearchableSelect = (props: props) => {
                     onClick={() => {
                         props.setSelectText("");
                     }}
-                    class="cursor-pointer text-slate-50 outline-none transition-all hover:text-teal-700 focus:outline-none"
+                    class={`cursor-pointer text-slate-50 outline-none transition-all focus:outline-none ${colors().hoverText}`}
                 >
                     <svg
                         class="mx-2 h-4 w-4 fill-current"
@@ -137,7 +140,7 @@ export const SearchableSelect = (props: props) => {
                 </button>
                 <label
                     for="show_more"
-                    class="cursor-pointer border-l border-slate-500 text-slate-50 outline-none transition-all hover:text-teal-700 focus:outline-none"
+                    class={`cursor-pointer border-l border-slate-500 text-slate-50 outline-none transition-all focus:outline-none ${colors().hoverText}`}
                 >
                     <button class="flex h-full justify-center">
                         <svg
@@ -157,7 +160,9 @@ export const SearchableSelect = (props: props) => {
                 </label>
             </div>
             {dropdownOpen() && (
-                <div class="custom-scrollbar absolute z-10 w-full flex-col overflow-y-auto rounded-md border border-t-0 border-teal-400">
+                <div
+                    class={`custom-scrollbar absolute z-10 w-full flex-col overflow-y-auto rounded-md border border-t-0 ${colors().dropdownBorder}`}
+                >
                     <div class="max-h-80">
                         <For each={holdSortOptions()}>
                             {(option) => (
@@ -172,11 +177,10 @@ export const SearchableSelect = (props: props) => {
                                     }}
                                 >
                                     <a
-                                        class={`block border-l-4 bg-gray-950 p-2 transition-colors group-hover:border-blue-600 group-hover:bg-gray-800 group-hover:text-teal-400
-                                        ${
+                                        class={`block border-l-4 bg-gray-950 p-2 transition-colors group-hover:border-blue-600 group-hover:bg-gray-800 ${
                                             props.currentlySelected === option
                                                 ? "border-green-600 text-green-600"
-                                                : "border-white text-white"
+                                                : `border-white text-white ${colors().groupHoverText}`
                                         }`}
                                     >
                                         <p class="inline-block w-full overflow-hidden text-ellipsis whitespace-nowrap">

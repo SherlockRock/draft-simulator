@@ -1,7 +1,8 @@
-import { Component, For, Show, createSignal } from "solid-js";
+import { Component, Show, createSignal } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { CreateCanvasDialog } from "./CreateCanvasDialog";
 import { useCanvasContext } from "../workflows/CanvasWorkflow";
+import { StyledSelect } from "./StyledSelect";
 
 interface CanvasSelectorProps {
     selectedId: string | null;
@@ -29,21 +30,23 @@ const CanvasSelector: Component<CanvasSelectorProps> = (props) => {
                 when={!canvases.loading}
                 fallback={<div class="text-sm text-slate-400">Loading canvases...</div>}
             >
-                <select
-                    class="mb-2 w-full rounded-md bg-slate-700 px-3 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                <StyledSelect
+                    class="mb-2"
                     value={props.selectedId || ""}
-                    onChange={(e) => {
-                        const value = e.currentTarget.value;
+                    onChange={(value) => {
                         if (value) {
                             handleSelect(value);
                         }
                     }}
-                >
-                    <option value="">Choose a canvas...</option>
-                    <For each={canvases()}>
-                        {(canvas) => <option value={canvas.id}>{canvas.name}</option>}
-                    </For>
-                </select>
+                    theme="purple"
+                    placeholder="Choose a canvas..."
+                    options={
+                        canvases()?.map((canvas: { id: string; name: string }) => ({
+                            value: canvas.id,
+                            label: canvas.name
+                        })) ?? []
+                    }
+                />
             </Show>
 
             <button

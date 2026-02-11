@@ -1,5 +1,6 @@
 import { Accessor, Component } from "solid-js";
 import { SearchableSelect } from "./SearchableSelect";
+import { SelectTheme } from "../utils/selectTheme";
 
 interface FilterBarProps {
     searchText: Accessor<string>;
@@ -9,6 +10,7 @@ interface FilterBarProps {
     categories: string[];
     searchPlaceholder?: string;
     categoryPlaceholder?: string;
+    theme?: SelectTheme;
 }
 
 export const FilterBar: Component<FilterBarProps> = (props) => {
@@ -28,6 +30,7 @@ export const FilterBar: Component<FilterBarProps> = (props) => {
                 selectText={props.selectedCategory()}
                 setSelectText={props.onCategoryChange}
                 onValidSelect={props.onCategoryChange}
+                theme={props.theme}
             />
         </div>
     );

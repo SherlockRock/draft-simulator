@@ -252,6 +252,7 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
                         onClose={() => setShowIconPicker(false)}
                         onSelect={(selectedIcon) => setIcon(selectedIcon)}
                         currentIcon={icon()}
+                        theme="purple"
                     />
                 </div>
             }

@@ -233,6 +233,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                         categories={championCategoryList}
                                         searchPlaceholder="Search champions..."
                                         categoryPlaceholder="Role"
+                                        theme="orange"
                                     />
                                 </div>
                                 <div class="max-h-72 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-4">

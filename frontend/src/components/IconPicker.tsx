@@ -8,16 +8,19 @@ import {
 } from "../utils/constants";
 import { useFilterableItems } from "../hooks/useFilterableItems";
 import { FilterBar } from "./FilterBar";
+import { SelectTheme, getThemeColors } from "../utils/selectTheme";
 
 interface IconPickerProps {
     isOpen: () => boolean;
     onClose: () => void;
     onSelect: (icon: string) => void;
     currentIcon?: string;
+    theme?: SelectTheme;
 }
 
 export const IconPicker = (props: IconPickerProps) => {
     const [activeTab, setActiveTab] = createSignal<"champions" | "emojis">("champions");
+    const colors = () => getThemeColors(props.theme ?? "teal");
 
     // Champion filtering
     const championFilter = useFilterableItems({
@@ -74,7 +77,7 @@ export const IconPicker = (props: IconPickerProps) => {
                             onClick={() => setActiveTab("champions")}
                             class={`px-4 py-2 text-sm font-medium transition-colors ${
                                 activeTab() === "champions"
-                                    ? "border-b-2 border-teal-500 text-teal-400"
+                                    ? `border-b-2 ${colors().activeBorder} ${colors().text}`
                                     : "text-slate-400 hover:text-slate-300"
                             }`}
                         >
@@ -84,7 +87,7 @@ export const IconPicker = (props: IconPickerProps) => {
                             onClick={() => setActiveTab("emojis")}
                             class={`px-4 py-2 text-sm font-medium transition-colors ${
                                 activeTab() === "emojis"
-                                    ? "border-b-2 border-teal-500 text-teal-400"
+                                    ? `border-b-2 ${colors().activeBorder} ${colors().text}`
                                     : "text-slate-400 hover:text-slate-300"
                             }`}
                         >
@@ -104,6 +107,7 @@ export const IconPicker = (props: IconPickerProps) => {
                                     categories={championFilter.categories}
                                     searchPlaceholder="Search champions..."
                                     categoryPlaceholder="Role"
+                                    theme={props.theme}
                                 />
                             </div>
                             <div class="grid grid-cols-8 gap-2 p-2 sm:grid-cols-10 md:grid-cols-12">
@@ -116,8 +120,8 @@ export const IconPicker = (props: IconPickerProps) => {
                                             class={`group relative aspect-square overflow-hidden rounded border-2 transition-all hover:scale-105 ${
                                                 props.currentIcon ===
                                                 originalIndex.toString()
-                                                    ? "border-teal-400 ring-2 ring-teal-400"
-                                                    : "border-slate-600 hover:border-teal-500"
+                                                    ? `${colors().dropdownBorder} ring-2 ${colors().ringColor}`
+                                                    : `border-slate-600 ${colors().hoverBorderLight}`
                                             }`}
                                             title={champion.name}
                                         >
@@ -147,6 +151,7 @@ export const IconPicker = (props: IconPickerProps) => {
                                     categories={emojiFilter.categories}
                                     searchPlaceholder="Search emojis..."
                                     categoryPlaceholder="Category"
+                                    theme={props.theme}
                                 />
                             </div>
                             <div class="grid grid-cols-8 gap-2 p-2 sm:grid-cols-10 md:grid-cols-12">
@@ -158,8 +163,8 @@ export const IconPicker = (props: IconPickerProps) => {
                                             }
                                             class={`flex aspect-square items-center justify-center rounded border-2 text-3xl transition-all hover:scale-105 ${
                                                 props.currentIcon === emojiItem.emoji
-                                                    ? "border-teal-400 bg-slate-700 ring-2 ring-teal-400"
-                                                    : "border-slate-600 bg-slate-800 hover:border-teal-500 hover:bg-slate-700"
+                                                    ? `${colors().dropdownBorder} bg-slate-700 ring-2 ${colors().ringColor}`
+                                                    : `border-slate-600 bg-slate-800 ${colors().hoverBorderLight} hover:bg-slate-700`
                                             }`}
                                             title={emojiItem.name}
                                         >

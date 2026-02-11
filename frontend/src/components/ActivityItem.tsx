@@ -18,6 +18,7 @@ import { ManageUsersDialog } from "./ManageUsersDialog";
 import { IconPicker } from "./IconPicker";
 import { IconDisplay } from "./IconDisplay";
 import { champions } from "../utils/constants";
+import { SelectTheme } from "../utils/selectTheme";
 
 interface Activity {
     resource_type: "draft" | "canvas" | "versus";
@@ -41,6 +42,12 @@ interface Activity {
 interface ActivityItemProps {
     activity: Activity;
 }
+
+const getThemeFromActivity = (activity: Activity): SelectTheme => {
+    if (activity.resource_type === "versus") return "orange";
+    if (activity.resource_type === "canvas") return "purple";
+    return "teal";
+};
 
 const ActivityItem: Component<ActivityItemProps> = (props) => {
     const navigate = useNavigate();
@@ -919,6 +926,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                 onClose={() => setShowIconPicker(false)}
                 onSelect={(selectedIcon) => setEditIcon(selectedIcon)}
                 currentIcon={editIcon()}
+                theme={getThemeFromActivity(props.activity)}
             />
 
             {/* Manage Users Dialog */}

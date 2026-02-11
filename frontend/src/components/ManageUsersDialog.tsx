@@ -1,6 +1,7 @@
 import { Component, For, Show } from "solid-js";
 import { CanvasUser } from "../utils/types";
 import { UseQueryResult } from "@tanstack/solid-query";
+import { StyledSelect } from "./StyledSelect";
 
 interface ManageUsersDialogProps {
     usersQuery: UseQueryResult<CanvasUser[], Error>;
@@ -37,20 +38,19 @@ export const ManageUsersDialog: Component<ManageUsersDialogProps> = (props) => {
                                 </div>
                             </div>
                             <div class="flex items-center gap-2">
-                                <select
+                                <StyledSelect
                                     value={user.permissions}
-                                    onChange={(e) =>
-                                        props.onPermissionChange(
-                                            user.id,
-                                            e.currentTarget.value
-                                        )
+                                    onChange={(val) =>
+                                        props.onPermissionChange(user.id, val)
                                     }
-                                    class="rounded bg-slate-700 px-2 py-1 text-sm text-slate-200"
-                                >
-                                    <option value="view">View</option>
-                                    <option value="edit">Edit</option>
-                                    <option value="admin">Admin</option>
-                                </select>
+                                    theme="purple"
+                                    options={[
+                                        { value: "view", label: "View" },
+                                        { value: "edit", label: "Edit" },
+                                        { value: "admin", label: "Admin" }
+                                    ]}
+                                    class="w-28"
+                                />
                                 <button
                                     onClick={() => props.onRemoveUser(user.id)}
                                     class="text-red-400 hover:text-red-300"

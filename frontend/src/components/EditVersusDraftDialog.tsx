@@ -4,6 +4,7 @@ import toast from "solid-toast";
 import { IconPicker } from "./IconPicker";
 import { champions } from "../utils/constants";
 import { VersusDraft } from "../utils/types";
+import { StyledSelect } from "./StyledSelect";
 
 interface EditVersusDraftDialogProps {
     isOpen: () => boolean;
@@ -237,15 +238,16 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
                                 <label class="mb-2 block text-sm font-medium text-slate-300">
                                     Draft Type
                                 </label>
-                                <select
+                                <StyledSelect
                                     value={type()}
-                                    onChange={(e) => setType(e.currentTarget.value)}
-                                    class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-orange-500 focus:outline-none"
-                                >
-                                    <option value="standard">Standard</option>
-                                    <option value="fearless">Fearless</option>
-                                    <option value="ironman">Ironman</option>
-                                </select>
+                                    onChange={setType}
+                                    theme="orange"
+                                    options={[
+                                        { value: "standard", label: "Standard" },
+                                        { value: "fearless", label: "Fearless" },
+                                        { value: "ironman", label: "Ironman" }
+                                    ]}
+                                />
                             </div>
                         </Show>
 
@@ -254,18 +256,17 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
                                 <label class="mb-2 block text-sm font-medium text-slate-300">
                                     Series Length
                                 </label>
-                                <select
-                                    value={length()}
-                                    onChange={(e) =>
-                                        setLength(parseInt(e.currentTarget.value))
-                                    }
-                                    class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-orange-500 focus:outline-none"
-                                >
-                                    <option value={1}>Best of 1</option>
-                                    <option value={3}>Best of 3</option>
-                                    <option value={5}>Best of 5</option>
-                                    <option value={7}>Best of 7</option>
-                                </select>
+                                <StyledSelect
+                                    value={String(length())}
+                                    onChange={(val) => setLength(parseInt(val))}
+                                    theme="orange"
+                                    options={[
+                                        { value: "1", label: "Best of 1" },
+                                        { value: "3", label: "Best of 3" },
+                                        { value: "5", label: "Best of 5" },
+                                        { value: "7", label: "Best of 7" }
+                                    ]}
+                                />
                             </div>
                         </Show>
 
@@ -313,6 +314,7 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
                         onClose={() => setShowIconPicker(false)}
                         onSelect={(selectedIcon) => setIcon(selectedIcon)}
                         currentIcon={icon()}
+                        theme="orange"
                     />
                 </div>
             }

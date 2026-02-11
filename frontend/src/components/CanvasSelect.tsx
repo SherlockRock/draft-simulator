@@ -2,6 +2,7 @@ import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import KeyEvent, { Key } from "../KeyEvent";
 import { champions } from "../utils/constants";
 import BlankSquare from "/src/assets/BlankSquare.webp";
+import { getThemeColors } from "../utils/selectTheme";
 
 type props = {
     pick: string;
@@ -21,6 +22,9 @@ type props = {
     onSelectNext: () => void;
     onSelectPrevious: () => void;
 };
+
+// CanvasSelect is only used in canvas context, so always use purple theme
+const colors = getThemeColors("purple");
 
 export const CanvasSelect = (props: props) => {
     const [isFocused, setIsFocused] = createSignal(false);
@@ -161,9 +165,9 @@ export const CanvasSelect = (props: props) => {
             holdSortOptions().findIndex((value) => value.name === championName) ===
             dropdownIndex()
         ) {
-            return "border-teal-400 text-teal-400 bg-slate-800 hover:border-teal-400 hover:bg-slate-600 hover:text-teal-400";
+            return `${colors.dropdownBorder} ${colors.text} bg-slate-800 ${colors.hoverBorder} hover:bg-slate-600 ${colors.hoverText}`;
         }
-        return "border-black text-slate-50 bg-slate-800 hover:border-teal-400 hover:bg-slate-600 hover:text-teal-400";
+        return `border-black text-slate-50 bg-slate-800 ${colors.hoverBorder} hover:bg-slate-600 ${colors.hoverText}`;
     };
 
     return (
@@ -274,7 +278,7 @@ export const CanvasSelect = (props: props) => {
                                     ""
                                 );
                             }}
-                            class="cursor-pointer text-slate-200 outline-none transition-all hover:text-teal-400 focus:outline-none"
+                            class={`cursor-pointer text-slate-200 outline-none transition-all focus:outline-none ${colors.hoverText}`}
                             disabled={props.disabled}
                         >
                             <svg

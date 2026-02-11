@@ -1246,6 +1246,7 @@ const VersusDraftView: Component = () => {
                                                 categories={championCategoryList}
                                                 searchPlaceholder="Search champions..."
                                                 categoryPlaceholder="Role"
+                                                theme="orange"
                                             />
                                         </div>
                                         <div class="grid flex-1 grid-cols-5 content-start gap-2 overflow-y-auto px-4 py-2">
