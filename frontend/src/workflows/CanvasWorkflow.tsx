@@ -31,6 +31,7 @@ import { Dialog } from "../components/Dialog";
 import { ManageUsersDialog } from "../components/ManageUsersDialog";
 import toast from "solid-toast";
 import { CanvasGroup, CanvasDraft } from "../utils/types";
+import { CanvasAccessDenied, AccessErrorType } from "../components/CanvasAccessDenied";
 
 // Create context for sharing canvas state with children
 type CanvasContextType = {
@@ -90,6 +91,9 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
             return fetchCanvasList();
         });
 
+    // Track canvas IDs we've already handled errors for to prevent loops
+    const handledErrorCanvasIds = new Set<string>();
+
     const [canvas, { mutate: mutateCanvas, refetch: refetchCanvas }] = createResource(
         () => (params.id !== undefined ? String(params.id) : null),
         async (id: string) => {
@@ -105,7 +109,33 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                     userPermissions: "admin" as const
                 };
             }
-            return fetchCanvas(id);
+
+            try {
+                return await fetchCanvas(id);
+            } catch (err) {
+                const error = err as Error & { status?: number };
+
+                // Only handle once per canvas
+                if (!handledErrorCanvasIds.has(id)) {
+                    let errorType: AccessErrorType | null = null;
+                    const status = error.status;
+
+                    if (status === 401) {
+                        errorType = "unauthorized";
+                    } else if (status === 403) {
+                        errorType = "forbidden";
+                    } else if (status === 404) {
+                        errorType = "notFound";
+                    }
+
+                    if (errorType) {
+                        handledErrorCanvasIds.add(id);
+                        setAccessError({ type: errorType, canvasId: id });
+                    }
+                }
+
+                throw err; // Re-throw to keep resource in error state
+            }
         }
     );
 
@@ -123,6 +153,10 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     const [isManageUsersOpen, setIsManageUsersOpen] = createSignal(false);
     const [isSharePopperOpen, setIsSharePopperOpen] = createSignal(false);
     const [copied, setCopied] = createSignal("");
+    const [accessError, setAccessError] = createSignal<{
+        type: AccessErrorType;
+        canvasId: string;
+    } | null>(null);
 
     let previousUser = user();
 
@@ -642,7 +676,27 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                     </FlowPanel>
                 </Show>
                 {/* Child routes (dashboard or detail view) render here */}
-                {props.children}
+                <Show
+                    when={!accessError()}
+                    fallback={
+                        <CanvasAccessDenied
+                            errorType={accessError()!.type}
+                            onNavigateToCanvases={() => {
+                                // Navigate first, then clear error
+                                // This order is important: clearing accessError causes the
+                                // Show to switch immediately, so we must navigate before that
+                                navigate("/canvas");
+                                const err = accessError();
+                                if (err) {
+                                    handledErrorCanvasIds.delete(err.canvasId);
+                                }
+                                setAccessError(null);
+                            }}
+                        />
+                    }
+                >
+                    {props.children}
+                </Show>
             </div>
         </CanvasContext.Provider>
     );

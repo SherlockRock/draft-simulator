@@ -1,7 +1,7 @@
 import { Component, createEffect, createSignal, onCleanup } from "solid-js";
 import { postNewDraft } from "../utils/actions";
 import CanvasComponent from "../Canvas";
-import { useNavigate, useParams } from "@solidjs/router";
+import { useParams } from "@solidjs/router";
 import { useMutation } from "@tanstack/solid-query";
 import { Viewport } from "../utils/types";
 import toast from "solid-toast";
@@ -13,24 +13,10 @@ import { getLocalCanvas } from "../utils/localCanvasStore";
 
 const CanvasDetailView: Component = () => {
     const params = useParams();
-    const navigate = useNavigate();
     const { canvas, mutateCanvas, layoutToggle, setCreateDraftCallback } =
         useCanvasContext();
     const [viewport, setViewport] = createSignal<Viewport>({ x: 0, y: 0, zoom: 1 });
     let canvasContainerRef: HTMLDivElement | undefined;
-
-    createEffect(() => {
-        const canvasData = canvas();
-        if (canvasData?.error) {
-            const error = canvasData.error;
-            if (error && typeof error === "object" && "status" in error) {
-                if (error.status === 401 || error.status === 403) {
-                    toast.error("You do not have permission to view this canvas.");
-                    navigate("/");
-                }
-            }
-        }
-    });
 
     const newDraftMutation = useMutation(() => ({
         mutationFn: (data: {
