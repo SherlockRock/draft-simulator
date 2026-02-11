@@ -162,7 +162,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
 
     createEffect(() => {
         const currentUser = user();
-        if (currentUser === undefined) {
+        if (!currentUser) {
             refetchCanvasList();
             if (params.id && params.id !== "local") {
                 mutateCanvas(undefined);
