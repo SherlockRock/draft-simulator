@@ -247,8 +247,8 @@ const CanvasCard = (props: cardProps) => {
                                     class="cursor-help rounded bg-slate-500/30 px-1.5 py-0.5 text-xs text-slate-300"
                                     title={
                                         props.canvasDraft.Draft.versus_draft_id
-                                            ? `Game ${(props.canvasDraft.Draft.seriesIndex ?? 0) + 1} of imported series`
-                                            : "Imported from versus series"
+                                            ? `Game ${(props.canvasDraft.Draft.seriesIndex ?? 0) + 1} of imported series. Cannot be edited.`
+                                            : "Imported from versus series. Cannot be edited."
                                     }
                                 >
                                     Locked

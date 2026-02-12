@@ -265,15 +265,12 @@ function Draft(props: props) {
                         </Match>
                         <Match when={props.draft()}>
                             <Show when={props.isLocked}>
-                                <div class="mb-2 flex items-center justify-center gap-2 rounded bg-slate-700/50 py-2">
+                                <div class="mb-2 flex items-center justify-center rounded bg-slate-700/50 py-2">
                                     <span
                                         class="cursor-help rounded bg-slate-500/30 px-2 py-1 text-sm text-slate-300"
-                                        title="This draft is from an imported series and cannot be edited"
+                                        title="Imported from versus series. Cannot be edited."
                                     >
                                         Locked
-                                    </span>
-                                    <span class="text-sm text-slate-400">
-                                        This draft cannot be edited
                                     </span>
                                 </div>
                             </Show>
