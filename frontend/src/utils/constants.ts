@@ -558,3 +558,51 @@ export const emojiCategories: Record<string, number[]> = {
     Hearts: [87, 88, 89, 90, 91, 92, 93, 94],
     Nature: [95, 96, 97, 98, 99, 100, 101, 102]
 };
+
+// Game number color system - unique colors per game (up to 7)
+// Full opacity versions for headers and badges
+export const gameTextColors: Record<number, string> = {
+    1: "text-cyan-500",
+    2: "text-amber-500",
+    3: "text-fuchsia-500",
+    4: "text-violet-500",
+    5: "text-sky-500",
+    6: "text-emerald-500",
+    7: "text-rose-500"
+};
+
+// Muted versions with 70% opacity for champion overlays
+export const gameTextColorsMuted: Record<number, string> = {
+    1: "text-cyan-600/70",
+    2: "text-amber-600/70",
+    3: "text-fuchsia-600/70",
+    4: "text-violet-600/70",
+    5: "text-sky-600/70",
+    6: "text-emerald-600/70",
+    7: "text-rose-600/70"
+};
+
+export const gameBorderColors: Record<number, string> = {
+    1: "border-cyan-600/70",
+    2: "border-amber-600/70",
+    3: "border-fuchsia-600/70",
+    4: "border-violet-600/70",
+    5: "border-sky-600/70",
+    6: "border-emerald-600/70",
+    7: "border-rose-600/70"
+};
+
+export const gameBgColors: Record<number, string> = {
+    1: "bg-cyan-600/70",
+    2: "bg-amber-600/70",
+    3: "bg-fuchsia-600/70",
+    4: "bg-violet-600/70",
+    5: "bg-sky-600/70",
+    6: "bg-emerald-600/70",
+    7: "bg-rose-600/70"
+};
+
+// Subtle slate colors for team/ban/pick indicators in overlay
+export const overlayTeamColor = "text-slate-400";
+export const overlayBanColor = "text-slate-500";
+export const overlayPickColor = "text-slate-500";

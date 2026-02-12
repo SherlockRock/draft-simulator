@@ -23,7 +23,16 @@ import { ReadyButton } from "../components/ReadyButton";
 import { WinnerDeclarationModal } from "../components/WinnerDeclarationModal";
 import { PauseRequestModal } from "../components/PauseRequestModal";
 import { GameSettingsGrid } from "../components/GameSettingsGrid";
-import { champions, championCategories } from "../utils/constants";
+import {
+    champions,
+    championCategories,
+    gameTextColors,
+    gameTextColorsMuted,
+    gameBorderColors,
+    overlayTeamColor,
+    overlayBanColor,
+    overlayPickColor
+} from "../utils/constants";
 import toast from "solid-toast";
 import { useFilterableItems } from "../hooks/useFilterableItems";
 import { FilterBar } from "../components/FilterBar";
@@ -713,12 +722,19 @@ const VersusDraftView: Component = () => {
         return map;
     });
 
-    // Convert a picks array index (0-19) to a short draft position label (T1B1, T2P3, etc.)
-    const getDraftPositionLabel = (pickIndex: number): string => {
-        if (pickIndex < 5) return `T1B${pickIndex + 1}`;
-        if (pickIndex < 10) return `T2B${pickIndex - 4}`;
-        if (pickIndex < 15) return `T1P${pickIndex - 9}`;
-        return `T2P${pickIndex - 14}`;
+    // Parse pick index into components for colorized rendering
+    const getDraftPositionParts = (
+        pickIndex: number
+    ): { team: number; type: "B" | "P"; num: number } => {
+        if (pickIndex < 5) return { team: 1, type: "B", num: pickIndex + 1 };
+        if (pickIndex < 10) return { team: 2, type: "B", num: pickIndex - 4 };
+        if (pickIndex < 15) return { team: 1, type: "P", num: pickIndex - 9 };
+        return { team: 2, type: "P", num: pickIndex - 14 };
+    };
+
+    // Get color class for a position (ban or pick) - uses subtle slate colors
+    const getPositionColor = (type: "B" | "P"): string => {
+        return type === "B" ? overlayBanColor : overlayPickColor;
     };
 
     // Convert a picks array index (0-19) to a full-text label for tooltips
@@ -812,7 +828,9 @@ const VersusDraftView: Component = () => {
                     <div class="flex h-full min-w-0 flex-1 flex-col items-center justify-center bg-slate-900">
                         <div class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-700/50 bg-slate-800/90 shadow-2xl">
                             <div class="p-8 text-center">
-                                <div class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
+                                <div
+                                    class={`mb-4 text-sm font-semibold uppercase tracking-wider ${gameTextColors[(draft()?.seriesIndex ?? 0) + 1] ?? "text-slate-500"}`}
+                                >
                                     Game {(draft()?.seriesIndex ?? 0) + 1}
                                 </div>
                                 <Show when={myTeamIdentity() && gameSuggestedRole()}>
@@ -925,7 +943,9 @@ const VersusDraftView: Component = () => {
                                         </Show>
                                     </div>
                                     <div class="flex flex-col items-center gap-1">
-                                        <span class="rounded bg-slate-700 px-2 py-0.5 text-xs font-semibold text-slate-300">
+                                        <span
+                                            class={`rounded bg-slate-700 px-2 py-0.5 text-xs font-semibold ${gameTextColors[(draft()?.seriesIndex ?? 0) + 1] ?? "text-slate-300"}`}
+                                        >
                                             Game {(draft()?.seriesIndex ?? 0) + 1}
                                         </span>
                                         <span class="text-slate-500">vs</span>
@@ -1251,7 +1271,10 @@ const VersusDraftView: Component = () => {
                                         </div>
                                         <div class="grid flex-1 grid-cols-5 content-start gap-2 overflow-y-auto px-4 py-2">
                                             <For each={filteredChampions()}>
-                                                {({ item: champ, originalIndex }) => {
+                                                {(
+                                                    { item: champ, originalIndex },
+                                                    loopIdx
+                                                ) => {
                                                     const champId = () =>
                                                         String(originalIndex);
                                                     const isPicked = () =>
@@ -1303,6 +1326,23 @@ const VersusDraftView: Component = () => {
                                                         (isPicked() ||
                                                             isSeriesRestricted()) &&
                                                         !isPendingSelection();
+                                                    // Grid position for tooltip positioning
+                                                    const gridColumn = () =>
+                                                        loopIdx() % 5;
+                                                    const isFirstRow = () =>
+                                                        loopIdx() < 5;
+                                                    // Tooltip horizontal alignment based on column
+                                                    const tooltipHorizontalClass = () => {
+                                                        const col = gridColumn();
+                                                        if (col === 0) return "left-0";
+                                                        if (col === 4) return "right-0";
+                                                        return "left-1/2 -translate-x-1/2";
+                                                    };
+                                                    // Tooltip vertical position - below for first row, above for others
+                                                    const tooltipVerticalClass = () =>
+                                                        isFirstRow()
+                                                            ? "top-full mt-1"
+                                                            : "bottom-full mb-1";
 
                                                     return (
                                                         <div class="group relative">
@@ -1318,10 +1358,10 @@ const VersusDraftView: Component = () => {
                                                                         ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
                                                                         : isSeriesRestricted() &&
                                                                             !isPendingSelection()
-                                                                          ? "cursor-not-allowed border-red-900"
+                                                                          ? `cursor-not-allowed ${gameBorderColors[restrictionInfo()?.gameNumber ?? 1] ?? "border-slate-700"}`
                                                                           : isPicked() &&
                                                                               !isPendingSelection()
-                                                                            ? "cursor-not-allowed border-slate-700"
+                                                                            ? `cursor-not-allowed ${gameBorderColors[currentGameNumber()] ?? "border-slate-700"}`
                                                                             : canSelect()
                                                                               ? "cursor-pointer border-slate-500 hover:scale-105 hover:border-slate-300"
                                                                               : "cursor-default border-slate-600"
@@ -1349,22 +1389,59 @@ const VersusDraftView: Component = () => {
                                                                         !isPendingSelection()
                                                                     }
                                                                 >
-                                                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/80 px-1 py-px text-[9px] font-bold leading-tight text-red-300">
-                                                                        <span>
-                                                                            G
-                                                                            {
-                                                                                restrictionInfo()
-                                                                                    ?.gameNumber
-                                                                            }
-                                                                        </span>
-                                                                        <span>
-                                                                            {getDraftPositionLabel(
-                                                                                restrictionInfo()
-                                                                                    ?.pickIndex ??
+                                                                    {(() => {
+                                                                        const info =
+                                                                            restrictionInfo();
+                                                                        const parts =
+                                                                            getDraftPositionParts(
+                                                                                info?.pickIndex ??
                                                                                     0
-                                                                            )}
-                                                                        </span>
-                                                                    </div>
+                                                                            );
+                                                                        const gameNum =
+                                                                            info?.gameNumber ??
+                                                                            1;
+                                                                        return (
+                                                                            <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
+                                                                                <span
+                                                                                    class={
+                                                                                        gameTextColorsMuted[
+                                                                                            gameNum
+                                                                                        ] ??
+                                                                                        "text-slate-300"
+                                                                                    }
+                                                                                >
+                                                                                    G
+                                                                                    {
+                                                                                        gameNum
+                                                                                    }
+                                                                                </span>
+                                                                                <span>
+                                                                                    <span
+                                                                                        class={
+                                                                                            overlayTeamColor
+                                                                                        }
+                                                                                    >
+                                                                                        T
+                                                                                        {
+                                                                                            parts.team
+                                                                                        }
+                                                                                    </span>
+                                                                                    <span
+                                                                                        class={getPositionColor(
+                                                                                            parts.type
+                                                                                        )}
+                                                                                    >
+                                                                                        {
+                                                                                            parts.type
+                                                                                        }
+                                                                                        {
+                                                                                            parts.num
+                                                                                        }
+                                                                                    </span>
+                                                                                </span>
+                                                                            </div>
+                                                                        );
+                                                                    })()}
                                                                 </Show>
                                                                 <Show
                                                                     when={
@@ -1373,17 +1450,55 @@ const VersusDraftView: Component = () => {
                                                                         !isPendingSelection()
                                                                     }
                                                                 >
-                                                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/80 px-1 py-px text-[9px] font-bold leading-tight text-slate-300">
-                                                                        <span>
-                                                                            G
-                                                                            {currentGameNumber()}
-                                                                        </span>
-                                                                        <span>
-                                                                            {getDraftPositionLabel(
+                                                                    {(() => {
+                                                                        const parts =
+                                                                            getDraftPositionParts(
                                                                                 currentPickIndex()
-                                                                            )}
-                                                                        </span>
-                                                                    </div>
+                                                                            );
+                                                                        const gameNum =
+                                                                            currentGameNumber();
+                                                                        return (
+                                                                            <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
+                                                                                <span
+                                                                                    class={
+                                                                                        gameTextColorsMuted[
+                                                                                            gameNum
+                                                                                        ] ??
+                                                                                        "text-slate-300"
+                                                                                    }
+                                                                                >
+                                                                                    G
+                                                                                    {
+                                                                                        gameNum
+                                                                                    }
+                                                                                </span>
+                                                                                <span>
+                                                                                    <span
+                                                                                        class={
+                                                                                            overlayTeamColor
+                                                                                        }
+                                                                                    >
+                                                                                        T
+                                                                                        {
+                                                                                            parts.team
+                                                                                        }
+                                                                                    </span>
+                                                                                    <span
+                                                                                        class={getPositionColor(
+                                                                                            parts.type
+                                                                                        )}
+                                                                                    >
+                                                                                        {
+                                                                                            parts.type
+                                                                                        }
+                                                                                        {
+                                                                                            parts.num
+                                                                                        }
+                                                                                    </span>
+                                                                                </span>
+                                                                            </div>
+                                                                        );
+                                                                    })()}
                                                                 </Show>
                                                             </button>
                                                             <Show
@@ -1392,7 +1507,9 @@ const VersusDraftView: Component = () => {
                                                                     !isPendingSelection()
                                                                 }
                                                             >
-                                                                <div class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[10px] text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                                                                <div
+                                                                    class={`pointer-events-none absolute z-50 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[10px] text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 ${tooltipVerticalClass()} ${tooltipHorizontalClass()}`}
+                                                                >
                                                                     {getTooltip()}
                                                                 </div>
                                                             </Show>
@@ -1403,7 +1520,9 @@ const VersusDraftView: Component = () => {
                                                                     !isPendingSelection()
                                                                 }
                                                             >
-                                                                <div class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[10px] text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                                                                <div
+                                                                    class={`pointer-events-none absolute z-50 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[10px] text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 ${tooltipVerticalClass()} ${tooltipHorizontalClass()}`}
+                                                                >
                                                                     {getTooltip()}
                                                                 </div>
                                                             </Show>
@@ -1432,7 +1551,9 @@ const VersusDraftView: Component = () => {
                                                         <Show when={index() > 0}>
                                                             <div class="mb-4 border-t border-slate-700" />
                                                         </Show>
-                                                        <div class="mb-3 text-sm font-semibold text-slate-300">
+                                                        <div
+                                                            class={`mb-3 text-sm font-semibold ${gameTextColors[game.gameNumber] ?? "text-slate-300"}`}
+                                                        >
                                                             Game {game.gameNumber}
                                                         </div>
 

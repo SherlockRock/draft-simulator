@@ -6,6 +6,7 @@ import { IconDisplay } from "../components/IconDisplay";
 import { WinnerReporter } from "../components/WinnerReporter";
 import { canReportWinner } from "../utils/versusPermissions";
 import { useUser } from "../userProvider";
+import { gameTextColors } from "../utils/constants";
 
 const VersusSeriesOverview: Component = () => {
     const params = useParams();
@@ -285,7 +286,9 @@ const VersusSeriesOverview: Component = () => {
                                                         </div>
 
                                                         <div class="flex items-center gap-3">
-                                                            <h3 class="font-semibold text-slate-100">
+                                                            <h3
+                                                                class={`font-semibold ${gameTextColors[index() + 1] ?? "text-slate-100"}`}
+                                                            >
                                                                 Game {index() + 1}
                                                             </h3>
 
