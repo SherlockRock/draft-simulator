@@ -1,4 +1,4 @@
-import { Show, createSignal, createMemo, Accessor, JSX } from "solid-js";
+import { Show, createSignal, createMemo, createEffect, Accessor, JSX } from "solid-js";
 import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/types";
 
 type CustomGroupContainerProps = {
@@ -19,6 +19,7 @@ type CustomGroupContainerProps = {
     onSelectAnchor?: (groupId: string, anchorType: AnchorType) => void;
     isGroupSelected?: boolean;
     sourceAnchor?: { type: AnchorType } | null;
+    editingGroupId?: Accessor<string | null>;
     children: JSX.Element;
 };
 
@@ -34,6 +35,13 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
     const [localWidth, setLocalWidth] = createSignal<number | null>(null);
     const [localHeight, setLocalHeight] = createSignal<number | null>(null);
     const [isResizeClamped, setIsResizeClamped] = createSignal(false);
+
+    createEffect(() => {
+        if (props.editingGroupId?.() === props.group.id) {
+            setEditName(props.group.name);
+            setIsEditing(true);
+        }
+    });
 
     const worldToScreen = (worldX: number, worldY: number) => {
         const vp = props.viewport();
