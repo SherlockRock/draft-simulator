@@ -2819,6 +2819,33 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         />
                     )}
                 </Show>
+                {/* Group Context Menu */}
+                <Show when={groupContextMenu()}>
+                    {(menu) => (
+                        <GroupContextMenu
+                            position={menu().position}
+                            group={menu().group}
+                            onRename={() => {
+                                setEditingGroupId(menu().group.id);
+                                closeGroupContextMenu();
+                            }}
+                            onGoTo={() => {
+                                const group = menu().group;
+                                setViewport({
+                                    x: group.positionX - window.innerWidth / 2 / viewport().zoom,
+                                    y: group.positionY - window.innerHeight / 2 / viewport().zoom,
+                                    zoom: viewport().zoom
+                                });
+                                closeGroupContextMenu();
+                            }}
+                            onDelete={() => {
+                                handleDeleteGroup(menu().group.id);
+                                closeGroupContextMenu();
+                            }}
+                            onClose={closeGroupContextMenu}
+                        />
+                    )}
+                </Show>
             </div>
         </Show>
     );
