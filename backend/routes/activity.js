@@ -1,20 +1,27 @@
 const express = require("express");
 const router = express.Router();
-const { Op } = require("sequelize");
+const { Op, literal } = require("sequelize");
 const Draft = require("../models/Draft");
 const { Canvas, UserCanvas } = require("../models/Canvas");
 const VersusDraft = require("../models/VersusDraft");
 const User = require("../models/User");
 const { getUserFromRequest } = require("../middleware/auth");
 
-const getSortOrder = (sort) => {
+const getSortOrder = (sort, tableName = null) => {
+  const nameCol = tableName ? `LOWER("${tableName}"."name")` : "LOWER(name)";
   switch (sort) {
     case "oldest":
       return [["updatedAt", "ASC"]];
     case "name_asc":
-      return [["name", "ASC"], ["updatedAt", "DESC"]];
+      return [
+        [literal(nameCol), "ASC"],
+        ["updatedAt", "DESC"],
+      ];
     case "name_desc":
-      return [["name", "DESC"], ["updatedAt", "DESC"]];
+      return [
+        [literal(nameCol), "DESC"],
+        ["updatedAt", "DESC"],
+      ];
     case "recent":
     default:
       return [["updatedAt", "DESC"]];
@@ -88,7 +95,7 @@ router.get("/recent", async (req, res) => {
                 required: true,
               },
             ],
-            order: getSortOrder(sort),
+            order: getSortOrder(sort, "Canvas"),
             limit: fetchLimit,
             attributes: [
               "id",
@@ -178,24 +185,36 @@ router.get("/recent", async (req, res) => {
       ...versusActivities,
     ];
 
-    // Sort combined results
+    // Sort combined results (case-insensitive for name sorting)
     if (sort === "name_asc") {
       allActivities.sort((a, b) => {
-        const nameCompare = a.resource_name.localeCompare(b.resource_name);
+        const nameCompare = a.resource_name.localeCompare(
+          b.resource_name,
+          undefined,
+          { sensitivity: "base" },
+        );
         if (nameCompare !== 0) return nameCompare;
         return new Date(b.timestamp) - new Date(a.timestamp);
       });
     } else if (sort === "name_desc") {
       allActivities.sort((a, b) => {
-        const nameCompare = b.resource_name.localeCompare(a.resource_name);
+        const nameCompare = b.resource_name.localeCompare(
+          a.resource_name,
+          undefined,
+          { sensitivity: "base" },
+        );
         if (nameCompare !== 0) return nameCompare;
         return new Date(b.timestamp) - new Date(a.timestamp);
       });
     } else if (sort === "oldest") {
-      allActivities.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      allActivities.sort(
+        (a, b) => new Date(a.timestamp) - new Date(b.timestamp),
+      );
     } else {
       // recent (default)
-      allActivities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      allActivities.sort(
+        (a, b) => new Date(b.timestamp) - new Date(a.timestamp),
+      );
     }
     // Paginate the results
     const paginatedActivities = allActivities.slice(offset, offset + pageSize);
