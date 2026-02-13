@@ -2551,6 +2551,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     onSelectAnchor={onGroupAnchorClick}
                                     isGroupSelected={groupConnectionSource() === group.id}
                                     sourceAnchor={sourceAnchor()}
+                                    onContextMenu={handleGroupContextMenu}
+                                    editingGroupId={editingGroupId}
                                 >
                                     <For each={getDraftsForGroup(group.id)}>
                                         {(cd) => (

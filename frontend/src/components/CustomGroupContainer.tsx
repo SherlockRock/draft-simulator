@@ -20,6 +20,7 @@ type CustomGroupContainerProps = {
     isGroupSelected?: boolean;
     sourceAnchor?: { type: AnchorType } | null;
     editingGroupId?: Accessor<string | null>;
+    onContextMenu?: (group: CanvasGroup, e: MouseEvent) => void;
     children: JSX.Element;
 };
 
@@ -156,6 +157,12 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 onMouseDown={(e) => {
                     if (!isEditing()) {
                         props.onGroupMouseDown(props.group.id, e);
+                    }
+                }}
+                onContextMenu={(e) => {
+                    if (props.canEdit() && props.onContextMenu) {
+                        e.preventDefault();
+                        props.onContextMenu(props.group, e);
                     }
                 }}
             >
