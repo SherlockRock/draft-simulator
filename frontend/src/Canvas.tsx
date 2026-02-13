@@ -83,6 +83,7 @@ import {
 } from "./components/CustomGroupContainer";
 import { DeleteGroupDialog } from "./components/DeleteGroupDialog";
 import { DraftContextMenu } from "./components/DraftContextMenu";
+import { GroupContextMenu } from "./components/GroupContextMenu";
 
 type cardProps = {
     canvasId: string;
@@ -547,6 +548,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         draft: CanvasDraft;
         position: { x: number; y: number };
     } | null>(null);
+
+    const [groupContextMenu, setGroupContextMenu] = createSignal<{
+        group: CanvasGroup;
+        position: { x: number; y: number };
+    } | null>(null);
+
+    const [editingGroupId, setEditingGroupId] = createSignal<string | null>(null);
 
     const ungroupedDrafts = createMemo(() => canvasDrafts.filter((cd) => !cd.group_id));
 
@@ -1872,6 +1880,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const closeDraftContextMenu = () => {
         setDraftContextMenu(null);
+    };
+
+    const handleGroupContextMenu = (group: CanvasGroup, e: MouseEvent) => {
+        if (!hasEditPermissions()) return;
+        e.preventDefault();
+        setGroupContextMenu({
+            group,
+            position: { x: e.clientX, y: e.clientY }
+        });
+    };
+
+    const closeGroupContextMenu = () => {
+        setGroupContextMenu(null);
     };
 
     const handleDraftView = (draft: CanvasDraft) => {
