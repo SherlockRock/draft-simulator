@@ -21,18 +21,24 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
     { value: "name_desc", label: "Name (Z-A)" },
 ];
 
+// Helper to get first value from search params (can be string or string[])
+const getParamString = (param: string | string[] | undefined): string => {
+    if (Array.isArray(param)) return param[0] || "";
+    return param || "";
+};
+
 const ActivityList: Component<ActivityListProps> = (props) => {
     const [searchParams, setSearchParams] = useSearchParams();
-    const [searchInput, setSearchInput] = createSignal(searchParams.search || "");
+    const [searchInput, setSearchInput] = createSignal(getParamString(searchParams.search));
     let debounceTimeout: number | undefined;
 
     // Read sort from URL, default to "recent"
     const currentSort = createMemo(() =>
-        (searchParams.sort as SortOption) || "recent"
+        (getParamString(searchParams.sort) as SortOption) || "recent"
     );
 
     // Read search from URL
-    const currentSearch = createMemo(() => searchParams.search || "");
+    const currentSearch = createMemo(() => getParamString(searchParams.search));
 
     // Debounce search input
     const handleSearchInput = (value: string) => {
