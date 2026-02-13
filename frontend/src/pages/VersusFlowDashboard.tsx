@@ -1,8 +1,6 @@
-import { Component, createSignal, For, Show, Switch, Match, onCleanup } from "solid-js";
-import { useInfiniteQuery } from "@tanstack/solid-query";
+import { Component, createSignal, Show } from "solid-js";
 import TutorialStep from "../components/TutorialStep";
-import ActivityItem from "../components/ActivityItem";
-import { fetchRecentActivity } from "../utils/actions";
+import ActivityList from "../components/ActivityList";
 import { useUser } from "../userProvider";
 import { CreateVersusDraftDialog } from "../components/CreateVersusDraftDialog";
 
@@ -10,30 +8,6 @@ const VersusFlowDashboard: Component = () => {
     const context = useUser();
     const [user] = context();
     const [showCreateDialog, setShowCreateDialog] = createSignal(false);
-
-    const activitiesQuery = useInfiniteQuery(() => ({
-        queryKey: ["recentActivity", "versus"],
-        queryFn: ({ pageParam = 0 }) => fetchRecentActivity(pageParam, "versus"),
-        getNextPageParam: (lastPage) => lastPage.nextPage,
-        enabled: !!user(),
-        initialPageParam: 0
-    }));
-
-    // Intersection observer for infinite scroll
-    const setupObserver = (element: HTMLDivElement) => {
-        const observer = new IntersectionObserver(
-            (entries) => {
-                if (entries[0].isIntersecting && !activitiesQuery.isFetchingNextPage) {
-                    activitiesQuery.fetchNextPage();
-                }
-            },
-            { threshold: 0.1 }
-        );
-
-        observer.observe(element);
-
-        onCleanup(() => observer.disconnect());
-    };
 
     const handleCreateVersus = () => {
         setShowCreateDialog(true);
@@ -123,56 +97,12 @@ const VersusFlowDashboard: Component = () => {
                         <h2 class="mb-5 text-xl font-semibold text-slate-200">
                             Recent Versus Activity
                         </h2>
-                        <Switch>
-                            <Match when={activitiesQuery.isLoading}>
-                                <div class="text-slate-400">Loading activity...</div>
-                            </Match>
-                            <Match when={activitiesQuery.isError}>
-                                <div class="text-red-400">Failed to load activity</div>
-                            </Match>
-                            <Match when={activitiesQuery.data}>
-                                <Show
-                                    when={activitiesQuery.data?.pages.some(
-                                        (page) => page.activities.length > 0
-                                    )}
-                                    fallback={
-                                        <div class="rounded-lg border border-slate-700/50 bg-slate-800/50 p-8 text-center text-slate-400">
-                                            No recent versus activity. Create your first
-                                            versus draft to get started!
-                                        </div>
-                                    }
-                                >
-                                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                                        <For
-                                            each={activitiesQuery.data?.pages.flatMap(
-                                                (page) => page.activities
-                                            )}
-                                        >
-                                            {(activity) => (
-                                                <ActivityItem activity={activity} />
-                                            )}
-                                        </For>
-                                    </div>
-                                    {/* Sentinel element for infinite scroll */}
-                                    <Show when={activitiesQuery.hasNextPage}>
-                                        <div ref={setupObserver} class="py-4 text-center">
-                                            <Show
-                                                when={activitiesQuery.isFetchingNextPage}
-                                                fallback={
-                                                    <div class="text-slate-500">
-                                                        Scroll for more...
-                                                    </div>
-                                                }
-                                            >
-                                                <div class="text-slate-400">
-                                                    Loading more...
-                                                </div>
-                                            </Show>
-                                        </div>
-                                    </Show>
-                                </Show>
-                            </Match>
-                        </Switch>
+                        <ActivityList
+                            queryKeyBase={["recentActivity", "versus"]}
+                            resourceType="versus"
+                            accentColor="orange"
+                            emptyMessage="No recent versus activity. Create your first versus draft to get started!"
+                        />
                     </section>
                 </Show>
             </div>
