@@ -662,6 +662,12 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                         );
                                                                     }
                                                                 }}
+                                                                onContextMenu={(e) =>
+                                                                    handleSidebarGroupContextMenu(
+                                                                        group,
+                                                                        e
+                                                                    )
+                                                                }
                                                             >
                                                                 <span class="text-slate-400">
                                                                     {group.type ===
