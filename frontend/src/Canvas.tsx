@@ -21,6 +21,7 @@ import {
     postNewDraft,
     updateCanvasDraftPosition,
     deleteDraftFromCanvas,
+    copyDraftInCanvas,
     updateCanvasViewport,
     CanvasResposnse,
     updateCanvasName,
@@ -59,6 +60,7 @@ import {
     localEditDraft,
     localUpdateDraftPosition,
     localDeleteDraft,
+    localCopyDraft,
     localUpdateViewport,
     localCreateConnection,
     localUpdateConnection,
@@ -80,6 +82,7 @@ import {
     CUSTOM_GROUP_HEADER_HEIGHT
 } from "./components/CustomGroupContainer";
 import { DeleteGroupDialog } from "./components/DeleteGroupDialog";
+import { DraftContextMenu } from "./components/DraftContextMenu";
 
 type cardProps = {
     canvasId: string;
@@ -89,6 +92,7 @@ type cardProps = {
     handleNameChange: (draftId: string, newName: string) => void;
     handlePickChange: (draftId: string, pickIndex: number, championName: string) => void;
     onBoxMouseDown: (draftId: string, e: MouseEvent) => void;
+    onContextMenu: (draft: CanvasDraft, e: MouseEvent) => void;
     layoutToggle: () => boolean;
     setLayoutToggle: (val: boolean) => void;
     viewport: () => Viewport;
@@ -149,7 +153,7 @@ const CanvasCard = (props: cardProps) => {
 
     return (
         <div
-            class="flex flex-col rounded-md border border-slate-500 bg-slate-600 shadow-lg"
+            class="canvas-card flex flex-col rounded-md border border-slate-500 bg-slate-600 shadow-lg"
             classList={{
                 "absolute z-30": !props.isGrouped || props.groupType === "custom",
                 "ring-4 ring-blue-400": props.isConnectionMode && !selected(),
@@ -184,6 +188,13 @@ const CanvasCard = (props: cardProps) => {
                     (!props.isGrouped || props.groupType === "custom")
                 ) {
                     props.onBoxMouseDown(props.canvasDraft.Draft.id, e);
+                }
+            }}
+            onContextMenu={(e) => {
+                if (props.canEdit()) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    props.onContextMenu(props.canvasDraft, e);
                 }
             }}
         >
@@ -427,6 +438,7 @@ type CanvasComponentProps = {
 
 const CanvasComponent = (props: CanvasComponentProps) => {
     const params = useParams();
+    const navigate = useNavigate();
     const queryClient = useQueryClient();
     const accessor = useUser();
     const socketAccessor = accessor()[2];
@@ -531,6 +543,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         x: 0,
         y: 0
     });
+    const [draftContextMenu, setDraftContextMenu] = createSignal<{
+        draft: CanvasDraft;
+        position: { x: number; y: number };
+    } | null>(null);
 
     const ungroupedDrafts = createMemo(() => canvasDrafts.filter((cd) => !cd.group_id));
 
@@ -665,6 +681,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         },
         onError: (error: Error) => {
             toast.error(`Error deleting draft: ${error.message}`);
+        }
+    }));
+
+    const copyDraftMutation = useMutation(() => ({
+        mutationFn: copyDraftInCanvas,
+        onSuccess: () => {
+            toast.success("Draft copied successfully");
+        },
+        onError: (error: Error) => {
+            toast.error(`Error copying draft: ${error.message}`);
         }
     }));
 
@@ -1837,6 +1863,68 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setContextMenuPosition(null);
     };
 
+    const handleDraftContextMenu = (draft: CanvasDraft, e: MouseEvent) => {
+        setDraftContextMenu({
+            draft,
+            position: { x: e.clientX, y: e.clientY }
+        });
+    };
+
+    const closeDraftContextMenu = () => {
+        setDraftContextMenu(null);
+    };
+
+    const handleDraftView = (draft: CanvasDraft) => {
+        navigate(`/canvas/${params.id}/draft/${draft.Draft.id}`);
+    };
+
+    const handleDraftGoTo = (draft: CanvasDraft) => {
+        // For grouped drafts, calculate actual position
+        const group = draft.group_id
+            ? canvasGroups.find((g) => g.id === draft.group_id)
+            : null;
+        if (group && group.type === "custom") {
+            navigateToDraft(
+                group.positionX + draft.positionX,
+                group.positionY + draft.positionY
+            );
+        } else if (group && group.type === "series") {
+            // Series groups position drafts horizontally
+            const groupDrafts = canvasDrafts.filter((cd) => cd.group_id === group.id);
+            const sortedDrafts = [...groupDrafts].sort(
+                (a, b) => (a.Draft.seriesIndex ?? 0) - (b.Draft.seriesIndex ?? 0)
+            );
+            const draftIndex = sortedDrafts.findIndex(
+                (cd) => cd.Draft.id === draft.Draft.id
+            );
+            const PADDING = 20;
+            const CARD_GAP = 24;
+            const cw = props.layoutToggle() ? 700 : 350;
+            const offsetX = PADDING + draftIndex * (cw + CARD_GAP);
+            navigateToDraft(group.positionX + offsetX, group.positionY);
+        } else {
+            navigateToDraft(draft.positionX, draft.positionY);
+        }
+    };
+
+    const handleDraftCopy = (draft: CanvasDraft) => {
+        if (isLocalMode()) {
+            localCopyDraft(draft.Draft.id);
+            refreshFromLocal();
+            toast.success("Draft copied successfully");
+        } else {
+            copyDraftMutation.mutate({
+                canvasId: params.id,
+                draftId: draft.Draft.id
+            });
+        }
+    };
+
+    const handleDraftDelete = (draft: CanvasDraft) => {
+        setDraftToDelete(draft);
+        setIsDeleteDialogOpen(true);
+    };
+
     const tabOrder = [
         0, 10, 1, 11, 2, 12, 3, 13, 4, 14, 5, 15, 6, 16, 7, 17, 8, 18, 9, 19
     ];
@@ -2454,6 +2542,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 handlePickChange={handlePickChange}
                                                 viewport={props.viewport}
                                                 onBoxMouseDown={onBoxMouseDown}
+                                                onContextMenu={handleDraftContextMenu}
                                                 layoutToggle={props.layoutToggle}
                                                 setLayoutToggle={props.setLayoutToggle}
                                                 isConnectionMode={isConnectionMode()}
@@ -2492,6 +2581,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         handlePickChange={handlePickChange}
                                         viewport={props.viewport}
                                         onBoxMouseDown={onBoxMouseDown}
+                                        onContextMenu={handleDraftContextMenu}
                                         layoutToggle={props.layoutToggle}
                                         setLayoutToggle={props.setLayoutToggle}
                                         isConnectionMode={isConnectionMode()}
@@ -2525,6 +2615,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             handlePickChange={handlePickChange}
                             viewport={props.viewport}
                             onBoxMouseDown={onBoxMouseDown}
+                            onContextMenu={handleDraftContextMenu}
                             layoutToggle={props.layoutToggle}
                             setLayoutToggle={props.setLayoutToggle}
                             isConnectionMode={isConnectionMode()}
@@ -2690,6 +2781,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             Create Group
                         </button>
                     </div>
+                </Show>
+                {/* Draft Context Menu */}
+                <Show when={draftContextMenu()}>
+                    {(menu) => (
+                        <DraftContextMenu
+                            position={menu().position}
+                            draft={menu().draft}
+                            onView={() => handleDraftView(menu().draft)}
+                            onGoTo={() => handleDraftGoTo(menu().draft)}
+                            onCopy={() => handleDraftCopy(menu().draft)}
+                            onDelete={() => handleDraftDelete(menu().draft)}
+                            onClose={closeDraftContextMenu}
+                        />
+                    )}
                 </Show>
             </div>
         </Show>

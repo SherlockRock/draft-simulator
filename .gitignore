@@ -6,4 +6,5 @@ dist
 *.key
 *.local.md
 *-design.md
+*-plan.md
 .worktrees

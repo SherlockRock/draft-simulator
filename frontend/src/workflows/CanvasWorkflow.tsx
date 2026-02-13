@@ -21,7 +21,9 @@ import {
     fetchCanvasUsers,
     updateCanvasUserPermission,
     removeUserFromCanvas,
-    generateCanvasShareLink
+    generateCanvasShareLink,
+    copyDraftInCanvas,
+    deleteDraftFromCanvas
 } from "../utils/actions";
 import { getLocalCanvas, hasLocalCanvas } from "../utils/localCanvasStore";
 import FlowPanel from "../components/FlowPanel";
@@ -32,6 +34,8 @@ import { ManageUsersDialog } from "../components/ManageUsersDialog";
 import toast from "solid-toast";
 import { CanvasGroup, CanvasDraft } from "../utils/types";
 import { CanvasAccessDenied, AccessErrorType } from "../components/CanvasAccessDenied";
+import { DraftContextMenu } from "../components/DraftContextMenu";
+import { localCopyDraft, localDeleteDraft } from "../utils/useLocalCanvasMutations";
 
 // Create context for sharing canvas state with children
 type CanvasContextType = {
@@ -157,6 +161,10 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         type: AccessErrorType;
         canvasId: string;
     } | null>(null);
+    const [sidebarDraftContextMenu, setSidebarDraftContextMenu] = createSignal<{
+        draft: CanvasDraft;
+        position: { x: number; y: number };
+    } | null>(null);
 
     let previousUser = user();
 
@@ -243,6 +251,108 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
             toast.error(`Error removing user: ${error.message}`);
         }
     }));
+
+    const copyDraftMutation = useMutation(() => ({
+        mutationFn: copyDraftInCanvas,
+        onSuccess: () => {
+            refetchCanvas();
+            toast.success("Draft copied successfully");
+        },
+        onError: (error: Error) => {
+            toast.error(`Error copying draft: ${error.message}`);
+        }
+    }));
+
+    const deleteDraftMutation = useMutation(() => ({
+        mutationFn: deleteDraftFromCanvas,
+        onSuccess: () => {
+            refetchCanvas();
+            toast.success("Draft deleted successfully");
+        },
+        onError: (error: Error) => {
+            toast.error(`Error deleting draft: ${error.message}`);
+        }
+    }));
+
+    const isLocalMode = () => params.id === "local";
+
+    const handleSidebarDraftContextMenu = (draft: CanvasDraft, e: MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setSidebarDraftContextMenu({
+            draft,
+            position: { x: e.clientX, y: e.clientY }
+        });
+    };
+
+    const closeSidebarDraftContextMenu = () => {
+        setSidebarDraftContextMenu(null);
+    };
+
+    const handleSidebarDraftView = (draft: CanvasDraft) => {
+        navigate(`/canvas/${params.id}/draft/${draft.Draft.id}`);
+    };
+
+    const handleSidebarDraftGoTo = (draft: CanvasDraft) => {
+        const callback = navigateToDraftCallback();
+        if (!callback) return;
+
+        // Calculate actual position based on group membership
+        const groups = (canvas()?.groups ?? []) as CanvasGroup[];
+        const drafts = (canvas()?.drafts ?? []) as CanvasDraft[];
+        const group = draft.group_id ? groups.find((g) => g.id === draft.group_id) : null;
+
+        if (group && group.type === "custom") {
+            callback(
+                group.positionX + draft.positionX,
+                group.positionY + draft.positionY
+            );
+        } else if (group && group.type === "series") {
+            // Series groups position drafts horizontally
+            const groupDrafts = drafts.filter((cd) => cd.group_id === group.id);
+            const sortedDrafts = [...groupDrafts].sort(
+                (a, b) => (a.Draft.seriesIndex ?? 0) - (b.Draft.seriesIndex ?? 0)
+            );
+            const draftIndex = sortedDrafts.findIndex(
+                (cd) => cd.Draft.id === draft.Draft.id
+            );
+            const PADDING = 20;
+            const CARD_GAP = 24;
+            const cw = layoutToggle() ? 700 : 350;
+            const offsetX = PADDING + draftIndex * (cw + CARD_GAP);
+            callback(group.positionX + offsetX, group.positionY);
+        } else {
+            callback(draft.positionX, draft.positionY);
+        }
+    };
+
+    const handleSidebarDraftCopy = (draft: CanvasDraft) => {
+        if (isLocalMode()) {
+            localCopyDraft(draft.Draft.id);
+            refetchCanvas();
+            toast.success("Draft copied successfully");
+        } else {
+            copyDraftMutation.mutate({
+                canvasId: params.id,
+                draftId: draft.Draft.id
+            });
+        }
+    };
+
+    const handleSidebarDraftDelete = (draft: CanvasDraft) => {
+        if (confirm(`Are you sure you want to delete "${draft.Draft.name}"?`)) {
+            if (isLocalMode()) {
+                localDeleteDraft(draft.Draft.id);
+                refetchCanvas();
+                toast.success("Draft deleted successfully");
+            } else {
+                deleteDraftMutation.mutate({
+                    canvas: params.id,
+                    draft: draft.Draft.id
+                });
+            }
+        }
+    };
 
     const handlePermissionChange = (userId: string, permission: string) => {
         updatePermissionMutation.mutate({ userId, permissions: permission });
@@ -620,6 +730,18 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                                     }
                                                                                 }
                                                                             }}
+                                                                            onContextMenu={(
+                                                                                e
+                                                                            ) => {
+                                                                                if (
+                                                                                    hasEditPermissions()
+                                                                                ) {
+                                                                                    handleSidebarDraftContextMenu(
+                                                                                        canvasDraft,
+                                                                                        e
+                                                                                    );
+                                                                                }
+                                                                            }}
                                                                         >
                                                                             {
                                                                                 canvasDraft
@@ -660,6 +782,16 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                     }
                                                                 }
                                                             }}
+                                                            onContextMenu={(e) => {
+                                                                if (
+                                                                    hasEditPermissions()
+                                                                ) {
+                                                                    handleSidebarDraftContextMenu(
+                                                                        canvasDraft,
+                                                                        e
+                                                                    );
+                                                                }
+                                                            }}
                                                         >
                                                             {canvasDraft.Draft.name}
                                                         </div>
@@ -696,6 +828,20 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                     }
                 >
                     {props.children}
+                </Show>
+                {/* Sidebar Draft Context Menu */}
+                <Show when={sidebarDraftContextMenu()}>
+                    {(menu) => (
+                        <DraftContextMenu
+                            position={menu().position}
+                            draft={menu().draft}
+                            onView={() => handleSidebarDraftView(menu().draft)}
+                            onGoTo={() => handleSidebarDraftGoTo(menu().draft)}
+                            onCopy={() => handleSidebarDraftCopy(menu().draft)}
+                            onDelete={() => handleSidebarDraftDelete(menu().draft)}
+                            onClose={closeSidebarDraftContextMenu}
+                        />
+                    )}
                 </Show>
             </div>
         </CanvasContext.Provider>

@@ -12,7 +12,10 @@ const User = require("../models/User.js");
 const VersusDraft = require("../models/VersusDraft.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
-const { draftHasSharedWithUser, generateUniqueCanvasGroupName } = require("../helpers.js");
+const {
+  draftHasSharedWithUser,
+  generateUniqueCanvasGroupName,
+} = require("../helpers.js");
 
 // Helper function to touch canvas updatedAt timestamp
 async function touchCanvasTimestamp(canvasId) {
@@ -55,7 +58,7 @@ router.get("/", async (req, res) => {
         id: canvas.id,
         name: canvas.name,
         updatedAt: canvas.updatedAt,
-      }))
+      })),
     );
   } catch (error) {
     console.error("Error fetching canvas list:", error);
@@ -94,11 +97,28 @@ router.get("/:canvasId", async (req, res) => {
 
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvas.id },
-      attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
-      include: [{
-        model: Draft,
-        attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"]
-      }],
+      attributes: [
+        "positionX",
+        "positionY",
+        "is_locked",
+        "group_id",
+        "source_type",
+      ],
+      include: [
+        {
+          model: Draft,
+          attributes: [
+            "name",
+            "id",
+            "picks",
+            "type",
+            "versus_draft_id",
+            "seriesIndex",
+            "completed",
+            "winner",
+          ],
+        },
+      ],
       raw: true,
       nest: true,
     });
@@ -115,7 +135,9 @@ router.get("/:canvasId", async (req, res) => {
     // Calculate isInProgress based on drafts in each group
     const groupsWithProgress = groups.map((g) => {
       const groupDrafts = canvasDrafts.filter((cd) => cd.group_id === g.id);
-      const isInProgress = groupDrafts.length > 0 && !groupDrafts.every((cd) => cd.Draft.completed);
+      const isInProgress =
+        groupDrafts.length > 0 &&
+        !groupDrafts.every((cd) => cd.Draft.completed);
       return {
         ...g.toJSON(),
         isInProgress,
@@ -181,8 +203,28 @@ router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
       if (group_id !== undefined) {
         const canvasDrafts = await CanvasDraft.findAll({
           where: { canvas_id: canvasId },
-          attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
-          include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] }],
+          attributes: [
+            "positionX",
+            "positionY",
+            "is_locked",
+            "group_id",
+            "source_type",
+          ],
+          include: [
+            {
+              model: Draft,
+              attributes: [
+                "name",
+                "id",
+                "picks",
+                "type",
+                "versus_draft_id",
+                "seriesIndex",
+                "completed",
+                "winner",
+              ],
+            },
+          ],
           raw: true,
           nest: true,
         });
@@ -205,11 +247,124 @@ router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
 
       res.status(200).json({ success: true, message: "Draft updated" });
     } else {
-      res.status(404).json({ success: false, message: "Canvas draft not found" });
+      res
+        .status(404)
+        .json({ success: false, message: "Canvas draft not found" });
     }
   } catch (error) {
     console.error("Failed to update canvas draft:", error);
     res.status(500).json({ error: "Failed to update canvas draft" });
+  }
+});
+
+// Copy a draft within a canvas
+router.post("/:canvasId/draft/:draftId/copy", protect, async (req, res) => {
+  try {
+    const { canvasId, draftId } = req.params;
+
+    const userCanvas = await UserCanvas.findOne({
+      where: { canvas_id: canvasId, user_id: req.user.id },
+    });
+
+    if (
+      !userCanvas ||
+      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
+    ) {
+      return res.status(403).json({
+        error: "Forbidden: You don't have permission to edit this canvas",
+      });
+    }
+
+    // Find the existing canvas draft
+    const existingCanvasDraft = await CanvasDraft.findOne({
+      where: { canvas_id: canvasId, draft_id: draftId },
+      include: [{ model: Draft }],
+    });
+
+    if (!existingCanvasDraft) {
+      return res.status(404).json({ error: "Draft not found on canvas" });
+    }
+
+    // Create a new draft with copied data
+    const originalDraft = existingCanvasDraft.Draft;
+    const newDraft = await Draft.create({
+      name: `${originalDraft.name} (Copy)`,
+      picks: originalDraft.picks || Array(20).fill(""),
+      public: false,
+      type: "canvas",
+      owner_id: req.user.id,
+    });
+
+    // Create the canvas draft at offset position
+    const COPY_OFFSET = 50;
+    const newCanvasDraft = await CanvasDraft.create({
+      canvas_id: canvasId,
+      draft_id: newDraft.id,
+      positionX: existingCanvasDraft.positionX + COPY_OFFSET,
+      positionY: existingCanvasDraft.positionY + COPY_OFFSET,
+      is_locked: false,
+      source_type: "canvas",
+    });
+
+    await touchCanvasTimestamp(canvasId);
+
+    // Fetch full canvas data for socket broadcast
+    const canvasDrafts = await CanvasDraft.findAll({
+      where: { canvas_id: canvasId },
+      attributes: [
+        "positionX",
+        "positionY",
+        "is_locked",
+        "group_id",
+        "source_type",
+      ],
+      include: [
+        {
+          model: Draft,
+          attributes: [
+            "name",
+            "id",
+            "picks",
+            "type",
+            "versus_draft_id",
+            "seriesIndex",
+            "completed",
+            "winner",
+          ],
+        },
+      ],
+      raw: true,
+      nest: true,
+    });
+
+    const connections = await CanvasConnection.findAll({
+      where: { canvas_id: canvasId },
+      raw: true,
+    });
+
+    const groups = await CanvasGroup.findAll({
+      where: { canvas_id: canvasId },
+    });
+
+    const canvas = await Canvas.findByPk(canvasId);
+
+    res.status(201).json({
+      success: true,
+      canvasDraft: {
+        ...newCanvasDraft.toJSON(),
+        Draft: newDraft.toJSON(),
+      },
+    });
+
+    socketService.emitToRoom(canvasId, "canvasUpdate", {
+      canvas: canvas.toJSON(),
+      drafts: canvasDrafts,
+      connections: connections,
+      groups: groups.map((g) => g.toJSON()),
+    });
+  } catch (error) {
+    console.error("Failed to copy draft:", error);
+    res.status(500).json({ error: "Failed to copy draft" });
   }
 });
 
@@ -236,7 +391,9 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
     });
 
     if (canvasDraftsToCheck.length === 0) {
-      return res.status(404).json({ success: false, message: "Canvas draft not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Canvas draft not found" });
     }
 
     // Find which ones are in series groups vs deletable (ungrouped or custom group)
@@ -244,22 +401,24 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
       .filter((cd) => cd.group_id)
       .map((cd) => cd.group_id);
 
-    const seriesGroups = groupIds.length > 0
-      ? await CanvasGroup.findAll({
-          where: { id: groupIds, type: "series" },
-        })
-      : [];
+    const seriesGroups =
+      groupIds.length > 0
+        ? await CanvasGroup.findAll({
+            where: { id: groupIds, type: "series" },
+          })
+        : [];
 
     const seriesGroupIds = new Set(seriesGroups.map((g) => g.id));
 
     // Find a deletable draft (not in a series group)
     const deletableDraft = canvasDraftsToCheck.find(
-      (cd) => !cd.group_id || !seriesGroupIds.has(cd.group_id)
+      (cd) => !cd.group_id || !seriesGroupIds.has(cd.group_id),
     );
 
     if (!deletableDraft) {
       return res.status(403).json({
-        error: "Cannot delete draft that is part of a series group. Remove the entire series instead.",
+        error:
+          "Cannot delete draft that is part of a series group. Remove the entire series instead.",
       });
     }
 
@@ -271,10 +430,10 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
     for (const conn of allConnections) {
       // Filter out the deleted draft from source and target arrays
       const filteredSources = (conn.source_draft_ids || []).filter(
-        (src) => src.draft_id !== draftId
+        (src) => src.draft_id !== draftId,
       );
       const filteredTargets = (conn.target_draft_ids || []).filter(
-        (tgt) => tgt.draft_id !== draftId
+        (tgt) => tgt.draft_id !== draftId,
       );
 
       // If either array is empty, delete the connection
@@ -296,9 +455,27 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
     const canvas = await Canvas.findByPk(canvasId);
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvasId },
-      attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
+      attributes: [
+        "positionX",
+        "positionY",
+        "is_locked",
+        "group_id",
+        "source_type",
+      ],
       include: [
-        { model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] },
+        {
+          model: Draft,
+          attributes: [
+            "name",
+            "id",
+            "picks",
+            "type",
+            "versus_draft_id",
+            "seriesIndex",
+            "completed",
+            "winner",
+          ],
+        },
       ],
       raw: true,
       nest: true,
@@ -430,13 +607,17 @@ router.post("/:canvasId/import/draft", protect, async (req, res) => {
     if (draft.owner_id !== req.user.id && !draft.public) {
       const isSharedWith = await draftHasSharedWithUser(draft, req.user);
       if (!isSharedWith) {
-        return res.status(403).json({ error: "Not authorized to use this draft" });
+        return res
+          .status(403)
+          .json({ error: "Not authorized to use this draft" });
       }
     }
 
     // Determine if draft is from versus series (locked) or standalone (editable)
     const isLocked = draft.type === "versus" || !!draft.versus_draft_id;
-    const sourceType = draft.versus_draft_id ? "versus" : (draft.type || "standalone");
+    const sourceType = draft.versus_draft_id
+      ? "versus"
+      : draft.type || "standalone";
 
     const canvasDraft = await CanvasDraft.create({
       canvas_id: canvasId,
@@ -452,8 +633,28 @@ router.post("/:canvasId/import/draft", protect, async (req, res) => {
     // Fetch the full canvas data for socket broadcast
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvasId },
-      attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
-      include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] }],
+      attributes: [
+        "positionX",
+        "positionY",
+        "is_locked",
+        "group_id",
+        "source_type",
+      ],
+      include: [
+        {
+          model: Draft,
+          attributes: [
+            "name",
+            "id",
+            "picks",
+            "type",
+            "versus_draft_id",
+            "seriesIndex",
+            "completed",
+            "winner",
+          ],
+        },
+      ],
       raw: true,
       nest: true,
     });
@@ -540,12 +741,14 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
           seriesType: versusDraft.type,
         },
       },
-      { transaction: t }
+      { transaction: t },
     );
 
     // Create CanvasDraft for each game in the series
     const drafts = versusDraft.Drafts || [];
-    const sortedDrafts = [...drafts].sort((a, b) => a.seriesIndex - b.seriesIndex);
+    const sortedDrafts = [...drafts].sort(
+      (a, b) => a.seriesIndex - b.seriesIndex,
+    );
 
     const createdCanvasDrafts = [];
     for (let i = 0; i < sortedDrafts.length; i++) {
@@ -560,7 +763,7 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
           group_id: group.id,
           source_type: "versus",
         },
-        { transaction: t }
+        { transaction: t },
       );
       createdCanvasDrafts.push({
         ...canvasDraft.toJSON(),
@@ -579,8 +782,28 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
     // Fetch full canvas data for socket broadcast
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvasId },
-      attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
-      include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] }],
+      attributes: [
+        "positionX",
+        "positionY",
+        "is_locked",
+        "group_id",
+        "source_type",
+      ],
+      include: [
+        {
+          model: Draft,
+          attributes: [
+            "name",
+            "id",
+            "picks",
+            "type",
+            "versus_draft_id",
+            "seriesIndex",
+            "completed",
+            "winner",
+          ],
+        },
+      ],
       raw: true,
       nest: true,
     });
@@ -632,9 +855,10 @@ router.post("/:canvasId/group", protect, async (req, res) => {
       });
     }
 
-    const groupName = name && typeof name === "string" && name.trim().length > 0
-      ? name.trim()
-      : await generateUniqueCanvasGroupName("New Group", canvasId);
+    const groupName =
+      name && typeof name === "string" && name.trim().length > 0
+        ? name.trim()
+        : await generateUniqueCanvasGroupName("New Group", canvasId);
 
     const group = await CanvasGroup.create({
       canvas_id: canvasId,
@@ -655,8 +879,28 @@ router.post("/:canvasId/group", protect, async (req, res) => {
 
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvasId },
-      attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
-      include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] }],
+      attributes: [
+        "positionX",
+        "positionY",
+        "is_locked",
+        "group_id",
+        "source_type",
+      ],
+      include: [
+        {
+          model: Draft,
+          attributes: [
+            "name",
+            "id",
+            "picks",
+            "type",
+            "versus_draft_id",
+            "seriesIndex",
+            "completed",
+            "winner",
+          ],
+        },
+      ],
       raw: true,
       nest: true,
     });
@@ -732,7 +976,7 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
             positionY: group.positionY + draft.positionY,
             group_id: null,
           },
-          { transaction: t }
+          { transaction: t },
         );
       }
     } else {
@@ -744,10 +988,10 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
 
       for (const conn of allConnections) {
         const filteredSources = (conn.source_draft_ids || []).filter(
-          (src) => !draftIdsToRemove.has(src.draft_id)
+          (src) => !draftIdsToRemove.has(src.draft_id),
         );
         const filteredTargets = (conn.target_draft_ids || []).filter(
-          (tgt) => !draftIdsToRemove.has(tgt.draft_id)
+          (tgt) => !draftIdsToRemove.has(tgt.draft_id),
         );
 
         if (filteredSources.length === 0 || filteredTargets.length === 0) {
@@ -777,10 +1021,10 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
 
     for (const conn of allConnsForGroup) {
       const filteredSources = (conn.source_draft_ids || []).filter(
-        (src) => !(src.type === "group" && src.group_id === groupId)
+        (src) => !(src.type === "group" && src.group_id === groupId),
       );
       const filteredTargets = (conn.target_draft_ids || []).filter(
-        (tgt) => !(tgt.type === "group" && tgt.group_id === groupId)
+        (tgt) => !(tgt.type === "group" && tgt.group_id === groupId),
       );
 
       if (filteredSources.length === 0 || filteredTargets.length === 0) {
@@ -806,8 +1050,28 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
     // Fetch updated canvas data
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvasId },
-      attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
-      include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] }],
+      attributes: [
+        "positionX",
+        "positionY",
+        "is_locked",
+        "group_id",
+        "source_type",
+      ],
+      include: [
+        {
+          model: Draft,
+          attributes: [
+            "name",
+            "id",
+            "picks",
+            "type",
+            "versus_draft_id",
+            "seriesIndex",
+            "completed",
+            "winner",
+          ],
+        },
+      ],
       raw: true,
       nest: true,
     });
@@ -867,7 +1131,11 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
 
     // Build update object with only provided fields
     const updates = {};
-    if (name !== undefined && typeof name === "string" && name.trim().length > 0) {
+    if (
+      name !== undefined &&
+      typeof name === "string" &&
+      name.trim().length > 0
+    ) {
       updates.name = name.trim();
     }
     if (typeof positionX === "number") updates.positionX = positionX;
@@ -900,8 +1168,28 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
       });
       const canvasDrafts = await CanvasDraft.findAll({
         where: { canvas_id: canvasId },
-        attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
-        include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] }],
+        attributes: [
+          "positionX",
+          "positionY",
+          "is_locked",
+          "group_id",
+          "source_type",
+        ],
+        include: [
+          {
+            model: Draft,
+            attributes: [
+              "name",
+              "id",
+              "picks",
+              "type",
+              "versus_draft_id",
+              "seriesIndex",
+              "completed",
+              "winner",
+            ],
+          },
+        ],
         raw: true,
         nest: true,
       });
@@ -998,7 +1286,9 @@ router.patch("/:canvasId/viewport", async (req, res) => {
     });
 
     if (!userCanvas) {
-      return res.status(403).json({ error: "Forbidden: You don't have access to this canvas" });
+      return res
+        .status(403)
+        .json({ error: "Forbidden: You don't have access to this canvas" });
     }
 
     userCanvas.lastViewportX = x;
@@ -1056,8 +1346,28 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
 
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvas.id },
-      attributes: ["positionX", "positionY", "is_locked", "group_id", "source_type"],
-      include: [{ model: Draft, attributes: ["name", "id", "picks", "type", "versus_draft_id", "seriesIndex", "completed", "winner"] }],
+      attributes: [
+        "positionX",
+        "positionY",
+        "is_locked",
+        "group_id",
+        "source_type",
+      ],
+      include: [
+        {
+          model: Draft,
+          attributes: [
+            "name",
+            "id",
+            "picks",
+            "type",
+            "versus_draft_id",
+            "seriesIndex",
+            "completed",
+            "winner",
+          ],
+        },
+      ],
       raw: true,
       nest: true,
     });
@@ -1159,7 +1469,7 @@ router.put("/:canvasId/users/:userId", protect, async (req, res) => {
           canvas_id: canvasId,
           user_id: userId,
         },
-      }
+      },
     );
 
     if (affectedRows > 0) {
@@ -1287,9 +1597,17 @@ router.post("/:canvasId/connections", protect, async (req, res) => {
     // Transform to backend format
     const formatEndpoint = (ep) => {
       if (ep.groupId) {
-        return { type: "group", group_id: ep.groupId, anchor_type: ep.anchorType || "top" };
+        return {
+          type: "group",
+          group_id: ep.groupId,
+          anchor_type: ep.anchorType || "top",
+        };
       }
-      return { type: "draft", draft_id: ep.draftId, anchor_type: ep.anchorType || "top" };
+      return {
+        type: "draft",
+        draft_id: ep.draftId,
+        anchor_type: ep.anchorType || "top",
+      };
     };
 
     const sourceDraftIdsFormatted = sourceDraftIds.map(formatEndpoint);
@@ -1372,9 +1690,17 @@ router.patch(
 
       const formatEndpoint = (ep) => {
         if (ep.groupId) {
-          return { type: "group", group_id: ep.groupId, anchor_type: ep.anchorType || "top" };
+          return {
+            type: "group",
+            group_id: ep.groupId,
+            anchor_type: ep.anchorType || "top",
+          };
         }
-        return { type: "draft", draft_id: ep.draftId, anchor_type: ep.anchorType || "top" };
+        return {
+          type: "draft",
+          draft_id: ep.draftId,
+          anchor_type: ep.anchorType || "top",
+        };
       };
 
       if (addSource) {
@@ -1396,7 +1722,7 @@ router.patch(
         const exists = connection.source_draft_ids.some((src) =>
           newSource.type === "group"
             ? src.type === "group" && src.group_id === newSource.group_id
-            : src.draft_id === newSource.draft_id
+            : src.draft_id === newSource.draft_id,
         );
 
         if (!exists) {
@@ -1427,7 +1753,7 @@ router.patch(
         const exists = connection.target_draft_ids.some((tgt) =>
           newTarget.type === "group"
             ? tgt.type === "group" && tgt.group_id === newTarget.group_id
-            : tgt.draft_id === newTarget.draft_id
+            : tgt.draft_id === newTarget.draft_id,
         );
 
         if (!exists) {
@@ -1460,7 +1786,7 @@ router.patch(
       console.error("Failed to update connection:", error);
       res.status(500).json({ error: "Failed to update connection" });
     }
-  }
+  },
 );
 
 router.delete(
@@ -1518,7 +1844,7 @@ router.delete(
       console.error("Failed to delete connection:", error);
       res.status(500).json({ error: "Failed to delete connection" });
     }
-  }
+  },
 );
 
 // Vertex Management Endpoints
@@ -1603,7 +1929,7 @@ router.post(
       console.error("Failed to create vertex:", error);
       res.status(500).json({ error: "Failed to create vertex" });
     }
-  }
+  },
 );
 
 // Update a vertex position (for dragging)
@@ -1678,7 +2004,7 @@ router.put(
       console.error("Failed to update vertex:", error);
       res.status(500).json({ error: "Failed to update vertex" });
     }
-  }
+  },
 );
 
 // Delete a vertex and auto-reconnect
@@ -1741,7 +2067,7 @@ router.delete(
       console.error("Failed to delete vertex:", error);
       res.status(500).json({ error: "Failed to delete vertex" });
     }
-  }
+  },
 );
 
 module.exports = router;

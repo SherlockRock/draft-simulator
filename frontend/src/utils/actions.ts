@@ -48,9 +48,16 @@ export const postNewDraft = async (data: {
     return hold;
 };
 
-export const fetchDefaultDraft = async (id: string | null): Promise<draft | null> => {
+export const fetchDefaultDraft = async (
+    id: string | null,
+    canvasId?: string | null
+): Promise<draft | null> => {
     if (!id || id === "oauth2callback") return null;
-    const res = await fetch(`${BASE_URL}/drafts/${id}`, {
+    const url = new URL(`${BASE_URL}/drafts/${id}`, window.location.origin);
+    if (canvasId) {
+        url.searchParams.set("canvas_id", canvasId);
+    }
+    const res = await fetch(url.toString(), {
         method: "GET",
         credentials: "include"
     });
@@ -103,6 +110,21 @@ export const deleteDraftFromCanvas = async (data: { canvas: string; draft: strin
     if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || "Failed to fetch draft");
+    }
+    return await res.json();
+};
+
+export const copyDraftInCanvas = async (data: { canvasId: string; draftId: string }) => {
+    const res = await fetch(
+        `${BASE_URL}/canvas/${data.canvasId}/draft/${data.draftId}/copy`,
+        {
+            method: "POST",
+            credentials: "include"
+        }
+    );
+    if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to copy draft");
     }
     return await res.json();
 };

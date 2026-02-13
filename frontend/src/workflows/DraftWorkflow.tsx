@@ -5,7 +5,7 @@ import {
     createContext,
     useContext,
     Setter,
-    Resource,
+    Resource
 } from "solid-js";
 import { useParams, RouteSectionProps } from "@solidjs/router";
 import { useUser } from "../userProvider";
@@ -32,8 +32,11 @@ const DraftWorkflow: Component<RouteSectionProps> = (props) => {
     const [user] = accessor();
 
     const [draft, { mutate: mutateDraft, refetch: refetchDraft }] = createResource(
-        () => (params.draftId ? String(params.draftId) : null),
-        fetchDefaultDraft
+        () =>
+            params.draftId
+                ? { draftId: String(params.draftId), canvasId: params.id }
+                : null,
+        (args) => fetchDefaultDraft(args?.draftId ?? null, args?.canvasId)
     );
 
     let previousUser = user();

@@ -92,6 +92,33 @@ export const localDeleteDraft = (draftId: string) => {
     });
 };
 
+const COPY_OFFSET = 50;
+
+export const localCopyDraft = (draftId: string) => {
+    return mutateLocal((canvas) => {
+        const originalDraft = canvas.drafts.find((d) => d.Draft.id === draftId);
+        if (!originalDraft) {
+            throw new Error("Draft not found");
+        }
+
+        const newDraftId = crypto.randomUUID();
+        const newDraft: CanvasDraft = {
+            positionX: originalDraft.positionX + COPY_OFFSET,
+            positionY: originalDraft.positionY + COPY_OFFSET,
+            group_id: null,
+            source_type: "canvas",
+            Draft: {
+                id: newDraftId,
+                name: `${originalDraft.Draft.name} (Copy)`,
+                picks: [...originalDraft.Draft.picks],
+                type: "canvas"
+            }
+        };
+        canvas.drafts.push(newDraft);
+        return { canvas, result: { success: true, canvasDraft: newDraft } };
+    });
+};
+
 export const localUpdateViewport = (viewport: Viewport) => {
     return mutateLocal((canvas) => {
         canvas.viewport = viewport;

@@ -105,6 +105,24 @@ router.get("/:id", async (req, res) => {
       return res.status(200).json(draftWithLock);
     }
 
+    // Check canvas-based access if canvas_id is provided
+    const { canvas_id } = req.query;
+    if (canvas_id) {
+      // Verify draft is actually on this canvas
+      const canvasDraftAssoc = await CanvasDraft.findOne({
+        where: { draft_id: draft.id, canvas_id },
+      });
+      if (canvasDraftAssoc) {
+        // Check user has at least view permission on this canvas
+        const userCanvas = await UserCanvas.findOne({
+          where: { canvas_id, user_id: user.id },
+        });
+        if (userCanvas) {
+          return res.status(200).json(draftWithLock);
+        }
+      }
+    }
+
     return res.status(403).json({ error: "Not authorized to view this draft" });
   } catch (err) {
     console.error(err);
@@ -142,11 +160,9 @@ router.post("/", protect, async (req, res) => {
         (userCanvas.permissions !== "edit" &&
           userCanvas.permissions !== "admin")
       ) {
-        return res
-          .status(403)
-          .json({
-            error: "Forbidden: You don't have permission to edit this canvas",
-          });
+        return res.status(403).json({
+          error: "Forbidden: You don't have permission to edit this canvas",
+        });
       }
 
       draftType = "canvas";
