@@ -578,11 +578,19 @@ export const deleteConnection = async (data: {
 
 export const fetchRecentActivity = async (
     page: number = 0,
-    resourceType?: "draft" | "canvas" | "versus"
+    resourceType?: "draft" | "canvas" | "versus",
+    search?: string,
+    sort?: "recent" | "oldest" | "name_asc" | "name_desc"
 ) => {
     const params = new URLSearchParams({ page: page.toString() });
     if (resourceType) {
         params.append("resource_type", resourceType);
+    }
+    if (search) {
+        params.append("search", search);
+    }
+    if (sort) {
+        params.append("sort", sort);
     }
 
     const res = await fetch(`${BASE_URL}/activity/recent?${params}`, {
