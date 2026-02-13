@@ -64,6 +64,10 @@ type CanvasContextType = {
         ((positionX: number, positionY: number) => void) | null
     >;
     refetchCanvasList: () => void;
+    setEditingGroupIdCallback: Accessor<((id: string | null) => void) | null>;
+    setSetEditingGroupIdCallback: Setter<((id: string | null) => void) | null>;
+    deleteGroupCallback: Accessor<((groupId: string) => void) | null>;
+    setDeleteGroupCallback: Setter<((groupId: string) => void) | null>;
 };
 
 const CanvasContext = createContext<CanvasContextType>();
@@ -154,6 +158,12 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     const [importCallback, setImportCallback] = createSignal<(() => void) | null>(null);
     const [createGroupCallback, setCreateGroupCallback] = createSignal<
         ((positionX: number, positionY: number) => void) | null
+    >(null);
+    const [setEditingGroupIdCallback, setSetEditingGroupIdCallback] = createSignal<
+        ((id: string | null) => void) | null
+    >(null);
+    const [deleteGroupCallback, setDeleteGroupCallback] = createSignal<
+        ((groupId: string) => void) | null
     >(null);
     const [isManageUsersOpen, setIsManageUsersOpen] = createSignal(false);
     const [isSharePopperOpen, setIsSharePopperOpen] = createSignal(false);
@@ -427,7 +437,11 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                 setImportCallback,
                 createGroupCallback,
                 setCreateGroupCallback,
-                refetchCanvasList
+                refetchCanvasList,
+                setEditingGroupIdCallback,
+                setSetEditingGroupIdCallback,
+                deleteGroupCallback,
+                setDeleteGroupCallback
             }}
         >
             <Dialog
@@ -864,6 +878,35 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                             onCopy={() => handleSidebarDraftCopy(menu().draft)}
                             onDelete={() => handleSidebarDraftDelete(menu().draft)}
                             onClose={closeSidebarDraftContextMenu}
+                        />
+                    )}
+                </Show>
+                {/* Sidebar Group Context Menu */}
+                <Show when={sidebarGroupContextMenu()}>
+                    {(menu) => (
+                        <GroupContextMenu
+                            position={menu().position}
+                            group={menu().group}
+                            onRename={() => {
+                                const callback = navigateToDraftCallback();
+                                if (callback) {
+                                    callback(menu().group.positionX, menu().group.positionY);
+                                }
+                                setEditingGroupIdCallback()?.(menu().group.id);
+                                closeSidebarGroupContextMenu();
+                            }}
+                            onGoTo={() => {
+                                const callback = navigateToDraftCallback();
+                                if (callback) {
+                                    callback(menu().group.positionX, menu().group.positionY);
+                                }
+                                closeSidebarGroupContextMenu();
+                            }}
+                            onDelete={() => {
+                                deleteGroupCallback()?.(menu().group.id);
+                                closeSidebarGroupContextMenu();
+                            }}
+                            onClose={closeSidebarGroupContextMenu}
                         />
                     )}
                 </Show>
