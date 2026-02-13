@@ -1,40 +1,15 @@
-import { Component, For, Show, Switch, Match, onCleanup, createSignal } from "solid-js";
+import { Component, Show, createSignal } from "solid-js";
 import { useNavigate } from "@solidjs/router";
-import { useInfiniteQuery } from "@tanstack/solid-query";
 import TutorialStep from "../components/TutorialStep";
-import ActivityItem from "../components/ActivityItem";
-import { fetchRecentActivity } from "../utils/actions";
+import ActivityList from "../components/ActivityList";
 import { useUser } from "../userProvider";
 import { CreateCanvasDialog } from "../components/CreateCanvasDialog";
+
 const CanvasFlowDashboard: Component = () => {
     const navigate = useNavigate();
     const context = useUser();
     const [user] = context();
     const [showCreateDialog, setShowCreateDialog] = createSignal(false);
-
-    const activitiesQuery = useInfiniteQuery(() => ({
-        queryKey: ["recentActivity", "canvas"],
-        queryFn: ({ pageParam = 0 }) => fetchRecentActivity(pageParam, "canvas"),
-        getNextPageParam: (lastPage) => lastPage.nextPage,
-        enabled: !!user(),
-        initialPageParam: 0
-    }));
-
-    // Intersection observer for infinite scroll
-    const setupObserver = (element: HTMLDivElement) => {
-        const observer = new IntersectionObserver(
-            (entries) => {
-                if (entries[0].isIntersecting && !activitiesQuery.isFetchingNextPage) {
-                    activitiesQuery.fetchNextPage();
-                }
-            },
-            { threshold: 0.1 }
-        );
-
-        observer.observe(element);
-
-        onCleanup(() => observer.disconnect());
-    };
 
     const handleCreateCanvas = () => {
         setShowCreateDialog(true);
@@ -124,55 +99,12 @@ const CanvasFlowDashboard: Component = () => {
                         <h2 class="mb-5 text-xl font-semibold text-slate-200">
                             Recent Canvas Activity
                         </h2>
-                        <Switch>
-                            <Match when={activitiesQuery.isLoading}>
-                                <div class="text-slate-400">Loading activity...</div>
-                            </Match>
-                            <Match when={activitiesQuery.isError}>
-                                <div class="text-red-400">Failed to load activity</div>
-                            </Match>
-                            <Match when={activitiesQuery.data}>
-                                <Show
-                                    when={activitiesQuery.data?.pages.some(
-                                        (page) => page.activities.length > 0
-                                    )}
-                                    fallback={
-                                        <div class="rounded-lg border border-slate-700/50 bg-slate-800/50 p-8 text-center text-slate-400">
-                                            No recent canvas activity
-                                        </div>
-                                    }
-                                >
-                                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                                        <For
-                                            each={activitiesQuery.data?.pages.flatMap(
-                                                (page) => page.activities
-                                            )}
-                                        >
-                                            {(activity) => (
-                                                <ActivityItem activity={activity} />
-                                            )}
-                                        </For>
-                                    </div>
-                                    {/* Sentinel element for infinite scroll */}
-                                    <Show when={activitiesQuery.hasNextPage}>
-                                        <div ref={setupObserver} class="py-4 text-center">
-                                            <Show
-                                                when={activitiesQuery.isFetchingNextPage}
-                                                fallback={
-                                                    <div class="text-slate-500">
-                                                        Scroll for more...
-                                                    </div>
-                                                }
-                                            >
-                                                <div class="text-slate-400">
-                                                    Loading more...
-                                                </div>
-                                            </Show>
-                                        </div>
-                                    </Show>
-                                </Show>
-                            </Match>
-                        </Switch>
+                        <ActivityList
+                            queryKeyBase={["recentActivity", "canvas"]}
+                            resourceType="canvas"
+                            accentColor="purple"
+                            emptyMessage="No recent canvas activity"
+                        />
                     </section>
                 </Show>
             </div>
