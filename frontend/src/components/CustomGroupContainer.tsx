@@ -21,6 +21,7 @@ type CustomGroupContainerProps = {
     sourceAnchor?: { type: AnchorType } | null;
     editingGroupId?: Accessor<string | null>;
     onContextMenu?: (group: CanvasGroup, e: MouseEvent) => void;
+    onEditingComplete?: () => void;
     children: JSX.Element;
 };
 
@@ -69,6 +70,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
             props.onRenameGroup(props.group.id, newName);
         }
         setIsEditing(false);
+        props.onEditingComplete?.();
     };
 
     const handleNameKeyDown = (e: KeyboardEvent) => {
@@ -77,6 +79,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         } else if (e.key === "Escape") {
             setEditName(props.group.name);
             setIsEditing(false);
+            props.onEditingComplete?.();
         }
     };
 

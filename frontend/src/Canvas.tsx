@@ -2556,6 +2556,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     sourceAnchor={sourceAnchor()}
                                     onContextMenu={handleGroupContextMenu}
                                     editingGroupId={editingGroupId}
+                                    onEditingComplete={() => setEditingGroupId(null)}
                                 >
                                     <For each={getDraftsForGroup(group.id)}>
                                         {(cd) => (
