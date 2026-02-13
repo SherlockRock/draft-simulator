@@ -35,6 +35,7 @@ import toast from "solid-toast";
 import { CanvasGroup, CanvasDraft } from "../utils/types";
 import { CanvasAccessDenied, AccessErrorType } from "../components/CanvasAccessDenied";
 import { DraftContextMenu } from "../components/DraftContextMenu";
+import { GroupContextMenu } from "../components/GroupContextMenu";
 import { localCopyDraft, localDeleteDraft } from "../utils/useLocalCanvasMutations";
 
 // Create context for sharing canvas state with children
@@ -166,6 +167,11 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         position: { x: number; y: number };
     } | null>(null);
 
+    const [sidebarGroupContextMenu, setSidebarGroupContextMenu] = createSignal<{
+        group: CanvasGroup;
+        position: { x: number; y: number };
+    } | null>(null);
+
     let previousUser = user();
 
     createEffect(() => {
@@ -287,6 +293,18 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
 
     const closeSidebarDraftContextMenu = () => {
         setSidebarDraftContextMenu(null);
+    };
+
+    const handleSidebarGroupContextMenu = (group: CanvasGroup, e: MouseEvent) => {
+        e.preventDefault();
+        setSidebarGroupContextMenu({
+            group,
+            position: { x: e.clientX, y: e.clientY }
+        });
+    };
+
+    const closeSidebarGroupContextMenu = () => {
+        setSidebarGroupContextMenu(null);
     };
 
     const handleSidebarDraftView = (draft: CanvasDraft) => {
