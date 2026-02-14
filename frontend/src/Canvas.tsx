@@ -2835,10 +2835,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             }}
                             onGoTo={() => {
                                 const group = menu().group;
-                                setViewport({
-                                    x: group.positionX - window.innerWidth / 2 / viewport().zoom,
-                                    y: group.positionY - window.innerHeight / 2 / viewport().zoom,
-                                    zoom: viewport().zoom
+                                props.setViewport({
+                                    x:
+                                        group.positionX -
+                                        window.innerWidth / 2 / props.viewport().zoom,
+                                    y:
+                                        group.positionY -
+                                        window.innerHeight / 2 / props.viewport().zoom,
+                                    zoom: props.viewport().zoom
                                 });
                                 closeGroupContextMenu();
                             }}
