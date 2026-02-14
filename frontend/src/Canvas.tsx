@@ -1980,8 +1980,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     onMount(() => {
-        canvasContext.setSetEditingGroupIdCallback(setEditingGroupId);
-        canvasContext.setDeleteGroupCallback((id) => handleDeleteGroup(id));
+        canvasContext.setSetEditingGroupIdCallback(() => setEditingGroupId);
+        canvasContext.setDeleteGroupCallback(() => (id: string) => handleDeleteGroup(id));
 
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key === "Tab" && focusedDraftId() !== null) {
