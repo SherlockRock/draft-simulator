@@ -33,12 +33,15 @@ export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
     return (
         <div
             ref={menuRef}
-            class="group-context-menu fixed z-50 rounded-md border border-slate-500 bg-slate-700 py-1 shadow-lg"
+            class="group-context-menu fixed z-50 w-36 rounded-md border border-slate-500 bg-slate-700 py-1 shadow-lg"
             style={{
                 left: `${props.position.x}px`,
                 top: `${props.position.y}px`
             }}
         >
+            <div class="truncate border-b border-slate-600 px-4 py-1.5 text-xs text-slate-400">
+                {props.group.name}
+            </div>
             <Show
                 when={props.group.type === "custom"}
                 fallback={

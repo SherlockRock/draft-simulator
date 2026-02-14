@@ -268,7 +268,34 @@ router.put("/:id", protect, async (req, res) => {
       return res.status(404).json({ error: "Draft not found" });
     }
 
-    if (draft.owner_id !== req.user.id) {
+    // Check authorization: owner OR canvas editor
+    let authorized = draft.owner_id === req.user.id;
+
+    if (!authorized) {
+      // Check canvas-based edit access if canvas_id is provided
+      const { canvas_id } = req.query;
+      if (canvas_id) {
+        // Verify draft is actually on this canvas
+        const canvasDraftAssoc = await CanvasDraft.findOne({
+          where: { draft_id: draft.id, canvas_id },
+        });
+        if (canvasDraftAssoc) {
+          // Check user has edit permission on this canvas
+          const userCanvas = await UserCanvas.findOne({
+            where: { canvas_id, user_id: req.user.id },
+          });
+          if (
+            userCanvas &&
+            (userCanvas.permissions === "edit" ||
+              userCanvas.permissions === "admin")
+          ) {
+            authorized = true;
+          }
+        }
+      }
+    }
+
+    if (!authorized) {
       return res
         .status(403)
         .json({ error: "Not authorized to edit this draft" });

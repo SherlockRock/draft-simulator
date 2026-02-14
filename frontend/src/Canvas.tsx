@@ -676,7 +676,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const editDraftMutation = useMutation(() => ({
         mutationFn: (data: { id: string; name: string; public: boolean }) => {
-            return editDraft(data.id, data);
+            return editDraft(data.id, data, params.id);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
@@ -2601,7 +2601,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 isGrouped={true}
                                                 groupType="custom"
                                                 editingDraftId={editingDraftId}
-                                                onEditingComplete={() => setEditingDraftId(null)}
+                                                onEditingComplete={() =>
+                                                    setEditingDraftId(null)
+                                                }
                                             />
                                         )}
                                     </For>
@@ -2848,7 +2850,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             onView={() => handleDraftView(menu().draft)}
                             onGoTo={() => handleDraftGoTo(menu().draft)}
                             onCopy={() => handleDraftCopy(menu().draft)}
-                            onDelete={() => handleDraftDelete(menu().draft)}
+                            onDelete={
+                                canvasGroups.find(
+                                    (g) =>
+                                        g.id === menu().draft.group_id &&
+                                        g.type === "series"
+                                )
+                                    ? undefined
+                                    : () => handleDraftDelete(menu().draft)
+                            }
                             onClose={closeDraftContextMenu}
                         />
                     )}

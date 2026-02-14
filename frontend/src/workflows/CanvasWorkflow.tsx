@@ -894,7 +894,15 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                             onView={() => handleSidebarDraftView(menu().draft)}
                             onGoTo={() => handleSidebarDraftGoTo(menu().draft)}
                             onCopy={() => handleSidebarDraftCopy(menu().draft)}
-                            onDelete={() => handleSidebarDraftDelete(menu().draft)}
+                            onDelete={
+                                ((canvas()?.groups ?? []) as CanvasGroup[]).find(
+                                    (g) =>
+                                        g.id === menu().draft.group_id &&
+                                        g.type === "series"
+                                )
+                                    ? undefined
+                                    : () => handleSidebarDraftDelete(menu().draft)
+                            }
                             onClose={closeSidebarDraftContextMenu}
                         />
                     )}

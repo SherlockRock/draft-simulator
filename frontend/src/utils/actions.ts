@@ -75,9 +75,14 @@ export const editDraft = async (
         description?: string;
         public?: boolean;
         icon?: string;
-    }
+    },
+    canvasId?: string
 ) => {
-    const res = await fetch(`${BASE_URL}/drafts/${id}`, {
+    const url = new URL(`${BASE_URL}/drafts/${id}`, window.location.origin);
+    if (canvasId) {
+        url.searchParams.set("canvas_id", canvasId);
+    }
+    const res = await fetch(url.toString(), {
         method: "PUT",
         credentials: "include",
         headers: {
