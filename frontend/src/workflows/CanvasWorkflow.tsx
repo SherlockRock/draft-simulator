@@ -68,6 +68,8 @@ type CanvasContextType = {
     setSetEditingGroupIdCallback: Setter<((id: string | null) => void) | null>;
     deleteGroupCallback: Accessor<((groupId: string) => void) | null>;
     setDeleteGroupCallback: Setter<((groupId: string) => void) | null>;
+    setEditingDraftIdCallback: Accessor<((id: string | null) => void) | null>;
+    setSetEditingDraftIdCallback: Setter<((id: string | null) => void) | null>;
 };
 
 const CanvasContext = createContext<CanvasContextType>();
@@ -164,6 +166,9 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     >(null);
     const [deleteGroupCallback, setDeleteGroupCallback] = createSignal<
         ((groupId: string) => void) | null
+    >(null);
+    const [setEditingDraftIdCallback, setSetEditingDraftIdCallback] = createSignal<
+        ((id: string | null) => void) | null
     >(null);
     const [isManageUsersOpen, setIsManageUsersOpen] = createSignal(false);
     const [isSharePopperOpen, setIsSharePopperOpen] = createSignal(false);
@@ -441,7 +446,9 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                 setEditingGroupIdCallback,
                 setSetEditingGroupIdCallback,
                 deleteGroupCallback,
-                setDeleteGroupCallback
+                setDeleteGroupCallback,
+                setEditingDraftIdCallback,
+                setSetEditingDraftIdCallback
             }}
         >
             <Dialog
@@ -873,6 +880,17 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                         <DraftContextMenu
                             position={menu().position}
                             draft={menu().draft}
+                            onRename={
+                                menu().draft.is_locked
+                                    ? undefined
+                                    : () => {
+                                          handleSidebarDraftGoTo(menu().draft);
+                                          setEditingDraftIdCallback()?.(
+                                              menu().draft.Draft.id
+                                          );
+                                          closeSidebarDraftContextMenu();
+                                      }
+                            }
                             onView={() => handleSidebarDraftView(menu().draft)}
                             onGoTo={() => handleSidebarDraftGoTo(menu().draft)}
                             onCopy={() => handleSidebarDraftCopy(menu().draft)}

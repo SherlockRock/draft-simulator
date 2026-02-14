@@ -110,11 +110,23 @@ type cardProps = {
     // Props for grouped mode
     isGrouped?: boolean;
     groupType?: "series" | "custom";
+    // Props for external rename triggering
+    editingDraftId?: Accessor<string | null>;
+    onEditingComplete?: () => void;
 };
 
 const CanvasCard = (props: cardProps) => {
     const navigate = useNavigate();
     const [nameSignal, setNameSignal] = createSignal(props.canvasDraft.Draft.name);
+    let nameInputRef: HTMLInputElement | undefined;
+
+    createEffect(() => {
+        if (props.editingDraftId?.() === props.canvasDraft.Draft.id) {
+            nameInputRef?.focus();
+            nameInputRef?.select();
+        }
+    });
+
     const handleViewClick = () => {
         navigate(`/canvas/${props.canvasId}/draft/${props.canvasDraft.Draft.id}`);
     };
@@ -214,6 +226,7 @@ const CanvasCard = (props: cardProps) => {
                 <div class="flex items-center justify-between">
                     <div class="flex min-w-0 flex-1 flex-col gap-1">
                         <input
+                            ref={nameInputRef}
                             type="text"
                             placeholder="Enter Draft Name"
                             value={nameSignal()}
@@ -223,12 +236,13 @@ const CanvasCard = (props: cardProps) => {
                                     e.currentTarget.blur();
                                 }
                             }}
-                            onBlur={() =>
+                            onBlur={() => {
                                 props.handleNameChange(
                                     props.canvasDraft.Draft.id,
                                     nameSignal()
-                                )
-                            }
+                                );
+                                props.onEditingComplete?.();
+                            }}
                             class="bg-transparent font-bold text-slate-50"
                             disabled={
                                 props.isConnectionMode ||
@@ -555,6 +569,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     } | null>(null);
 
     const [editingGroupId, setEditingGroupId] = createSignal<string | null>(null);
+    const [editingDraftId, setEditingDraftId] = createSignal<string | null>(null);
 
     const ungroupedDrafts = createMemo(() => canvasDrafts.filter((cd) => !cd.group_id));
 
@@ -1982,6 +1997,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     onMount(() => {
         canvasContext.setSetEditingGroupIdCallback(() => setEditingGroupId);
         canvasContext.setDeleteGroupCallback(() => (id: string) => handleDeleteGroup(id));
+        canvasContext.setSetEditingDraftIdCallback(() => setEditingDraftId);
 
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key === "Tab" && focusedDraftId() !== null) {
@@ -2584,6 +2600,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 canEdit={hasEditPermissions}
                                                 isGrouped={true}
                                                 groupType="custom"
+                                                editingDraftId={editingDraftId}
+                                                onEditingComplete={() => setEditingDraftId(null)}
                                             />
                                         )}
                                     </For>
@@ -2623,6 +2641,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         canEdit={hasEditPermissions}
                                         isGrouped={true}
                                         groupType="series"
+                                        editingDraftId={editingDraftId}
+                                        onEditingComplete={() => setEditingDraftId(null)}
                                     />
                                 )}
                             />
@@ -2655,6 +2675,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             onSelectNext={onSelectNext}
                             onSelectPrevious={onSelectPrevious}
                             canEdit={hasEditPermissions}
+                            editingDraftId={editingDraftId}
+                            onEditingComplete={() => setEditingDraftId(null)}
                         />
                     )}
                 </For>
@@ -2815,6 +2837,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         <DraftContextMenu
                             position={menu().position}
                             draft={menu().draft}
+                            onRename={
+                                menu().draft.is_locked
+                                    ? undefined
+                                    : () => {
+                                          setEditingDraftId(menu().draft.Draft.id);
+                                          closeDraftContextMenu();
+                                      }
+                            }
                             onView={() => handleDraftView(menu().draft)}
                             onGoTo={() => handleDraftGoTo(menu().draft)}
                             onCopy={() => handleDraftCopy(menu().draft)}
