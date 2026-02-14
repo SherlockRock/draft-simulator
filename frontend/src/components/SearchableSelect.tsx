@@ -1,7 +1,6 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
-import KeyEvent, { Key } from "../KeyEvent";
-import { sortOptions } from "../utils/constants";
 import { SelectTheme, getThemeColors } from "../utils/selectTheme";
+import { createDropdownKeyboard } from "../utils/useDropdownKeyboard";
 
 type props = {
     placeholder?: string;
@@ -16,7 +15,6 @@ type props = {
 export const SearchableSelect = (props: props) => {
     const [isFocused, setIsFocused] = createSignal(false);
     const [dropdownOpen, setDropdownOpen] = createSignal(false);
-    const [dropdownIndex, setDropdownIndex] = createSignal(-1);
     const colors = () => getThemeColors(props.theme ?? "teal");
 
     const openDropdown = () => {
@@ -37,50 +35,6 @@ export const SearchableSelect = (props: props) => {
         openDropdown();
     };
 
-    const handleKeyEvent = (key: Key) => {
-        if (!isFocused()) return;
-        switch (key) {
-            case "Enter":
-                if (dropdownOpen() && dropdownIndex() >= 0) {
-                    const hold = holdSortOptions();
-                    props.setSelectText(hold[dropdownIndex() % hold.length]);
-                    setDropdownOpen(false);
-                    if (props.onValidSelect) {
-                        props.onValidSelect(hold[dropdownIndex() % hold.length]);
-                    }
-                }
-                break;
-            case "ArrowUp":
-                if (dropdownOpen()) {
-                    setDropdownIndex((prevIndex) => {
-                        if (prevIndex === 0) {
-                            return sortOptions.length - 1;
-                        }
-                        return prevIndex - 1;
-                    });
-                }
-                break;
-            case "ArrowDown":
-                if (dropdownOpen()) {
-                    setDropdownIndex((prevIndex) => {
-                        if (prevIndex === sortOptions.length - 1) {
-                            return 0;
-                        }
-                        return prevIndex + 1;
-                    });
-                } else {
-                    setDropdownOpen(true);
-                }
-                break;
-            case "Escape":
-                if (dropdownOpen()) {
-                    setDropdownOpen(false);
-                } else {
-                    props.setSelectText("");
-                }
-        }
-    };
-
     const handleSortOptions = (sortInput: string) => {
         if (sortInput === "" || sortInput === props.currentlySelected) {
             return props.sortOptions;
@@ -95,22 +49,57 @@ export const SearchableSelect = (props: props) => {
         return hold;
     });
 
+    const handleSelect = (index: number) => {
+        const options = holdSortOptions();
+        if (index >= 0 && index < options.length) {
+            const option = options[index];
+            props.setSelectText(option);
+            closeDropdown();
+            if (props.onValidSelect) {
+                props.onValidSelect(option);
+            }
+        }
+    };
+
+    const keyboard = createDropdownKeyboard({
+        getItemCount: () => holdSortOptions().length,
+        onSelect: handleSelect,
+        onClose: closeDropdown,
+        isOpen: dropdownOpen
+    });
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if (!isFocused()) return;
+
+        // Special case: Escape clears text if dropdown is already closed
+        if (e.key === "Escape" && !dropdownOpen()) {
+            props.setSelectText("");
+            return;
+        }
+
+        const result = keyboard.handleKeyDown(e);
+        if (result === "open") {
+            e.preventDefault();
+            openDropdown();
+            keyboard.resetIndex(0);
+        }
+    };
+
     return (
-        <div class="relative">
-            <KeyEvent
-                onKeyUp={handleKeyEvent}
-                keys={["Enter", "ArrowUp", "ArrowDown", "Escape"]}
-            />
+        <div
+            class="relative"
+            onKeyDown={handleKeyDown}
+            onFocusIn={onFocusIn}
+            onFocusOut={onFocusOut}
+            tabIndex={0}
+        >
             <div
                 class={`flex h-10 items-center rounded-md border bg-slate-800 ${colors().border}`}
-                onFocusIn={onFocusIn}
-                onFocusOut={onFocusOut}
-                tabIndex={0}
             >
                 <input
                     value={props.selectText}
                     onInput={(e) => {
-                        setDropdownIndex(0);
+                        keyboard.resetIndex(0);
                         setDropdownOpen(true);
                         props.setSelectText(e.target.value);
                     }}
@@ -165,22 +154,22 @@ export const SearchableSelect = (props: props) => {
                 >
                     <div class="max-h-80">
                         <For each={holdSortOptions()}>
-                            {(option) => (
+                            {(option, index) => (
                                 <div
+                                    ref={(el) => keyboard.setItemRef(index(), el)}
                                     class="group cursor-pointer"
-                                    onMouseDown={() => {
-                                        props.setSelectText(option);
-                                        closeDropdown();
-                                        if (props.onValidSelect) {
-                                            props.onValidSelect(option);
-                                        }
-                                    }}
+                                    onMouseDown={() => handleSelect(index())}
+                                    onMouseEnter={() =>
+                                        keyboard.setHighlightedIndex(index())
+                                    }
                                 >
                                     <a
-                                        class={`block border-l-4 bg-gray-950 p-2 transition-colors group-hover:border-blue-600 group-hover:bg-gray-800 ${
+                                        class={`block border-l-4 p-2 transition-colors ${
                                             props.currentlySelected === option
-                                                ? "border-green-600 text-green-600"
-                                                : `border-white text-white ${colors().groupHoverText}`
+                                                ? "border-green-600 bg-gray-950 text-green-600"
+                                                : index() === keyboard.highlightedIndex()
+                                                  ? `${colors().activeBorder} bg-gray-800 text-white`
+                                                  : `border-white bg-gray-950 text-white group-hover:bg-gray-800 ${colors().groupHoverText} ${colors().groupHoverBorder}`
                                         }`}
                                     >
                                         <p class="inline-block w-full overflow-hidden text-ellipsis whitespace-nowrap">
