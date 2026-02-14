@@ -1,6 +1,6 @@
 import { Component, Show, createMemo, createSignal } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
-import { useVersusContext } from "../workflows/VersusWorkflow";
+import { useVersusContext } from "../contexts/VersusContext";
 import { VersusChatPanel } from "./VersusChatPanel";
 import { PickChangeModal } from "./PickChangeModal";
 import { VersionFooter } from "./VersionFooter";

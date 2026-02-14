@@ -7,9 +7,9 @@ import { Viewport } from "../utils/types";
 import toast from "solid-toast";
 import { AuthGuard } from "../components/AuthGuard";
 import { cardHeight, cardWidth } from "../utils/helpers";
-import { useCanvasContext } from "../workflows/CanvasWorkflow";
 import { localNewDraft } from "../utils/useLocalCanvasMutations";
 import { getLocalCanvas } from "../utils/localCanvasStore";
+import { useCanvasContext } from "../contexts/CanvasContext";
 
 const CanvasDetailView: Component = () => {
     const params = useParams();

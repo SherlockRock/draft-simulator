@@ -1,7 +1,7 @@
 import { Component, For, Show, createMemo } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
 import { draft } from "../utils/types";
-import { useVersusContext } from "../workflows/VersusWorkflow";
+import { useVersusContext } from "../contexts/VersusContext";
 import { IconDisplay } from "../components/IconDisplay";
 import { WinnerReporter } from "../components/WinnerReporter";
 import { canReportWinner } from "../utils/versusPermissions";

@@ -1,6 +1,6 @@
 import { Component, createSignal, Show } from "solid-js";
 import { clearVersusRole } from "../utils/versusStorage";
-import { useVersusContext } from "../workflows/VersusWorkflow";
+import { useVersusContext } from "../contexts/VersusContext";
 import toast from "solid-toast";
 
 interface RoleSwitcherProps {

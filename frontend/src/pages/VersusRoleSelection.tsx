@@ -1,6 +1,7 @@
 import { Component, createSignal, Show, createMemo } from "solid-js";
 import toast from "solid-toast";
-import { useVersusContext, getSuggestedRole } from "../workflows/VersusWorkflow";
+import { useVersusContext } from "../contexts/VersusContext";
+import { getSuggestedRole } from "../workflows/VersusWorkflow";
 import { IconDisplay } from "../components/IconDisplay";
 
 const VersusRoleSelection: Component = () => {

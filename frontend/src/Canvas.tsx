@@ -52,7 +52,6 @@ import {
 } from "./components/Connections";
 import { AnchorPoints } from "./components/AnchorPoints";
 import { AnchorType } from "./utils/types";
-import { useCanvasContext } from "./workflows/CanvasWorkflow";
 import { cardHeight, cardWidth } from "./utils/helpers";
 import {
     localUpdateCanvasName,
@@ -84,6 +83,7 @@ import {
 import { DeleteGroupDialog } from "./components/DeleteGroupDialog";
 import { DraftContextMenu } from "./components/DraftContextMenu";
 import { GroupContextMenu } from "./components/GroupContextMenu";
+import { useCanvasContext } from "./contexts/CanvasContext";
 
 type cardProps = {
     canvasId: string;

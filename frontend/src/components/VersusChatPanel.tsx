@@ -1,6 +1,6 @@
 import { Component, For, createSignal } from "solid-js";
 import { useUser } from "../userProvider";
-import { useVersusContext } from "../workflows/VersusWorkflow";
+import { useVersusContext } from "../contexts/VersusContext";
 
 interface VersusChatPanelProps {
     socket: any;

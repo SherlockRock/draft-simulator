@@ -12,10 +12,10 @@ import { useParams, useNavigate } from "@solidjs/router";
 import { useUser } from "../userProvider";
 import {
     useVersusContext,
-    ActiveDraftState,
-    DraftCallbacks,
-    getSuggestedRole
-} from "../workflows/VersusWorkflow";
+    type ActiveDraftState,
+    type DraftCallbacks
+} from "../contexts/VersusContext";
+import { getSuggestedRole } from "../workflows/VersusWorkflow";
 import { VersusDraft, draft, VersusState } from "../utils/types";
 import { getEffectivePickOrder, getPicksArrayIndex } from "../utils/versusPickOrder";
 import { VersusTimer } from "../components/VersusTimer";

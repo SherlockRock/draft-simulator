@@ -1,7 +1,7 @@
 import { Component, Show, createSignal } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { CreateCanvasDialog } from "./CreateCanvasDialog";
-import { useCanvasContext } from "../workflows/CanvasWorkflow";
+import { useCanvasContext } from "../contexts/CanvasContext";
 import { StyledSelect } from "./StyledSelect";
 
 interface CanvasSelectorProps {
