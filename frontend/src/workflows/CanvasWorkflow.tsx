@@ -890,15 +890,28 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                             onRename={() => {
                                 const callback = navigateToDraftCallback();
                                 if (callback) {
-                                    callback(menu().group.positionX, menu().group.positionY);
+                                    callback(
+                                        menu().group.positionX,
+                                        menu().group.positionY
+                                    );
                                 }
                                 setEditingGroupIdCallback()?.(menu().group.id);
+                                closeSidebarGroupContextMenu();
+                            }}
+                            onViewSeries={() => {
+                                const group = menu().group;
+                                if (group.versus_draft_id) {
+                                    navigate(`/versus/${group.versus_draft_id}`);
+                                }
                                 closeSidebarGroupContextMenu();
                             }}
                             onGoTo={() => {
                                 const callback = navigateToDraftCallback();
                                 if (callback) {
-                                    callback(menu().group.positionX, menu().group.positionY);
+                                    callback(
+                                        menu().group.positionX,
+                                        menu().group.positionY
+                                    );
                                 }
                                 closeSidebarGroupContextMenu();
                             }}

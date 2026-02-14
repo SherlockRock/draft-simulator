@@ -1,10 +1,11 @@
-import { Component, onMount, onCleanup } from "solid-js";
+import { Component, onMount, onCleanup, Show } from "solid-js";
 import { CanvasGroup } from "../utils/types";
 
 type GroupContextMenuProps = {
     position: { x: number; y: number };
     group: CanvasGroup;
-    onRename: () => void;
+    onRename?: () => void;
+    onViewSeries?: () => void;
     onGoTo: () => void;
     onDelete: () => void;
     onClose: () => void;
@@ -38,15 +39,30 @@ export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
                 top: `${props.position.y}px`
             }}
         >
-            <button
-                class="w-full px-4 py-2 text-left text-sm text-slate-200 hover:bg-slate-600"
-                onClick={() => {
-                    props.onRename();
-                    props.onClose();
-                }}
+            <Show
+                when={props.group.type === "custom"}
+                fallback={
+                    <button
+                        class="w-full px-4 py-2 text-left text-sm text-slate-200 hover:bg-slate-600"
+                        onClick={() => {
+                            props.onViewSeries?.();
+                            props.onClose();
+                        }}
+                    >
+                        View series
+                    </button>
+                }
             >
-                Rename
-            </button>
+                <button
+                    class="w-full px-4 py-2 text-left text-sm text-slate-200 hover:bg-slate-600"
+                    onClick={() => {
+                        props.onRename?.();
+                        props.onClose();
+                    }}
+                >
+                    Rename
+                </button>
+            </Show>
             <button
                 class="w-full px-4 py-2 text-left text-sm text-slate-200 hover:bg-slate-600"
                 onClick={() => {

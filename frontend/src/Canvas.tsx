@@ -2833,6 +2833,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 setEditingGroupId(menu().group.id);
                                 closeGroupContextMenu();
                             }}
+                            onViewSeries={() => {
+                                const group = menu().group;
+                                if (group.versus_draft_id) {
+                                    navigate(`/versus/${group.versus_draft_id}`);
+                                }
+                                closeGroupContextMenu();
+                            }}
                             onGoTo={() => {
                                 const group = menu().group;
                                 props.setViewport({
