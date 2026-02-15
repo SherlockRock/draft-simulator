@@ -21,6 +21,7 @@ type props = {
     onFocus: () => void;
     onSelectNext: () => void;
     onSelectPrevious: () => void;
+    side?: "team1" | "team2";
 };
 
 // CanvasSelect is only used in canvas context, so always use purple theme
@@ -260,7 +261,14 @@ export const CanvasSelect = (props: props) => {
                         placeholder={props.indexToShorthand[props.index()]}
                         name="select"
                         id={`${props.draft.id}-${props.index()}-select`}
-                        class="h-6 w-full appearance-none bg-inherit px-1 text-slate-50 outline-none placeholder:text-slate-200"
+                        class="h-6 w-full appearance-none bg-inherit px-1 outline-none"
+                        classList={{
+                            "text-violet-300 placeholder:text-violet-300":
+                                props.side === "team1",
+                            "text-fuchsia-300 placeholder:text-fuchsia-300":
+                                props.side === "team2",
+                            "text-slate-50 placeholder:text-slate-200": !props.side
+                        }}
                         disabled={props.disabled}
                     />
                     <Show when={selectedChampion() !== null}>
@@ -278,7 +286,13 @@ export const CanvasSelect = (props: props) => {
                                     ""
                                 );
                             }}
-                            class={`cursor-pointer text-slate-200 outline-none transition-all focus:outline-none ${colors.hoverText}`}
+                            class={`cursor-pointer outline-none transition-all focus:outline-none ${
+                                props.side === "team1"
+                                    ? "text-violet-300 hover:text-violet-200"
+                                    : props.side === "team2"
+                                      ? "text-fuchsia-300 hover:text-fuchsia-200"
+                                      : `text-slate-200 ${colors.hoverText}`
+                            }`}
                             disabled={props.disabled}
                         >
                             <svg

@@ -2277,35 +2277,52 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 onDeleteGroup={handleDeleteGroup}
                                 canEdit={hasEditPermissions}
                                 isConnectionMode={isConnectionMode()}
-                                renderDraftCard={(cd) => (
-                                    <CanvasCard
-                                        canvasId={params.id}
-                                        canvasDraft={cd}
-                                        addBox={addBox}
-                                        deleteBox={deleteBox}
-                                        handleNameChange={handleNameChange}
-                                        handlePickChange={handlePickChange}
-                                        viewport={props.viewport}
-                                        onBoxMouseDown={onBoxMouseDown}
-                                        onContextMenu={handleDraftContextMenu}
-                                        layoutToggle={props.layoutToggle}
-                                        setLayoutToggle={props.setLayoutToggle}
-                                        isConnectionMode={isConnectionMode()}
-                                        onAnchorClick={onAnchorClick}
-                                        connectionSource={connectionSource}
-                                        sourceAnchor={sourceAnchor}
-                                        focusedDraftId={focusedDraftId}
-                                        focusedSelectIndex={focusedSelectIndex}
-                                        onSelectFocus={onSelectFocus}
-                                        onSelectNext={onSelectNext}
-                                        onSelectPrevious={onSelectPrevious}
-                                        canEdit={hasEditPermissions}
-                                        isGrouped={true}
-                                        groupType="series"
-                                        editingDraftId={editingDraftId}
-                                        onEditingComplete={() => setEditingDraftId(null)}
-                                    />
-                                )}
+                                renderDraftCard={(cd) => {
+                                    // Compute team names based on blueSideTeam
+                                    const bst = cd.Draft.blueSideTeam ?? 1;
+                                    const blueTeamName =
+                                        bst === 1
+                                            ? group.metadata.blueTeamName
+                                            : group.metadata.redTeamName;
+                                    const redTeamName =
+                                        bst === 1
+                                            ? group.metadata.redTeamName
+                                            : group.metadata.blueTeamName;
+
+                                    return (
+                                        <CanvasCard
+                                            canvasId={params.id}
+                                            canvasDraft={cd}
+                                            addBox={addBox}
+                                            deleteBox={deleteBox}
+                                            handleNameChange={handleNameChange}
+                                            handlePickChange={handlePickChange}
+                                            viewport={props.viewport}
+                                            onBoxMouseDown={onBoxMouseDown}
+                                            onContextMenu={handleDraftContextMenu}
+                                            layoutToggle={props.layoutToggle}
+                                            setLayoutToggle={props.setLayoutToggle}
+                                            isConnectionMode={isConnectionMode()}
+                                            onAnchorClick={onAnchorClick}
+                                            connectionSource={connectionSource}
+                                            sourceAnchor={sourceAnchor}
+                                            focusedDraftId={focusedDraftId}
+                                            focusedSelectIndex={focusedSelectIndex}
+                                            onSelectFocus={onSelectFocus}
+                                            onSelectNext={onSelectNext}
+                                            onSelectPrevious={onSelectPrevious}
+                                            canEdit={hasEditPermissions}
+                                            isGrouped={true}
+                                            groupType="series"
+                                            editingDraftId={editingDraftId}
+                                            onEditingComplete={() =>
+                                                setEditingDraftId(null)
+                                            }
+                                            blueTeamName={blueTeamName}
+                                            redTeamName={redTeamName}
+                                        />
+                                    );
+                                }}
                             />
                         </Show>
                     )}

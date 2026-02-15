@@ -3,6 +3,26 @@
 // These types are used purely for frontend UI state and have no API representation
 // =============================================================================
 
+export type CanvasDraft = {
+    positionX: number;
+    positionY: number;
+    is_locked?: boolean;
+    group_id?: string | null;
+    source_type?: "canvas" | "standalone" | "versus";
+    Draft: {
+        name: string;
+        id: string;
+        picks: string[];
+        type: "canvas" | "standalone" | "versus";
+        versus_draft_id?: string;
+        seriesIndex?: number;
+        completed?: boolean;
+        winner?: "blue" | "red" | null;
+        blueSideTeam?: 1 | 2;
+        firstPick?: "blue" | "red";
+    };
+};
+
 import type { VersusDraft, VersusParticipant } from "./schemas";
 
 export type AnchorPoint = {
