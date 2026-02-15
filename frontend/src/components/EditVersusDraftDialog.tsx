@@ -3,7 +3,7 @@ import { Dialog } from "./Dialog";
 import toast from "solid-toast";
 import { IconPicker } from "./IconPicker";
 import { champions } from "../utils/constants";
-import { VersusDraft } from "../utils/types";
+import { VersusDraft } from "../utils/schemas";
 import { StyledSelect } from "./StyledSelect";
 
 interface EditVersusDraftDialogProps {

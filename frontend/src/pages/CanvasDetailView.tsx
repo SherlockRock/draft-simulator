@@ -3,7 +3,7 @@ import { postNewDraft } from "../utils/actions";
 import CanvasComponent from "../Canvas";
 import { useParams } from "@solidjs/router";
 import { useMutation } from "@tanstack/solid-query";
-import { Viewport } from "../utils/types";
+import { Viewport } from "../utils/schemas";
 import toast from "solid-toast";
 import { AuthGuard } from "../components/AuthGuard";
 import { cardHeight, cardWidth } from "../utils/helpers";

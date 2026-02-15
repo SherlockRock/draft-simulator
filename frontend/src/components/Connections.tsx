@@ -5,9 +5,9 @@ import {
     CanvasGroup,
     Connection,
     Viewport,
-    ContextMenuPosition,
     AnchorType
-} from "../utils/types";
+} from "../utils/schemas";
+import { ContextMenuPosition } from "../utils/types";
 import {
     getAnchorScreenPosition,
     getGroupAnchorScreenPosition,

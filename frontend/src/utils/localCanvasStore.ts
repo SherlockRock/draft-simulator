@@ -1,4 +1,4 @@
-import { CanvasDraft, Connection, CanvasGroup, Viewport } from "./types";
+import { CanvasDraft, Connection, CanvasGroup, Viewport } from "./schemas";
 
 const STORAGE_KEY = "draft-sim:local-canvas";
 

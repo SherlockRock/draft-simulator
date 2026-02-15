@@ -1,4 +1,4 @@
-import { CanvasGroup } from "../utils/types";
+import { CanvasGroup } from "../utils/schemas";
 
 type DeleteGroupDialogProps = {
     group: CanvasGroup;

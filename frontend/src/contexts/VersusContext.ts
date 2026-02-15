@@ -1,6 +1,16 @@
 import { createContext, useContext } from "solid-js";
 import { Socket } from "socket.io-client";
+import { Draft } from "../utils/schemas";
 import { VersusSessionState, ChatMessage } from "../utils/types";
+
+// Pick change request type
+export type PickChangeRequest = {
+    requestId: string;
+    team: "blue" | "red";
+    pickIndex: number;
+    oldChampion: string;
+    newChampion: string;
+} | null;
 
 // Draft-specific state types for callback registration pattern
 export type ActiveDraftState = {
@@ -11,7 +21,7 @@ export type ActiveDraftState = {
     readyStatus: { blue: boolean; red: boolean };
     completed: boolean;
     winner?: "blue" | "red" | null;
-    draft: any; // The draft resource data
+    draft: Draft;
 };
 
 export type DraftCallbacks = {
@@ -26,7 +36,7 @@ export type DraftCallbacks = {
     handleRequestPickChange: (pickIndex: number, newChampion: string) => void;
     handleApprovePickChange: (requestId: string) => void;
     handleRejectPickChange: (requestId: string) => void;
-    pendingPickChangeRequest: () => any;
+    pendingPickChangeRequest: () => PickChangeRequest;
 };
 
 // Versus workflow context type definition

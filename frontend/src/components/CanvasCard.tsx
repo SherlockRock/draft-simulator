@@ -1,7 +1,6 @@
 import { createSignal, createEffect, Show, createMemo, Index, Accessor } from "solid-js";
 import { useNavigate } from "@solidjs/router";
-import { CanvasDraft, Viewport } from "../utils/types";
-import { AnchorType } from "../utils/types";
+import { CanvasDraft, Viewport, AnchorType } from "../utils/schemas";
 import { AnchorPoints } from "./AnchorPoints";
 import { CanvasSelect } from "./CanvasSelect";
 import { indexToShorthandHorizontal, indexToShorthandVertical } from "../utils/constants";

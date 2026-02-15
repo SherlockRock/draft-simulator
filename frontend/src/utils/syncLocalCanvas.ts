@@ -1,5 +1,14 @@
 import { getLocalCanvas, clearLocalCanvas } from "./localCanvasStore";
-import { createCanvas, postNewDraft, createCanvasGroup, updateCanvasGroup, updateCanvasDraft, createConnection, updateCanvasViewport } from "./actions";
+import {
+    createCanvas,
+    postNewDraft,
+    createCanvasGroup,
+    updateCanvasGroup,
+    updateCanvasDraft,
+    createConnection,
+    updateCanvasViewport
+} from "./actions";
+import { ConnectionEndpoint } from "./schemas";
 
 export const syncLocalCanvasToServer = async (): Promise<string | null> => {
     const local = getLocalCanvas();
@@ -68,11 +77,17 @@ export const syncLocalCanvasToServer = async (): Promise<string | null> => {
 
     // Step 4: Create connections with remapped IDs
     for (const conn of local.connections) {
-        const remapEndpoint = (e: any) => {
-            if ("group_id" in e && e.group_id) {
-                return { groupId: groupIdMap.get(e.group_id) ?? e.group_id, anchorType: e.anchor_type };
+        const remapEndpoint = (e: ConnectionEndpoint) => {
+            if ("group_id" in e) {
+                return {
+                    groupId: groupIdMap.get(e.group_id) ?? e.group_id,
+                    anchorType: e.anchor_type
+                };
             }
-            return { draftId: draftIdMap.get(e.draft_id) ?? e.draft_id, anchorType: e.anchor_type };
+            return {
+                draftId: draftIdMap.get(e.draft_id) ?? e.draft_id,
+                anchorType: e.anchor_type
+            };
         };
 
         await createConnection({

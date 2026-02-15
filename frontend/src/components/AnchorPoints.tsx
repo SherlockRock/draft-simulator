@@ -1,4 +1,4 @@
-import { AnchorType } from "../utils/types";
+import { AnchorType } from "../utils/schemas";
 import { cardHeight, cardWidth } from "../utils/helpers";
 import { createMemo } from "solid-js";
 

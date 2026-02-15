@@ -283,7 +283,9 @@ const VersusFlowPanelContent: Component = () => {
                                 draft={draftState()?.draft}
                                 myRole={myRole}
                                 isCompetitive={versusDraft()?.competitive ?? false}
-                                pendingRequest={callbacks()?.pendingPickChangeRequest()}
+                                pendingRequest={
+                                    callbacks()?.pendingPickChangeRequest() ?? null
+                                }
                                 onRequestChange={
                                     callbacks()?.handleRequestPickChange ?? fallbackAction
                                 }

@@ -1,6 +1,6 @@
 import { For, Show, createMemo, Accessor, JSX } from "solid-js";
 import { useNavigate } from "@solidjs/router";
-import { CanvasDraft, CanvasGroup, Viewport } from "../utils/types";
+import { CanvasDraft, CanvasGroup, Viewport } from "../utils/schemas";
 
 type SeriesGroupContainerProps = {
     group: CanvasGroup;

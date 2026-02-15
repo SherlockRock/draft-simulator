@@ -13,11 +13,10 @@ import VersusFlowPanelContent from "../components/VersusFlowPanelContent";
 import {
     VersusDraft,
     VersusParticipant,
-    VersusSessionState,
     VersusJoinResponse,
-    VersusRoleSelectResponse,
-    ChatMessage
-} from "../utils/types";
+    VersusRoleSelectResponse
+} from "../utils/schemas";
+import { VersusSessionState, ChatMessage } from "../utils/types";
 import { saveVersusRole, getVersusRole } from "../utils/versusStorage";
 import { Socket } from "socket.io-client";
 import toast from "solid-toast";

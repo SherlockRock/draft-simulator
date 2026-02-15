@@ -21,7 +21,8 @@ const CanvasEntryRedirect: Component = () => {
 
     createEffect(async () => {
         // Wait for auth to resolve before making any decisions
-        if ((user as any).isLoading) return;
+        // user accessor has isLoading property added via Object.defineProperty
+        if ((user as unknown as { isLoading?: boolean }).isLoading) return;
 
         if (user()) {
             // Signed-in user: wait for canvas list to load

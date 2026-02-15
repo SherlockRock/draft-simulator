@@ -49,7 +49,7 @@ const VersusRoleSelection: Component = () => {
         setSelectedRole(role);
         try {
             selectRole(role);
-        } catch (error: any) {
+        } catch (error) {
             console.error("Failed to select role:", error);
         } finally {
             setTimeout(() => {

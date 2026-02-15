@@ -1,4 +1,4 @@
-import { Vertex, Viewport } from "../utils/types";
+import { Vertex, Viewport } from "../utils/schemas";
 import { worldToScreen } from "../utils/helpers";
 
 type VertexComponentProps = {

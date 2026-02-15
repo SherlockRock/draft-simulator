@@ -16,7 +16,7 @@ import {
     type DraftCallbacks
 } from "../contexts/VersusContext";
 import { getSuggestedRole } from "../workflows/VersusWorkflow";
-import { VersusDraft, draft, VersusState } from "../utils/types";
+import { VersusDraft, draft, VersusState } from "../utils/schemas";
 import { getEffectivePickOrder, getPicksArrayIndex } from "../utils/versusPickOrder";
 import { VersusTimer } from "../components/VersusTimer";
 import { ReadyButton } from "../components/ReadyButton";
