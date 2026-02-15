@@ -87,7 +87,7 @@ export const SearchableSelect = (props: props) => {
 
     return (
         <div
-            class="relative"
+            class="relative w-48 shrink-0"
             onKeyDown={handleKeyDown}
             onFocusIn={onFocusIn}
             onFocusOut={onFocusOut}

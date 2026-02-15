@@ -13,6 +13,8 @@ export type CanvasDraft = {
         seriesIndex?: number;
         completed?: boolean;
         winner?: "blue" | "red" | null;
+        blueSideTeam?: 1 | 2;
+        firstPick?: "blue" | "red";
     };
 };
 

@@ -35,6 +35,9 @@ export type CanvasCardProps = {
     // Props for external rename triggering
     editingDraftId?: Accessor<string | null>;
     onEditingComplete?: () => void;
+    // Team name display (for series drafts)
+    blueTeamName?: string;
+    redTeamName?: string;
 };
 
 export const CanvasCard = (props: CanvasCardProps) => {
@@ -313,8 +316,12 @@ export const CanvasCard = (props: CanvasCardProps) => {
                 <div class="h-5" />
             </div>
             <div class="mb-2 grid grid-cols-2 gap-1">
-                <div class="text-center font-semibold text-blue-400">Blue</div>
-                <div class="text-center font-semibold text-red-400">Red</div>
+                <div class="text-center text-lg font-semibold text-violet-300">
+                    {props.blueTeamName ?? "Team 1"}
+                </div>
+                <div class="text-center text-lg font-semibold text-fuchsia-300">
+                    {props.redTeamName ?? "Team 2"}
+                </div>
             </div>
             <div
                 class={
@@ -344,6 +351,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                             }
                             onSelectNext={props.onSelectNext}
                             onSelectPrevious={props.onSelectPrevious}
+                            side={index < 10 ? "team1" : "team2"}
                         />
                     )}
                 </Index>
