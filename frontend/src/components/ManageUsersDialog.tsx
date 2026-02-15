@@ -1,5 +1,5 @@
 import { Component, For, Show } from "solid-js";
-import { CanvasUser } from "../utils/types";
+import { CanvasUser } from "../utils/schemas";
 import { UseQueryResult } from "@tanstack/solid-query";
 import { StyledSelect } from "./StyledSelect";
 

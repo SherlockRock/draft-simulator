@@ -1,5 +1,5 @@
 import { Show, createSignal, createMemo, createEffect, Accessor, JSX } from "solid-js";
-import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/types";
+import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/schemas";
 
 type CustomGroupContainerProps = {
     group: CanvasGroup;

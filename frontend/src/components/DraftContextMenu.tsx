@@ -1,5 +1,5 @@
 import { Component, onMount, onCleanup, Show } from "solid-js";
-import { CanvasDraft } from "../utils/types";
+import { CanvasDraft } from "../utils/schemas";
 
 type DraftContextMenuProps = {
     position: { x: number; y: number };

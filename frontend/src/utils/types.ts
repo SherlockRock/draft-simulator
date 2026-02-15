@@ -1,103 +1,17 @@
-export type CanvasDraft = {
-    positionX: number;
-    positionY: number;
-    is_locked?: boolean;
-    group_id?: string | null;
-    source_type?: "canvas" | "standalone" | "versus";
-    Draft: {
-        name: string;
-        id: string;
-        picks: string[];
-        type: "canvas" | "standalone" | "versus";
-        versus_draft_id?: string;
-        seriesIndex?: number;
-        completed?: boolean;
-        winner?: "blue" | "red" | null;
-    };
-};
+// =============================================================================
+// UI-only types (not from API, no Zod schema needed)
+// These types are used purely for frontend UI state and have no API representation
+// =============================================================================
 
-export type CanvasGroup = {
-    id: string;
-    canvas_id: string;
-    name: string;
-    type: "series" | "custom";
-    positionX: number;
-    positionY: number;
-    width?: number | null;
-    height?: number | null;
-    versus_draft_id?: string;
-    metadata: {
-        blueTeamName?: string;
-        redTeamName?: string;
-        length?: number;
-        competitive?: boolean;
-        seriesType?: string;
-    };
-    isInProgress?: boolean;
-    CanvasDrafts?: CanvasDraft[];
-};
-
-export type Viewport = {
-    x: number;
-    y: number;
-    zoom: number;
-};
-
-export type draft = {
-    id: string;
-    name: string;
-    public: boolean;
-    picks: string[];
-    owner_id: string;
-    type: "canvas" | "standalone" | "versus";
-    versus_draft_id?: string;
-    seriesIndex?: number;
-    completed?: boolean;
-    winner?: "blue" | "red" | null;
-    firstPick: "blue" | "red";
-    blueSideTeam: 1 | 2;
-    description?: string;
-    icon?: string;
-    is_locked?: boolean;
-};
-
-export type CanvasUser = {
-    id: string;
-    name: string;
-    email: string;
-    picture: string;
-    permissions: "view" | "edit" | "admin";
-    lastAccessedAt: string;
-};
-
-export type AnchorType = "top" | "bottom" | "left" | "right";
+import type { VersusDraft, VersusParticipant } from "./schemas";
 
 export type AnchorPoint = {
-    type: AnchorType;
+    type: "top" | "bottom" | "left" | "right";
 };
 
 export type AnchorPosition = {
     x: number;
     y: number;
-};
-
-export type ConnectionEndpoint =
-    | { type?: "draft"; draft_id: string; anchor_type: AnchorType }
-    | { type: "group"; group_id: string; anchor_type: AnchorType };
-
-export type Vertex = {
-    id: string;
-    x: number; // World coordinates
-    y: number; // World coordinates
-};
-
-export type Connection = {
-    id: string;
-    canvas_id: string;
-    source_draft_ids: ConnectionEndpoint[];
-    target_draft_ids: ConnectionEndpoint[];
-    vertices: Vertex[];
-    style: "solid" | "dashed" | "dotted";
 };
 
 export type ContextMenuAction = {
@@ -118,53 +32,10 @@ export type ChatMessage = {
     timestamp: number;
 };
 
-export type VersusDraft = {
-    id: string;
-    name: string;
-    blueTeamName: string;
-    redTeamName: string;
-    description?: string;
-    length: number;
-    competitive: boolean;
-    icon?: string;
-    type?: string;
-    shareLink: string;
-    owner_id: string;
-    createdAt: string;
-    updatedAt: string;
-    Drafts?: draft[];
-};
-
-export type VersusParticipant = {
-    id: string;
-    versus_draft_id: string;
-    user_id?: string;
-    role: "blue_captain" | "red_captain" | "spectator";
-    socketId?: string;
-    reclaimToken?: string;
-    isConnected: boolean;
-    lastSeenAt: string;
-};
-
 export type VersusPickOrderItem = {
     team: "blue" | "red";
     type: "ban" | "pick";
     slot: number;
-};
-
-export type VersusState = {
-    draftId: string;
-    currentPickIndex: number;
-    timerStartedAt: number | null;
-    isPaused: boolean;
-    readyStatus: {
-        blue: boolean;
-        red: boolean;
-    };
-    completed: boolean;
-    winner?: "blue" | "red" | null;
-    firstPick?: "blue" | "red";
-    blueSideTeam?: 1 | 2;
 };
 
 export type VersusSessionState = {
@@ -173,23 +44,4 @@ export type VersusSessionState = {
     myParticipant: VersusParticipant | null;
     connected: boolean;
     error: string | null;
-};
-
-export type VersusJoinResponse = {
-    success: boolean;
-    versusDraft: VersusDraft;
-    participants: VersusParticipant[];
-    myParticipant: VersusParticipant | null;
-    availableRoles: {
-        blue_captain: boolean;
-        red_captain: boolean;
-        spectator: boolean;
-    };
-    autoJoinedRole?: "blue_captain" | "red_captain" | "spectator";
-};
-
-export type VersusRoleSelectResponse = {
-    success: boolean;
-    participant: VersusParticipant;
-    reclaimToken: string;
 };

@@ -1,5 +1,5 @@
 import { Component, Show, For, createSignal } from "solid-js";
-import { draft } from "../utils/types";
+import { draft } from "../utils/schemas";
 import { champions, championCategories } from "../utils/constants";
 import { useFilterableItems } from "../hooks/useFilterableItems";
 import { FilterBar } from "./FilterBar";
@@ -13,10 +13,10 @@ interface PickChangeRequest {
 }
 
 interface PickChangeModalProps {
-    draft: draft;
+    draft?: draft;
     myRole: () => string | null;
     isCompetitive: boolean;
-    pendingRequest: PickChangeRequest | null;
+    pendingRequest?: PickChangeRequest | null;
     onRequestChange: (pickIndex: number, newChampion: string) => void;
     onApproveChange: (requestId: string) => void;
     onRejectChange: (requestId: string) => void;

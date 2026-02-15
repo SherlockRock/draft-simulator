@@ -12,6 +12,7 @@ import {
     removeUserFromCanvas,
     editVersusDraft
 } from "../utils/actions";
+import { Activity } from "../utils/schemas";
 import toast from "solid-toast";
 import { Dialog } from "./Dialog";
 import { ManageUsersDialog } from "./ManageUsersDialog";
@@ -19,25 +20,6 @@ import { IconPicker } from "./IconPicker";
 import { IconDisplay } from "./IconDisplay";
 import { champions } from "../utils/constants";
 import { SelectTheme } from "../utils/selectTheme";
-
-interface Activity {
-    resource_type: "draft" | "canvas" | "versus";
-    resource_id: string;
-    resource_name: string;
-    description?: string;
-    public?: boolean;
-    icon?: string;
-    timestamp: string;
-    created_at: string;
-    is_owner: boolean;
-    draft_type?: "standalone" | "canvas" | "versus";
-    // Versus-specific fields
-    blueTeamName?: string;
-    redTeamName?: string;
-    length?: number;
-    competitive?: boolean;
-    type?: string;
-}
 
 interface ActivityItemProps {
     activity: Activity;
@@ -427,7 +409,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
             {/* Header section: icon spans title + team names rows */}
             <div class="flex gap-3 p-4 pb-2">
                 <IconDisplay
-                    icon={props.activity.icon}
+                    icon={props.activity.icon ?? undefined}
                     defaultIcon={getDefaultIcon()}
                     size="md"
                 />

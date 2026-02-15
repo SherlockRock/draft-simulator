@@ -1,9 +1,10 @@
 import { Component, For, createSignal } from "solid-js";
+import { Socket } from "socket.io-client";
 import { useUser } from "../userProvider";
 import { useVersusContext } from "../contexts/VersusContext";
 
 interface VersusChatPanelProps {
-    socket: any;
+    socket: Socket;
     versusDraftId: string;
     currentRole: "blue_captain" | "red_captain" | "spectator" | null;
 }

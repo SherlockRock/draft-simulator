@@ -6,7 +6,7 @@ import {
     importDraftToCanvas,
     importSeriesToCanvas
 } from "../utils/actions";
-import { VersusDraft } from "../utils/types";
+import { VersusDraft, Draft } from "../utils/schemas";
 import { champions } from "../utils/constants";
 import toast from "solid-toast";
 
@@ -79,7 +79,7 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
         const drafts = draftsQuery.data || [];
         const query = searchQuery().toLowerCase();
         if (!query) return drafts;
-        return drafts.filter((d: any) => d.name.toLowerCase().includes(query));
+        return drafts.filter((d: Draft) => d.name.toLowerCase().includes(query));
     });
 
     const filteredSeries = createMemo(() => {
@@ -175,7 +175,7 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                             }
                         >
                             <For each={filteredDrafts()}>
-                                {(draft: any) => (
+                                {(draft: Draft) => (
                                     <div
                                         class="flex cursor-pointer items-center gap-3 border-b border-slate-700 px-4 py-3 hover:bg-slate-700"
                                         classList={{

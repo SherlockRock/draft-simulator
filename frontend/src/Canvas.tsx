@@ -36,7 +36,15 @@ import {
 import { useNavigate, useParams } from "@solidjs/router";
 import { toast } from "solid-toast";
 import { useUser } from "./userProvider";
-import { CanvasDraft, draft, Viewport, Connection, CanvasGroup } from "./utils/types";
+import {
+    CanvasDraft,
+    draft,
+    Viewport,
+    Connection,
+    CanvasGroup,
+    Vertex,
+    AnchorType
+} from "./utils/schemas";
 import { CanvasCard } from "./components/CanvasCard";
 import { Dialog } from "./components/Dialog";
 import { ImportToCanvasDialog } from "./components/ImportToCanvasDialog";
@@ -45,7 +53,6 @@ import {
     ConnectionPreview,
     GroupConnectionPreview
 } from "./components/Connections";
-import { AnchorType } from "./utils/types";
 import { cardHeight, cardWidth } from "./utils/helpers";
 import {
     localUpdateCanvasName,
@@ -76,9 +83,9 @@ import { DraftContextMenu } from "./components/DraftContextMenu";
 import { GroupContextMenu } from "./components/GroupContextMenu";
 import { useCanvasContext } from "./contexts/CanvasContext";
 
-const debounce = (func: (...args: any[]) => void, limit: number) => {
+const debounce = <T extends unknown[]>(func: (...args: T) => void, limit: number) => {
     let inDebounce: boolean;
-    return function (...args: any[]) {
+    return function (...args: T) {
         if (!inDebounce) {
             func(...args);
             inDebounce = true;
@@ -295,9 +302,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         onSuccess: (data: { name: string; id: string }) => {
             queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
             toast.success("Canvas name updated");
-            queryClient.setQueryData(["canvas", params.id], (oldData: any) => {
-                return { ...oldData, name: data.name };
-            });
+            queryClient.setQueryData(
+                ["canvas", params.id],
+                (oldData: CanvasResposnse | undefined) => {
+                    return oldData ? { ...oldData, name: data.name } : oldData;
+                }
+            );
         },
         onError: (error: Error) => {
             toast.error(`Failed to update canvas name: ${error.message}`);
@@ -683,7 +693,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             "vertexCreated",
             (data: {
                 connectionId: string;
-                vertex: any;
+                vertex: Vertex;
                 allConnections: Connection[];
             }) => {
                 setConnections(data.allConnections);

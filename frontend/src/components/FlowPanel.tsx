@@ -1,8 +1,8 @@
-import { Component, createSignal, Show } from "solid-js";
+import { Component, createSignal, Show, JSX } from "solid-js";
 
 interface FlowPanelProps {
     flow: "draft" | "canvas" | "versus" | null;
-    children?: any;
+    children?: JSX.Element;
 }
 
 const FlowPanel: Component<FlowPanelProps> = (props) => {

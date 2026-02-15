@@ -33,7 +33,7 @@ import {
     DragEventHandler,
     DragOverlay
 } from "@thisbeyond/solid-dnd";
-import { draft } from "./utils/types";
+import { draft } from "./utils/schemas";
 import BlankSquare from "/src/assets/BlankSquare.webp";
 import { useQueryClient } from "@tanstack/solid-query";
 

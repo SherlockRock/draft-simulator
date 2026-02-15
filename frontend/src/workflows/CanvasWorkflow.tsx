@@ -27,7 +27,7 @@ import CanvasSelector from "../components/CanvasSelector";
 import { Dialog } from "../components/Dialog";
 import { ManageUsersDialog } from "../components/ManageUsersDialog";
 import toast from "solid-toast";
-import { CanvasGroup, CanvasDraft } from "../utils/types";
+import { CanvasGroup, CanvasDraft } from "../utils/schemas";
 import { CanvasAccessDenied, AccessErrorType } from "../components/CanvasAccessDenied";
 import { DraftContextMenu } from "../components/DraftContextMenu";
 import { GroupContextMenu } from "../components/GroupContextMenu";
@@ -809,7 +809,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                     when={!accessError()}
                     fallback={
                         <CanvasAccessDenied
-                            errorType={accessError()!.type}
+                            errorType={accessError()?.type ?? "notFound"}
                             onNavigateToCanvases={() => {
                                 // Navigate first, then clear error
                                 // This order is important: clearing accessError causes the

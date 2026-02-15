@@ -1,4 +1,4 @@
-import { draft, VersusDraft } from "./types";
+import { draft, VersusDraft } from "./schemas";
 
 export function canReportWinner(
     targetDraft: draft,

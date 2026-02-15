@@ -2,7 +2,7 @@ import { Component, Show } from "solid-js";
 import { champions } from "../utils/constants";
 
 interface IconDisplayProps {
-    icon?: string;
+    icon?: string | null;
     defaultIcon?: string;
     size?: "sm" | "md" | "lg";
     className?: string;

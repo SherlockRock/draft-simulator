@@ -1,5 +1,5 @@
 import { Component, onMount, onCleanup, Show } from "solid-js";
-import { CanvasGroup } from "../utils/types";
+import { CanvasGroup } from "../utils/schemas";
 
 type GroupContextMenuProps = {
     position: { x: number; y: number };

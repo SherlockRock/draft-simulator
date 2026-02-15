@@ -1,4 +1,4 @@
-import { draft } from "./types";
+import { draft } from "./schemas";
 
 /**
  * Get champions restricted from selection based on series type and previous games.

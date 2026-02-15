@@ -1,5 +1,13 @@
-import { CanvasDraft, Connection, CanvasGroup, Viewport } from "./types";
+import { CanvasDraft, Connection, CanvasGroup, Viewport, AnchorType } from "./schemas";
 import { getLocalCanvas, saveLocalCanvas, LocalCanvas } from "./localCanvasStore";
+
+// Helper to safely cast anchor type with default
+const toAnchorType = (value: string | undefined, defaultValue: AnchorType): AnchorType => {
+    if (value === "top" || value === "bottom" || value === "left" || value === "right") {
+        return value;
+    }
+    return defaultValue;
+};
 
 // Helper: read, apply, save, return
 const mutateLocal = <T>(
@@ -142,11 +150,11 @@ export const localCreateConnection = (data: {
                     ? {
                           type: "group" as const,
                           group_id: e.groupId,
-                          anchor_type: (e.anchorType ?? "bottom") as any
+                          anchor_type: toAnchorType(e.anchorType, "bottom")
                       }
                     : {
                           draft_id: e.draftId!,
-                          anchor_type: (e.anchorType ?? "bottom") as any
+                          anchor_type: toAnchorType(e.anchorType, "bottom")
                       }
             ),
             target_draft_ids: data.targetDraftIds.map((e) =>
@@ -154,11 +162,11 @@ export const localCreateConnection = (data: {
                     ? {
                           type: "group" as const,
                           group_id: e.groupId,
-                          anchor_type: (e.anchorType ?? "top") as any
+                          anchor_type: toAnchorType(e.anchorType, "top")
                       }
                     : {
                           draft_id: e.draftId!,
-                          anchor_type: (e.anchorType ?? "top") as any
+                          anchor_type: toAnchorType(e.anchorType, "top")
                       }
             ),
             vertices: data.vertices ?? [],
@@ -182,11 +190,11 @@ export const localUpdateConnection = (data: {
                     ? {
                           type: "group" as const,
                           group_id: data.addSource.groupId,
-                          anchor_type: (data.addSource.anchorType ?? "bottom") as any
+                          anchor_type: toAnchorType(data.addSource.anchorType, "bottom")
                       }
                     : {
                           draft_id: data.addSource.draftId!,
-                          anchor_type: (data.addSource.anchorType ?? "bottom") as any
+                          anchor_type: toAnchorType(data.addSource.anchorType, "bottom")
                       };
                 conn.source_draft_ids.push(endpoint);
             }
@@ -195,11 +203,11 @@ export const localUpdateConnection = (data: {
                     ? {
                           type: "group" as const,
                           group_id: data.addTarget.groupId,
-                          anchor_type: (data.addTarget.anchorType ?? "top") as any
+                          anchor_type: toAnchorType(data.addTarget.anchorType, "top")
                       }
                     : {
                           draft_id: data.addTarget.draftId!,
-                          anchor_type: (data.addTarget.anchorType ?? "top") as any
+                          anchor_type: toAnchorType(data.addTarget.anchorType, "top")
                       };
                 conn.target_draft_ids.push(endpoint);
             }
