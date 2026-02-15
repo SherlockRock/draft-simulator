@@ -5,6 +5,9 @@ const jwt = require("jsonwebtoken");
 const https = require("https");
 const http = require("http");
 const { readFile } = require("node:fs/promises");
+const { existsSync } = require("node:fs");
+const path = require("path");
+const os = require("os");
 const { Server } = require("socket.io");
 const cors = require("cors");
 const draftRoutes = require("./routes/drafts");
@@ -24,6 +27,19 @@ const { initializeTimerService } = require("./services/versusTimerService");
 const HeartbeatManager = require("./services/heartbeatManager");
 const VersusSessionManager = require("./services/versusSessionManager");
 require("dotenv").config();
+
+function findCertPath() {
+  const localPath = ".";
+  const sharedPath = path.join(os.homedir(), ".config/local-certs");
+
+  if (existsSync(path.join(localPath, "localhost+2.pem"))) {
+    return localPath;
+  }
+  if (existsSync(path.join(sharedPath, "localhost+2.pem"))) {
+    return sharedPath;
+  }
+  return null;
+}
 
 async function main() {
   (async () => {
@@ -67,9 +83,10 @@ async function main() {
   app.use("/api/versus-drafts", versusRoutes);
 
   let server;
-  if (process.env.ENVIRONMENT === "development") {
-    const key = await readFile("./localhost+2-key.pem");
-    const cert = await readFile("./localhost+2.pem");
+  const certPath = process.env.ENVIRONMENT === "development" ? findCertPath() : null;
+  if (certPath) {
+    const key = await readFile(path.join(certPath, "localhost+2-key.pem"));
+    const cert = await readFile(path.join(certPath, "localhost+2.pem"));
     server = https.createServer({ key, cert }, app);
   } else {
     server = http.createServer(app);
