@@ -25,28 +25,34 @@ export const DraftSchema = z.object({
     name: z.string(),
     public: z.boolean(),
     picks: z.array(z.string()),
-    owner_id: z.string(),
-    type: z.enum(["canvas", "standalone", "versus"]),
-    versus_draft_id: z.string().optional(),
-    seriesIndex: z.number().optional(),
+    owner_id: z.string().nullable(),
+    type: z.enum(["canvas", "versus"]),
+    versus_draft_id: z.string().nullable().optional(),
+    seriesIndex: z.number().nullable().optional(),
     completed: z.boolean().optional(),
     winner: z.enum(["blue", "red"]).nullable().optional(),
     firstPick: z.enum(["blue", "red"]),
     blueSideTeam: z.union([z.literal(1), z.literal(2)]),
     description: z.string().optional(),
     icon: z.string().optional(),
-    is_locked: z.boolean().optional()
+    is_locked: z.boolean().optional(),
+    createdAt: z.string().optional(),
+    updatedAt: z.string().optional()
 });
 
 export const CanvasDraftInnerSchema = z.object({
     name: z.string(),
     id: z.string(),
     picks: z.array(z.string()),
-    type: z.enum(["canvas", "standalone", "versus"]),
-    versus_draft_id: z.string().optional(),
-    seriesIndex: z.number().optional(),
+    type: z.enum(["canvas", "versus"]),
+    versus_draft_id: z.string().nullable().optional(),
+    seriesIndex: z.number().nullable().optional(),
     completed: z.boolean().optional(),
-    winner: z.enum(["blue", "red"]).nullable().optional()
+    winner: z.enum(["blue", "red"]).nullable().optional(),
+    firstPick: z.enum(["blue", "red"]).optional(),
+    blueSideTeam: z.union([z.literal(1), z.literal(2)]).optional(),
+    createdAt: z.string().optional(),
+    updatedAt: z.string().optional()
 });
 
 export const CanvasDraftSchema = z.object({
@@ -54,8 +60,10 @@ export const CanvasDraftSchema = z.object({
     positionY: z.number(),
     is_locked: z.boolean().optional(),
     group_id: z.string().nullable().optional(),
-    source_type: z.enum(["canvas", "standalone", "versus"]).optional(),
-    Draft: CanvasDraftInnerSchema
+    source_type: z.enum(["canvas", "versus"]).optional(),
+    Draft: CanvasDraftInnerSchema,
+    createdAt: z.string().optional(),
+    updatedAt: z.string().optional()
 });
 
 // =============================================================================
@@ -79,10 +87,12 @@ export const CanvasGroupSchema = z.object({
     positionY: z.number(),
     width: z.number().nullable().optional(),
     height: z.number().nullable().optional(),
-    versus_draft_id: z.string().optional(),
+    versus_draft_id: z.string().nullable().optional(),
     metadata: CanvasGroupMetadataSchema,
     isInProgress: z.boolean().optional(),
-    CanvasDrafts: z.array(CanvasDraftSchema).optional()
+    CanvasDrafts: z.array(CanvasDraftSchema).optional(),
+    createdAt: z.string().optional(),
+    updatedAt: z.string().optional()
 });
 
 // =============================================================================
@@ -114,7 +124,9 @@ export const ConnectionSchema = z.object({
     source_draft_ids: z.array(ConnectionEndpointSchema),
     target_draft_ids: z.array(ConnectionEndpointSchema),
     vertices: z.array(VertexSchema),
-    style: z.enum(["solid", "dashed", "dotted"])
+    style: z.enum(["solid", "dashed", "dotted"]),
+    createdAt: z.string().optional(),
+    updatedAt: z.string().optional()
 });
 
 // =============================================================================
@@ -139,11 +151,11 @@ export const VersusDraftSchema = z.object({
     name: z.string(),
     blueTeamName: z.string(),
     redTeamName: z.string(),
-    description: z.string().optional(),
+    description: z.string().nullable().optional(),
     length: z.number(),
     competitive: z.boolean(),
-    icon: z.string().optional(),
-    type: z.string().optional(),
+    icon: z.string().nullable().optional(),
+    type: z.string().nullable().optional(),
     shareLink: z.string(),
     owner_id: z.string(),
     createdAt: z.string(),
@@ -154,12 +166,14 @@ export const VersusDraftSchema = z.object({
 export const VersusParticipantSchema = z.object({
     id: z.string(),
     versus_draft_id: z.string(),
-    user_id: z.string().optional(),
+    user_id: z.string().nullable().optional(),
     role: z.enum(["blue_captain", "red_captain", "spectator"]),
-    socketId: z.string().optional(),
-    reclaimToken: z.string().optional(),
+    socketId: z.string().nullable().optional(),
+    reclaimToken: z.string().nullable().optional(),
     isConnected: z.boolean(),
-    lastSeenAt: z.string()
+    lastSeenAt: z.string(),
+    createdAt: z.string().optional(),
+    updatedAt: z.string().optional()
 });
 
 export const VersusStateSchema = z.object({
@@ -233,7 +247,6 @@ export const AuthResponseSchema = z.object({
 export const CanvasListItemSchema = z.object({
     id: z.string(),
     name: z.string(),
-    createdAt: z.string(),
     updatedAt: z.string()
 });
 

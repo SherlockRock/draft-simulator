@@ -1,7 +1,7 @@
 export interface VersusRoleData {
     role: "blue_captain" | "red_captain" | "spectator";
     participantId: string;
-    reclaimToken?: string;
+    reclaimToken?: string | null;
     timestamp: number;
 }
 
