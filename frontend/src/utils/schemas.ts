@@ -305,6 +305,176 @@ export const ImportSeriesResponseSchema = z.object({
 });
 
 // =============================================================================
+// Socket Event Schemas - Versus Session
+// =============================================================================
+
+export const VersusParticipantsUpdateSchema = z.object({
+    participants: z.array(VersusParticipantSchema)
+});
+
+export const VersusSyncResponseSchema = z.object({
+    versusDraft: VersusDraftSchema,
+    participants: z.array(VersusParticipantSchema),
+    myParticipant: VersusParticipantSchema.nullable()
+});
+
+export const VersusSeriesUpdateSchema = z.object({
+    versusDraft: VersusDraftSchema
+});
+
+export const VersusErrorSchema = z.object({
+    error: z.string()
+});
+
+// =============================================================================
+// Socket Event Schemas - Draft State
+// =============================================================================
+
+export const DraftStateSyncSchema = z.object({
+    draftId: z.string(),
+    picks: z.array(z.string()),
+    currentPickIndex: z.number(),
+    timerStartedAt: z.number().nullable(),
+    isPaused: z.boolean(),
+    readyStatus: z.object({
+        blue: z.boolean(),
+        red: z.boolean()
+    }),
+    completed: z.boolean(),
+    winner: z.enum(["blue", "red"]).nullable().optional(),
+    firstPick: z.enum(["blue", "red"]),
+    blueSideTeam: z.union([z.literal(1), z.literal(2)])
+});
+
+export const DraftUpdateSchema = z.object({
+    draftId: z.string(),
+    picks: z.array(z.string()),
+    currentPickIndex: z.number(),
+    timerStartedAt: z.number().nullable(),
+    isPaused: z.boolean(),
+    completed: z.boolean(),
+    firstPick: z.enum(["blue", "red"]).optional()
+});
+
+export const DraftStartedSchema = z.object({
+    draftId: z.string(),
+    timerStartedAt: z.number(),
+    currentPickIndex: z.number(),
+    firstPick: z.enum(["blue", "red"])
+});
+
+export const ReadyUpdateSchema = z.object({
+    draftId: z.string(),
+    blueReady: z.boolean(),
+    redReady: z.boolean()
+});
+
+export const GameSettingsUpdateSchema = z.object({
+    draftId: z.string(),
+    firstPick: z.enum(["blue", "red"]),
+    blueSideTeam: z.union([z.literal(1), z.literal(2)])
+});
+
+// =============================================================================
+// Socket Event Schemas - Draft Control
+// =============================================================================
+
+export const PauseRequestedSchema = z.object({
+    draftId: z.string(),
+    team: z.enum(["blue", "red"])
+});
+
+export const ResumeRequestedSchema = z.object({
+    draftId: z.string(),
+    team: z.enum(["blue", "red"])
+});
+
+export const ResumeCountdownStartedSchema = z.object({
+    draftId: z.string(),
+    countdownStartedAt: z.number()
+});
+
+export const ResumeRejectedSchema = z.object({
+    draftId: z.string()
+});
+
+export const PickChangeRequestedSchema = z.object({
+    requestId: z.string(),
+    draftId: z.string(),
+    team: z.enum(["blue", "red"]),
+    pickIndex: z.number(),
+    oldChampion: z.string(),
+    newChampion: z.string()
+});
+
+export const PickChangeResponseSchema = z.object({
+    requestId: z.string()
+});
+
+// =============================================================================
+// Socket Event Schemas - Communication
+// =============================================================================
+
+export const VersusMessageSchema = z.object({
+    username: z.string(),
+    role: z.enum(["blue_captain", "red_captain", "spectator"]),
+    message: z.string(),
+    timestamp: z.number()
+});
+
+export const WinnerUpdateSchema = z.object({
+    draftId: z.string(),
+    winner: z.enum(["blue", "red"])
+});
+
+export const DraftStatusUpdateSchema = z.object({
+    draftId: z.string(),
+    completed: z.boolean()
+});
+
+// =============================================================================
+// Socket Event Schemas - Canvas
+// =============================================================================
+
+export const CanvasObjectMovedSchema = z.object({
+    draftId: z.string(),
+    positionX: z.number(),
+    positionY: z.number()
+});
+
+export const VertexMovedSchema = z.object({
+    connectionId: z.string(),
+    vertexId: z.string(),
+    x: z.number(),
+    y: z.number()
+});
+
+export const GroupMovedSchema = z.object({
+    groupId: z.string(),
+    positionX: z.number(),
+    positionY: z.number()
+});
+
+export const GroupResizedSchema = z.object({
+    groupId: z.string(),
+    width: z.number(),
+    height: z.number()
+});
+
+// =============================================================================
+// Socket Event Schemas - General
+// =============================================================================
+
+export const HeartbeatSchema = z.object({
+    timerStartedAt: z.number().nullable(),
+    currentPickIndex: z.number()
+});
+
+export const RoleAvailableSchema = z.object({
+    role: z.enum(["blue_captain", "red_captain"])
+});
+
+// =============================================================================
 // Type Exports (inferred from schemas)
 // =============================================================================
 
@@ -329,3 +499,29 @@ export type UserDetails = z.infer<typeof UserDetailsSchema>;
 export type CanvasListItem = z.infer<typeof CanvasListItemSchema>;
 export type Activity = z.infer<typeof ActivityItemSchema>;
 export type ActivityResponse = z.infer<typeof ActivityResponseSchema>;
+
+// Socket Event Types
+export type VersusParticipantsUpdate = z.infer<typeof VersusParticipantsUpdateSchema>;
+export type VersusSyncResponse = z.infer<typeof VersusSyncResponseSchema>;
+export type VersusSeriesUpdate = z.infer<typeof VersusSeriesUpdateSchema>;
+export type VersusError = z.infer<typeof VersusErrorSchema>;
+export type DraftStateSync = z.infer<typeof DraftStateSyncSchema>;
+export type DraftUpdate = z.infer<typeof DraftUpdateSchema>;
+export type DraftStarted = z.infer<typeof DraftStartedSchema>;
+export type ReadyUpdate = z.infer<typeof ReadyUpdateSchema>;
+export type GameSettingsUpdate = z.infer<typeof GameSettingsUpdateSchema>;
+export type PauseRequested = z.infer<typeof PauseRequestedSchema>;
+export type ResumeRequested = z.infer<typeof ResumeRequestedSchema>;
+export type ResumeCountdownStarted = z.infer<typeof ResumeCountdownStartedSchema>;
+export type ResumeRejected = z.infer<typeof ResumeRejectedSchema>;
+export type PickChangeRequested = z.infer<typeof PickChangeRequestedSchema>;
+export type PickChangeResponse = z.infer<typeof PickChangeResponseSchema>;
+export type VersusMessage = z.infer<typeof VersusMessageSchema>;
+export type WinnerUpdate = z.infer<typeof WinnerUpdateSchema>;
+export type DraftStatusUpdate = z.infer<typeof DraftStatusUpdateSchema>;
+export type CanvasObjectMoved = z.infer<typeof CanvasObjectMovedSchema>;
+export type VertexMoved = z.infer<typeof VertexMovedSchema>;
+export type GroupMoved = z.infer<typeof GroupMovedSchema>;
+export type GroupResized = z.infer<typeof GroupResizedSchema>;
+export type Heartbeat = z.infer<typeof HeartbeatSchema>;
+export type RoleAvailable = z.infer<typeof RoleAvailableSchema>;

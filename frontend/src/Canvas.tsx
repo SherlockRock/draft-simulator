@@ -38,13 +38,18 @@ import { toast } from "solid-toast";
 import { useUser } from "./userProvider";
 import {
     CanvasDraft,
-    draft,
     Viewport,
     Connection,
     CanvasGroup,
     Vertex,
-    AnchorType
+    AnchorType,
+    CanvasObjectMovedSchema,
+    VertexMovedSchema,
+    GroupMovedSchema,
+    GroupResizedSchema,
+    DraftUpdateSchema
 } from "./utils/schemas";
+import { validateSocketEvent } from "./utils/socketValidation";
 import { CanvasCard } from "./components/CanvasCard";
 import { Dialog } from "./components/Dialog";
 import { ImportToCanvasDialog } from "./components/ImportToCanvasDialog";
@@ -652,25 +657,27 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 });
             }
         );
-        socketAccessor().on(
-            "draftUpdate",
-            (data: { picks: string[]; id: string } | draft) => {
-                setCanvasDrafts((cd) => cd.Draft.id === data.id, "Draft", "picks", [
-                    ...data.picks
-                ]);
+        socketAccessor().on("draftUpdate", (rawData: unknown) => {
+            const data = validateSocketEvent("draftUpdate", rawData, DraftUpdateSchema);
+            if (!data) return;
+            setCanvasDrafts((cd) => cd.Draft.id === data.draftId, "Draft", "picks", [
+                ...data.picks
+            ]);
+        });
+        socketAccessor().on("canvasObjectMoved", (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "canvasObjectMoved",
+                rawData,
+                CanvasObjectMovedSchema
+            );
+            if (!data) return;
+            if (dragState().activeBoxId !== data.draftId) {
+                setCanvasDrafts((cd) => cd.Draft.id === data.draftId, {
+                    positionX: data.positionX,
+                    positionY: data.positionY
+                });
             }
-        );
-        socketAccessor().on(
-            "canvasObjectMoved",
-            (data: { draftId: string; positionX: number; positionY: number }) => {
-                if (dragState().activeBoxId !== data.draftId) {
-                    setCanvasDrafts((cd) => cd.Draft.id === data.draftId, {
-                        positionX: data.positionX,
-                        positionY: data.positionY
-                    });
-                }
-            }
-        );
+        });
         socketAccessor().on(
             "connectionCreated",
             (data: { connection: Connection; allConnections: Connection[] }) => {
@@ -699,24 +706,23 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 setConnections(data.allConnections);
             }
         );
-        socketAccessor().on(
-            "vertexMoved",
-            (data: { connectionId: string; vertexId: string; x: number; y: number }) => {
-                const vState = vertexDragState();
-                // Don't update if we're the one dragging this vertex
-                if (
-                    vState.connectionId !== data.connectionId ||
-                    vState.vertexId !== data.vertexId
-                ) {
-                    setConnections(
-                        (conn) => conn.id === data.connectionId,
-                        "vertices",
-                        (v) => v.id === data.vertexId,
-                        { x: data.x, y: data.y }
-                    );
-                }
+        socketAccessor().on("vertexMoved", (rawData: unknown) => {
+            const data = validateSocketEvent("vertexMoved", rawData, VertexMovedSchema);
+            if (!data) return;
+            const vState = vertexDragState();
+            // Don't update if we're the one dragging this vertex
+            if (
+                vState.connectionId !== data.connectionId ||
+                vState.vertexId !== data.vertexId
+            ) {
+                setConnections(
+                    (conn) => conn.id === data.connectionId,
+                    "vertices",
+                    (v) => v.id === data.vertexId,
+                    { x: data.x, y: data.y }
+                );
             }
-        );
+        });
         socketAccessor().on(
             "vertexUpdated",
             (data: { connectionId: string; vertexId: string; x: number; y: number }) => {
@@ -751,27 +757,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 );
             }
         );
-        socketAccessor().on(
-            "groupMoved",
-            (data: { groupId: string; positionX: number; positionY: number }) => {
-                const gState = groupDragState();
-                if (gState.activeGroupId !== data.groupId) {
-                    setCanvasGroups((g) => g.id === data.groupId, {
-                        positionX: data.positionX,
-                        positionY: data.positionY
-                    });
-                }
-            }
-        );
-        socketAccessor().on(
-            "groupResized",
-            (data: { groupId: string; width: number; height: number }) => {
+        socketAccessor().on("groupMoved", (rawData: unknown) => {
+            const data = validateSocketEvent("groupMoved", rawData, GroupMovedSchema);
+            if (!data) return;
+            const gState = groupDragState();
+            if (gState.activeGroupId !== data.groupId) {
                 setCanvasGroups((g) => g.id === data.groupId, {
-                    width: data.width,
-                    height: data.height
+                    positionX: data.positionX,
+                    positionY: data.positionY
                 });
             }
-        );
+        });
+        socketAccessor().on("groupResized", (rawData: unknown) => {
+            const data = validateSocketEvent("groupResized", rawData, GroupResizedSchema);
+            if (!data) return;
+            setCanvasGroups((g) => g.id === data.groupId, {
+                width: data.width,
+                height: data.height
+            });
+        });
         onCleanup(() => {
             socketAccessor().off("canvasUpdate");
             socketAccessor().off("draftUpdate");

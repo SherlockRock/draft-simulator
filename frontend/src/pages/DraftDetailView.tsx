@@ -2,7 +2,8 @@ import { Component, Show, createMemo } from "solid-js";
 import Draft from "../Draft";
 import { useDraftContext } from "../workflows/DraftWorkflow";
 import { useCanvasContext } from "../contexts/CanvasContext";
-import { CanvasGroup, CanvasDraft } from "../utils/types";
+import { CanvasDraft } from "../utils/types";
+import { CanvasGroup } from "../utils/schemas";
 
 const DraftDetailView: Component = () => {
     const { draft, mutateDraft } = useDraftContext();

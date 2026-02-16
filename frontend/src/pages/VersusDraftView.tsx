@@ -16,7 +16,23 @@ import {
     type DraftCallbacks
 } from "../contexts/VersusContext";
 import { getSuggestedRole } from "../workflows/VersusWorkflow";
-import { VersusDraft, draft, VersusState } from "../utils/schemas";
+import {
+    VersusDraft,
+    draft,
+    VersusState,
+    HeartbeatSchema,
+    DraftStateSyncSchema,
+    ReadyUpdateSchema,
+    DraftStartedSchema,
+    DraftUpdateSchema,
+    PauseRequestedSchema,
+    ResumeRequestedSchema,
+    PickChangeRequestedSchema,
+    RoleAvailableSchema,
+    GameSettingsUpdateSchema,
+    WinnerUpdateSchema
+} from "../utils/schemas";
+import { validateSocketEvent } from "../utils/socketValidation";
 import { getEffectivePickOrder, getPicksArrayIndex } from "../utils/versusPickOrder";
 import { VersusTimer } from "../components/VersusTimer";
 import { ReadyButton } from "../components/ReadyButton";
@@ -204,7 +220,9 @@ const VersusDraftView: Component = () => {
             return;
         }
 
-        socket.on("heartbeat", (data: any) => {
+        socket.on("heartbeat", (rawData: unknown) => {
+            const data = validateSocketEvent("heartbeat", rawData, HeartbeatSchema);
+            if (!data) return;
             if (
                 data.timerStartedAt !== versusState().timerStartedAt ||
                 data.currentPickIndex !== versusState().currentPickIndex
@@ -219,7 +237,13 @@ const VersusDraftView: Component = () => {
         });
 
         // Listen for state sync
-        socket.on("draftStateSync", (data: any) => {
+        socket.on("draftStateSync", (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "draftStateSync",
+                rawData,
+                DraftStateSyncSchema
+            );
+            if (!data) return;
             mutateDraft((prev) => ({
                 ...prev!,
                 picks: data.picks,
@@ -239,7 +263,9 @@ const VersusDraftView: Component = () => {
         });
 
         // Listen for ready updates
-        socket.on("readyUpdate", (data: any) => {
+        socket.on("readyUpdate", (rawData: unknown) => {
+            const data = validateSocketEvent("readyUpdate", rawData, ReadyUpdateSchema);
+            if (!data) return;
             setVersusState((prev) => ({
                 ...prev,
                 readyStatus: { blue: data.blueReady, red: data.redReady }
@@ -247,7 +273,9 @@ const VersusDraftView: Component = () => {
         });
 
         // Listen for draft started
-        socket.on("draftStarted", (data: any) => {
+        socket.on("draftStarted", (rawData: unknown) => {
+            const data = validateSocketEvent("draftStarted", rawData, DraftStartedSchema);
+            if (!data) return;
             setVersusState((prev) => ({
                 ...prev,
                 timerStartedAt: data.timerStartedAt,
@@ -258,7 +286,9 @@ const VersusDraftView: Component = () => {
         });
 
         // Listen for draft updates
-        socket.on("draftUpdate", (data: any) => {
+        socket.on("draftUpdate", (rawData: unknown) => {
+            const data = validateSocketEvent("draftUpdate", rawData, DraftUpdateSchema);
+            if (!data) return;
             mutateDraft((prev) => ({
                 ...prev!,
                 picks: data.picks,
@@ -274,7 +304,13 @@ const VersusDraftView: Component = () => {
         });
 
         // Listen for pause requests
-        socket.on("pauseRequested", (data: any) => {
+        socket.on("pauseRequested", (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "pauseRequested",
+                rawData,
+                PauseRequestedSchema
+            );
+            if (!data) return;
             const myTeam = myRole()?.includes("blue") ? "blue" : "red";
             // Only show modal if it's NOT your team requesting
             if (data.team !== myTeam) {
@@ -285,7 +321,13 @@ const VersusDraftView: Component = () => {
         });
 
         // Listen for resume requests
-        socket.on("resumeRequested", (data: any) => {
+        socket.on("resumeRequested", (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "resumeRequested",
+                rawData,
+                ResumeRequestedSchema
+            );
+            if (!data) return;
             const myTeam = myRole()?.includes("blue") ? "blue" : "red";
             // Only show modal if it's NOT your team requesting
             if (data.team !== myTeam) {
@@ -295,7 +337,7 @@ const VersusDraftView: Component = () => {
             }
         });
 
-        // Listen for resume countdown
+        // Listen for resume countdown (no payload)
         socket.on("resumeCountdownStarted", () => {
             setShowPauseRequest(false);
             setIsCountingDown(true);
@@ -317,35 +359,53 @@ const VersusDraftView: Component = () => {
             }, 1000);
         });
 
-        // Listen for resume rejection
+        // Listen for resume rejection (no payload)
         socket.on("resumeRejected", () => {
             toast.error("Resume request was rejected");
             setShowPauseRequest(false);
         });
 
         // Listen for pick change requests
-        socket.on("pickChangeRequested", (data: any) => {
+        socket.on("pickChangeRequested", (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "pickChangeRequested",
+                rawData,
+                PickChangeRequestedSchema
+            );
+            if (!data) return;
             setPendingPickChangeRequest(data);
             toast(
                 `${data.team === "blue" ? versusDraft()?.blueTeamName : versusDraft()?.redTeamName} requested a pick change`
             );
         });
 
-        // Listen for pick change rejections
+        // Listen for pick change rejections (no payload)
         socket.on("pickChangeRejected", () => {
             toast.error("Pick change request was rejected");
             setPendingPickChangeRequest(null);
         });
 
         // Listen for role availability
-        socket.on("roleAvailable", (data: any) => {
+        socket.on("roleAvailable", (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "roleAvailable",
+                rawData,
+                RoleAvailableSchema
+            );
+            if (!data) return;
             toast(`${data.role.replace("_", " ")} is now available`, {
                 duration: 5000
             });
         });
 
         // Listen for game settings updates (firstPick, blueSideTeam)
-        socket.on("gameSettingsUpdate", (data: any) => {
+        socket.on("gameSettingsUpdate", (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "gameSettingsUpdate",
+                rawData,
+                GameSettingsUpdateSchema
+            );
+            if (!data) return;
             if (data.draftId === params.draftId) {
                 setVersusState((prev) => ({
                     ...prev,
@@ -365,21 +425,24 @@ const VersusDraftView: Component = () => {
         });
 
         // Listen for winner updates
-        socket.on(
-            "versusWinnerUpdate",
-            (data: { draftId: string; winner: "blue" | "red" }) => {
-                if (data.draftId === params.draftId) {
-                    mutateDraft((prev) => ({
-                        ...prev!,
-                        winner: data.winner
-                    }));
-                    setVersusState((prev) => ({
-                        ...prev,
-                        winner: data.winner
-                    }));
-                }
+        socket.on("versusWinnerUpdate", (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "versusWinnerUpdate",
+                rawData,
+                WinnerUpdateSchema
+            );
+            if (!data) return;
+            if (data.draftId === params.draftId) {
+                mutateDraft((prev) => ({
+                    ...prev!,
+                    winner: data.winner
+                }));
+                setVersusState((prev) => ({
+                    ...prev,
+                    winner: data.winner
+                }));
             }
-        );
+        });
 
         draftSocketWithListeners = socket;
 

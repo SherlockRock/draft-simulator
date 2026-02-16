@@ -11,11 +11,17 @@ import { useUser } from "../userProvider";
 import FlowPanel from "../components/FlowPanel";
 import VersusFlowPanelContent from "../components/VersusFlowPanelContent";
 import {
-    VersusDraft,
-    VersusParticipant,
-    VersusJoinResponse,
-    VersusRoleSelectResponse
+    VersusJoinResponseSchema,
+    VersusRoleSelectResponseSchema,
+    VersusParticipantsUpdateSchema,
+    VersusSeriesUpdateSchema,
+    VersusErrorSchema,
+    VersusMessageSchema,
+    WinnerUpdateSchema,
+    DraftStatusUpdateSchema,
+    VersusSyncResponseSchema
 } from "../utils/schemas";
+import { validateSocketEvent } from "../utils/socketValidation";
 import { VersusSessionState, ChatMessage } from "../utils/types";
 import { saveVersusRole, getVersusRole } from "../utils/versusStorage";
 import { Socket } from "socket.io-client";
@@ -132,7 +138,13 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
     };
 
     // Join response handler
-    const handleJoinResponse = (response: VersusJoinResponse) => {
+    const handleJoinResponse = (rawData: unknown) => {
+        const response = validateSocketEvent(
+            "versusJoinResponse",
+            rawData,
+            VersusJoinResponseSchema
+        );
+        if (!response) return;
         if (!response.success) {
             setVersusContext({
                 versusDraft: null,
@@ -244,7 +256,13 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         }
 
         // Participant updated handler
-        const handleParticipantUpdate = (data: { participants: VersusParticipant[] }) => {
+        const handleParticipantUpdate = (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "versusParticipantsUpdate",
+                rawData,
+                VersusParticipantsUpdateSchema
+            );
+            if (!data) return;
             setVersusContext((prev) => ({
                 ...prev,
                 participants: data.participants
@@ -252,7 +270,13 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         };
 
         // Versus draft updated handler
-        const handleVersusDraftUpdate = (data: { versusDraft: VersusDraft }) => {
+        const handleVersusDraftUpdate = (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "versusSeriesUpdate",
+                rawData,
+                VersusSeriesUpdateSchema
+            );
+            if (!data) return;
             setVersusContext((prev) => ({
                 ...prev,
                 versusDraft: data.versusDraft
@@ -260,25 +284,36 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         };
 
         // Error handler
-        const handleVersusError = (data: { error: string }) => {
+        const handleVersusError = (rawData: unknown) => {
+            const data = validateSocketEvent("versusError", rawData, VersusErrorSchema);
+            if (!data) return;
             toast.error(data.error);
         };
 
         // Chat message handler (lifted to context for persistence)
-        const handleNewVersusMessage = (data: ChatMessage) => {
+        const handleNewVersusMessage = (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "newVersusMessage",
+                rawData,
+                VersusMessageSchema
+            );
+            if (!data) return;
             addChatMessage(data);
         };
 
-        // Chat user count handler
+        // Chat user count handler (simple number, no schema needed)
         const handleVersusUserCountUpdate = (count: number) => {
             setChatUserCount(count);
         };
 
         // Winner update handler
-        const handleWinnerUpdate = (data: {
-            draftId: string;
-            winner: "blue" | "red";
-        }) => {
+        const handleWinnerUpdate = (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "versusWinnerUpdate",
+                rawData,
+                WinnerUpdateSchema
+            );
+            if (!data) return;
             setVersusContext((prev) => {
                 if (!prev.versusDraft?.Drafts) return prev;
                 return {
@@ -294,10 +329,13 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         };
 
         // Draft status update handler (for completion status sync)
-        const handleDraftStatusUpdate = (data: {
-            draftId: string;
-            completed: boolean;
-        }) => {
+        const handleDraftStatusUpdate = (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "versusDraftStatusUpdate",
+                rawData,
+                DraftStatusUpdateSchema
+            );
+            if (!data) return;
             setVersusContext((prev) => {
                 if (!prev.versusDraft?.Drafts) return prev;
                 return {
@@ -315,11 +353,13 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         };
 
         // Sync response handler (for reconnection sync)
-        const handleSyncResponse = (data: {
-            versusDraft: VersusDraft;
-            participants: VersusParticipant[];
-            myParticipant: (VersusParticipant & { reclaimToken?: string }) | null;
-        }) => {
+        const handleSyncResponse = (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "versusSyncResponse",
+                rawData,
+                VersusSyncResponseSchema
+            );
+            if (!data) return;
             setVersusContext((prev) => ({
                 ...prev,
                 versusDraft: data.versusDraft,
@@ -385,7 +425,13 @@ const VersusWorkflow: Component<RouteSectionProps> = (props) => {
         if (!sock) return;
 
         // Role select response handler
-        const handleRoleSelectResponse = (response: VersusRoleSelectResponse) => {
+        const handleRoleSelectResponse = (rawData: unknown) => {
+            const response = validateSocketEvent(
+                "versusRoleSelectResponse",
+                rawData,
+                VersusRoleSelectResponseSchema
+            );
+            if (!response) return;
             if (!response.success) {
                 toast.error("Failed to select role");
                 return;
