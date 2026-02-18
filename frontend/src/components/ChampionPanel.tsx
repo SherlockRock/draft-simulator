@@ -74,6 +74,16 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
     // Check if draft type shows bans in restrictions (ironman only)
     const showBansInRestrictions = () => props.versusDraft()?.type === "ironman";
 
+    // Champions not in restricted list (for Available section)
+    const availableChampions = createMemo(() => {
+        const restricted = new Set(props.restrictedChampions());
+        const currentPicks = new Set(props.draft()?.picks ?? []);
+
+        return champions
+            .map((champ, index) => ({ champ, index: String(index) }))
+            .filter(({ index }) => !restricted.has(index) && !currentPicks.has(index));
+    });
+
     // Inner component for a single game's restricted champions row
     const GameRestrictedRow: Component<{ game: GameRestrictions }> = (gameProps) => {
         // Combine champions based on mode
@@ -187,8 +197,52 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
             <div class="flex-1 overflow-y-auto">
                 <Show when={!isFiltering()}>
                     <div class="p-4">
-                        {/* Unified view placeholder */}
-                        <p class="text-slate-400">Unified view (game sections + available)</p>
+                        {/* Game restricted sections */}
+                        <Show when={props.restrictedByGame().length > 0}>
+                            <For each={props.restrictedByGame()}>
+                                {(game) => <GameRestrictedRow game={game} />}
+                            </For>
+                        </Show>
+
+                        {/* Available section */}
+                        <div class="mt-4">
+                            <div class="mb-3 text-center text-sm font-medium text-slate-400">
+                                Available
+                            </div>
+                            <div class="grid grid-cols-5 gap-2">
+                                <For each={availableChampions()}>
+                                    {({ champ, index }) => {
+                                        const isPendingSelection = () =>
+                                            props.getCurrentPendingChampion() === index &&
+                                            props.isMyTurn();
+                                        const canSelect = () =>
+                                            props.isMyTurn() && !props.isPaused();
+
+                                        return (
+                                            <button
+                                                onClick={() =>
+                                                    canSelect() && props.onChampionSelect(index)
+                                                }
+                                                class={`relative h-14 w-14 overflow-hidden rounded border-2 transition-all ${
+                                                    isPendingSelection()
+                                                        ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
+                                                        : canSelect()
+                                                          ? "cursor-pointer border-slate-500 hover:scale-105 hover:border-slate-300"
+                                                          : "cursor-default border-slate-600"
+                                                }`}
+                                                title={champ.name}
+                                            >
+                                                <img
+                                                    src={champ.img}
+                                                    alt={champ.name}
+                                                    class="h-full w-full object-cover"
+                                                />
+                                            </button>
+                                        );
+                                    }}
+                                </For>
+                            </div>
+                        </div>
                     </div>
                 </Show>
 
