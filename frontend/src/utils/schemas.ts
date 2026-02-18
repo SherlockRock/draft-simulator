@@ -201,7 +201,7 @@ export const VersusJoinResponseSchema = z.object({
         red_captain: z.boolean(),
         spectator: z.boolean()
     }),
-    autoJoinedRole: z.enum(["blue_captain", "red_captain", "spectator"]).optional()
+    autoJoinedRole: z.enum(["blue_captain", "red_captain", "spectator"]).nullable()
 });
 
 export const VersusRoleSelectResponseSchema = z.object({

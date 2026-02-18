@@ -189,6 +189,45 @@ const VersusDraftView: Component = () => {
         createSignal<any>(null);
     const [activeTab, setActiveTab] = createSignal<"pick" | "restricted">("pick");
 
+    // Track slots that are currently animating (just got locked in)
+    const [animatingSlots, setAnimatingSlots] = createSignal<Set<string>>(new Set());
+    let prevPickIndex = 0;
+
+    // Watch for lock-ins (when currentPickIndex advances)
+    createEffect(() => {
+        const state = versusState();
+        const currentIndex = state.currentPickIndex;
+
+        // If index advanced, the previous slot was just locked in
+        if (currentIndex > prevPickIndex && state.timerStartedAt !== null) {
+            const effectiveOrder = getEffectivePickOrder(state.firstPick || "blue");
+            const lockedPick = effectiveOrder[prevPickIndex];
+
+            if (lockedPick) {
+                const slotKey = `${lockedPick.team}-${lockedPick.type}-${lockedPick.slot}`;
+                setAnimatingSlots((prev) => new Set(prev).add(slotKey));
+
+                // Remove after animation completes (300ms)
+                setTimeout(() => {
+                    setAnimatingSlots((prev) => {
+                        const next = new Set(prev);
+                        next.delete(slotKey);
+                        return next;
+                    });
+                }, 300);
+            }
+        }
+        prevPickIndex = currentIndex;
+    });
+
+    const isSlotAnimating = (
+        team: "blue" | "red",
+        type: "pick" | "ban",
+        slot: number
+    ) => {
+        return animatingSlots().has(`${team}-${type}-${slot}`);
+    };
+
     // Champion filtering
     const {
         searchText,
@@ -1153,7 +1192,7 @@ const VersusDraftView: Component = () => {
                                             <For each={getTeamPicks("blue")}>
                                                 {(pick, index) => (
                                                     <div
-                                                        class={`flex h-16 items-center gap-3 rounded border-2 bg-slate-800 p-2 transition-all ${
+                                                        class={`flex h-16 items-center gap-3 overflow-hidden rounded border-2 bg-slate-800 p-2 transition-all ${
                                                             isPickActive("blue", index())
                                                                 ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
                                                                 : "border-blue-600/30"
@@ -1171,7 +1210,7 @@ const VersusDraftView: Component = () => {
                                                                         parseInt(pick)
                                                                     ].name
                                                                 }
-                                                                class="h-14 w-14 rounded object-cover"
+                                                                class={`h-14 w-14 rounded object-cover ${isSlotAnimating("blue", "pick", index()) ? "animate-pop" : ""}`}
                                                             />
                                                             <span class="text-sm text-slate-200">
                                                                 {
@@ -1196,7 +1235,7 @@ const VersusDraftView: Component = () => {
                                             <For each={getTeamPicks("red")}>
                                                 {(pick, index) => (
                                                     <div
-                                                        class={`flex h-16 items-center gap-3 rounded border-2 bg-slate-800 p-2 transition-all ${
+                                                        class={`flex h-16 items-center gap-3 overflow-hidden rounded border-2 bg-slate-800 p-2 transition-all ${
                                                             isPickActive("red", index())
                                                                 ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
                                                                 : "border-red-600/30"
@@ -1214,7 +1253,7 @@ const VersusDraftView: Component = () => {
                                                                         parseInt(pick)
                                                                     ].name
                                                                 }
-                                                                class="h-14 w-14 rounded object-cover"
+                                                                class={`h-14 w-14 rounded object-cover ${isSlotAnimating("red", "pick", index()) ? "animate-pop" : ""}`}
                                                             />
                                                             <span class="text-sm text-slate-200">
                                                                 {
