@@ -606,3 +606,50 @@ export const gameBgColors: Record<number, string> = {
 export const overlayTeamColor = "text-slate-400";
 export const overlayBanColor = "text-slate-500";
 export const overlayPickColor = "text-slate-500";
+
+// Community Dragon CDN splash image helper
+const CD_BASE =
+    "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/assets/characters";
+
+// Champions with non-standard internal names
+const INTERNAL_NAME_OVERRIDES: Record<string, string> = {
+    Wukong: "monkeyking"
+};
+
+// Champions with special URL patterns (VGU/ASU/reworks or newer .name.jpg format)
+const SPECIAL_SPLASH_URLS: Record<string, string> = {
+    // VGU/ASU reworks
+    Ambessa: `${CD_BASE}/ambessa/skins/base/images/ambessa_splash_centered_0.domina.jpg`,
+    Hwei: `${CD_BASE}/hwei/skins/skin0/images/hwei_splash_centered_0.jpg`,
+    LeBlanc: `${CD_BASE}/leblanc/skins/base/images/leblanc_splash_centered_0.leblanc_rework.jpg`,
+    Teemo: `${CD_BASE}/teemo/skins/base/images/teemo_splash_centered_0.asu_teemo.jpg`,
+    Viktor: `${CD_BASE}/viktor/skins/base/images/viktor_splash_centered_0.viktorvgu.jpg`,
+    "Xin Zhao": `${CD_BASE}/xinzhao/skins/base/images/xinzhaorework_splash_centered_0.xinzhaorework.jpg`,
+    // Newer champions with .name.jpg format
+    Aurora: `${CD_BASE}/aurora/skins/base/images/aurora_splash_centered_0.aurora.jpg`,
+    Briar: `${CD_BASE}/briar/skins/base/images/briar_splash_centered_0.briar.jpg`,
+    Mel: `${CD_BASE}/mel/skins/base/images/mel_splash_centered_0.mel.jpg`,
+    Naafiri: `${CD_BASE}/naafiri/skins/base/images/naafiri_splash_centered_0.naafiri.jpg`,
+    Smolder: `${CD_BASE}/smolder/skins/base/images/smolder_splash_centered_0.smolder.jpg`,
+    Yunara: `${CD_BASE}/yunara/skins/base/images/yunara_splash_centered_0.yunara.jpg`,
+    Zaahen: `${CD_BASE}/zaahen/skins/base/images/zaahen_splash_centered_0.zaahen.jpg`
+};
+
+/**
+ * Get the Community Dragon CDN URL for a champion's centered splash art.
+ * @param championName - The champion's display name (e.g., "Aurelion Sol", "Kai'Sa")
+ */
+export const getSplashUrl = (championName: string): string => {
+    // Check for special URL first
+    if (SPECIAL_SPLASH_URLS[championName]) {
+        return SPECIAL_SPLASH_URLS[championName];
+    }
+
+    // Convert display name to internal name
+    const internalName =
+        INTERNAL_NAME_OVERRIDES[championName] ??
+        championName.toLowerCase().replace(/[\s'.]/g, "");
+
+    // Try standard format first, fallback handled by browser
+    return `${CD_BASE}/${internalName}/skins/base/images/${internalName}_splash_centered_0.jpg`;
+};

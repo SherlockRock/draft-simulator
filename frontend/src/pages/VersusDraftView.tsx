@@ -47,7 +47,8 @@ import {
     gameBorderColors,
     overlayTeamColor,
     overlayBanColor,
-    overlayPickColor
+    overlayPickColor,
+    getSplashUrl
 } from "../utils/constants";
 import toast from "solid-toast";
 import { useFilterableItems } from "../hooks/useFilterableItems";
@@ -1128,11 +1129,11 @@ const VersusDraftView: Component = () => {
                                         Bans
                                     </div>
                                     <div class="flex justify-between gap-4">
-                                        <div class="flex gap-2">
+                                        <div class="flex gap-3">
                                             <For each={getTeamBans("blue")}>
                                                 {(ban, index) => (
                                                     <div
-                                                        class={`h-14 w-14 rounded border-2 bg-slate-800 transition-all ${
+                                                        class={`h-20 w-20 rounded border-2 bg-slate-800 transition-all ${
                                                             isBanActive("blue", index())
                                                                 ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
                                                                 : "border-blue-600/30"
@@ -1153,11 +1154,11 @@ const VersusDraftView: Component = () => {
                                                 )}
                                             </For>
                                         </div>
-                                        <div class="flex gap-2">
+                                        <div class="flex gap-3">
                                             <For each={getTeamBans("red")}>
                                                 {(ban, index) => (
                                                     <div
-                                                        class={`h-14 w-14 rounded border-2 bg-slate-800 transition-all ${
+                                                        class={`h-20 w-20 rounded border-2 bg-slate-800 transition-all ${
                                                             isBanActive("red", index())
                                                                 ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
                                                                 : "border-red-600/30"
@@ -1188,11 +1189,11 @@ const VersusDraftView: Component = () => {
                                         <div class="mb-2 text-sm font-semibold text-blue-400">
                                             Blue Picks
                                         </div>
-                                        <div class="space-y-2">
+                                        <div class="flex flex-col gap-2">
                                             <For each={getTeamPicks("blue")}>
                                                 {(pick, index) => (
                                                     <div
-                                                        class={`flex h-16 items-center gap-3 overflow-hidden rounded border-2 bg-slate-800 p-2 transition-all ${
+                                                        class={`relative h-[12vh] overflow-hidden rounded border-2 bg-slate-800 transition-all ${
                                                             isPickActive("blue", index())
                                                                 ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
                                                                 : "border-blue-600/30"
@@ -1200,19 +1201,20 @@ const VersusDraftView: Component = () => {
                                                     >
                                                         <Show when={pick && pick !== ""}>
                                                             <img
-                                                                src={
+                                                                src={getSplashUrl(
                                                                     champions[
                                                                         parseInt(pick)
-                                                                    ].img
-                                                                }
+                                                                    ].name
+                                                                )}
                                                                 alt={
                                                                     champions[
                                                                         parseInt(pick)
                                                                     ].name
                                                                 }
-                                                                class={`h-14 w-14 rounded object-cover ${isSlotAnimating("blue", "pick", index()) ? "animate-pop" : ""}`}
+                                                                class={`h-full w-full object-cover object-[center_25%] ${isSlotAnimating("blue", "pick", index()) ? "animate-pop" : ""}`}
                                                             />
-                                                            <span class="text-sm text-slate-200">
+                                                            <div class="absolute inset-0 bg-gradient-to-r from-slate-900/80 to-transparent" />
+                                                            <span class="absolute bottom-1 left-2 text-sm font-medium text-slate-100 drop-shadow-lg">
                                                                 {
                                                                     champions[
                                                                         parseInt(pick)
@@ -1231,11 +1233,11 @@ const VersusDraftView: Component = () => {
                                         <div class="mb-2 text-sm font-semibold text-red-400">
                                             Red Picks
                                         </div>
-                                        <div class="space-y-2">
+                                        <div class="flex flex-col gap-2">
                                             <For each={getTeamPicks("red")}>
                                                 {(pick, index) => (
                                                     <div
-                                                        class={`flex h-16 items-center gap-3 overflow-hidden rounded border-2 bg-slate-800 p-2 transition-all ${
+                                                        class={`relative h-[12vh] overflow-hidden rounded border-2 bg-slate-800 transition-all ${
                                                             isPickActive("red", index())
                                                                 ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
                                                                 : "border-red-600/30"
@@ -1243,19 +1245,20 @@ const VersusDraftView: Component = () => {
                                                     >
                                                         <Show when={pick && pick !== ""}>
                                                             <img
-                                                                src={
+                                                                src={getSplashUrl(
                                                                     champions[
                                                                         parseInt(pick)
-                                                                    ].img
-                                                                }
+                                                                    ].name
+                                                                )}
                                                                 alt={
                                                                     champions[
                                                                         parseInt(pick)
                                                                     ].name
                                                                 }
-                                                                class={`h-14 w-14 rounded object-cover ${isSlotAnimating("red", "pick", index()) ? "animate-pop" : ""}`}
+                                                                class={`h-full w-full object-cover object-[center_25%] ${isSlotAnimating("red", "pick", index()) ? "animate-pop" : ""}`}
                                                             />
-                                                            <span class="text-sm text-slate-200">
+                                                            <div class="absolute inset-0 bg-gradient-to-l from-slate-900/80 to-transparent" />
+                                                            <span class="absolute bottom-1 right-2 text-sm font-medium text-slate-100 drop-shadow-lg">
                                                                 {
                                                                     champions[
                                                                         parseInt(pick)
