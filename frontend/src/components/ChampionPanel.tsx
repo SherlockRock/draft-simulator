@@ -4,7 +4,6 @@ import { useFilterableItems } from "../hooks/useFilterableItems";
 import {
     champions,
     championCategories,
-    gameTextColors,
     gameTextColorsMuted,
     gameBorderColors,
     overlayTeamColor,
@@ -17,7 +16,10 @@ import type { draft, VersusDraft } from "../utils/schemas";
 interface ChampionPanelProps {
     restrictedByGame: () => GameRestrictions[];
     restrictedChampions: () => string[];
-    restrictedChampionGameMap: () => Map<string, { gameNumber: number; pickIndex: number }>;
+    restrictedChampionGameMap: () => Map<
+        string,
+        { gameNumber: number; pickIndex: number }
+    >;
     draft: () => draft | undefined;
     versusDraft: () => VersusDraft | undefined;
     isMyTurn: () => boolean;
@@ -41,8 +43,8 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
     });
 
     // Derived: are we filtering?
-    const isFiltering = createMemo(() =>
-        searchText() !== "" || selectedCategory() !== ""
+    const isFiltering = createMemo(
+        () => searchText() !== "" || selectedCategory() !== ""
     );
 
     // Parse pick index into components for colorized rendering
@@ -111,7 +113,6 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
             return champs;
         });
 
-        const gameColor = () => gameTextColors[gameProps.game.gameNumber] ?? "text-slate-300";
         const gameBgColor = () => {
             // Map text colors to bg colors
             const colorMap: Record<number, string> = {
@@ -133,11 +134,13 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                     class={`flex w-10 flex-shrink-0 flex-col items-center justify-center rounded-l ${gameBgColor()}`}
                 >
                     <span class="text-[10px] font-bold text-white">Game</span>
-                    <span class="text-lg font-bold text-white">{gameProps.game.gameNumber}</span>
+                    <span class="text-lg font-bold text-white">
+                        {gameProps.game.gameNumber}
+                    </span>
                 </div>
 
                 {/* Champions grid - 5 per row */}
-                <div class="grid flex-1 grid-cols-5 gap-1 rounded-r bg-slate-700/50 p-2">
+                <div class="grid flex-1 grid-cols-5 gap-1 px-2">
                     <For each={allChampions()}>
                         {({ id, pickIndex }) => {
                             const champ = champions[parseInt(id)];
@@ -156,16 +159,14 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                         class="h-full w-full object-cover opacity-50"
                                         title={`${champ.name} - Game ${gameNum} ${getDraftPositionText(pickIndex)}`}
                                     />
-                                    {/* Position badge */}
+                                    {/* Position badge - T# P# format (no game number since it's in sidebar) */}
                                     <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
-                                        <span class={gameTextColorsMuted[gameNum] ?? "text-slate-300"}>
-                                            G{gameNum}
+                                        <span class={overlayTeamColor}>
+                                            T{parts.team}
                                         </span>
-                                        <span>
-                                            <span class={overlayTeamColor}>T{parts.team}</span>
-                                            <span class={getPositionColor(parts.type)}>
-                                                {parts.type}{parts.num}
-                                            </span>
+                                        <span class={getPositionColor(parts.type)}>
+                                            {parts.type}
+                                            {parts.num}
                                         </span>
                                     </div>
                                 </div>
@@ -221,7 +222,8 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                         return (
                                             <button
                                                 onClick={() =>
-                                                    canSelect() && props.onChampionSelect(index)
+                                                    canSelect() &&
+                                                    props.onChampionSelect(index)
                                                 }
                                                 class={`relative h-14 w-14 overflow-hidden rounded border-2 transition-all ${
                                                     isPendingSelection()
@@ -274,14 +276,17 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                     <div class="group relative">
                                         <button
                                             onClick={() =>
-                                                canSelect() && props.onChampionSelect(champId())
+                                                canSelect() &&
+                                                props.onChampionSelect(champId())
                                             }
                                             class={`relative h-14 w-14 overflow-hidden rounded border-2 transition-all ${
                                                 isPendingSelection()
                                                     ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
-                                                    : isSeriesRestricted() && !isPendingSelection()
+                                                    : isSeriesRestricted() &&
+                                                        !isPendingSelection()
                                                       ? `cursor-not-allowed ${gameBorderColors[restrictionInfo()?.gameNumber ?? 1] ?? "border-slate-700"}`
-                                                      : isPicked() && !isPendingSelection()
+                                                      : isPicked() &&
+                                                          !isPendingSelection()
                                                         ? `cursor-not-allowed ${gameBorderColors[currentGameNumber()] ?? "border-slate-700"}`
                                                         : canSelect()
                                                           ? "cursor-pointer border-slate-500 hover:scale-105 hover:border-slate-300"
@@ -293,7 +298,8 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                 src={champ.img}
                                                 alt={champ.name}
                                                 class={`h-full w-full object-cover ${
-                                                    (isPicked() || isSeriesRestricted()) &&
+                                                    (isPicked() ||
+                                                        isSeriesRestricted()) &&
                                                     !isPendingSelection()
                                                         ? "opacity-40"
                                                         : ""
@@ -301,7 +307,10 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                             />
                                             {/* Restricted overlay badge */}
                                             <Show
-                                                when={isSeriesRestricted() && !isPendingSelection()}
+                                                when={
+                                                    isSeriesRestricted() &&
+                                                    !isPendingSelection()
+                                                }
                                             >
                                                 {(() => {
                                                     const info = restrictionInfo();
@@ -313,14 +322,19 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                         <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
                                                             <span
                                                                 class={
-                                                                    gameTextColorsMuted[gameNum] ??
-                                                                    "text-slate-300"
+                                                                    gameTextColorsMuted[
+                                                                        gameNum
+                                                                    ] ?? "text-slate-300"
                                                                 }
                                                             >
                                                                 G{gameNum}
                                                             </span>
                                                             <span>
-                                                                <span class={overlayTeamColor}>
+                                                                <span
+                                                                    class={
+                                                                        overlayTeamColor
+                                                                    }
+                                                                >
                                                                     T{parts.team}
                                                                 </span>
                                                                 <span
@@ -345,22 +359,28 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                 }
                                             >
                                                 {(() => {
-                                                    const parts = getDraftPositionParts(
-                                                        currentPickIndex()
-                                                    );
+                                                    const parts =
+                                                        getDraftPositionParts(
+                                                            currentPickIndex()
+                                                        );
                                                     const gameNum = currentGameNumber();
                                                     return (
                                                         <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
                                                             <span
                                                                 class={
-                                                                    gameTextColorsMuted[gameNum] ??
-                                                                    "text-slate-300"
+                                                                    gameTextColorsMuted[
+                                                                        gameNum
+                                                                    ] ?? "text-slate-300"
                                                                 }
                                                             >
                                                                 G{gameNum}
                                                             </span>
                                                             <span>
-                                                                <span class={overlayTeamColor}>
+                                                                <span
+                                                                    class={
+                                                                        overlayTeamColor
+                                                                    }
+                                                                >
                                                                     T{parts.team}
                                                                 </span>
                                                                 <span
