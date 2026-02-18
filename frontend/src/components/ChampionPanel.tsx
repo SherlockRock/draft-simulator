@@ -74,6 +74,99 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
     // Check if draft type shows bans in restrictions (ironman only)
     const showBansInRestrictions = () => props.versusDraft()?.type === "ironman";
 
+    // Inner component for a single game's restricted champions row
+    const GameRestrictedRow: Component<{ game: GameRestrictions }> = (gameProps) => {
+        // Combine champions based on mode
+        const allChampions = createMemo(() => {
+            const champs: { id: string; pickIndex: number }[] = [];
+
+            if (showBansInRestrictions()) {
+                // Ironman: include bans
+                gameProps.game.blueBans.forEach((id, i) => {
+                    if (id && id !== "") champs.push({ id, pickIndex: i });
+                });
+                gameProps.game.redBans.forEach((id, i) => {
+                    if (id && id !== "") champs.push({ id, pickIndex: 5 + i });
+                });
+            }
+
+            // Always include picks
+            gameProps.game.bluePicks.forEach((id, i) => {
+                if (id && id !== "") champs.push({ id, pickIndex: 10 + i });
+            });
+            gameProps.game.redPicks.forEach((id, i) => {
+                if (id && id !== "") champs.push({ id, pickIndex: 15 + i });
+            });
+
+            return champs;
+        });
+
+        const gameColor = () => gameTextColors[gameProps.game.gameNumber] ?? "text-slate-300";
+        const gameBgColor = () => {
+            // Map text colors to bg colors
+            const colorMap: Record<number, string> = {
+                1: "bg-cyan-600",
+                2: "bg-amber-600",
+                3: "bg-fuchsia-600",
+                4: "bg-violet-600",
+                5: "bg-sky-600",
+                6: "bg-emerald-600",
+                7: "bg-rose-600"
+            };
+            return colorMap[gameProps.game.gameNumber] ?? "bg-slate-600";
+        };
+
+        return (
+            <div class="mb-4 flex">
+                {/* Sidebar badge */}
+                <div
+                    class={`flex w-10 flex-shrink-0 flex-col items-center justify-center rounded-l ${gameBgColor()}`}
+                >
+                    <span class="text-[10px] font-bold text-white">Game</span>
+                    <span class="text-lg font-bold text-white">{gameProps.game.gameNumber}</span>
+                </div>
+
+                {/* Champions grid - 5 per row */}
+                <div class="grid flex-1 grid-cols-5 gap-1 rounded-r bg-slate-700/50 p-2">
+                    <For each={allChampions()}>
+                        {({ id, pickIndex }) => {
+                            const champ = champions[parseInt(id)];
+                            if (!champ) return null;
+
+                            const parts = getDraftPositionParts(pickIndex);
+                            const gameNum = gameProps.game.gameNumber;
+
+                            return (
+                                <div
+                                    class={`relative h-14 w-14 overflow-hidden rounded border-2 ${gameBorderColors[gameNum] ?? "border-slate-600"}`}
+                                >
+                                    <img
+                                        src={champ.img}
+                                        alt={champ.name}
+                                        class="h-full w-full object-cover opacity-50"
+                                        title={`${champ.name} - Game ${gameNum} ${getDraftPositionText(pickIndex)}`}
+                                    />
+                                    {/* Position badge */}
+                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
+                                        <span class={gameTextColorsMuted[gameNum] ?? "text-slate-300"}>
+                                            G{gameNum}
+                                        </span>
+                                        <span>
+                                            <span class={overlayTeamColor}>T{parts.team}</span>
+                                            <span class={getPositionColor(parts.type)}>
+                                                {parts.type}{parts.num}
+                                            </span>
+                                        </span>
+                                    </div>
+                                </div>
+                            );
+                        }}
+                    </For>
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div class="flex w-96 flex-col border-l border-slate-700 bg-slate-800">
             {/* Filter bar - fixed at top */}
