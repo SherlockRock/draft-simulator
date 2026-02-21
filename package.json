@@ -1,0 +1,13 @@
+{
+  "name": "draft-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel --filter draft-simulator-frontend --filter draft-simulator-backend dev",
+    "dev:frontend": "pnpm --filter draft-simulator-frontend dev",
+    "dev:backend": "pnpm --filter draft-simulator-backend dev",
+    "build": "pnpm --filter @draft-sim/shared-types build && pnpm --filter draft-simulator-frontend build",
+    "build:types": "pnpm --filter @draft-sim/shared-types build",
+    "typecheck": "pnpm --filter draft-simulator-frontend exec tsc --noEmit"
+  }
+}

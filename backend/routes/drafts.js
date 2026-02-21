@@ -1,5 +1,8 @@
 const express = require("express");
 const router = express.Router();
+// Shared types available after pnpm install:
+// const { DraftSchema } = require("@draft-sim/shared-types");
+// Usage: const result = DraftSchema.safeParse(req.body);
 const Draft = require("../models/Draft");
 const VersusDraft = require("../models/VersusDraft");
 const {

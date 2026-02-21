@@ -1,8 +1,13 @@
 {
-  "name": "socket-chat-example",
+  "name": "draft-simulator-backend",
   "version": "0.0.1",
-  "description": "my first socket.io app",
+  "description": "Draft Simulator backend",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
   "dependencies": {
+    "@draft-sim/shared-types": "workspace:*",
     "connect-session-sequelize": "^7.1.7",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
