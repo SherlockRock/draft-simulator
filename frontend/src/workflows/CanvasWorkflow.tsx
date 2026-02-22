@@ -33,6 +33,7 @@ import { DraftContextMenu } from "../components/DraftContextMenu";
 import { GroupContextMenu } from "../components/GroupContextMenu";
 import { localCopyDraft, localDeleteDraft } from "../utils/useLocalCanvasMutations";
 import { CanvasContext } from "../contexts/CanvasContext";
+import { CanvasSocketProvider } from "../providers/CanvasSocketProvider";
 
 const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     const params = useParams();
@@ -383,8 +384,9 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     };
 
     return (
-        <CanvasContext.Provider
-            value={{
+        <CanvasSocketProvider>
+            <CanvasContext.Provider
+                value={{
                 canvas,
                 mutateCanvas,
                 refetchCanvas,
@@ -947,6 +949,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                 </Show>
             </div>
         </CanvasContext.Provider>
+        </CanvasSocketProvider>
     );
 };
 
