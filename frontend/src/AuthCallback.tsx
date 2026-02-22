@@ -12,8 +12,10 @@ const AuthCallback = () => {
     onMount(() => {
         const code = searchParams.code;
         const state = searchParams.state;
-        if (code && actions && "login" in actions) {
-            actions.login(code, state).catch(() => {
+        const codeStr = Array.isArray(code) ? code[0] : code;
+        const stateStr = Array.isArray(state) ? state[0] : state;
+        if (codeStr && stateStr && actions && "login" in actions) {
+            actions.login(codeStr, stateStr).catch(() => {
                 toast.error(`Failed to sign in`);
                 navigate("/", { replace: true });
             });

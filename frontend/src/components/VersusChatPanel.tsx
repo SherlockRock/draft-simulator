@@ -20,7 +20,9 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
         e.preventDefault();
         const msg = messageInput().trim();
         if (msg && props.socket) {
-            const username = user() && "name" in user() ? user().name : props.socket.id;
+            const currentUser = user();
+            const username =
+                currentUser && "name" in currentUser ? currentUser.name : props.socket.id;
 
             props.socket.emit("sendVersusMessage", {
                 versusDraftId: props.versusDraftId,

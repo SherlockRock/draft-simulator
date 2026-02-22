@@ -10,7 +10,6 @@ import {
     VersusDraftSchema,
     CanvasResponseSchema,
     ShareLinkResponseSchema,
-    CanvasShareLinkResponseSchema,
     UserDetailsSchema,
     CanvasListItemSchema,
     ActivityResponseSchema,
@@ -262,10 +261,9 @@ export const generateCanvasShareLink = async (
     const result = await apiPost(
         `/shares/${canvasId}/generate-canvas-link`,
         { permissions },
-        CanvasShareLinkResponseSchema
+        ShareLinkResponseSchema
     );
-    // Return the appropriate link based on permissions requested
-    return permissions === "edit" ? result.editShareLink : result.viewShareLink;
+    return result.shareLink;
 };
 
 export const fetchCanvasUsers = async (canvasId: string) => {

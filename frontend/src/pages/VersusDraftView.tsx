@@ -554,21 +554,27 @@ const VersusDraftView: Component = () => {
 
     // Actions
     const handleReady = () => {
-        socketAccessor().emit("captainReady", {
+        const socket = socketAccessor();
+        if (!socket) return;
+        socket.emit("captainReady", {
             draftId: params.draftId,
             role: myRole()
         });
     };
 
     const handleUnready = () => {
-        socketAccessor().emit("captainUnready", {
+        const socket = socketAccessor();
+        if (!socket) return;
+        socket.emit("captainUnready", {
             draftId: params.draftId,
             role: myRole()
         });
     };
 
     const handleLockIn = () => {
-        socketAccessor().emit("lockInPick", {
+        const socket = socketAccessor();
+        if (!socket) return;
+        socket.emit("lockInPick", {
             draftId: params.draftId,
             role: myRole()
         });
@@ -576,10 +582,12 @@ const VersusDraftView: Component = () => {
 
     const handleChampionSelect = (championIndex: string) => {
         if (!isMyTurn() || isSpectator()) return;
+        const socket = socketAccessor();
+        if (!socket) return;
 
         // Clicking a champion saves it as pending pick (visible to all)
         // User must click "Lock In" button to advance to next pick
-        socketAccessor().emit("versusPick", {
+        socket.emit("versusPick", {
             draftId: params.draftId,
             champion: championIndex,
             role: myRole()
@@ -616,8 +624,10 @@ const VersusDraftView: Component = () => {
     const handlePause = () => {
         const state = versusState();
         const isCompetitive = versusDraft()?.competitive;
+        const socket = socketAccessor();
+        if (!socket) return;
 
-        socketAccessor().emit("requestPause", {
+        socket.emit("requestPause", {
             draftId: params.draftId,
             role: myRole()
         });
@@ -637,13 +647,15 @@ const VersusDraftView: Component = () => {
     };
 
     const handleApproveRequest = () => {
+        const socket = socketAccessor();
+        if (!socket) return;
         if (pauseRequestType() === "pause") {
-            socketAccessor().emit("approvePause", {
+            socket.emit("approvePause", {
                 draftId: params.draftId,
                 role: myRole()
             });
         } else {
-            socketAccessor().emit("approveResume", {
+            socket.emit("approveResume", {
                 draftId: params.draftId,
                 role: myRole()
             });
@@ -652,8 +664,10 @@ const VersusDraftView: Component = () => {
     };
 
     const handleRejectRequest = () => {
+        const socket = socketAccessor();
+        if (!socket) return;
         if (pauseRequestType() === "resume") {
-            socketAccessor().emit("rejectResume", {
+            socket.emit("rejectResume", {
                 draftId: params.draftId,
                 role: myRole()
             });
@@ -662,7 +676,9 @@ const VersusDraftView: Component = () => {
     };
 
     const handleRequestPickChange = (pickIndex: number, newChampion: string) => {
-        socketAccessor().emit("requestPickChange", {
+        const socket = socketAccessor();
+        if (!socket) return;
+        socket.emit("requestPickChange", {
             draftId: params.draftId,
             pickIndex,
             newChampion,
@@ -677,7 +693,9 @@ const VersusDraftView: Component = () => {
     };
 
     const handleApprovePickChange = (requestId: string) => {
-        socketAccessor().emit("respondPickChange", {
+        const socket = socketAccessor();
+        if (!socket) return;
+        socket.emit("respondPickChange", {
             draftId: params.draftId,
             requestId,
             approved: true,
@@ -688,7 +706,9 @@ const VersusDraftView: Component = () => {
     };
 
     const handleRejectPickChange = (requestId: string) => {
-        socketAccessor().emit("respondPickChange", {
+        const socket = socketAccessor();
+        if (!socket) return;
+        socket.emit("respondPickChange", {
             draftId: params.draftId,
             requestId,
             approved: false,

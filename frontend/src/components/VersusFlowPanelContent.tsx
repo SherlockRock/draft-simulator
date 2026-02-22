@@ -57,7 +57,7 @@ const VersusFlowPanelContent: Component = () => {
     const isOwner = createMemo(() => {
         const vd = versusDraft();
         const uid = userId();
-        return vd && uid && vd.owner_id === uid;
+        return !!(vd && uid && vd.owner_id === uid);
     });
 
     const canEditGameSettings = createMemo(() => {

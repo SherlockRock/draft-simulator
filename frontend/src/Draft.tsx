@@ -97,29 +97,28 @@ function Draft(props: props) {
         if (holdDraft && anonDraft()) {
             setAnonDraft(false);
             navigate(`/canvas/${params.id}/draft/${holdDraft.id}`, { replace: true });
-            socketAccessor().emit("joinRoom", holdDraft.id);
+            socketAccessor()?.emit("joinRoom", holdDraft.id);
         }
     });
 
     createEffect(() => {
-        socketAccessor().on(
-            "draftUpdate",
-            (data: { picks: string[]; id: string } | draft) => {
-                if ("owner_id" in data) {
-                    props.mutate(() => ({
-                        ...data,
-                        picks: [...data.picks]
-                    }));
-                } else {
-                    props.mutate((old) => ({
-                        ...old,
-                        picks: [...data.picks]
-                    }));
-                }
+        const socket = socketAccessor();
+        if (!socket) return;
+        socket.on("draftUpdate", (data: { picks: string[]; id: string } | draft) => {
+            if ("owner_id" in data) {
+                props.mutate(() => ({
+                    ...data,
+                    picks: [...data.picks]
+                }));
+            } else {
+                props.mutate((old) => ({
+                    ...old,
+                    picks: [...data.picks]
+                }));
             }
-        );
+        });
         onCleanup(() => {
-            socketAccessor().off("draftUpdate");
+            socket.off("draftUpdate");
         });
     });
 
@@ -151,7 +150,7 @@ function Draft(props: props) {
             ...old,
             picks: [...holdPicks]
         }));
-        socketAccessor().emit("newDraft", {
+        socketAccessor()?.emit("newDraft", {
             picks: holdPicks,
             id: params.draftId
         });

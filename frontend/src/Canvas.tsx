@@ -535,7 +535,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const emitMove = (draftId: string, positionX: number, positionY: number) => {
         if (isLocalMode()) return;
-        socketAccessor().emit("canvasObjectMove", {
+        const socket = socketAccessor();
+        if (!socket) return;
+        socket.emit("canvasObjectMove", {
             canvasId: canvasId(),
             draftId,
             positionX,
@@ -552,7 +554,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         y: number
     ) => {
         if (isLocalMode()) return;
-        socketAccessor().emit("vertexMove", {
+        const socket = socketAccessor();
+        if (!socket) return;
+        socket.emit("vertexMove", {
             canvasId: canvasId(),
             connectionId,
             vertexId,
@@ -565,7 +569,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const emitGroupMove = (groupId: string, positionX: number, positionY: number) => {
         if (isLocalMode()) return;
-        socketAccessor().emit("groupMove", {
+        const socket = socketAccessor();
+        if (!socket) return;
+        socket.emit("groupMove", {
             canvasId: canvasId(),
             groupId,
             positionX,
@@ -577,7 +583,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const emitGroupResize = (groupId: string, width: number, height: number) => {
         if (isLocalMode()) return;
-        socketAccessor().emit("groupResize", {
+        const socket = socketAccessor();
+        if (!socket) return;
+        socket.emit("groupResize", {
             canvasId: canvasId(),
             groupId,
             width,
@@ -594,8 +602,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
         // Leave old canvas room if switching canvases
         const prevId = loadedCanvasId();
-        if (prevId && !isLocalMode()) {
-            socketAccessor().emit("leaveRoom", prevId);
+        const socket = socketAccessor();
+        if (prevId && !isLocalMode() && socket) {
+            socket.emit("leaveRoom", prevId);
         }
 
         // Reset stores with new canvas data
@@ -617,8 +626,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setDraftToDelete(null);
 
         // Join new canvas room (draft updates broadcast to canvas room)
-        if (!isLocalMode()) {
-            socketAccessor().emit("joinRoom", currentId);
+        if (!isLocalMode() && socket) {
+            socket.emit("joinRoom", currentId);
         }
 
         setLoadedCanvasId(currentId);
@@ -627,14 +636,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // Leave canvas room on component unmount
     onCleanup(() => {
         const prevId = loadedCanvasId();
-        if (prevId && !isLocalMode()) {
-            socketAccessor().emit("leaveRoom", prevId);
+        const socket = socketAccessor();
+        if (prevId && !isLocalMode() && socket) {
+            socket.emit("leaveRoom", prevId);
         }
     });
 
     createEffect(() => {
         if (isLocalMode()) return;
-        socketAccessor().on(
+        const socket = socketAccessor();
+        if (!socket) return;
+        socket.on(
             "canvasUpdate",
             (data: {
                 canvas: { id: string; name: string };
@@ -656,7 +668,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 });
             }
         );
-        socketAccessor().on("draftUpdate", (rawData: unknown) => {
+        socket.on("draftUpdate", (rawData: unknown) => {
             const data = validateSocketEvent(
                 "draftUpdate",
                 rawData,
@@ -667,7 +679,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 ...data.picks
             ]);
         });
-        socketAccessor().on("canvasObjectMoved", (rawData: unknown) => {
+        socket.on("canvasObjectMoved", (rawData: unknown) => {
             const data = validateSocketEvent(
                 "canvasObjectMoved",
                 rawData,
@@ -681,25 +693,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 });
             }
         });
-        socketAccessor().on(
+        socket.on(
             "connectionCreated",
             (data: { connection: Connection; allConnections: Connection[] }) => {
                 setConnections(data.allConnections);
             }
         );
-        socketAccessor().on(
+        socket.on(
             "connectionUpdated",
             (data: { connection: Connection; allConnections: Connection[] }) => {
                 setConnections(data.allConnections);
             }
         );
-        socketAccessor().on(
+        socket.on(
             "connectionDeleted",
             (data: { connectionId: string; allConnections: Connection[] }) => {
                 setConnections(data.allConnections);
             }
         );
-        socketAccessor().on(
+        socket.on(
             "vertexCreated",
             (data: {
                 connectionId: string;
@@ -709,7 +721,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 setConnections(data.allConnections);
             }
         );
-        socketAccessor().on("vertexMoved", (rawData: unknown) => {
+        socket.on("vertexMoved", (rawData: unknown) => {
             const data = validateSocketEvent("vertexMoved", rawData, VertexMovedSchema);
             if (!data) return;
             const vState = vertexDragState();
@@ -726,7 +738,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 );
             }
         });
-        socketAccessor().on(
+        socket.on(
             "vertexUpdated",
             (data: { connectionId: string; vertexId: string; x: number; y: number }) => {
                 const vState = vertexDragState();
@@ -744,7 +756,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 }
             }
         );
-        socketAccessor().on(
+        socket.on(
             "vertexDeleted",
             (data: {
                 connectionId: string;
@@ -760,7 +772,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 );
             }
         );
-        socketAccessor().on("groupMoved", (rawData: unknown) => {
+        socket.on("groupMoved", (rawData: unknown) => {
             const data = validateSocketEvent("groupMoved", rawData, GroupMovedSchema);
             if (!data) return;
             const gState = groupDragState();
@@ -771,7 +783,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 });
             }
         });
-        socketAccessor().on("groupResized", (rawData: unknown) => {
+        socket.on("groupResized", (rawData: unknown) => {
             const data = validateSocketEvent("groupResized", rawData, GroupResizedSchema);
             if (!data) return;
             setCanvasGroups((g) => g.id === data.groupId, {
@@ -780,18 +792,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             });
         });
         onCleanup(() => {
-            socketAccessor().off("canvasUpdate");
-            socketAccessor().off("draftUpdate");
-            socketAccessor().off("canvasObjectMoved");
-            socketAccessor().off("connectionCreated");
-            socketAccessor().off("connectionUpdated");
-            socketAccessor().off("connectionDeleted");
-            socketAccessor().off("vertexCreated");
-            socketAccessor().off("vertexMoved");
-            socketAccessor().off("vertexUpdated");
-            socketAccessor().off("vertexDeleted");
-            socketAccessor().off("groupMoved");
-            socketAccessor().off("groupResized");
+            socket.off("canvasUpdate");
+            socket.off("draftUpdate");
+            socket.off("canvasObjectMoved");
+            socket.off("connectionCreated");
+            socket.off("connectionUpdated");
+            socket.off("connectionDeleted");
+            socket.off("vertexCreated");
+            socket.off("vertexMoved");
+            socket.off("vertexUpdated");
+            socket.off("vertexDeleted");
+            socket.off("groupMoved");
+            socket.off("groupResized");
         });
     });
 
@@ -855,7 +867,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 const holdPicks = [...Draft.picks];
                 holdPicks[pickIndex] = champIndex !== -1 ? String(champIndex) : "";
                 if (!isLocalMode()) {
-                    socketAccessor().emit("newDraft", {
+                    socketAccessor()?.emit("newDraft", {
                         picks: holdPicks,
                         id: draftId
                     });

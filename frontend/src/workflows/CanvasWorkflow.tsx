@@ -481,7 +481,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                         Share
                                                     </button>
                                                     {isSharePopperOpen() && (
-                                                        <div class="absolute left-0 top-full z-10 mt-2 min-w-[250px] rounded-md bg-slate-600 p-3 shadow-lg">
+                                                        <div class="absolute right-0 top-full z-10 mt-2 w-[215px] rounded-md bg-slate-600 p-3 shadow-lg">
                                                             <div class="space-y-3">
                                                                 <div>
                                                                     <p class="mb-1 text-xs font-medium text-slate-300">

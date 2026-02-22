@@ -15,16 +15,29 @@ const CanvasEntryRedirect: Component = () => {
 
     // For signed-in users, fetch their canvas list (already sorted by updatedAt DESC)
     const [canvasList] = createResource(
-        () => (user() ? true : null),
+        () => {
+            // Only fetch when we know user is signed in
+            // user() returns undefined while loading, null/user object when resolved
+            const u = user();
+            // Check if auth query has settled (not undefined = resolved)
+            const hasSettled =
+                u !== undefined || (user as unknown as { isError?: boolean }).isError;
+            if (!hasSettled) return null; // Don't fetch yet
+            return u ? true : null; // Fetch only if signed in
+        },
         () => fetchCanvasList()
     );
 
     createEffect(async () => {
-        // Wait for auth to resolve before making any decisions
-        // user accessor has isLoading property added via Object.defineProperty
-        if ((user as unknown as { isLoading?: boolean }).isLoading) return;
+        // Track user() to make the effect reactive to auth state changes
+        const currentUser = user();
 
-        if (user()) {
+        // Check if auth is still loading (undefined = loading, null = not signed in)
+        // Also check isError for failed auth queries
+        const isError = (user as unknown as { isError?: boolean }).isError;
+        if (currentUser === undefined && !isError) return;
+
+        if (currentUser) {
             // Signed-in user: wait for canvas list to load
             const list = canvasList();
             if (list === undefined) return; // still loading
