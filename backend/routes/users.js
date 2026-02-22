@@ -6,6 +6,7 @@ const { Canvas, UserCanvas, CanvasDraft, CanvasGroup, CanvasConnection } = requi
 const Draft = require("../models/Draft");
 const VersusDraft = require("../models/VersusDraft");
 const VersusParticipant = require("../models/VersusParticipant");
+const UserToken = require("../models/UserToken");
 
 router.get("/", async (req, res) => {
   const token = req.cookies.paseto;
@@ -102,6 +103,82 @@ router.get("/me/export", protect, async (req, res) => {
   } catch (error) {
     console.error("Export error:", error);
     res.status(500).json({ error: "Failed to export data" });
+  }
+});
+
+router.delete("/me", protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { confirmEmail } = req.body;
+
+    // Validate email confirmation
+    if (!confirmEmail || confirmEmail !== req.user.email) {
+      return res.status(400).json({ error: "Email confirmation does not match" });
+    }
+
+    // 1. Get canvases where user is admin (owner)
+    const ownedCanvases = await UserCanvas.findAll({
+      where: { user_id: userId, permissions: "admin" },
+    });
+    const ownedCanvasIds = ownedCanvases.map((uc) => uc.canvas_id);
+
+    // 2. For each owned canvas, find drafts that are ONLY on that canvas
+    for (const canvasId of ownedCanvasIds) {
+      const canvasDrafts = await CanvasDraft.findAll({
+        where: { canvas_id: canvasId },
+      });
+
+      for (const cd of canvasDrafts) {
+        // Check if this draft exists on any OTHER canvas not owned by user
+        const otherCanvasLinks = await CanvasDraft.findAll({
+          where: { draft_id: cd.draft_id },
+        });
+
+        const isSharedElsewhere = otherCanvasLinks.some(
+          (link) => !ownedCanvasIds.includes(link.canvas_id)
+        );
+
+        if (!isSharedElsewhere) {
+          // Safe to delete the draft
+          await Draft.destroy({ where: { id: cd.draft_id } });
+        }
+      }
+
+      // Delete the canvas (cascades to CanvasDraft, CanvasGroup, etc.)
+      await Canvas.destroy({ where: { id: canvasId } });
+    }
+
+    // 3. Anonymize versus series (set owner_id to null)
+    await VersusDraft.update(
+      { owner_id: null },
+      { where: { owner_id: userId } }
+    );
+
+    // 4. Delete user tokens
+    await UserToken.destroy({ where: { UserId: userId } });
+
+    // 5. Delete UserCanvas entries (for shared canvases user doesn't own)
+    await UserCanvas.destroy({ where: { user_id: userId } });
+
+    // 6. Delete user
+    await req.user.destroy();
+
+    // 7. Clear cookies
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+    });
+    res.clearCookie("accessToken", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+    });
+
+    res.json({ success: true, message: "Account deleted" });
+  } catch (error) {
+    console.error("Delete account error:", error);
+    res.status(500).json({ error: "Failed to delete account" });
   }
 });
 
