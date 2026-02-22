@@ -157,7 +157,7 @@ export const VersusDraftSchema = z.object({
   icon: z.string().nullable().optional(),
   type: z.string().nullable().optional(),
   shareLink: z.string(),
-  owner_id: z.string(),
+  owner_id: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
   Drafts: z.array(DraftSchema).optional(),
