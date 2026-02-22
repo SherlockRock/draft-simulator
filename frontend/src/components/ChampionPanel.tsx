@@ -1,4 +1,4 @@
-import { Component, createMemo, For, Show } from "solid-js";
+import { Component, createMemo, createSignal, For, Show } from "solid-js";
 import { FilterBar } from "./FilterBar";
 import { useFilterableItems } from "../hooks/useFilterableItems";
 import {
@@ -29,6 +29,8 @@ interface ChampionPanelProps {
 }
 
 export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
+    const [isExpanded, setIsExpanded] = createSignal(true);
+
     // Filtering state
     const {
         searchText,
@@ -179,8 +181,26 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
     };
 
     return (
-        <div class="flex w-96 flex-col border-l border-slate-700 bg-slate-800">
-            {/* Filter bar - fixed at top */}
+        <div
+            class={`flex flex-col border-l border-slate-700 bg-slate-800 transition-all duration-300 ${
+                isExpanded() ? "w-96" : "w-5"
+            }`}
+        >
+            <div class="flex h-full">
+                {/* Toggle button */}
+                <button
+                    onClick={() => setIsExpanded(!isExpanded())}
+                    class="flex w-5 flex-shrink-0 items-center justify-center border-r border-slate-700/30 bg-slate-800 transition-colors hover:bg-slate-700"
+                >
+                    <span class="text-[10px] text-slate-500">
+                        {isExpanded() ? "▶" : "◀"}
+                    </span>
+                </button>
+
+                {/* Content area */}
+                <Show when={isExpanded()}>
+                    <div class="flex flex-1 flex-col">
+                        {/* Filter bar - fixed at top */}
             <div class="border-b border-slate-700 px-4 py-3">
                 <FilterBar
                     searchText={searchText}
@@ -401,6 +421,9 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                 );
                             }}
                         </For>
+                    </div>
+                </Show>
+            </div>
                     </div>
                 </Show>
             </div>
