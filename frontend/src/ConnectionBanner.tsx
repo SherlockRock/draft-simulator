@@ -1,27 +1,26 @@
-import { Show } from "solid-js";
-import { useUser } from "./userProvider";
+import { Show, Accessor } from "solid-js";
+import { ConnectionStatus, ConnectionInfo } from "./providers/socketUtils";
 
-const ConnectionBanner = () => {
-    const accessor = useUser();
-    const [, userMethods, , connectionStatus, connectionInfo] = accessor();
+type Props = {
+    connectionStatus: Accessor<ConnectionStatus>;
+    connectionInfo: Accessor<ConnectionInfo>;
+    onReconnect: () => void;
+};
 
-    const handleReconnect = () => {
-        userMethods.reconnect();
-    };
-
+const ConnectionBanner = (props: Props) => {
     return (
-        <Show when={connectionStatus() !== "connected"}>
+        <Show when={props.connectionStatus() !== "connected"}>
             <div
                 class="flex items-center justify-center gap-4 p-3 text-center font-bold text-slate-50"
                 classList={{
-                    "bg-yellow-600": connectionStatus() === "connecting",
+                    "bg-yellow-600": props.connectionStatus() === "connecting",
                     "bg-red-600":
-                        connectionStatus() === "disconnected" ||
-                        connectionStatus() === "error"
+                        props.connectionStatus() === "disconnected" ||
+                        props.connectionStatus() === "error"
                 }}
             >
                 <div class="flex items-center gap-2">
-                    <Show when={connectionStatus() === "connecting"}>
+                    <Show when={props.connectionStatus() === "connecting"}>
                         <svg
                             class="h-5 w-5 animate-spin"
                             xmlns="http://www.w3.org/2000/svg"
@@ -44,14 +43,14 @@ const ConnectionBanner = () => {
                         </svg>
                         <span>
                             Reconnecting to server
-                            <Show when={connectionInfo().reconnectAttempts > 0}>
+                            <Show when={props.connectionInfo().reconnectAttempts > 0}>
                                 {" "}
-                                (attempt {connectionInfo().reconnectAttempts})
+                                (attempt {props.connectionInfo().reconnectAttempts})
                             </Show>
                             ...
                         </span>
                     </Show>
-                    <Show when={connectionStatus() === "disconnected"}>
+                    <Show when={props.connectionStatus() === "disconnected"}>
                         <svg
                             class="h-5 w-5"
                             xmlns="http://www.w3.org/2000/svg"
@@ -68,7 +67,7 @@ const ConnectionBanner = () => {
                         </svg>
                         <span>Disconnected from server</span>
                     </Show>
-                    <Show when={connectionStatus() === "error"}>
+                    <Show when={props.connectionStatus() === "error"}>
                         <svg
                             class="h-5 w-5"
                             xmlns="http://www.w3.org/2000/svg"
@@ -88,12 +87,12 @@ const ConnectionBanner = () => {
                 </div>
                 <Show
                     when={
-                        connectionStatus() === "error" ||
-                        connectionStatus() === "disconnected"
+                        props.connectionStatus() === "error" ||
+                        props.connectionStatus() === "disconnected"
                     }
                 >
                     <button
-                        onClick={handleReconnect}
+                        onClick={props.onReconnect}
                         class="rounded-md bg-white/20 px-3 py-1 text-sm font-medium transition-colors hover:bg-white/30"
                     >
                         Reconnect
