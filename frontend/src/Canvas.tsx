@@ -120,6 +120,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const socketAccessor = accessor()[2];
     const canvasContext = useCanvasContext();
 
+    // Route parameter accessor with type narrowing
+    // SolidJS router guarantees params.id exists when this route matches
+    const canvasId = (): string => {
+        const id = params.id;
+        if (id === undefined) throw new Error("Missing required route parameter: id");
+        return id;
+    };
+
     // Reactive permission check - reads directly from context resource
     // This ensures permissions update when navigating between canvases
     const hasEditPermissions = () => {
@@ -127,7 +135,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         return perms === "edit" || perms === "admin";
     };
 
-    const isLocalMode = () => params.id === "local";
+    const isLocalMode = () => canvasId() === "local";
 
     // Helper to refresh canvas data from localStorage after a local mutation
     const refreshFromLocal = () => {
@@ -305,10 +313,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const updateCanvasNameMutation = useMutation(() => ({
         mutationFn: updateCanvasName,
         onSuccess: (data: { name: string; id: string }) => {
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
             toast.success("Canvas name updated");
             queryClient.setQueryData(
-                ["canvas", params.id],
+                ["canvas", canvasId()],
                 (oldData: CanvasResposnse | undefined) => {
                     return oldData ? { ...oldData, name: data.name } : oldData;
                 }
@@ -340,10 +348,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const editDraftMutation = useMutation(() => ({
         mutationFn: (data: { id: string; name: string; public: boolean }) => {
-            return editDraft(data.id, data, params.id);
+            return editDraft(data.id, data, canvasId());
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
             toast.success("Successfully edited draft!");
         },
         onError: (error) => {
@@ -355,7 +363,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         mutationFn: updateCanvasDraftPosition,
         onError: (error: Error) => {
             toast.error(`Failed to save position: ${error.message}`);
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
         }
     }));
 
@@ -392,7 +400,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         mutationFn: createConnection,
         onSuccess: () => {
             toast.success("Connection created!");
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
         },
         onError: (error: Error) => {
             toast.error(`Failed to create connection: ${error.message}`);
@@ -403,7 +411,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         mutationFn: updateConnection,
         onSuccess: () => {
             toast.success("Connection updated!");
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
             setSelectedVertexForConnection(null);
         },
         onError: (error: Error) => {
@@ -415,7 +423,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         mutationFn: deleteConnection,
         onSuccess: () => {
             toast.success("Connection deleted!");
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
         },
         onError: (error: Error) => {
             toast.error(`Failed to delete connection: ${error.message}`);
@@ -425,7 +433,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const createVertexMutation = useMutation(() => ({
         mutationFn: createVertex,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
         },
         onError: (error: Error) => {
             toast.error(`Failed to create vertex: ${error.message}`);
@@ -436,7 +444,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         mutationFn: updateVertex,
         onError: (error: Error) => {
             toast.error(`Failed to update vertex: ${error.message}`);
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
         }
     }));
 
@@ -444,7 +452,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         mutationFn: deleteVertex,
         onSuccess: () => {
             toast.success("Vertex deleted!");
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
         },
         onError: (error: Error) => {
             toast.error(`Failed to delete vertex: ${error.message}`);
@@ -455,7 +463,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         mutationFn: updateCanvasGroupPosition,
         onError: (error: Error) => {
             toast.error(`Failed to save group position: ${error.message}`);
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
         }
     }));
 
@@ -482,7 +490,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const createGroupMutation = useMutation(() => ({
         mutationFn: createCanvasGroup,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
             toast.success("Group created");
         },
         onError: (error: Error) => {
@@ -493,7 +501,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const updateGroupMutation = useMutation(() => ({
         mutationFn: updateCanvasGroup,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["canvas", params.id] });
+            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
         },
         onError: (error: Error) => {
             toast.error(`Failed to update group: ${error.message}`);
@@ -528,7 +536,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const emitMove = (draftId: string, positionX: number, positionY: number) => {
         if (isLocalMode()) return;
         socketAccessor().emit("canvasObjectMove", {
-            canvasId: params.id,
+            canvasId: canvasId(),
             draftId,
             positionX,
             positionY
@@ -545,7 +553,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     ) => {
         if (isLocalMode()) return;
         socketAccessor().emit("vertexMove", {
-            canvasId: params.id,
+            canvasId: canvasId(),
             connectionId,
             vertexId,
             x,
@@ -558,7 +566,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const emitGroupMove = (groupId: string, positionX: number, positionY: number) => {
         if (isLocalMode()) return;
         socketAccessor().emit("groupMove", {
-            canvasId: params.id,
+            canvasId: canvasId(),
             groupId,
             positionX,
             positionY
@@ -570,7 +578,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const emitGroupResize = (groupId: string, width: number, height: number) => {
         if (isLocalMode()) return;
         socketAccessor().emit("groupResize", {
-            canvasId: params.id,
+            canvasId: canvasId(),
             groupId,
             width,
             height
@@ -580,7 +588,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const debouncedEmitGroupResize = debounce(emitGroupResize, 25);
 
     createEffect(() => {
-        const currentId = params.id;
+        const currentId = canvasId();
         const data = props.canvasData;
         if (!data || props.isLoading || currentId === loadedCanvasId()) return;
 
@@ -799,7 +807,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 toast.success("Canvas name updated");
             } else {
                 updateCanvasNameMutation.mutate({
-                    canvasId: params.id,
+                    canvasId: canvasId(),
                     name: newName
                 });
             }
@@ -822,7 +830,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 name: fromBox.Draft.name,
                 picks: fromBox.Draft.picks,
                 public: false,
-                canvas_id: params.id,
+                canvas_id: canvasId(),
                 positionX: fromBox.positionX + 100,
                 positionY: fromBox.positionY + 100
             });
@@ -916,7 +924,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 toast.success("Connection updated!");
             } else {
                 updateConnectionMutation.mutate({
-                    canvasId: params.id,
+                    canvasId: canvasId(),
                     connectionId: selectedVertex.connectionId,
                     addTarget: { draftId, anchorType }
                 });
@@ -939,7 +947,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 toast.success("Connection created!");
             } else {
                 createConnectionMutation.mutate({
-                    canvasId: params.id,
+                    canvasId: canvasId(),
                     sourceDraftIds: [
                         { groupId: groupSource, anchorType: srcAnchor?.type }
                     ],
@@ -967,7 +975,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 toast.success("Connection created!");
             } else {
                 createConnectionMutation.mutate({
-                    canvasId: params.id,
+                    canvasId: canvasId(),
                     sourceDraftIds: [{ draftId: source, anchorType: srcAnchor?.type }],
                     targetDraftIds: [{ draftId, anchorType }]
                 });
@@ -996,7 +1004,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 toast.success("Connection updated!");
             } else {
                 updateConnectionMutation.mutate({
-                    canvasId: params.id,
+                    canvasId: canvasId(),
                     connectionId: selectedVertex.connectionId,
                     addTarget: { groupId, anchorType }
                 });
@@ -1017,7 +1025,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 toast.success("Connection created!");
             } else {
                 createConnectionMutation.mutate({
-                    canvasId: params.id,
+                    canvasId: canvasId(),
                     sourceDraftIds: [{ draftId: source, anchorType: srcAnchor?.type }],
                     targetDraftIds: [{ groupId, anchorType }]
                 });
@@ -1042,7 +1050,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     toast.success("Connection created!");
                 } else {
                     createConnectionMutation.mutate({
-                        canvasId: params.id,
+                        canvasId: canvasId(),
                         sourceDraftIds: [
                             { groupId: groupSource, anchorType: srcAnchor?.type }
                         ],
@@ -1068,7 +1076,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             toast.success("Connection deleted!");
         } else {
             deleteConnectionMutation.mutate({
-                canvasId: params.id,
+                canvasId: canvasId(),
                 connectionId
             });
         }
@@ -1097,7 +1105,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 toast.success("Connection updated!");
             } else {
                 updateConnectionMutation.mutate({
-                    canvasId: params.id,
+                    canvasId: canvasId(),
                     connectionId,
                     addSource: { draftId: source, anchorType: srcAnchor.type }
                 });
@@ -1113,7 +1121,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 toast.success("Connection updated!");
             } else {
                 updateConnectionMutation.mutate({
-                    canvasId: params.id,
+                    canvasId: canvasId(),
                     connectionId,
                     addSource: { groupId: groupSource, anchorType: srcAnchor.type }
                 });
@@ -1139,7 +1147,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 toast.success("Connection updated!");
             } else {
                 updateConnectionMutation.mutate({
-                    canvasId: params.id,
+                    canvasId: canvasId(),
                     connectionId,
                     addSource: { draftId: source, anchorType: srcAnchor.type }
                 });
@@ -1158,7 +1166,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 toast.success("Connection updated!");
             } else {
                 updateConnectionMutation.mutate({
-                    canvasId: params.id,
+                    canvasId: canvasId(),
                     connectionId,
                     addSource: { groupId: groupSource, anchorType: srcAnchor.type }
                 });
@@ -1289,7 +1297,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     name: "New Draft",
                     picks: Array(20).fill(""),
                     public: false,
-                    canvas_id: params.id,
+                    canvas_id: canvasId(),
                     positionX: worldX,
                     positionY: worldY
                 });
@@ -1302,7 +1310,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             localUpdateViewport(viewport);
         } else {
             updateViewportMutation.mutate({
-                canvasId: params.id,
+                canvasId: canvasId(),
                 viewport
             });
         }
@@ -1331,7 +1339,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             refreshFromLocal();
         } else {
             createVertexMutation.mutate({
-                canvasId: params.id,
+                canvasId: canvasId(),
                 connectionId,
                 x,
                 y
@@ -1346,7 +1354,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             toast.success("Vertex deleted!");
         } else {
             deleteVertexMutation.mutate({
-                canvasId: params.id,
+                canvasId: canvasId(),
                 connectionId,
                 vertexId
             });
@@ -1407,7 +1415,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 toast.success("Group removed from canvas");
             } else {
                 deleteGroupMutation.mutate({
-                    canvasId: params.id,
+                    canvasId: canvasId(),
                     groupId: group.id,
                     keepDrafts
                 });
@@ -1431,7 +1439,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             toast.success("Group created");
         } else {
             createGroupMutation.mutate({
-                canvasId: params.id,
+                canvasId: canvasId(),
                 positionX: pos.x,
                 positionY: pos.y
             });
@@ -1445,7 +1453,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             refreshFromLocal();
         } else {
             updateGroupMutation.mutate({
-                canvasId: params.id,
+                canvasId: canvasId(),
                 groupId,
                 name: newName
             });
@@ -1465,7 +1473,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             refreshFromLocal();
         } else {
             updateGroupMutation.mutate({
-                canvasId: params.id,
+                canvasId: canvasId(),
                 groupId,
                 width,
                 height
@@ -1520,7 +1528,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 });
             } else {
                 updateGroupMutation.mutate({
-                    canvasId: params.id,
+                    canvasId: canvasId(),
                     groupId: group.id,
                     width: newWidth,
                     height: newHeight
@@ -1574,7 +1582,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleDraftView = (draft: CanvasDraft) => {
-        navigate(`/canvas/${params.id}/draft/${draft.Draft.id}`);
+        navigate(`/canvas/${canvasId()}/draft/${draft.Draft.id}`);
     };
 
     const handleDraftGoTo = (draft: CanvasDraft) => {
@@ -1613,7 +1621,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             toast.success("Draft copied successfully");
         } else {
             copyDraftMutation.mutate({
-                canvasId: params.id,
+                canvasId: canvasId(),
                 draftId: draft.Draft.id
             });
         }
@@ -1817,7 +1825,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         });
                     } else {
                         updateVertexMutation.mutate({
-                            canvasId: params.id,
+                            canvasId: canvasId(),
                             connectionId: vertexDrag.connectionId,
                             vertexId: vertexDrag.vertexId,
                             x: vertex.x,
@@ -1847,7 +1855,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         });
                     } else {
                         updateGroupPositionMutation.mutate({
-                            canvasId: params.id,
+                            canvasId: canvasId(),
                             groupId: gState.activeGroupId,
                             positionX: group.positionX,
                             positionY: group.positionY
@@ -1907,7 +1915,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             });
                         } else {
                             updateDraftGroupMutation.mutate({
-                                canvasId: params.id,
+                                canvasId: canvasId(),
                                 draftId: finalDraft.Draft.id,
                                 positionX: relativeX,
                                 positionY: relativeY,
@@ -1938,7 +1946,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 });
                             } else {
                                 updateDraftGroupMutation.mutate({
-                                    canvasId: params.id,
+                                    canvasId: canvasId(),
                                     draftId: finalDraft.Draft.id,
                                     positionX: worldX,
                                     positionY: worldY,
@@ -1956,7 +1964,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             });
                         } else {
                             updatePositionMutation.mutate({
-                                canvasId: params.id,
+                                canvasId: canvasId(),
                                 draftId: state.activeBoxId,
                                 positionX: finalDraft.positionX,
                                 positionY: finalDraft.positionY
@@ -2040,7 +2048,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 toast.success("Successfully deleted draft");
             } else {
                 deleteDraftMutation.mutate({
-                    canvas: params.id,
+                    canvas: canvasId(),
                     draft: draftToDelete()?.Draft?.id ?? ""
                 });
             }
@@ -2240,7 +2248,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     <For each={getDraftsForGroup(group.id)}>
                                         {(cd) => (
                                             <CanvasCard
-                                                canvasId={params.id}
+                                                canvasId={canvasId()}
                                                 canvasDraft={cd}
                                                 addBox={addBox}
                                                 deleteBox={deleteBox}
@@ -2295,7 +2303,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
                                     return (
                                         <CanvasCard
-                                            canvasId={params.id}
+                                            canvasId={canvasId()}
                                             canvasDraft={cd}
                                             addBox={addBox}
                                             deleteBox={deleteBox}
@@ -2336,7 +2344,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 <For each={ungroupedDrafts()}>
                     {(cd) => (
                         <CanvasCard
-                            canvasId={params.id}
+                            canvasId={canvasId()}
                             canvasDraft={cd}
                             addBox={addBox}
                             deleteBox={deleteBox}
@@ -2397,7 +2405,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     onCancel={() => setIsImportDialogOpen(false)}
                     body={
                         <ImportToCanvasDialog
-                            canvasId={params.id}
+                            canvasId={canvasId()}
                             positionX={importPosition().x}
                             positionY={importPosition().y}
                             onClose={() => setIsImportDialogOpen(false)}
@@ -2490,7 +2498,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         name: "New Draft",
                                         picks: Array(20).fill(""),
                                         public: false,
-                                        canvas_id: params.id,
+                                        canvas_id: canvasId(),
                                         positionX: pos.x,
                                         positionY: pos.y
                                     });

@@ -40,6 +40,13 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     const accessor = useUser();
     const [user] = accessor();
 
+    // Route parameter accessor with type narrowing
+    const canvasId = (): string => {
+        const id = params.id;
+        if (id === undefined) throw new Error("Missing required route parameter: id");
+        return id;
+    };
+
     const [canvasList, { mutate: mutateCanvasList, refetch: refetchCanvasList }] =
         createResource<any[]>(async () => {
             if (!user()) {
@@ -175,12 +182,12 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     const usersQuery = useQuery(() => ({
         queryKey: ["canvasUsers", params.id],
         enabled: isManageUsersOpen() && !!params.id,
-        queryFn: () => fetchCanvasUsers(params.id)
+        queryFn: () => fetchCanvasUsers(canvasId())
     }));
 
     const viewShareLinkQuery = useQuery(() => ({
         queryKey: ["canvasShareLink", params.id, "view"],
-        queryFn: () => generateCanvasShareLink(params.id, "view"),
+        queryFn: () => generateCanvasShareLink(canvasId(), "view"),
         enabled: isSharePopperOpen() && !!params.id && hasAdminPermissions(),
         staleTime: 5 * 60 * 1000,
         retry: false
@@ -188,7 +195,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
 
     const editShareLinkQuery = useQuery(() => ({
         queryKey: ["canvasShareLink", params.id, "edit"],
-        queryFn: () => generateCanvasShareLink(params.id, "edit"),
+        queryFn: () => generateCanvasShareLink(canvasId(), "edit"),
         enabled: isSharePopperOpen() && !!params.id && hasAdminPermissions(),
         staleTime: 5 * 60 * 1000,
         retry: false
@@ -204,7 +211,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
 
     const updatePermissionMutation = useMutation(() => ({
         mutationFn: (data: { userId: string; permissions: string }) =>
-            updateCanvasUserPermission(params.id, data.userId, data.permissions),
+            updateCanvasUserPermission(canvasId(), data.userId, data.permissions),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["canvasUsers", params.id] });
             toast.success("Permissions updated");
@@ -215,7 +222,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     }));
 
     const removeUserMutation = useMutation(() => ({
-        mutationFn: (userId: string) => removeUserFromCanvas(params.id, userId),
+        mutationFn: (userId: string) => removeUserFromCanvas(canvasId(), userId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["canvasUsers", params.id] });
             toast.success("User removed");
@@ -247,7 +254,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         }
     }));
 
-    const isLocalMode = () => params.id === "local";
+    const isLocalMode = () => canvasId() === "local";
 
     const handleSidebarDraftContextMenu = (draft: CanvasDraft, e: MouseEvent) => {
         e.preventDefault();
@@ -275,7 +282,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     };
 
     const handleSidebarDraftView = (draft: CanvasDraft) => {
-        navigate(`/canvas/${params.id}/draft/${draft.Draft.id}`);
+        navigate(`/canvas/${canvasId()}/draft/${draft.Draft.id}`);
     };
 
     const handleSidebarDraftGoTo = (draft: CanvasDraft) => {
@@ -318,7 +325,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
             toast.success("Draft copied successfully");
         } else {
             copyDraftMutation.mutate({
-                canvasId: params.id,
+                canvasId: canvasId(),
                 draftId: draft.Draft.id
             });
         }
@@ -332,7 +339,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                 toast.success("Draft deleted successfully");
             } else {
                 deleteDraftMutation.mutate({
-                    canvas: params.id,
+                    canvas: canvasId(),
                     draft: draft.Draft.id
                 });
             }
@@ -420,8 +427,8 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                     <FlowPanel flow="canvas">
                         <div class="flex h-full flex-col gap-2 pt-4">
                             {/* Canvas Selector - hidden when viewing a draft or in local mode */}
-                            <Show when={!isDraftView() && params.id !== "local"}>
-                                <CanvasSelector selectedId={params.id} />
+                            <Show when={!isDraftView() && canvasId() !== "local"}>
+                                <CanvasSelector selectedId={canvasId()} />
                             </Show>
 
                             {/* Control buttons - hidden when viewing a draft */}
@@ -437,7 +444,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                         <Show
                                             when={
                                                 hasAdminPermissions() &&
-                                                params.id !== "local"
+                                                canvasId() !== "local"
                                             }
                                             fallback={
                                                 <button
@@ -575,7 +582,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                             {/* Back to canvas link when viewing a draft */}
                             <Show when={isDraftView()}>
                                 <button
-                                    onClick={() => navigate(`/canvas/${params.id}`)}
+                                    onClick={() => navigate(`/canvas/${canvasId()}`)}
                                     class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-300 hover:bg-slate-700"
                                 >
                                     <span>&larr;</span>
@@ -710,7 +717,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                                     isDraftView()
                                                                                 ) {
                                                                                     navigate(
-                                                                                        `/canvas/${params.id}/draft/${canvasDraft.Draft.id}`
+                                                                                        `/canvas/${canvasId()}/draft/${canvasDraft.Draft.id}`
                                                                                     );
                                                                                 } else {
                                                                                     const callback =
@@ -766,7 +773,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                             onClick={() => {
                                                                 if (isDraftView()) {
                                                                     navigate(
-                                                                        `/canvas/${params.id}/draft/${canvasDraft.Draft.id}`
+                                                                        `/canvas/${canvasId()}/draft/${canvasDraft.Draft.id}`
                                                                     );
                                                                 } else {
                                                                     const callback =

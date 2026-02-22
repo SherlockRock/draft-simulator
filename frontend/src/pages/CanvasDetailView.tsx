@@ -18,6 +18,13 @@ const CanvasDetailView: Component = () => {
     const [viewport, setViewport] = createSignal<Viewport>({ x: 0, y: 0, zoom: 1 });
     let canvasContainerRef: HTMLDivElement | undefined;
 
+    // Route parameter accessor with type narrowing
+    const canvasId = (): string => {
+        const id = params.id;
+        if (id === undefined) throw new Error("Missing required route parameter: id");
+        return id;
+    };
+
     const newDraftMutation = useMutation(() => ({
         mutationFn: (data: {
             name: string;
@@ -47,7 +54,7 @@ const CanvasDetailView: Component = () => {
             const positionX = centerWorldX - currentWidth / 2;
             const positionY = centerWorldY - currentHeight / 2;
 
-            if (params.id === "local") {
+            if (canvasId() === "local") {
                 localNewDraft({
                     name: "New Draft",
                     picks: Array(20).fill(""),
@@ -71,7 +78,7 @@ const CanvasDetailView: Component = () => {
                     name: "New Draft",
                     picks: Array(20).fill(""),
                     public: false,
-                    canvas_id: params.id,
+                    canvas_id: canvasId(),
                     positionX,
                     positionY
                 });
@@ -88,7 +95,7 @@ const CanvasDetailView: Component = () => {
         });
     });
 
-    const isLocalMode = () => params.id === "local";
+    const isLocalMode = () => canvasId() === "local";
 
     return (
         <AuthGuard requireAuth={!isLocalMode()}>
