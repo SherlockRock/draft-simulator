@@ -10,6 +10,7 @@ import AuthCallback from "./AuthCallback";
 import ShareDraftPage from "./ShareDraftPage";
 import ShareCanvasPage from "./ShareCanvasPage";
 import HomePage from "./pages/HomePage";
+import SettingsPage from "./pages/SettingsPage";
 
 import CanvasFlowDashboard from "./pages/CanvasFlowDashboard";
 import CanvasEntryRedirect from "./components/CanvasEntryRedirect";
@@ -41,6 +42,7 @@ render(
                 <Route path="/share/canvas" component={ShareCanvasPage} />
                 <Route path="/" component={UserWrapper}>
                     <Route path="/oauth2callback" component={AuthCallback} />
+                    <Route path="/settings" component={SettingsPage} />
                     <Route path="/" component={HomePage} />
                     <Route path="/canvas" component={CanvasWorkflow}>
                         <Route path="/" component={CanvasEntryRedirect} />
