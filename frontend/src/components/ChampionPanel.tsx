@@ -153,7 +153,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
 
                             return (
                                 <div
-                                    class={`relative h-14 w-14 overflow-hidden rounded border-2 ${gameBorderColors[gameNum] ?? "border-slate-600"}`}
+                                    class={`relative aspect-square w-full overflow-hidden rounded border-2 ${gameBorderColors[gameNum] ?? "border-slate-600"}`}
                                 >
                                     <img
                                         src={champ.img}
@@ -183,14 +183,14 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
     return (
         <div
             class={`flex flex-col border-l border-slate-700 bg-slate-800 transition-all duration-300 ${
-                isExpanded() ? "w-96" : "w-5"
+                isExpanded() ? "w-[min(26vw,384px)]" : "w-5"
             }`}
         >
             <div class="flex h-full">
                 {/* Toggle button */}
                 <button
                     onClick={() => setIsExpanded(!isExpanded())}
-                    class="flex w-5 flex-shrink-0 items-center justify-center border-r border-slate-700/30 bg-slate-800 transition-colors hover:bg-slate-700"
+                    class="flex w-5 flex-shrink-0 items-center justify-center border-r border-slate-700 bg-slate-800 transition-colors hover:bg-slate-700"
                 >
                     <span class="text-[10px] text-slate-500">
                         {isExpanded() ? "▶" : "◀"}
@@ -201,229 +201,261 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                 <Show when={isExpanded()}>
                     <div class="flex flex-1 flex-col">
                         {/* Filter bar - fixed at top */}
-            <div class="border-b border-slate-700 px-4 py-3">
-                <FilterBar
-                    searchText={searchText}
-                    onSearchChange={setSearchText}
-                    selectedCategory={selectedCategory}
-                    onCategoryChange={setSelectedCategory}
-                    categories={championCategoryList}
-                    searchPlaceholder="Search champions..."
-                    categoryPlaceholder="Role"
-                    theme="orange"
-                />
-            </div>
-
-            {/* Content area */}
-            <div class="flex-1 overflow-y-auto">
-                <Show when={!isFiltering()}>
-                    <div class="p-4">
-                        {/* Game restricted sections */}
-                        <Show when={props.restrictedByGame().length > 0}>
-                            <For each={props.restrictedByGame()}>
-                                {(game) => <GameRestrictedRow game={game} />}
-                            </For>
-                        </Show>
-
-                        {/* Available section */}
-                        <div class="mt-4">
-                            <div class="mb-3 text-center text-sm font-medium text-slate-400">
-                                Available
-                            </div>
-                            <div class="grid grid-cols-5 gap-2">
-                                <For each={availableChampions()}>
-                                    {({ champ, index }) => {
-                                        const isPendingSelection = () =>
-                                            props.getCurrentPendingChampion() === index &&
-                                            props.isMyTurn();
-                                        const canSelect = () =>
-                                            props.isMyTurn() && !props.isPaused();
-
-                                        return (
-                                            <button
-                                                onClick={() =>
-                                                    canSelect() &&
-                                                    props.onChampionSelect(index)
-                                                }
-                                                class={`relative h-14 w-14 overflow-hidden rounded border-2 transition-all ${
-                                                    isPendingSelection()
-                                                        ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
-                                                        : canSelect()
-                                                          ? "cursor-pointer border-slate-500 hover:scale-105 hover:border-slate-300"
-                                                          : "cursor-default border-slate-600"
-                                                }`}
-                                                title={champ.name}
-                                            >
-                                                <img
-                                                    src={champ.img}
-                                                    alt={champ.name}
-                                                    class="h-full w-full object-cover"
-                                                />
-                                            </button>
-                                        );
-                                    }}
-                                </For>
-                            </div>
+                        <div class="border-b border-slate-700 px-4 py-3">
+                            <FilterBar
+                                searchText={searchText}
+                                onSearchChange={setSearchText}
+                                selectedCategory={selectedCategory}
+                                onCategoryChange={setSelectedCategory}
+                                categories={championCategoryList}
+                                searchPlaceholder="Search champions..."
+                                categoryPlaceholder="Role"
+                                theme="orange"
+                            />
                         </div>
-                    </div>
-                </Show>
 
-                <Show when={isFiltering()}>
-                    <div class="grid grid-cols-5 content-start gap-2 p-4">
-                        <For each={filteredChampions()}>
-                            {({ item: champ, originalIndex }) => {
-                                const champId = () => String(originalIndex);
-                                const isPicked = () =>
-                                    (props.draft()?.picks ?? []).includes(champId());
-                                const isSeriesRestricted = () =>
-                                    props.restrictedChampions().includes(champId());
-                                const isPendingSelection = () =>
-                                    props.getCurrentPendingChampion() === champId() &&
-                                    props.isMyTurn();
-                                const canSelect = () =>
-                                    props.isMyTurn() &&
-                                    !isPicked() &&
-                                    !isSeriesRestricted() &&
-                                    !props.isPaused();
-                                const restrictionInfo = () =>
-                                    props.restrictedChampionGameMap().get(champId());
-                                const currentPickIndex = () => {
-                                    const picks = props.draft()?.picks ?? [];
-                                    return picks.indexOf(champId());
-                                };
+                        {/* Content area */}
+                        <div class="custom-scrollbar flex-1 overflow-y-auto">
+                            <Show when={!isFiltering()}>
+                                <div class="p-4">
+                                    {/* Game restricted sections */}
+                                    <Show when={props.restrictedByGame().length > 0}>
+                                        <For each={props.restrictedByGame()}>
+                                            {(game) => <GameRestrictedRow game={game} />}
+                                        </For>
+                                    </Show>
 
-                                return (
-                                    <div class="group relative">
-                                        <button
-                                            onClick={() =>
-                                                canSelect() &&
-                                                props.onChampionSelect(champId())
-                                            }
-                                            class={`relative h-14 w-14 overflow-hidden rounded border-2 transition-all ${
-                                                isPendingSelection()
-                                                    ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
-                                                    : isSeriesRestricted() &&
-                                                        !isPendingSelection()
-                                                      ? `cursor-not-allowed ${gameBorderColors[restrictionInfo()?.gameNumber ?? 1] ?? "border-slate-700"}`
-                                                      : isPicked() &&
-                                                          !isPendingSelection()
-                                                        ? `cursor-not-allowed ${gameBorderColors[currentGameNumber()] ?? "border-slate-700"}`
-                                                        : canSelect()
-                                                          ? "cursor-pointer border-slate-500 hover:scale-105 hover:border-slate-300"
-                                                          : "cursor-default border-slate-600"
-                                            }`}
-                                            title={champ.name}
-                                        >
-                                            <img
-                                                src={champ.img}
-                                                alt={champ.name}
-                                                class={`h-full w-full object-cover ${
-                                                    (isPicked() ||
-                                                        isSeriesRestricted()) &&
-                                                    !isPendingSelection()
-                                                        ? "opacity-40"
-                                                        : ""
-                                                }`}
-                                            />
-                                            {/* Restricted overlay badge */}
-                                            <Show
-                                                when={
-                                                    isSeriesRestricted() &&
-                                                    !isPendingSelection()
-                                                }
-                                            >
-                                                {(() => {
-                                                    const info = restrictionInfo();
-                                                    const parts = getDraftPositionParts(
-                                                        info?.pickIndex ?? 0
-                                                    );
-                                                    const gameNum = info?.gameNumber ?? 1;
+                                    {/* Available section */}
+                                    <div class="mt-4">
+                                        <div class="mb-3 text-center text-sm font-medium text-slate-400">
+                                            Available
+                                        </div>
+                                        <div class="grid grid-cols-5 gap-2">
+                                            <For each={availableChampions()}>
+                                                {({ champ, index }) => {
+                                                    const isPendingSelection = () =>
+                                                        props.getCurrentPendingChampion() ===
+                                                            index && props.isMyTurn();
+                                                    const canSelect = () =>
+                                                        props.isMyTurn() &&
+                                                        !props.isPaused();
+
                                                     return (
-                                                        <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
-                                                            <span
-                                                                class={
-                                                                    gameTextColorsMuted[
-                                                                        gameNum
-                                                                    ] ?? "text-slate-300"
-                                                                }
-                                                            >
-                                                                G{gameNum}
-                                                            </span>
-                                                            <span>
-                                                                <span
-                                                                    class={
-                                                                        overlayTeamColor
-                                                                    }
-                                                                >
-                                                                    T{parts.team}
-                                                                </span>
-                                                                <span
-                                                                    class={getPositionColor(
-                                                                        parts.type
-                                                                    )}
-                                                                >
-                                                                    {parts.type}
-                                                                    {parts.num}
-                                                                </span>
-                                                            </span>
-                                                        </div>
+                                                        <button
+                                                            onClick={() =>
+                                                                canSelect() &&
+                                                                props.onChampionSelect(
+                                                                    index
+                                                                )
+                                                            }
+                                                            class={`relative aspect-square w-full overflow-hidden rounded border-2 transition-all ${
+                                                                isPendingSelection()
+                                                                    ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
+                                                                    : canSelect()
+                                                                      ? "cursor-pointer border-slate-500 hover:scale-105 hover:border-slate-300"
+                                                                      : "cursor-default border-slate-600"
+                                                            }`}
+                                                            title={champ.name}
+                                                        >
+                                                            <img
+                                                                src={champ.img}
+                                                                alt={champ.name}
+                                                                class="h-full w-full object-cover"
+                                                            />
+                                                        </button>
                                                     );
-                                                })()}
-                                            </Show>
-                                            {/* Current game picked overlay badge */}
-                                            <Show
-                                                when={
-                                                    isPicked() &&
-                                                    !isSeriesRestricted() &&
-                                                    !isPendingSelection()
-                                                }
-                                            >
-                                                {(() => {
-                                                    const parts =
-                                                        getDraftPositionParts(
-                                                            currentPickIndex()
-                                                        );
-                                                    const gameNum = currentGameNumber();
-                                                    return (
-                                                        <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
-                                                            <span
-                                                                class={
-                                                                    gameTextColorsMuted[
-                                                                        gameNum
-                                                                    ] ?? "text-slate-300"
-                                                                }
-                                                            >
-                                                                G{gameNum}
-                                                            </span>
-                                                            <span>
-                                                                <span
-                                                                    class={
-                                                                        overlayTeamColor
-                                                                    }
-                                                                >
-                                                                    T{parts.team}
-                                                                </span>
-                                                                <span
-                                                                    class={getPositionColor(
-                                                                        parts.type
-                                                                    )}
-                                                                >
-                                                                    {parts.type}
-                                                                    {parts.num}
-                                                                </span>
-                                                            </span>
-                                                        </div>
-                                                    );
-                                                })()}
-                                            </Show>
-                                        </button>
+                                                }}
+                                            </For>
+                                        </div>
                                     </div>
-                                );
-                            }}
-                        </For>
-                    </div>
-                </Show>
-            </div>
+                                </div>
+                            </Show>
+
+                            <Show when={isFiltering()}>
+                                <div class="grid grid-cols-5 content-start gap-2 p-4">
+                                    <For each={filteredChampions()}>
+                                        {({ item: champ, originalIndex }) => {
+                                            const champId = () => String(originalIndex);
+                                            const isPicked = () =>
+                                                (props.draft()?.picks ?? []).includes(
+                                                    champId()
+                                                );
+                                            const isSeriesRestricted = () =>
+                                                props
+                                                    .restrictedChampions()
+                                                    .includes(champId());
+                                            const isPendingSelection = () =>
+                                                props.getCurrentPendingChampion() ===
+                                                    champId() && props.isMyTurn();
+                                            const canSelect = () =>
+                                                props.isMyTurn() &&
+                                                !isPicked() &&
+                                                !isSeriesRestricted() &&
+                                                !props.isPaused();
+                                            const restrictionInfo = () =>
+                                                props
+                                                    .restrictedChampionGameMap()
+                                                    .get(champId());
+                                            const currentPickIndex = () => {
+                                                const picks = props.draft()?.picks ?? [];
+                                                return picks.indexOf(champId());
+                                            };
+
+                                            return (
+                                                <div class="group relative">
+                                                    <button
+                                                        onClick={() =>
+                                                            canSelect() &&
+                                                            props.onChampionSelect(
+                                                                champId()
+                                                            )
+                                                        }
+                                                        class={`relative aspect-square w-full overflow-hidden rounded border-2 transition-all ${
+                                                            isPendingSelection()
+                                                                ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
+                                                                : isSeriesRestricted() &&
+                                                                    !isPendingSelection()
+                                                                  ? `cursor-not-allowed ${gameBorderColors[restrictionInfo()?.gameNumber ?? 1] ?? "border-slate-700"}`
+                                                                  : isPicked() &&
+                                                                      !isPendingSelection()
+                                                                    ? `cursor-not-allowed ${gameBorderColors[currentGameNumber()] ?? "border-slate-700"}`
+                                                                    : canSelect()
+                                                                      ? "cursor-pointer border-slate-500 hover:scale-105 hover:border-slate-300"
+                                                                      : "cursor-default border-slate-600"
+                                                        }`}
+                                                        title={champ.name}
+                                                    >
+                                                        <img
+                                                            src={champ.img}
+                                                            alt={champ.name}
+                                                            class={`h-full w-full object-cover ${
+                                                                (isPicked() ||
+                                                                    isSeriesRestricted()) &&
+                                                                !isPendingSelection()
+                                                                    ? "opacity-40"
+                                                                    : ""
+                                                            }`}
+                                                        />
+                                                        {/* Restricted overlay badge */}
+                                                        <Show
+                                                            when={
+                                                                isSeriesRestricted() &&
+                                                                !isPendingSelection()
+                                                            }
+                                                        >
+                                                            {(() => {
+                                                                const info =
+                                                                    restrictionInfo();
+                                                                const parts =
+                                                                    getDraftPositionParts(
+                                                                        info?.pickIndex ??
+                                                                            0
+                                                                    );
+                                                                const gameNum =
+                                                                    info?.gameNumber ?? 1;
+                                                                return (
+                                                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
+                                                                        <span
+                                                                            class={
+                                                                                gameTextColorsMuted[
+                                                                                    gameNum
+                                                                                ] ??
+                                                                                "text-slate-300"
+                                                                            }
+                                                                        >
+                                                                            G{gameNum}
+                                                                        </span>
+                                                                        <span>
+                                                                            <span
+                                                                                class={
+                                                                                    overlayTeamColor
+                                                                                }
+                                                                            >
+                                                                                T
+                                                                                {
+                                                                                    parts.team
+                                                                                }
+                                                                            </span>
+                                                                            <span
+                                                                                class={getPositionColor(
+                                                                                    parts.type
+                                                                                )}
+                                                                            >
+                                                                                {
+                                                                                    parts.type
+                                                                                }
+                                                                                {
+                                                                                    parts.num
+                                                                                }
+                                                                            </span>
+                                                                        </span>
+                                                                    </div>
+                                                                );
+                                                            })()}
+                                                        </Show>
+                                                        {/* Current game picked overlay badge */}
+                                                        <Show
+                                                            when={
+                                                                isPicked() &&
+                                                                !isSeriesRestricted() &&
+                                                                !isPendingSelection()
+                                                            }
+                                                        >
+                                                            {(() => {
+                                                                const parts =
+                                                                    getDraftPositionParts(
+                                                                        currentPickIndex()
+                                                                    );
+                                                                const gameNum =
+                                                                    currentGameNumber();
+                                                                return (
+                                                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
+                                                                        <span
+                                                                            class={
+                                                                                gameTextColorsMuted[
+                                                                                    gameNum
+                                                                                ] ??
+                                                                                "text-slate-300"
+                                                                            }
+                                                                        >
+                                                                            G{gameNum}
+                                                                        </span>
+                                                                        <span>
+                                                                            <span
+                                                                                class={
+                                                                                    overlayTeamColor
+                                                                                }
+                                                                            >
+                                                                                T
+                                                                                {
+                                                                                    parts.team
+                                                                                }
+                                                                            </span>
+                                                                            <span
+                                                                                class={getPositionColor(
+                                                                                    parts.type
+                                                                                )}
+                                                                            >
+                                                                                {
+                                                                                    parts.type
+                                                                                }
+                                                                                {
+                                                                                    parts.num
+                                                                                }
+                                                                            </span>
+                                                                        </span>
+                                                                    </div>
+                                                                );
+                                                            })()}
+                                                        </Show>
+                                                    </button>
+                                                </div>
+                                            );
+                                        }}
+                                    </For>
+                                </div>
+                            </Show>
+                        </div>
                     </div>
                 </Show>
             </div>

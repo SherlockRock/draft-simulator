@@ -39,19 +39,8 @@ import { ReadyButton } from "../components/ReadyButton";
 import { WinnerDeclarationModal } from "../components/WinnerDeclarationModal";
 import { PauseRequestModal } from "../components/PauseRequestModal";
 import { GameSettingsGrid } from "../components/GameSettingsGrid";
-import {
-    champions,
-    championCategories,
-    gameTextColors,
-    gameTextColorsMuted,
-    gameBorderColors,
-    overlayTeamColor,
-    overlayBanColor,
-    overlayPickColor,
-    getSplashUrl
-} from "../utils/constants";
+import { champions, gameTextColors, getSplashUrl } from "../utils/constants";
 import toast from "solid-toast";
-import BlankSquare from "/src/assets/BlankSquare.webp";
 import { ChampionPanel } from "../components/ChampionPanel";
 import {
     getRestrictedChampions,
@@ -810,35 +799,6 @@ const VersusDraftView: Component = () => {
         return map;
     });
 
-    // Parse pick index into components for colorized rendering
-    const getDraftPositionParts = (
-        pickIndex: number
-    ): { team: number; type: "B" | "P"; num: number } => {
-        if (pickIndex < 5) return { team: 1, type: "B", num: pickIndex + 1 };
-        if (pickIndex < 10) return { team: 2, type: "B", num: pickIndex - 4 };
-        if (pickIndex < 15) return { team: 1, type: "P", num: pickIndex - 9 };
-        return { team: 2, type: "P", num: pickIndex - 14 };
-    };
-
-    // Get color class for a position (ban or pick) - uses subtle slate colors
-    const getPositionColor = (type: "B" | "P"): string => {
-        return type === "B" ? overlayBanColor : overlayPickColor;
-    };
-
-    // Convert a picks array index (0-19) to a full-text label for tooltips
-    const getDraftPositionText = (pickIndex: number): string => {
-        if (pickIndex < 5) return `Team 1 Ban ${pickIndex + 1}`;
-        if (pickIndex < 10) return `Team 2 Ban ${pickIndex - 4}`;
-        if (pickIndex < 15) return `Team 1 Pick ${pickIndex - 9}`;
-        return `Team 2 Pick ${pickIndex - 14}`;
-    };
-
-    // Check if Restricted tab should be shown (not Standard mode)
-    const showRestrictedTab = createMemo(() => {
-        const vd = versusDraft();
-        return vd && vd.type && vd.type !== "standard";
-    });
-
     // Get the next game in the series (if any)
     const nextGame = createMemo(() => {
         const vd = versusDraft();
@@ -989,21 +949,23 @@ const VersusDraftView: Component = () => {
                         {/* Main Content */}
                         <div class="flex flex-1 overflow-hidden">
                             {/* Drafts Display - now takes full remaining width */}
-                            <div class="flex flex-1 flex-col p-6">
+                            <div class="flex min-w-0 flex-1 flex-col p-6">
                                 {/* Team Names */}
                                 <div class="mb-4 flex items-center">
                                     {/* Blue Team */}
-                                    <div class="flex min-w-0 flex-1 flex-col items-start gap-2">
-                                        <Show
-                                            when={
-                                                (versusState().firstPick || "blue") ===
-                                                "blue"
-                                            }
-                                        >
-                                            <span class="rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
-                                                1st Pick
-                                            </span>
-                                        </Show>
+                                    <div class="flex min-w-0 flex-1 flex-col items-start gap-1">
+                                        <div class="h-5">
+                                            <Show
+                                                when={
+                                                    (versusState().firstPick ||
+                                                        "blue") === "blue"
+                                                }
+                                            >
+                                                <span class="rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+                                                    1st Pick
+                                                </span>
+                                            </Show>
+                                        </div>
                                         <div class="text-xl font-bold text-blue-400">
                                             {blueSideTeamName()}
                                         </div>
@@ -1069,17 +1031,19 @@ const VersusDraftView: Component = () => {
                                         </Show>
                                     </div>
                                     {/* Red Team */}
-                                    <div class="flex min-w-0 flex-1 flex-col items-end gap-2">
-                                        <Show
-                                            when={
-                                                (versusState().firstPick || "blue") ===
-                                                "red"
-                                            }
-                                        >
-                                            <span class="rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
-                                                1st Pick
-                                            </span>
-                                        </Show>
+                                    <div class="flex min-w-0 flex-1 flex-col items-end gap-1">
+                                        <div class="h-5">
+                                            <Show
+                                                when={
+                                                    (versusState().firstPick ||
+                                                        "blue") === "red"
+                                                }
+                                            >
+                                                <span class="rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+                                                    1st Pick
+                                                </span>
+                                            </Show>
+                                        </div>
                                         <div class="text-xl font-bold text-red-400">
                                             {redSideTeamName()}
                                         </div>
@@ -1110,15 +1074,12 @@ const VersusDraftView: Component = () => {
 
                                 {/* Bans */}
                                 <div class="mb-6">
-                                    <div class="mb-2 text-sm font-semibold text-slate-400">
-                                        Bans
-                                    </div>
-                                    <div class="flex justify-between gap-4">
-                                        <div class="flex gap-3">
+                                    <div class="flex justify-between gap-8">
+                                        <div class="flex min-w-0 flex-1 gap-2">
                                             <For each={getTeamBans("blue")}>
                                                 {(ban, index) => (
                                                     <div
-                                                        class={`h-20 w-20 rounded border-2 bg-slate-800 transition-all ${
+                                                        class={`relative aspect-square flex-1 overflow-hidden rounded border-2 bg-slate-800 transition-all ${
                                                             isBanActive("blue", index())
                                                                 ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
                                                                 : "border-blue-600/30"
@@ -1132,18 +1093,21 @@ const VersusDraftView: Component = () => {
                                                                     ].img
                                                                 }
                                                                 alt=""
-                                                                class="h-full w-full rounded object-cover opacity-50"
+                                                                class="h-full w-full object-cover"
                                                             />
+                                                            <div class="absolute inset-0 flex items-center justify-center">
+                                                                <div class="h-[100%] w-1 -rotate-45 bg-slate-200" />
+                                                            </div>
                                                         </Show>
                                                     </div>
                                                 )}
                                             </For>
                                         </div>
-                                        <div class="flex gap-3">
+                                        <div class="flex min-w-0 flex-1 gap-2">
                                             <For each={getTeamBans("red")}>
                                                 {(ban, index) => (
                                                     <div
-                                                        class={`h-20 w-20 rounded border-2 bg-slate-800 transition-all ${
+                                                        class={`relative aspect-square flex-1 overflow-hidden rounded border-2 bg-slate-800 transition-all ${
                                                             isBanActive("red", index())
                                                                 ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
                                                                 : "border-red-600/30"
@@ -1157,8 +1121,11 @@ const VersusDraftView: Component = () => {
                                                                     ].img
                                                                 }
                                                                 alt=""
-                                                                class="h-full w-full rounded object-cover opacity-50"
+                                                                class="h-full w-full object-cover"
                                                             />
+                                                            <div class="absolute inset-0 flex items-center justify-center">
+                                                                <div class="h-[100%] w-1 -rotate-45 bg-slate-200" />
+                                                            </div>
                                                         </Show>
                                                     </div>
                                                 )}
@@ -1170,10 +1137,7 @@ const VersusDraftView: Component = () => {
                                 {/* Picks */}
                                 <div class="mb-6 flex gap-8">
                                     {/* Blue Picks */}
-                                    <div class="flex-1">
-                                        <div class="mb-2 text-sm font-semibold text-blue-400">
-                                            Blue Picks
-                                        </div>
+                                    <div class="min-w-0 flex-1">
                                         <div class="flex flex-col gap-2">
                                             <For each={getTeamPicks("blue")}>
                                                 {(pick, index) => (
@@ -1198,7 +1162,7 @@ const VersusDraftView: Component = () => {
                                                                 }
                                                                 class={`h-full w-full object-cover object-[center_25%] ${isSlotAnimating("blue", "pick", index()) ? "animate-pop" : ""}`}
                                                             />
-                                                            <div class="absolute inset-0 bg-gradient-to-r from-slate-900/80 to-transparent" />
+                                                            <div class="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-slate-900/80 to-transparent" />
                                                             <span class="absolute bottom-1 left-2 text-sm font-medium text-slate-100 drop-shadow-lg">
                                                                 {
                                                                     champions[
@@ -1214,10 +1178,7 @@ const VersusDraftView: Component = () => {
                                     </div>
 
                                     {/* Red Picks */}
-                                    <div class="flex-1">
-                                        <div class="mb-2 text-sm font-semibold text-red-400">
-                                            Red Picks
-                                        </div>
+                                    <div class="min-w-0 flex-1">
                                         <div class="flex flex-col gap-2">
                                             <For each={getTeamPicks("red")}>
                                                 {(pick, index) => (
@@ -1242,7 +1203,7 @@ const VersusDraftView: Component = () => {
                                                                 }
                                                                 class={`h-full w-full object-cover object-[center_25%] ${isSlotAnimating("red", "pick", index()) ? "animate-pop" : ""}`}
                                                             />
-                                                            <div class="absolute inset-0 bg-gradient-to-l from-slate-900/80 to-transparent" />
+                                                            <div class="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-slate-900/80 to-transparent" />
                                                             <span class="absolute bottom-1 right-2 text-sm font-medium text-slate-100 drop-shadow-lg">
                                                                 {
                                                                     champions[
@@ -1315,7 +1276,6 @@ const VersusDraftView: Component = () => {
                                     </div>
                                 </Show>
                             </div>
-
 
                             {/* Champion Panel */}
                             <ChampionPanel
