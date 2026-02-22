@@ -56,6 +56,8 @@ export const CanvasSelect = (props: props) => {
     createEffect(() => {
         if (props.pick !== "") {
             setSelectText(champions[Number(props.pick)].name);
+        } else {
+            setSelectText("");
         }
     });
 

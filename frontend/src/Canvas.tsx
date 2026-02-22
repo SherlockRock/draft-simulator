@@ -47,7 +47,7 @@ import {
     VertexMovedSchema,
     GroupMovedSchema,
     GroupResizedSchema,
-    DraftUpdateSchema
+    CanvasDraftUpdateSchema
 } from "./utils/schemas";
 import { validateSocketEvent } from "./utils/socketValidation";
 import { CanvasCard } from "./components/CanvasCard";
@@ -592,13 +592,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const data = props.canvasData;
         if (!data || props.isLoading || currentId === loadedCanvasId()) return;
 
-        // Leave old socket rooms if switching canvases
+        // Leave old canvas room if switching canvases
         const prevId = loadedCanvasId();
         if (prevId && !isLocalMode()) {
             socketAccessor().emit("leaveRoom", prevId);
-            canvasDrafts.forEach((cd: CanvasDraft) => {
-                socketAccessor().emit("leaveRoom", cd.Draft.id);
-            });
         }
 
         // Reset stores with new canvas data
@@ -619,25 +616,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setIsDeleteDialogOpen(false);
         setDraftToDelete(null);
 
-        // Join new socket rooms
+        // Join new canvas room (draft updates broadcast to canvas room)
         if (!isLocalMode()) {
             socketAccessor().emit("joinRoom", currentId);
-            (data.drafts ?? []).forEach((draft: CanvasDraft) => {
-                socketAccessor().emit("joinRoom", draft.Draft.id);
-            });
         }
 
         setLoadedCanvasId(currentId);
     });
 
-    // Leave socket rooms on component unmount
+    // Leave canvas room on component unmount
     onCleanup(() => {
         const prevId = loadedCanvasId();
         if (prevId && !isLocalMode()) {
             socketAccessor().emit("leaveRoom", prevId);
-            canvasDrafts.forEach((cd: CanvasDraft) => {
-                socketAccessor().emit("leaveRoom", cd.Draft.id);
-            });
         }
     });
 
@@ -666,9 +657,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             }
         );
         socketAccessor().on("draftUpdate", (rawData: unknown) => {
-            const data = validateSocketEvent("draftUpdate", rawData, DraftUpdateSchema);
+            const data = validateSocketEvent(
+                "draftUpdate",
+                rawData,
+                CanvasDraftUpdateSchema
+            );
             if (!data) return;
-            setCanvasDrafts((cd) => cd.Draft.id === data.draftId, "Draft", "picks", [
+            setCanvasDrafts((cd) => cd.Draft.id === data.id, "Draft", "picks", [
                 ...data.picks
             ]);
         });

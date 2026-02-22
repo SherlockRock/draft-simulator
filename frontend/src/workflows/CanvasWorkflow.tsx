@@ -625,184 +625,226 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                     };
 
                                     return (
-                                        <div class="flex min-h-0 flex-col gap-1 overflow-y-auto px-3">
-                                            {/* Grouped drafts */}
-                                            <For each={groups()}>
-                                                {(group) => (
-                                                    <div class="flex flex-col gap-1">
-                                                        <div
-                                                            class="flex cursor-pointer items-center gap-2 rounded-md bg-slate-600 px-2 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-500"
-                                                            onClick={() => {
-                                                                const callback =
-                                                                    navigateToDraftCallback();
-                                                                if (callback) {
-                                                                    callback(
-                                                                        group.positionX,
-                                                                        group.positionY
-                                                                    );
-                                                                }
-                                                            }}
-                                                            onContextMenu={(e) =>
-                                                                handleSidebarGroupContextMenu(
-                                                                    group,
-                                                                    e
-                                                                )
-                                                            }
-                                                        >
-                                                            <span class="text-slate-400">
-                                                                {group.type === "series"
-                                                                    ? "Series"
-                                                                    : "Group"}
-                                                            </span>
-                                                            <span class="truncate">
-                                                                {group.name}
-                                                            </span>
-                                                        </div>
-                                                        <For
-                                                            each={getDraftsForGroup(
-                                                                group.id
-                                                            )}
-                                                        >
-                                                            {(canvasDraft, index) => {
-                                                                const getNavPosition =
-                                                                    () => {
-                                                                        if (
-                                                                            group.type ===
-                                                                            "custom"
-                                                                        ) {
-                                                                            // Custom groups use free-form positions
-                                                                            return {
-                                                                                x:
-                                                                                    group.positionX +
-                                                                                    canvasDraft.positionX,
-                                                                                y:
-                                                                                    group.positionY +
-                                                                                    canvasDraft.positionY
-                                                                            };
-                                                                        }
-                                                                        // Series groups use horizontal layout
-                                                                        const PADDING = 20;
-                                                                        const CARD_GAP = 24;
-                                                                        const cw =
-                                                                            layoutToggle()
-                                                                                ? 700
-                                                                                : 350;
-                                                                        const offsetX =
-                                                                            PADDING +
-                                                                            index() *
-                                                                                (cw +
-                                                                                    CARD_GAP);
-                                                                        return {
-                                                                            x:
-                                                                                group.positionX +
-                                                                                offsetX,
-                                                                            y: group.positionY
-                                                                        };
-                                                                    };
+                                        <div class="flex min-h-0 flex-1 flex-col p-3">
+                                            {/* Inset container */}
+                                            <div class="flex min-h-0 flex-1 flex-col rounded-t-lg border border-slate-700/50 bg-slate-900/40">
+                                                {/* Section header - outside scroll area */}
+                                                <div class="border-b border-slate-700/50 px-3 py-2">
+                                                    <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                                                        Drafts & Groups
+                                                    </span>
+                                                </div>
 
-                                                                return (
-                                                                    <div
-                                                                        class={`ml-3 cursor-pointer truncate rounded-md px-3 py-2 text-sm transition-colors ${
-                                                                            isDraftView() &&
-                                                                            canvasDraft
-                                                                                .Draft
-                                                                                .id ===
-                                                                                params.draftId
-                                                                                ? "bg-slate-600 text-slate-50"
-                                                                                : "bg-slate-700 text-slate-200 hover:bg-slate-600"
-                                                                        }`}
-                                                                        onClick={() => {
-                                                                            if (
-                                                                                isDraftView()
-                                                                            ) {
-                                                                                navigate(
-                                                                                    `/canvas/${canvasId()}/draft/${canvasDraft.Draft.id}`
-                                                                                );
-                                                                            } else {
-                                                                                const callback =
-                                                                                    navigateToDraftCallback();
-                                                                                if (
-                                                                                    callback
-                                                                                ) {
-                                                                                    const pos =
-                                                                                        getNavPosition();
-                                                                                    callback(
-                                                                                        pos.x,
-                                                                                        pos.y
-                                                                                    );
-                                                                                }
-                                                                            }
-                                                                        }}
-                                                                        onContextMenu={(
-                                                                            e
-                                                                        ) => {
-                                                                            if (
-                                                                                hasEditPermissions()
-                                                                            ) {
-                                                                                handleSidebarDraftContextMenu(
-                                                                                    canvasDraft,
-                                                                                    e
-                                                                                );
-                                                                            }
-                                                                        }}
-                                                                    >
-                                                                        {
-                                                                            canvasDraft
-                                                                                .Draft
-                                                                                .name
+                                                {/* Scrollable content */}
+                                                <div class="custom-scrollbar flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-2">
+                                                    {/* Grouped drafts */}
+                                                    <For each={groups()}>
+                                                        {(group) => (
+                                                            <div class="flex flex-shrink-0 flex-col">
+                                                                <div
+                                                                    class="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700/50"
+                                                                    onClick={() => {
+                                                                        const callback =
+                                                                            navigateToDraftCallback();
+                                                                        if (callback) {
+                                                                            callback(
+                                                                                group.positionX,
+                                                                                group.positionY
+                                                                            );
                                                                         }
-                                                                    </div>
-                                                                );
-                                                            }}
-                                                        </For>
-                                                    </div>
-                                                )}
-                                            </For>
-                                            {/* Ungrouped drafts */}
-                                            <For each={ungroupedDrafts()}>
-                                                {(canvasDraft) => (
-                                                    <div
-                                                        class={`cursor-pointer truncate rounded-md px-3 py-2 text-sm transition-colors ${
-                                                            isDraftView() &&
-                                                            canvasDraft.Draft.id ===
-                                                                params.draftId
-                                                                ? "bg-slate-600 text-slate-50"
-                                                                : "bg-slate-700 text-slate-200 hover:bg-slate-600"
-                                                        }`}
-                                                        onClick={() => {
-                                                            if (isDraftView()) {
-                                                                navigate(
-                                                                    `/canvas/${canvasId()}/draft/${canvasDraft.Draft.id}`
-                                                                );
-                                                            } else {
-                                                                const callback =
-                                                                    navigateToDraftCallback();
-                                                                if (callback) {
-                                                                    callback(
-                                                                        canvasDraft.positionX,
-                                                                        canvasDraft.positionY
-                                                                    );
-                                                                }
-                                                            }
-                                                        }}
-                                                        onContextMenu={(e) => {
-                                                            if (hasEditPermissions()) {
-                                                                handleSidebarDraftContextMenu(
-                                                                    canvasDraft,
-                                                                    e
-                                                                );
-                                                            }
-                                                        }}
-                                                    >
-                                                        {canvasDraft.Draft.name}
-                                                    </div>
-                                                )}
-                                            </For>
+                                                                    }}
+                                                                    onContextMenu={(e) =>
+                                                                        handleSidebarGroupContextMenu(
+                                                                            group,
+                                                                            e
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <span
+                                                                        class={
+                                                                            group.type ===
+                                                                            "series"
+                                                                                ? "text-orange-400"
+                                                                                : "text-purple-400"
+                                                                        }
+                                                                    >
+                                                                        ●
+                                                                    </span>
+                                                                    <span class="truncate text-slate-200">
+                                                                        {group.name}
+                                                                    </span>
+                                                                </div>
+                                                                <For
+                                                                    each={getDraftsForGroup(
+                                                                        group.id
+                                                                    )}
+                                                                >
+                                                                    {(
+                                                                        canvasDraft,
+                                                                        index
+                                                                    ) => {
+                                                                        const getNavPosition =
+                                                                            () => {
+                                                                                if (
+                                                                                    group.type ===
+                                                                                    "custom"
+                                                                                ) {
+                                                                                    return {
+                                                                                        x:
+                                                                                            group.positionX +
+                                                                                            canvasDraft.positionX,
+                                                                                        y:
+                                                                                            group.positionY +
+                                                                                            canvasDraft.positionY
+                                                                                    };
+                                                                                }
+                                                                                const PADDING = 20;
+                                                                                const CARD_GAP = 24;
+                                                                                const cw =
+                                                                                    layoutToggle()
+                                                                                        ? 700
+                                                                                        : 350;
+                                                                                const offsetX =
+                                                                                    PADDING +
+                                                                                    index() *
+                                                                                        (cw +
+                                                                                            CARD_GAP);
+                                                                                return {
+                                                                                    x:
+                                                                                        group.positionX +
+                                                                                        offsetX,
+                                                                                    y: group.positionY
+                                                                                };
+                                                                            };
+
+                                                                        const isLast =
+                                                                            () =>
+                                                                                index() ===
+                                                                                getDraftsForGroup(
+                                                                                    group.id
+                                                                                ).length -
+                                                                                    1;
+
+                                                                        return (
+                                                                            <div class="flex items-stretch">
+                                                                                {/* Tree connector */}
+                                                                                <div class="ml-[11px] flex w-3 flex-col">
+                                                                                    <div
+                                                                                        class={`w-px flex-1 bg-slate-700 ${isLast() ? "h-3" : ""}`}
+                                                                                    />
+                                                                                    <div class="h-px w-full bg-slate-700" />
+                                                                                    <div
+                                                                                        class={`w-px flex-1 ${isLast() ? "bg-transparent" : "bg-slate-700"}`}
+                                                                                    />
+                                                                                </div>
+                                                                                <div
+                                                                                    class={`flex-1 cursor-pointer truncate rounded px-2 py-1.5 text-sm transition-colors ${
+                                                                                        isDraftView() &&
+                                                                                        canvasDraft
+                                                                                            .Draft
+                                                                                            .id ===
+                                                                                            params.draftId
+                                                                                            ? "bg-purple-600/30 text-purple-200"
+                                                                                            : "text-slate-300 hover:bg-slate-700/50 hover:text-slate-100"
+                                                                                    }`}
+                                                                                    onClick={() => {
+                                                                                        if (
+                                                                                            isDraftView()
+                                                                                        ) {
+                                                                                            navigate(
+                                                                                                `/canvas/${canvasId()}/draft/${canvasDraft.Draft.id}`
+                                                                                            );
+                                                                                        } else {
+                                                                                            const callback =
+                                                                                                navigateToDraftCallback();
+                                                                                            if (
+                                                                                                callback
+                                                                                            ) {
+                                                                                                const pos =
+                                                                                                    getNavPosition();
+                                                                                                callback(
+                                                                                                    pos.x,
+                                                                                                    pos.y
+                                                                                                );
+                                                                                            }
+                                                                                        }
+                                                                                    }}
+                                                                                    onContextMenu={(
+                                                                                        e
+                                                                                    ) => {
+                                                                                        if (
+                                                                                            hasEditPermissions()
+                                                                                        ) {
+                                                                                            handleSidebarDraftContextMenu(
+                                                                                                canvasDraft,
+                                                                                                e
+                                                                                            );
+                                                                                        }
+                                                                                    }}
+                                                                                >
+                                                                                    {
+                                                                                        canvasDraft
+                                                                                            .Draft
+                                                                                            .name
+                                                                                    }
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    }}
+                                                                </For>
+                                                            </div>
+                                                        )}
+                                                    </For>
+
+                                                    {/* Ungrouped drafts */}
+                                                    <For each={ungroupedDrafts()}>
+                                                        {(canvasDraft) => (
+                                                            <div
+                                                                class={`flex-shrink-0 cursor-pointer truncate rounded px-2 py-1.5 text-sm transition-colors ${
+                                                                    isDraftView() &&
+                                                                    canvasDraft.Draft
+                                                                        .id ===
+                                                                        params.draftId
+                                                                        ? "bg-purple-600/30 text-purple-200"
+                                                                        : "text-slate-300 hover:bg-slate-700/50 hover:text-slate-100"
+                                                                }`}
+                                                                onClick={() => {
+                                                                    if (isDraftView()) {
+                                                                        navigate(
+                                                                            `/canvas/${canvasId()}/draft/${canvasDraft.Draft.id}`
+                                                                        );
+                                                                    } else {
+                                                                        const callback =
+                                                                            navigateToDraftCallback();
+                                                                        if (callback) {
+                                                                            callback(
+                                                                                canvasDraft.positionX,
+                                                                                canvasDraft.positionY
+                                                                            );
+                                                                        }
+                                                                    }
+                                                                }}
+                                                                onContextMenu={(e) => {
+                                                                    if (
+                                                                        hasEditPermissions()
+                                                                    ) {
+                                                                        handleSidebarDraftContextMenu(
+                                                                            canvasDraft,
+                                                                            e
+                                                                        );
+                                                                    }
+                                                                }}
+                                                            >
+                                                                {canvasDraft.Draft.name}
+                                                            </div>
+                                                        )}
+                                                    </For>
+                                                </div>
+                                            </div>
                                         </div>
                                     );
                                 })()}
                             </Show>
-                            <div class="flex-1" />
                             <VersionFooter />
                         </div>
                     </FlowPanel>
