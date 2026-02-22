@@ -121,11 +121,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const canvasContext = useCanvasContext();
 
     // Route parameter accessor with type narrowing
-    // SolidJS router guarantees params.id exists when this route matches
+    // Returns empty string during route transitions/cleanup when params.id is undefined
     const canvasId = (): string => {
-        const id = params.id;
-        if (id === undefined) throw new Error("Missing required route parameter: id");
-        return id;
+        return params.id ?? "";
     };
 
     // Reactive permission check - reads directly from context resource

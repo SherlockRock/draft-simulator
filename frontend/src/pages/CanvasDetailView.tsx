@@ -19,10 +19,9 @@ const CanvasDetailView: Component = () => {
     let canvasContainerRef: HTMLDivElement | undefined;
 
     // Route parameter accessor with type narrowing
+    // Returns empty string during route transitions/cleanup when params.id is undefined
     const canvasId = (): string => {
-        const id = params.id;
-        if (id === undefined) throw new Error("Missing required route parameter: id");
-        return id;
+        return params.id ?? "";
     };
 
     const newDraftMutation = useMutation(() => ({

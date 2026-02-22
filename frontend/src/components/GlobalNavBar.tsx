@@ -28,10 +28,7 @@ const GlobalNavBar: Component = () => {
             {/* Flow Navigation */}
             <div class="flex gap-2">
                 <button
-                    onClick={() => {
-                        console.log("[GlobalNavBar] Home button clicked, navigating to /");
-                        navigate("/");
-                    }}
+                    onClick={() => navigate("/")}
                     class={`flex items-center gap-2 rounded-md px-4 py-2 font-medium transition-colors ${
                         activeFlow() === null
                             ? "bg-teal-700 text-slate-50"

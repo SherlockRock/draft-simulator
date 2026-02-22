@@ -41,10 +41,9 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     const [user] = accessor();
 
     // Route parameter accessor with type narrowing
+    // Returns empty string during route transitions/cleanup when params.id is undefined
     const canvasId = (): string => {
-        const id = params.id;
-        if (id === undefined) throw new Error("Missing required route parameter: id");
-        return id;
+        return params.id ?? "";
     };
 
     const [canvasList, { mutate: mutateCanvasList, refetch: refetchCanvasList }] =
