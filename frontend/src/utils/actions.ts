@@ -538,6 +538,27 @@ export const handleGoogleLogin = async (code: string, state: string) => {
     }
 };
 
+export const exportUserData = async () => {
+    return apiGet(
+        "/users/me/export",
+        z.object({
+            exportedAt: z.string(),
+            user: z.object({
+                name: z.string(),
+                email: z.string(),
+                picture: z.string(),
+                createdAt: z.string()
+            }),
+            canvases: z.array(z.unknown()),
+            versusSeries: z.array(z.unknown())
+        })
+    );
+};
+
+export const deleteUserAccount = async (confirmEmail: string) => {
+    return apiDelete("/users/me", SuccessSchema, { confirmEmail });
+};
+
 // =============================================================================
 // Other
 // =============================================================================

@@ -28,7 +28,10 @@ const GlobalNavBar: Component = () => {
             {/* Flow Navigation */}
             <div class="flex gap-2">
                 <button
-                    onClick={() => navigate("/")}
+                    onClick={() => {
+                        console.log("[GlobalNavBar] Home button clicked, navigating to /");
+                        navigate("/");
+                    }}
                     class={`flex items-center gap-2 rounded-md px-4 py-2 font-medium transition-colors ${
                         activeFlow() === null
                             ? "bg-teal-700 text-slate-50"
@@ -64,16 +67,16 @@ const GlobalNavBar: Component = () => {
 
             {/* User Section */}
             <div class="flex items-center gap-3">
-                <Show when={user() && "name" in user()}>
+                <Show when={user()?.name}>
                     <div class="flex items-center gap-3">
-                        <Show when={user().picture}>
+                        <Show when={user()?.picture}>
                             <img
-                                src={user().picture}
-                                alt={user().name}
+                                src={user()?.picture}
+                                alt={user()?.name}
                                 class="h-8 w-8 rounded-full"
                             />
                         </Show>
-                        <span class="font-medium text-slate-200">{user().name}</span>
+                        <span class="font-medium text-slate-200">{user()?.name}</span>
                         <button
                             onClick={() => navigate("/settings")}
                             class="rounded-md bg-slate-800 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-700"
@@ -88,7 +91,7 @@ const GlobalNavBar: Component = () => {
                         </button>
                     </div>
                 </Show>
-                <Show when={!user() || !("name" in user())}>
+                <Show when={!user()?.name}>
                     <button
                         onClick={handleLogin}
                         class="rounded-md bg-teal-700 px-4 py-2 font-medium text-slate-100 transition-colors hover:bg-teal-600"

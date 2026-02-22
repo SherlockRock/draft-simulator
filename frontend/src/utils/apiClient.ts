@@ -93,11 +93,20 @@ export async function apiPut<T>(
 /**
  * Validated DELETE request.
  */
-export async function apiDelete<T>(path: string, schema: z.ZodType<T>): Promise<T> {
-    const res = await fetch(`${BASE_URL}${path}`, {
+export async function apiDelete<T>(
+    path: string,
+    schema: z.ZodType<T>,
+    body?: unknown
+): Promise<T> {
+    const options: RequestInit = {
         method: "DELETE",
         credentials: "include"
-    });
+    };
+    if (body !== undefined) {
+        options.headers = { "Content-Type": "application/json" };
+        options.body = JSON.stringify(body);
+    }
+    const res = await fetch(`${BASE_URL}${path}`, options);
     if (!res.ok) {
         throw new Error(`API error: ${res.status}`);
     }

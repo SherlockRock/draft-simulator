@@ -2,6 +2,7 @@ import { Component, Show, createSignal, createEffect } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { useUser } from "../userProvider";
 import { DeleteAccountModal } from "../components/DeleteAccountModal";
+import { exportUserData, deleteUserAccount } from "../utils/actions";
 
 const SettingsPage: Component = () => {
     const navigate = useNavigate();
@@ -21,13 +22,7 @@ const SettingsPage: Component = () => {
     const handleExport = async () => {
         setIsExporting(true);
         try {
-            const response = await fetch(
-                `${import.meta.env.VITE_API_URL || ""}/api/users/me/export`,
-                { credentials: "include" }
-            );
-            if (!response.ok) throw new Error("Export failed");
-
-            const data = await response.json();
+            const data = await exportUserData();
             const blob = new Blob([JSON.stringify(data, null, 2)], {
                 type: "application/json"
             });
@@ -47,21 +42,8 @@ const SettingsPage: Component = () => {
     };
 
     const handleDeleteAccount = async (confirmEmail: string) => {
-        const response = await fetch(
-            `${import.meta.env.VITE_API_URL || ""}/api/users/me`,
-            {
-                method: "DELETE",
-                credentials: "include",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ confirmEmail })
-            }
-        );
-        if (!response.ok) throw new Error("Delete failed");
-
-        // Clear local state and redirect
-        if (actions && "logout" in actions) {
-            actions.logout();
-        }
+        await deleteUserAccount(confirmEmail);
+        actions.logout();
         navigate("/", { replace: true });
     };
 
