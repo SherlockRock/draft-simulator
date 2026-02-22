@@ -86,7 +86,9 @@ export const StyledSelect: Component<StyledSelectProps> = (props) => {
                         : `cursor-pointer ${colors().hoverBorder}`
                 }`}
             >
-                <span class={selectedOption() ? "text-slate-50" : "text-slate-400"}>
+                <span
+                    class={`truncate ${selectedOption() ? "text-slate-50" : "text-slate-400"}`}
+                >
                     {selectedOption()?.label ?? props.placeholder ?? "Select..."}
                 </span>
                 <svg
@@ -114,7 +116,7 @@ export const StyledSelect: Component<StyledSelectProps> = (props) => {
                             <button
                                 ref={(el) => keyboard.setItemRef(index(), el)}
                                 type="button"
-                                class={`w-full px-3 py-2 text-left transition-colors ${
+                                class={`w-full truncate px-3 py-2 text-left transition-colors ${
                                     props.value === option.value
                                         ? `${colors().text} bg-slate-700`
                                         : index() === keyboard.highlightedIndex()

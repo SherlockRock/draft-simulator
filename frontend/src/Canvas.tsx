@@ -2109,21 +2109,21 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     <Show when={hasEditPermissions()}>
                         <button
                             onClick={toggleConnectionMode}
-                            class="rounded px-4 py-2 font-semibold text-white shadow transition-colors"
+                            class="rounded-md px-3 py-2 text-sm font-medium text-slate-200 transition-colors"
                             classList={{
-                                "bg-purple-600 hover:bg-purple-700": !isConnectionMode(),
-                                "bg-green-600 hover:bg-green-700": isConnectionMode()
+                                "bg-purple-600 hover:bg-purple-500": !isConnectionMode(),
+                                "bg-green-600 hover:bg-green-500": isConnectionMode()
                             }}
                         >
                             {isConnectionMode() ? "✓ Connection Mode" : "Connection Mode"}
                         </button>
                     </Show>
-                    <div class="rounded border border-slate-500 bg-slate-600 px-3 py-1.5 text-center text-slate-50 shadow">
+                    <div class="rounded-md border border-slate-500 bg-slate-600 px-3 py-2 text-center text-sm text-slate-50">
                         Zoom: {Math.round(props.viewport().zoom * 100)}%
                     </div>
                     <button
                         onClick={resetViewport}
-                        class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
+                        class="rounded-md bg-purple-600 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-purple-500"
                     >
                         Reset View
                     </button>
