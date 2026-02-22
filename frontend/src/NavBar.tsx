@@ -53,9 +53,9 @@ function NavBar(props: props) {
                             class={`flex h-full flex-1 flex-col gap-4 px-4 ${isExpanded() ? "" : "hidden"}`}
                         >
                             <div class="flex flex-col gap-2 pt-4">
-                                {user() && "name" in user() ? (
+                                {user()?.name ? (
                                     <div class="flex flex-col gap-2">
-                                        <p class="text-slate-50">Hello: {user().name}</p>
+                                        <p class="text-slate-50">Hello: {user()?.name}</p>
                                         <button
                                             class="text-md rounded-md bg-teal-700 px-3 py-2 font-sans font-normal text-slate-100 hover:bg-teal-400"
                                             onClick={handleLogOut}

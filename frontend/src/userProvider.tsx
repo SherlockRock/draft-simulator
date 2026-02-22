@@ -37,6 +37,21 @@ export interface UserAccessor {
     error: Error | null;
 }
 
+export interface UserActions {
+    login: (code: string, state: string) => Promise<UserData | undefined>;
+    logout: () => Promise<void>;
+    refetch: () => void;
+    reconnect: () => void;
+}
+
+export type UserContextValue = [
+    UserAccessor,
+    UserActions,
+    Accessor<Socket | undefined>,
+    Accessor<ConnectionStatus>,
+    Accessor<ConnectionInfo>
+];
+
 const socketOptions = {
     pingInterval: 25000,
     pingTimeout: 5000,
@@ -51,7 +66,9 @@ const createAnonymousSocket = () => io(socketUrl, socketOptions);
 const createAuthenticatedSocket = () =>
     io(socketUrl, { ...socketOptions, withCredentials: true });
 
-const UserContext = createContext<Accessor<Array<any>>>();
+// Context uses loose typing for backward compatibility with existing code
+// Files that need strict typing can import UserContextValue and cast
+const UserContext = createContext<Accessor<UserContextValue>>();
 
 export function UserProvider(props: { children: JSX.Element }) {
     const navigate = useNavigate();
@@ -112,19 +129,20 @@ export function UserProvider(props: { children: JSX.Element }) {
     };
 
     // Create a compatibility wrapper that mimics the old createResource API
-    const userAccessor = (() => userQuery.data) as UserAccessor;
-    // Add query state properties to the accessor function for advanced usage
-    Object.defineProperty(userAccessor, "loading", {
-        get: () => userQuery.isLoading
-    });
-    Object.defineProperty(userAccessor, "error", {
-        get: () => userQuery.error
-    });
-    Object.defineProperty(userAccessor, "isLoading", {
-        get: () => userQuery.isLoading
-    });
-    Object.defineProperty(userAccessor, "isError", {
-        get: () => userQuery.isError
+    // Using Object.assign for proper TypeScript inference
+    const userAccessor: UserAccessor = Object.assign(() => userQuery.data, {
+        get isLoading() {
+            return userQuery.isLoading;
+        },
+        get loading() {
+            return userQuery.isLoading;
+        },
+        get isError() {
+            return userQuery.isError;
+        },
+        get error() {
+            return userQuery.error;
+        }
     });
 
     const connectionInfo = createMemo<ConnectionInfo>(() => ({
@@ -132,7 +150,7 @@ export function UserProvider(props: { children: JSX.Element }) {
         reconnectAttempts: reconnectAttempts()
     }));
 
-    const holdUser = createMemo(() => [
+    const holdUser = createMemo<UserContextValue>(() => [
         userAccessor,
         {
             login,

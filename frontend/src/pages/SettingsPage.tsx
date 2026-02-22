@@ -1,12 +1,12 @@
 import { Component, Show, createSignal, createEffect } from "solid-js";
 import { useNavigate } from "@solidjs/router";
-import { useUser, UserAccessor } from "../userProvider";
+import { useUser } from "../userProvider";
 import { DeleteAccountModal } from "../components/DeleteAccountModal";
 
 const SettingsPage: Component = () => {
     const navigate = useNavigate();
     const context = useUser();
-    const [user, actions] = context() as [UserAccessor, any];
+    const [user, actions] = context();
     const [isExporting, setIsExporting] = createSignal(false);
     const [showDeleteModal, setShowDeleteModal] = createSignal(false);
     const [showTooltip, setShowTooltip] = createSignal(false);
@@ -29,7 +29,7 @@ const SettingsPage: Component = () => {
 
             const data = await response.json();
             const blob = new Blob([JSON.stringify(data, null, 2)], {
-                type: "application/json",
+                type: "application/json"
             });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -47,37 +47,35 @@ const SettingsPage: Component = () => {
     };
 
     const handleDeleteAccount = async (confirmEmail: string) => {
-        try {
-            const response = await fetch(
-                `${import.meta.env.VITE_API_URL || ""}/api/users/me`,
-                {
-                    method: "DELETE",
-                    credentials: "include",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ confirmEmail }),
-                }
-            );
-            if (!response.ok) throw new Error("Delete failed");
-
-            // Clear local state and redirect
-            if (actions && "logout" in actions) {
-                actions.logout();
+        const response = await fetch(
+            `${import.meta.env.VITE_API_URL || ""}/api/users/me`,
+            {
+                method: "DELETE",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ confirmEmail })
             }
-            navigate("/", { replace: true });
-        } catch (error) {
-            console.error("Delete failed:", error);
-            throw error;
+        );
+        if (!response.ok) throw new Error("Delete failed");
+
+        // Clear local state and redirect
+        if (actions && "logout" in actions) {
+            actions.logout();
         }
+        navigate("/", { replace: true });
     };
 
     return (
         <div class="flex-1 overflow-auto bg-slate-900">
-            <Show when={user()} fallback={
-                <div class="flex h-full items-center justify-center">
-                    <p class="text-slate-400">Loading...</p>
-                </div>
-            }>
-            <div class="mx-auto max-w-2xl p-8">
+            <Show
+                when={user()}
+                fallback={
+                    <div class="flex h-full items-center justify-center">
+                        <p class="text-slate-400">Loading...</p>
+                    </div>
+                }
+            >
+                <div class="mx-auto max-w-2xl p-8">
                     <h1 class="mb-8 text-3xl font-bold text-slate-50">Settings</h1>
 
                     {/* Profile Section */}
@@ -114,8 +112,8 @@ const SettingsPage: Component = () => {
                                             <li>Profile picture</li>
                                         </ul>
                                         <p class="text-xs text-slate-400">
-                                            We cannot access your Google Drive, contacts, or other
-                                            Google services.
+                                            We cannot access your Google Drive, contacts,
+                                            or other Google services.
                                         </p>
                                     </div>
                                 </Show>
@@ -130,19 +128,25 @@ const SettingsPage: Component = () => {
                                 />
                             </Show>
                             <div>
-                                <p class="text-lg font-medium text-slate-100">{user()?.name}</p>
+                                <p class="text-lg font-medium text-slate-100">
+                                    {user()?.name}
+                                </p>
                                 <p class="text-slate-400">{user()?.email}</p>
-                                <p class="mt-1 text-xs text-slate-500">Managed by Google</p>
+                                <p class="mt-1 text-xs text-slate-500">
+                                    Managed by Google
+                                </p>
                             </div>
                         </div>
                     </div>
 
                     {/* Data Export Section */}
                     <div class="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-6">
-                        <h2 class="mb-2 text-xl font-semibold text-slate-200">Your Data</h2>
+                        <h2 class="mb-2 text-xl font-semibold text-slate-200">
+                            Your Data
+                        </h2>
                         <p class="mb-4 text-slate-400">
-                            Download a copy of all your data including canvases, drafts, and
-                            versus series.
+                            Download a copy of all your data including canvases, drafts,
+                            and versus series.
                         </p>
                         <button
                             onClick={handleExport}
@@ -156,8 +160,8 @@ const SettingsPage: Component = () => {
                     {/* Delete Account */}
                     <div class="rounded-lg border-2 border-red-600/50 bg-slate-800 p-6">
                         <p class="mb-4 text-slate-400">
-                            Delete your account and all associated data. This action cannot be
-                            undone.
+                            Delete your account and all associated data. This action
+                            cannot be undone.
                         </p>
                         <button
                             onClick={() => setShowDeleteModal(true)}
@@ -166,14 +170,14 @@ const SettingsPage: Component = () => {
                             Delete Account
                         </button>
                     </div>
-            </div>
+                </div>
 
-            <DeleteAccountModal
-                isOpen={showDeleteModal()}
-                userEmail={user()?.email ?? ""}
-                onClose={() => setShowDeleteModal(false)}
-                onConfirm={handleDeleteAccount}
-            />
+                <DeleteAccountModal
+                    isOpen={showDeleteModal()}
+                    userEmail={user()?.email ?? ""}
+                    onClose={() => setShowDeleteModal(false)}
+                    onConfirm={handleDeleteAccount}
+                />
             </Show>
         </div>
     );
