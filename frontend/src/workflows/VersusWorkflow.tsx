@@ -7,7 +7,6 @@ import {
     untrack
 } from "solid-js";
 import { useParams, useNavigate, RouteSectionProps } from "@solidjs/router";
-import { useUser } from "../userProvider";
 import FlowPanel from "../components/FlowPanel";
 import VersusFlowPanelContent from "../components/VersusFlowPanelContent";
 import {
@@ -32,6 +31,7 @@ import {
     type ActiveDraftState,
     type DraftCallbacks
 } from "../contexts/VersusContext";
+import { VersusSocketProvider, useVersusSocket } from "../providers/VersusSocketProvider";
 
 // Helper: compute team identity from role + side assignment
 const computeTeamIdentity = (
@@ -63,10 +63,20 @@ export const getSuggestedRole = (
 };
 
 const VersusWorkflow: Component<RouteSectionProps> = (props) => {
+    return (
+        <VersusSocketProvider>
+            <VersusWorkflowInner {...props} />
+        </VersusSocketProvider>
+    );
+};
+
+const VersusWorkflowInner: Component<RouteSectionProps> = (props) => {
     const params = useParams();
     const navigate = useNavigate();
-    const accessor = useUser();
-    const [, , socketAccessor, connectionStatusAccessor] = accessor();
+
+    // Get socket from VersusSocketProvider instead of useUser
+    const { socket: socketAccessor, connectionStatus: connectionStatusAccessor } =
+        useVersusSocket();
 
     // Versus context state - single source of truth for all components
     const [versusContext, setVersusContext] = createSignal<VersusSessionState>({
