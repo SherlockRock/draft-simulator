@@ -37,6 +37,10 @@ const setupAssociations = () => {
     onDelete: "CASCADE",
   });
 
+  // Direct UserCanvas associations (needed for queries from UserCanvas)
+  UserCanvas.belongsTo(Canvas, { foreignKey: "canvas_id" });
+  Canvas.hasMany(UserCanvas, { foreignKey: "canvas_id", onDelete: "CASCADE" });
+
   Canvas.hasMany(CanvasDraft, { foreignKey: "canvas_id", onDelete: "CASCADE" });
   CanvasDraft.belongsTo(Canvas, {
     foreignKey: "canvas_id",
