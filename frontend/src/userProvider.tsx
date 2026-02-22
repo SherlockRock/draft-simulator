@@ -22,6 +22,21 @@ export type ConnectionInfo = {
     reconnectAttempts: number;
 };
 
+export type UserData = {
+    id: string;
+    name: string;
+    email: string;
+    picture: string;
+};
+
+export interface UserAccessor {
+    (): UserData | null | undefined;
+    isLoading: boolean;
+    loading: boolean;
+    isError: boolean;
+    error: Error | null;
+}
+
 const socketOptions = {
     pingInterval: 25000,
     pingTimeout: 5000,
@@ -97,7 +112,7 @@ export function UserProvider(props: { children: JSX.Element }) {
     };
 
     // Create a compatibility wrapper that mimics the old createResource API
-    const userAccessor = () => userQuery.data;
+    const userAccessor = (() => userQuery.data) as UserAccessor;
     // Add query state properties to the accessor function for advanced usage
     Object.defineProperty(userAccessor, "loading", {
         get: () => userQuery.isLoading

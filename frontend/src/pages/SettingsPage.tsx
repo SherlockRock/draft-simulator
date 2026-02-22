@@ -1,19 +1,19 @@
 import { Component, Show, createSignal, createEffect } from "solid-js";
 import { useNavigate } from "@solidjs/router";
-import { useUser } from "../userProvider";
+import { useUser, UserAccessor } from "../userProvider";
 import { DeleteAccountModal } from "../components/DeleteAccountModal";
 
 const SettingsPage: Component = () => {
     const navigate = useNavigate();
     const context = useUser();
-    const [user, actions] = context();
+    const [user, actions] = context() as [UserAccessor, any];
     const [isExporting, setIsExporting] = createSignal(false);
     const [showDeleteModal, setShowDeleteModal] = createSignal(false);
     const [showTooltip, setShowTooltip] = createSignal(false);
 
     // Redirect if not logged in (only after auth check completes)
     createEffect(() => {
-        if (!(user as any).isLoading && !user()) {
+        if (!user.isLoading && !user()) {
             navigate("/", { replace: true });
         }
     });
