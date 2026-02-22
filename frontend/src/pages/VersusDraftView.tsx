@@ -9,7 +9,7 @@ import {
     createResource
 } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
-import { useUser } from "../userProvider";
+import { useVersusSocket } from "../providers/VersusSocketProvider";
 import {
     useVersusContext,
     type ActiveDraftState,
@@ -69,8 +69,7 @@ const fetchDraft = async (id: string): Promise<draft> => {
 const VersusDraftView: Component = () => {
     const params = useParams<{ id: string; draftId: string }>();
     const navigate = useNavigate();
-    const accessor = useUser();
-    const [, , socketAccessor, connectionStatusAccessor] = accessor();
+    const { socket: socketAccessor, connectionStatus: connectionStatusAccessor } = useVersusSocket();
 
     // Get role and participant info from context (single source of truth)
     const {
