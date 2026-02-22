@@ -147,9 +147,8 @@ const SettingsPage: Component = () => {
                         </button>
                     </div>
 
-                    {/* Danger Zone */}
+                    {/* Delete Account */}
                     <div class="rounded-lg border-2 border-red-600/50 bg-slate-800 p-6">
-                        <h2 class="mb-2 text-xl font-semibold text-red-400">Danger Zone</h2>
                         <p class="mb-4 text-slate-400">
                             Delete your account and all associated data. This action cannot be
                             undone.
