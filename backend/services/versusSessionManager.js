@@ -7,8 +7,7 @@ const crypto = require("crypto");
  * not stored here - this is purely for real-time presence.
  */
 class VersusSessionManager {
-  constructor(heartbeatManager) {
-    this.heartbeatManager = heartbeatManager;
+  constructor() {
     // Map: versusDraftId -> session data
     this.sessions = new Map();
   }
@@ -58,10 +57,6 @@ class VersusSessionManager {
     } else if (role === "red_captain") {
       session.roleAssignments.red_captain = visitorId;
     }
-
-    // Register with heartbeat manager with a session-specific role
-    const sessionRole = `versus:${versusDraftId}:${role}`;
-    this.heartbeatManager.registerClient(socket, visitorId, sessionRole);
 
     return participant;
   }

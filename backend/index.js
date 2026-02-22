@@ -24,7 +24,6 @@ const socketService = require("./middleware/socketService");
 const { UserCanvas, CanvasDraft } = require("./models/Canvas");
 const { setupVersusHandlers } = require("./socketHandlers/versusHandlers");
 const { initializeTimerService } = require("./services/versusTimerService");
-const HeartbeatManager = require("./services/heartbeatManager");
 const VersusSessionManager = require("./services/versusSessionManager");
 require("dotenv").config();
 
@@ -106,8 +105,7 @@ async function main() {
 
   // Initialize versus timer service
   initializeTimerService(io);
-  const heartbeatManager = new HeartbeatManager(io);
-  const versusSessionManager = new VersusSessionManager(heartbeatManager);
+  const versusSessionManager = new VersusSessionManager();
 
   io.use(async (socket, next) => {
     const handshake = socket.handshake;
@@ -146,7 +144,6 @@ async function main() {
 
     // Set up versus-specific handlers
     setupVersusHandlers(io, socket, versusSessionManager);
-    heartbeatManager.registerClient(socket, socket.id);
 
     socket.on("newDraft", async (data) => {
       try {
