@@ -1,7 +1,6 @@
 import { Component, Show, createSignal } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { useUser } from "../userProvider";
-import GlobalNavBar from "../components/GlobalNavBar";
 import { DeleteAccountModal } from "../components/DeleteAccountModal";
 
 const SettingsPage: Component = () => {
@@ -71,10 +70,8 @@ const SettingsPage: Component = () => {
     };
 
     return (
-        <div class="flex h-full flex-col">
-            <GlobalNavBar />
-            <div class="flex-1 overflow-auto bg-slate-900">
-                <div class="mx-auto max-w-2xl p-8">
+        <div class="flex-1 overflow-auto bg-slate-900">
+            <div class="mx-auto max-w-2xl p-8">
                     <h1 class="mb-8 text-3xl font-bold text-slate-50">Settings</h1>
 
                     {/* Profile Section */}
@@ -164,7 +161,6 @@ const SettingsPage: Component = () => {
                             Delete Account
                         </button>
                     </div>
-                </div>
             </div>
 
             <DeleteAccountModal
