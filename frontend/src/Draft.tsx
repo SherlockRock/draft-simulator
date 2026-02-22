@@ -23,7 +23,7 @@ import {
     topChamps
 } from "./utils/constants";
 import { useNavigate, useParams } from "@solidjs/router";
-import { useUser } from "./userProvider";
+import { useCanvasSocket } from "./providers/CanvasSocketProvider";
 import { SearchableSelect } from "./components/SearchableSelect";
 import {
     createDraggable,
@@ -82,8 +82,7 @@ type props = {
 function Draft(props: props) {
     const params = useParams();
     const navigate = useNavigate();
-    const accessor = useUser();
-    const socketAccessor = accessor()[2];
+    const { socket: socketAccessor } = useCanvasSocket();
     const queryClient = useQueryClient();
     const [searchWord, setSearchWord] = createSignal("");
     const [selectedChampion, setSelectedChampion] = createSignal("");
