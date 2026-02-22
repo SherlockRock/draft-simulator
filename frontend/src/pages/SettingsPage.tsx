@@ -1,4 +1,4 @@
-import { Component, Show, createSignal } from "solid-js";
+import { Component, Show, createSignal, createEffect } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { useUser } from "../userProvider";
 import { DeleteAccountModal } from "../components/DeleteAccountModal";
@@ -11,11 +11,12 @@ const SettingsPage: Component = () => {
     const [showDeleteModal, setShowDeleteModal] = createSignal(false);
     const [showTooltip, setShowTooltip] = createSignal(false);
 
-    // Redirect if not logged in
-    if (!user()) {
-        navigate("/", { replace: true });
-        return null;
-    }
+    // Redirect if not logged in (only after auth check completes)
+    createEffect(() => {
+        if (!(user as any).isLoading && !user()) {
+            navigate("/", { replace: true });
+        }
+    });
 
     const handleExport = async () => {
         setIsExporting(true);
@@ -71,6 +72,11 @@ const SettingsPage: Component = () => {
 
     return (
         <div class="flex-1 overflow-auto bg-slate-900">
+            <Show when={user()} fallback={
+                <div class="flex h-full items-center justify-center">
+                    <p class="text-slate-400">Loading...</p>
+                </div>
+            }>
             <div class="mx-auto max-w-2xl p-8">
                     <h1 class="mb-8 text-3xl font-bold text-slate-50">Settings</h1>
 
@@ -168,6 +174,7 @@ const SettingsPage: Component = () => {
                 onClose={() => setShowDeleteModal(false)}
                 onConfirm={handleDeleteAccount}
             />
+            </Show>
         </div>
     );
 };
