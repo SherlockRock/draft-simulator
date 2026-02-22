@@ -144,6 +144,9 @@ router.delete("/me", protect, async (req, res) => {
         }
       }
 
+      // Delete all UserCanvas entries for this canvas (including shared users)
+      await UserCanvas.destroy({ where: { canvas_id: canvasId } });
+
       // Delete the canvas (cascades to CanvasDraft, CanvasGroup, etc.)
       await Canvas.destroy({ where: { id: canvasId } });
     }
