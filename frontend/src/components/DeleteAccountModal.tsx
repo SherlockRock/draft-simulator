@@ -64,6 +64,18 @@ export const DeleteAccountModal: Component<DeleteAccountModalProps> = (props) =>
                             Versus series you created will remain but show "Deleted User" as
                             creator.
                         </p>
+                        <p class="mt-3 text-sm text-slate-400">
+                            To fully disconnect from Google, also{" "}
+                            <a
+                                href="https://myaccount.google.com/permissions"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="text-teal-400 underline hover:text-teal-300"
+                            >
+                                revoke access in your Google Account
+                            </a>
+                            .
+                        </p>
                     </div>
 
                     <div class="mb-4">
