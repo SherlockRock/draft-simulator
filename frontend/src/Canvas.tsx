@@ -87,6 +87,7 @@ import { DeleteGroupDialog } from "./components/DeleteGroupDialog";
 import { DraftContextMenu } from "./components/DraftContextMenu";
 import { GroupContextMenu } from "./components/GroupContextMenu";
 import { useCanvasContext } from "./contexts/CanvasContext";
+import { useCanvasSocket } from "./providers/CanvasSocketProvider";
 
 const debounce = <T extends unknown[]>(func: (...args: T) => void, limit: number) => {
     let inDebounce: boolean;
@@ -117,7 +118,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const accessor = useUser();
-    const socketAccessor = accessor()[2];
+    const [user] = accessor();
+    const { socket: socketAccessor } = useCanvasSocket();
     const canvasContext = useCanvasContext();
 
     // Route parameter accessor with type narrowing
