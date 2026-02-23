@@ -4,6 +4,7 @@ const { Op, literal } = require("sequelize");
 const Draft = require("../models/Draft");
 const { Canvas, UserCanvas } = require("../models/Canvas");
 const VersusDraft = require("../models/VersusDraft");
+const VersusParticipant = require("../models/VersusParticipant");
 const User = require("../models/User");
 const { getUserFromRequest } = require("../middleware/auth");
 
@@ -107,31 +108,45 @@ router.get("/recent", async (req, res) => {
             ],
           });
 
-    // Get user's versus drafts if needed
-    const versusDrafts =
-      resourceType === "draft" || resourceType === "canvas"
-        ? []
-        : await VersusDraft.findAll({
-            where: {
-              owner_id: user.id,
-              ...(search && { name: { [Op.iLike]: `%${search}%` } }),
-            },
-            order: getSortOrder(sort),
-            limit: fetchLimit,
-            attributes: [
-              "id",
-              "name",
-              "blueTeamName",
-              "redTeamName",
-              "description",
-              "length",
-              "competitive",
-              "type",
-              "updatedAt",
-              "createdAt",
-              "icon",
-            ],
-          });
+    // Get user's versus drafts if needed (owned OR participated in)
+    let versusDrafts = [];
+    if (resourceType !== "draft" && resourceType !== "canvas") {
+      // Get IDs of versus drafts where user is a participant
+      const participatedVersusIds = await VersusParticipant.findAll({
+        where: { user_id: user.id },
+        attributes: ["versus_draft_id"],
+        raw: true,
+      }).then((rows) => rows.map((r) => r.versus_draft_id));
+
+      // Get versus drafts where user is owner OR participant
+      versusDrafts = await VersusDraft.findAll({
+        where: {
+          [Op.or]: [
+            { owner_id: user.id },
+            ...(participatedVersusIds.length > 0
+              ? [{ id: { [Op.in]: participatedVersusIds } }]
+              : []),
+          ],
+          ...(search && { name: { [Op.iLike]: `%${search}%` } }),
+        },
+        order: getSortOrder(sort),
+        limit: fetchLimit,
+        attributes: [
+          "id",
+          "name",
+          "blueTeamName",
+          "redTeamName",
+          "description",
+          "length",
+          "competitive",
+          "type",
+          "updatedAt",
+          "createdAt",
+          "icon",
+          "owner_id",
+        ],
+      });
+    }
 
     // Transform drafts to activity format
     const draftActivities = [
@@ -175,7 +190,7 @@ router.get("/recent", async (req, res) => {
       timestamp: versus.updatedAt,
       created_at: versus.createdAt,
       icon: versus.icon,
-      is_owner: true,
+      is_owner: versus.owner_id === user.id,
     }));
 
     // Combine and sort

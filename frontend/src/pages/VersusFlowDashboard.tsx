@@ -1,13 +1,51 @@
-import { Component, createSignal, Show } from "solid-js";
+import { Component, createSignal, createEffect, onMount, Show } from "solid-js";
+import { useInfiniteQuery } from "@tanstack/solid-query";
 import TutorialStep from "../components/TutorialStep";
 import ActivityList from "../components/ActivityList";
 import { useUser } from "../userProvider";
 import { CreateVersusDraftDialog } from "../components/CreateVersusDraftDialog";
+import { fetchRecentActivity } from "../utils/actions";
 
 const VersusFlowDashboard: Component = () => {
     const context = useUser();
     const [user] = context();
     const [showCreateDialog, setShowCreateDialog] = createSignal(false);
+    const [authSettled, setAuthSettled] = createSignal(false);
+
+    // Brief delay to let auth resolve before checking
+    onMount(() => {
+        setTimeout(() => setAuthSettled(true), 150);
+    });
+
+    // Query to check if user has any versus activity (shares cache with ActivityList)
+    const activityQuery = useInfiniteQuery(() => ({
+        queryKey: ["recentActivity", "versus", "", "recent"],
+        queryFn: ({ pageParam = 0 }) =>
+            fetchRecentActivity(pageParam, "versus", "", "recent"),
+        getNextPageParam: (lastPage) => lastPage.nextPage,
+        initialPageParam: 0,
+        enabled: !!user()
+    }));
+
+    // Auto-open create modal for users with no versus activity
+    createEffect(() => {
+        if (!authSettled()) return;
+
+        const currentUser = user();
+        const data = activityQuery.data;
+
+        if (currentUser) {
+            // Signed-in: wait for activity data before deciding
+            if (data === undefined) return;
+
+            if (!data.pages.some((p) => p.activities.length > 0)) {
+                setShowCreateDialog(true);
+            }
+        } else {
+            // Anonymous user
+            setShowCreateDialog(true);
+        }
+    });
 
     const handleCreateVersus = () => {
         setShowCreateDialog(true);
