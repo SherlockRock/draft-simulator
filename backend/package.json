@@ -1,7 +1,7 @@
 {
   "name": "draft-simulator-backend",
   "version": "0.0.1",
-  "description": "Draft Simulator backend",
+  "description": "First Pick backend",
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js"

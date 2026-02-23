@@ -20,11 +20,14 @@ const CanvasFlowDashboard: Component = () => {
             <div class="mx-auto max-w-7xl p-8">
                 {/* Hero intro section - centered panel within wider container */}
                 <div class="mx-auto mb-12 max-w-3xl">
-                    <div class="relative overflow-hidden rounded-xl border border-slate-700/50 bg-gradient-to-b from-slate-800 to-slate-800/50 p-8">
-                        {/* Subtle accent glow */}
-                        <div class="pointer-events-none absolute -top-24 left-1/2 h-48 w-96 -translate-x-1/2 rounded-full bg-purple-500/10 blur-3xl" />
+                    <div class="relative flex overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800">
+                        {/* Subtle gradient overlay */}
+                        <div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-purple-500/5 to-transparent" />
 
-                        <div class="relative">
+                        {/* Side accent stripe */}
+                        <div class="w-2 flex-shrink-0 bg-purple-500" />
+
+                        <div class="relative p-8">
                             <div class="mb-6 flex items-center gap-3">
                                 <span class="text-4xl">🎨</span>
                                 <h1 class="text-3xl font-bold text-slate-50">

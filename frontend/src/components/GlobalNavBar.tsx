@@ -25,41 +25,49 @@ const GlobalNavBar: Component = () => {
 
     return (
         <div class="global-navbar flex items-center justify-between border-b border-slate-700 bg-slate-900 px-6 py-3">
-            {/* Flow Navigation */}
-            <div class="flex gap-2">
-                <button
+            {/* Brand + Flow Navigation */}
+            <div class="flex items-center gap-6">
+                <span
                     onClick={() => navigate("/")}
-                    class={`flex items-center gap-2 rounded-md px-4 py-2 font-medium transition-colors ${
-                        activeFlow() === null
-                            ? "bg-teal-700 text-slate-50"
-                            : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-                    }`}
+                    class="cursor-pointer text-xl font-bold text-slate-50"
                 >
-                    <span>🏠</span>
-                    <span>Home</span>
-                </button>
-                <button
-                    onClick={() => navigate("/canvas")}
-                    class={`flex items-center gap-2 rounded-md px-4 py-2 font-medium transition-colors ${
-                        activeFlow() === "canvas"
-                            ? "bg-purple-600 text-white"
-                            : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-                    }`}
-                >
-                    <span>🎨</span>
-                    <span>Canvas</span>
-                </button>
-                <button
-                    onClick={() => navigate("/versus")}
-                    class={`flex items-center gap-2 rounded-md px-4 py-2 font-medium transition-colors ${
-                        activeFlow() === "versus"
-                            ? "bg-orange-600 text-white"
-                            : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-                    }`}
-                >
-                    <span>⚔️</span>
-                    <span>Versus</span>
-                </button>
+                    First Pick
+                </span>
+                <div class="flex gap-2">
+                    <button
+                        onClick={() => navigate("/")}
+                        class={`flex items-center gap-2 rounded-md px-4 py-2 font-medium transition-colors ${
+                            activeFlow() === null
+                                ? "bg-teal-700 text-slate-50"
+                                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                        }`}
+                    >
+                        <span>🏠</span>
+                        <span>Home</span>
+                    </button>
+                    <button
+                        onClick={() => navigate("/canvas")}
+                        class={`flex items-center gap-2 rounded-md px-4 py-2 font-medium transition-colors ${
+                            activeFlow() === "canvas"
+                                ? "bg-purple-600 text-white"
+                                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                        }`}
+                    >
+                        <span>🎨</span>
+                        <span>Canvas</span>
+                    </button>
+                    <button
+                        onClick={() => navigate("/versus")}
+                        class={`flex items-center gap-2 rounded-md px-4 py-2 font-medium transition-colors ${
+                            activeFlow() === "versus"
+                                ? "bg-orange-600 text-white"
+                                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                        }`}
+                    >
+                        <span>⚔️</span>
+                        <span>Versus</span>
+                    </button>
+                </div>
             </div>
 
             {/* User Section */}

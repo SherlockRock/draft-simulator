@@ -244,31 +244,31 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
         switch (props.activity.resource_type) {
             case "draft":
                 return {
-                    border: "border-blue-600/50 hover:border-blue-500",
-                    bg: "bg-slate-800 hover:bg-slate-700",
                     badge: "bg-blue-500/20 text-blue-300",
-                    text: "text-blue-400"
+                    text: "text-blue-400",
+                    accent: "bg-blue-500",
+                    gradient: "from-blue-500/5 to-transparent"
                 };
             case "canvas":
                 return {
-                    border: "border-purple-600/50 hover:border-purple-500",
-                    bg: "bg-slate-800 hover:bg-slate-700",
                     badge: "bg-purple-500/20 text-purple-300",
-                    text: "text-purple-400"
+                    text: "text-purple-400",
+                    accent: "bg-purple-500",
+                    gradient: "from-purple-500/5 to-transparent"
                 };
             case "versus":
                 return {
-                    border: "border-orange-600/50 hover:border-orange-500",
-                    bg: "bg-slate-800 hover:bg-slate-700",
                     badge: "bg-orange-500/20 text-orange-300",
-                    text: "text-orange-400"
+                    text: "text-orange-400",
+                    accent: "bg-orange-500",
+                    gradient: "from-orange-500/5 to-transparent"
                 };
             default:
                 return {
-                    border: "border-slate-700 hover:border-slate-600",
-                    bg: "bg-slate-800 hover:bg-slate-700",
                     badge: "bg-blue-500/20 text-blue-300",
-                    text: "text-slate-400"
+                    text: "text-slate-400",
+                    accent: "bg-teal-500",
+                    gradient: "from-teal-500/5 to-transparent"
                 };
         }
     };
@@ -404,48 +404,95 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     return (
         <div
             onClick={handleClick}
-            class={`relative flex cursor-pointer flex-col rounded-lg border-2 transition-all ${colors.border} ${colors.bg}`}
+            class="relative flex cursor-pointer overflow-hidden rounded-lg border border-slate-700/50 bg-slate-800 transition-all hover:bg-slate-700/80"
         >
-            {/* Header section: icon spans title + team names rows */}
-            <div class="flex gap-3 p-4 pb-2">
-                <IconDisplay
-                    icon={props.activity.icon ?? undefined}
-                    defaultIcon={getDefaultIcon()}
-                    size="md"
-                />
-                {/* Right side: title row + team names row */}
-                <div class="flex min-w-0 flex-1 flex-col gap-1">
-                    {/* Title row: title + actions */}
-                    <div class="flex items-center gap-2">
-                        <span
-                            class={`min-w-0 flex-1 truncate text-lg font-semibold ${colors.text}`}
-                        >
-                            {props.activity.resource_name}
-                        </span>
-                        {/* Actions/badge */}
-                        <Show
-                            when={props.activity.is_owner}
-                            fallback={
-                                <span
-                                    class={`shrink-0 rounded px-2 py-1 text-center text-xs ${colors.badge}`}
-                                >
-                                    Shared
-                                </span>
-                            }
-                        >
-                            <div
-                                ref={shareButtonRef}
-                                class="relative shrink-0"
-                                onFocusOut={handleShareFocusOut}
+            {/* Subtle gradient overlay */}
+            <div
+                class={`pointer-events-none absolute inset-0 bg-gradient-to-r ${colors.gradient}`}
+            />
+
+            {/* Side accent stripe */}
+            <div class={`w-1.5 flex-shrink-0 ${colors.accent}`} />
+
+            {/* Content wrapper */}
+            <div class="relative flex flex-1 flex-col">
+                {/* Header section: icon spans title + team names rows */}
+                <div class="flex gap-3 p-4 pb-2">
+                    <IconDisplay
+                        icon={props.activity.icon ?? undefined}
+                        defaultIcon={getDefaultIcon()}
+                        size="md"
+                    />
+                    {/* Right side: title row + team names row */}
+                    <div class="flex min-w-0 flex-1 flex-col gap-1">
+                        {/* Title row: title + actions */}
+                        <div class="flex items-center gap-2">
+                            <span
+                                class={`min-w-0 flex-1 truncate text-lg font-semibold ${colors.text}`}
                             >
-                                <div class="flex items-center gap-2">
-                                    <Show
-                                        when={props.activity.resource_type === "canvas"}
+                                {props.activity.resource_name}
+                            </span>
+                            {/* Actions/badge */}
+                            <Show
+                                when={props.activity.is_owner}
+                                fallback={
+                                    <span
+                                        class={`shrink-0 rounded px-2 py-1 text-center text-xs ${colors.badge}`}
                                     >
+                                        Shared
+                                    </span>
+                                }
+                            >
+                                <div
+                                    ref={shareButtonRef}
+                                    class="relative shrink-0"
+                                    onFocusOut={handleShareFocusOut}
+                                >
+                                    <div class="flex items-center gap-2">
+                                        <Show
+                                            when={
+                                                props.activity.resource_type === "canvas"
+                                            }
+                                        >
+                                            <button
+                                                onClick={handleManageUsers}
+                                                class={`${colors.text} transition-opacity hover:opacity-70`}
+                                                title="Manage Users"
+                                            >
+                                                <svg
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    class="h-5 w-5"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                    stroke-width="2"
+                                                >
+                                                    <path
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                        d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                                                    />
+                                                </svg>
+                                            </button>
+                                        </Show>
                                         <button
-                                            onClick={handleManageUsers}
+                                            onClick={handleShare}
                                             class={`${colors.text} transition-opacity hover:opacity-70`}
-                                            title="Manage Users"
+                                            title="Share"
+                                        >
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                class="h-5 w-5"
+                                                viewBox="0 0 20 20"
+                                                fill="currentColor"
+                                            >
+                                                <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            onClick={handleEdit}
+                                            class={`${colors.text} transition-opacity hover:opacity-70`}
+                                            title="Edit"
                                         >
                                             <svg
                                                 xmlns="http://www.w3.org/2000/svg"
@@ -458,124 +505,94 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                                 <path
                                                     stroke-linecap="round"
                                                     stroke-linejoin="round"
-                                                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.586a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                                                 />
                                             </svg>
                                         </button>
-                                    </Show>
-                                    <button
-                                        onClick={handleShare}
-                                        class={`${colors.text} transition-opacity hover:opacity-70`}
-                                        title="Share"
-                                    >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            class="h-5 w-5"
-                                            viewBox="0 0 20 20"
-                                            fill="currentColor"
-                                        >
-                                            <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" />
-                                        </svg>
-                                    </button>
-                                    <button
-                                        onClick={handleEdit}
-                                        class={`${colors.text} transition-opacity hover:opacity-70`}
-                                        title="Edit"
-                                    >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            class="h-5 w-5"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                            stroke-width="2"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.586a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                            />
-                                        </svg>
-                                    </button>
+                                    </div>
                                 </div>
+                            </Show>
+                        </div>
+                        {/* Team names row (versus only) */}
+                        <Show when={props.activity.resource_type === "versus"}>
+                            <div class="flex flex-wrap items-center gap-x-2 text-sm">
+                                <span class="text-blue-400">
+                                    {props.activity.blueTeamName}
+                                </span>
+                                <span class="text-slate-500">vs</span>
+                                <span class="text-red-400">
+                                    {props.activity.redTeamName}
+                                </span>
                             </div>
                         </Show>
                     </div>
-                    {/* Team names row (versus only) */}
-                    <Show when={props.activity.resource_type === "versus"}>
-                        <div class="flex flex-wrap items-center gap-x-2 text-sm">
-                            <span class="text-blue-400">
-                                {props.activity.blueTeamName}
-                            </span>
-                            <span class="text-slate-500">vs</span>
-                            <span class="text-red-400">{props.activity.redTeamName}</span>
-                        </div>
-                    </Show>
                 </div>
-            </div>
 
-            {/* Description - full width from left edge */}
-            <Show when={props.activity.description}>
-                <p class="line-clamp-2 px-4 text-sm text-slate-300">
-                    {props.activity.description}
-                </p>
-            </Show>
+                {/* Description - full width from left edge */}
+                <Show when={props.activity.description}>
+                    <p class="line-clamp-2 px-4 text-sm text-slate-300">
+                        {props.activity.description}
+                    </p>
+                </Show>
 
-            {/* Spacer to push footer to bottom */}
-            <div class="flex-1" />
+                {/* Spacer to push footer to bottom */}
+                <div class="flex-1" />
 
-            {/* Footer row: timestamp left, badges right */}
-            <div class="flex items-center justify-between px-4 pb-3 pt-2">
-                <span class="text-sm text-slate-400">
-                    {formatTimestamp(props.activity.timestamp)}
-                </span>
-                <Show when={props.activity.resource_type === "versus"}>
-                    <div class="flex items-center gap-2">
-                        <span
-                            class="rounded px-2 py-0.5 text-xs"
-                            classList={{
-                                "bg-indigo-500/20 text-indigo-300":
-                                    props.activity.length === 1,
-                                "bg-teal-500/20 text-teal-300":
-                                    props.activity.length === 3,
-                                "bg-emerald-500/20 text-emerald-300":
-                                    props.activity.length === 5,
-                                "bg-pink-500/20 text-pink-300":
-                                    props.activity.length === 7
-                            }}
-                        >
-                            Bo{props.activity.length}
-                        </span>
-                        <Show
-                            when={props.activity.competitive}
-                            fallback={
-                                <span class="rounded bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
-                                    Scrim
-                                </span>
-                            }
-                        >
-                            <span class="rounded bg-amber-500/20 px-2 py-0.5 text-xs text-amber-300">
-                                Competitive
-                            </span>
-                        </Show>
-                        <Show when={props.activity.type}>
+                {/* Footer row: timestamp left, badges right */}
+                <div class="flex items-center justify-between px-4 pb-3 pt-2">
+                    <span class="text-sm text-slate-400">
+                        {formatTimestamp(props.activity.timestamp)}
+                    </span>
+                    <Show when={props.activity.resource_type === "versus"}>
+                        <div class="flex items-center gap-2">
                             <span
                                 class="rounded px-2 py-0.5 text-xs"
                                 classList={{
-                                    "bg-cyan-500/20 text-cyan-300":
-                                        props.activity.type === "standard",
-                                    "bg-fuchsia-500/20 text-fuchsia-300":
-                                        props.activity.type === "fearless",
-                                    "bg-lime-500/20 text-lime-300":
-                                        props.activity.type === "ironman"
+                                    "bg-indigo-500/20 text-indigo-300":
+                                        props.activity.length === 1,
+                                    "bg-teal-500/20 text-teal-300":
+                                        props.activity.length === 3,
+                                    "bg-emerald-500/20 text-emerald-300":
+                                        props.activity.length === 5,
+                                    "bg-pink-500/20 text-pink-300":
+                                        props.activity.length === 7
                                 }}
                             >
-                                {(props.activity.type?.charAt(0) ?? "").toUpperCase() +
-                                    (props.activity.type?.slice(1) ?? "")}
+                                Bo{props.activity.length}
                             </span>
-                        </Show>
-                    </div>
-                </Show>
+                            <Show
+                                when={props.activity.competitive}
+                                fallback={
+                                    <span class="rounded bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
+                                        Scrim
+                                    </span>
+                                }
+                            >
+                                <span class="rounded bg-amber-500/20 px-2 py-0.5 text-xs text-amber-300">
+                                    Competitive
+                                </span>
+                            </Show>
+                            <Show when={props.activity.type}>
+                                <span
+                                    class="rounded px-2 py-0.5 text-xs"
+                                    classList={{
+                                        "bg-cyan-500/20 text-cyan-300":
+                                            props.activity.type === "standard",
+                                        "bg-fuchsia-500/20 text-fuchsia-300":
+                                            props.activity.type === "fearless",
+                                        "bg-lime-500/20 text-lime-300":
+                                            props.activity.type === "ironman"
+                                    }}
+                                >
+                                    {(
+                                        props.activity.type?.charAt(0) ?? ""
+                                    ).toUpperCase() +
+                                        (props.activity.type?.slice(1) ?? "")}
+                                </span>
+                            </Show>
+                        </div>
+                    </Show>
+                </div>
             </div>
 
             {/* Share Popup - positioned at card level to avoid overflow clipping */}

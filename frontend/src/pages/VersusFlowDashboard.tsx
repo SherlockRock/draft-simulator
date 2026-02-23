@@ -18,11 +18,14 @@ const VersusFlowDashboard: Component = () => {
             <div class="mx-auto max-w-7xl p-8">
                 {/* Hero intro section - centered panel within wider container */}
                 <div class="mx-auto mb-12 max-w-3xl">
-                    <div class="relative overflow-hidden rounded-xl border border-slate-700/50 bg-gradient-to-b from-slate-800 to-slate-800/50 p-8">
-                        {/* Subtle accent glow */}
-                        <div class="pointer-events-none absolute -top-24 left-1/2 h-48 w-96 -translate-x-1/2 rounded-full bg-orange-500/10 blur-3xl" />
+                    <div class="relative flex overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800">
+                        {/* Subtle gradient overlay */}
+                        <div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-orange-500/5 to-transparent" />
 
-                        <div class="relative">
+                        {/* Side accent stripe */}
+                        <div class="w-2 flex-shrink-0 bg-orange-500" />
+
+                        <div class="relative p-8">
                             <div class="mb-6 flex items-center gap-3">
                                 <span class="text-4xl">⚔️</span>
                                 <h1 class="text-3xl font-bold text-slate-50">
@@ -50,7 +53,7 @@ const VersusFlowDashboard: Component = () => {
 
                             <button
                                 onClick={handleCreateVersus}
-                                class="rounded-lg bg-gradient-to-r from-orange-600 to-orange-500 px-6 py-3 font-semibold text-white shadow-lg shadow-orange-500/20 transition-all hover:from-orange-500 hover:to-orange-400 hover:shadow-orange-500/30"
+                                class="rounded-lg bg-orange-500 px-6 py-3 font-semibold text-white transition-all hover:bg-orange-400"
                             >
                                 Create New Versus Draft
                             </button>
