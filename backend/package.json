@@ -4,7 +4,7 @@
   "description": "Draft Simulator backend",
   "scripts": {
     "start": "node index.js",
-    "dev": "node index.js"
+    "dev": "node --watch index.js"
   },
   "dependencies": {
     "@draft-sim/shared-types": "workspace:*",

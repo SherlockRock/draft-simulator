@@ -12,6 +12,8 @@ import { useSearchParams } from "@solidjs/router";
 import { useInfiniteQuery } from "@tanstack/solid-query";
 import { fetchRecentActivity } from "../utils/actions";
 import ActivityItem from "./ActivityItem";
+import { StyledSelect } from "./StyledSelect";
+import { SelectTheme } from "../utils/selectTheme";
 
 type SortOption = "recent" | "oldest" | "name_asc" | "name_desc";
 type AccentColor = "teal" | "purple" | "orange";
@@ -94,21 +96,21 @@ const ActivityList: Component<ActivityListProps> = (props) => {
         onCleanup(() => observer.disconnect());
     };
 
-    const selectBorderClass = () => {
+    const selectTheme = (): SelectTheme => {
         switch (props.accentColor) {
             case "purple":
-                return "border-purple-500";
+                return "purple";
             case "orange":
-                return "border-orange-500";
+                return "orange";
             default:
-                return "border-teal-500";
+                return "teal";
         }
     };
 
     return (
         <div>
             {/* Filter Controls - matches champion search layout */}
-            <div class="mb-4 flex">
+            <div class="mb-4 flex gap-2">
                 <input
                     type="text"
                     placeholder="Search..."
@@ -116,17 +118,13 @@ const ActivityList: Component<ActivityListProps> = (props) => {
                     onInput={(e) => handleSearchInput(e.currentTarget.value)}
                     class="w-full bg-transparent p-2 text-slate-50 placeholder:text-slate-200 focus:outline-none"
                 />
-                <select
+                <StyledSelect
                     value={currentSort()}
-                    onChange={(e) =>
-                        handleSortChange(e.currentTarget.value as SortOption)
-                    }
-                    class={`rounded-md border bg-slate-800 px-4 py-2 text-slate-50 focus:outline-none ${selectBorderClass()}`}
-                >
-                    <For each={SORT_OPTIONS}>
-                        {(option) => <option value={option.value}>{option.label}</option>}
-                    </For>
-                </select>
+                    onChange={(value) => handleSortChange(value as SortOption)}
+                    options={SORT_OPTIONS}
+                    theme={selectTheme()}
+                    class="w-40"
+                />
             </div>
 
             {/* Activity Grid */}

@@ -96,7 +96,7 @@ export const IconPicker = (props: IconPickerProps) => {
                     </div>
 
                     {/* Content */}
-                    <div class="h-[50vh] overflow-y-auto overflow-x-hidden">
+                    <div class="custom-scrollbar h-[50vh] overflow-y-auto overflow-x-hidden">
                         <Show when={activeTab() === "champions"}>
                             <div class="mb-2 p-2">
                                 <FilterBar

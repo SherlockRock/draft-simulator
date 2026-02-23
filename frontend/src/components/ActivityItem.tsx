@@ -859,7 +859,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                         onChange={(e) =>
                                             setEditCompetitive(e.currentTarget.checked)
                                         }
-                                        class="h-4 w-4 rounded border-slate-600 bg-slate-700 text-teal-500 focus:ring-2 focus:ring-teal-500"
+                                        class="h-4 w-4 rounded border-slate-600 bg-slate-700 accent-orange-500 focus:ring-2 focus:ring-teal-500"
                                     />
                                     Competitive Mode
                                 </label>

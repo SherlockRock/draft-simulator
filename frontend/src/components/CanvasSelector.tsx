@@ -23,7 +23,7 @@ const CanvasSelector: Component<CanvasSelectorProps> = (props) => {
 
     return (
         <div class="canvas-selector">
-            <label class="mb-2 block text-sm font-medium text-slate-300">
+            <label class="mb-2 block text-sm font-medium text-slate-200">
                 Select Canvas
             </label>
             <Show
