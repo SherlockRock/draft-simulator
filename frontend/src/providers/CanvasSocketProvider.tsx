@@ -86,12 +86,14 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
 
     return (
         <CanvasSocketContext.Provider value={contextValue}>
-            <ConnectionBanner
-                connectionStatus={connectionStatus}
-                connectionInfo={connectionInfo}
-                onReconnect={reconnect}
-            />
-            {props.children}
+            <div class="flex flex-1 flex-col overflow-hidden">
+                <ConnectionBanner
+                    connectionStatus={connectionStatus}
+                    connectionInfo={connectionInfo}
+                    onReconnect={reconnect}
+                />
+                {props.children}
+            </div>
         </CanvasSocketContext.Provider>
     );
 }

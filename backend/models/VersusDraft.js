@@ -15,12 +15,12 @@ const VersusDraft = sequelize.define("VersusDraft", {
   blueTeamName: {
     type: DataTypes.STRING,
     allowNull: false,
-    defaultValue: "Blue Team",
+    defaultValue: "Team 1",
   },
   redTeamName: {
     type: DataTypes.STRING,
     allowNull: false,
-    defaultValue: "Red Team",
+    defaultValue: "Team 2",
   },
   description: {
     type: DataTypes.TEXT,

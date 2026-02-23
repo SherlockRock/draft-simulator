@@ -14,8 +14,8 @@ interface CreateVersusDraftDialogProps {
 export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => {
     const navigate = useNavigate();
     const [name, setName] = createSignal("");
-    const [blueTeamName, setBlueTeamName] = createSignal("Blue Team");
-    const [redTeamName, setRedTeamName] = createSignal("Red Team");
+    const [blueTeamName, setBlueTeamName] = createSignal("Team 1");
+    const [redTeamName, setRedTeamName] = createSignal("Team 2");
     const [description, setDescription] = createSignal("");
     const [length, setLength] = createSignal(3);
     const [competitive, setCompetitive] = createSignal(false);
@@ -28,8 +28,8 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
     createEffect(() => {
         if (props.isOpen()) {
             setName("");
-            setBlueTeamName("Blue Team");
-            setRedTeamName("Red Team");
+            setBlueTeamName("Team 1");
+            setRedTeamName("Team 2");
             setDescription("");
             setLength(3);
             setCompetitive(false);
@@ -46,10 +46,10 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
             newErrors.name = "Name is required";
         }
         if (!blueTeamName().trim()) {
-            newErrors.blueTeamName = "Blue team name is required";
+            newErrors.blueTeamName = "Team 1 name is required";
         }
         if (!redTeamName().trim()) {
-            newErrors.redTeamName = "Red team name is required";
+            newErrors.redTeamName = "Team 2 name is required";
         }
 
         setErrors(newErrors);
@@ -125,7 +125,7 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label class="mb-2 block text-sm font-medium text-slate-300">
-                                    Blue Team Name
+                                    Team 1 Name
                                 </label>
                                 <input
                                     type="text"
@@ -144,7 +144,7 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
 
                             <div>
                                 <label class="mb-2 block text-sm font-medium text-slate-300">
-                                    Red Team Name
+                                    Team 2 Name
                                 </label>
                                 <input
                                     type="text"

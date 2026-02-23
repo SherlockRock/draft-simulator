@@ -17,7 +17,14 @@ router.get("/", authenticate, async (req, res) => {
         {
           model: Draft,
           as: "Drafts",
-          attributes: ["id", "name", "picks", "seriesIndex", "completed", "winner"],
+          attributes: [
+            "id",
+            "name",
+            "picks",
+            "seriesIndex",
+            "completed",
+            "winner",
+          ],
         },
       ],
       order: [["updatedAt", "DESC"]],
@@ -49,8 +56,8 @@ router.post("/", optionalAuth, async (req, res) => {
     // Create versus draft
     const versusDraft = await VersusDraft.create({
       name,
-      blueTeamName: blueTeamName || "Blue Team",
-      redTeamName: redTeamName || "Red Team",
+      blueTeamName: blueTeamName || "Team 1",
+      redTeamName: redTeamName || "Team 2",
       description,
       length: length || 3,
       competitive: competitive || false,
@@ -132,7 +139,9 @@ router.put("/:id", authenticate, async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
-    const versusDraft = await VersusDraft.findByPk(req.params.id, { transaction });
+    const versusDraft = await VersusDraft.findByPk(req.params.id, {
+      transaction,
+    });
 
     if (!versusDraft) {
       await transaction.rollback();
@@ -144,22 +153,38 @@ router.put("/:id", authenticate, async (req, res) => {
       return res.status(403).json({ error: "Not authorized" });
     }
 
-    const { name, description, competitive, icon, type, blueTeamName, redTeamName, length } = req.body;
+    const {
+      name,
+      description,
+      competitive,
+      icon,
+      type,
+      blueTeamName,
+      redTeamName,
+      length,
+    } = req.body;
 
     // Check if series has started (any picks made in first draft)
-    const drafts = await versusDraft.getDrafts({ order: [['seriesIndex', 'ASC']], transaction });
+    const drafts = await versusDraft.getDrafts({
+      order: [["seriesIndex", "ASC"]],
+      transaction,
+    });
     const firstDraft = drafts[0];
-    const hasStarted = firstDraft && firstDraft.picks && firstDraft.picks.some(p => p && p !== "");
+    const hasStarted =
+      firstDraft &&
+      firstDraft.picks &&
+      firstDraft.picks.some((p) => p && p !== "");
 
     // Check if Game 2 has started (for type change validation)
-    const game2 = drafts.find(d => d.seriesIndex === 1);
-    const game2HasStarted = game2 && game2.picks && game2.picks.some(p => p && p !== "");
+    const game2 = drafts.find((d) => d.seriesIndex === 1);
+    const game2HasStarted =
+      game2 && game2.picks && game2.picks.some((p) => p && p !== "");
 
     // Validate type change - allowed until Game 2 starts
     if (type !== undefined && type !== versusDraft.type && game2HasStarted) {
       await transaction.rollback();
       return res.status(400).json({
-        error: "Cannot change series type after Game 2 has started"
+        error: "Cannot change series type after Game 2 has started",
       });
     }
 
@@ -176,31 +201,35 @@ router.put("/:id", authenticate, async (req, res) => {
         for (let i = 0; i < delta; i++) {
           const newSeriesIndex = drafts.length + i;
           newDraftPromises.push(
-            Draft.create({
-              name: `${seriesName} - Game ${newSeriesIndex + 1}`,
-              type: "versus",
-              versus_draft_id: versusDraft.id,
-              seriesIndex: newSeriesIndex,
-              owner_id: versusDraft.owner_id,
-              description: "",
-              picks: Array(20).fill(""),
-              completed: false,
-              winner: null,
-            }, { transaction })
+            Draft.create(
+              {
+                name: `${seriesName} - Game ${newSeriesIndex + 1}`,
+                type: "versus",
+                versus_draft_id: versusDraft.id,
+                seriesIndex: newSeriesIndex,
+                owner_id: versusDraft.owner_id,
+                description: "",
+                picks: Array(20).fill(""),
+                completed: false,
+                winner: null,
+              },
+              { transaction },
+            ),
           );
         }
         await Promise.all(newDraftPromises);
       } else {
         // Decreasing length - check and delete drafts
-        const draftsToDelete = drafts.filter(d => d.seriesIndex >= length);
+        const draftsToDelete = drafts.filter((d) => d.seriesIndex >= length);
 
         // Check if any drafts to delete have picks
         for (const draft of draftsToDelete) {
-          const hasPicks = draft.picks && draft.picks.some(p => p && p !== "");
+          const hasPicks =
+            draft.picks && draft.picks.some((p) => p && p !== "");
           if (hasPicks) {
             await transaction.rollback();
             return res.status(400).json({
-              error: `Cannot reduce series length - Game ${draft.seriesIndex + 1} has already started`
+              error: `Cannot reduce series length - Game ${draft.seriesIndex + 1} has already started`,
             });
           }
         }
@@ -209,31 +238,34 @@ router.put("/:id", authenticate, async (req, res) => {
         await Draft.destroy({
           where: {
             versus_draft_id: versusDraft.id,
-            seriesIndex: { [Op.gte]: length }
+            seriesIndex: { [Op.gte]: length },
           },
-          transaction
+          transaction,
         });
       }
     }
 
-    await versusDraft.update({
-      ...(name && { name }),
-      ...(description !== undefined && { description }),
-      ...(competitive !== undefined && { competitive }),
-      ...(icon !== undefined && { icon }),
-      ...(blueTeamName && { blueTeamName }),
-      ...(redTeamName && { redTeamName }),
-      // Type changes allowed until Game 2 starts, length changes only before series starts
-      ...(!game2HasStarted && type !== undefined && { type }),
-      ...(!hasStarted && length !== undefined && { length }),
-    }, { transaction });
+    await versusDraft.update(
+      {
+        ...(name && { name }),
+        ...(description !== undefined && { description }),
+        ...(competitive !== undefined && { competitive }),
+        ...(icon !== undefined && { icon }),
+        ...(blueTeamName && { blueTeamName }),
+        ...(redTeamName && { redTeamName }),
+        // Type changes allowed until Game 2 starts, length changes only before series starts
+        ...(!game2HasStarted && type !== undefined && { type }),
+        ...(!hasStarted && length !== undefined && { length }),
+      },
+      { transaction },
+    );
 
     await transaction.commit();
 
     // Reload with drafts included for the response and socket broadcast
     const updatedVersusDraft = await VersusDraft.findByPk(versusDraft.id, {
       include: [{ model: Draft, as: "Drafts" }],
-      order: [[{ model: Draft, as: "Drafts" }, "seriesIndex", "ASC"]]
+      order: [[{ model: Draft, as: "Drafts" }, "seriesIndex", "ASC"]],
     });
 
     // Broadcast update to all connected participants

@@ -116,13 +116,13 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                     {/* Team Score */}
                     <div class="flex items-center gap-2 text-sm">
                         <span class="text-blue-400">
-                            {props.group.metadata.blueTeamName ?? "Blue Team"}
+                            {props.group.metadata.blueTeamName ?? "Team 1"}
                         </span>
                         <span class="font-bold text-slate-50">
                             {teamScore().blue} - {teamScore().red}
                         </span>
                         <span class="text-red-400">
-                            {props.group.metadata.redTeamName ?? "Red Team"}
+                            {props.group.metadata.redTeamName ?? "Team 2"}
                         </span>
                     </div>
                 </div>

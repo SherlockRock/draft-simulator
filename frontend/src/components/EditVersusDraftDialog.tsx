@@ -38,8 +38,8 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
     createEffect(() => {
         if (props.isOpen()) {
             setName(props.versusDraft.name || "");
-            setBlueTeamName(props.versusDraft.blueTeamName || "Blue Team");
-            setRedTeamName(props.versusDraft.redTeamName || "Red Team");
+            setBlueTeamName(props.versusDraft.blueTeamName || "Team 1");
+            setRedTeamName(props.versusDraft.redTeamName || "Team 2");
             setDescription(props.versusDraft.description || "");
             setCompetitive(props.versusDraft.competitive || false);
             setIcon(props.versusDraft.icon || "");
@@ -56,10 +56,10 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
             newErrors.name = "Name is required";
         }
         if (!blueTeamName().trim()) {
-            newErrors.blueTeamName = "Blue team name is required";
+            newErrors.blueTeamName = "Team 1 name is required";
         }
         if (!redTeamName().trim()) {
-            newErrors.redTeamName = "Red team name is required";
+            newErrors.redTeamName = "Team 2 name is required";
         }
 
         setErrors(newErrors);
@@ -134,7 +134,7 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label class="mb-2 block text-sm font-medium text-slate-300">
-                                    Blue Team Name
+                                    Team 1 Name
                                 </label>
                                 <input
                                     type="text"
@@ -153,7 +153,7 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
 
                             <div>
                                 <label class="mb-2 block text-sm font-medium text-slate-300">
-                                    Red Team Name
+                                    Team 2 Name
                                 </label>
                                 <input
                                     type="text"

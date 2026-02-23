@@ -8,8 +8,19 @@ type Props = {
 };
 
 const ConnectionBanner = (props: Props) => {
+    // Only show banner when:
+    // - Reconnecting (not initial connect) - connecting with attempts > 0
+    // - Disconnected or error state
+    const shouldShow = () => {
+        const status = props.connectionStatus();
+        if (status === "disconnected" || status === "error") return true;
+        if (status === "connecting" && props.connectionInfo().reconnectAttempts > 0)
+            return true;
+        return false;
+    };
+
     return (
-        <Show when={props.connectionStatus() !== "connected"}>
+        <Show when={shouldShow()}>
             <div
                 class="flex items-center justify-center gap-4 p-3 text-center font-bold text-slate-50"
                 classList={{

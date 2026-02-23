@@ -111,8 +111,8 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
             setEditDescription(props.activity.description || "");
             setEditIcon(props.activity.icon || "");
             if (props.activity.resource_type === "versus") {
-                setEditBlueTeamName(props.activity.blueTeamName || "Blue Team");
-                setEditRedTeamName(props.activity.redTeamName || "Red Team");
+                setEditBlueTeamName(props.activity.blueTeamName || "Team 1");
+                setEditRedTeamName(props.activity.redTeamName || "Team 2");
                 setEditCompetitive(props.activity.competitive || false);
             }
             if (props.activity.resource_type === "draft") {
@@ -843,7 +843,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                             <div class="mb-4 grid grid-cols-2 gap-4">
                                 <div>
                                     <label class="mb-2 block text-sm font-medium text-slate-200">
-                                        Blue Team
+                                        Team 1
                                     </label>
                                     <input
                                         type="text"
@@ -856,7 +856,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                 </div>
                                 <div>
                                     <label class="mb-2 block text-sm font-medium text-slate-200">
-                                        Red Team
+                                        Team 2
                                     </label>
                                     <input
                                         type="text"

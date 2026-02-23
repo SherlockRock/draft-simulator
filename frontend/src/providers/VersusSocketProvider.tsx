@@ -94,12 +94,14 @@ export function VersusSocketProvider(props: { children: JSX.Element }) {
 
     return (
         <VersusSocketContext.Provider value={contextValue}>
-            <ConnectionBanner
-                connectionStatus={connectionStatus}
-                connectionInfo={connectionInfo}
-                onReconnect={reconnect}
-            />
-            {props.children}
+            <div class="flex flex-1 flex-col overflow-hidden">
+                <ConnectionBanner
+                    connectionStatus={connectionStatus}
+                    connectionInfo={connectionInfo}
+                    onReconnect={reconnect}
+                />
+                {props.children}
+            </div>
         </VersusSocketContext.Provider>
     );
 }

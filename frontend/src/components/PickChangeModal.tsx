@@ -316,8 +316,8 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                     class={`font-semibold ${getTeamColor(props.pendingRequest?.team ?? "blue")}`}
                                 >
                                     {props.pendingRequest?.team === "blue"
-                                        ? "Blue Team"
-                                        : "Red Team"}
+                                        ? "Team 1"
+                                        : "Team 2"}
                                 </span>{" "}
                                 wants to change a pick
                             </p>

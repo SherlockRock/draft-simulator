@@ -69,7 +69,8 @@ const fetchDraft = async (id: string): Promise<draft> => {
 const VersusDraftView: Component = () => {
     const params = useParams<{ id: string; draftId: string }>();
     const navigate = useNavigate();
-    const { socket: socketAccessor, connectionStatus: connectionStatusAccessor } = useVersusSocket();
+    const { socket: socketAccessor, connectionStatus: connectionStatusAccessor } =
+        useVersusSocket();
 
     // Get role and participant info from context (single source of truth)
     const {
@@ -758,14 +759,14 @@ const VersusDraftView: Component = () => {
     const blueSideTeamName = () => {
         const vd = versusDraft();
         const bst = versusState().blueSideTeam ?? draft()?.blueSideTeam ?? 1;
-        if (!vd) return "Blue Team";
+        if (!vd) return "Team 1";
         return bst === 1 ? vd.blueTeamName : vd.redTeamName;
     };
 
     const redSideTeamName = () => {
         const vd = versusDraft();
         const bst = versusState().blueSideTeam ?? draft()?.blueSideTeam ?? 1;
-        if (!vd) return "Red Team";
+        if (!vd) return "Team 2";
         return bst === 1 ? vd.redTeamName : vd.blueTeamName;
     };
 
