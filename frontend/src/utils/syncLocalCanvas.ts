@@ -1,4 +1,4 @@
-import { getLocalCanvas, clearLocalCanvas } from "./localCanvasStore";
+import { getLocalCanvas, clearLocalCanvas, isLocalCanvasEmpty } from "./localCanvasStore";
 import {
     createCanvas,
     postNewDraft,
@@ -11,6 +11,9 @@ import {
 import { ConnectionEndpoint } from "./schemas";
 
 export const syncLocalCanvasToServer = async (): Promise<string | null> => {
+    // Skip sync if canvas is empty (no drafts, no groups, not renamed)
+    if (isLocalCanvasEmpty()) return null;
+
     const local = getLocalCanvas();
     if (!local) return null;
 
@@ -99,7 +102,7 @@ export const syncLocalCanvasToServer = async (): Promise<string | null> => {
         });
     }
 
-    // Step 5: Clear local storage
+    // Step 5: Clear local storage after successful sync
     clearLocalCanvas();
 
     return canvasId;

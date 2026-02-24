@@ -47,3 +47,11 @@ export const createEmptyLocalCanvas = (name: string, description?: string, icon?
 export const hasLocalCanvas = (): boolean => {
     return localStorage.getItem(STORAGE_KEY) !== null;
 };
+
+export const isLocalCanvasEmpty = (): boolean => {
+    const canvas = getLocalCanvas();
+    if (!canvas) return true;
+    const hasContent = canvas.drafts.length > 0 || canvas.groups.length > 0;
+    const wasRenamed = canvas.name !== "My Canvas";
+    return !hasContent && !wasRenamed;
+};

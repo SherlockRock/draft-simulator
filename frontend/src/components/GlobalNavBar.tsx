@@ -21,6 +21,16 @@ const GlobalNavBar: Component = () => {
         if (actions && "logout" in actions) {
             actions.logout();
         }
+
+        // Context-dependent redirect after logout
+        const path = location.pathname;
+        if (path.startsWith("/canvas")) {
+            // Go through CanvasEntryRedirect to ensure fresh local canvas is created
+            navigate("/canvas", { replace: true });
+        } else if (path.startsWith("/settings")) {
+            navigate("/", { replace: true });
+        }
+        // Versus and other pages: stay on current URL
     };
 
     return (
