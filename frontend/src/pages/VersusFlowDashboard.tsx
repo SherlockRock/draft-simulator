@@ -1,21 +1,23 @@
-import { Component, createSignal, createEffect, onMount, Show } from "solid-js";
-import { useInfiniteQuery } from "@tanstack/solid-query";
+import { Component, createSignal, createEffect, Show } from "solid-js";
+import { useQuery, useInfiniteQuery } from "@tanstack/solid-query";
 import TutorialStep from "../components/TutorialStep";
 import ActivityList from "../components/ActivityList";
 import { useUser } from "../userProvider";
 import { CreateVersusDraftDialog } from "../components/CreateVersusDraftDialog";
-import { fetchRecentActivity } from "../utils/actions";
+import { fetchRecentActivity, fetchUserDetails } from "../utils/actions";
 
 const VersusFlowDashboard: Component = () => {
     const context = useUser();
     const [user] = context();
     const [showCreateDialog, setShowCreateDialog] = createSignal(false);
-    const [authSettled, setAuthSettled] = createSignal(false);
 
-    // Brief delay to let auth resolve before checking
-    onMount(() => {
-        setTimeout(() => setAuthSettled(true), 150);
-    });
+    // Observe user query state reactively (shares cache with userProvider)
+    const userQuery = useQuery(() => ({
+        queryKey: ["user"],
+        queryFn: fetchUserDetails,
+        staleTime: 1000 * 60 * 60 * 24,
+        retry: false
+    }));
 
     // Query to check if user has any versus activity (shares cache with ActivityList)
     const activityQuery = useInfiniteQuery(() => ({
@@ -24,18 +26,17 @@ const VersusFlowDashboard: Component = () => {
             fetchRecentActivity(pageParam, "versus", "", "recent"),
         getNextPageParam: (lastPage) => lastPage.nextPage,
         initialPageParam: 0,
-        enabled: !!user()
+        enabled: !!userQuery.data
     }));
 
     // Auto-open create modal for users with no versus activity
     createEffect(() => {
-        if (!authSettled()) return;
+        // Wait for auth to resolve
+        if (userQuery.isLoading) return;
 
-        const currentUser = user();
-        const data = activityQuery.data;
-
-        if (currentUser) {
+        if (userQuery.data) {
             // Signed-in: wait for activity data before deciding
+            const data = activityQuery.data;
             if (data === undefined) return;
 
             if (!data.pages.some((p) => p.activities.length > 0)) {

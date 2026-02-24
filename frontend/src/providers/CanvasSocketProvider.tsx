@@ -5,8 +5,7 @@ import {
     createEffect,
     onCleanup,
     JSX,
-    createMemo,
-    Accessor
+    createMemo
 } from "solid-js";
 import { Socket } from "socket.io-client";
 import {
@@ -15,11 +14,15 @@ import {
     SocketContextValue,
     createAuthenticatedSocket
 } from "./socketUtils";
+import { useUser } from "../userProvider";
 import ConnectionBanner from "../ConnectionBanner";
 
 const CanvasSocketContext = createContext<SocketContextValue>();
 
 export function CanvasSocketProvider(props: { children: JSX.Element }) {
+    const accessor = useUser();
+    const [user] = accessor();
+
     const [socket, setSocket] = createSignal<Socket | undefined>(undefined);
     const [connectionStatus, setConnectionStatus] =
         createSignal<ConnectionStatus>("connecting");
@@ -39,7 +42,17 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
         reconnectAttempts: reconnectAttempts()
     }));
 
+    // Only create socket for authenticated users
+    // Anonymous users use local canvases which don't need real-time sync
     createEffect(() => {
+        const currentUser = user();
+        if (!currentUser) {
+            // No socket for anonymous users - they use local mode
+            setSocket(undefined);
+            setConnectionStatus("disconnected");
+            return;
+        }
+
         const newSocket = createAuthenticatedSocket();
 
         newSocket.on("connect", () => {
@@ -84,14 +97,20 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
         reconnect
     };
 
+    // For anonymous users (local mode), skip the connection banner
+    // since there's no socket to connect
+    const isLocalMode = () => !user();
+
     return (
         <CanvasSocketContext.Provider value={contextValue}>
             <div class="flex flex-1 flex-col overflow-hidden">
-                <ConnectionBanner
-                    connectionStatus={connectionStatus}
-                    connectionInfo={connectionInfo}
-                    onReconnect={reconnect}
-                />
+                {!isLocalMode() && (
+                    <ConnectionBanner
+                        connectionStatus={connectionStatus}
+                        connectionInfo={connectionInfo}
+                        onReconnect={reconnect}
+                    />
+                )}
                 {props.children}
             </div>
         </CanvasSocketContext.Provider>

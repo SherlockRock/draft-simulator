@@ -1,7 +1,7 @@
-import { Component, createEffect, createResource } from "solid-js";
+import { Component, createEffect } from "solid-js";
 import { useNavigate } from "@solidjs/router";
-import { useUser } from "../userProvider";
-import { fetchCanvasList, createCanvas } from "../utils/actions";
+import { useQuery } from "@tanstack/solid-query";
+import { fetchCanvasList, createCanvas, fetchUserDetails } from "../utils/actions";
 import {
     hasLocalCanvas,
     createEmptyLocalCanvas,
@@ -10,39 +10,40 @@ import {
 
 const CanvasEntryRedirect: Component = () => {
     const navigate = useNavigate();
-    const context = useUser();
-    const [user] = context();
+
+    // Use useQuery directly to get proper reactivity for isLoading/isError
+    // This shares the cache with UserProvider's query via the same key
+    const userQuery = useQuery(() => ({
+        queryKey: ["user"],
+        queryFn: fetchUserDetails,
+        staleTime: 1000 * 60 * 60 * 24,
+        retry: false
+    }));
 
     // For signed-in users, fetch their canvas list (already sorted by updatedAt DESC)
-    const [canvasList] = createResource(
-        () => {
-            // Only fetch when we know user is signed in
-            // user() returns undefined while loading, null/user object when resolved
-            const u = user();
-            // Check if auth query has settled (not undefined = resolved)
-            const hasSettled =
-                u !== undefined || (user as unknown as { isError?: boolean }).isError;
-            if (!hasSettled) return null; // Don't fetch yet
-            return u ? true : null; // Fetch only if signed in
-        },
-        () => fetchCanvasList()
-    );
+    const canvasListQuery = useQuery(() => ({
+        queryKey: ["canvasList"],
+        queryFn: fetchCanvasList,
+        // Only fetch when user is confirmed signed in
+        enabled: !userQuery.isLoading && !userQuery.isError && !!userQuery.data,
+        staleTime: 1000 * 60 * 5
+    }));
 
     createEffect(async () => {
-        // Track user() to make the effect reactive to auth state changes
-        const currentUser = user();
+        // Track reactive query state - these are signals in TanStack Solid Query
+        const isLoading = userQuery.isLoading;
+        const isError = userQuery.isError;
+        const currentUser = userQuery.data;
 
-        // Check if auth is still loading (undefined = loading, null = not signed in)
-        // Also check isError for failed auth queries
-        const isError = (user as unknown as { isError?: boolean }).isError;
-        if (currentUser === undefined && !isError) return;
+        // Wait for auth to settle
+        if (isLoading) return;
 
-        if (currentUser) {
+        if (currentUser && !isError) {
             // Signed-in user: wait for canvas list to load
-            const list = canvasList();
-            if (list === undefined) return; // still loading
+            if (canvasListQuery.isLoading) return;
+            const list = canvasListQuery.data;
 
-            if (list.length > 0) {
+            if (list && list.length > 0) {
                 // Navigate to most recently updated canvas (first in list)
                 navigate(`/canvas/${list[0].id}`, { replace: true });
             } else {
