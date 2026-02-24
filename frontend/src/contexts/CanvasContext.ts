@@ -1,7 +1,7 @@
 import { createContext, useContext, Setter, Resource, Accessor } from "solid-js";
 
 // Canvas context type definition - shared between CanvasWorkflow and consumers
-export type CanvasContextType = {
+type CanvasContextType = {
     canvas: Resource<any>;
     mutateCanvas: Setter<any>;
     refetchCanvas: () => void;

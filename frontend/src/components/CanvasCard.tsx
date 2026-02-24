@@ -6,7 +6,7 @@ import { CanvasSelect } from "./CanvasSelect";
 import { indexToShorthandHorizontal, indexToShorthandVertical } from "../utils/constants";
 import { CUSTOM_GROUP_HEADER_HEIGHT } from "./CustomGroupContainer";
 
-export type CanvasCardProps = {
+type CanvasCardProps = {
     canvasId: string;
     canvasDraft: CanvasDraft;
     addBox: (fromBox: CanvasDraft) => void;

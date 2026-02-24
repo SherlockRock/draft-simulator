@@ -92,11 +92,7 @@ function resetReadyStatus(draftId) {
 }
 
 module.exports = {
-  versusStates,
   initializeState,
   getState,
-  updateState,
-  removeState,
   getActiveDraftIds,
-  resetReadyStatus,
 };

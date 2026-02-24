@@ -1,26 +1,18 @@
-import {
-    Accessor,
-    createContext,
-    createMemo,
-    useContext,
-    JSX,
-    createEffect,
-    createSignal
-} from "solid-js";
+import { Accessor, createContext, createMemo, useContext, JSX } from "solid-js";
 import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import { fetchUserDetails, handleGoogleLogin, handleRevoke } from "./utils/actions";
 import { useNavigate } from "@solidjs/router";
 import { syncLocalCanvasToServer } from "./utils/syncLocalCanvas";
 import toast from "solid-toast";
 
-export type UserData = {
+type UserData = {
     id: string;
     name: string;
     email: string;
     picture: string;
 };
 
-export interface UserAccessor {
+interface UserAccessor {
     (): UserData | null | undefined;
     isLoading: boolean;
     loading: boolean;
@@ -28,13 +20,13 @@ export interface UserAccessor {
     error: Error | null;
 }
 
-export interface UserActions {
+interface UserActions {
     login: (code: string, state: string) => Promise<UserData | undefined>;
     logout: () => Promise<void>;
     refetch: () => void;
 }
 
-export type UserContextValue = [UserAccessor, UserActions];
+type UserContextValue = [UserAccessor, UserActions];
 
 const UserContext = createContext<Accessor<UserContextValue>>();
 

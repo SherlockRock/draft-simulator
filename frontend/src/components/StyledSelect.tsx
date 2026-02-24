@@ -2,7 +2,7 @@ import { createSignal, For, Show, Component } from "solid-js";
 import { SelectTheme, getThemeColors } from "../utils/selectTheme";
 import { createDropdownKeyboard } from "../utils/useDropdownKeyboard";
 
-export type StyledSelectOption = {
+type StyledSelectOption = {
     value: string;
     label: string;
 };

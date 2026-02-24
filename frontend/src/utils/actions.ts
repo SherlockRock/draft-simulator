@@ -30,10 +30,6 @@ export const BASE_URL =
 // Draft Operations
 // =============================================================================
 
-export const fetchDraft = async (id: string) => {
-    return apiGet(`/drafts/${id}`, DraftSchema);
-};
-
 export const postNewDraft = async (data: {
     name: string;
     public: boolean;
@@ -65,10 +61,6 @@ export const editDraft = async (
     return apiPut(`/drafts/${id}${params}`, data, DraftSchema);
 };
 
-export const deleteDraft = async (id: string) => {
-    return apiDelete(`/drafts/${id}`, SuccessSchema);
-};
-
 export const deleteDraftFromCanvas = async (data: { canvas: string; draft: string }) => {
     return apiDelete(`/canvas/${data.canvas}/draft/${data.draft}`, SuccessSchema);
 };
@@ -78,30 +70,6 @@ export const copyDraftInCanvas = async (data: { canvasId: string; draftId: strin
         `/canvas/${data.canvasId}/draft/${data.draftId}/copy`,
         {},
         z.object({ success: z.boolean(), canvasDraft: CanvasDraftSchema })
-    );
-};
-
-export const createDraft = async (data: {
-    name: string;
-    public: boolean;
-    description?: string;
-    type?: "standalone" | "canvas" | "versus";
-    icon?: string;
-}) => {
-    return apiPost(
-        "/drafts",
-        {
-            name: data.name,
-            public: data.public,
-            description: data.description,
-            icon: data.icon
-        },
-        z.object({
-            id: z.string(),
-            name: z.string(),
-            public: z.boolean(),
-            type: z.string()
-        })
     );
 };
 
@@ -137,10 +105,6 @@ export const createCanvas = async (data: {
     );
 };
 
-export const deleteCanvas = async (canvas: string) => {
-    return apiDelete(`/canvas/${canvas}`, SuccessSchema);
-};
-
 export const updateCanvasName = async (data: {
     canvasId: string;
     name: string;
@@ -162,10 +126,6 @@ export const updateCanvasName = async (data: {
 
 export const fetchCanvasList = async () => {
     return apiGet("/canvas", z.array(CanvasListItemSchema));
-};
-
-export const fetchDraftCanvases = async (draftId: string) => {
-    return apiGet(`/drafts/${draftId}/canvases`, z.array(CanvasListItemSchema));
 };
 
 export const updateCanvasViewport = async (data: {
