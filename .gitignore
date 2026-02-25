@@ -5,7 +5,6 @@ dist
 *.pem
 *.key
 *.local.md
-*-design.md
-*-plan.md
+docs/
 .worktrees
 .desloppify
