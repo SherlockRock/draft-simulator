@@ -5,7 +5,7 @@ import {
     importDraftToCanvas,
     importSeriesToCanvas
 } from "../utils/actions";
-import { VersusDraft } from "../utils/schemas";
+import { VersusDraftListItem } from "../utils/schemas";
 import toast from "solid-toast";
 
 type Props = {
@@ -70,10 +70,10 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
         const series = seriesQuery.data || [];
         const query = searchQuery().toLowerCase();
         if (!query) return series;
-        return series.filter((s: VersusDraft) => s.name.toLowerCase().includes(query));
+        return series.filter((s: VersusDraftListItem) => s.name.toLowerCase().includes(query));
     });
 
-    const getSeriesScore = (series: VersusDraft) => {
+    const getSeriesScore = (series: VersusDraftListItem) => {
         if (!series.Drafts) return { blue: 0, red: 0 };
         const blue = series.Drafts.filter((d) => d.winner === "blue").length;
         const red = series.Drafts.filter((d) => d.winner === "red").length;
@@ -120,7 +120,7 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                             }
                         >
                             <For each={filteredSeries()}>
-                                {(series: VersusDraft) => {
+                                {(series: VersusDraftListItem) => {
                                     const score = getSeriesScore(series);
                                     const isExpanded = () =>
                                         expandedSeriesId() === series.id;

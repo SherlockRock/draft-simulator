@@ -163,6 +163,34 @@ export const VersusDraftSchema = z.object({
   Drafts: z.array(DraftSchema).optional(),
 });
 
+// Simplified draft schema for versus list endpoint (returns subset of fields)
+export const VersusDraftListItemDraftSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  picks: z.array(z.string()),
+  seriesIndex: z.number().nullable().optional(),
+  completed: z.boolean().optional(),
+  winner: z.enum(["blue", "red"]).nullable().optional(),
+});
+
+// Schema for GET /versus-drafts list endpoint
+export const VersusDraftListItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  blueTeamName: z.string(),
+  redTeamName: z.string(),
+  description: z.string().nullable().optional(),
+  length: z.number(),
+  competitive: z.boolean(),
+  icon: z.string().nullable().optional(),
+  type: z.string().nullable().optional(),
+  shareLink: z.string(),
+  owner_id: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  Drafts: z.array(VersusDraftListItemDraftSchema).optional(),
+});
+
 export const VersusParticipantSchema = z.object({
   id: z.string(),
   versus_draft_id: z.string(),
@@ -498,6 +526,7 @@ export type Viewport = z.infer<typeof ViewportSchema>;
 export type CanvasUser = z.infer<typeof CanvasUserSchema>;
 export type AnchorType = z.infer<typeof AnchorTypeSchema>;
 export type VersusDraft = z.infer<typeof VersusDraftSchema>;
+export type VersusDraftListItem = z.infer<typeof VersusDraftListItemSchema>;
 export type VersusParticipant = z.infer<typeof VersusParticipantSchema>;
 export type VersusState = z.infer<typeof VersusStateSchema>;
 export type VersusJoinResponse = z.infer<typeof VersusJoinResponseSchema>;

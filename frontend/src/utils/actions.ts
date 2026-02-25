@@ -8,6 +8,7 @@ import {
     VertexSchema,
     CanvasUserSchema,
     VersusDraftSchema,
+    VersusDraftListItemSchema,
     CanvasResponseSchema,
     ShareLinkResponseSchema,
     UserDetailsSchema,
@@ -450,7 +451,7 @@ export const editVersusDraft = async (
 };
 
 export const fetchUserVersusSeries = async () => {
-    return apiGet("/versus-drafts", z.array(VersusDraftSchema));
+    return apiGet("/versus-drafts", z.array(VersusDraftListItemSchema));
 };
 
 // =============================================================================
