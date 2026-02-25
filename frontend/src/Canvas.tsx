@@ -88,6 +88,7 @@ import { DraftContextMenu } from "./components/DraftContextMenu";
 import { GroupContextMenu } from "./components/GroupContextMenu";
 import { useCanvasContext } from "./contexts/CanvasContext";
 import { useCanvasSocket } from "./providers/CanvasSocketProvider";
+import CanvasSidebar from "./components/CanvasSidebar";
 
 const debounce = <T extends unknown[]>(func: (...args: T) => void, limit: number) => {
     let inDebounce: boolean;
@@ -2045,6 +2046,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         props.setViewport({ x: 0, y: 0, zoom: 1 });
     };
 
+    const zoomIn = () => {
+        const vp = props.viewport();
+        const newZoom = Math.min(5, vp.zoom * 1.2);
+        props.setViewport({ ...vp, zoom: newZoom });
+    };
+
+    const zoomOut = () => {
+        const vp = props.viewport();
+        const newZoom = Math.max(0.1, vp.zoom / 1.2);
+        props.setViewport({ ...vp, zoom: newZoom });
+    };
+
     const onDelete = () => {
         if (draftToDelete()) {
             if (isLocalMode()) {
@@ -2098,7 +2111,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 ref={canvasContainerRef}
                 onContextMenu={handleCanvasContextMenu}
             >
-                <div class="absolute left-4 top-4 z-40 flex gap-2">
+                <CanvasSidebar
+                    onZoomIn={zoomIn}
+                    onZoomOut={zoomOut}
+                    onFitToScreen={resetViewport}
+                    onSwapOrientation={() => props.setLayoutToggle(!props.layoutToggle())}
+                    onImport={() => setIsImportDialogOpen(true)}
+                    isConnectionMode={isConnectionMode()}
+                    onToggleConnectionMode={toggleConnectionMode}
+                    hasEditPermissions={hasEditPermissions()}
+                />
+                <div class="absolute left-4 top-4 z-40">
                     <input
                         type="text"
                         value={props.canvasData?.name || ""}
@@ -2113,27 +2136,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         placeholder="Canvas Name"
                         disabled={isConnectionMode() || !hasEditPermissions()}
                     />
-                    <Show when={hasEditPermissions()}>
-                        <button
-                            onClick={toggleConnectionMode}
-                            class="rounded-md px-3 py-2 text-sm font-medium text-slate-200 transition-colors"
-                            classList={{
-                                "bg-purple-600 hover:bg-purple-500": !isConnectionMode(),
-                                "bg-green-600 hover:bg-green-500": isConnectionMode()
-                            }}
-                        >
-                            {isConnectionMode() ? "✓ Connection Mode" : "Connection Mode"}
-                        </button>
-                    </Show>
-                    <div class="rounded-md border border-slate-500 bg-slate-600 px-3 py-2 text-center text-sm text-slate-50">
-                        Zoom: {Math.round(props.viewport().zoom * 100)}%
-                    </div>
-                    <button
-                        onClick={resetViewport}
-                        class="rounded-md bg-purple-600 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-purple-500"
-                    >
-                        Reset View
-                    </button>
                 </div>
                 <Show when={isLocalMode()}>
                     <div class="absolute right-4 top-4 z-40 flex items-center gap-2 rounded-lg border border-yellow-600/30 bg-yellow-900/40 px-3 py-1.5 text-xs text-yellow-300 shadow-lg backdrop-blur-sm">
