@@ -37,6 +37,7 @@ const SidebarButton: Component<SidebarButtonProps> = (props) => {
             <button
                 onClick={props.onClick}
                 disabled={props.disabled}
+                aria-label={props.tooltip}
                 class="flex h-9 w-9 items-center justify-center rounded-md border border-slate-600 transition-colors"
                 classList={{
                     "bg-purple-600 hover:bg-purple-500 border-purple-500": props.isActive,
@@ -93,7 +94,9 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
                 />
             </Show>
 
-            <Separator />
+            <Show when={props.hasEditPermissions}>
+                <Separator />
+            </Show>
 
             {/* Mode controls */}
             <Show when={props.hasEditPermissions}>
