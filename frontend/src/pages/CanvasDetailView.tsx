@@ -13,7 +13,7 @@ import { useCanvasContext } from "../contexts/CanvasContext";
 
 const CanvasDetailView: Component = () => {
     const params = useParams();
-    const { canvas, mutateCanvas, layoutToggle, setCreateDraftCallback } =
+    const { canvas, mutateCanvas, layoutToggle, setLayoutToggle, setCreateDraftCallback } =
         useCanvasContext();
     const [viewport, setViewport] = createSignal<Viewport>({ x: 0, y: 0, zoom: 1 });
     let canvasContainerRef: HTMLDivElement | undefined;
@@ -107,7 +107,7 @@ const CanvasDetailView: Component = () => {
                     refetch={() => {}}
                     isFetching={canvas.loading}
                     layoutToggle={layoutToggle}
-                    setLayoutToggle={() => {}}
+                    setLayoutToggle={setLayoutToggle}
                     viewport={viewport}
                     setViewport={setViewport}
                 />

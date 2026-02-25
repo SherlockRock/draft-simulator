@@ -2114,7 +2114,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 <CanvasSidebar
                     onZoomIn={zoomIn}
                     onZoomOut={zoomOut}
-                    onFitToScreen={resetViewport}
                     onSwapOrientation={() => props.setLayoutToggle(!props.layoutToggle())}
                     onImport={() => setIsImportDialogOpen(true)}
                     isConnectionMode={isConnectionMode()}

@@ -2,7 +2,6 @@ import { Component, Show } from "solid-js";
 import {
     Plus,
     Minus,
-    Maximize2,
     ArrowLeftRight,
     Import,
     GitBranch
@@ -12,7 +11,6 @@ interface CanvasSidebarProps {
     // Zoom controls
     onZoomIn: () => void;
     onZoomOut: () => void;
-    onFitToScreen: () => void;
     // Canvas controls
     onSwapOrientation: () => void;
     onImport: () => void;
@@ -71,11 +69,6 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
                 icon={Minus}
                 tooltip="Zoom out"
                 onClick={props.onZoomOut}
-            />
-            <SidebarButton
-                icon={Maximize2}
-                tooltip="Fit to screen"
-                onClick={props.onFitToScreen}
             />
 
             <Separator />

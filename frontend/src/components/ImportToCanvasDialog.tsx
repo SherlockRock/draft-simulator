@@ -1,13 +1,11 @@
 import { Component, createSignal, For, Show, createMemo } from "solid-js";
 import { useQuery, createMutation, useQueryClient } from "@tanstack/solid-query";
 import {
-    fetchStandaloneDrafts,
     fetchUserVersusSeries,
     importDraftToCanvas,
     importSeriesToCanvas
 } from "../utils/actions";
-import { VersusDraft, Draft } from "../utils/schemas";
-import { champions } from "../utils/constants";
+import { VersusDraft } from "../utils/schemas";
 import toast from "solid-toast";
 
 type Props = {
@@ -20,17 +18,10 @@ type Props = {
 
 export const ImportToCanvasDialog: Component<Props> = (props) => {
     const queryClient = useQueryClient();
-    const [activeTab, setActiveTab] = createSignal<"drafts" | "series">("drafts");
     const [searchQuery, setSearchQuery] = createSignal("");
-    const [selectedDraftId, setSelectedDraftId] = createSignal<string | null>(null);
     const [selectedSeriesId, setSelectedSeriesId] = createSignal<string | null>(null);
     const [expandedSeriesId, setExpandedSeriesId] = createSignal<string | null>(null);
     const [selectedGameId, setSelectedGameId] = createSignal<string | null>(null);
-
-    const draftsQuery = useQuery(() => ({
-        queryKey: ["standaloneDrafts"],
-        queryFn: fetchStandaloneDrafts
-    }));
 
     const seriesQuery = useQuery(() => ({
         queryKey: ["userVersusSeries"],
@@ -75,13 +66,6 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
         }
     }));
 
-    const filteredDrafts = createMemo(() => {
-        const drafts = draftsQuery.data || [];
-        const query = searchQuery().toLowerCase();
-        if (!query) return drafts;
-        return drafts.filter((d: Draft) => d.name.toLowerCase().includes(query));
-    });
-
     const filteredSeries = createMemo(() => {
         const series = seriesQuery.data || [];
         const query = searchQuery().toLowerCase();
@@ -97,60 +81,22 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
     };
 
     const handleImport = () => {
-        if (activeTab() === "drafts" && selectedDraftId()) {
-            importDraftMutation.mutate(selectedDraftId()!);
-        } else if (activeTab() === "series") {
-            if (selectedGameId()) {
-                // Import individual game
-                importDraftMutation.mutate(selectedGameId()!);
-            } else if (selectedSeriesId()) {
-                // Import full series
-                importSeriesMutation.mutate(selectedSeriesId()!);
-            }
+        if (selectedGameId()) {
+            // Import individual game
+            importDraftMutation.mutate(selectedGameId()!);
+        } else if (selectedSeriesId()) {
+            // Import full series
+            importSeriesMutation.mutate(selectedSeriesId()!);
         }
     };
 
     const canImport = () => {
-        if (activeTab() === "drafts") return !!selectedDraftId();
         return !!selectedSeriesId() || !!selectedGameId();
     };
 
     return (
         <div class="flex w-[500px] flex-col gap-4">
-            <h2 class="text-lg font-bold text-slate-50">Import to Canvas</h2>
-
-            {/* Tabs */}
-            <div class="flex gap-2">
-                <button
-                    class="rounded-md px-4 py-2 text-sm font-medium"
-                    classList={{
-                        "bg-teal-700 text-slate-50": activeTab() === "drafts",
-                        "bg-slate-700 text-slate-300 hover:bg-slate-600":
-                            activeTab() !== "drafts"
-                    }}
-                    onClick={() => {
-                        setActiveTab("drafts");
-                        setSelectedSeriesId(null);
-                        setSelectedGameId(null);
-                    }}
-                >
-                    Standalone Drafts
-                </button>
-                <button
-                    class="rounded-md px-4 py-2 text-sm font-medium"
-                    classList={{
-                        "bg-teal-700 text-slate-50": activeTab() === "series",
-                        "bg-slate-700 text-slate-300 hover:bg-slate-600":
-                            activeTab() !== "series"
-                    }}
-                    onClick={() => {
-                        setActiveTab("series");
-                        setSelectedDraftId(null);
-                    }}
-                >
-                    Versus Series
-                </button>
-            </div>
+            <h2 class="text-lg font-bold text-slate-50">Import Versus Series</h2>
 
             {/* Search */}
             <input
@@ -163,67 +109,7 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
 
             {/* Content */}
             <div class="max-h-80 min-h-40 overflow-y-auto rounded-md border border-slate-500 bg-slate-800">
-                <Show when={activeTab() === "drafts"}>
-                    <Show
-                        when={!draftsQuery.isPending}
-                        fallback={<div class="p-4 text-slate-400">Loading...</div>}
-                    >
-                        <Show
-                            when={filteredDrafts().length > 0}
-                            fallback={
-                                <div class="p-4 text-slate-400">No drafts found</div>
-                            }
-                        >
-                            <For each={filteredDrafts()}>
-                                {(draft: Draft) => (
-                                    <div
-                                        class="flex cursor-pointer items-center gap-3 border-b border-slate-700 px-4 py-3 hover:bg-slate-700"
-                                        classList={{
-                                            "bg-teal-900/50":
-                                                selectedDraftId() === draft.id
-                                        }}
-                                        onClick={() => setSelectedDraftId(draft.id)}
-                                    >
-                                        <div class="flex flex-1 flex-col">
-                                            <span class="font-medium text-slate-50">
-                                                {draft.name}
-                                            </span>
-                                            <div class="flex gap-1">
-                                                <For
-                                                    each={
-                                                        draft.picks?.slice(10, 15) || []
-                                                    }
-                                                >
-                                                    {(pick: string) => (
-                                                        <Show
-                                                            when={
-                                                                pick &&
-                                                                champions[parseInt(pick)]
-                                                            }
-                                                        >
-                                                            <img
-                                                                src={
-                                                                    champions[
-                                                                        parseInt(pick)
-                                                                    ]?.img
-                                                                }
-                                                                alt=""
-                                                                class="h-6 w-6 rounded"
-                                                            />
-                                                        </Show>
-                                                    )}
-                                                </For>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </For>
-                        </Show>
-                    </Show>
-                </Show>
-
-                <Show when={activeTab() === "series"}>
-                    <Show
+                <Show
                         when={!seriesQuery.isPending}
                         fallback={<div class="p-4 text-slate-400">Loading...</div>}
                     >
@@ -408,7 +294,6 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                             </For>
                         </Show>
                     </Show>
-                </Show>
             </div>
 
             {/* Footer */}
