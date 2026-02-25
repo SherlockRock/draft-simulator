@@ -437,153 +437,120 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                 {/* Control buttons - hidden when viewing a draft */}
                                 <Show when={isDetailView() && !isDraftView()}>
                                     <div class="flex flex-col gap-2 px-3">
-                                        <button
-                                            class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
-                                            onClick={() =>
-                                                setLayoutToggle((prev) => !prev)
+                                        <Show
+                                            when={
+                                                hasAdminPermissions() &&
+                                                canvasId() !== "local"
                                             }
+                                            fallback={null}
                                         >
-                                            Swap Orientation
-                                        </button>
-                                        <Show when={hasEditPermissions()}>
-                                            <Show
-                                                when={
-                                                    hasAdminPermissions() &&
-                                                    canvasId() !== "local"
-                                                }
-                                                fallback={
-                                                    <button
-                                                        class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
-                                                        onClick={() => {
-                                                            const callback =
-                                                                importCallback();
-                                                            if (callback) callback();
-                                                        }}
-                                                    >
-                                                        Import
-                                                    </button>
+                                            <div
+                                                class="relative"
+                                                onFocusOut={handleShareFocusOut}
+                                            >
+                                                <button
+                                                    onClick={handleShareCanvas}
+                                                    class="w-full rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
+                                                >
+                                                    Share
+                                                </button>
+                                                {isSharePopperOpen() && (
+                                                    <div class="absolute right-0 top-full z-10 mt-2 w-[215px] rounded-md bg-slate-600 p-3 shadow-lg">
+                                                        <div class="space-y-3">
+                                                            <div>
+                                                                <p class="mb-1 text-xs font-medium text-slate-300">
+                                                                    View Access
+                                                                </p>
+                                                                <Show
+                                                                    when={
+                                                                        !viewShareLinkQuery.isPending
+                                                                    }
+                                                                    fallback={
+                                                                        <div class="text-xs text-slate-400">
+                                                                            Loading...
+                                                                        </div>
+                                                                    }
+                                                                >
+                                                                    <div class="flex flex-col gap-2">
+                                                                        <input
+                                                                            type="text"
+                                                                            readOnly
+                                                                            value={
+                                                                                viewShareLinkQuery.data ||
+                                                                                ""
+                                                                            }
+                                                                            class="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-slate-50"
+                                                                        />
+                                                                        <button
+                                                                            onClick={
+                                                                                handleCopyViewLink
+                                                                            }
+                                                                            class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
+                                                                            disabled={
+                                                                                !viewShareLinkQuery.data
+                                                                            }
+                                                                        >
+                                                                            {copied() ===
+                                                                            "view"
+                                                                                ? "✓"
+                                                                                : "Copy"}
+                                                                        </button>
+                                                                    </div>
+                                                                </Show>
+                                                            </div>
+                                                            <div>
+                                                                <p class="mb-1 text-xs font-medium text-slate-300">
+                                                                    Edit Access
+                                                                </p>
+                                                                <Show
+                                                                    when={
+                                                                        !editShareLinkQuery.isPending
+                                                                    }
+                                                                    fallback={
+                                                                        <div class="text-xs text-slate-400">
+                                                                            Loading...
+                                                                        </div>
+                                                                    }
+                                                                >
+                                                                    <div class="flex flex-col gap-2">
+                                                                        <input
+                                                                            type="text"
+                                                                            readOnly
+                                                                            value={
+                                                                                editShareLinkQuery.data ||
+                                                                                ""
+                                                                            }
+                                                                            class="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-slate-50"
+                                                                        />
+                                                                        <button
+                                                                            onClick={
+                                                                                handleCopyEditLink
+                                                                            }
+                                                                            class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
+                                                                            disabled={
+                                                                                !editShareLinkQuery.data
+                                                                            }
+                                                                        >
+                                                                            {copied() ===
+                                                                            "edit"
+                                                                                ? "✓"
+                                                                                : "Copy"}
+                                                                        </button>
+                                                                    </div>
+                                                                </Show>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <button
+                                                class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
+                                                onClick={() =>
+                                                    setIsManageUsersOpen(true)
                                                 }
                                             >
-                                                <div class="grid grid-cols-2 gap-2">
-                                                    <button
-                                                        class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
-                                                        onClick={() => {
-                                                            const callback =
-                                                                importCallback();
-                                                            if (callback) callback();
-                                                        }}
-                                                    >
-                                                        Import
-                                                    </button>
-                                                    <div
-                                                        class="relative"
-                                                        onFocusOut={handleShareFocusOut}
-                                                    >
-                                                        <button
-                                                            onClick={handleShareCanvas}
-                                                            class="w-full rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
-                                                        >
-                                                            Share
-                                                        </button>
-                                                        {isSharePopperOpen() && (
-                                                            <div class="absolute right-0 top-full z-10 mt-2 w-[215px] rounded-md bg-slate-600 p-3 shadow-lg">
-                                                                <div class="space-y-3">
-                                                                    <div>
-                                                                        <p class="mb-1 text-xs font-medium text-slate-300">
-                                                                            View Access
-                                                                        </p>
-                                                                        <Show
-                                                                            when={
-                                                                                !viewShareLinkQuery.isPending
-                                                                            }
-                                                                            fallback={
-                                                                                <div class="text-xs text-slate-400">
-                                                                                    Loading...
-                                                                                </div>
-                                                                            }
-                                                                        >
-                                                                            <div class="flex flex-col gap-2">
-                                                                                <input
-                                                                                    type="text"
-                                                                                    readOnly
-                                                                                    value={
-                                                                                        viewShareLinkQuery.data ||
-                                                                                        ""
-                                                                                    }
-                                                                                    class="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-slate-50"
-                                                                                />
-                                                                                <button
-                                                                                    onClick={
-                                                                                        handleCopyViewLink
-                                                                                    }
-                                                                                    class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
-                                                                                    disabled={
-                                                                                        !viewShareLinkQuery.data
-                                                                                    }
-                                                                                >
-                                                                                    {copied() ===
-                                                                                    "view"
-                                                                                        ? "✓"
-                                                                                        : "Copy"}
-                                                                                </button>
-                                                                            </div>
-                                                                        </Show>
-                                                                    </div>
-                                                                    <div>
-                                                                        <p class="mb-1 text-xs font-medium text-slate-300">
-                                                                            Edit Access
-                                                                        </p>
-                                                                        <Show
-                                                                            when={
-                                                                                !editShareLinkQuery.isPending
-                                                                            }
-                                                                            fallback={
-                                                                                <div class="text-xs text-slate-400">
-                                                                                    Loading...
-                                                                                </div>
-                                                                            }
-                                                                        >
-                                                                            <div class="flex flex-col gap-2">
-                                                                                <input
-                                                                                    type="text"
-                                                                                    readOnly
-                                                                                    value={
-                                                                                        editShareLinkQuery.data ||
-                                                                                        ""
-                                                                                    }
-                                                                                    class="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-slate-50"
-                                                                                />
-                                                                                <button
-                                                                                    onClick={
-                                                                                        handleCopyEditLink
-                                                                                    }
-                                                                                    class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
-                                                                                    disabled={
-                                                                                        !editShareLinkQuery.data
-                                                                                    }
-                                                                                >
-                                                                                    {copied() ===
-                                                                                    "edit"
-                                                                                        ? "✓"
-                                                                                        : "Copy"}
-                                                                                </button>
-                                                                            </div>
-                                                                        </Show>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
-                                                    onClick={() =>
-                                                        setIsManageUsersOpen(true)
-                                                    }
-                                                >
-                                                    Manage Users
-                                                </button>
-                                            </Show>
+                                                Manage Users
+                                            </button>
                                         </Show>
                                     </div>
                                 </Show>
