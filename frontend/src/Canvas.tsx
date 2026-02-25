@@ -2153,7 +2153,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     </div>
                 </Show>
                 <div
-                    class="canvas-background absolute inset-0 cursor-move bg-slate-700"
+                    class="canvas-background absolute inset-0 cursor-move bg-slate-700 bg-[radial-gradient(circle,rgba(148,163,184,0.15)_1px,transparent_1px)] bg-[length:24px_24px]"
                     onMouseDown={onBackgroundMouseDown}
                     onDblClick={onBackgroundDoubleClick}
                 >
