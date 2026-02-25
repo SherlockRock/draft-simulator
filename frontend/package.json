@@ -28,8 +28,8 @@
         "vite-plugin-solid": "^2.7.0"
     },
     "dependencies": {
-        "@draft-sim/shared-types": "workspace:*",
         "@babel/traverse": "^7.25.9",
+        "@draft-sim/shared-types": "workspace:*",
         "@eslint/eslintrc": "^3.2.0",
         "@eslint/js": "^9.15.0",
         "@solidjs/router": "^0.15.1",
@@ -38,6 +38,7 @@
         "babel-preset-solid": "^1.7.7",
         "braces": "^3.0.3",
         "globals": "^15.12.0",
+        "lucide-solid": "^0.575.0",
         "micromatch": "^4.0.8",
         "rollup": "^4.27.4",
         "socket.io-client": "^4.8.1",
