@@ -23,6 +23,8 @@ interface CanvasSettingsDialogProps {
     onDeleteCanvas: () => void;
     onClose: () => void;
     isOpen: () => boolean;
+    /** Optional: pass mutation.isPending for accurate loading state */
+    isDeleting?: () => boolean;
 }
 
 export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props) => {
@@ -38,8 +40,11 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
     const [showIconPicker, setShowIconPicker] = createSignal(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = createSignal(false);
     const [isSaving, setIsSaving] = createSignal(false);
-    const [isDeleting, setIsDeleting] = createSignal(false);
+    const [internalIsDeleting, setInternalIsDeleting] = createSignal(false);
     const [errors, setErrors] = createSignal<Record<string, string>>({});
+
+    // Use prop if provided, otherwise use internal state
+    const isDeleting = () => props.isDeleting?.() ?? internalIsDeleting();
 
     // Initialize form values when dialog opens or canvas changes
     createEffect(() => {
@@ -99,9 +104,11 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
     };
 
     const handleDelete = () => {
-        setIsDeleting(true);
+        // Set internal state as fallback if parent doesn't provide isDeleting prop
+        setInternalIsDeleting(true);
         props.onDeleteCanvas();
         // Note: onDeleteCanvas should handle closing the dialog and navigation
+        // If parent provides isDeleting prop, it reflects actual mutation state
     };
 
     const hasChanges = () => {

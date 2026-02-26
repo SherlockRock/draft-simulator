@@ -468,6 +468,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                 onUpdateCanvas={(data) => updateCanvasMutation.mutate(data)}
                                 onDeleteCanvas={() => deleteCanvasMutation.mutate()}
                                 onClose={() => setIsManageUsersOpen(false)}
+                                isDeleting={() => deleteCanvasMutation.isPending}
                             />
                         </Show>
                     }

@@ -880,6 +880,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                 }}
                 onDeleteCanvas={() => deleteCanvasMutation.mutate()}
                 onClose={() => setIsManageUsersOpen(false)}
+                isDeleting={() => deleteCanvasMutation.isPending}
             />
         </div>
     );
