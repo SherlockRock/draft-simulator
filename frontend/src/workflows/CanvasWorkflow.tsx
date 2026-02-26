@@ -36,6 +36,8 @@ import { GroupContextMenu } from "../components/GroupContextMenu";
 import { localCopyDraft, localDeleteDraft } from "../utils/useLocalCanvasMutations";
 import { CanvasContext } from "../contexts/CanvasContext";
 import { CanvasSocketProvider } from "../providers/CanvasSocketProvider";
+import { Settings, Share2, Plus } from "lucide-solid";
+import { CreateCanvasDialog } from "../components/CreateCanvasDialog";
 
 const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     const params = useParams();
@@ -154,6 +156,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         group: CanvasGroup;
         position: { x: number; y: number };
     } | null>(null);
+    const [showCreateDialog, setShowCreateDialog] = createSignal(false);
 
     let previousUser = user();
 
@@ -478,6 +481,15 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                         </Show>
                     }
                 />
+                <CreateCanvasDialog
+                    isOpen={showCreateDialog}
+                    onClose={() => setShowCreateDialog(false)}
+                    onSuccess={(canvasId) => {
+                        setShowCreateDialog(false);
+                        refetchCanvasList();
+                        navigate(`/canvas/${canvasId}`);
+                    }}
+                />
                 <div class="flex flex-1 overflow-hidden">
                     <Show when={isDetailView()}>
                         <FlowPanel flow="canvas">
@@ -489,37 +501,44 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                     </div>
                                 </Show>
 
-                                {/* Control buttons - hidden when viewing a draft */}
+                                {/* Action icons - hidden when viewing a draft */}
                                 <Show when={isDetailView() && !isDraftView()}>
-                                    <div class="flex flex-col gap-2 px-3">
-                                        <Show
-                                            when={
-                                                hasAdminPermissions() &&
-                                                canvasId() !== "local"
-                                            }
-                                            fallback={null}
+                                    <div class="flex items-center gap-1 px-3">
+                                        {/* Plus - always visible for signed-in users */}
+                                        <button
+                                            onClick={() => setShowCreateDialog(true)}
+                                            class="rounded-md p-2 text-slate-400 transition-colors hover:bg-purple-600 hover:text-slate-200"
+                                            title="Create New Canvas"
                                         >
-                                            <div
-                                                class="relative"
-                                                onFocusOut={handleShareFocusOut}
+                                            <Plus size={18} />
+                                        </button>
+
+                                        {/* Gear and Share - admin only, non-local */}
+                                        <Show when={hasAdminPermissions() && canvasId() !== "local"}>
+                                            <button
+                                                onClick={() => setIsManageUsersOpen(true)}
+                                                class="rounded-md p-2 text-slate-400 transition-colors hover:bg-purple-600 hover:text-slate-200"
+                                                title="Canvas Settings"
                                             >
+                                                <Settings size={18} />
+                                            </button>
+                                            <div class="relative" onFocusOut={handleShareFocusOut}>
                                                 <button
                                                     onClick={handleShareCanvas}
-                                                    class="w-full rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
+                                                    class="rounded-md p-2 text-slate-400 transition-colors hover:bg-purple-600 hover:text-slate-200"
+                                                    title="Share Canvas"
                                                 >
-                                                    Share
+                                                    <Share2 size={18} />
                                                 </button>
                                                 {isSharePopperOpen() && (
-                                                    <div class="absolute right-0 top-full z-10 mt-2 w-[215px] rounded-md bg-slate-600 p-3 shadow-lg">
+                                                    <div class="absolute left-0 top-full z-10 mt-2 w-[215px] rounded-md bg-slate-600 p-3 shadow-lg">
                                                         <div class="space-y-3">
                                                             <div>
                                                                 <p class="mb-1 text-xs font-medium text-slate-300">
                                                                     View Access
                                                                 </p>
                                                                 <Show
-                                                                    when={
-                                                                        !viewShareLinkQuery.isPending
-                                                                    }
+                                                                    when={!viewShareLinkQuery.isPending}
                                                                     fallback={
                                                                         <div class="text-xs text-slate-400">
                                                                             Loading...
@@ -530,25 +549,15 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                         <input
                                                                             type="text"
                                                                             readOnly
-                                                                            value={
-                                                                                viewShareLinkQuery.data ||
-                                                                                ""
-                                                                            }
+                                                                            value={viewShareLinkQuery.data || ""}
                                                                             class="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-slate-50"
                                                                         />
                                                                         <button
-                                                                            onClick={
-                                                                                handleCopyViewLink
-                                                                            }
+                                                                            onClick={handleCopyViewLink}
                                                                             class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
-                                                                            disabled={
-                                                                                !viewShareLinkQuery.data
-                                                                            }
+                                                                            disabled={!viewShareLinkQuery.data}
                                                                         >
-                                                                            {copied() ===
-                                                                            "view"
-                                                                                ? "✓"
-                                                                                : "Copy"}
+                                                                            {copied() === "view" ? "✓" : "Copy"}
                                                                         </button>
                                                                     </div>
                                                                 </Show>
@@ -558,9 +567,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                     Edit Access
                                                                 </p>
                                                                 <Show
-                                                                    when={
-                                                                        !editShareLinkQuery.isPending
-                                                                    }
+                                                                    when={!editShareLinkQuery.isPending}
                                                                     fallback={
                                                                         <div class="text-xs text-slate-400">
                                                                             Loading...
@@ -571,25 +578,15 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                         <input
                                                                             type="text"
                                                                             readOnly
-                                                                            value={
-                                                                                editShareLinkQuery.data ||
-                                                                                ""
-                                                                            }
+                                                                            value={editShareLinkQuery.data || ""}
                                                                             class="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-slate-50"
                                                                         />
                                                                         <button
-                                                                            onClick={
-                                                                                handleCopyEditLink
-                                                                            }
+                                                                            onClick={handleCopyEditLink}
                                                                             class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
-                                                                            disabled={
-                                                                                !editShareLinkQuery.data
-                                                                            }
+                                                                            disabled={!editShareLinkQuery.data}
                                                                         >
-                                                                            {copied() ===
-                                                                            "edit"
-                                                                                ? "✓"
-                                                                                : "Copy"}
+                                                                            {copied() === "edit" ? "✓" : "Copy"}
                                                                         </button>
                                                                     </div>
                                                                 </Show>
@@ -598,14 +595,6 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                     </div>
                                                 )}
                                             </div>
-                                            <button
-                                                class="rounded-md bg-purple-600 px-3 py-2 text-center text-sm font-medium text-slate-200 hover:bg-purple-500"
-                                                onClick={() =>
-                                                    setIsManageUsersOpen(true)
-                                                }
-                                            >
-                                                Manage Users
-                                            </button>
                                         </Show>
                                     </div>
                                 </Show>
