@@ -18,14 +18,16 @@ import {
     removeUserFromCanvas,
     generateCanvasShareLink,
     copyDraftInCanvas,
-    deleteDraftFromCanvas
+    deleteDraftFromCanvas,
+    deleteCanvas,
+    updateCanvasName
 } from "../utils/actions";
 import { getLocalCanvas, hasLocalCanvas } from "../utils/localCanvasStore";
 import FlowPanel from "../components/FlowPanel";
 import { VersionFooter } from "../components/VersionFooter";
 import CanvasSelector from "../components/CanvasSelector";
 import { Dialog } from "../components/Dialog";
-import { ManageUsersDialog } from "../components/ManageUsersDialog";
+import { CanvasSettingsDialog } from "../components/CanvasSettingsDialog";
 import toast from "solid-toast";
 import { CanvasGroup, CanvasDraft } from "../utils/schemas";
 import { CanvasAccessDenied, AccessErrorType } from "../components/CanvasAccessDenied";
@@ -236,6 +238,38 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         }
     }));
 
+    const deleteCanvasMutation = useMutation(() => ({
+        mutationFn: () => deleteCanvas(canvasId()),
+        onSuccess: async () => {
+            toast.success("Canvas deleted");
+            setIsManageUsersOpen(false);
+            // Navigate to most recent other canvas
+            const list = await refetchCanvasList();
+            const otherCanvas = list?.find((c) => c.id !== canvasId());
+            if (otherCanvas) {
+                navigate(`/canvas/${otherCanvas.id}`);
+            } else {
+                navigate("/canvas");
+            }
+        },
+        onError: (error: Error) => {
+            toast.error(`Failed to delete canvas: ${error.message}`);
+        }
+    }));
+
+    const updateCanvasMutation = useMutation(() => ({
+        mutationFn: (data: { name: string; description?: string; icon?: string }) =>
+            updateCanvasName({ canvasId: canvasId(), ...data }),
+        onSuccess: () => {
+            toast.success("Canvas updated");
+            refetchCanvas();
+            queryClient.invalidateQueries({ queryKey: ["canvasList"] });
+        },
+        onError: (error: Error) => {
+            toast.error(`Failed to update canvas: ${error.message}`);
+        }
+    }));
+
     const copyDraftMutation = useMutation(() => ({
         mutationFn: copyDraftInCanvas,
         onSuccess: () => {
@@ -419,12 +453,23 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                     isOpen={isManageUsersOpen}
                     onCancel={() => setIsManageUsersOpen(false)}
                     body={
-                        <ManageUsersDialog
-                            usersQuery={usersQuery}
-                            onPermissionChange={handlePermissionChange}
-                            onRemoveUser={handleRemoveUser}
-                            onClose={() => setIsManageUsersOpen(false)}
-                        />
+                        <Show when={canvas()}>
+                            <CanvasSettingsDialog
+                                isOpen={isManageUsersOpen}
+                                canvas={{
+                                    id: canvasId(),
+                                    name: canvas()?.name ?? ""
+                                }}
+                                usersQuery={usersQuery}
+                                onPermissionChange={(userId, permission) =>
+                                    updatePermissionMutation.mutate({ userId, permissions: permission })
+                                }
+                                onRemoveUser={(userId) => removeUserMutation.mutate(userId)}
+                                onUpdateCanvas={(data) => updateCanvasMutation.mutate(data)}
+                                onDeleteCanvas={() => deleteCanvasMutation.mutate()}
+                                onClose={() => setIsManageUsersOpen(false)}
+                            />
+                        </Show>
                     }
                 />
                 <div class="flex flex-1 overflow-hidden">
