@@ -48,18 +48,22 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     };
 
     const [canvasList, { mutate: mutateCanvasList, refetch: refetchCanvasList }] =
-        createResource<any[]>(async () => {
-            if (!user()) {
-                if (hasLocalCanvas()) {
-                    const local = getLocalCanvas()!;
-                    return [
-                        { id: "local", name: local.name, updatedAt: local.createdAt }
-                    ];
+        createResource(
+            // Source signal: re-run when user auth state changes
+            () => user(),
+            async (currentUser) => {
+                if (!currentUser) {
+                    if (hasLocalCanvas()) {
+                        const local = getLocalCanvas()!;
+                        return [
+                            { id: "local", name: local.name, updatedAt: local.createdAt }
+                        ];
+                    }
+                    return [];
                 }
-                return [];
+                return fetchCanvasList();
             }
-            return fetchCanvasList();
-        });
+        );
 
     // Track canvas IDs we've already handled errors for to prevent loops
     const handledErrorCanvasIds = new Set<string>();

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import { fetchUserDetails, handleGoogleLogin, handleRevoke } from "./utils/actions";
 import { useNavigate } from "@solidjs/router";
 import { syncLocalCanvasToServer } from "./utils/syncLocalCanvas";
+import { clearLocalCanvas } from "./utils/localCanvasStore";
 import toast from "solid-toast";
 
 type UserData = {
@@ -65,7 +66,15 @@ export function UserProvider(props: { children: JSX.Element }) {
             toast.error("Couldn't save your local canvas. It's still stored locally.");
         }
 
-        navigate(res?.returnTo ?? "/", { replace: true });
+        // If returnTo is /canvas/local, redirect to /canvas instead
+        // so CanvasEntryRedirect can fetch the user's actual canvases
+        if (res?.returnTo === "/canvas/local") {
+            // Clear the empty local canvas since user is now authenticated
+            clearLocalCanvas();
+            navigate("/canvas", { replace: true });
+        } else {
+            navigate(res?.returnTo ?? "/", { replace: true });
+        }
         return res?.user;
     };
 

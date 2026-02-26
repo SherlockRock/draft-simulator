@@ -7,9 +7,11 @@ import {
     createEmptyLocalCanvas,
     saveLocalCanvas
 } from "../utils/localCanvasStore";
+import { useCanvasContext } from "../contexts/CanvasContext";
 
 const CanvasEntryRedirect: Component = () => {
     const navigate = useNavigate();
+    const { refetchCanvasList } = useCanvasContext();
 
     // Use useQuery directly to get proper reactivity for isLoading/isError
     // This shares the cache with UserProvider's query via the same key
@@ -50,6 +52,8 @@ const CanvasEntryRedirect: Component = () => {
                 // No canvases exist — create a default one
                 try {
                     const result = await createCanvas({ name: "My Canvas" });
+                    // Refresh parent's canvas list so dropdown shows the new canvas
+                    refetchCanvasList();
                     navigate(`/canvas/${result.canvas.id}`, { replace: true });
                 } catch {
                     // If creation fails, fall back to dashboard
