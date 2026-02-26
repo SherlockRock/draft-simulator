@@ -11,12 +11,13 @@ import {
     fetchCanvasUsers,
     updateCanvasUserPermission,
     removeUserFromCanvas,
-    editVersusDraft
+    editVersusDraft,
+    deleteCanvas
 } from "../utils/actions";
 import { Activity } from "../utils/schemas";
 import toast from "solid-toast";
 import { Dialog } from "./Dialog";
-import { ManageUsersDialog } from "./ManageUsersDialog";
+import { CanvasSettingsDialog } from "./CanvasSettingsDialog";
 import { IconPicker } from "./IconPicker";
 import { IconDisplay } from "./IconDisplay";
 import { champions } from "../utils/constants";
@@ -225,6 +226,19 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
         },
         onError: () => {
             toast.error("Failed to update versus draft");
+        }
+    }));
+
+    const deleteCanvasMutation = useMutation(() => ({
+        mutationFn: () => deleteCanvas(props.activity.resource_id),
+        onSuccess: () => {
+            toast.success("Canvas deleted");
+            setIsManageUsersOpen(false);
+            queryClient.invalidateQueries({ queryKey: ["activity"] });
+            queryClient.invalidateQueries({ queryKey: ["canvasList"] });
+        },
+        onError: (error: Error) => {
+            toast.error(`Failed to delete canvas: ${error.message}`);
         }
     }));
 
@@ -452,13 +466,14 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                     <div class="flex items-center gap-2">
                                         <Show
                                             when={
-                                                props.activity.resource_type === "canvas"
+                                                props.activity.resource_type === "canvas" &&
+                                                props.activity.is_owner
                                             }
                                         >
                                             <button
                                                 onClick={handleManageUsers}
                                                 class={`${colors.text} transition-opacity hover:opacity-70`}
-                                                title="Manage Users"
+                                                title="Canvas Settings"
                                             >
                                                 <Users size={20} />
                                             </button>
@@ -844,18 +859,27 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                 theme={getThemeFromActivity(props.activity)}
             />
 
-            {/* Manage Users Dialog */}
-            <Dialog
+            {/* Canvas Settings Dialog */}
+            <CanvasSettingsDialog
                 isOpen={isManageUsersOpen}
-                onCancel={() => setIsManageUsersOpen(false)}
-                body={
-                    <ManageUsersDialog
-                        usersQuery={usersQuery}
-                        onPermissionChange={handlePermissionChange}
-                        onRemoveUser={handleRemoveUser}
-                        onClose={() => setIsManageUsersOpen(false)}
-                    />
-                }
+                canvas={{
+                    id: props.activity.resource_id,
+                    name: props.activity.resource_name,
+                    description: props.activity.description,
+                    icon: props.activity.icon
+                }}
+                usersQuery={usersQuery}
+                onPermissionChange={handlePermissionChange}
+                onRemoveUser={handleRemoveUser}
+                onUpdateCanvas={(data) => {
+                    editCanvasMutation.mutate({
+                        name: data.name,
+                        description: data.description,
+                        icon: data.icon
+                    });
+                }}
+                onDeleteCanvas={() => deleteCanvasMutation.mutate()}
+                onClose={() => setIsManageUsersOpen(false)}
             />
         </div>
     );
