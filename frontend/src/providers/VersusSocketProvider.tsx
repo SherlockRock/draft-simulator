@@ -28,6 +28,9 @@ export function VersusSocketProvider(props: { children: JSX.Element }) {
     const [connectionStatus, setConnectionStatus] =
         createSignal<ConnectionStatus>("connecting");
     const [reconnectAttempts, setReconnectAttempts] = createSignal(0);
+    const [justReconnected, setJustReconnected] = createSignal(false);
+
+    const clearReconnected = () => setJustReconnected(false);
 
     const reconnect = () => {
         const sock = socket();
@@ -50,9 +53,18 @@ export function VersusSocketProvider(props: { children: JSX.Element }) {
             ? createAuthenticatedSocket()
             : createAnonymousSocket();
 
+        // Track if we've had a successful connection before
+        // so we can distinguish reconnects from initial connect
+        let hasConnectedBefore = false;
+
         newSocket.on("connect", () => {
             setConnectionStatus("connected");
             setReconnectAttempts(0);
+            // Set justReconnected if this is a reconnect (not initial connection)
+            if (hasConnectedBefore) {
+                setJustReconnected(true);
+            }
+            hasConnectedBefore = true;
         });
 
         newSocket.on("disconnect", () => {
@@ -60,8 +72,11 @@ export function VersusSocketProvider(props: { children: JSX.Element }) {
         });
 
         newSocket.io.on("reconnect", () => {
+            // This fires for auto-reconnects by the Manager
+            // The connect handler above also handles manual reconnects
             setConnectionStatus("connected");
             setReconnectAttempts(0);
+            setJustReconnected(true);
         });
 
         newSocket.io.on("reconnect_attempt", (attemptNumber) => {
@@ -89,7 +104,9 @@ export function VersusSocketProvider(props: { children: JSX.Element }) {
         socket,
         connectionStatus,
         connectionInfo,
-        reconnect
+        reconnect,
+        justReconnected,
+        clearReconnected
     };
 
     return (

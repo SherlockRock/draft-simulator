@@ -12,6 +12,8 @@ export type SocketContextValue = {
     connectionStatus: () => ConnectionStatus;
     connectionInfo: () => ConnectionInfo;
     reconnect: () => void;
+    justReconnected: () => boolean;
+    clearReconnected: () => void;
 };
 
 const socketOptions = {

@@ -8,12 +8,12 @@ export type CanvasDraft = {
     positionY: number;
     is_locked?: boolean;
     group_id?: string | null;
-    source_type?: "canvas" | "standalone" | "versus";
+    source_type?: "canvas" | "versus";
     Draft: {
         name: string;
         id: string;
         picks: string[];
-        type: "canvas" | "standalone" | "versus";
+        type: "canvas" | "versus";
         versus_draft_id?: string;
         seriesIndex?: number;
         completed?: boolean;

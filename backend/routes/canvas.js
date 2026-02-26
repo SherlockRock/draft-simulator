@@ -619,11 +619,9 @@ router.post("/:canvasId/import/draft", protect, async (req, res) => {
       }
     }
 
-    // Determine if draft is from versus series (locked) or standalone (editable)
+    // Determine if draft is from versus series (locked) or canvas (editable)
     const isLocked = draft.type === "versus" || !!draft.versus_draft_id;
-    const sourceType = draft.versus_draft_id
-      ? "versus"
-      : draft.type || "standalone";
+    const sourceType = draft.versus_draft_id ? "versus" : "canvas";
 
     const canvasDraft = await CanvasDraft.create({
       canvas_id: canvasId,

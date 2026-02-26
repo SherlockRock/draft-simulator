@@ -35,7 +35,6 @@ import {
 } from "./utils/actions";
 import { useNavigate, useParams } from "@solidjs/router";
 import { toast } from "solid-toast";
-import { useUser } from "./userProvider";
 import {
     CanvasDraft,
     Viewport,
@@ -118,9 +117,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const params = useParams();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
-    const accessor = useUser();
-    const [user] = accessor();
-    const { socket: socketAccessor } = useCanvasSocket();
+    const {
+        socket: socketAccessor,
+        connectionStatus,
+        justReconnected,
+        clearReconnected
+    } = useCanvasSocket();
     const canvasContext = useCanvasContext();
 
     // Route parameter accessor with type narrowing
@@ -137,6 +139,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const isLocalMode = () => canvasId() === "local";
+
+    // Combined edit check: must have permissions AND be connected (except local mode)
+    const canEdit = () => {
+        if (isLocalMode()) return hasEditPermissions();
+        return hasEditPermissions() && connectionStatus() === "connected";
+    };
 
     // Helper to refresh canvas data from localStorage after a local mutation
     const refreshFromLocal = () => {
@@ -643,6 +651,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     });
 
+    // Sync canvas state after reconnection
+    createEffect(() => {
+        if (isLocalMode()) return;
+        if (justReconnected()) {
+            // Reset loadedCanvasId so the data-loading effect will re-apply the fresh data
+            setLoadedCanvasId(null);
+            canvasContext.refetchCanvas();
+            clearReconnected();
+        }
+    });
+
     createEffect(() => {
         if (isLocalMode()) return;
         const socket = socketAccessor();
@@ -823,7 +842,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const addBox = (fromBox: CanvasDraft) => {
-        if (!hasEditPermissions()) return;
+        if (!canEdit()) return;
         if (isLocalMode()) {
             localNewDraft({
                 name: fromBox.Draft.name,
@@ -846,7 +865,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const deleteBox = (draftId: string) => {
-        if (!hasEditPermissions()) return;
+        if (!canEdit()) return;
         const draft = canvasDrafts.find((d) => d.Draft.id === draftId);
         if (draft) {
             setDraftToDelete(draft);
@@ -859,7 +878,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         pickIndex: number,
         championName: string
     ) => {
-        if (!hasEditPermissions()) return;
+        if (!canEdit()) return;
         const champIndex = champions.findIndex((value) => value.name === championName);
         setCanvasDrafts(
             (cd) => cd.Draft.id === draftId,
@@ -893,7 +912,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleNameChange = (draftId: string, newName: string) => {
-        if (!hasEditPermissions()) return;
+        if (!canEdit()) return;
         if (isLocalMode()) {
             localEditDraft(draftId, { name: newName });
             refreshFromLocal();
@@ -915,7 +934,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const onAnchorClick = (draftId: string, anchorType: AnchorType) => {
-        if (!isConnectionMode()) return;
+        if (!isConnectionMode() || !canEdit()) return;
 
         const selectedVertex = selectedVertexForConnection();
         const source = connectionSource();
@@ -995,7 +1014,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const onGroupAnchorClick = (groupId: string, anchorType: AnchorType) => {
-        if (!isConnectionMode()) return;
+        if (!isConnectionMode() || !canEdit()) return;
 
         const selectedVertex = selectedVertexForConnection();
         const source = connectionSource();
@@ -1078,6 +1097,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleDeleteConnection = (connectionId: string) => {
+        if (!canEdit()) return;
         if (isLocalMode()) {
             localDeleteConnection(connectionId);
             refreshFromLocal();
@@ -1097,7 +1117,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleConnectionClick = (connectionId: string) => {
-        if (!isConnectionMode()) return;
+        if (!isConnectionMode() || !canEdit()) return;
 
         const source = connectionSource();
         const groupSource = groupConnectionSource();
@@ -1139,7 +1159,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleVertexClick = (connectionId: string, vertexId: string) => {
-        if (!isConnectionMode()) return;
+        if (!isConnectionMode() || !canEdit()) return;
 
         const source = connectionSource();
         const groupSource = groupConnectionSource();
@@ -1218,7 +1238,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const onBoxMouseDown = (draftId: string, e: MouseEvent) => {
         if (isConnectionMode()) return;
-        if (!hasEditPermissions()) return;
+        if (!canEdit()) return;
 
         const target = e.target as HTMLElement;
         if (target.closest("select, button, input")) {
@@ -1278,7 +1298,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const onBackgroundDoubleClick = (e: MouseEvent) => {
         if (isConnectionMode()) return;
-        if (!hasEditPermissions()) return;
+        if (!canEdit()) return;
 
         const target = e.target as HTMLElement;
         if (target === canvasContainerRef || canvasContainerRef?.contains(target)) {
@@ -1332,6 +1352,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         e: MouseEvent
     ) => {
         e.stopPropagation();
+        if (!canEdit()) return;
         const worldCoords = screenToWorld(e.clientX, e.clientY);
         setVertexDragState({
             connectionId,
@@ -1342,6 +1363,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleCreateVertex = (connectionId: string, x: number, y: number) => {
+        if (!canEdit()) return;
         if (isLocalMode()) {
             localCreateVertex({ connectionId, x, y });
             refreshFromLocal();
@@ -1386,7 +1408,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const onGroupMouseDown = (groupId: string, e: MouseEvent) => {
         if (isConnectionMode()) return;
-        if (!hasEditPermissions()) return;
+        if (!canEdit()) return;
 
         const target = e.target as HTMLElement;
         if (target.closest("button")) return;
@@ -1404,7 +1426,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleDeleteGroup = (groupId: string) => {
-        if (!hasEditPermissions()) return;
+        if (!canEdit()) return;
         const group = canvasGroups.find((g) => g.id === groupId);
         if (group) {
             setGroupToDelete(group);
@@ -1455,7 +1477,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleRenameGroup = (groupId: string, newName: string) => {
-        if (!hasEditPermissions()) return;
+        if (!canEdit()) return;
         if (isLocalMode()) {
             localUpdateGroup({ groupId, name: newName });
             refreshFromLocal();
@@ -1469,13 +1491,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleResizeGroup = (groupId: string, width: number, height: number) => {
-        if (!hasEditPermissions()) return;
+        if (!canEdit()) return;
         setCanvasGroups((g) => g.id === groupId, { width, height });
         debouncedEmitGroupResize(groupId, width, height);
     };
 
     const handleResizeEnd = (groupId: string, width: number, height: number) => {
-        if (!hasEditPermissions()) return;
+        if (!canEdit()) return;
         if (isLocalMode()) {
             localUpdateGroup({ groupId, width, height });
             refreshFromLocal();
@@ -1553,7 +1575,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
         e.preventDefault();
 
-        if (!hasEditPermissions()) return;
+        if (!canEdit()) return;
 
         const worldPos = screenToWorld(e.clientX, e.clientY);
         setContextMenuWorldPosition(worldPos);
@@ -1577,7 +1599,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleGroupContextMenu = (group: CanvasGroup, e: MouseEvent) => {
-        if (!hasEditPermissions()) return;
+        if (!canEdit()) return;
         e.preventDefault();
         setGroupContextMenu({
             group,
@@ -2042,10 +2064,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     });
 
-    const resetViewport = () => {
-        props.setViewport({ x: 0, y: 0, zoom: 1 });
-    };
-
     const zoomIn = () => {
         const vp = props.viewport();
         const newZoom = Math.min(5, vp.zoom * 1.2);
@@ -2118,7 +2136,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     onImport={() => setIsImportDialogOpen(true)}
                     isConnectionMode={isConnectionMode()}
                     onToggleConnectionMode={toggleConnectionMode}
-                    hasEditPermissions={hasEditPermissions()}
+                    hasEditPermissions={canEdit()}
                 />
                 <div class="absolute left-4 top-4 z-40">
                     <input
@@ -2133,7 +2151,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         }}
                         class="rounded border border-slate-500 bg-slate-600 px-3 py-1.5 text-slate-50 shadow focus:border-purple-400 focus:outline-none"
                         placeholder="Canvas Name"
-                        disabled={isConnectionMode() || !hasEditPermissions()}
+                        disabled={isConnectionMode() || !canEdit()}
                     />
                 </div>
                 <Show when={isLocalMode()}>
@@ -2240,7 +2258,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     onRenameGroup={handleRenameGroup}
                                     onResizeGroup={handleResizeGroup}
                                     onResizeEnd={handleResizeEnd}
-                                    canEdit={hasEditPermissions}
+                                    canEdit={canEdit}
                                     isConnectionMode={isConnectionMode()}
                                     isDragTarget={dragOverGroupId() === group.id}
                                     isExitingSource={exitingGroupId() === group.id}
@@ -2280,7 +2298,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 onSelectFocus={onSelectFocus}
                                                 onSelectNext={onSelectNext}
                                                 onSelectPrevious={onSelectPrevious}
-                                                canEdit={hasEditPermissions}
+                                                canEdit={canEdit}
                                                 isGrouped={true}
                                                 groupType="custom"
                                                 editingDraftId={editingDraftId}
@@ -2299,7 +2317,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 viewport={props.viewport}
                                 onGroupMouseDown={onGroupMouseDown}
                                 onDeleteGroup={handleDeleteGroup}
-                                canEdit={hasEditPermissions}
+                                canEdit={canEdit}
                                 isConnectionMode={isConnectionMode()}
                                 renderDraftCard={(cd) => {
                                     // Compute team names based on blueSideTeam
@@ -2335,7 +2353,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                             onSelectFocus={onSelectFocus}
                                             onSelectNext={onSelectNext}
                                             onSelectPrevious={onSelectPrevious}
-                                            canEdit={hasEditPermissions}
+                                            canEdit={canEdit}
                                             isGrouped={true}
                                             groupType="series"
                                             editingDraftId={editingDraftId}
@@ -2376,7 +2394,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             onSelectFocus={onSelectFocus}
                             onSelectNext={onSelectNext}
                             onSelectPrevious={onSelectPrevious}
-                            canEdit={hasEditPermissions}
+                            canEdit={canEdit}
                             editingDraftId={editingDraftId}
                             onEditingComplete={() => setEditingDraftId(null)}
                         />
