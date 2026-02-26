@@ -1,7 +1,7 @@
 import { Component, createSignal, Show, createEffect } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/solid-query";
-import { Users, Share2, Pencil, Loader2, Check, Copy, Plus } from "lucide-solid";
+import { Settings, Share2, Pencil, Loader2, Check, Copy, Plus } from "lucide-solid";
 import {
     generateShareLink,
     generateVersusShareLink,
@@ -323,6 +323,9 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
 
     const handleEdit = (e: MouseEvent) => {
         e.stopPropagation();
+        if (props.activity.resource_type === "canvas") {
+            return; // Canvas uses CanvasSettingsDialog
+        }
         setEditName(props.activity.resource_name);
         setEditDescription(props.activity.description || "");
         setEditPublic(props.activity.public ?? false);
@@ -475,7 +478,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                                 class={`${colors.text} transition-opacity hover:opacity-70`}
                                                 title="Canvas Settings"
                                             >
-                                                <Users size={20} />
+                                                <Settings size={20} />
                                             </button>
                                         </Show>
                                         <button
@@ -486,13 +489,15 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                             {/* TODO: DRA-40 - Review: was filled icon */}
                                             <Share2 size={20} />
                                         </button>
-                                        <button
-                                            onClick={handleEdit}
-                                            class={`${colors.text} transition-opacity hover:opacity-70`}
-                                            title="Edit"
-                                        >
-                                            <Pencil size={20} />
-                                        </button>
+                                        <Show when={props.activity.resource_type !== "canvas"}>
+                                            <button
+                                                onClick={handleEdit}
+                                                class={`${colors.text} transition-opacity hover:opacity-70`}
+                                                title="Edit"
+                                            >
+                                                <Pencil size={20} />
+                                            </button>
+                                        </Show>
                                     </div>
                                 </div>
                             </Show>
