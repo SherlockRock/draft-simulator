@@ -136,6 +136,10 @@ export const updateCanvasViewport = async (data: {
     return apiPatch(`/canvas/${data.canvasId}/viewport`, data.viewport, SuccessSchema);
 };
 
+export const deleteCanvas = async (canvasId: string) => {
+    return apiDelete(`/canvas/${canvasId}`, SuccessSchema);
+};
+
 export const updateCanvasDraftPosition = async (data: {
     canvasId: string;
     draftId: string;
