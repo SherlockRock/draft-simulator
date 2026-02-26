@@ -1,4 +1,5 @@
 import { Component, Show } from "solid-js";
+import { Lock, CircleHelp } from "lucide-solid";
 import { handleLogin } from "../utils/actions";
 
 export type AccessErrorType = "unauthorized" | "forbidden" | "notFound";
@@ -20,35 +21,9 @@ export const CanvasAccessDenied: Component<CanvasAccessDeniedProps> = (props) =>
             <div class="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-slate-600/50 ring-1 ring-slate-500/50">
                 <Show
                     when={props.errorType === "notFound"}
-                    fallback={
-                        <svg
-                            class="h-7 w-7 text-slate-400"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="1.5"
-                                d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
-                            />
-                        </svg>
-                    }
+                    fallback={<Lock size={28} class="text-slate-400" />}
                 >
-                    <svg
-                        class="h-7 w-7 text-slate-400"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="1.5"
-                            d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"
-                        />
-                    </svg>
+                    <CircleHelp size={28} class="text-slate-400" />
                 </Show>
             </div>
 

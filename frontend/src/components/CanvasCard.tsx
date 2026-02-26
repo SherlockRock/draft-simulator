@@ -1,5 +1,6 @@
 import { createSignal, createEffect, Show, createMemo, Index, Accessor } from "solid-js";
 import { useNavigate } from "@solidjs/router";
+import { Eye, Plus, X, Lock } from "lucide-solid";
 import { CanvasDraft, Viewport, AnchorType } from "../utils/schemas";
 import { AnchorPoints } from "./AnchorPoints";
 import { CanvasSelect } from "./CanvasSelect";
@@ -186,19 +187,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                                 }}
                                 disabled={props.isConnectionMode}
                             >
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    class="h-4 w-4"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                >
-                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                                    <circle cx="12" cy="12" r="3" />
-                                </svg>
+                                <Eye size={16} />
                             </button>
                             <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
                                 View Full Screen
@@ -216,19 +205,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                                 }}
                                 disabled={props.isConnectionMode || !props.canEdit()}
                             >
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    class="h-4 w-4"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                >
-                                    <line x1="12" y1="5" x2="12" y2="19" />
-                                    <line x1="5" y1="12" x2="19" y2="12" />
-                                </svg>
+                                <Plus size={16} />
                             </button>
                             <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
                                 Copy Draft
@@ -254,19 +231,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                                             props.isConnectionMode || !props.canEdit()
                                         }
                                     >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            class="h-4 w-4"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            stroke-width="2"
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                        >
-                                            <line x1="18" y1="6" x2="6" y2="18" />
-                                            <line x1="6" y1="6" x2="18" y2="18" />
-                                        </svg>
+                                        <X size={16} />
                                     </button>
                                     <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
                                         Delete Draft
@@ -283,26 +248,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                                             : "Imported from versus series. Cannot be edited."
                                     }
                                 >
-                                    <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        class="h-4 w-4"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        stroke-width="2"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                    >
-                                        <rect
-                                            x="3"
-                                            y="11"
-                                            width="18"
-                                            height="11"
-                                            rx="2"
-                                            ry="2"
-                                        />
-                                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                                    </svg>
+                                    <Lock size={16} />
                                 </div>
                                 <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
                                     Locked

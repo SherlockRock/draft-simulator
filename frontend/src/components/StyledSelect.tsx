@@ -1,4 +1,5 @@
 import { createSignal, For, Show, Component } from "solid-js";
+import { ChevronDown } from "lucide-solid";
 import { SelectTheme, getThemeColors } from "../utils/selectTheme";
 import { createDropdownKeyboard } from "../utils/useDropdownKeyboard";
 
@@ -91,20 +92,12 @@ export const StyledSelect: Component<StyledSelectProps> = (props) => {
                 >
                     {selectedOption()?.label ?? props.placeholder ?? "Select..."}
                 </span>
-                <svg
-                    class={`h-4 w-4 text-slate-400 transition-transform ${
+                <ChevronDown
+                    size={16}
+                    class={`text-slate-400 transition-transform ${
                         dropdownOpen() ? "rotate-180" : ""
                     }`}
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                >
-                    <polyline points="6 9 12 15 18 9" />
-                </svg>
+                />
             </button>
 
             <Show when={dropdownOpen()}>

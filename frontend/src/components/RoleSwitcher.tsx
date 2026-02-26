@@ -1,4 +1,5 @@
 import { Component, createSignal, Show } from "solid-js";
+import { ChevronDown, ArrowLeftRight } from "lucide-solid";
 import { clearVersusRole } from "../utils/versusStorage";
 import { useVersusContext } from "../contexts/VersusContext";
 import toast from "solid-toast";
@@ -50,19 +51,10 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
             >
                 <div class={`h-2 w-2 rounded-full ${getRoleStyles().dot}`} />
                 <span>{getRoleDisplay()}</span>
-                <svg
-                    class={`h-3 w-3 transition-transform ${isOpen() ? "rotate-180" : ""}`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    stroke-width="2"
-                >
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M19 9l-7 7-7-7"
-                    />
-                </svg>
+                <ChevronDown
+                    size={12}
+                    class={`transition-transform ${isOpen() ? "rotate-180" : ""}`}
+                />
             </button>
 
             <Show when={isOpen()}>
@@ -81,19 +73,7 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
                             onClick={handleSwitchRole}
                             class="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-700 px-4 py-2.5 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-600"
                         >
-                            <svg
-                                class="h-4 w-4"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                stroke-width="2"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-                                />
-                            </svg>
+                            <ArrowLeftRight size={16} />
                             Switch Role
                         </button>
 

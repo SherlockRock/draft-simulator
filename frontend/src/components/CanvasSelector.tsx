@@ -1,5 +1,6 @@
 import { Component, Show, createSignal } from "solid-js";
 import { useNavigate } from "@solidjs/router";
+import { Plus } from "lucide-solid";
 import { CreateCanvasDialog } from "./CreateCanvasDialog";
 import { useCanvasContext } from "../contexts/CanvasContext";
 import { StyledSelect } from "./StyledSelect";
@@ -53,19 +54,7 @@ const CanvasSelector: Component<CanvasSelectorProps> = (props) => {
                         class="flex h-10 items-center justify-center rounded-r-md border border-l-0 border-purple-700 bg-slate-700 px-3 text-slate-400 transition-colors hover:bg-purple-600 hover:text-slate-200 group-hover:border-purple-400"
                         title="Create New Canvas"
                     >
-                        <svg
-                            class="h-4 w-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            stroke-width="2"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M12 4v16m8-8H4"
-                            />
-                        </svg>
+                        <Plus size={16} />
                     </button>
                 </div>
             </Show>

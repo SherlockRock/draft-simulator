@@ -1,4 +1,5 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
+import { X, ChevronUp } from "lucide-solid";
 import { SelectTheme, getThemeColors } from "../utils/selectTheme";
 import { createDropdownKeyboard } from "../utils/useDropdownKeyboard";
 
@@ -114,37 +115,19 @@ export const SearchableSelect = (props: props) => {
                     }}
                     class={`cursor-pointer text-slate-50 outline-none transition-all focus:outline-none ${colors().hoverText}`}
                 >
-                    <svg
-                        class="mx-2 h-4 w-4 fill-current"
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                    >
-                        <line x1="18" y1="6" x2="6" y2="18" />
-                        <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
+                    <X size={16} class="mx-2" />
                 </button>
                 <label
                     for="show_more"
                     class={`cursor-pointer border-l border-slate-500 text-slate-50 outline-none transition-all focus:outline-none ${colors().hoverText}`}
                 >
                     <button class="flex h-full justify-center">
-                        <svg
-                            class={`mx-2 h-4 w-4 transform fill-current transition-transform ${
+                        <ChevronUp
+                            size={16}
+                            class={`mx-2 transform transition-transform ${
                                 dropdownOpen() ? "rotate-180" : ""
                             }`}
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        >
-                            <polyline points="18 15 12 9 6 15" />
-                        </svg>
+                        />
                     </button>
                 </label>
             </div>

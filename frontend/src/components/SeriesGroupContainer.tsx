@@ -1,5 +1,6 @@
 import { For, Show, createMemo, Accessor, JSX } from "solid-js";
 import { useNavigate } from "@solidjs/router";
+import { ExternalLink, Check, Trash2 } from "lucide-solid";
 import { CanvasDraft, CanvasGroup, Viewport } from "../utils/schemas";
 
 type SeriesGroupContainerProps = {
@@ -97,19 +98,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                             class="rounded p-1 text-slate-400 hover:bg-slate-600 hover:text-teal-400"
                             title="Go to series overview"
                         >
-                            <svg
-                                class="h-4 w-4"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                                />
-                            </svg>
+                            <ExternalLink size={16} />
                         </button>
                     </Show>
 
@@ -188,13 +177,8 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                         }
                     >
                         <span class="flex items-center gap-1 text-xs text-green-400">
-                            <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
-                                <path
-                                    fill-rule="evenodd"
-                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                    clip-rule="evenodd"
-                                />
-                            </svg>
+                            {/* TODO: DRA-40 - Review: was filled icon */}
+                            <Check size={12} />
                             Completed
                         </span>
                     </Show>
@@ -209,19 +193,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                             class="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-red-400"
                             title="Remove series from canvas"
                         >
-                            <svg
-                                class="h-4 w-4"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                />
-                            </svg>
+                            <Trash2 size={16} />
                         </button>
                     </Show>
                 </div>

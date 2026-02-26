@@ -1,5 +1,6 @@
 import { Component, Show, createMemo, createSignal } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
+import { Pencil, Check, Share2 } from "lucide-solid";
 import { useVersusContext } from "../contexts/VersusContext";
 import { VersusChatPanel } from "./VersusChatPanel";
 import { PickChangeModal } from "./PickChangeModal";
@@ -131,19 +132,7 @@ const VersusFlowPanelContent: Component = () => {
                                 class="rounded p-1 text-slate-400 transition-colors hover:bg-slate-700/50 hover:text-slate-200"
                                 title="Edit series"
                             >
-                                <svg
-                                    class="h-4 w-4"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                    />
-                                </svg>
+                                <Pencil size={16} />
                             </button>
                         </Show>
                     </div>
@@ -191,36 +180,12 @@ const VersusFlowPanelContent: Component = () => {
                     >
                         {copied() ? (
                             <>
-                                <svg
-                                    class="h-4 w-4 text-orange-400"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        d="M5 13l4 4L19 7"
-                                    />
-                                </svg>
+                                <Check size={16} class="text-orange-400" />
                                 <span class="text-orange-400">Link Copied!</span>
                             </>
                         ) : (
                             <>
-                                <svg
-                                    class="h-4 w-4"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-                                    />
-                                </svg>
+                                <Share2 size={16} />
                                 Share Invite Link
                             </>
                         )}
