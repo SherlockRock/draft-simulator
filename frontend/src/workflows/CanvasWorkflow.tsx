@@ -77,7 +77,10 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                 const local = getLocalCanvas();
                 if (!local) return undefined;
                 return {
+                    id: "local",
                     name: local.name,
+                    description: local.description ?? null,
+                    icon: local.icon ?? null,
                     drafts: local.drafts,
                     connections: local.connections,
                     groups: local.groups,
@@ -457,8 +460,10 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                             <CanvasSettingsDialog
                                 isOpen={isManageUsersOpen}
                                 canvas={{
-                                    id: canvasId(),
-                                    name: canvas()?.name ?? ""
+                                    id: canvas()?.id ?? canvasId(),
+                                    name: canvas()?.name ?? "",
+                                    description: canvas()?.description,
+                                    icon: canvas()?.icon
                                 }}
                                 usersQuery={usersQuery}
                                 onPermissionChange={(userId, permission) =>

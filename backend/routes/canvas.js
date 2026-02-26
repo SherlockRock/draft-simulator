@@ -147,7 +147,10 @@ router.get("/:canvasId", async (req, res) => {
     });
 
     res.json({
+      id: canvas.id,
       name: canvas.name,
+      description: canvas.description,
+      icon: canvas.icon,
       drafts: canvasDrafts,
       connections: connections,
       groups: groupsWithProgress,

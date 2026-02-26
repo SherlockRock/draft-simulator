@@ -245,7 +245,10 @@ export const VersusRoleSelectResponseSchema = z.object({
 // =============================================================================
 
 export const CanvasResponseSchema = z.object({
+  id: z.string(),
   name: z.string(),
+  description: z.string().nullable().optional(),
+  icon: z.string().nullable().optional(),
   drafts: z.array(CanvasDraftSchema),
   connections: z.array(ConnectionSchema),
   groups: z.array(CanvasGroupSchema),
