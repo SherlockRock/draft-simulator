@@ -1,11 +1,14 @@
-import { createContext, useContext, Setter, Resource, Accessor } from "solid-js";
+import { createContext, useContext, Setter, Resource, Accessor, JSX } from "solid-js";
+import type { CanvasResponse, CanvasListItem } from "@draft-sim/shared-types";
 
 // Canvas context type definition - shared between CanvasWorkflow and consumers
 type CanvasContextType = {
-    canvas: Resource<any>;
+    canvas: Resource<CanvasResponse | undefined>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutateCanvas: Setter<any>;
     refetchCanvas: () => void;
-    canvasList: Resource<any>;
+    canvasList: Resource<CanvasListItem[] | undefined>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutateCanvasList: Setter<any>;
     layoutToggle: Accessor<boolean>;
     setLayoutToggle: Setter<boolean>;
@@ -32,6 +35,12 @@ type CanvasContextType = {
     setDeleteGroupCallback: Setter<((groupId: string) => void) | null>;
     setEditingDraftIdCallback: Accessor<((id: string | null) => void) | null>;
     setSetEditingDraftIdCallback: Setter<((id: string | null) => void) | null>;
+    // Settings/share controls (managed by workflow, used by canvas sidebar)
+    openSettings: () => void;
+    toggleShare: () => void;
+    closeSharePopper: () => void;
+    onShareFocusOut: (e: FocusEvent) => void;
+    sharePopperContent: Accessor<JSX.Element | null>;
 };
 
 export const CanvasContext = createContext<CanvasContextType>();

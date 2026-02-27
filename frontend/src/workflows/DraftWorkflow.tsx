@@ -10,9 +10,11 @@ import {
 import { useParams, RouteSectionProps } from "@solidjs/router";
 import { useUser } from "../userProvider";
 import { fetchDefaultDraft } from "../utils/actions";
+import type { Draft } from "@draft-sim/shared-types";
 
 type DraftContextType = {
-    draft: Resource<any>;
+    draft: Resource<Draft | null | undefined>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutateDraft: Setter<any>;
 };
 

@@ -20,6 +20,7 @@ import {
     VersusDraft,
     draft,
     VersusState,
+    PickChangeRequested,
     HeartbeatSchema,
     DraftStateSyncSchema,
     ReadyUpdateSchema,
@@ -32,6 +33,7 @@ import {
     GameSettingsUpdateSchema,
     WinnerUpdateSchema
 } from "../utils/schemas";
+import { Socket } from "socket.io-client";
 import { validateSocketEvent } from "../utils/socketValidation";
 import { getEffectivePickOrder, getPicksArrayIndex } from "../utils/versusPickOrder";
 import { VersusTimer } from "../components/VersusTimer";
@@ -175,7 +177,7 @@ const VersusDraftView: Component = () => {
     const [isCountingDown, setIsCountingDown] = createSignal(false);
     const [countdownValue, setCountdownValue] = createSignal(3);
     const [pendingPickChangeRequest, setPendingPickChangeRequest] =
-        createSignal<any>(null);
+        createSignal<PickChangeRequested | null>(null);
 
     // Track slots that are currently animating (just got locked in)
     const [animatingSlots, setAnimatingSlots] = createSignal<Set<string>>(new Set());
@@ -219,7 +221,7 @@ const VersusDraftView: Component = () => {
     // Socket listener registration - only re-runs when socket instance changes
     // Follows VersusWorkflow's deduplication pattern to avoid tearing down listeners
     // when unrelated dependencies (role, participantId) change.
-    let draftSocketWithListeners: any = undefined;
+    let draftSocketWithListeners: Socket | undefined = undefined;
 
     createEffect(() => {
         const socket = socketAccessor();

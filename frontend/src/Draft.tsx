@@ -33,7 +33,7 @@ import {
     DragEventHandler,
     DragOverlay
 } from "@thisbeyond/solid-dnd";
-import { draft } from "./utils/schemas";
+import type { Draft as DraftType, draft } from "./utils/schemas";
 import BlankSquare from "/src/assets/BlankSquare.webp";
 import { useQueryClient } from "@tanstack/solid-query";
 import { SelectTheme } from "./utils/selectTheme";
@@ -71,7 +71,8 @@ const Droppable = (props: droppableProps) => {
 };
 
 type props = {
-    draft: Resource<any>;
+    draft: Resource<DraftType | null | undefined>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutate: Setter<any>;
     isLocked?: boolean;
     blueTeamName?: string;
@@ -137,10 +138,10 @@ function Draft(props: props) {
 
     const handlePick = (index: number, championId: string) => {
         if (props.isLocked) return;
+        const currentDraft = props.draft();
+        if (!currentDraft) return;
         const holdPicks = [
-            ...props
-                .draft()
-                .picks.map((pick: string) => (pick === championId ? "" : pick))
+            ...currentDraft.picks.map((pick: string) => (pick === championId ? "" : pick))
         ];
         if (index !== -1) {
             holdPicks[index] = championId;
@@ -159,7 +160,9 @@ function Draft(props: props) {
     };
 
     const handleSelect = (index: number) => {
-        if (selectedChampion() !== "" || props.draft().picks[index] !== "") {
+        const currentDraft = props.draft();
+        if (!currentDraft) return;
+        if (selectedChampion() !== "" || currentDraft.picks[index] !== "") {
             handlePick(index, selectedChampion());
         }
     };
@@ -183,7 +186,7 @@ function Draft(props: props) {
         const champNum = String(champions.findIndex((c) => c.name === champ));
         if (selectedChampion() === champNum) {
             return "block w-full border-2 border-blue-700 hover:cursor-move";
-        } else if (props.draft().picks.includes(champNum)) {
+        } else if (props.draft()?.picks.includes(champNum)) {
             return "block w-full border-2 border-gray-950 brightness-[30%]";
         }
         return "block w-full border-2 border-black hover:cursor-move";
@@ -204,7 +207,7 @@ function Draft(props: props) {
 
     const handleSelectedChamp = (champ: string) => {
         if (props.isLocked) return;
-        if (!props.draft().picks.includes(champ)) {
+        if (!props.draft()?.picks.includes(champ)) {
             setSelectedChampion(champ);
         }
     };
@@ -290,7 +293,9 @@ function Draft(props: props) {
                                     classList={{ "pointer-events-none": props.isLocked }}
                                 >
                                     {/* All 10 bans */}
-                                    <Index each={props.draft().picks.slice(0, 10)}>
+                                    <Index
+                                        each={(props.draft()?.picks ?? []).slice(0, 10)}
+                                    >
                                         {(each, index) => {
                                             const side = index < 5 ? "team1" : "team2";
                                             const borderColor =
@@ -358,7 +363,9 @@ function Draft(props: props) {
                                     classList={{ "pointer-events-none": props.isLocked }}
                                 >
                                     {/* Blue Side Champions */}
-                                    <Index each={props.draft().picks.slice(10, 15)}>
+                                    <Index
+                                        each={(props.draft()?.picks ?? []).slice(10, 15)}
+                                    >
                                         {(each, index) => (
                                             <Droppable id={index + 10}>
                                                 <Show
@@ -465,7 +472,9 @@ function Draft(props: props) {
                                     classList={{ "pointer-events-none": props.isLocked }}
                                 >
                                     {/* Red Side Champions */}
-                                    <Index each={props.draft().picks.slice(15, 20)}>
+                                    <Index
+                                        each={(props.draft()?.picks ?? []).slice(15, 20)}
+                                    >
                                         {(each, index) => (
                                             <Droppable id={index + 15}>
                                                 <Show
