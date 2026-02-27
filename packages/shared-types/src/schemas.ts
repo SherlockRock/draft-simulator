@@ -140,6 +140,7 @@ export const CanvasUserSchema = z.object({
   picture: z.string(),
   permissions: z.enum(["view", "edit", "admin"]),
   lastAccessedAt: z.string(),
+  isOwner: z.boolean(),
 });
 
 // =============================================================================

@@ -1438,7 +1438,7 @@ router.get("/:canvasId/users", protect, async (req, res) => {
           model: User,
           attributes: ["id", "name", "email", "picture"],
           through: {
-            attributes: ["permissions", "lastAccessedAt"],
+            attributes: ["permissions", "lastAccessedAt", "createdAt"],
           },
         },
       ],
@@ -1448,6 +1448,17 @@ router.get("/:canvasId/users", protect, async (req, res) => {
       return res.status(404).json({ error: "Canvas not found" });
     }
 
+    // Find the owner (user with earliest createdAt in UserCanvas)
+    let ownerId = null;
+    let earliestDate = null;
+    for (const user of canvas.Users) {
+      const createdAt = new Date(user.UserCanvas.createdAt);
+      if (!earliestDate || createdAt < earliestDate) {
+        earliestDate = createdAt;
+        ownerId = user.id;
+      }
+    }
+
     const users = canvas.Users.map((user) => ({
       id: user.id,
       name: user.name,
@@ -1455,6 +1466,7 @@ router.get("/:canvasId/users", protect, async (req, res) => {
       picture: user.picture,
       permissions: user.UserCanvas.permissions,
       lastAccessedAt: user.UserCanvas.lastAccessedAt,
+      isOwner: user.id === ownerId,
     }));
 
     res.json({ users });

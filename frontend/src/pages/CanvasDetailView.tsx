@@ -18,7 +18,11 @@ const CanvasDetailView: Component = () => {
         mutateCanvas,
         layoutToggle,
         setLayoutToggle,
-        setCreateDraftCallback
+        setCreateDraftCallback,
+        openSettings,
+        toggleShare,
+        onShareFocusOut,
+        sharePopperContent
     } = useCanvasContext();
     const [viewport, setViewport] = createSignal<Viewport>({ x: 0, y: 0, zoom: 1 });
     let canvasContainerRef: HTMLDivElement | undefined;
@@ -115,6 +119,10 @@ const CanvasDetailView: Component = () => {
                     setLayoutToggle={setLayoutToggle}
                     viewport={viewport}
                     setViewport={setViewport}
+                    onSettings={openSettings}
+                    onShare={toggleShare}
+                    onShareFocusOut={onShareFocusOut}
+                    sharePopperContent={sharePopperContent()}
                 />
             </div>
         </AuthGuard>

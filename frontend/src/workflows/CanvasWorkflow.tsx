@@ -36,8 +36,6 @@ import { GroupContextMenu } from "../components/GroupContextMenu";
 import { localCopyDraft, localDeleteDraft } from "../utils/useLocalCanvasMutations";
 import { CanvasContext } from "../contexts/CanvasContext";
 import { CanvasSocketProvider } from "../providers/CanvasSocketProvider";
-import { Settings, Share2, Plus } from "lucide-solid";
-import { CreateCanvasDialog } from "../components/CreateCanvasDialog";
 
 const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     const params = useParams();
@@ -156,7 +154,6 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         group: CanvasGroup;
         position: { x: number; y: number };
     } | null>(null);
-    const [showCreateDialog, setShowCreateDialog] = createSignal(false);
 
     let previousUser = user();
 
@@ -390,16 +387,6 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         }
     };
 
-    const handlePermissionChange = (userId: string, permission: string) => {
-        updatePermissionMutation.mutate({ userId, permissions: permission });
-    };
-
-    const handleRemoveUser = (userId: string) => {
-        if (confirm("Are you sure you want to remove this user?")) {
-            removeUserMutation.mutate(userId);
-        }
-    };
-
     const handleShareCanvas = () => {
         setIsSharePopperOpen((prev) => !prev);
     };
@@ -452,7 +439,76 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                     deleteGroupCallback,
                     setDeleteGroupCallback,
                     setEditingDraftIdCallback,
-                    setSetEditingDraftIdCallback
+                    setSetEditingDraftIdCallback,
+                    openSettings: () => setIsManageUsersOpen(true),
+                    toggleShare: handleShareCanvas,
+                    closeSharePopper: () => setIsSharePopperOpen(false),
+                    onShareFocusOut: handleShareFocusOut,
+                    sharePopperContent: () =>
+                        isSharePopperOpen() ? (
+                            <div class="absolute left-full top-0 z-10 ml-2 w-[215px] rounded-md bg-slate-600 p-3 shadow-lg">
+                                <div class="space-y-3">
+                                    <div>
+                                        <p class="mb-1 text-xs font-medium text-slate-300">
+                                            View Access
+                                        </p>
+                                        <Show
+                                            when={!viewShareLinkQuery.isPending}
+                                            fallback={
+                                                <div class="text-xs text-slate-400">
+                                                    Loading...
+                                                </div>
+                                            }
+                                        >
+                                            <div class="flex flex-col gap-2">
+                                                <input
+                                                    type="text"
+                                                    readOnly
+                                                    value={viewShareLinkQuery.data || ""}
+                                                    class="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-slate-50"
+                                                />
+                                                <button
+                                                    onClick={handleCopyViewLink}
+                                                    class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
+                                                    disabled={!viewShareLinkQuery.data}
+                                                >
+                                                    {copied() === "view" ? "✓" : "Copy"}
+                                                </button>
+                                            </div>
+                                        </Show>
+                                    </div>
+                                    <div>
+                                        <p class="mb-1 text-xs font-medium text-slate-300">
+                                            Edit Access
+                                        </p>
+                                        <Show
+                                            when={!editShareLinkQuery.isPending}
+                                            fallback={
+                                                <div class="text-xs text-slate-400">
+                                                    Loading...
+                                                </div>
+                                            }
+                                        >
+                                            <div class="flex flex-col gap-2">
+                                                <input
+                                                    type="text"
+                                                    readOnly
+                                                    value={editShareLinkQuery.data || ""}
+                                                    class="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-slate-50"
+                                                />
+                                                <button
+                                                    onClick={handleCopyEditLink}
+                                                    class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
+                                                    disabled={!editShareLinkQuery.data}
+                                                >
+                                                    {copied() === "edit" ? "✓" : "Copy"}
+                                                </button>
+                                            </div>
+                                        </Show>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : null
                 }}
             >
                 <Dialog
@@ -470,25 +526,23 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                 }}
                                 usersQuery={usersQuery}
                                 onPermissionChange={(userId, permission) =>
-                                    updatePermissionMutation.mutate({ userId, permissions: permission })
+                                    updatePermissionMutation.mutate({
+                                        userId,
+                                        permissions: permission
+                                    })
                                 }
-                                onRemoveUser={(userId) => removeUserMutation.mutate(userId)}
-                                onUpdateCanvas={(data) => updateCanvasMutation.mutate(data)}
+                                onRemoveUser={(userId) => {
+                                    removeUserMutation.mutate(userId);
+                                }}
+                                onUpdateCanvas={(data) =>
+                                    updateCanvasMutation.mutate(data)
+                                }
                                 onDeleteCanvas={() => deleteCanvasMutation.mutate()}
                                 onClose={() => setIsManageUsersOpen(false)}
                                 isDeleting={() => deleteCanvasMutation.isPending}
                             />
                         </Show>
                     }
-                />
-                <CreateCanvasDialog
-                    isOpen={showCreateDialog}
-                    onClose={() => setShowCreateDialog(false)}
-                    onSuccess={(canvasId) => {
-                        setShowCreateDialog(false);
-                        refetchCanvasList();
-                        navigate(`/canvas/${canvasId}`);
-                    }}
                 />
                 <div class="flex flex-1 overflow-hidden">
                     <Show when={isDetailView()}>
@@ -498,104 +552,6 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                 <Show when={!isDraftView() && canvasId() !== "local"}>
                                     <div class="px-3">
                                         <CanvasSelector selectedId={canvasId()} />
-                                    </div>
-                                </Show>
-
-                                {/* Action icons - hidden when viewing a draft */}
-                                <Show when={isDetailView() && !isDraftView()}>
-                                    <div class="flex items-center gap-1 px-3">
-                                        {/* Plus - always visible for signed-in users */}
-                                        <button
-                                            onClick={() => setShowCreateDialog(true)}
-                                            class="rounded-md p-2 text-slate-400 transition-colors hover:bg-purple-600 hover:text-slate-200"
-                                            title="Create New Canvas"
-                                        >
-                                            <Plus size={18} />
-                                        </button>
-
-                                        {/* Gear and Share - admin only, non-local */}
-                                        <Show when={hasAdminPermissions() && canvasId() !== "local"}>
-                                            <button
-                                                onClick={() => setIsManageUsersOpen(true)}
-                                                class="rounded-md p-2 text-slate-400 transition-colors hover:bg-purple-600 hover:text-slate-200"
-                                                title="Canvas Settings"
-                                            >
-                                                <Settings size={18} />
-                                            </button>
-                                            <div class="relative" onFocusOut={handleShareFocusOut}>
-                                                <button
-                                                    onClick={handleShareCanvas}
-                                                    class="rounded-md p-2 text-slate-400 transition-colors hover:bg-purple-600 hover:text-slate-200"
-                                                    title="Share Canvas"
-                                                >
-                                                    <Share2 size={18} />
-                                                </button>
-                                                {isSharePopperOpen() && (
-                                                    <div class="absolute left-0 top-full z-10 mt-2 w-[215px] rounded-md bg-slate-600 p-3 shadow-lg">
-                                                        <div class="space-y-3">
-                                                            <div>
-                                                                <p class="mb-1 text-xs font-medium text-slate-300">
-                                                                    View Access
-                                                                </p>
-                                                                <Show
-                                                                    when={!viewShareLinkQuery.isPending}
-                                                                    fallback={
-                                                                        <div class="text-xs text-slate-400">
-                                                                            Loading...
-                                                                        </div>
-                                                                    }
-                                                                >
-                                                                    <div class="flex flex-col gap-2">
-                                                                        <input
-                                                                            type="text"
-                                                                            readOnly
-                                                                            value={viewShareLinkQuery.data || ""}
-                                                                            class="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-slate-50"
-                                                                        />
-                                                                        <button
-                                                                            onClick={handleCopyViewLink}
-                                                                            class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
-                                                                            disabled={!viewShareLinkQuery.data}
-                                                                        >
-                                                                            {copied() === "view" ? "✓" : "Copy"}
-                                                                        </button>
-                                                                    </div>
-                                                                </Show>
-                                                            </div>
-                                                            <div>
-                                                                <p class="mb-1 text-xs font-medium text-slate-300">
-                                                                    Edit Access
-                                                                </p>
-                                                                <Show
-                                                                    when={!editShareLinkQuery.isPending}
-                                                                    fallback={
-                                                                        <div class="text-xs text-slate-400">
-                                                                            Loading...
-                                                                        </div>
-                                                                    }
-                                                                >
-                                                                    <div class="flex flex-col gap-2">
-                                                                        <input
-                                                                            type="text"
-                                                                            readOnly
-                                                                            value={editShareLinkQuery.data || ""}
-                                                                            class="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-slate-50"
-                                                                        />
-                                                                        <button
-                                                                            onClick={handleCopyEditLink}
-                                                                            class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
-                                                                            disabled={!editShareLinkQuery.data}
-                                                                        >
-                                                                            {copied() === "edit" ? "✓" : "Copy"}
-                                                                        </button>
-                                                                    </div>
-                                                                </Show>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </Show>
                                     </div>
                                 </Show>
 
