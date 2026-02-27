@@ -7,7 +7,8 @@ import {
     Show,
     createMemo,
     Setter,
-    Accessor
+    Accessor,
+    JSX
 } from "solid-js";
 import { createStore } from "solid-js/store";
 import { champions } from "./utils/constants";
@@ -19,7 +20,6 @@ import {
     copyDraftInCanvas,
     updateCanvasViewport,
     CanvasResposnse,
-    updateCanvasName,
     createConnection,
     updateConnection,
     deleteConnection,
@@ -59,7 +59,6 @@ import {
 } from "./components/Connections";
 import { cardHeight, cardWidth } from "./utils/helpers";
 import {
-    localUpdateCanvasName,
     localNewDraft,
     localEditDraft,
     localUpdateDraftPosition,
@@ -111,6 +110,11 @@ type CanvasComponentProps = {
     setLayoutToggle: (val: boolean) => void;
     viewport: Accessor<Viewport>;
     setViewport: Setter<Viewport>;
+    // Settings/share controls (admin only)
+    onSettings?: () => void;
+    onShare?: () => void;
+    onShareFocusOut?: (e: FocusEvent) => void;
+    sharePopperContent?: JSX.Element;
 };
 
 const CanvasComponent = (props: CanvasComponentProps) => {
@@ -131,11 +135,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         return params.id ?? "";
     };
 
-    // Reactive permission check - reads directly from context resource
+    // Reactive permission checks - read directly from context resource
     // This ensures permissions update when navigating between canvases
     const hasEditPermissions = () => {
         const perms = canvasContext.canvas()?.userPermissions;
         return perms === "edit" || perms === "admin";
+    };
+
+    const hasAdminPermissions = () => {
+        const perms = canvasContext.canvas()?.userPermissions;
+        return perms === "admin";
     };
 
     const isLocalMode = () => canvasId() === "local";
@@ -318,23 +327,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             canvasContext.setCreateGroupCallback(null);
         });
     });
-
-    const updateCanvasNameMutation = useMutation(() => ({
-        mutationFn: updateCanvasName,
-        onSuccess: (data: { name: string; id: string }) => {
-            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
-            toast.success("Canvas name updated");
-            queryClient.setQueryData(
-                ["canvas", canvasId()],
-                (oldData: CanvasResposnse | undefined) => {
-                    return oldData ? { ...oldData, name: data.name } : oldData;
-                }
-            );
-        },
-        onError: (error: Error) => {
-            toast.error(`Failed to update canvas name: ${error.message}`);
-        }
-    }));
 
     const newDraftMutation = useMutation(() => ({
         mutationFn: (data: {
@@ -827,20 +819,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     });
 
-    const handleCanvasNameChange = (newName: string) => {
-        if (newName.trim() && newName !== props.canvasData?.name) {
-            if (isLocalMode()) {
-                localUpdateCanvasName({ name: newName });
-                toast.success("Canvas name updated");
-            } else {
-                updateCanvasNameMutation.mutate({
-                    canvasId: canvasId(),
-                    name: newName
-                });
-            }
-        }
-    };
-
     const addBox = (fromBox: CanvasDraft) => {
         if (!canEdit()) return;
         if (isLocalMode()) {
@@ -1237,6 +1215,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const onBoxMouseDown = (draftId: string, e: MouseEvent) => {
+        canvasContext.closeSharePopper();
         if (isConnectionMode()) return;
         if (!canEdit()) return;
 
@@ -1275,6 +1254,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const onBackgroundMouseDown = (e: MouseEvent) => {
+        canvasContext.closeSharePopper();
+
         if (isConnectionMode()) {
             clearConnectionSelection();
         }
@@ -1407,6 +1388,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const onGroupMouseDown = (groupId: string, e: MouseEvent) => {
+        canvasContext.closeSharePopper();
         if (isConnectionMode()) return;
         if (!canEdit()) return;
 
@@ -2130,6 +2112,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 onContextMenu={handleCanvasContextMenu}
             >
                 <CanvasSidebar
+                    icon={props.canvasData?.icon}
+                    name={props.canvasData?.name}
+                    description={props.canvasData?.description}
                     onZoomIn={zoomIn}
                     onZoomOut={zoomOut}
                     onSwapOrientation={() => props.setLayoutToggle(!props.layoutToggle())}
@@ -2137,23 +2122,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     isConnectionMode={isConnectionMode()}
                     onToggleConnectionMode={toggleConnectionMode}
                     hasEditPermissions={canEdit()}
+                    hasAdminPermissions={hasAdminPermissions() && !isLocalMode()}
+                    onSettings={props.onSettings}
+                    onShare={props.onShare}
+                    onShareFocusOut={props.onShareFocusOut}
+                    sharePopperContent={props.sharePopperContent}
                 />
-                <div class="absolute left-4 top-4 z-40">
-                    <input
-                        type="text"
-                        value={props.canvasData?.name || ""}
-                        onInput={(e) => e.currentTarget.value}
-                        onBlur={(e) => handleCanvasNameChange(e.currentTarget.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === "Escape") {
-                                e.currentTarget.blur();
-                            }
-                        }}
-                        class="rounded border border-slate-500 bg-slate-600 px-3 py-1.5 text-slate-50 shadow focus:border-purple-400 focus:outline-none"
-                        placeholder="Canvas Name"
-                        disabled={isConnectionMode() || !canEdit()}
-                    />
-                </div>
                 <Show when={isLocalMode()}>
                     <div class="absolute right-4 top-4 z-40 flex items-center gap-2 rounded-lg border border-yellow-600/30 bg-yellow-900/40 px-3 py-1.5 text-xs text-yellow-300 shadow-lg backdrop-blur-sm">
                         <span>Local only</span>

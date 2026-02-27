@@ -1,5 +1,5 @@
 import { Component, createSignal, createEffect, For, Show } from "solid-js";
-import { Trash2, Plus } from "lucide-solid";
+import { Trash2, Plus, AlertTriangle } from "lucide-solid";
 import { UseQueryResult } from "@tanstack/solid-query";
 import { CanvasUser } from "../utils/schemas";
 import { Dialog } from "./Dialog";
@@ -39,6 +39,7 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
     // UI state
     const [showIconPicker, setShowIconPicker] = createSignal(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = createSignal(false);
+    const [userToRemove, setUserToRemove] = createSignal<string | null>(null);
     const [isSaving, setIsSaving] = createSignal(false);
     const [internalIsDeleting, setInternalIsDeleting] = createSignal(false);
     const [errors, setErrors] = createSignal<Record<string, string>>({});
@@ -54,6 +55,7 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
             setIcon(props.canvas.icon ?? "");
             setActiveTab("details");
             setShowDeleteConfirm(false);
+            setUserToRemove(null);
             setErrors({});
         }
     });
@@ -132,11 +134,11 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
             isOpen={props.isOpen}
             onCancel={props.onClose}
             body={
-                <div class="w-[500px] text-slate-200">
+                <div class="flex h-[490px] w-[500px] flex-col text-slate-200">
                     <h2 class="mb-4 text-xl font-bold text-slate-50">Canvas Settings</h2>
 
                     {/* Tab Bar */}
-                    <div class="mb-6 flex gap-2 border-b border-slate-600">
+                    <div class="flex gap-2 border-b border-slate-600">
                         <button
                             type="button"
                             class={tabClasses("details")}
@@ -160,260 +162,397 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                         </button>
                     </div>
 
-                    {/* Details Tab */}
-                    <Show when={activeTab() === "details"}>
-                        <div class="space-y-4">
-                            <div>
-                                <label
-                                    class="mb-2 block text-sm font-medium text-slate-300"
-                                    for="settings-canvas-name"
-                                >
-                                    Canvas Name
-                                </label>
-                                <input
-                                    id="settings-canvas-name"
-                                    type="text"
-                                    value={name()}
-                                    onInput={(e) => {
-                                        setName(e.currentTarget.value);
-                                        if (errors().name) {
-                                            setErrors({ ...errors(), name: "" });
-                                        }
-                                    }}
-                                    onBlur={() => {
-                                        const error = validateName(name());
-                                        if (error) {
-                                            setErrors({ ...errors(), name: error });
-                                        }
-                                    }}
-                                    class="w-full appearance-none rounded border border-slate-500 bg-slate-600 px-3 py-2 leading-tight text-slate-50 shadow focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                />
-                                {errors().name && (
-                                    <p class="mt-1 text-sm text-red-400">{errors().name}</p>
-                                )}
-                            </div>
-
-                            <div>
-                                <label
-                                    class="mb-2 block text-sm font-medium text-slate-300"
-                                    for="settings-canvas-description"
-                                >
-                                    Description (optional)
-                                </label>
-                                <textarea
-                                    id="settings-canvas-description"
-                                    value={description()}
-                                    onInput={(e) => {
-                                        setDescription(e.currentTarget.value);
-                                        if (errors().description) {
-                                            setErrors({ ...errors(), description: "" });
-                                        }
-                                    }}
-                                    onBlur={() => {
-                                        const error = validateDescription(description());
-                                        if (error) {
-                                            setErrors({ ...errors(), description: error });
-                                        }
-                                    }}
-                                    rows={3}
-                                    class="w-full appearance-none rounded border border-slate-500 bg-slate-600 px-3 py-2 leading-tight text-slate-50 shadow focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                />
-                                <div class="mt-1 flex items-center justify-between">
-                                    {errors().description ? (
-                                        <p class="text-sm text-red-400">
-                                            {errors().description}
-                                        </p>
-                                    ) : (
-                                        <p class="text-xs text-slate-400">
-                                            {description().length}/1000 characters
+                    {/* Tab Content Area - fixed height, each tab fills this */}
+                    <div class="mt-6 flex min-h-0 flex-1 flex-col">
+                        {/* Details Tab */}
+                        <Show when={activeTab() === "details"}>
+                            <div class="flex flex-1 flex-col space-y-4">
+                                <div>
+                                    <label
+                                        class="mb-2 block text-sm font-medium text-slate-300"
+                                        for="settings-canvas-name"
+                                    >
+                                        Canvas Name
+                                    </label>
+                                    <input
+                                        id="settings-canvas-name"
+                                        type="text"
+                                        value={name()}
+                                        onInput={(e) => {
+                                            setName(e.currentTarget.value);
+                                            if (errors().name) {
+                                                setErrors({ ...errors(), name: "" });
+                                            }
+                                        }}
+                                        onBlur={() => {
+                                            const error = validateName(name());
+                                            if (error) {
+                                                setErrors({ ...errors(), name: error });
+                                            }
+                                        }}
+                                        class="w-full appearance-none rounded border border-slate-500 bg-slate-600 px-3 py-2 leading-tight text-slate-50 shadow focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    />
+                                    {errors().name && (
+                                        <p class="mt-1 text-sm text-red-400">
+                                            {errors().name}
                                         </p>
                                     )}
                                 </div>
+
+                                <div>
+                                    <label
+                                        class="mb-2 block text-sm font-medium text-slate-300"
+                                        for="settings-canvas-description"
+                                    >
+                                        Description (optional)
+                                    </label>
+                                    <textarea
+                                        id="settings-canvas-description"
+                                        value={description()}
+                                        onInput={(e) => {
+                                            setDescription(e.currentTarget.value);
+                                            if (errors().description) {
+                                                setErrors({
+                                                    ...errors(),
+                                                    description: ""
+                                                });
+                                            }
+                                        }}
+                                        onBlur={() => {
+                                            const error =
+                                                validateDescription(description());
+                                            if (error) {
+                                                setErrors({
+                                                    ...errors(),
+                                                    description: error
+                                                });
+                                            }
+                                        }}
+                                        rows={3}
+                                        class="w-full appearance-none rounded border border-slate-500 bg-slate-600 px-3 py-2 leading-tight text-slate-50 shadow focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    />
+                                    <div class="mt-1 flex items-center justify-between">
+                                        {errors().description ? (
+                                            <p class="text-sm text-red-400">
+                                                {errors().description}
+                                            </p>
+                                        ) : (
+                                            <p class="text-xs text-slate-400">
+                                                {description().length}/1000 characters
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="mb-2 block text-sm font-medium text-slate-300">
+                                        Icon (optional)
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowIconPicker(true)}
+                                        class="flex h-16 w-full items-center gap-3 rounded border border-slate-500 bg-slate-600 px-3 py-2 text-slate-50 hover:bg-slate-500"
+                                    >
+                                        <Show
+                                            when={icon()}
+                                            fallback={
+                                                <div class="flex h-12 w-12 items-center justify-center rounded bg-slate-700">
+                                                    <Plus
+                                                        size={24}
+                                                        class="text-slate-400"
+                                                    />
+                                                </div>
+                                            }
+                                        >
+                                            <IconDisplay
+                                                icon={icon()}
+                                                size="md"
+                                                className="rounded"
+                                            />
+                                        </Show>
+                                        <span class="text-sm text-slate-300">
+                                            {icon() ? "Change icon" : "Select an icon"}
+                                        </span>
+                                    </button>
+                                </div>
+
+                                <div class="mt-auto flex items-center justify-end gap-2 border-t border-slate-600 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={props.onClose}
+                                        class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-500"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleSave}
+                                        disabled={isSaving() || !hasChanges()}
+                                        class="rounded-md bg-purple-500 px-4 py-2 text-sm font-medium text-slate-50 hover:bg-purple-400 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        {isSaving() ? "Saving..." : "Save Changes"}
+                                    </button>
+                                </div>
                             </div>
 
-                            <div>
-                                <label class="mb-2 block text-sm font-medium text-slate-300">
-                                    Icon (optional)
-                                </label>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowIconPicker(true)}
-                                    class="flex h-16 w-full items-center gap-3 rounded border border-slate-500 bg-slate-600 px-3 py-2 text-slate-50 hover:bg-slate-500"
-                                >
+                            <IconPicker
+                                isOpen={showIconPicker}
+                                onClose={() => setShowIconPicker(false)}
+                                onSelect={(selectedIcon) => setIcon(selectedIcon)}
+                                currentIcon={icon()}
+                                theme="purple"
+                            />
+                        </Show>
+
+                        {/* Users Tab */}
+                        <Show when={activeTab() === "users"}>
+                            <div class="flex min-h-0 flex-1 flex-col">
+                                <div class="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto pr-2">
+                                    <Show when={props.usersQuery.isLoading}>
+                                        <div class="text-center text-slate-400">
+                                            Loading users...
+                                        </div>
+                                    </Show>
+                                    <Show when={props.usersQuery.isError}>
+                                        <div class="text-center text-red-400">
+                                            Failed to load users
+                                        </div>
+                                    </Show>
+                                    <For each={props.usersQuery.data}>
+                                        {(user) => {
+                                            const isOwner = () => user.isOwner;
+                                            const isConfirming = () =>
+                                                userToRemove() === user.id;
+
+                                            return (
+                                                <div
+                                                    class="rounded p-2 transition-colors"
+                                                    classList={{
+                                                        "bg-slate-700": !isConfirming(),
+                                                        "bg-gradient-to-r from-red-500/10 to-slate-700 border border-red-500/30":
+                                                            isConfirming()
+                                                    }}
+                                                >
+                                                    {/* Normal state */}
+                                                    <Show when={!isConfirming()}>
+                                                        <div class="flex items-center justify-between">
+                                                            <div class="flex items-center gap-2">
+                                                                {user.picture && (
+                                                                    <img
+                                                                        src={user.picture}
+                                                                        class="h-8 w-8 rounded-full"
+                                                                        alt={user.name}
+                                                                    />
+                                                                )}
+                                                                <div>
+                                                                    <div class="flex items-center gap-2">
+                                                                        <span class="text-sm font-medium">
+                                                                            {user.name}
+                                                                        </span>
+                                                                        <Show
+                                                                            when={isOwner()}
+                                                                        >
+                                                                            <span class="rounded bg-purple-500/20 px-1.5 py-0.5 text-xs text-purple-300">
+                                                                                Owner
+                                                                            </span>
+                                                                        </Show>
+                                                                    </div>
+                                                                    <div class="text-xs text-slate-400">
+                                                                        {user.email}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="flex items-center gap-2">
+                                                                <StyledSelect
+                                                                    value={
+                                                                        user.permissions
+                                                                    }
+                                                                    onChange={(val) =>
+                                                                        props.onPermissionChange(
+                                                                            user.id,
+                                                                            val
+                                                                        )
+                                                                    }
+                                                                    theme="purple"
+                                                                    options={[
+                                                                        {
+                                                                            value: "view",
+                                                                            label: "View"
+                                                                        },
+                                                                        {
+                                                                            value: "edit",
+                                                                            label: "Edit"
+                                                                        },
+                                                                        {
+                                                                            value: "admin",
+                                                                            label: "Admin"
+                                                                        }
+                                                                    ]}
+                                                                    class="w-28"
+                                                                />
+                                                                <Show
+                                                                    when={!isOwner()}
+                                                                    fallback={
+                                                                        <div class="w-[20px]" />
+                                                                    }
+                                                                >
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            setUserToRemove(
+                                                                                user.id
+                                                                            )
+                                                                        }
+                                                                        class="text-red-400 hover:text-red-300"
+                                                                        title="Remove user"
+                                                                    >
+                                                                        <Trash2
+                                                                            size={20}
+                                                                        />
+                                                                    </button>
+                                                                </Show>
+                                                            </div>
+                                                        </div>
+                                                    </Show>
+
+                                                    {/* Confirmation state */}
+                                                    <Show when={isConfirming()}>
+                                                        <div class="flex items-center justify-between">
+                                                            <div class="flex items-center gap-2">
+                                                                <div class="flex h-8 w-8 items-center justify-center rounded-full bg-red-500/20">
+                                                                    <AlertTriangle
+                                                                        size={16}
+                                                                        class="text-red-400"
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <span class="text-sm font-medium">
+                                                                        Remove {user.name}
+                                                                        ?
+                                                                    </span>
+                                                                    <div class="text-xs text-slate-400">
+                                                                        They will lose
+                                                                        access to this
+                                                                        canvas
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="flex items-center gap-2">
+                                                                <button
+                                                                    onClick={() =>
+                                                                        setUserToRemove(
+                                                                            null
+                                                                        )
+                                                                    }
+                                                                    class="rounded bg-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-500"
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        props.onRemoveUser(
+                                                                            user.id
+                                                                        );
+                                                                        setUserToRemove(
+                                                                            null
+                                                                        );
+                                                                    }}
+                                                                    class="rounded bg-red-500 px-3 py-1.5 text-sm text-white hover:bg-red-400"
+                                                                >
+                                                                    Remove
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </Show>
+                                                </div>
+                                            );
+                                        }}
+                                    </For>
+                                    <Show when={props.usersQuery.data?.length === 0}>
+                                        <p class="text-center text-slate-400">
+                                            No users found.
+                                        </p>
+                                    </Show>
+                                </div>
+                                <div class="mt-4 flex justify-end border-t border-slate-600 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={props.onClose}
+                                        class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-500"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                            </div>
+                        </Show>
+
+                        {/* Delete Tab */}
+                        <Show when={activeTab() === "delete"}>
+                            <div class="flex flex-1 flex-col">
+                                <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+                                    <h3 class="mb-2 text-lg font-semibold text-red-400">
+                                        Danger Zone
+                                    </h3>
+                                    <p class="mb-4 text-sm text-slate-300">
+                                        Deleting this canvas is permanent and cannot be
+                                        undone. All drafts, connections, and shared access
+                                        will be removed.
+                                    </p>
+
                                     <Show
-                                        when={icon()}
+                                        when={showDeleteConfirm()}
                                         fallback={
-                                            <div class="flex h-12 w-12 items-center justify-center rounded bg-slate-700">
-                                                <Plus size={24} class="text-slate-400" />
-                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowDeleteConfirm(true)}
+                                                class="rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-400"
+                                            >
+                                                Delete Canvas
+                                            </button>
                                         }
                                     >
-                                        <IconDisplay
-                                            icon={icon()}
-                                            size="md"
-                                            className="rounded"
-                                        />
-                                    </Show>
-                                    <span class="text-sm text-slate-300">
-                                        {icon() ? "Change icon" : "Select an icon"}
-                                    </span>
-                                </button>
-                            </div>
-
-                            <div class="flex items-center justify-end gap-2 border-t border-slate-600 pt-4">
-                                <button
-                                    type="button"
-                                    onClick={props.onClose}
-                                    class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-500"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleSave}
-                                    disabled={isSaving() || !hasChanges()}
-                                    class="rounded-md bg-purple-500 px-4 py-2 text-sm font-medium text-slate-50 hover:bg-purple-400 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {isSaving() ? "Saving..." : "Save Changes"}
-                                </button>
-                            </div>
-                        </div>
-
-                        <IconPicker
-                            isOpen={showIconPicker}
-                            onClose={() => setShowIconPicker(false)}
-                            onSelect={(selectedIcon) => setIcon(selectedIcon)}
-                            currentIcon={icon()}
-                            theme="purple"
-                        />
-                    </Show>
-
-                    {/* Users Tab */}
-                    <Show when={activeTab() === "users"}>
-                        <div class="max-h-[50vh] space-y-3 overflow-y-auto pr-2">
-                            <Show when={props.usersQuery.isLoading}>
-                                <div class="text-center text-slate-400">Loading users...</div>
-                            </Show>
-                            <Show when={props.usersQuery.isError}>
-                                <div class="text-center text-red-400">Failed to load users</div>
-                            </Show>
-                            <For each={props.usersQuery.data}>
-                                {(user) => (
-                                    <div class="flex items-center justify-between rounded bg-slate-700 p-2">
-                                        <div class="flex items-center gap-2">
-                                            {user.picture && (
-                                                <img
-                                                    src={user.picture}
-                                                    class="h-8 w-8 rounded-full"
-                                                    alt={user.name}
-                                                />
-                                            )}
-                                            <div>
-                                                <div class="text-sm font-medium">{user.name}</div>
-                                                <div class="text-xs text-slate-400">{user.email}</div>
+                                        <div class="space-y-3">
+                                            <p class="text-sm font-medium text-red-300">
+                                                Are you sure you want to delete "
+                                                {props.canvas.name}"?
+                                            </p>
+                                            <div class="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setShowDeleteConfirm(false)
+                                                    }
+                                                    disabled={isDeleting()}
+                                                    class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleDelete}
+                                                    disabled={isDeleting()}
+                                                    class="rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    {isDeleting()
+                                                        ? "Deleting..."
+                                                        : "Yes, Delete"}
+                                                </button>
                                             </div>
                                         </div>
-                                        <div class="flex items-center gap-2">
-                                            <StyledSelect
-                                                value={user.permissions}
-                                                onChange={(val) =>
-                                                    props.onPermissionChange(user.id, val)
-                                                }
-                                                theme="purple"
-                                                options={[
-                                                    { value: "view", label: "View" },
-                                                    { value: "edit", label: "Edit" },
-                                                    { value: "admin", label: "Admin" }
-                                                ]}
-                                                class="w-28"
-                                            />
-                                            <button
-                                                onClick={() => props.onRemoveUser(user.id)}
-                                                class="text-red-400 hover:text-red-300"
-                                                title="Remove user"
-                                            >
-                                                <Trash2 size={20} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </For>
-                            <Show when={props.usersQuery.data?.length === 0}>
-                                <p class="text-center text-slate-400">No users found.</p>
-                            </Show>
-                        </div>
-                        <div class="mt-4 flex justify-end border-t border-slate-600 pt-4">
-                            <button
-                                type="button"
-                                onClick={props.onClose}
-                                class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-500"
-                            >
-                                Close
-                            </button>
-                        </div>
-                    </Show>
+                                    </Show>
+                                </div>
 
-                    {/* Delete Tab */}
-                    <Show when={activeTab() === "delete"}>
-                        <div class="space-y-4">
-                            <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
-                                <h3 class="mb-2 text-lg font-semibold text-red-400">
-                                    Danger Zone
-                                </h3>
-                                <p class="mb-4 text-sm text-slate-300">
-                                    Deleting this canvas is permanent and cannot be undone.
-                                    All drafts, connections, and shared access will be removed.
-                                </p>
-
-                                <Show
-                                    when={showDeleteConfirm()}
-                                    fallback={
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowDeleteConfirm(true)}
-                                            class="rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-400"
-                                        >
-                                            Delete Canvas
-                                        </button>
-                                    }
-                                >
-                                    <div class="space-y-3">
-                                        <p class="text-sm font-medium text-red-300">
-                                            Are you sure you want to delete "{props.canvas.name}"?
-                                        </p>
-                                        <div class="flex gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowDeleteConfirm(false)}
-                                                disabled={isDeleting()}
-                                                class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
-                                            >
-                                                Cancel
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={handleDelete}
-                                                disabled={isDeleting()}
-                                                class="rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
-                                            >
-                                                {isDeleting() ? "Deleting..." : "Yes, Delete"}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </Show>
+                                <div class="mt-auto flex justify-end border-t border-slate-600 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={props.onClose}
+                                        class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-500"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
                             </div>
-
-                            <div class="flex justify-end border-t border-slate-600 pt-4">
-                                <button
-                                    type="button"
-                                    onClick={props.onClose}
-                                    class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-500"
-                                >
-                                    Close
-                                </button>
-                            </div>
-                        </div>
-                    </Show>
+                        </Show>
+                    </div>
                 </div>
             }
         />
