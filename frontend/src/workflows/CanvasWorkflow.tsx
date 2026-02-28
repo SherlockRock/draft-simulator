@@ -28,6 +28,7 @@ import { VersionFooter } from "../components/VersionFooter";
 import CanvasSelector from "../components/CanvasSelector";
 import { Dialog } from "../components/Dialog";
 import { CanvasSettingsDialog } from "../components/CanvasSettingsDialog";
+import { FlowBackLink } from "../components/FlowBackLink";
 import toast from "solid-toast";
 import { CanvasGroup, CanvasDraft } from "../utils/schemas";
 import { CanvasAccessDenied, AccessErrorType } from "../components/CanvasAccessDenied";
@@ -557,21 +558,11 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
 
                                 {/* Back to canvas link when viewing a draft */}
                                 <Show when={isDraftView()}>
-                                    <div class="px-3">
-                                        <button
-                                            onClick={() =>
-                                                navigate(`/canvas/${canvasId()}`)
-                                            }
-                                            class="group flex items-center gap-2 text-purple-400 transition-colors hover:text-purple-300"
-                                        >
-                                            <span class="transition-transform group-hover:-translate-x-1">
-                                                ←
-                                            </span>
-                                            <span class="text-sm font-medium">
-                                                Back to {canvas()?.name || "Canvas"}
-                                            </span>
-                                        </button>
-                                    </div>
+                                    <FlowBackLink
+                                        flowType="canvas"
+                                        label="Back to Canvas"
+                                        onClick={() => navigate(`/canvas/${canvasId()}`)}
+                                    />
                                 </Show>
 
                                 {/* Draft list when canvas is selected */}
