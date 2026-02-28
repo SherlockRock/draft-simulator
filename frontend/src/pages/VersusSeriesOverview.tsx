@@ -91,13 +91,7 @@ const VersusSeriesOverview: Component = () => {
                 }
             >
                 <Show when={versusDraft()}>
-                    {/* Ambient background gradient */}
-                    <div class="pointer-events-none fixed inset-0 overflow-hidden">
-                        <div class="absolute -left-1/4 -top-1/4 h-[600px] w-[600px] rounded-full bg-blue-600/[0.07] blur-[120px]" />
-                        <div class="absolute -right-1/4 -top-1/4 h-[600px] w-[600px] rounded-full bg-red-600/[0.07] blur-[120px]" />
-                    </div>
-
-                    <div class="relative mx-auto max-w-5xl px-6 py-8">
+                    <div class="mx-auto max-w-5xl px-6 py-8">
                         {/* Hero matchup section */}
                         <div class="mb-10 overflow-hidden rounded-2xl border border-slate-700/50 bg-gradient-to-b from-slate-800/80 to-slate-900/80 shadow-2xl backdrop-blur-sm">
                             {/* Series name + icon header */}

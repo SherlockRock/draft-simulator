@@ -549,6 +549,15 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                     <Show when={isDetailView()}>
                         <FlowPanel flow="canvas">
                             <div class="flex h-full flex-col gap-3 py-3">
+                                {/* Back to Canvas Dashboard */}
+                                <Show when={!isDraftView() && canvasId() !== "local"}>
+                                    <FlowBackLink
+                                        flowType="canvas"
+                                        label="Back to Canvas Dashboard"
+                                        onClick={() => navigate("/canvas/dashboard")}
+                                    />
+                                </Show>
+
                                 {/* Canvas Selector - hidden when viewing a draft or in local mode */}
                                 <Show when={!isDraftView() && canvasId() !== "local"}>
                                     <div class="px-3">

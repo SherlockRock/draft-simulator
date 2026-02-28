@@ -2,7 +2,6 @@ import { Component, Show, createSignal } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { Plus } from "lucide-solid";
 import { CreateCanvasDialog } from "./CreateCanvasDialog";
-import { FlowBackLink } from "./FlowBackLink";
 import { useCanvasContext } from "../contexts/CanvasContext";
 import { StyledSelect } from "./StyledSelect";
 
@@ -25,11 +24,6 @@ const CanvasSelector: Component<CanvasSelectorProps> = (props) => {
 
     return (
         <div class="canvas-selector">
-            <FlowBackLink
-                flowType="canvas"
-                label="Back to Canvas Dashboard"
-                onClick={() => navigate("/canvas")}
-            />
             <Show
                 when={!canvases.loading}
                 fallback={<div class="text-sm text-slate-400">Loading canvases...</div>}

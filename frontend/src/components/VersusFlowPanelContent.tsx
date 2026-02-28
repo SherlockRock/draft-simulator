@@ -197,61 +197,56 @@ const VersusFlowPanelContent: Component = () => {
                 </div>
             </Show>
 
-            {/* Draft Controls Section - only when viewing a draft */}
+            {/* Winner Reporter - shown when draft is completed */}
+            <Show when={isInDraftView() && draftState()?.completed && draftState()?.draft}>
+                <div class="px-3">
+                    <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Winner
+                    </div>
+                    <WinnerReporter
+                        draftId={draftState()?.draft?.id ?? ""}
+                        blueTeamName={blueSideTeamName() ?? ""}
+                        redTeamName={redSideTeamName() ?? ""}
+                        currentWinner={draftState()?.draft?.winner}
+                        canEdit={canEditWinner()}
+                        onReportWinner={handleReportWinner}
+                    />
+                </div>
+            </Show>
+
+            {/* Pause Button */}
             <Show
                 when={
                     isInDraftView() &&
-                    draftState() &&
-                    ((callbacks() && !isSpectator()) || draftState()?.completed)
+                    callbacks()?.draftStarted() &&
+                    !draftState()?.completed &&
+                    !isSpectator()
                 }
             >
-                <div class="flex flex-col gap-2 px-3">
-                    {/* Winner Reporter - shown when draft is completed */}
-                    <Show when={draftState()?.completed && draftState()?.draft}>
-                        <div>
-                            <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                                Winner
-                            </div>
-                            <WinnerReporter
-                                draftId={draftState()?.draft?.id ?? ""}
-                                blueTeamName={blueSideTeamName() ?? ""}
-                                redTeamName={redSideTeamName() ?? ""}
-                                currentWinner={draftState()?.draft?.winner}
-                                canEdit={canEditWinner()}
-                                onReportWinner={handleReportWinner}
-                            />
-                        </div>
-                    </Show>
-
-                    {/* Pause Button */}
-                    <Show
-                        when={
-                            callbacks()?.draftStarted() &&
-                            !draftState()?.completed &&
-                            !isSpectator()
-                        }
+                <div class="px-3">
+                    <button
+                        onClick={() => callbacks()?.handlePause()}
+                        class={`w-full rounded px-3 py-1.5 text-sm font-medium transition-all active:scale-[0.98] ${
+                            draftState()?.isPaused
+                                ? "border border-yellow-500/60 bg-yellow-500/15 font-bold text-yellow-400 hover:bg-yellow-500/25"
+                                : "border border-slate-600/50 bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
+                        }`}
                     >
-                        <button
-                            onClick={() => callbacks()?.handlePause()}
-                            class={`w-full rounded px-3 py-1.5 text-sm font-medium transition-all active:scale-[0.98] ${
-                                draftState()?.isPaused
-                                    ? "border border-yellow-500/60 bg-yellow-500/15 font-bold text-yellow-400 hover:bg-yellow-500/25"
-                                    : "border border-slate-600/50 bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
-                            }`}
-                        >
-                            {draftState()?.isPaused ? "Resume Draft" : "Pause Draft"}
-                        </button>
-                    </Show>
+                        {draftState()?.isPaused ? "Resume Draft" : "Pause Draft"}
+                    </button>
+                </div>
+            </Show>
 
-                    {/* Pick Change Modal */}
-                    <Show when={draftState()?.draft && callbacks() && !isSpectator()}>
-                        <PickChangeModal
-                            draft={draftState()?.draft}
-                            myRole={myRole}
-                            isCompetitive={versusDraft()?.competitive ?? false}
-                            pendingRequest={
-                                callbacks()?.pendingPickChangeRequest() ?? null
-                            }
+            {/* Pick Change Modal */}
+            <Show when={isInDraftView() && draftState()?.completed && draftState()?.draft && callbacks() && !isSpectator()}>
+                <div class="px-3">
+                    <PickChangeModal
+                        draft={draftState()?.draft}
+                        myRole={myRole}
+                        isCompetitive={versusDraft()?.competitive ?? false}
+                        pendingRequest={
+                            callbacks()?.pendingPickChangeRequest() ?? null
+                        }
                             onRequestChange={
                                 callbacks()?.handleRequestPickChange ?? fallbackAction
                             }
@@ -262,7 +257,6 @@ const VersusFlowPanelContent: Component = () => {
                                 callbacks()?.handleRejectPickChange ?? fallbackAction
                             }
                         />
-                    </Show>
                 </div>
             </Show>
 
