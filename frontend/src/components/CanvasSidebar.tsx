@@ -9,6 +9,7 @@ import {
     Share2
 } from "lucide-solid";
 import { IconDisplay } from "./IconDisplay";
+import { champions } from "../utils/constants";
 
 interface CanvasSidebarProps {
     // Canvas info
@@ -73,34 +74,48 @@ const SidebarGroup: Component<{ children: JSX.Element }> = (props) => (
 );
 
 const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
+    const isChampionIcon = () => {
+        if (!props.icon) return false;
+        const num = parseInt(props.icon);
+        return !isNaN(num) && num >= 0 && num < champions.length;
+    };
+
     return (
         <div class="absolute left-4 top-4 z-40 flex flex-col gap-2">
             {/* Canvas icon */}
-            <Show when={props.icon}>
-                <SidebarGroup>
-                    <div class="group relative">
-                        <div class="flex h-9 w-9 items-center justify-center overflow-hidden rounded-md border border-slate-600 bg-slate-800">
+            <SidebarGroup>
+                <div class="group relative">
+                    <div
+                        class="flex h-9 w-9 items-center justify-center overflow-hidden rounded-md"
+                        classList={{
+                            "border border-slate-600 bg-slate-800": isChampionIcon()
+                        }}
+                    >
+                        <Show
+                            when={props.icon}
+                            fallback={<span class="text-2xl">🎨</span>}
+                        >
                             <IconDisplay
                                 icon={props.icon}
                                 size="sm"
                                 className="!h-9 !w-9 [&_img]:!h-9 [&_img]:!w-9 [&_span]:!text-2xl"
                             />
-                        </div>
-                        <Show when={props.name}>
-                            <div class="pointer-events-none absolute left-full top-0 z-50 ml-2 w-max max-w-xs rounded bg-slate-900 px-3 py-2 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                                <div class="text-sm font-medium text-slate-100">
-                                    {props.name}
-                                </div>
-                                <Show when={props.description}>
-                                    <div class="mt-1 text-xs text-slate-400">
-                                        {props.description}
-                                    </div>
-                                </Show>
-                            </div>
                         </Show>
                     </div>
-                </SidebarGroup>
-            </Show>
+                    <Show when={props.name}>
+                        <div class="pointer-events-none absolute left-full top-0 z-50 ml-2 w-max max-w-xs rounded bg-slate-900 px-3 py-2 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                            <div class="text-sm font-medium text-slate-100">
+                                {props.name}
+                            </div>
+                            <Show when={props.description}>
+                                <div class="mt-1 text-xs text-slate-400">
+                                    {props.description}
+                                </div>
+                            </Show>
+                        </div>
+                    </Show>
+                </div>
+            </SidebarGroup>
 
             {/* Zoom controls + swap orientation */}
             <SidebarGroup>

@@ -19,7 +19,11 @@ interface CanvasSettingsDialogProps {
     usersQuery: UseQueryResult<CanvasUser[], Error>;
     onPermissionChange: (userId: string, permission: string) => void;
     onRemoveUser: (userId: string) => void;
-    onUpdateCanvas: (data: { name: string; description?: string; icon?: string }) => void;
+    onUpdateCanvas: (data: {
+        name: string;
+        description?: string;
+        icon?: string;
+    }) => Promise<{ name: string; id: string }>;
     onDeleteCanvas: () => void;
     onClose: () => void;
     isOpen: () => boolean;
@@ -95,11 +99,14 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
 
         setIsSaving(true);
         try {
-            props.onUpdateCanvas({
+            await props.onUpdateCanvas({
                 name: name().trim(),
                 description: description().trim() || undefined,
                 icon: icon() || undefined
             });
+            props.onClose();
+        } catch {
+            // Error handling is done by the mutation's onError callback
         } finally {
             setIsSaving(false);
         }

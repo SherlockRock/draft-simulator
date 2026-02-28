@@ -469,8 +469,8 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                     <div class="flex items-center gap-2">
                                         <Show
                                             when={
-                                                props.activity.resource_type === "canvas" &&
-                                                props.activity.is_owner
+                                                props.activity.resource_type ===
+                                                    "canvas" && props.activity.is_owner
                                             }
                                         >
                                             <button
@@ -489,7 +489,11 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                             {/* TODO: DRA-40 - Review: was filled icon */}
                                             <Share2 size={20} />
                                         </button>
-                                        <Show when={props.activity.resource_type !== "canvas"}>
+                                        <Show
+                                            when={
+                                                props.activity.resource_type !== "canvas"
+                                            }
+                                        >
                                             <button
                                                 onClick={handleEdit}
                                                 class={`${colors.text} transition-opacity hover:opacity-70`}
@@ -662,7 +666,10 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                             when={!shareLinkQuery.isPending}
                             fallback={
                                 <div class="flex items-center gap-2 px-2 py-1">
-                                    <Loader2 size={20} class="animate-spin text-teal-400" />
+                                    <Loader2
+                                        size={20}
+                                        class="animate-spin text-teal-400"
+                                    />
                                     <span class="text-sm text-slate-300">
                                         Generating...
                                     </span>
@@ -876,13 +883,13 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                 usersQuery={usersQuery}
                 onPermissionChange={handlePermissionChange}
                 onRemoveUser={handleRemoveUser}
-                onUpdateCanvas={(data) => {
-                    editCanvasMutation.mutate({
+                onUpdateCanvas={(data) =>
+                    editCanvasMutation.mutateAsync({
                         name: data.name,
                         description: data.description,
                         icon: data.icon
-                    });
-                }}
+                    })
+                }
                 onDeleteCanvas={() => deleteCanvasMutation.mutate()}
                 onClose={() => setIsManageUsersOpen(false)}
                 isDeleting={() => deleteCanvasMutation.isPending}
