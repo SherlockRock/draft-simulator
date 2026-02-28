@@ -20,6 +20,40 @@ const BASE_URL =
         ? `${import.meta.env.VITE_API_URL}/api`
         : "/api";
 
+// Deduplicates concurrent refresh attempts so multiple 401s
+// don't fire multiple refresh requests.
+let refreshPromise: Promise<boolean> | null = null;
+
+async function refreshAccessToken(): Promise<boolean> {
+    try {
+        const res = await fetch(`${BASE_URL}/auth/refresh-token`, {
+            credentials: "include"
+        });
+        return res.ok;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Fetch wrapper that retries once on 401 by refreshing the access token.
+ */
+async function fetchWithRefresh(url: string, options: RequestInit): Promise<Response> {
+    const res = await fetch(url, options);
+    if (res.status !== 401) return res;
+
+    if (!refreshPromise) {
+        refreshPromise = refreshAccessToken().finally(() => {
+            refreshPromise = null;
+        });
+    }
+
+    const refreshed = await refreshPromise;
+    if (!refreshed) return res;
+
+    return fetch(url, options);
+}
+
 /**
  * Parse and validate API response data against a Zod schema.
  * Shows a toast and throws ValidationError on failure.
@@ -38,7 +72,7 @@ function validateResponse<T>(data: unknown, schema: z.ZodType<T>): T {
  * Validated GET request.
  */
 export async function apiGet<T>(path: string, schema: z.ZodType<T>): Promise<T> {
-    const res = await fetch(`${BASE_URL}${path}`, {
+    const res = await fetchWithRefresh(`${BASE_URL}${path}`, {
         credentials: "include"
     });
     if (!res.ok) {
@@ -56,7 +90,7 @@ export async function apiPost<T>(
     body: unknown,
     schema: z.ZodType<T>
 ): Promise<T> {
-    const res = await fetch(`${BASE_URL}${path}`, {
+    const res = await fetchWithRefresh(`${BASE_URL}${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -77,7 +111,7 @@ export async function apiPut<T>(
     body: unknown,
     schema: z.ZodType<T>
 ): Promise<T> {
-    const res = await fetch(`${BASE_URL}${path}`, {
+    const res = await fetchWithRefresh(`${BASE_URL}${path}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -106,7 +140,7 @@ export async function apiDelete<T>(
         options.headers = { "Content-Type": "application/json" };
         options.body = JSON.stringify(body);
     }
-    const res = await fetch(`${BASE_URL}${path}`, options);
+    const res = await fetchWithRefresh(`${BASE_URL}${path}`, options);
     if (!res.ok) {
         throw new Error(`API error: ${res.status}`);
     }
@@ -122,7 +156,7 @@ export async function apiPatch<T>(
     body: unknown,
     schema: z.ZodType<T>
 ): Promise<T> {
-    const res = await fetch(`${BASE_URL}${path}`, {
+    const res = await fetchWithRefresh(`${BASE_URL}${path}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
