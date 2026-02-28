@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "@solidjs/router";
 import { Pencil, Check, Share2 } from "lucide-solid";
 import { useVersusContext } from "../contexts/VersusContext";
 import { VersusChatPanel } from "./VersusChatPanel";
+import { FlowBackLink } from "./FlowBackLink";
 import { PickChangeModal } from "./PickChangeModal";
 import { VersionFooter } from "./VersionFooter";
 import { WinnerReporter } from "./WinnerReporter";
@@ -103,19 +104,22 @@ const VersusFlowPanelContent: Component = () => {
 
     return (
         <div class="flex h-full flex-col gap-3 py-3">
+            {/* Back to Versus Dashboard - shown on series overview */}
+            <Show when={isInSeries() && !isInDraftView()}>
+                <FlowBackLink
+                    flowType="versus"
+                    label="Back to Versus Dashboard"
+                    onClick={() => navigate("/versus")}
+                />
+            </Show>
+
             {/* Back to Series - shown when viewing a draft */}
             <Show when={isInDraftView() && isInSeries()}>
-                <div class="px-3">
-                    <button
-                        onClick={() => navigate(`/versus/${params.id}`)}
-                        class="group flex items-center gap-2 text-orange-400 transition-colors hover:text-orange-300"
-                    >
-                        <span class="transition-transform group-hover:-translate-x-1">
-                            ←
-                        </span>
-                        <span class="text-sm font-medium">Back to Series</span>
-                    </button>
-                </div>
+                <FlowBackLink
+                    flowType="versus"
+                    label="Back to Series"
+                    onClick={() => navigate(`/versus/${params.id}`)}
+                />
             </Show>
 
             {/* Match Info Section - shown when in a series */}
