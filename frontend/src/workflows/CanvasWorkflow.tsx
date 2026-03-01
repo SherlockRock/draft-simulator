@@ -609,10 +609,10 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                         return (
                                             <div class="flex min-h-0 flex-1 flex-col p-3">
                                                 {/* Inset container */}
-                                                <div class="flex min-h-0 flex-1 flex-col rounded-t-lg border border-slate-700/50 bg-slate-900/40">
+                                                <div class="flex min-h-0 flex-1 flex-col rounded-t-lg border border-purple-500/30 bg-slate-900/40">
                                                     {/* Section header - outside scroll area */}
-                                                    <div class="border-b border-slate-700/50 px-3 py-2">
-                                                        <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-200">
+                                                    <div class="flex items-center border-b border-purple-500/30 px-3 py-2.5">
+                                                        <span class="text-[11px] font-semibold uppercase leading-none tracking-wider text-slate-200">
                                                             Drafts & Groups
                                                         </span>
                                                     </div>

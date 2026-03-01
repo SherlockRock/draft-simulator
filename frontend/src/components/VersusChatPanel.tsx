@@ -48,14 +48,16 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
 
     return (
         <div class="flex h-full flex-col">
-            <div class="flex flex-1 flex-col rounded-md border border-slate-500 bg-slate-700">
+            <div class="flex min-h-0 flex-1 flex-col rounded-t-lg border border-orange-500/30 bg-slate-900/40">
                 {/* Header */}
-                <div class="flex justify-between border-b border-slate-500 p-2 text-sm font-medium text-slate-50">
-                    <p>Series Chat</p>
+                <div class="flex items-center border-b border-orange-500/30 px-3 py-2.5">
+                    <span class="text-[11px] font-semibold uppercase leading-none tracking-wider text-slate-200">
+                        Series Chat
+                    </span>
                 </div>
 
                 {/* Messages */}
-                <div class="flex-1 overflow-y-auto p-2">
+                <div class="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-2">
                     <For each={chatMessages()}>
                         {(msg) => (
                             <div class="mb-2 flex flex-wrap text-sm">
@@ -75,13 +77,13 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
 
                 {/* Input */}
                 <form
-                    class="flex items-center border-t border-slate-500 p-2"
+                    class="flex items-center border-t border-orange-500/30 p-2"
                     onSubmit={handleSend}
                 >
                     <input
                         type="text"
                         placeholder="Type a message..."
-                        class="min-w-0 flex-1 rounded-l-md border-none bg-slate-600 px-3 py-1 text-sm text-slate-50 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-orange-500/50"
+                        class="min-w-0 flex-1 rounded-l-md border-none bg-slate-800/60 px-3 py-1 text-sm text-slate-50 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-orange-500/50"
                         value={messageInput()}
                         onInput={(e) => setMessageInput(e.currentTarget.value)}
                         maxLength={500}
