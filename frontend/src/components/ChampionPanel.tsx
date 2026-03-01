@@ -190,9 +190,9 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                 {/* Toggle button */}
                 <button
                     onClick={() => setIsExpanded(!isExpanded())}
-                    class="flex w-5 flex-shrink-0 items-center justify-center border-r border-slate-700 bg-slate-800 transition-colors hover:bg-slate-700"
+                    class="group flex w-5 flex-shrink-0 items-center justify-center border-r border-slate-700 bg-slate-800 transition-colors hover:bg-slate-700"
                 >
-                    <span class="text-[10px] text-slate-500">
+                    <span class="text-[10px] text-slate-500 transition-colors group-hover:text-orange-400">
                         {isExpanded() ? "▶" : "◀"}
                     </span>
                 </button>

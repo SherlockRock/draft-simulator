@@ -7,19 +7,13 @@ interface FlowPanelProps {
 
 const flowColors = {
     canvas: {
-        arrow: "text-purple-400",
-        arrowHover: "group-hover:text-purple-300",
-        border: "border-purple-500/40"
+        arrowHover: "group-hover:text-purple-400"
     },
     versus: {
-        arrow: "text-orange-400",
-        arrowHover: "group-hover:text-orange-300",
-        border: "border-orange-500/60"
+        arrowHover: "group-hover:text-orange-400"
     },
     draft: {
-        arrow: "text-slate-400",
-        arrowHover: "group-hover:text-slate-300",
-        border: "border-slate-600"
+        arrowHover: "group-hover:text-slate-300"
     }
 };
 
@@ -46,15 +40,11 @@ const FlowPanel: Component<FlowPanelProps> = (props) => {
                 </div>
                 <button
                     onClick={() => setIsExpanded(!isExpanded())}
-                    class={`group flex w-5 items-center justify-center border-l bg-slate-800 transition-colors hover:bg-slate-700 ${
-                        colors() ? colors()!.border : "border-slate-700"
-                    }`}
+                    class="group flex w-5 items-center justify-center border-l border-slate-700 bg-slate-800 transition-colors hover:bg-slate-700"
                 >
                     <span
-                        class={`text-[10px] transition-colors ${
-                            colors()
-                                ? `${colors()!.arrow} ${colors()!.arrowHover}`
-                                : "text-slate-500"
+                        class={`text-[10px] text-slate-500 transition-colors ${
+                            colors()?.arrowHover ?? ""
                         }`}
                     >
                         {isExpanded() ? "◀" : "▶"}
