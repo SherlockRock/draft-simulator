@@ -16,7 +16,7 @@ export const themeColors = {
         hoverBorderLight: "hover:border-teal-500"
     },
     orange: {
-        border: "border-orange-700",
+        border: "border-orange-500/60",
         focusBorder: "focus:border-orange-400",
         ring: "focus:ring-orange-400",
         text: "text-orange-400",

@@ -32,12 +32,12 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
     const getRoleStyles = () => {
         if (props.currentRole === "blue_captain" || props.currentRole === "red_captain")
             return {
-                pill: "bg-orange-500/20 text-orange-300 border-orange-500/40 hover:bg-orange-500/30",
+                pill: "bg-orange-500/20 text-orange-300 border-orange-500/60 hover:bg-orange-500/30",
                 dot: "bg-orange-400",
                 text: "text-orange-400"
             };
         return {
-            pill: "bg-slate-600/30 text-slate-300 border-slate-500/40 hover:bg-slate-600/50",
+            pill: "bg-slate-600/30 text-slate-300 border-orange-500/60 hover:bg-slate-600/50",
             dot: "bg-slate-400",
             text: "text-slate-400"
         };
@@ -58,7 +58,7 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
             </button>
 
             <Show when={isOpen()}>
-                <div class="absolute left-0 top-12 z-50 w-full overflow-hidden rounded-xl border border-slate-600/50 bg-slate-800 shadow-xl">
+                <div class="absolute left-0 top-12 z-50 w-full overflow-hidden rounded-xl border border-orange-500/60 bg-slate-800 shadow-xl">
                     <div class="border-b border-slate-700/50 bg-slate-800/80 px-4 py-3">
                         <div class="text-xs font-semibold uppercase tracking-wider text-slate-500">
                             Your Role
@@ -71,7 +71,7 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
                     <div class="p-3">
                         <button
                             onClick={handleSwitchRole}
-                            class="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-700 px-4 py-2.5 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-600"
+                            class="flex w-full items-center justify-center gap-2 rounded-lg border border-orange-500/60 bg-slate-700 px-4 py-2.5 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-600"
                         >
                             <ArrowLeftRight size={16} />
                             Switch Role

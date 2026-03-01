@@ -78,7 +78,7 @@ const VersusSeriesOverview: Component = () => {
     };
 
     return (
-        <div class="flex-1 overflow-auto bg-slate-950">
+        <div class="flex-1 overflow-auto bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
             <Show
                 when={isConnected()}
                 fallback={
@@ -247,8 +247,8 @@ const VersusSeriesOverview: Component = () => {
                                                 }}
                                                 class={`group relative overflow-hidden rounded-xl border transition-all duration-200 ${
                                                     accessible
-                                                        ? "cursor-pointer border-slate-700/50 bg-slate-800/50 hover:border-slate-600 hover:bg-slate-800"
-                                                        : "border-slate-800 bg-slate-900/50 opacity-60"
+                                                        ? "cursor-pointer border-slate-700/50 bg-slate-800 hover:border-slate-600 hover:bg-slate-700"
+                                                        : "border-slate-800 bg-slate-950 opacity-60"
                                                 }`}
                                             >
                                                 {/* Left accent bar for winner */}

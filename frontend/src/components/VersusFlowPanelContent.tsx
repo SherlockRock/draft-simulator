@@ -125,18 +125,18 @@ const VersusFlowPanelContent: Component = () => {
             {/* Match Info Section - shown when in a series */}
             <Show when={isInSeries() && versusDraft()}>
                 <div class="flex flex-col gap-2 px-3">
-                    {/* Series info card */}
-                    <div class="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/40 p-3">
-                        <h2 class="text-base font-bold leading-tight text-slate-100">
+                    {/* Series name display - mirrors canvas selector styling */}
+                    <div class="flex h-10 w-full items-center justify-between rounded-md border border-orange-500/60 bg-slate-800 px-3 py-2">
+                        <span class="truncate text-slate-50">
                             {versusDraft()?.name ?? ""}
-                        </h2>
+                        </span>
                         <Show when={isOwner()}>
                             <button
                                 onClick={() => setShowEditDialog(true)}
-                                class="rounded p-1 text-slate-400 transition-colors hover:bg-slate-700/50 hover:text-slate-200"
+                                class="rounded p-1 text-slate-400 transition-colors hover:text-slate-200"
                                 title="Edit series"
                             >
-                                <Pencil size={16} />
+                                <Pencil size={14} />
                             </button>
                         </Show>
                     </div>
@@ -180,7 +180,7 @@ const VersusFlowPanelContent: Component = () => {
                 <div class="px-3">
                     <button
                         onClick={handleCopyLink}
-                        class="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-2 text-sm font-medium text-slate-200 transition-all hover:border-slate-500 hover:bg-slate-700"
+                        class="flex w-full items-center justify-center gap-2 rounded-lg border border-orange-500/60 bg-slate-700/50 px-3 py-2 text-sm font-medium text-slate-200 transition-all hover:border-orange-400/60 hover:bg-slate-700"
                     >
                         {copied() ? (
                             <>
@@ -198,7 +198,9 @@ const VersusFlowPanelContent: Component = () => {
             </Show>
 
             {/* Winner Reporter - shown when draft is completed */}
-            <Show when={isInDraftView() && draftState()?.completed && draftState()?.draft}>
+            <Show
+                when={isInDraftView() && draftState()?.completed && draftState()?.draft}
+            >
                 <div class="px-3">
                     <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Winner
@@ -238,25 +240,31 @@ const VersusFlowPanelContent: Component = () => {
             </Show>
 
             {/* Pick Change Modal */}
-            <Show when={isInDraftView() && draftState()?.completed && draftState()?.draft && callbacks() && !isSpectator()}>
+            <Show
+                when={
+                    isInDraftView() &&
+                    draftState()?.completed &&
+                    draftState()?.draft &&
+                    callbacks() &&
+                    !isSpectator()
+                }
+            >
                 <div class="px-3">
                     <PickChangeModal
                         draft={draftState()?.draft}
                         myRole={myRole}
                         isCompetitive={versusDraft()?.competitive ?? false}
-                        pendingRequest={
-                            callbacks()?.pendingPickChangeRequest() ?? null
+                        pendingRequest={callbacks()?.pendingPickChangeRequest() ?? null}
+                        onRequestChange={
+                            callbacks()?.handleRequestPickChange ?? fallbackAction
                         }
-                            onRequestChange={
-                                callbacks()?.handleRequestPickChange ?? fallbackAction
-                            }
-                            onApproveChange={
-                                callbacks()?.handleApprovePickChange ?? fallbackAction
-                            }
-                            onRejectChange={
-                                callbacks()?.handleRejectPickChange ?? fallbackAction
-                            }
-                        />
+                        onApproveChange={
+                            callbacks()?.handleApprovePickChange ?? fallbackAction
+                        }
+                        onRejectChange={
+                            callbacks()?.handleRejectPickChange ?? fallbackAction
+                        }
+                    />
                 </div>
             </Show>
 

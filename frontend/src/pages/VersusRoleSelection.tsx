@@ -71,14 +71,7 @@ const VersusRoleSelection: Component = () => {
     };
 
     return (
-        <div class="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-slate-950 p-6">
-            {/* Ambient background gradients */}
-            <div class="pointer-events-none absolute inset-0 overflow-hidden">
-                <div class="absolute -left-1/4 top-1/4 h-[500px] w-[500px] rounded-full bg-orange-600/10 blur-[100px]" />
-                <div class="absolute -right-1/4 top-1/4 h-[500px] w-[500px] rounded-full bg-orange-600/10 blur-[100px]" />
-                <div class="absolute bottom-0 left-1/2 h-[300px] w-[600px] -translate-x-1/2 rounded-full bg-slate-700/20 blur-[80px]" />
-            </div>
-
+        <div class="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px] p-6">
             <Show
                 when={isConnected() && !error()}
                 fallback={

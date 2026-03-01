@@ -70,7 +70,7 @@ const GlobalNavBar: Component = () => {
                         onClick={() => navigate("/versus")}
                         class={`flex items-center gap-2 rounded-md px-4 py-2 font-medium transition-colors ${
                             activeFlow() === "versus"
-                                ? "bg-orange-600 text-white"
+                                ? "bg-orange-500 text-white"
                                 : "bg-slate-800 text-slate-300 hover:bg-slate-700"
                         }`}
                     >

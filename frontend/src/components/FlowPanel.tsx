@@ -14,7 +14,7 @@ const flowColors = {
     versus: {
         arrow: "text-orange-400",
         arrowHover: "group-hover:text-orange-300",
-        border: "border-orange-500/40"
+        border: "border-orange-500/60"
     },
     draft: {
         arrow: "text-slate-400",

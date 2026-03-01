@@ -16,7 +16,7 @@ const CanvasFlowDashboard: Component = () => {
     };
 
     return (
-        <div class="flex-1 overflow-auto bg-slate-900">
+        <div class="flex-1 overflow-auto bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
             <div class="mx-auto max-w-7xl p-8">
                 {/* Hero intro section - centered panel within wider container */}
                 <div class="mx-auto mb-12 max-w-3xl">
