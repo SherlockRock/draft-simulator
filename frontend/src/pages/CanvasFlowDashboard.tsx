@@ -16,51 +16,34 @@ const CanvasFlowDashboard: Component = () => {
 
     return (
         <div class="flex-1 overflow-auto bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
-            <div class="mx-auto max-w-7xl p-8">
-                {/* Hero intro section - centered panel within wider container */}
+            <div class="mx-auto min-h-full max-w-7xl flex flex-col justify-center p-8">
+                {/* Inline banner */}
                 <div class="mx-auto mb-12 max-w-3xl">
-                    <div class="relative flex overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800">
+                    <div class="relative flex items-center overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800">
                         {/* Subtle gradient overlay */}
                         <div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-purple-500/5 to-transparent" />
 
                         {/* Side accent stripe */}
-                        <div class="w-2 flex-shrink-0 bg-purple-500" />
+                        <div class="absolute inset-y-0 left-0 w-2 bg-purple-500" />
 
-                        <div class="relative p-8">
-                            <div class="mb-6 flex items-center gap-3">
-                                <span class="text-4xl">🎨</span>
-                                <h1 class="text-3xl font-bold text-slate-50">
+                        {/* Title + tagline */}
+                        <div class="relative flex flex-1 items-center gap-3 py-6 pl-8 pr-4">
+                            <span class="text-4xl">🎨</span>
+                            <div>
+                                <h1 class="text-2xl font-bold text-slate-50">
                                     Canvas Mode
                                 </h1>
+                                <p class="text-sm text-slate-300">
+                                    Visually organize and connect your drafts
+                                </p>
                             </div>
+                        </div>
 
-                            <p class="mb-4 text-slate-300">
-                                Canvas is an infinite workspace for visually organizing
-                                and connecting your drafts.
-                            </p>
-
-                            <ul class="mb-8 space-y-2 text-slate-300">
-                                <li class="flex items-start gap-2">
-                                    <span class="mt-2.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-purple-400" />
-                                    Create and position draft cards anywhere on the canvas
-                                </li>
-                                <li class="flex items-start gap-2">
-                                    <span class="mt-2.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-purple-400" />
-                                    Draw connections between related drafts
-                                </li>
-                                <li class="flex items-start gap-2">
-                                    <span class="mt-2.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-purple-400" />
-                                    Collaborate with teammates in real-time
-                                </li>
-                                <li class="flex items-start gap-2">
-                                    <span class="mt-2.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-purple-400" />
-                                    Organize complex draft scenarios and strategies
-                                </li>
-                            </ul>
-
+                        {/* CTA button */}
+                        <div class="relative pr-8">
                             <button
                                 onClick={handleCreateCanvas}
-                                class="rounded-lg bg-gradient-to-r from-purple-600 to-purple-500 px-6 py-3 font-semibold text-white shadow-lg shadow-purple-500/20 transition-all hover:from-purple-500 hover:to-purple-400 hover:shadow-purple-500/30"
+                                class="rounded-lg bg-purple-500 px-8 py-4 text-lg font-semibold text-white shadow-lg shadow-purple-500/25 transition-all hover:bg-purple-400 hover:shadow-purple-500/35"
                             >
                                 Create New Canvas
                             </button>

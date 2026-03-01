@@ -53,45 +53,34 @@ const VersusFlowDashboard: Component = () => {
 
     return (
         <div class="flex-1 overflow-auto bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
-            <div class="mx-auto max-w-7xl p-8">
-                {/* Hero intro section - centered panel within wider container */}
+            <div class="mx-auto min-h-full max-w-7xl flex flex-col justify-center p-8">
+                {/* Inline banner */}
                 <div class="mx-auto mb-12 max-w-3xl">
-                    <div class="relative flex overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800">
+                    <div class="relative flex items-center overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800">
                         {/* Subtle gradient overlay */}
                         <div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-orange-500/5 to-transparent" />
 
                         {/* Side accent stripe */}
-                        <div class="w-2 flex-shrink-0 bg-orange-500" />
+                        <div class="absolute inset-y-0 left-0 w-2 bg-orange-500" />
 
-                        <div class="relative p-8">
-                            <div class="mb-6 flex items-center gap-3">
-                                <span class="text-4xl">⚔️</span>
-                                <h1 class="text-3xl font-bold text-slate-50">
+                        {/* Title + tagline */}
+                        <div class="relative flex flex-1 items-center gap-3 py-6 pl-8 pr-4">
+                            <span class="text-4xl">⚔️</span>
+                            <div>
+                                <h1 class="text-2xl font-bold text-slate-50">
                                     Versus Mode
                                 </h1>
+                                <p class="text-sm text-slate-300">
+                                    Head-to-head competitive draft series
+                                </p>
                             </div>
+                        </div>
 
-                            <ul class="mb-8 space-y-2 text-slate-300">
-                                <li class="flex items-start gap-2">
-                                    <span class="mt-2.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-orange-400" />
-                                    Create head-to-head competitive draft series (Best of
-                                    1, 3, 5, or 7)
-                                </li>
-                                <li class="flex items-start gap-2">
-                                    <span class="mt-2.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-orange-400" />
-                                    Share a single link for others to join as Blue
-                                    Captain, Red Captain, or Spectator
-                                </li>
-                                <li class="flex items-start gap-2">
-                                    <span class="mt-2.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-orange-400" />
-                                    Choose between Fearless, Standard, or Ironman draft
-                                    styles
-                                </li>
-                            </ul>
-
+                        {/* CTA button */}
+                        <div class="relative pr-8">
                             <button
                                 onClick={handleCreateVersus}
-                                class="rounded-lg bg-orange-500 px-6 py-3 font-semibold text-white transition-all hover:bg-orange-400"
+                                class="rounded-lg bg-orange-500 px-8 py-4 text-lg font-semibold text-white shadow-lg shadow-orange-500/25 transition-all hover:bg-orange-400 hover:shadow-orange-500/35"
                             >
                                 Create New Versus Draft
                             </button>
