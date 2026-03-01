@@ -1,6 +1,5 @@
 import { Component, Show, createSignal } from "solid-js";
 import { useNavigate } from "@solidjs/router";
-import TutorialStep from "../components/TutorialStep";
 import ActivityList from "../components/ActivityList";
 import { useUser } from "../userProvider";
 import { CreateCanvasDialog } from "../components/CreateCanvasDialog";
@@ -68,33 +67,6 @@ const CanvasFlowDashboard: Component = () => {
                         </div>
                     </div>
                 </div>
-
-                {/* How it works - spans wider */}
-                <section class="mb-12">
-                    <h2 class="mb-5 text-xl font-semibold text-slate-200">
-                        How It Works
-                    </h2>
-                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <TutorialStep
-                            number={1}
-                            title="Create a Canvas"
-                            description="Use the canvas selector in the left panel to create your first canvas"
-                            color="purple"
-                        />
-                        <TutorialStep
-                            number={2}
-                            title="Add Drafts"
-                            description="Double-click the canvas to create draft cards, or add existing standalone drafts"
-                            color="purple"
-                        />
-                        <TutorialStep
-                            number={3}
-                            title="Make Connections"
-                            description="Enter connection mode to draw relationships between drafts"
-                            color="purple"
-                        />
-                    </div>
-                </section>
 
                 {/* Recent Canvas Activity - full width of container */}
                 <Show when={user()}>

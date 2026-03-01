@@ -1,6 +1,5 @@
 import { Component, createSignal, createEffect, Show } from "solid-js";
 import { useQuery, useInfiniteQuery } from "@tanstack/solid-query";
-import TutorialStep from "../components/TutorialStep";
 import ActivityList from "../components/ActivityList";
 import { useUser } from "../userProvider";
 import { CreateVersusDraftDialog } from "../components/CreateVersusDraftDialog";
@@ -99,39 +98,6 @@ const VersusFlowDashboard: Component = () => {
                         </div>
                     </div>
                 </div>
-
-                {/* How it works - spans wider */}
-                <section class="mb-12">
-                    <h2 class="mb-5 text-xl font-semibold text-slate-200">
-                        How It Works
-                    </h2>
-                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                        <TutorialStep
-                            number={1}
-                            title="Create a Series"
-                            description="Set team names, series length (Bo1/3/5/7), and choose Competitive or Scrim mode"
-                            color="orange"
-                        />
-                        <TutorialStep
-                            number={2}
-                            title="Share the Link"
-                            description="Send the unique share link to participants - they can join as captains or spectators"
-                            color="orange"
-                        />
-                        <TutorialStep
-                            number={3}
-                            title="Ready Up & Draft"
-                            description="Both captains must ready up to start. Then take turns picking and banning champions"
-                            color="orange"
-                        />
-                        <TutorialStep
-                            number={4}
-                            title="Complete the Series"
-                            description="Declare winners after each game. Drafts unlock sequentially as you progress"
-                            color="orange"
-                        />
-                    </div>
-                </section>
 
                 {/* Recent Versus Activity - full width of container */}
                 <Show when={user()}>

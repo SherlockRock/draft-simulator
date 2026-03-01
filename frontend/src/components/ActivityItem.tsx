@@ -1,7 +1,7 @@
 import { Component, createSignal, Show, createEffect } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/solid-query";
-import { Settings, Share2, Pencil, Loader2, Check, Copy, Plus } from "lucide-solid";
+import { Share2, Pencil, Loader2, Check, Copy, Plus } from "lucide-solid";
 import {
     generateShareLink,
     generateVersusShareLink,
@@ -324,7 +324,8 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     const handleEdit = (e: MouseEvent) => {
         e.stopPropagation();
         if (props.activity.resource_type === "canvas") {
-            return; // Canvas uses CanvasSettingsDialog
+            setIsManageUsersOpen(true);
+            return;
         }
         setEditName(props.activity.resource_name);
         setEditDescription(props.activity.description || "");
@@ -400,11 +401,6 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
         }
     };
 
-    const handleManageUsers = (e: MouseEvent) => {
-        e.stopPropagation();
-        setIsManageUsersOpen(true);
-    };
-
     const handlePermissionChange = (userId: string, permission: string) => {
         if (props.activity.resource_type === "canvas") {
             updatePermissionMutation.mutate({ userId, permission });
@@ -467,41 +463,20 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                     onFocusOut={handleShareFocusOut}
                                 >
                                     <div class="flex items-center gap-2">
-                                        <Show
-                                            when={
-                                                props.activity.resource_type ===
-                                                    "canvas" && props.activity.is_owner
-                                            }
-                                        >
-                                            <button
-                                                onClick={handleManageUsers}
-                                                class={`${colors.text} transition-opacity hover:opacity-70`}
-                                                title="Canvas Settings"
-                                            >
-                                                <Settings size={20} />
-                                            </button>
-                                        </Show>
                                         <button
                                             onClick={handleShare}
                                             class={`${colors.text} transition-opacity hover:opacity-70`}
                                             title="Share"
                                         >
-                                            {/* TODO: DRA-40 - Review: was filled icon */}
                                             <Share2 size={20} />
                                         </button>
-                                        <Show
-                                            when={
-                                                props.activity.resource_type !== "canvas"
-                                            }
+                                        <button
+                                            onClick={handleEdit}
+                                            class={`${colors.text} transition-opacity hover:opacity-70`}
+                                            title="Edit"
                                         >
-                                            <button
-                                                onClick={handleEdit}
-                                                class={`${colors.text} transition-opacity hover:opacity-70`}
-                                                title="Edit"
-                                            >
-                                                <Pencil size={20} />
-                                            </button>
-                                        </Show>
+                                            <Pencil size={20} />
+                                        </button>
                                     </div>
                                 </div>
                             </Show>
