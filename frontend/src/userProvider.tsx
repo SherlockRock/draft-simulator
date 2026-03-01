@@ -5,6 +5,7 @@ import { useNavigate } from "@solidjs/router";
 import { syncLocalCanvasToServer } from "./utils/syncLocalCanvas";
 import { clearLocalCanvas } from "./utils/localCanvasStore";
 import toast from "solid-toast";
+import { identifyUser, resetUser, track } from "./utils/analytics";
 
 type UserData = {
     id: string;
@@ -42,7 +43,16 @@ export function UserProvider(props: { children: JSX.Element }) {
 
         return {
             queryKey: ["user"],
-            queryFn: fetchUserDetails,
+            queryFn: async () => {
+                const user = await fetchUserDetails();
+                if (user) {
+                    identifyUser(user.id, {
+                        name: user.name,
+                        email: user.email
+                    });
+                }
+                return user;
+            },
             enabled: enabled,
             staleTime: 1000 * 60 * 60 * 24, // 24 hours
             retry: false
@@ -52,6 +62,18 @@ export function UserProvider(props: { children: JSX.Element }) {
     const login = async (code: string, state: string) => {
         const res = await handleGoogleLogin(code, state);
         userQuery.refetch();
+
+        if (res?.user) {
+            identifyUser(res.user.id, {
+                name: res.user.name,
+                email: res.user.email
+            });
+            // If query cache had no user before login, this is a signup
+            const hadPriorSession = queryClient.getQueryData(["user"]);
+            track(hadPriorSession ? "user_logged_in" : "user_signed_up", {
+                method: "google"
+            });
+        }
 
         // Check for local canvas to sync
         try {
@@ -79,6 +101,8 @@ export function UserProvider(props: { children: JSX.Element }) {
     };
 
     const logout = async () => {
+        track("user_logged_out");
+        resetUser();
         await handleRevoke();
         queryClient.setQueryData(["user"], null);
     };

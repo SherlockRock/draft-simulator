@@ -23,6 +23,9 @@ import VersusWorkflow from "./workflows/VersusWorkflow";
 import VersusSeriesOverview from "./pages/VersusSeriesOverview";
 import VersusRoleSelection from "./pages/VersusRoleSelection";
 import VersusDraftView from "./pages/VersusDraftView";
+import { initAnalytics } from "./utils/analytics";
+
+initAnalytics();
 
 const root = document.getElementById("root");
 
