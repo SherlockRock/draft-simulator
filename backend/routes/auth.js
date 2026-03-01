@@ -54,12 +54,14 @@ router.post("/google/callback", async (req, res) => {
       where: { email: payload.email },
     });
 
+    let isNewUser = false;
     if (loggedInUser) {
       loggedInUser.name = payload.name;
       loggedInUser.email = payload.email;
       loggedInUser.picture = payload.picture;
       await loggedInUser.save();
     } else {
+      isNewUser = true;
       loggedInUser = await User.create({
         name: payload.name,
         email: payload.email,
@@ -124,7 +126,8 @@ router.post("/google/callback", async (req, res) => {
     });
     res.json({
       user,
-      returnTo, // Send returnTo back to frontend
+      returnTo,
+      isNewUser,
     });
   } catch (error) {
     console.error("Error during Google OAuth callback:", error);

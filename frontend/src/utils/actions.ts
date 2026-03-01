@@ -499,10 +499,11 @@ export const handleGoogleLogin = async (code: string, state: string) => {
             { code, state },
             z.object({
                 user: UserDetailsSchema,
-                returnTo: z.string().optional()
+                returnTo: z.string().optional(),
+                isNewUser: z.boolean().optional()
             })
         );
-        return { user: result.user, returnTo: result.returnTo };
+        return { user: result.user, returnTo: result.returnTo, isNewUser: result.isNewUser };
     } catch {
         return null;
     }
