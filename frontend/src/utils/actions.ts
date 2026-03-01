@@ -200,7 +200,7 @@ export const importSeriesToCanvas = async (data: {
     positionX?: number;
     positionY?: number;
 }) => {
-    return apiPost(
+    const result = await apiPost(
         `/canvas/${data.canvasId}/import/series`,
         {
             versusDraftId: data.versusDraftId,
@@ -209,6 +209,8 @@ export const importSeriesToCanvas = async (data: {
         },
         ImportSeriesResponseSchema
     );
+    track("versus_imported_to_canvas");
+    return result;
 };
 
 // =============================================================================
@@ -362,7 +364,7 @@ export const createCanvasGroup = async (data: {
     positionX: number;
     positionY: number;
 }) => {
-    return apiPost(
+    const result = await apiPost(
         `/canvas/${data.canvasId}/group`,
         {
             name: data.name,
@@ -371,6 +373,8 @@ export const createCanvasGroup = async (data: {
         },
         z.object({ success: z.boolean(), group: CanvasGroupSchema })
     );
+    track("group_created");
+    return result;
 };
 
 export const updateCanvasGroup = async (data: {
