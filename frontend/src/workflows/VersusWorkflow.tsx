@@ -32,6 +32,7 @@ import {
     type DraftCallbacks
 } from "../contexts/VersusContext";
 import { VersusSocketProvider, useVersusSocket } from "../providers/VersusSocketProvider";
+import { track } from "../utils/analytics";
 
 // Helper: compute team identity from role + side assignment
 const computeTeamIdentity = (
@@ -176,6 +177,9 @@ const VersusWorkflowInner: Component<RouteSectionProps> = (props) => {
         });
 
         setCurrentVersusDraftId(response.versusDraft.id);
+        track("versus_session_joined", {
+            role: response.myParticipant?.role ?? "pending"
+        });
 
         // If auto-joined with a valid role, navigate to series overview
         if (response.autoJoinedRole && response.myParticipant) {
@@ -634,6 +638,7 @@ const VersusWorkflowInner: Component<RouteSectionProps> = (props) => {
     };
 
     const leaveSession = () => {
+        track("versus_session_left");
         const sock = currentSocket();
         const versusDraft = versusContext().versusDraft;
 

@@ -6,6 +6,7 @@ import { Plus } from "lucide-solid";
 import { IconPicker } from "./IconPicker";
 import { champions } from "../utils/constants";
 import { StyledSelect } from "./StyledSelect";
+import { track } from "../utils/analytics";
 
 interface CreateVersusDraftDialogProps {
     isOpen: () => boolean;
@@ -87,6 +88,11 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
 
             const versusDraft = await response.json();
             toast.success("Versus draft created successfully!");
+            track("versus_created", {
+                type: type(),
+                length: length(),
+                competitive: competitive()
+            });
             props.onClose();
             navigate(`/versus/join/${versusDraft.shareLink}`);
         } catch (error) {

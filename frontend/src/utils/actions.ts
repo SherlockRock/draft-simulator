@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { apiGet, apiPost, apiPut, apiDelete, apiPatch } from "./apiClient";
+import { track } from "./analytics";
 import {
     DraftSchema,
     CanvasDraftSchema,
@@ -39,7 +40,9 @@ export const postNewDraft = async (data: {
     positionX?: number;
     positionY?: number;
 }) => {
-    return apiPost("/drafts", data, DraftSchema);
+    const result = await apiPost("/drafts", data, DraftSchema);
+    track("draft_created");
+    return result;
 };
 
 export const fetchDefaultDraft = async (id: string | null, canvasId?: string | null) => {
@@ -91,7 +94,7 @@ export const createCanvas = async (data: {
     description?: string;
     icon?: string;
 }) => {
-    return apiPost(
+    const result = await apiPost(
         "/canvas/",
         data,
         z.object({
@@ -104,6 +107,8 @@ export const createCanvas = async (data: {
             })
         })
     );
+    track("canvas_created");
+    return result;
 };
 
 export const updateCanvasName = async (data: {
@@ -216,6 +221,7 @@ export const generateShareLink = async (draftId: string) => {
         {},
         ShareLinkResponseSchema
     );
+    track("draft_shared");
     return result.shareLink;
 };
 
@@ -228,6 +234,7 @@ export const generateCanvasShareLink = async (
         { permissions },
         ShareLinkResponseSchema
     );
+    track("canvas_shared");
     return result.shareLink;
 };
 
