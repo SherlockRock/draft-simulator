@@ -61,6 +61,8 @@ export function UserProvider(props: { children: JSX.Element }) {
 
     const login = async (code: string, state: string) => {
         const res = await handleGoogleLogin(code, state);
+        // Read cache before refetch to distinguish signup vs returning login
+        const hadPriorSession = queryClient.getQueryData(["user"]);
         userQuery.refetch();
 
         if (res?.user) {
@@ -68,8 +70,6 @@ export function UserProvider(props: { children: JSX.Element }) {
                 name: res.user.name,
                 email: res.user.email
             });
-            // If query cache had no user before login, this is a signup
-            const hadPriorSession = queryClient.getQueryData(["user"]);
             track(hadPriorSession ? "user_logged_in" : "user_signed_up", {
                 method: "google"
             });
