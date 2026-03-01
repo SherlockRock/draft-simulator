@@ -1,6 +1,7 @@
 import { Component, Show, createMemo, createSignal } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
 import { Pencil, Check, Share2 } from "lucide-solid";
+import { track } from "../utils/analytics";
 import { useVersusContext } from "../contexts/VersusContext";
 import { VersusChatPanel } from "./VersusChatPanel";
 import { FlowBackLink } from "./FlowBackLink";
@@ -96,6 +97,7 @@ const VersusFlowPanelContent: Component = () => {
         if (vd) {
             const link = `${window.location.origin}/versus/join/${vd.shareLink ?? ""}`;
             navigator.clipboard.writeText(link);
+            track("versus_shared");
             setCopied(true);
             toast.success("Link copied to clipboard");
             setTimeout(() => setCopied(false), 2000);

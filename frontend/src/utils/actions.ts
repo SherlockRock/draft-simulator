@@ -215,16 +215,6 @@ export const importSeriesToCanvas = async (data: {
 // Canvas Sharing/Users
 // =============================================================================
 
-export const generateShareLink = async (draftId: string) => {
-    const result = await apiPost(
-        `/shares/${draftId}/generate-link`,
-        {},
-        ShareLinkResponseSchema
-    );
-    track("draft_shared");
-    return result.shareLink;
-};
-
 export const generateCanvasShareLink = async (
     canvasId: string,
     permissions: "view" | "edit" = "view"

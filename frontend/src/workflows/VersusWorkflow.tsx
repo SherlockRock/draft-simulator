@@ -641,8 +641,10 @@ const VersusWorkflowInner: Component<RouteSectionProps> = (props) => {
         const sock = currentSocket();
         const versusDraft = versusContext().versusDraft;
 
-        if (sock && versusDraft) {
+        if (versusDraft) {
             track("versus_session_left");
+        }
+        if (sock && versusDraft) {
             sock.emit("versusLeave", { versusDraftId: versusDraft.id });
         }
 

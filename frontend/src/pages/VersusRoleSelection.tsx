@@ -1,6 +1,7 @@
 import { Component, createSignal, Show, createMemo } from "solid-js";
 import toast from "solid-toast";
 import { AlertTriangle, EyeOff, Check, Share2, User, Eye } from "lucide-solid";
+import { track } from "../utils/analytics";
 import { useVersusContext } from "../contexts/VersusContext";
 import { getSuggestedRole } from "../workflows/VersusWorkflow";
 import { IconDisplay } from "../components/IconDisplay";
@@ -64,6 +65,7 @@ const VersusRoleSelection: Component = () => {
         if (versusDraft()) {
             const link = `${window.location.origin}/versus/join/${versusDraft()?.shareLink ?? ""}`;
             navigator.clipboard.writeText(link);
+            track("versus_shared");
             setCopied(true);
             toast.success("Link copied to clipboard");
             setTimeout(() => setCopied(false), 2000);
