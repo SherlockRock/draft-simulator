@@ -28,8 +28,11 @@ const CanvasEntryRedirect: Component = () => {
         queryFn: fetchCanvasList,
         // Only fetch when user is confirmed signed in
         enabled: !userQuery.isLoading && !userQuery.isError && !!userQuery.data,
-        staleTime: 1000 * 60 * 5
+        // Always refetch on mount — stale cache may lack canvases created last visit
+        staleTime: 0
     }));
+
+    let isCreating = false;
 
     createEffect(async () => {
         // Track reactive query state - these are signals in TanStack Solid Query
@@ -41,8 +44,8 @@ const CanvasEntryRedirect: Component = () => {
         if (isLoading) return;
 
         if (currentUser && !isError) {
-            // Signed-in user: wait for canvas list to load
-            if (canvasListQuery.isLoading) return;
+            // Wait for fresh data — stale cache may show empty list on remount
+            if (canvasListQuery.isFetching) return;
             const list = canvasListQuery.data;
 
             if (list && list.length > 0) {
@@ -50,12 +53,15 @@ const CanvasEntryRedirect: Component = () => {
                 navigate(`/canvas/${list[0].id}`, { replace: true });
             } else {
                 // No canvases exist — create a default one
+                if (isCreating) return;
+                isCreating = true;
                 try {
                     const result = await createCanvas({ name: "My Canvas" });
                     // Refresh parent's canvas list so dropdown shows the new canvas
                     refetchCanvasList();
                     navigate(`/canvas/${result.canvas.id}`, { replace: true });
                 } catch {
+                    isCreating = false;
                     // If creation fails, fall back to dashboard
                     navigate("/canvas/dashboard", { replace: true });
                 }

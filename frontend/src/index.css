@@ -3,8 +3,9 @@
 @tailwind utilities;
 body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
-        "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu",
+        "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
@@ -35,4 +36,23 @@ code {
 .custom-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: #64748b #334155;
+}
+
+.selection-purple::selection {
+    background-color: rgb(168 85 247 / 0.3); /* purple-500/30 */
+    color: #e9d5ff; /* purple-200 */
+}
+
+.selection-orange::selection {
+    background-color: rgb(249 115 22 / 0.3); /* orange-500/30 */
+    color: #fed7aa; /* orange-200 */
+}
+
+@keyframes countdown-unwind {
+    from {
+        stroke-dashoffset: 0;
+    }
+    to {
+        stroke-dashoffset: 62.83;
+    }
 }

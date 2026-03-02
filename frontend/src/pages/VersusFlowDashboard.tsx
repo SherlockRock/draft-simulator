@@ -34,7 +34,8 @@ const VersusFlowDashboard: Component = () => {
         if (userQuery.isLoading) return;
 
         if (userQuery.data) {
-            // Signed-in: wait for activity data before deciding
+            // Wait for fresh data — stale cache may show empty activity on remount
+            if (activityQuery.isFetching) return;
             const data = activityQuery.data;
             if (data === undefined) return;
 
@@ -53,7 +54,7 @@ const VersusFlowDashboard: Component = () => {
 
     return (
         <div class="flex-1 overflow-auto bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
-            <div class="mx-auto min-h-full max-w-7xl flex flex-col justify-center p-8">
+            <div class="mx-auto flex min-h-full max-w-7xl flex-col justify-center p-8">
                 {/* Inline banner */}
                 <div class="mx-auto mb-12 max-w-3xl">
                     <div class="relative flex items-center overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800">

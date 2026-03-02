@@ -17,6 +17,8 @@ type StyledSelectProps = {
     theme?: SelectTheme;
     disabled?: boolean;
     class?: string;
+    /** Element to measure dropdown width from (defaults to the trigger button) */
+    dropdownWidthRef?: HTMLElement;
 };
 
 export const StyledSelect: Component<StyledSelectProps> = (props) => {
@@ -35,10 +37,11 @@ export const StyledSelect: Component<StyledSelectProps> = (props) => {
     const updateDropdownPosition = () => {
         if (buttonRef) {
             const rect = buttonRef.getBoundingClientRect();
+            const widthRect = props.dropdownWidthRef?.getBoundingClientRect();
             setDropdownPosition({
                 top: rect.bottom + 4, // 4px gap (mt-1 equivalent)
-                left: rect.left,
-                width: rect.width
+                left: widthRect?.left ?? rect.left,
+                width: widthRect?.width ?? rect.width
             });
         }
     };

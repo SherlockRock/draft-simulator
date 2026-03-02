@@ -13,6 +13,7 @@ const CanvasSelector: Component<CanvasSelectorProps> = (props) => {
     const navigate = useNavigate();
     const { canvasList: canvases, refetchCanvasList } = useCanvasContext();
     const [showCreateDialog, setShowCreateDialog] = createSignal(false);
+    let containerRef: HTMLDivElement | undefined;
 
     const handleSelect = (canvasId: string) => {
         navigate(`/canvas/${canvasId}`);
@@ -28,9 +29,10 @@ const CanvasSelector: Component<CanvasSelectorProps> = (props) => {
                 when={!canvases.loading}
                 fallback={<div class="text-sm text-slate-400">Loading canvases...</div>}
             >
-                <div class="group relative flex">
+                <div ref={containerRef} class="group relative flex">
                     <StyledSelect
                         class="!static flex-1 [&>button]:rounded-r-none [&>button]:border-r-0 [&>button]:transition-colors [&>button]:group-hover:border-purple-400"
+                        dropdownWidthRef={containerRef}
                         value={props.selectedId || ""}
                         onChange={(value) => {
                             if (value) {

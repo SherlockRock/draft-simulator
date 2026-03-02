@@ -149,10 +149,10 @@ export const SearchableSelect = (props: props) => {
                                     <a
                                         class={`block border-l-4 p-2 transition-colors ${
                                             props.currentlySelected === option
-                                                ? "border-green-600 bg-gray-950 text-green-600"
+                                                ? `${colors().activeBorder} bg-slate-700 ${colors().text}`
                                                 : index() === keyboard.highlightedIndex()
-                                                  ? `${colors().activeBorder} bg-gray-800 text-white`
-                                                  : `border-white bg-gray-950 text-white group-hover:bg-gray-800 ${colors().groupHoverText} ${colors().groupHoverBorder}`
+                                                  ? `${colors().activeBorder} bg-slate-700 text-slate-50`
+                                                  : `border-transparent bg-slate-900 text-slate-50 group-hover:bg-slate-700 ${colors().groupHoverText} ${colors().groupHoverBorder}`
                                         }`}
                                     >
                                         <p class="inline-block w-full overflow-hidden text-ellipsis whitespace-nowrap">
@@ -163,7 +163,7 @@ export const SearchableSelect = (props: props) => {
                             )}
                         </For>
                         <Show when={holdSortOptions().length === 0}>
-                            <a class="block border-l-4 bg-gray-950 p-2 text-gray-500">
+                            <a class="block border-l-4 border-transparent bg-slate-900 p-2 text-slate-500">
                                 None
                             </a>
                         </Show>

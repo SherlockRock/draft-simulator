@@ -113,7 +113,7 @@ type CanvasComponentProps = {
     // Settings/share controls (admin only)
     onSettings?: () => void;
     onShare?: () => void;
-    onShareFocusOut?: (e: FocusEvent) => void;
+    setShareButtonRef?: (el: HTMLDivElement) => void;
     sharePopperContent?: JSX.Element;
 };
 
@@ -2098,7 +2098,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         </div>
                         <button
                             onClick={() => props.refetch()}
-                            class="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
+                            class="rounded bg-purple-500 px-4 py-2 text-slate-50 hover:bg-purple-400"
                         >
                             Retry
                         </button>
@@ -2125,7 +2125,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     hasAdminPermissions={hasAdminPermissions() && !isLocalMode()}
                     onSettings={props.onSettings}
                     onShare={props.onShare}
-                    onShareFocusOut={props.onShareFocusOut}
+                    setShareButtonRef={props.setShareButtonRef}
                     sharePopperContent={props.sharePopperContent}
                 />
                 <Show when={isLocalMode()}>

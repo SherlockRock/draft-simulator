@@ -39,7 +39,8 @@ type CanvasContextType = {
     openSettings: () => void;
     toggleShare: () => void;
     closeSharePopper: () => void;
-    onShareFocusOut: (e: FocusEvent) => void;
+    setSharePopperRef: (el: HTMLDivElement) => void;
+    setShareButtonRef: (el: HTMLDivElement) => void;
     sharePopperContent: Accessor<JSX.Element | null>;
 };
 

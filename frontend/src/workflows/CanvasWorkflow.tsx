@@ -4,6 +4,7 @@ import {
     createEffect,
     createSignal,
     createMemo,
+    onCleanup,
     Show,
     For
 } from "solid-js";
@@ -29,6 +30,7 @@ import CanvasSelector from "../components/CanvasSelector";
 import { Dialog } from "../components/Dialog";
 import { CanvasSettingsDialog } from "../components/CanvasSettingsDialog";
 import { FlowBackLink } from "../components/FlowBackLink";
+import { Check, Copy, X } from "lucide-solid";
 import toast from "solid-toast";
 import { CanvasGroup, CanvasDraft } from "../utils/schemas";
 import { CanvasAccessDenied, AccessErrorType } from "../components/CanvasAccessDenied";
@@ -388,9 +390,46 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         }
     };
 
-    const handleShareCanvas = () => {
-        setIsSharePopperOpen((prev) => !prev);
+    const SHARE_AUTO_CLOSE_MS = 10000;
+    let shareAutoCloseTimer: ReturnType<typeof setTimeout> | undefined;
+    let sharePopperRef: HTMLDivElement | undefined;
+    let shareButtonRef: HTMLDivElement | undefined;
+
+    const closeSharePopper = () => {
+        setIsSharePopperOpen(false);
+        clearTimeout(shareAutoCloseTimer);
     };
+
+    const handleShareCanvas = () => {
+        if (isSharePopperOpen()) {
+            closeSharePopper();
+        } else {
+            setIsSharePopperOpen(true);
+            shareAutoCloseTimer = setTimeout(closeSharePopper, SHARE_AUTO_CLOSE_MS);
+        }
+    };
+
+    // Click-outside to close share popover
+    createEffect(() => {
+        if (isSharePopperOpen()) {
+            const handler = (e: MouseEvent) => {
+                const target = e.target as Node;
+                if (
+                    sharePopperRef &&
+                    !sharePopperRef.contains(target) &&
+                    shareButtonRef &&
+                    !shareButtonRef.contains(target)
+                ) {
+                    closeSharePopper();
+                }
+            };
+            document.addEventListener("mousedown", handler);
+            onCleanup(() => {
+                document.removeEventListener("mousedown", handler);
+                clearTimeout(shareAutoCloseTimer);
+            });
+        }
+    });
 
     const handleCopyViewLink = () => {
         if (viewShareLinkQuery.data) {
@@ -405,13 +444,6 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
             navigator.clipboard.writeText(editShareLinkQuery.data);
             setCopied("edit");
             setTimeout(() => setCopied(""), 2000);
-        }
-    };
-
-    const handleShareFocusOut = (e: FocusEvent) => {
-        const container = e.currentTarget as HTMLDivElement;
-        if (e.relatedTarget === null || !container.contains(e.relatedTarget as Node)) {
-            setIsSharePopperOpen(false);
         }
     };
 
@@ -443,69 +475,118 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                     setSetEditingDraftIdCallback,
                     openSettings: () => setIsManageUsersOpen(true),
                     toggleShare: handleShareCanvas,
-                    closeSharePopper: () => setIsSharePopperOpen(false),
-                    onShareFocusOut: handleShareFocusOut,
+                    closeSharePopper: closeSharePopper,
+                    setSharePopperRef: (el: HTMLDivElement) => {
+                        sharePopperRef = el;
+                    },
+                    setShareButtonRef: (el: HTMLDivElement) => {
+                        shareButtonRef = el;
+                    },
                     sharePopperContent: () =>
                         isSharePopperOpen() ? (
-                            <div class="absolute left-full top-0 z-10 ml-2 w-[215px] rounded-md bg-slate-600 p-3 shadow-lg">
-                                <div class="space-y-3">
-                                    <div>
-                                        <p class="mb-1 text-xs font-medium text-slate-300">
-                                            View Access
-                                        </p>
-                                        <Show
-                                            when={!viewShareLinkQuery.isPending}
-                                            fallback={
-                                                <div class="text-xs text-slate-400">
-                                                    Loading...
-                                                </div>
-                                            }
+                            <div
+                                ref={(el) => {
+                                    sharePopperRef = el;
+                                }}
+                                class="absolute left-full top-1/2 z-10 ml-3 flex -translate-y-1/2 items-center"
+                            >
+                                {/* Arrow pointing left towards share button */}
+                                <div class="h-0 w-0 border-y-[8px] border-r-[8px] border-y-transparent border-r-purple-500" />
+
+                                {/* Popover card */}
+                                <div class="relative w-[220px] rounded-lg border border-l-[6px] border-slate-600 border-l-purple-500 bg-slate-800 p-3 shadow-lg">
+                                    {/* Close button with countdown ring */}
+                                    <button
+                                        onClick={closeSharePopper}
+                                        class="absolute right-0.5 top-0.5 flex h-6 w-6 items-center justify-center text-slate-400 transition-colors hover:text-slate-200"
+                                    >
+                                        <svg
+                                            class="absolute inset-0 -rotate-90"
+                                            viewBox="0 0 24 24"
                                         >
-                                            <div class="flex flex-col gap-2">
-                                                <input
-                                                    type="text"
-                                                    readOnly
-                                                    value={viewShareLinkQuery.data || ""}
-                                                    class="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-slate-50"
-                                                />
-                                                <button
-                                                    onClick={handleCopyViewLink}
-                                                    class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
-                                                    disabled={!viewShareLinkQuery.data}
-                                                >
-                                                    {copied() === "view" ? "✓" : "Copy"}
-                                                </button>
-                                            </div>
-                                        </Show>
-                                    </div>
-                                    <div>
-                                        <p class="mb-1 text-xs font-medium text-slate-300">
-                                            Edit Access
-                                        </p>
-                                        <Show
-                                            when={!editShareLinkQuery.isPending}
-                                            fallback={
-                                                <div class="text-xs text-slate-400">
-                                                    Loading...
+                                            <circle
+                                                cx="12"
+                                                cy="12"
+                                                r="10"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="1.5"
+                                                stroke-dasharray="62.83"
+                                                stroke-dashoffset="0"
+                                                stroke-linecap="round"
+                                                class="opacity-30"
+                                                style={`animation: countdown-unwind ${SHARE_AUTO_CLOSE_MS}ms linear forwards`}
+                                            />
+                                        </svg>
+                                        <X size={12} />
+                                    </button>
+                                    <div class="space-y-2">
+                                        <div>
+                                            <p class="mb-0.5 text-xs font-medium text-slate-300">
+                                                View Access
+                                            </p>
+                                            <Show
+                                                when={!viewShareLinkQuery.isPending}
+                                                fallback={
+                                                    <div class="text-xs text-slate-400">
+                                                        Loading...
+                                                    </div>
+                                                }
+                                            >
+                                                <div class="flex items-center gap-1.5">
+                                                    <div class="selection-purple h-[26px] w-0 flex-grow cursor-text select-all truncate rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-50">
+                                                        {viewShareLinkQuery.data || ""}
+                                                    </div>
+                                                    <button
+                                                        onClick={handleCopyViewLink}
+                                                        class="shrink-0 rounded-md bg-purple-500 p-1.5 text-slate-50 hover:bg-purple-400 disabled:opacity-50"
+                                                        disabled={
+                                                            !viewShareLinkQuery.data
+                                                        }
+                                                    >
+                                                        <Show
+                                                            when={copied() !== "view"}
+                                                            fallback={<Check size={14} />}
+                                                        >
+                                                            <Copy size={14} />
+                                                        </Show>
+                                                    </button>
                                                 </div>
-                                            }
-                                        >
-                                            <div class="flex flex-col gap-2">
-                                                <input
-                                                    type="text"
-                                                    readOnly
-                                                    value={editShareLinkQuery.data || ""}
-                                                    class="w-full rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-slate-50"
-                                                />
-                                                <button
-                                                    onClick={handleCopyEditLink}
-                                                    class="rounded-md bg-purple-500 px-2 py-1 text-xs text-slate-50 hover:bg-purple-400 disabled:opacity-50"
-                                                    disabled={!editShareLinkQuery.data}
-                                                >
-                                                    {copied() === "edit" ? "✓" : "Copy"}
-                                                </button>
-                                            </div>
-                                        </Show>
+                                            </Show>
+                                        </div>
+                                        <div>
+                                            <p class="mb-0.5 text-xs font-medium text-slate-300">
+                                                Edit Access
+                                            </p>
+                                            <Show
+                                                when={!editShareLinkQuery.isPending}
+                                                fallback={
+                                                    <div class="text-xs text-slate-400">
+                                                        Loading...
+                                                    </div>
+                                                }
+                                            >
+                                                <div class="flex items-center gap-1.5">
+                                                    <div class="selection-purple h-[26px] w-0 flex-grow cursor-text select-all truncate rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-50">
+                                                        {editShareLinkQuery.data || ""}
+                                                    </div>
+                                                    <button
+                                                        onClick={handleCopyEditLink}
+                                                        class="shrink-0 rounded-md bg-purple-500 p-1.5 text-slate-50 hover:bg-purple-400 disabled:opacity-50"
+                                                        disabled={
+                                                            !editShareLinkQuery.data
+                                                        }
+                                                    >
+                                                        <Show
+                                                            when={copied() !== "edit"}
+                                                            fallback={<Check size={14} />}
+                                                        >
+                                                            <Copy size={14} />
+                                                        </Show>
+                                                    </button>
+                                                </div>
+                                            </Show>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

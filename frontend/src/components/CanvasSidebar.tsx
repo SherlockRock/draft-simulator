@@ -32,7 +32,7 @@ interface CanvasSidebarProps {
     onSettings?: () => void;
     // Share
     onShare?: () => void;
-    onShareFocusOut?: (e: FocusEvent) => void;
+    setShareButtonRef?: (el: HTMLDivElement) => void;
     sharePopperContent?: JSX.Element;
 }
 
@@ -166,7 +166,7 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
                         />
                     </Show>
                     <Show when={props.hasAdminPermissions && props.onShare}>
-                        <div class="relative" onFocusOut={props.onShareFocusOut}>
+                        <div class="relative" ref={(el) => props.setShareButtonRef?.(el)}>
                             <SidebarButton
                                 icon={Share2}
                                 tooltip="Share canvas"

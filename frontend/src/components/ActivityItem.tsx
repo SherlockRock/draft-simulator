@@ -1,8 +1,7 @@
 import { Component, createSignal, Show, createEffect, onCleanup } from "solid-js";
-import { Portal } from "solid-js/web";
 import { useNavigate } from "@solidjs/router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/solid-query";
-import { Share2, Pencil, Loader2, Check, Copy, Plus } from "lucide-solid";
+import { Share2, Pencil, Loader2, Check, Copy, Plus, X } from "lucide-solid";
 import {
     generateVersusShareLink,
     generateCanvasShareLink,
@@ -52,9 +51,10 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     const [editRedTeamName, setEditRedTeamName] = createSignal("");
     const [editCompetitive, setEditCompetitive] = createSignal(false);
 
-    let sharePopupRef: HTMLDivElement | undefined;
     let shareButtonRef: HTMLDivElement | undefined;
-    const [popupPosition, setPopupPosition] = createSignal({ top: 0, left: 0 });
+    let cardRef: HTMLDivElement | undefined;
+    let autoCloseTimer: ReturnType<typeof setTimeout> | undefined;
+    const AUTO_CLOSE_MS = 10000;
 
     // For versus - single share link
     const shareLinkQuery = useQuery(() => ({
@@ -311,17 +311,36 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
         navigate(`/${props.activity.resource_type}/${props.activity.resource_id}`);
     };
 
+    const closeShare = () => {
+        setIsShareOpen(false);
+        clearTimeout(autoCloseTimer);
+    };
+
     const handleShare = (e: MouseEvent) => {
         e.stopPropagation();
-        if (!isShareOpen() && shareButtonRef) {
-            const rect = shareButtonRef.getBoundingClientRect();
-            setPopupPosition({
-                top: rect.bottom + 8,
-                left: rect.left
+        if (isShareOpen()) {
+            closeShare();
+        } else {
+            setIsShareOpen(true);
+            autoCloseTimer = setTimeout(closeShare, AUTO_CLOSE_MS);
+        }
+    };
+
+    // Click-outside to close share view
+    createEffect(() => {
+        if (isShareOpen()) {
+            const handler = (e: MouseEvent) => {
+                if (cardRef && !cardRef.contains(e.target as Node)) {
+                    closeShare();
+                }
+            };
+            document.addEventListener("mousedown", handler);
+            onCleanup(() => {
+                document.removeEventListener("mousedown", handler);
+                clearTimeout(autoCloseTimer);
             });
         }
-        setIsShareOpen((prev) => !prev);
-    };
+    });
 
     const handleEdit = (e: MouseEvent) => {
         e.stopPropagation();
@@ -335,27 +354,6 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
         setEditIcon(props.activity.icon || "");
         setIsEditOpen(true);
     };
-
-    // Click-outside handler for Portal-based share popup
-    createEffect(() => {
-        if (isShareOpen()) {
-            const handleClickOutside = (e: MouseEvent) => {
-                const target = e.target as Node;
-                if (
-                    shareButtonRef &&
-                    !shareButtonRef.contains(target) &&
-                    sharePopupRef &&
-                    !sharePopupRef.contains(target)
-                ) {
-                    setIsShareOpen(false);
-                }
-            };
-            document.addEventListener("mousedown", handleClickOutside);
-            onCleanup(() =>
-                document.removeEventListener("mousedown", handleClickOutside)
-            );
-        }
-    });
 
     const handleCopy = () => {
         if (shareLinkQuery.data) {
@@ -424,6 +422,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
 
     return (
         <div
+            ref={cardRef}
             onClick={handleClick}
             class="relative flex cursor-pointer overflow-hidden rounded-lg border border-slate-700/50 bg-slate-800 transition-all hover:bg-slate-700/80"
         >
@@ -435,265 +434,278 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
             {/* Side accent stripe */}
             <div class={`w-1.5 flex-shrink-0 ${colors.accent}`} />
 
-            {/* Content wrapper */}
-            <div class="relative flex flex-1 flex-col">
-                {/* Header section: icon spans title + team names rows */}
-                <div class="flex gap-3 p-4 pb-2">
-                    <IconDisplay
-                        icon={props.activity.icon ?? undefined}
-                        defaultIcon={getDefaultIcon()}
-                        size="md"
-                    />
-                    {/* Right side: title row + team names row */}
-                    <div class="flex min-w-0 flex-1 flex-col gap-1">
-                        {/* Title row: title + actions */}
-                        <div class="flex items-center gap-2">
-                            <span
-                                class={`min-w-0 flex-1 truncate text-lg font-semibold ${colors.text}`}
-                            >
-                                {props.activity.resource_name}
-                            </span>
-                            {/* Actions/badge */}
-                            <Show
-                                when={props.activity.is_owner}
-                                fallback={
-                                    <span
-                                        class={`shrink-0 rounded px-2 py-1 text-center text-xs ${colors.badge}`}
-                                    >
-                                        Shared
-                                    </span>
-                                }
-                            >
-                                <div ref={shareButtonRef} class="relative shrink-0">
-                                    <div class="flex items-center gap-2">
-                                        <button
-                                            onClick={handleShare}
-                                            class={`${colors.text} transition-opacity hover:opacity-70`}
-                                            title="Share"
+            {/* Normal content — hidden when share is open */}
+            <Show when={!isShareOpen()}>
+                <div class="relative flex flex-1 flex-col">
+                    {/* Header section: icon spans title + team names rows */}
+                    <div class="flex gap-3 p-4 pb-2">
+                        <IconDisplay
+                            icon={props.activity.icon ?? undefined}
+                            defaultIcon={getDefaultIcon()}
+                            size="md"
+                        />
+                        {/* Right side: title row + team names row */}
+                        <div class="flex min-w-0 flex-1 flex-col gap-1">
+                            {/* Title row: title + actions */}
+                            <div class="flex items-center gap-2">
+                                <span
+                                    class={`min-w-0 flex-1 truncate text-lg font-semibold ${colors.text}`}
+                                >
+                                    {props.activity.resource_name}
+                                </span>
+                                {/* Actions/badge */}
+                                <Show
+                                    when={props.activity.is_owner}
+                                    fallback={
+                                        <span
+                                            class={`shrink-0 rounded px-2 py-1 text-center text-xs ${colors.badge}`}
                                         >
-                                            <Share2 size={20} />
-                                        </button>
-                                        <button
-                                            onClick={handleEdit}
-                                            class={`${colors.text} transition-opacity hover:opacity-70`}
-                                            title="Edit"
-                                        >
-                                            <Pencil size={20} />
-                                        </button>
+                                            Shared
+                                        </span>
+                                    }
+                                >
+                                    <div ref={shareButtonRef} class="relative shrink-0">
+                                        <div class="flex items-center gap-2">
+                                            <button
+                                                onClick={handleShare}
+                                                class={`${colors.text} transition-opacity hover:opacity-70`}
+                                                title="Share"
+                                            >
+                                                <Share2 size={20} />
+                                            </button>
+                                            <button
+                                                onClick={handleEdit}
+                                                class={`${colors.text} transition-opacity hover:opacity-70`}
+                                                title="Edit"
+                                            >
+                                                <Pencil size={20} />
+                                            </button>
+                                        </div>
                                     </div>
+                                </Show>
+                            </div>
+                            {/* Team names row (versus only) */}
+                            <Show when={props.activity.resource_type === "versus"}>
+                                <div class="flex flex-wrap items-center gap-x-2 text-sm">
+                                    <span class="text-blue-400">
+                                        {props.activity.blueTeamName}
+                                    </span>
+                                    <span class="text-slate-500">vs</span>
+                                    <span class="text-red-400">
+                                        {props.activity.redTeamName}
+                                    </span>
                                 </div>
                             </Show>
                         </div>
-                        {/* Team names row (versus only) */}
-                        <Show when={props.activity.resource_type === "versus"}>
-                            <div class="flex flex-wrap items-center gap-x-2 text-sm">
-                                <span class="text-blue-400">
-                                    {props.activity.blueTeamName}
-                                </span>
-                                <span class="text-slate-500">vs</span>
-                                <span class="text-red-400">
-                                    {props.activity.redTeamName}
-                                </span>
-                            </div>
-                        </Show>
                     </div>
-                </div>
 
-                {/* Description - full width from left edge */}
-                <Show when={props.activity.description}>
-                    <p class="line-clamp-2 px-4 text-sm text-slate-300">
-                        {props.activity.description}
-                    </p>
-                </Show>
+                    {/* Description - full width from left edge */}
+                    <Show when={props.activity.description}>
+                        <p class="line-clamp-2 px-4 text-sm text-slate-300">
+                            {props.activity.description}
+                        </p>
+                    </Show>
 
-                {/* Spacer to push footer to bottom */}
-                <div class="flex-1" />
+                    {/* Spacer to push footer to bottom */}
+                    <div class="flex-1" />
 
-                {/* Footer row: timestamp left, badges right */}
-                <div class="flex items-center justify-between px-4 pb-3 pt-2">
-                    <span class="text-sm text-slate-400">
-                        {formatTimestamp(props.activity.timestamp)}
-                    </span>
-                    <Show when={props.activity.resource_type === "versus"}>
-                        <div class="flex items-center gap-2">
-                            <span
-                                class="rounded px-2 py-0.5 text-xs"
-                                classList={{
-                                    "bg-indigo-500/20 text-indigo-300":
-                                        props.activity.length === 1,
-                                    "bg-teal-500/20 text-teal-300":
-                                        props.activity.length === 3,
-                                    "bg-emerald-500/20 text-emerald-300":
-                                        props.activity.length === 5,
-                                    "bg-pink-500/20 text-pink-300":
-                                        props.activity.length === 7
-                                }}
-                            >
-                                Bo{props.activity.length}
-                            </span>
-                            <Show
-                                when={props.activity.competitive}
-                                fallback={
-                                    <span class="rounded bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
-                                        Scrim
-                                    </span>
-                                }
-                            >
-                                <span class="rounded bg-amber-500/20 px-2 py-0.5 text-xs text-amber-300">
-                                    Competitive
-                                </span>
-                            </Show>
-                            <Show when={props.activity.type}>
+                    {/* Footer row: timestamp left, badges right */}
+                    <div class="flex items-center justify-between px-4 pb-3 pt-2">
+                        <span class="text-sm text-slate-400">
+                            {formatTimestamp(props.activity.timestamp)}
+                        </span>
+                        <Show when={props.activity.resource_type === "versus"}>
+                            <div class="flex items-center gap-2">
                                 <span
                                     class="rounded px-2 py-0.5 text-xs"
                                     classList={{
-                                        "bg-cyan-500/20 text-cyan-300":
-                                            props.activity.type === "standard",
-                                        "bg-fuchsia-500/20 text-fuchsia-300":
-                                            props.activity.type === "fearless",
-                                        "bg-lime-500/20 text-lime-300":
-                                            props.activity.type === "ironman"
+                                        "bg-indigo-500/20 text-indigo-300":
+                                            props.activity.length === 1,
+                                        "bg-teal-500/20 text-teal-300":
+                                            props.activity.length === 3,
+                                        "bg-emerald-500/20 text-emerald-300":
+                                            props.activity.length === 5,
+                                        "bg-pink-500/20 text-pink-300":
+                                            props.activity.length === 7
                                     }}
                                 >
-                                    {(
-                                        props.activity.type?.charAt(0) ?? ""
-                                    ).toUpperCase() +
-                                        (props.activity.type?.slice(1) ?? "")}
+                                    Bo{props.activity.length}
                                 </span>
-                            </Show>
-                        </div>
-                    </Show>
-                </div>
-            </div>
-
-            {/* Share Popup - rendered via Portal to avoid overflow clipping */}
-            <Show when={isShareOpen()}>
-                <Portal>
-                    <div
-                        ref={sharePopupRef}
-                        class="fixed z-[100] rounded-md border border-slate-600 bg-slate-700 p-3 shadow-lg"
-                        style={{
-                            top: `${popupPosition().top}px`,
-                            left: `${popupPosition().left}px`
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {/* For Canvas - show both View and Edit access */}
-                        <Show when={props.activity.resource_type === "canvas"}>
-                            <div class="space-y-3">
-                                <div>
-                                    <p class="mb-1 text-xs font-medium text-slate-300">
-                                        View Access
-                                    </p>
-                                    <Show
-                                        when={!viewShareLinkQuery.isPending}
-                                        fallback={
-                                            <div class="text-xs text-slate-400">
-                                                Loading...
-                                            </div>
-                                        }
+                                <Show
+                                    when={props.activity.competitive}
+                                    fallback={
+                                        <span class="rounded bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
+                                            Scrim
+                                        </span>
+                                    }
+                                >
+                                    <span class="rounded bg-amber-500/20 px-2 py-0.5 text-xs text-amber-300">
+                                        Competitive
+                                    </span>
+                                </Show>
+                                <Show when={props.activity.type}>
+                                    <span
+                                        class="rounded px-2 py-0.5 text-xs"
+                                        classList={{
+                                            "bg-cyan-500/20 text-cyan-300":
+                                                props.activity.type === "standard",
+                                            "bg-fuchsia-500/20 text-fuchsia-300":
+                                                props.activity.type === "fearless",
+                                            "bg-lime-500/20 text-lime-300":
+                                                props.activity.type === "ironman"
+                                        }}
                                     >
-                                        <div class="flex flex-col gap-2">
-                                            <input
-                                                type="text"
-                                                readOnly
-                                                value={viewShareLinkQuery.data || ""}
-                                                class="w-48 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-50"
-                                            />
-                                            <button
-                                                onClick={handleCopyViewLink}
-                                                class="rounded-md bg-teal-400 px-2 py-1 text-xs text-slate-50 hover:bg-teal-700 disabled:opacity-50"
-                                                disabled={!viewShareLinkQuery.data}
-                                            >
-                                                {copied() === "view"
-                                                    ? "✓ Copied"
-                                                    : "Copy"}
-                                            </button>
-                                        </div>
-                                    </Show>
-                                </div>
-                                <div>
-                                    <p class="mb-1 text-xs font-medium text-slate-300">
-                                        Edit Access
-                                    </p>
-                                    <Show
-                                        when={!editShareLinkQuery.isPending}
-                                        fallback={
-                                            <div class="text-xs text-slate-400">
-                                                Loading...
-                                            </div>
-                                        }
-                                    >
-                                        <div class="flex flex-col gap-2">
-                                            <input
-                                                type="text"
-                                                readOnly
-                                                value={editShareLinkQuery.data || ""}
-                                                class="w-48 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-50"
-                                            />
-                                            <button
-                                                onClick={handleCopyEditLink}
-                                                class="rounded-md bg-teal-400 px-2 py-1 text-xs text-slate-50 hover:bg-teal-700 disabled:opacity-50"
-                                                disabled={!editShareLinkQuery.data}
-                                            >
-                                                {copied() === "edit"
-                                                    ? "✓ Copied"
-                                                    : "Copy"}
-                                            </button>
-                                        </div>
-                                    </Show>
-                                </div>
+                                        {(
+                                            props.activity.type?.charAt(0) ?? ""
+                                        ).toUpperCase() +
+                                            (props.activity.type?.slice(1) ?? "")}
+                                    </span>
+                                </Show>
                             </div>
                         </Show>
-
-                        {/* For Draft/Versus - show single share link */}
-                        <Show when={props.activity.resource_type !== "canvas"}>
-                            <Show
-                                when={!shareLinkQuery.isPending}
-                                fallback={
-                                    <div class="flex items-center gap-2 px-2 py-1">
-                                        <Loader2
-                                            size={20}
-                                            class="animate-spin text-teal-400"
-                                        />
-                                        <span class="text-sm text-slate-300">
-                                            Generating...
-                                        </span>
-                                    </div>
-                                }
-                            >
-                                <p class="mb-2 text-xs font-medium text-slate-300">
-                                    Share Link
-                                </p>
-                                <div class="flex items-center gap-2">
-                                    <input
-                                        type="text"
-                                        readOnly
-                                        value={shareLinkQuery.data || ""}
-                                        class="w-48 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-50"
-                                    />
-                                    <button
-                                        onClick={handleCopy}
-                                        class="rounded-md bg-teal-400 p-2 text-slate-50 hover:bg-teal-700"
-                                        disabled={!shareLinkQuery.data}
-                                    >
-                                        <Show
-                                            when={copied() !== "single"}
-                                            fallback={
-                                                <>
-                                                    {/* TODO: DRA-40 - Review: was filled icon */}
-                                                    <Check size={16} />
-                                                </>
-                                            }
-                                        >
-                                            <Copy size={16} />
-                                        </Show>
-                                    </button>
-                                </div>
-                            </Show>
-                        </Show>
                     </div>
-                </Portal>
+                </div>
+            </Show>
+
+            {/* Share view — replaces card content */}
+            <Show when={isShareOpen()}>
+                <div
+                    class="relative flex flex-1 flex-col justify-center gap-2 px-4 py-3"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {/* Close button with countdown ring */}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            closeShare();
+                        }}
+                        class="absolute right-0.5 top-0.5 flex h-6 w-6 items-center justify-center text-slate-400 transition-colors hover:text-slate-200"
+                    >
+                        <svg class="absolute inset-0 -rotate-90" viewBox="0 0 24 24">
+                            <circle
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.5"
+                                stroke-dasharray="62.83"
+                                stroke-dashoffset="0"
+                                stroke-linecap="round"
+                                class="opacity-30"
+                                style={`animation: countdown-unwind ${AUTO_CLOSE_MS}ms linear forwards`}
+                            />
+                        </svg>
+                        <X size={12} />
+                    </button>
+
+                    {/* For Canvas - show both View and Edit access */}
+                    <Show when={props.activity.resource_type === "canvas"}>
+                        <div class="space-y-2">
+                            <div>
+                                <p class="mb-0.5 text-xs font-medium text-slate-300">
+                                    View Access
+                                </p>
+                                <Show
+                                    when={!viewShareLinkQuery.isPending}
+                                    fallback={
+                                        <div class="text-xs text-slate-400">
+                                            Loading...
+                                        </div>
+                                    }
+                                >
+                                    <div class="flex items-center gap-2">
+                                        <div class="selection-purple h-[26px] w-0 flex-grow cursor-text select-all truncate rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-50">
+                                            {viewShareLinkQuery.data || ""}
+                                        </div>
+                                        <button
+                                            onClick={handleCopyViewLink}
+                                            class="shrink-0 rounded-md bg-purple-500 p-1.5 text-slate-50 hover:bg-purple-400 disabled:opacity-50"
+                                            disabled={!viewShareLinkQuery.data}
+                                        >
+                                            <Show
+                                                when={copied() !== "view"}
+                                                fallback={<Check size={14} />}
+                                            >
+                                                <Copy size={14} />
+                                            </Show>
+                                        </button>
+                                    </div>
+                                </Show>
+                            </div>
+                            <div>
+                                <p class="mb-0.5 text-xs font-medium text-slate-300">
+                                    Edit Access
+                                </p>
+                                <Show
+                                    when={!editShareLinkQuery.isPending}
+                                    fallback={
+                                        <div class="text-xs text-slate-400">
+                                            Loading...
+                                        </div>
+                                    }
+                                >
+                                    <div class="flex items-center gap-2">
+                                        <div class="selection-purple h-[26px] w-0 flex-grow cursor-text select-all truncate rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-50">
+                                            {editShareLinkQuery.data || ""}
+                                        </div>
+                                        <button
+                                            onClick={handleCopyEditLink}
+                                            class="shrink-0 rounded-md bg-purple-500 p-1.5 text-slate-50 hover:bg-purple-400 disabled:opacity-50"
+                                            disabled={!editShareLinkQuery.data}
+                                        >
+                                            <Show
+                                                when={copied() !== "edit"}
+                                                fallback={<Check size={14} />}
+                                            >
+                                                <Copy size={14} />
+                                            </Show>
+                                        </button>
+                                    </div>
+                                </Show>
+                            </div>
+                        </div>
+                    </Show>
+
+                    {/* For Versus/Draft - show single share link */}
+                    <Show when={props.activity.resource_type !== "canvas"}>
+                        <Show
+                            when={!shareLinkQuery.isPending}
+                            fallback={
+                                <div class="flex items-center gap-2">
+                                    <Loader2
+                                        size={16}
+                                        class="animate-spin text-teal-400"
+                                    />
+                                    <span class="text-xs text-slate-300">
+                                        Generating...
+                                    </span>
+                                </div>
+                            }
+                        >
+                            <p class="mb-1 text-xs font-medium text-slate-300">
+                                Share Link
+                            </p>
+                            <div class="flex items-center gap-2">
+                                <div class="selection-orange h-[26px] w-0 flex-grow cursor-text select-all truncate rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-50">
+                                    {shareLinkQuery.data || ""}
+                                </div>
+                                <button
+                                    onClick={handleCopy}
+                                    class="shrink-0 rounded-md bg-orange-500 p-1.5 text-slate-50 hover:bg-orange-400"
+                                    disabled={!shareLinkQuery.data}
+                                >
+                                    <Show
+                                        when={copied() !== "single"}
+                                        fallback={<Check size={14} />}
+                                    >
+                                        <Copy size={14} />
+                                    </Show>
+                                </button>
+                            </div>
+                        </Show>
+                    </Show>
+                </div>
             </Show>
 
             {/* Edit Dialog */}
