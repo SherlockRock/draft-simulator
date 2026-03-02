@@ -1,4 +1,5 @@
 import { createSignal, createEffect, createMemo, Show } from "solid-js";
+import { useMutation } from "@tanstack/solid-query";
 import { Dialog } from "./Dialog";
 import toast from "solid-toast";
 import { Plus } from "lucide-solid";
@@ -6,6 +7,7 @@ import { IconPicker } from "./IconPicker";
 import { champions } from "../utils/constants";
 import { VersusDraft } from "../utils/schemas";
 import { StyledSelect } from "./StyledSelect";
+import { editVersusDraft } from "../utils/actions";
 
 interface EditVersusDraftDialogProps {
     isOpen: () => boolean;
@@ -24,8 +26,21 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
     const [showIconPicker, setShowIconPicker] = createSignal(false);
     const [type, setType] = createSignal("standard");
     const [length, setLength] = createSignal(1);
-    const [isSubmitting, setIsSubmitting] = createSignal(false);
     const [errors, setErrors] = createSignal<Record<string, string>>({});
+
+    const mutation = useMutation(() => ({
+        mutationFn: (data: Parameters<typeof editVersusDraft>[1]) =>
+            editVersusDraft(props.versusDraft.id, data),
+        onSuccess: () => {
+            toast.success("Versus draft updated successfully!");
+            props.onSuccess?.();
+            props.onClose();
+        },
+        onError: (error: Error) => {
+            toast.error("Failed to update versus draft");
+            console.error(error);
+        }
+    }));
 
     const hasStarted = createMemo(() => {
         const drafts = props.versusDraft.Drafts || [];
@@ -67,43 +82,21 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSubmit = async (e: Event) => {
+    const handleSubmit = (e: Event) => {
         e.preventDefault();
 
         if (!validateForm()) return;
 
-        setIsSubmitting(true);
-        try {
-            const response = await fetch(
-                `${import.meta.env.VITE_API_URL}/api/versus-drafts/${props.versusDraft.id}`,
-                {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    credentials: "include",
-                    body: JSON.stringify({
-                        name: name().trim(),
-                        blueTeamName: blueTeamName().trim(),
-                        redTeamName: redTeamName().trim(),
-                        description: description().trim() || undefined,
-                        competitive: competitive(),
-                        icon: icon(),
-                        type: type(),
-                        length: length()
-                    })
-                }
-            );
-
-            if (!response.ok) throw new Error("Failed to update versus draft");
-
-            toast.success("Versus draft updated successfully!");
-            props.onSuccess?.();
-            props.onClose();
-        } catch (error) {
-            toast.error("Failed to update versus draft");
-            console.error(error);
-        } finally {
-            setIsSubmitting(false);
-        }
+        mutation.mutate({
+            name: name().trim(),
+            blueTeamName: blueTeamName().trim(),
+            redTeamName: redTeamName().trim(),
+            description: description().trim() || undefined,
+            competitive: competitive(),
+            icon: icon(),
+            type: type(),
+            length: length()
+        });
     };
 
     return (
@@ -283,16 +276,16 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
                                 type="button"
                                 onClick={props.onClose}
                                 class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-50 hover:bg-slate-500"
-                                disabled={isSubmitting()}
+                                disabled={mutation.isPending}
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
                                 class="rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-500 disabled:opacity-50"
-                                disabled={isSubmitting()}
+                                disabled={mutation.isPending}
                             >
-                                {isSubmitting() ? "Saving..." : "Save Changes"}
+                                {mutation.isPending ? "Saving..." : "Save Changes"}
                             </button>
                         </div>
                     </form>

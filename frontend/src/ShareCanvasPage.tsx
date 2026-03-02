@@ -1,43 +1,39 @@
 import { useSearchParams, useNavigate } from "@solidjs/router";
-import { onMount } from "solid-js";
+import { onMount, Show } from "solid-js";
+import { useMutation } from "@tanstack/solid-query";
 import { toast } from "solid-toast";
-import { BASE_URL } from "./utils/actions";
+import { verifyShareCanvasLink } from "./utils/actions";
 
 const ShareCanvasPage = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
 
-    onMount(async () => {
-        const token = searchParams.token;
-        if (token) {
-            try {
-                const response = await fetch(
-                    `${BASE_URL}/shares/verify-canvas-link?token=${token}`,
-                    {
-                        method: "GET",
-                        credentials: "include"
-                    }
-                );
+    const mutation = useMutation(() => ({
+        mutationFn: verifyShareCanvasLink,
+        onSuccess: (data) => {
+            toast.success("Canvas Shared Successfully");
+            navigate(`/canvas/${data.canvasId}`);
+        },
+        onError: (error: Error) => {
+            toast.error(`Share verification failed: ${error.message}`);
+            navigate("/");
+        }
+    }));
 
-                if (response.ok) {
-                    const data = await response.json();
-                    toast.success("Canvas Shared Successfully");
-                    navigate(`/canvas/${data.canvasId}`);
-                } else {
-                    const error = await response.json();
-                    toast.error(`Share verification failed: ${error.error}`);
-                    navigate("/");
-                }
-            } catch (error) {
-                toast.error(`Share verification failed: ${error}`);
-                navigate("/");
-            }
+    onMount(() => {
+        const token = searchParams.token;
+        if (typeof token === "string") {
+            mutation.mutate(token);
         } else {
             navigate("/");
         }
     });
 
-    return <div>Verifying canvas share link...</div>;
+    return (
+        <Show when={mutation.isPending}>
+            <div>Verifying canvas share link...</div>
+        </Show>
+    );
 };
 
 export default ShareCanvasPage;

@@ -1,4 +1,5 @@
 import { createSignal, createEffect, Show } from "solid-js";
+import { useMutation } from "@tanstack/solid-query";
 import { Dialog } from "./Dialog";
 import toast from "solid-toast";
 import { useNavigate } from "@solidjs/router";
@@ -6,6 +7,7 @@ import { Plus } from "lucide-solid";
 import { IconPicker } from "./IconPicker";
 import { champions } from "../utils/constants";
 import { StyledSelect } from "./StyledSelect";
+import { createVersusDraft } from "../utils/actions";
 import { track } from "../utils/analytics";
 
 interface CreateVersusDraftDialogProps {
@@ -24,8 +26,25 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
     const [icon, setIcon] = createSignal("");
     const [showIconPicker, setShowIconPicker] = createSignal(false);
     const [type, setType] = createSignal("standard");
-    const [isSubmitting, setIsSubmitting] = createSignal(false);
     const [errors, setErrors] = createSignal<Record<string, string>>({});
+
+    const mutation = useMutation(() => ({
+        mutationFn: createVersusDraft,
+        onSuccess: (versusDraft) => {
+            toast.success("Versus draft created successfully!");
+            track("versus_created", {
+                type: type(),
+                length: length(),
+                competitive: competitive()
+            });
+            props.onClose();
+            navigate(`/versus/join/${versusDraft.shareLink}`);
+        },
+        onError: (error: Error) => {
+            toast.error("Failed to create versus draft");
+            console.error(error);
+        }
+    }));
 
     createEffect(() => {
         if (props.isOpen()) {
@@ -58,49 +77,21 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSubmit = async (e: Event) => {
+    const handleSubmit = (e: Event) => {
         e.preventDefault();
 
         if (!validateForm()) return;
 
-        setIsSubmitting(true);
-        try {
-            const response = await fetch(
-                `${import.meta.env.VITE_API_URL}/api/versus-drafts`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    credentials: "include",
-                    body: JSON.stringify({
-                        name: name().trim(),
-                        blueTeamName: blueTeamName().trim(),
-                        redTeamName: redTeamName().trim(),
-                        description: description().trim() || undefined,
-                        length: length(),
-                        competitive: competitive(),
-                        icon: icon(),
-                        type: type()
-                    })
-                }
-            );
-
-            if (!response.ok) throw new Error("Failed to create versus draft");
-
-            const versusDraft = await response.json();
-            toast.success("Versus draft created successfully!");
-            track("versus_created", {
-                type: type(),
-                length: length(),
-                competitive: competitive()
-            });
-            props.onClose();
-            navigate(`/versus/join/${versusDraft.shareLink}`);
-        } catch (error) {
-            toast.error("Failed to create versus draft");
-            console.error(error);
-        } finally {
-            setIsSubmitting(false);
-        }
+        mutation.mutate({
+            name: name().trim(),
+            blueTeamName: blueTeamName().trim(),
+            redTeamName: redTeamName().trim(),
+            description: description().trim() || undefined,
+            length: length(),
+            competitive: competitive(),
+            icon: icon(),
+            type: type()
+        });
     };
 
     return (
@@ -276,16 +267,16 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                                 type="button"
                                 onClick={props.onClose}
                                 class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-50 hover:bg-slate-500"
-                                disabled={isSubmitting()}
+                                disabled={mutation.isPending}
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
                                 class="rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-500 disabled:opacity-50"
-                                disabled={isSubmitting()}
+                                disabled={mutation.isPending}
                             >
-                                {isSubmitting() ? "Creating..." : "Create Series"}
+                                {mutation.isPending ? "Creating..." : "Create Series"}
                             </button>
                         </div>
                     </form>

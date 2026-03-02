@@ -5,10 +5,10 @@ import {
     createMemo,
     onCleanup,
     For,
-    Show,
-    createResource
+    Show
 } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/solid-query";
 import { useVersusSocket } from "../providers/VersusSocketProvider";
 import {
     useVersusContext,
@@ -33,6 +33,11 @@ import {
     GameSettingsUpdateSchema,
     WinnerUpdateSchema
 } from "../utils/schemas";
+import {
+    fetchVersusDraft,
+    fetchDraft,
+    completeDraft
+} from "../utils/actions";
 import { Socket } from "socket.io-client";
 import { validateSocketEvent } from "../utils/socketValidation";
 import { getEffectivePickOrder, getPicksArrayIndex } from "../utils/versusPickOrder";
@@ -48,25 +53,6 @@ import {
     getRestrictedChampions,
     getRestrictedChampionsByGame
 } from "../utils/seriesRestrictions";
-
-const fetchVersusDraft = async (id: string): Promise<VersusDraft> => {
-    const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/versus-drafts/${id}`,
-        {
-            credentials: "include"
-        }
-    );
-    if (!response.ok) throw new Error("Failed to fetch versus draft");
-    return response.json();
-};
-
-const fetchDraft = async (id: string): Promise<draft> => {
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/drafts/${id}`, {
-        credentials: "include"
-    });
-    if (!response.ok) throw new Error("Failed to fetch draft");
-    return response.json();
-};
 
 const VersusDraftView: Component = () => {
     const params = useParams<{ id: string; draftId: string }>();
@@ -86,19 +72,52 @@ const VersusDraftView: Component = () => {
         confirmGameRole,
         myTeamIdentity
     } = useVersusContext();
+    const queryClient = useQueryClient();
     const myRole = createMemo(() => versusContext().myParticipant?.role || null);
     const participantId = createMemo(() => versusContext().myParticipant?.id || null);
-    const [versusDraft, { mutate: mutateVersusDraft }] = createResource(
-        () => params.id,
-        fetchVersusDraft
-    );
+    const versusDraftQuery = useQuery(() => ({
+        queryKey: ["versusDraft", params.id],
+        queryFn: () => fetchVersusDraft(params.id),
+        enabled: !!params.id
+    }));
+    const draftQuery = useQuery(() => ({
+        queryKey: ["draft", params.draftId],
+        queryFn: () => fetchDraft(params.draftId),
+        enabled: !!params.draftId
+    }));
+    const [versusState, setVersusState] = createSignal<VersusState>({
+        draftId: params.draftId,
+        currentPickIndex: 0,
+        timerStartedAt: null,
+        isPaused: false,
+        readyStatus: { blue: false, red: false },
+        completed: false,
+        firstPick: "blue",
+        blueSideTeam: 1
+    });
 
-    // Sync context's versusDraft (updated via sockets) to local resource
+    // Sync context's versusDraft (updated via sockets) to query cache
     createEffect(() => {
         const contextVD = versusContext().versusDraft;
         if (contextVD) {
-            mutateVersusDraft(contextVD);
+            queryClient.setQueryData(["versusDraft", params.id], contextVD);
         }
+    });
+
+    // Reset versusState when navigating between games in the series
+    // (socket draftStateSync will update with real values shortly after)
+    createEffect(() => {
+        const draftId = params.draftId;
+        setVersusState({
+            draftId,
+            currentPickIndex: 0,
+            timerStartedAt: null,
+            isPaused: false,
+            readyStatus: { blue: false, red: false },
+            completed: false,
+            firstPick: "blue",
+            blueSideTeam: 1
+        });
     });
 
     // Per-game role re-prompt: track whether user needs to confirm role for this game
@@ -108,7 +127,7 @@ const VersusDraftView: Component = () => {
         const role = myRole();
         const draftId = params.draftId;
         const identity = myTeamIdentity();
-        const d = draft();
+        const d = draftQuery.data;
         const state = versusState();
 
         // Never show confirmation for completed or already-started games
@@ -142,32 +161,21 @@ const VersusDraftView: Component = () => {
         settings: { firstPick?: "blue" | "red"; blueSideTeam?: 1 | 2 }
     ) => {
         setVersusState((prev) => ({ ...prev, ...settings }));
-        mutateDraft((prev) => (prev ? { ...prev, ...settings } : prev!));
+        queryClient.setQueryData(["draft", params.draftId], (prev: draft | undefined) =>
+            prev ? { ...prev, ...settings } : prev
+        );
         setGameSettings(id, settings);
     };
 
     // Compute suggested role for re-prompt overlay
     const gameSuggestedRole = createMemo(() => {
-        const vd = versusDraft();
+        const vd = versusDraftQuery.data;
         const identity = myTeamIdentity();
         if (!vd || !identity) return null;
-        const bst = versusState().blueSideTeam || draft()?.blueSideTeam || 1;
+        const bst = versusState().blueSideTeam || draftQuery.data?.blueSideTeam || 1;
         return getSuggestedRole(identity, bst, vd.blueTeamName, vd.redTeamName);
     });
-    const [draft, { mutate: mutateDraft }] = createResource(
-        () => params.draftId,
-        fetchDraft
-    );
-    const [versusState, setVersusState] = createSignal<VersusState>({
-        draftId: params.draftId,
-        currentPickIndex: 0,
-        timerStartedAt: null,
-        isPaused: false,
-        readyStatus: { blue: false, red: false },
-        completed: false,
-        firstPick: "blue",
-        blueSideTeam: 1
-    });
+
     const [showWinnerModal, setShowWinnerModal] = createSignal(false);
     const [showPauseRequest, setShowPauseRequest] = createSignal(false);
     const [pauseRequestType, setPauseRequestType] = createSignal<"pause" | "resume">(
@@ -260,11 +268,9 @@ const VersusDraftView: Component = () => {
                 DraftStateSyncSchema
             );
             if (!data) return;
-            mutateDraft((prev) => ({
-                ...prev!,
-                picks: data.picks,
-                completed: data.completed
-            }));
+            queryClient.setQueryData(["draft", params.draftId], (prev: draft | undefined) =>
+                prev ? { ...prev, picks: data.picks, completed: data.completed } : prev
+            );
             setVersusState({
                 draftId: data.draftId,
                 currentPickIndex: data.currentPickIndex,
@@ -305,11 +311,9 @@ const VersusDraftView: Component = () => {
         socket.on("draftUpdate", (rawData: unknown) => {
             const data = validateSocketEvent("draftUpdate", rawData, DraftUpdateSchema);
             if (!data) return;
-            mutateDraft((prev) => ({
-                ...prev!,
-                picks: data.picks,
-                completed: data.completed
-            }));
+            queryClient.setQueryData(["draft", params.draftId], (prev: draft | undefined) =>
+                prev ? { ...prev, picks: data.picks, completed: data.completed } : prev
+            );
             setVersusState((prev) => ({
                 ...prev,
                 currentPickIndex: data.currentPickIndex,
@@ -391,7 +395,7 @@ const VersusDraftView: Component = () => {
             if (!data) return;
             setPendingPickChangeRequest(data);
             toast(
-                `${data.team === "blue" ? versusDraft()?.blueTeamName : versusDraft()?.redTeamName} requested a pick change`
+                `${data.team === "blue" ? versusDraftQuery.data?.blueTeamName : versusDraftQuery.data?.redTeamName} requested a pick change`
             );
         });
 
@@ -428,14 +432,14 @@ const VersusDraftView: Component = () => {
                     firstPick: data.firstPick,
                     blueSideTeam: data.blueSideTeam
                 }));
-                mutateDraft((prev) =>
+                queryClient.setQueryData(["draft", params.draftId], (prev: draft | undefined) =>
                     prev
                         ? {
                               ...prev,
                               firstPick: data.firstPick,
                               blueSideTeam: data.blueSideTeam
                           }
-                        : prev!
+                        : prev
                 );
             }
         });
@@ -449,10 +453,9 @@ const VersusDraftView: Component = () => {
             );
             if (!data) return;
             if (data.draftId === params.draftId) {
-                mutateDraft((prev) => ({
-                    ...prev!,
-                    winner: data.winner
-                }));
+                queryClient.setQueryData(["draft", params.draftId], (prev: draft | undefined) =>
+                    prev ? { ...prev, winner: data.winner } : prev
+                );
                 setVersusState((prev) => ({
                     ...prev,
                     winner: data.winner
@@ -512,7 +515,7 @@ const VersusDraftView: Component = () => {
 
     // Register draft state with workflow context for FlowPanel
     createEffect(() => {
-        const draftData = draft();
+        const draftData = draftQuery.data;
         const state = versusState();
 
         if (draftData && state) {
@@ -596,36 +599,27 @@ const VersusDraftView: Component = () => {
         });
     };
 
-    const handleDeclareWinner = async (winner: "blue" | "red" | null) => {
-        try {
-            const response = await fetch(
-                `${import.meta.env.VITE_API_URL}/api/drafts/${params.draftId}/complete`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    credentials: "include",
-                    body: JSON.stringify({ winner })
-                }
-            );
-
-            if (!response.ok) throw new Error("Failed to declare winner");
-
+    const declareWinnerMutation = useMutation(() => ({
+        mutationFn: (winner: "blue" | "red" | null) =>
+            completeDraft(params.draftId, { winner }),
+        onSuccess: () => {
             toast.success("Winner declared!");
             setShowWinnerModal(false);
-
-            // Navigate back to series overview
-            setTimeout(() => {
-                navigate(`/versus/${params.id}`);
-            }, 1000);
-        } catch (error) {
+            setTimeout(() => navigate(`/versus/${params.id}`), 1000);
+        },
+        onError: (error: Error) => {
             console.error("Error declaring winner:", error);
             toast.error("Failed to declare winner");
         }
+    }));
+
+    const handleDeclareWinner = (winner: "blue" | "red" | null) => {
+        declareWinnerMutation.mutate(winner);
     };
 
     const handlePause = () => {
         const state = versusState();
-        const isCompetitive = versusDraft()?.competitive;
+        const isCompetitive = versusDraftQuery.data?.competitive;
         const socket = socketAccessor();
         if (!socket) return;
 
@@ -687,7 +681,7 @@ const VersusDraftView: Component = () => {
             role: myRole()
         });
 
-        if (!versusDraft()?.competitive) {
+        if (!versusDraftQuery.data?.competitive) {
             toast.success("Pick changed!");
         } else {
             toast("Pick change request sent, waiting for approval...");
@@ -721,13 +715,13 @@ const VersusDraftView: Component = () => {
     };
 
     const getTeamPicks = (team: "blue" | "red") => {
-        const picks = draft()?.picks || [];
+        const picks = draftQuery.data?.picks || [];
         const startIndex = team === "blue" ? 10 : 15;
         return [0, 1, 2, 3, 4].map((slot) => picks[startIndex + slot]);
     };
 
     const getTeamBans = (team: "blue" | "red") => {
-        const picks = draft()?.picks || [];
+        const picks = draftQuery.data?.picks || [];
         const startIndex = team === "blue" ? 0 : 5;
         return [0, 1, 2, 3, 4].map((slot) => picks[startIndex + slot]);
     };
@@ -759,23 +753,23 @@ const VersusDraftView: Component = () => {
     const draftStarted = () => versusState().timerStartedAt !== null;
 
     const blueSideTeamName = () => {
-        const vd = versusDraft();
-        const bst = versusState().blueSideTeam ?? draft()?.blueSideTeam ?? 1;
+        const vd = versusDraftQuery.data;
+        const bst = versusState().blueSideTeam ?? draftQuery.data?.blueSideTeam ?? 1;
         if (!vd) return "Team 1";
         return bst === 1 ? vd.blueTeamName : vd.redTeamName;
     };
 
     const redSideTeamName = () => {
-        const vd = versusDraft();
-        const bst = versusState().blueSideTeam ?? draft()?.blueSideTeam ?? 1;
+        const vd = versusDraftQuery.data;
+        const bst = versusState().blueSideTeam ?? draftQuery.data?.blueSideTeam ?? 1;
         if (!vd) return "Team 2";
         return bst === 1 ? vd.redTeamName : vd.blueTeamName;
     };
 
     // Compute restricted champions for Fearless/Ironman modes
     const restrictedChampions = createMemo(() => {
-        const vd = versusDraft();
-        const d = draft();
+        const vd = versusDraftQuery.data;
+        const d = draftQuery.data;
         if (!vd || !d) return [];
         return getRestrictedChampions(
             vd.type || "standard",
@@ -786,8 +780,8 @@ const VersusDraftView: Component = () => {
 
     // Compute restricted champions by game for Restricted tab display
     const restrictedByGame = createMemo(() => {
-        const vd = versusDraft();
-        const d = draft();
+        const vd = versusDraftQuery.data;
+        const d = draftQuery.data;
         if (!vd || !d) return [];
         return getRestrictedChampionsByGame(
             vd.type || "standard",
@@ -823,8 +817,8 @@ const VersusDraftView: Component = () => {
 
     // Get the next game in the series (if any)
     const nextGame = createMemo(() => {
-        const vd = versusDraft();
-        const d = draft();
+        const vd = versusDraftQuery.data;
+        const d = draftQuery.data;
         if (!vd || !d || !vd.Drafts) return null;
 
         const currentIndex = d.seriesIndex ?? 0;
@@ -843,7 +837,7 @@ const VersusDraftView: Component = () => {
         const effectiveOrder = getEffectivePickOrder(state.firstPick || "blue");
         if (state.completed || state.currentPickIndex >= effectiveOrder.length)
             return false;
-        const picks = draft()?.picks || [];
+        const picks = draftQuery.data?.picks || [];
         const picksIndex = getPicksArrayIndex(
             state.currentPickIndex,
             versusState().firstPick || "blue"
@@ -857,7 +851,7 @@ const VersusDraftView: Component = () => {
         const effectiveOrder = getEffectivePickOrder(state.firstPick || "blue");
         if (state.completed || state.currentPickIndex >= effectiveOrder.length)
             return null;
-        const picks = draft()?.picks || [];
+        const picks = draftQuery.data?.picks || [];
         const picksIndex = getPicksArrayIndex(
             state.currentPickIndex,
             versusState().firstPick || "blue"
@@ -889,19 +883,19 @@ const VersusDraftView: Component = () => {
 
     return (
         <Show
-            when={!versusDraft.loading && !draft.loading}
+            when={!versusDraftQuery.isPending && !draftQuery.isPending}
             fallback={<div class="p-8">Loading...</div>}
         >
-            <Show when={versusDraft() && draft()}>
+            <Show when={versusDraftQuery.data && draftQuery.data}>
                 {/* Per-game role confirmation overlay */}
                 <Show when={needsGameConfirm()}>
                     <div class="flex h-full min-w-0 flex-1 flex-col items-center justify-center bg-slate-900">
                         <div class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-700/50 bg-slate-800/90 shadow-2xl">
                             <div class="p-8 text-center">
                                 <div
-                                    class={`mb-4 text-sm font-semibold uppercase tracking-wider ${gameTextColors[(draft()?.seriesIndex ?? 0) + 1] ?? "text-slate-500"}`}
+                                    class={`mb-4 text-sm font-semibold uppercase tracking-wider ${gameTextColors[(draftQuery.data?.seriesIndex ?? 0) + 1] ?? "text-slate-500"}`}
                                 >
-                                    Game {(draft()?.seriesIndex ?? 0) + 1}
+                                    Game {(draftQuery.data?.seriesIndex ?? 0) + 1}
                                 </div>
                                 <Show when={myTeamIdentity() && gameSuggestedRole()}>
                                     <p class="text-sm text-slate-300">
@@ -932,8 +926,8 @@ const VersusDraftView: Component = () => {
                                 </div>
                                 <GameSettingsGrid
                                     draftId={params.draftId}
-                                    teamOneName={versusDraft()?.blueTeamName ?? ""}
-                                    teamTwoName={versusDraft()?.redTeamName ?? ""}
+                                    teamOneName={versusDraftQuery.data?.blueTeamName ?? ""}
+                                    teamTwoName={versusDraftQuery.data?.redTeamName ?? ""}
                                     blueSideTeam={
                                         (versusState().blueSideTeam || 1) as 1 | 2
                                     }
@@ -1016,9 +1010,9 @@ const VersusDraftView: Component = () => {
                                     </div>
                                     <div class="flex flex-col items-center gap-1">
                                         <span
-                                            class={`rounded bg-slate-700 px-2 py-0.5 text-xs font-semibold ${gameTextColors[(draft()?.seriesIndex ?? 0) + 1] ?? "text-slate-300"}`}
+                                            class={`rounded bg-slate-700 px-2 py-0.5 text-xs font-semibold ${gameTextColors[(draftQuery.data?.seriesIndex ?? 0) + 1] ?? "text-slate-300"}`}
                                         >
-                                            Game {(draft()?.seriesIndex ?? 0) + 1}
+                                            Game {(draftQuery.data?.seriesIndex ?? 0) + 1}
                                         </span>
                                         <span class="text-slate-500">vs</span>
                                         <Show
@@ -1304,8 +1298,8 @@ const VersusDraftView: Component = () => {
                                 restrictedByGame={restrictedByGame}
                                 restrictedChampions={restrictedChampions}
                                 restrictedChampionGameMap={restrictedChampionGameMap}
-                                draft={draft}
-                                versusDraft={versusDraft}
+                                draft={() => draftQuery.data}
+                                versusDraft={() => versusDraftQuery.data}
                                 isMyTurn={isMyTurn}
                                 isPaused={() => versusState().isPaused}
                                 getCurrentPendingChampion={getCurrentPendingChampion}
@@ -1316,8 +1310,8 @@ const VersusDraftView: Component = () => {
                         {/* Modals */}
                         <WinnerDeclarationModal
                             isOpen={showWinnerModal()}
-                            blueTeamName={versusDraft()?.blueTeamName ?? ""}
-                            redTeamName={versusDraft()?.redTeamName ?? ""}
+                            blueTeamName={versusDraftQuery.data?.blueTeamName ?? ""}
+                            redTeamName={versusDraftQuery.data?.redTeamName ?? ""}
                             onDeclareWinner={handleDeclareWinner}
                             isSpectator={isSpectator()}
                         />
@@ -1326,8 +1320,8 @@ const VersusDraftView: Component = () => {
                             isOpen={showPauseRequest()}
                             requestType={pauseRequestType()}
                             requestingTeam={pauseRequestTeam()}
-                            blueTeamName={versusDraft()?.blueTeamName ?? ""}
-                            redTeamName={versusDraft()?.redTeamName ?? ""}
+                            blueTeamName={versusDraftQuery.data?.blueTeamName ?? ""}
+                            redTeamName={versusDraftQuery.data?.redTeamName ?? ""}
                             onApprove={handleApproveRequest}
                             onReject={handleRejectRequest}
                         />

@@ -17,7 +17,9 @@ import {
     ActivityResponseSchema,
     SuccessSchema,
     ImportSeriesResponseSchema,
-    UpdateCanvasNameResponseSchema
+    UpdateCanvasNameResponseSchema,
+    ShareDraftVerifySchema,
+    ShareCanvasVerifySchema
 } from "./schemas";
 
 // Re-export types for backward compatibility
@@ -43,6 +45,14 @@ export const postNewDraft = async (data: {
     const result = await apiPost("/drafts", data, DraftSchema);
     track("draft_created");
     return result;
+};
+
+export const fetchDraft = async (id: string) => {
+    return apiGet(`/drafts/${id}`, DraftSchema);
+};
+
+export const completeDraft = async (draftId: string, data: { winner: "blue" | "red" | null }) => {
+    return apiPost(`/drafts/${draftId}/complete`, data, DraftSchema);
 };
 
 export const fetchDefaultDraft = async (id: string | null, canvasId?: string | null) => {
@@ -439,6 +449,23 @@ export const generateVersusShareLink = async (versusDraftId: string) => {
     return `${window.location.origin}/versus/join/${versusDraft.shareLink}`;
 };
 
+export const fetchVersusDraft = async (id: string) => {
+    return apiGet(`/versus-drafts/${id}`, VersusDraftSchema);
+};
+
+export const createVersusDraft = async (data: {
+    name: string;
+    blueTeamName: string;
+    redTeamName: string;
+    description?: string;
+    length: number;
+    competitive: boolean;
+    icon: string;
+    type: string;
+}) => {
+    return apiPost("/versus-drafts", data, VersusDraftSchema);
+};
+
 export const editVersusDraft = async (
     versusDraftId: string,
     data: {
@@ -527,6 +554,14 @@ export const deleteUserAccount = async (confirmEmail: string) => {
 // =============================================================================
 // Other
 // =============================================================================
+
+export const verifyShareDraftLink = async (token: string) => {
+    return apiGet(`/shares/verify-link?token=${token}`, ShareDraftVerifySchema);
+};
+
+export const verifyShareCanvasLink = async (token: string) => {
+    return apiGet(`/shares/verify-canvas-link?token=${token}`, ShareCanvasVerifySchema);
+};
 
 export const fetchRecentActivity = async (
     page: number = 0,
