@@ -1,47 +1,43 @@
 import { useSearchParams, useNavigate } from "@solidjs/router";
-import { onMount } from "solid-js";
+import { onMount, Show } from "solid-js";
+import { useMutation } from "@tanstack/solid-query";
 import { toast } from "solid-toast";
-import { BASE_URL } from "./utils/actions";
+import { verifyShareDraftLink } from "./utils/actions";
 
 const ShareDraftPage = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
 
-    onMount(async () => {
-        const token = searchParams.token;
-        if (token) {
-            try {
-                const response = await fetch(
-                    `${BASE_URL}/shares/verify-link?token=${token}`,
-                    {
-                        method: "GET",
-                        credentials: "include"
-                    }
-                );
-
-                if (response.ok) {
-                    const data = await response.json();
-                    toast.success("Draft Shared Successfully");
-                    if (data.canvasId) {
-                        navigate(`/canvas/${data.canvasId}/draft/${data.draftId}`);
-                    } else {
-                        navigate("/");
-                    }
-                } else {
-                    const error = await response.json();
-                    toast.error(`Share verification failed: ${error}`);
-                    navigate("/");
-                }
-            } catch (error) {
-                toast.error(`Share verification failed: ${error}`);
+    const mutation = useMutation(() => ({
+        mutationFn: verifyShareDraftLink,
+        onSuccess: (data) => {
+            toast.success("Draft Shared Successfully");
+            if (data.canvasId) {
+                navigate(`/canvas/${data.canvasId}/draft/${data.draftId}`);
+            } else {
                 navigate("/");
             }
+        },
+        onError: (error: Error) => {
+            toast.error(`Share verification failed: ${error.message}`);
+            navigate("/");
+        }
+    }));
+
+    onMount(() => {
+        const token = searchParams.token;
+        if (typeof token === "string") {
+            mutation.mutate(token);
         } else {
             navigate("/");
         }
     });
 
-    return <div>Verifying draft share link...</div>;
+    return (
+        <Show when={mutation.isPending}>
+            <div>Verifying draft share link...</div>
+        </Show>
+    );
 };
 
 export default ShareDraftPage;
