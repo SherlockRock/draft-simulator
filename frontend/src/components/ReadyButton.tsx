@@ -58,12 +58,12 @@ export const ReadyButton: Component<ReadyButtonProps> = (props) => {
     };
 
     const stateStyles = {
-        ready: "bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white shadow-lg shadow-emerald-500/40 hover:shadow-emerald-400/60 hover:scale-105 border-2 border-emerald-400/50",
+        ready: "bg-gradient-to-br from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white shadow-lg shadow-orange-500/40 hover:shadow-orange-400/60 hover:scale-105 border-2 border-orange-400/50",
         unready:
-            "bg-gradient-to-br from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 shadow-lg shadow-amber-500/40 hover:shadow-amber-400/60 hover:scale-105 border-2 border-amber-400/50",
+            "bg-orange-500/15 text-orange-400 hover:bg-orange-500/25 hover:scale-105 border-2 border-orange-500/60",
         starting:
-            "bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-lg shadow-violet-500/50 border-2 border-violet-400/50 cursor-wait",
-        lockin: "bg-gradient-to-br from-cyan-500 via-blue-500 to-blue-600 hover:from-cyan-400 hover:via-blue-400 hover:to-blue-500 text-white shadow-xl shadow-blue-500/50 hover:shadow-blue-400/70 hover:scale-110 border-2 border-cyan-400/60 hover:border-cyan-300",
+            "bg-gradient-to-br from-orange-500/70 to-orange-600/70 text-white shadow-lg shadow-orange-500/30 border-2 border-orange-400/40 cursor-wait",
+        lockin: "bg-gradient-to-br from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white shadow-lg shadow-orange-500/40 hover:shadow-orange-400/60 hover:scale-105 border-2 border-orange-400/50",
         disabled:
             "bg-slate-700/50 text-slate-500 cursor-not-allowed border-2 border-slate-600/30 shadow-none"
     };
@@ -73,8 +73,8 @@ export const ReadyButton: Component<ReadyButtonProps> = (props) => {
             onClick={handleClick}
             disabled={isDisabled()}
             class={`
-                group relative overflow-hidden
-                rounded-lg px-12 py-4
+                group relative w-52
+                overflow-hidden rounded-lg py-4 text-center
                 text-[0.95rem] font-bold uppercase tracking-wider
                 transition-all duration-300 ease-out
                 active:scale-95 disabled:active:scale-100

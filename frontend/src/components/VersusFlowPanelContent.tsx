@@ -1,12 +1,13 @@
 import { Component, Show, createMemo, createSignal } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
-import { Pencil, Check, Share2 } from "lucide-solid";
+import { Pencil, Check, Share2, Pause, Play } from "lucide-solid";
 import { track } from "../utils/analytics";
 import { useVersusContext } from "../contexts/VersusContext";
 import { VersusChatPanel } from "./VersusChatPanel";
 import { FlowBackLink } from "./FlowBackLink";
 import { PickChangeModal } from "./PickChangeModal";
 import { VersionFooter } from "./VersionFooter";
+import { IconDisplay } from "./IconDisplay";
 import { WinnerReporter } from "./WinnerReporter";
 import { GameSettingsGrid } from "./GameSettingsGrid";
 import { canReportWinner } from "../utils/versusPermissions";
@@ -127,20 +128,88 @@ const VersusFlowPanelContent: Component = () => {
             {/* Match Info Section - shown when in a series */}
             <Show when={isInSeries() && versusDraft()}>
                 <div class="flex flex-col gap-2 px-3">
-                    {/* Series name display - mirrors canvas selector styling */}
-                    <div class="flex h-10 w-full items-center justify-between rounded-md border border-orange-500/60 bg-slate-800 px-3 py-2">
-                        <span class="truncate text-slate-50">
-                            {versusDraft()?.name ?? ""}
-                        </span>
-                        <Show when={isOwner()}>
+                    {/* Combined title bar: split-button with icon segment */}
+                    <div class="group/bar flex">
+                        {/* Left: icon + name */}
+                        <div class="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-l-md border border-r-0 border-orange-700 bg-slate-800 px-2 transition-colors group-hover/bar:border-orange-400">
+                            {/* Series icon with description tooltip */}
+                            <div class="group/icon relative flex-shrink-0">
+                                <IconDisplay
+                                    icon={versusDraft()?.icon}
+                                    defaultIcon="⚔️"
+                                    size="xs"
+                                    className="rounded-md"
+                                />
+                                <Show when={versusDraft()?.description}>
+                                    <div class="pointer-events-none absolute left-0 top-full z-50 mt-2 w-52 rounded-lg border border-slate-600/80 bg-slate-800 px-3 py-2.5 text-xs leading-relaxed text-slate-300 opacity-0 shadow-xl transition-opacity duration-200 group-hover/icon:opacity-100">
+                                        <div class="absolute -top-1.5 left-3 h-3 w-3 rotate-45 border-l border-t border-slate-600/80 bg-slate-800" />
+                                        <p class="relative">
+                                            {versusDraft()?.description}
+                                        </p>
+                                    </div>
+                                </Show>
+                            </div>
+
+                            <span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-50">
+                                {versusDraft()?.name ?? ""}
+                            </span>
+                        </div>
+
+                        {/* Right: action icons segment */}
+                        <div class="flex h-10 flex-shrink-0 items-stretch overflow-hidden rounded-r-md border border-l-0 border-orange-700 bg-slate-700 text-slate-400 transition-colors group-hover/bar:border-orange-400">
+                            <Show when={isOwner()}>
+                                <button
+                                    onClick={() => setShowEditDialog(true)}
+                                    class="flex items-center px-2.5 transition-colors hover:bg-orange-600 hover:text-slate-200"
+                                    title="Edit series"
+                                >
+                                    <Pencil size={14} />
+                                </button>
+                            </Show>
+
                             <button
-                                onClick={() => setShowEditDialog(true)}
-                                class="rounded p-1 text-slate-400 transition-colors hover:text-slate-200"
-                                title="Edit series"
+                                onClick={handleCopyLink}
+                                class={`flex items-center px-2.5 transition-colors ${
+                                    copied()
+                                        ? "text-orange-400"
+                                        : "hover:bg-orange-600 hover:text-slate-200"
+                                }`}
+                                title={copied() ? "Link copied!" : "Share invite link"}
                             >
-                                <Pencil size={14} />
+                                {copied() ? (
+                                    <Check size={14} class="text-orange-400" />
+                                ) : (
+                                    <Share2 size={14} />
+                                )}
                             </button>
-                        </Show>
+
+                            <Show
+                                when={
+                                    isInDraftView() &&
+                                    callbacks()?.draftStarted() &&
+                                    !draftState()?.completed &&
+                                    !isSpectator()
+                                }
+                            >
+                                <button
+                                    onClick={() => callbacks()?.handlePause()}
+                                    class={`flex items-center px-2.5 transition-colors hover:bg-orange-600 hover:text-slate-200 ${
+                                        draftState()?.isPaused ? "text-orange-400" : ""
+                                    }`}
+                                    title={
+                                        draftState()?.isPaused
+                                            ? "Resume draft"
+                                            : "Pause draft"
+                                    }
+                                >
+                                    {draftState()?.isPaused ? (
+                                        <Play size={14} />
+                                    ) : (
+                                        <Pause size={14} />
+                                    )}
+                                </button>
+                            </Show>
+                        </div>
                     </div>
 
                     <RoleSwitcher
@@ -177,67 +246,29 @@ const VersusFlowPanelContent: Component = () => {
                 </div>
             </Show>
 
-            {/* Invite Section */}
-            <Show when={isInSeries() && versusDraft()}>
-                <div class="px-3">
-                    <button
-                        onClick={handleCopyLink}
-                        class="flex w-full items-center justify-center gap-2 rounded-lg border border-orange-500/60 bg-slate-700/50 px-3 py-2 text-sm font-medium text-slate-200 transition-all hover:border-orange-400/60 hover:bg-slate-700"
-                    >
-                        {copied() ? (
-                            <>
-                                <Check size={16} class="text-orange-400" />
-                                <span class="text-orange-400">Link Copied!</span>
-                            </>
-                        ) : (
-                            <>
-                                <Share2 size={16} />
-                                Share Invite Link
-                            </>
-                        )}
-                    </button>
-                </div>
-            </Show>
-
             {/* Winner Reporter - shown when draft is completed */}
-            <Show
-                when={isInDraftView() && draftState()?.completed && draftState()?.draft}
-            >
-                <div class="px-3">
-                    <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                        Winner
-                    </div>
-                    <WinnerReporter
-                        draftId={draftState()?.draft?.id ?? ""}
-                        blueTeamName={blueSideTeamName() ?? ""}
-                        redTeamName={redSideTeamName() ?? ""}
-                        currentWinner={draftState()?.draft?.winner}
-                        canEdit={canEditWinner()}
-                        onReportWinner={handleReportWinner}
-                    />
-                </div>
-            </Show>
-
-            {/* Pause Button */}
             <Show
                 when={
                     isInDraftView() &&
-                    callbacks()?.draftStarted() &&
-                    !draftState()?.completed &&
-                    !isSpectator()
+                    draftState()?.completed &&
+                    draftState()?.draft &&
+                    draftState()?.draftId === params.draftId
                 }
             >
-                <div class="px-3">
-                    <button
-                        onClick={() => callbacks()?.handlePause()}
-                        class={`w-full rounded px-3 py-1.5 text-sm font-medium transition-all active:scale-[0.98] ${
-                            draftState()?.isPaused
-                                ? "border border-yellow-500/60 bg-yellow-500/15 font-bold text-yellow-400 hover:bg-yellow-500/25"
-                                : "border border-slate-600/50 bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
-                        }`}
-                    >
-                        {draftState()?.isPaused ? "Resume Draft" : "Pause Draft"}
-                    </button>
+                <div class="flex justify-center px-3 pt-4">
+                    <div class="relative">
+                        <span class="absolute -top-[22px] left-1/2 -translate-x-1/2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                            Winner
+                        </span>
+                        <WinnerReporter
+                            draftId={draftState()?.draft?.id ?? ""}
+                            blueTeamName={blueSideTeamName() ?? ""}
+                            redTeamName={redSideTeamName() ?? ""}
+                            currentWinner={draftState()?.draft?.winner}
+                            canEdit={canEditWinner()}
+                            onReportWinner={handleReportWinner}
+                        />
+                    </div>
                 </div>
             </Show>
 
@@ -247,6 +278,7 @@ const VersusFlowPanelContent: Component = () => {
                     isInDraftView() &&
                     draftState()?.completed &&
                     draftState()?.draft &&
+                    draftState()?.draftId === params.draftId &&
                     callbacks() &&
                     !isSpectator()
                 }

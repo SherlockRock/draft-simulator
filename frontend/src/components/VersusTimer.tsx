@@ -42,9 +42,13 @@ export const VersusTimer: Component<VersusTimerProps> = (props) => {
     return (
         <Show
             when={props.timerStartedAt}
-            fallback={<div class="text-2xl font-bold text-slate-400">--</div>}
+            fallback={
+                <div class="flex h-9 items-center justify-center text-2xl font-bold text-slate-400">
+                    --
+                </div>
+            }
         >
-            <div class="text-center">
+            <div class="flex h-9 items-center justify-center text-center">
                 <Show
                     when={!props.isPaused}
                     fallback={

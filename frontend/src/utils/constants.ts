@@ -627,10 +627,7 @@ const SPECIAL_SPLASH_URLS: Record<string, string> = {
     "Xin Zhao": `${CD_BASE}/xinzhao/skins/base/images/xinzhaorework_splash_centered_0.xinzhaorework.jpg`,
     // Newer champions with .name.jpg format
     Aurora: `${CD_BASE}/aurora/skins/base/images/aurora_splash_centered_0.aurora.jpg`,
-    Briar: `${CD_BASE}/briar/skins/base/images/briar_splash_centered_0.briar.jpg`,
     Mel: `${CD_BASE}/mel/skins/base/images/mel_splash_centered_0.mel.jpg`,
-    Naafiri: `${CD_BASE}/naafiri/skins/base/images/naafiri_splash_centered_0.naafiri.jpg`,
-    Smolder: `${CD_BASE}/smolder/skins/base/images/smolder_splash_centered_0.smolder.jpg`,
     Yunara: `${CD_BASE}/yunara/skins/base/images/yunara_splash_centered_0.yunara.jpg`,
     Zaahen: `${CD_BASE}/zaahen/skins/base/images/zaahen_splash_centered_0.zaahen.jpg`
 };

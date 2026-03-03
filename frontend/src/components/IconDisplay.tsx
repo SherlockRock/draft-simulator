@@ -4,7 +4,7 @@ import { champions } from "../utils/constants";
 interface IconDisplayProps {
     icon?: string | null;
     defaultIcon?: string;
-    size?: "sm" | "md" | "lg";
+    size?: "xs" | "sm" | "md" | "lg";
     className?: string;
 }
 
@@ -17,6 +17,8 @@ export const IconDisplay: Component<IconDisplayProps> = (props) => {
 
     const getSizeClasses = () => {
         switch (props.size) {
+            case "xs":
+                return { container: "h-7 w-7", text: "text-lg", img: "h-7 w-7" };
             case "sm":
                 return { container: "h-10 w-10", text: "text-2xl", img: "h-10 w-10" };
             case "lg":

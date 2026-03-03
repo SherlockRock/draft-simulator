@@ -1,6 +1,6 @@
 import { Component, For, Show, createMemo } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
-import { Lock, ChevronRight } from "lucide-solid";
+import { Lock, ChevronRight, Flag } from "lucide-solid";
 import { draft } from "../utils/schemas";
 import { useVersusContext } from "../contexts/VersusContext";
 import { IconDisplay } from "../components/IconDisplay";
@@ -263,6 +263,7 @@ const VersusSeriesOverview: Component = () => {
                                                 </Show>
 
                                                 <div class="flex items-center justify-between p-5">
+                                                    {/* Left zone: game identity */}
                                                     <div class="flex items-center gap-4">
                                                         {/* Game number badge */}
                                                         <div
@@ -280,39 +281,87 @@ const VersusSeriesOverview: Component = () => {
                                                             {index() + 1}
                                                         </div>
 
-                                                        <div class="flex items-center gap-3">
-                                                            <h3
-                                                                class={`font-semibold ${gameTextColors[index() + 1] ?? "text-slate-100"}`}
-                                                            >
-                                                                Game {index() + 1}
-                                                            </h3>
+                                                        <h3
+                                                            class={`font-semibold ${gameTextColors[index() + 1] ?? "text-slate-100"}`}
+                                                        >
+                                                            Game {index() + 1}
+                                                        </h3>
 
-                                                            {/* Status indicator */}
-                                                            <span
-                                                                class={`rounded px-2.5 py-0.5 text-xs font-medium ${
-                                                                    status === "complete"
-                                                                        ? "bg-green-500/20 text-green-300"
-                                                                        : status ===
-                                                                            "active"
-                                                                          ? "bg-orange-500/20 text-orange-300"
-                                                                          : status ===
-                                                                              "locked"
-                                                                            ? "bg-slate-700/50 text-slate-500"
-                                                                            : "bg-slate-700/50 text-slate-400"
-                                                                }`}
-                                                            >
-                                                                {status === "complete"
-                                                                    ? "Complete"
+                                                        {/* Status indicator */}
+                                                        <span
+                                                            class={`rounded px-2.5 py-0.5 text-xs font-medium ${
+                                                                status === "complete"
+                                                                    ? "bg-green-500/20 text-green-300"
                                                                     : status === "active"
-                                                                      ? "In Progress"
+                                                                      ? "bg-orange-500/20 text-orange-300"
                                                                       : status ===
                                                                           "locked"
-                                                                        ? "Locked"
-                                                                        : "Upcoming"}
-                                                            </span>
+                                                                        ? "bg-slate-700/50 text-slate-500"
+                                                                        : "bg-slate-700/50 text-slate-400"
+                                                            }`}
+                                                        >
+                                                            {status === "complete"
+                                                                ? "Complete"
+                                                                : status === "active"
+                                                                  ? "In Progress"
+                                                                  : status === "locked"
+                                                                    ? "Locked"
+                                                                    : "Upcoming"}
+                                                        </span>
+                                                    </div>
 
-                                                            {/* Winner display / reporter */}
-                                                            <Show when={draft.completed}>
+                                                    {/* Right zone: 1st pick + winner + nav */}
+                                                    <div class="flex items-center gap-3">
+                                                        {/* 1st pick chip */}
+                                                        <Show
+                                                            when={
+                                                                status === "complete" ||
+                                                                status === "active"
+                                                            }
+                                                        >
+                                                            <span class="flex items-center gap-1.5 rounded-md bg-slate-700/50 px-2.5 py-1 text-xs font-medium text-slate-400">
+                                                                <Flag
+                                                                    size={10}
+                                                                    class="text-orange-400/70"
+                                                                />
+                                                                1st:{" "}
+                                                                <span class="text-slate-300">
+                                                                    {(() => {
+                                                                        const bst =
+                                                                            draft.blueSideTeam ||
+                                                                            1;
+                                                                        const blueName =
+                                                                            bst === 1
+                                                                                ? (versusDraft()
+                                                                                      ?.blueTeamName ??
+                                                                                  "")
+                                                                                : (versusDraft()
+                                                                                      ?.redTeamName ??
+                                                                                  "");
+                                                                        const redName =
+                                                                            bst === 1
+                                                                                ? (versusDraft()
+                                                                                      ?.redTeamName ??
+                                                                                  "")
+                                                                                : (versusDraft()
+                                                                                      ?.blueTeamName ??
+                                                                                  "");
+                                                                        return (draft.firstPick ||
+                                                                            "blue") ===
+                                                                            "blue"
+                                                                            ? blueName
+                                                                            : redName;
+                                                                    })()}
+                                                                </span>
+                                                            </span>
+                                                        </Show>
+
+                                                        {/* Winner reporter */}
+                                                        <Show when={draft.completed}>
+                                                            <div class="relative">
+                                                                <span class="absolute -top-[22px] left-1/2 -translate-x-1/2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                                                                    Winner
+                                                                </span>
                                                                 <WinnerReporter
                                                                     draftId={draft.id}
                                                                     blueTeamName={
@@ -353,56 +402,23 @@ const VersusSeriesOverview: Component = () => {
                                                                         )
                                                                     }
                                                                 />
-                                                            </Show>
-
-                                                            {/* Read-only first pick label for completed games */}
-                                                            <Show when={draft.completed}>
-                                                                <span class="text-[10px] text-slate-500">
-                                                                    1st Pick:{" "}
-                                                                    {(() => {
-                                                                        const bst =
-                                                                            draft.blueSideTeam ||
-                                                                            1;
-                                                                        const blueName =
-                                                                            bst === 1
-                                                                                ? (versusDraft()
-                                                                                      ?.blueTeamName ??
-                                                                                  "")
-                                                                                : (versusDraft()
-                                                                                      ?.redTeamName ??
-                                                                                  "");
-                                                                        const redName =
-                                                                            bst === 1
-                                                                                ? (versusDraft()
-                                                                                      ?.redTeamName ??
-                                                                                  "")
-                                                                                : (versusDraft()
-                                                                                      ?.blueTeamName ??
-                                                                                  "");
-                                                                        return (draft.firstPick ||
-                                                                            "blue") ===
-                                                                            "blue"
-                                                                            ? blueName
-                                                                            : redName;
-                                                                    })()}
-                                                                </span>
-                                                            </Show>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Right side: lock icon or arrow */}
-                                                    <Show
-                                                        when={accessible}
-                                                        fallback={
-                                                            <div class="text-slate-600">
-                                                                <Lock size={20} />
                                                             </div>
-                                                        }
-                                                    >
-                                                        <div class="text-slate-500 transition-transform duration-200 group-hover:translate-x-1 group-hover:text-slate-300">
-                                                            <ChevronRight size={20} />
-                                                        </div>
-                                                    </Show>
+                                                        </Show>
+
+                                                        {/* Nav icon */}
+                                                        <Show
+                                                            when={accessible}
+                                                            fallback={
+                                                                <div class="text-slate-600">
+                                                                    <Lock size={20} />
+                                                                </div>
+                                                            }
+                                                        >
+                                                            <div class="text-slate-500 transition-transform duration-200 group-hover:translate-x-1 group-hover:text-slate-300">
+                                                                <ChevronRight size={20} />
+                                                            </div>
+                                                        </Show>
+                                                    </div>
                                                 </div>
                                             </div>
                                         );

@@ -24,48 +24,51 @@ export const WinnerReporter: Component<WinnerReporterProps> = (props) => {
 
     const blueSelected = () => props.currentWinner === "blue";
     const redSelected = () => props.currentWinner === "red";
+    const noneSelected = () => !props.currentWinner;
 
     return (
         <div onClick={handleContainerClick}>
-            <div class="flex overflow-hidden rounded border border-slate-600/40">
+            <div class="flex items-center gap-1.5">
+                {/* Blue team button */}
                 <button
                     onClick={(e) => handleSelect(e, "blue")}
                     disabled={!props.canEdit}
-                    class={`group/btn flex flex-1 items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-all ${
+                    class={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-all ${
                         blueSelected()
-                            ? "bg-blue-500/30 text-blue-300"
-                            : props.canEdit
-                              ? "text-blue-400/60 hover:bg-blue-500/20 hover:text-blue-400"
-                              : "text-blue-400/40"
+                            ? "bg-blue-500/25 text-blue-300 ring-1 ring-blue-500/40"
+                            : noneSelected() && props.canEdit
+                              ? "bg-slate-700/40 text-slate-400 hover:bg-blue-500/15 hover:text-blue-400"
+                              : "bg-slate-700/30 text-slate-500"
                     } ${props.canEdit ? "cursor-pointer" : "cursor-default"}`}
                 >
                     <span
-                        class={`h-1.5 w-1.5 rounded-full transition-all ${
+                        class={`h-2 w-2 rounded-full transition-all ${
                             blueSelected()
-                                ? "bg-blue-400"
-                                : "bg-blue-500 opacity-40 group-hover/btn:opacity-70"
+                                ? "bg-blue-400 shadow-[0_0_6px_rgba(96,165,250,0.5)]"
+                                : "border border-slate-500"
                         }`}
                     />
                     <span class="truncate">{props.blueTeamName}</span>
                 </button>
-                <div class="w-px self-stretch bg-slate-600/40" />
+
+                {/* Red team button */}
                 <button
                     onClick={(e) => handleSelect(e, "red")}
                     disabled={!props.canEdit}
-                    class={`group/btn flex flex-1 items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-all ${
+                    class={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-all ${
                         redSelected()
-                            ? "bg-red-500/30 text-red-300"
-                            : props.canEdit
-                              ? "text-red-400/60 hover:bg-red-500/20 hover:text-red-400"
-                              : "text-red-400/40"
+                            ? "bg-red-500/25 text-red-300 ring-1 ring-red-500/40"
+                            : noneSelected() && props.canEdit
+                              ? "bg-slate-700/40 text-slate-400 hover:bg-red-500/15 hover:text-red-400"
+                              : "bg-slate-700/30 text-slate-500"
                     } ${props.canEdit ? "cursor-pointer" : "cursor-default"}`}
                 >
                     <span class="truncate">{props.redTeamName}</span>
                     <span
-                        class={`h-1.5 w-1.5 rounded-full transition-all ${
+                        class={`h-2 w-2 rounded-full transition-all ${
                             redSelected()
-                                ? "bg-red-400"
-                                : "bg-red-500 opacity-40 group-hover/btn:opacity-70"
+                                ? "bg-red-400 shadow-[0_0_6px_rgba(248,113,113,0.5)]"
+                                : "border border-slate-500"
                         }`}
                     />
                 </button>

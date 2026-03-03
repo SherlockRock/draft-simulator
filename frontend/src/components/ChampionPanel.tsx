@@ -79,13 +79,13 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
     const showBansInRestrictions = () => props.versusDraft()?.type === "ironman";
 
     // Champions not in restricted list (for Available section)
+    // Current game picks stay visible but are rendered as disabled
     const availableChampions = createMemo(() => {
         const restricted = new Set(props.restrictedChampions());
-        const currentPicks = new Set(props.draft()?.picks ?? []);
 
         return champions
             .map((champ, index) => ({ champ, index: String(index) }))
-            .filter(({ index }) => !restricted.has(index) && !currentPicks.has(index));
+            .filter(({ index }) => !restricted.has(index));
     });
 
     // Inner component for a single game's restricted champions row
@@ -233,12 +233,22 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                         <div class="grid grid-cols-5 gap-2">
                                             <For each={availableChampions()}>
                                                 {({ champ, index }) => {
+                                                    const isPicked = () =>
+                                                        (
+                                                            props.draft()?.picks ?? []
+                                                        ).includes(index);
                                                     const isPendingSelection = () =>
                                                         props.getCurrentPendingChampion() ===
                                                             index && props.isMyTurn();
                                                     const canSelect = () =>
                                                         props.isMyTurn() &&
+                                                        !isPicked() &&
                                                         !props.isPaused();
+                                                    const currentPickIndex = () => {
+                                                        const picks =
+                                                            props.draft()?.picks ?? [];
+                                                        return picks.indexOf(index);
+                                                    };
 
                                                     return (
                                                         <button
@@ -251,17 +261,83 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                             class={`relative aspect-square w-full overflow-hidden rounded border-2 transition-all ${
                                                                 isPendingSelection()
                                                                     ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
-                                                                    : canSelect()
-                                                                      ? "cursor-pointer border-slate-500 hover:scale-105 hover:border-slate-300"
-                                                                      : "cursor-default border-slate-600"
+                                                                    : isPicked() &&
+                                                                        !isPendingSelection()
+                                                                      ? `cursor-not-allowed ${gameBorderColors[currentGameNumber()] ?? "border-slate-700"}`
+                                                                      : canSelect()
+                                                                        ? "cursor-pointer border-slate-500 hover:scale-105 hover:border-slate-300"
+                                                                        : "cursor-default border-slate-600"
                                                             }`}
-                                                            title={champ.name}
+                                                            title={
+                                                                isPicked()
+                                                                    ? `${champ.name} - Game ${currentGameNumber()} ${getDraftPositionText(currentPickIndex())}`
+                                                                    : champ.name
+                                                            }
                                                         >
                                                             <img
                                                                 src={champ.img}
                                                                 alt={champ.name}
-                                                                class="h-full w-full object-cover"
+                                                                class={`h-full w-full object-cover ${
+                                                                    isPicked() &&
+                                                                    !isPendingSelection()
+                                                                        ? "opacity-40"
+                                                                        : ""
+                                                                }`}
                                                             />
+                                                            {/* Current game picked overlay badge */}
+                                                            <Show
+                                                                when={
+                                                                    isPicked() &&
+                                                                    !isPendingSelection()
+                                                                }
+                                                            >
+                                                                {(() => {
+                                                                    const parts =
+                                                                        getDraftPositionParts(
+                                                                            currentPickIndex()
+                                                                        );
+                                                                    const gameNum =
+                                                                        currentGameNumber();
+                                                                    return (
+                                                                        <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
+                                                                            <span
+                                                                                class={
+                                                                                    gameTextColorsMuted[
+                                                                                        gameNum
+                                                                                    ] ??
+                                                                                    "text-slate-300"
+                                                                                }
+                                                                            >
+                                                                                G{gameNum}
+                                                                            </span>
+                                                                            <span>
+                                                                                <span
+                                                                                    class={
+                                                                                        overlayTeamColor
+                                                                                    }
+                                                                                >
+                                                                                    T
+                                                                                    {
+                                                                                        parts.team
+                                                                                    }
+                                                                                </span>
+                                                                                <span
+                                                                                    class={getPositionColor(
+                                                                                        parts.type
+                                                                                    )}
+                                                                                >
+                                                                                    {
+                                                                                        parts.type
+                                                                                    }
+                                                                                    {
+                                                                                        parts.num
+                                                                                    }
+                                                                                </span>
+                                                                            </span>
+                                                                        </div>
+                                                                    );
+                                                                })()}
+                                                            </Show>
                                                         </button>
                                                     );
                                                 }}
@@ -323,7 +399,13 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                                       ? "cursor-pointer border-slate-500 hover:scale-105 hover:border-slate-300"
                                                                       : "cursor-default border-slate-600"
                                                         }`}
-                                                        title={champ.name}
+                                                        title={
+                                                            isSeriesRestricted()
+                                                                ? `${champ.name} - Game ${restrictionInfo()?.gameNumber ?? 1} ${getDraftPositionText(restrictionInfo()?.pickIndex ?? 0)}`
+                                                                : isPicked()
+                                                                  ? `${champ.name} - Game ${currentGameNumber()} ${getDraftPositionText(currentPickIndex())}`
+                                                                  : champ.name
+                                                        }
                                                     >
                                                         <img
                                                             src={champ.img}

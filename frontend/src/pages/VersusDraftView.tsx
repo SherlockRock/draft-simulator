@@ -17,7 +17,6 @@ import {
 } from "../contexts/VersusContext";
 import { getSuggestedRole } from "../workflows/VersusWorkflow";
 import {
-    VersusDraft,
     draft,
     VersusState,
     PickChangeRequested,
@@ -33,11 +32,7 @@ import {
     GameSettingsUpdateSchema,
     WinnerUpdateSchema
 } from "../utils/schemas";
-import {
-    fetchVersusDraft,
-    fetchDraft,
-    completeDraft
-} from "../utils/actions";
+import { fetchVersusDraft, fetchDraft, completeDraft } from "../utils/actions";
 import { Socket } from "socket.io-client";
 import { validateSocketEvent } from "../utils/socketValidation";
 import { getEffectivePickOrder, getPicksArrayIndex } from "../utils/versusPickOrder";
@@ -95,6 +90,8 @@ const VersusDraftView: Component = () => {
         firstPick: "blue",
         blueSideTeam: 1
     });
+    // Gate panel registration on first socket sync to prevent stale/pre-sync data flash
+    const [hasSynced, setHasSynced] = createSignal(false);
 
     // Sync context's versusDraft (updated via sockets) to query cache
     createEffect(() => {
@@ -108,6 +105,7 @@ const VersusDraftView: Component = () => {
     // (socket draftStateSync will update with real values shortly after)
     createEffect(() => {
         const draftId = params.draftId;
+        setHasSynced(false);
         setVersusState({
             draftId,
             currentPickIndex: 0,
@@ -268,8 +266,12 @@ const VersusDraftView: Component = () => {
                 DraftStateSyncSchema
             );
             if (!data) return;
-            queryClient.setQueryData(["draft", params.draftId], (prev: draft | undefined) =>
-                prev ? { ...prev, picks: data.picks, completed: data.completed } : prev
+            queryClient.setQueryData(
+                ["draft", params.draftId],
+                (prev: draft | undefined) =>
+                    prev
+                        ? { ...prev, picks: data.picks, completed: data.completed }
+                        : prev
             );
             setVersusState({
                 draftId: data.draftId,
@@ -282,6 +284,7 @@ const VersusDraftView: Component = () => {
                 firstPick: data.firstPick,
                 blueSideTeam: data.blueSideTeam
             });
+            setHasSynced(true);
         });
 
         // Listen for ready updates
@@ -311,8 +314,12 @@ const VersusDraftView: Component = () => {
         socket.on("draftUpdate", (rawData: unknown) => {
             const data = validateSocketEvent("draftUpdate", rawData, DraftUpdateSchema);
             if (!data) return;
-            queryClient.setQueryData(["draft", params.draftId], (prev: draft | undefined) =>
-                prev ? { ...prev, picks: data.picks, completed: data.completed } : prev
+            queryClient.setQueryData(
+                ["draft", params.draftId],
+                (prev: draft | undefined) =>
+                    prev
+                        ? { ...prev, picks: data.picks, completed: data.completed }
+                        : prev
             );
             setVersusState((prev) => ({
                 ...prev,
@@ -432,14 +439,16 @@ const VersusDraftView: Component = () => {
                     firstPick: data.firstPick,
                     blueSideTeam: data.blueSideTeam
                 }));
-                queryClient.setQueryData(["draft", params.draftId], (prev: draft | undefined) =>
-                    prev
-                        ? {
-                              ...prev,
-                              firstPick: data.firstPick,
-                              blueSideTeam: data.blueSideTeam
-                          }
-                        : prev
+                queryClient.setQueryData(
+                    ["draft", params.draftId],
+                    (prev: draft | undefined) =>
+                        prev
+                            ? {
+                                  ...prev,
+                                  firstPick: data.firstPick,
+                                  blueSideTeam: data.blueSideTeam
+                              }
+                            : prev
                 );
             }
         });
@@ -453,8 +462,10 @@ const VersusDraftView: Component = () => {
             );
             if (!data) return;
             if (data.draftId === params.draftId) {
-                queryClient.setQueryData(["draft", params.draftId], (prev: draft | undefined) =>
-                    prev ? { ...prev, winner: data.winner } : prev
+                queryClient.setQueryData(
+                    ["draft", params.draftId],
+                    (prev: draft | undefined) =>
+                        prev ? { ...prev, winner: data.winner } : prev
                 );
                 setVersusState((prev) => ({
                     ...prev,
@@ -514,9 +525,12 @@ const VersusDraftView: Component = () => {
     });
 
     // Register draft state with workflow context for FlowPanel
+    // Before socket sync: use draftQuery.data for completed/winner (instant for completed drafts)
+    // After socket sync: use versusState (real-time authoritative source)
     createEffect(() => {
         const draftData = draftQuery.data;
         const state = versusState();
+        const synced = hasSynced();
 
         if (draftData && state) {
             const activeState: ActiveDraftState = {
@@ -525,11 +539,13 @@ const VersusDraftView: Component = () => {
                 timerStartedAt: state.timerStartedAt,
                 isPaused: state.isPaused,
                 readyStatus: state.readyStatus,
-                completed: state.completed,
-                winner: state.winner,
+                completed: synced ? state.completed : (draftData.completed ?? false),
+                winner: synced ? state.winner : draftData.winner,
                 draft: draftData
             };
             registerDraftState(activeState);
+        } else {
+            unregisterDraftState();
         }
 
         onCleanup(() => {
@@ -926,7 +942,9 @@ const VersusDraftView: Component = () => {
                                 </div>
                                 <GameSettingsGrid
                                     draftId={params.draftId}
-                                    teamOneName={versusDraftQuery.data?.blueTeamName ?? ""}
+                                    teamOneName={
+                                        versusDraftQuery.data?.blueTeamName ?? ""
+                                    }
                                     teamTwoName={versusDraftQuery.data?.redTeamName ?? ""}
                                     blueSideTeam={
                                         (versusState().blueSideTeam || 1) as 1 | 2
@@ -1089,7 +1107,7 @@ const VersusDraftView: Component = () => {
                                 </div>
 
                                 {/* Bans */}
-                                <div class="mb-6">
+                                <div class="mb-6 mt-2">
                                     <div class="flex justify-between gap-[clamp(1rem,5vw,6rem)]">
                                         <div class="flex min-w-0 flex-1 gap-2">
                                             <For each={getTeamBans("blue")}>
@@ -1097,7 +1115,7 @@ const VersusDraftView: Component = () => {
                                                     <div
                                                         class={`relative aspect-square flex-1 overflow-hidden rounded border-2 bg-slate-800 transition-all ${
                                                             isBanActive("blue", index())
-                                                                ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
+                                                                ? "animate-pulse border-orange-400 ring-4 ring-orange-400/50"
                                                                 : "border-blue-600/30"
                                                         }`}
                                                     >
@@ -1125,7 +1143,7 @@ const VersusDraftView: Component = () => {
                                                     <div
                                                         class={`relative aspect-square flex-1 overflow-hidden rounded border-2 bg-slate-800 transition-all ${
                                                             isBanActive("red", index())
-                                                                ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
+                                                                ? "animate-pulse border-orange-400 ring-4 ring-orange-400/50"
                                                                 : "border-red-600/30"
                                                         }`}
                                                     >
@@ -1160,9 +1178,9 @@ const VersusDraftView: Component = () => {
                                                     <div
                                                         class={`relative min-h-0 flex-1 overflow-hidden rounded border-2 bg-slate-900 transition-all ${
                                                             isPickActive("blue", index())
-                                                                ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
+                                                                ? "animate-pulse border-orange-400 ring-4 ring-orange-400/50"
                                                                 : "border-blue-600/30"
-                                                        }`}
+                                                        } ${isSlotAnimating("blue", "pick", index()) ? "animate-pop" : ""}`}
                                                     >
                                                         <Show when={pick && pick !== ""}>
                                                             <img
@@ -1176,9 +1194,9 @@ const VersusDraftView: Component = () => {
                                                                         parseInt(pick)
                                                                     ].name
                                                                 }
-                                                                class={`h-full w-full -translate-x-[15%] scale-[1.25] object-cover object-[center_25%] ${isSlotAnimating("blue", "pick", index()) ? "animate-pop" : ""}`}
+                                                                class="h-full w-full -translate-x-[15%] scale-[1.25] object-cover object-[center_25%]"
                                                             />
-                                                            <div class="absolute inset-0 bg-gradient-to-r from-transparent via-transparent via-70% to-black" />
+                                                            <div class="absolute inset-0 bg-gradient-to-r from-transparent via-transparent via-50% to-black" />
                                                             <span class="absolute bottom-2 right-3 text-lg font-semibold tracking-wide text-slate-100 drop-shadow-lg">
                                                                 {
                                                                     champions[
@@ -1201,9 +1219,9 @@ const VersusDraftView: Component = () => {
                                                     <div
                                                         class={`relative min-h-0 flex-1 overflow-hidden rounded border-2 bg-slate-900 transition-all ${
                                                             isPickActive("red", index())
-                                                                ? "animate-pulse border-4 border-yellow-400 ring-4 ring-yellow-400/50"
+                                                                ? "animate-pulse border-orange-400 ring-4 ring-orange-400/50"
                                                                 : "border-red-600/30"
-                                                        }`}
+                                                        } ${isSlotAnimating("red", "pick", index()) ? "animate-pop" : ""}`}
                                                     >
                                                         <Show when={pick && pick !== ""}>
                                                             <img
@@ -1217,9 +1235,9 @@ const VersusDraftView: Component = () => {
                                                                         parseInt(pick)
                                                                     ].name
                                                                 }
-                                                                class={`h-full w-full translate-x-[15%] scale-[1.25] object-cover object-[center_25%] ${isSlotAnimating("red", "pick", index()) ? "animate-pop" : ""}`}
+                                                                class="h-full w-full translate-x-[15%] scale-[1.25] object-cover object-[center_25%]"
                                                             />
-                                                            <div class="absolute inset-0 bg-gradient-to-l from-transparent via-transparent via-70% to-black" />
+                                                            <div class="absolute inset-0 bg-gradient-to-l from-transparent via-transparent via-50% to-black" />
                                                             <span class="absolute bottom-2 left-3 text-lg font-semibold tracking-wide text-slate-100 drop-shadow-lg">
                                                                 {
                                                                     champions[
@@ -1275,7 +1293,7 @@ const VersusDraftView: Component = () => {
                                         >
                                             <button
                                                 onClick={handlePause}
-                                                class="rounded-lg border border-yellow-500/60 bg-yellow-500/15 px-12 py-4 text-[0.95rem] font-bold uppercase tracking-wider text-yellow-400 transition-all hover:bg-yellow-500/25"
+                                                class="w-52 rounded-lg border-2 border-orange-500/60 bg-orange-500/15 py-4 text-center text-[0.95rem] font-bold uppercase tracking-wider text-orange-400 transition-all duration-300 ease-out hover:scale-105 hover:bg-orange-500/25 active:scale-95"
                                             >
                                                 Resume Draft
                                             </button>

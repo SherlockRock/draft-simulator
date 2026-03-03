@@ -15,7 +15,7 @@ export default {
             keyframes: {
                 pop: {
                     "0%": { transform: "scale(1)", filter: "brightness(1)" },
-                    "50%": { transform: "scale(1.15)", filter: "brightness(1.3)" },
+                    "50%": { transform: "scale(1.08)", filter: "brightness(1.3)" },
                     "100%": { transform: "scale(1)", filter: "brightness(1)" }
                 }
             }
