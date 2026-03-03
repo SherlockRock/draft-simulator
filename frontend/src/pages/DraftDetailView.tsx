@@ -1,4 +1,4 @@
-import { Component, Show, createMemo } from "solid-js";
+import { Component, Show, createMemo, createEffect } from "solid-js";
 import Draft from "../Draft";
 import { useDraftContext } from "../workflows/DraftWorkflow";
 import { useCanvasContext } from "../contexts/CanvasContext";
@@ -7,7 +7,28 @@ import { CanvasGroup } from "../utils/schemas";
 
 const DraftDetailView: Component = () => {
     const { draft, mutateDraft } = useDraftContext();
-    const { canvas } = useCanvasContext();
+    const { canvas, mutateCanvas } = useCanvasContext();
+
+    // Sync draft pick changes back into the canvas resource so the canvas
+    // view reflects the latest picks without a refetch when navigating back.
+    createEffect(() => {
+        const d = draft();
+        if (!d) return;
+        const picks = [...d.picks];
+        const draftId = d.id;
+
+        mutateCanvas((prev) => {
+            if (!prev?.drafts) return prev;
+            return {
+                ...prev,
+                drafts: prev.drafts.map((cd: CanvasDraft) =>
+                    cd.Draft.id === draftId
+                        ? { ...cd, Draft: { ...cd.Draft, picks } }
+                        : cd
+                )
+            };
+        });
+    });
 
     // Find the group containing this draft and compute team names
     const teamNames = createMemo(() => {

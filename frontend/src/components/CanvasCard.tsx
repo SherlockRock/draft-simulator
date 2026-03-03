@@ -96,7 +96,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                 "absolute z-30": !props.isGrouped || props.groupType === "custom",
                 "ring-4 ring-blue-400": props.isConnectionMode && !selected(),
                 "ring-4 ring-green-400": selected(),
-                "flex-shrink-0": props.isGrouped && props.groupType === "series"
+                "relative flex-shrink-0": props.isGrouped && props.groupType === "series"
             }}
             style={{
                 ...(props.isGrouped && props.groupType === "custom"

@@ -413,7 +413,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         if (dbParticipant) {
           const roleAvailable = versusSessionManager.isRoleAvailable(
             versusDraftId,
-            dbParticipant.role
+            dbParticipant.role,
           );
 
           if (roleAvailable) {
@@ -423,7 +423,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
               socket,
               visitorId,
               dbParticipant.role,
-              dbParticipant.id
+              dbParticipant.id,
             );
 
             // Update DB record with new reclaim token
@@ -433,7 +433,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
             });
 
             console.log(
-              `User reclaimed role on reconnect: ${dbParticipant.role}`
+              `User reclaimed role on reconnect: ${dbParticipant.role}`,
             );
           }
         }
@@ -445,7 +445,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       if (!myParticipant) {
         const existing = versusSessionManager.getParticipantBySocket(
           versusDraftId,
-          socket.id
+          socket.id,
         );
         if (existing) {
           myParticipant = existing;
@@ -483,6 +483,14 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   socket.on("joinVersusDraft", async (data) => {
     try {
       const { versusDraftId, draftId, role, participantId } = data;
+
+      // Leave any previous draft rooms before joining the new one
+      // (prevents receiving stale events from old draft rooms when navigating between games)
+      for (const room of socket.rooms) {
+        if (room.startsWith("draft:") && room !== `draft:${draftId}`) {
+          socket.leave(room);
+        }
+      }
 
       // Join rooms
       socket.join(`versus:${versusDraftId}`);
@@ -532,7 +540,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       // Get participant info
       const participant = versusSessionManager.getParticipantBySocket(
         versusDraftId,
-        socket.id
+        socket.id,
       );
 
       const isCaptain =
@@ -560,7 +568,11 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
 
       // Don't allow changes after draft has started
       const state = getState(draftId);
-      if (state && state.timerStartedAt !== null && state.currentPickIndex > 0) {
+      if (
+        state &&
+        state.timerStartedAt !== null &&
+        state.currentPickIndex > 0
+      ) {
         return socket.emit("error", {
           message: "Cannot change settings after draft has started",
         });
@@ -725,7 +737,10 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       }
 
       // Check if champion is already picked (excluding current pending slot)
-      const picksIndex = getPicksArrayIndex(state.currentPickIndex, state.firstPick || "blue");
+      const picksIndex = getPicksArrayIndex(
+        state.currentPickIndex,
+        state.firstPick || "blue",
+      );
       const picksWithoutCurrent = draft.picks.filter(
         (_, idx) => idx !== picksIndex,
       );
@@ -745,7 +760,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
           const restrictedChampions = getRestrictedChampions(
             versusDraft.type,
             versusDraft.Drafts,
-            draft.seriesIndex
+            draft.seriesIndex,
           );
 
           if (restrictedChampions.includes(champion)) {
@@ -1205,7 +1220,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       // Get participant info for this socket
       const participant = versusSessionManager.getParticipantBySocket(
         versusDraftId,
-        socket.id
+        socket.id,
       );
 
       const isCaptain =
@@ -1283,6 +1298,7 @@ async function processPickLock(io, draftId, team) {
       io.to(`versus:${draft.versus_draft_id}`).emit("versusDraftStatusUpdate", {
         draftId,
         completed: true,
+        picks: draft.picks,
       });
     }
   }

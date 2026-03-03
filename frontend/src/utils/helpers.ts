@@ -140,6 +140,74 @@ export const getAnchorScreenPosition = (
     return worldToScreen(worldPos.x, worldPos.y, viewport);
 };
 
+// Series group layout constants (must match SeriesGroupContainer.tsx)
+export const SERIES_HEADER_HEIGHT = 56;
+export const SERIES_PADDING = 20;
+export const SERIES_CARD_GAP = 24;
+
+/**
+ * Computes the pixel dimensions of a series group container
+ * based on the number of drafts and the current layout toggle.
+ */
+export const getSeriesGroupDimensions = (
+    draftCount: number,
+    layoutToggle: boolean
+): { width: number; height: number } => {
+    const cw = cardWidth(layoutToggle);
+    const ch = cardHeight(layoutToggle);
+    return {
+        width:
+            2 * SERIES_PADDING +
+            draftCount * cw +
+            Math.max(0, draftCount - 1) * SERIES_CARD_GAP,
+        height: SERIES_HEADER_HEIGHT + 2 * SERIES_PADDING + ch
+    };
+};
+
+/**
+ * Computes the world-coordinate top-left corner of a draft card
+ * inside a series group, based on its sorted index in the group.
+ */
+export const getSeriesDraftWorldPosition = (
+    group: CanvasGroup,
+    draftIndex: number,
+    layoutToggle: boolean
+): { x: number; y: number } => {
+    const cw = cardWidth(layoutToggle);
+    return {
+        x: group.positionX + SERIES_PADDING + draftIndex * (cw + SERIES_CARD_GAP),
+        y: group.positionY + SERIES_HEADER_HEIGHT + SERIES_PADDING
+    };
+};
+
+/**
+ * Gets the anchor world position for a draft inside a series group.
+ * Uses computed layout position instead of stored positionX/Y.
+ */
+export const getSeriesDraftAnchorWorldPosition = (
+    group: CanvasGroup,
+    draftIndex: number,
+    anchorType: AnchorType,
+    layoutToggle: boolean
+): AnchorPosition => {
+    const base = getSeriesDraftWorldPosition(group, draftIndex, layoutToggle);
+    const cw = cardWidth(layoutToggle);
+    const ch = cardHeight(layoutToggle);
+
+    switch (anchorType) {
+        case "top":
+            return { x: base.x + cw / 2, y: base.y };
+        case "bottom":
+            return { x: base.x + cw / 2, y: base.y + ch };
+        case "left":
+            return { x: base.x, y: base.y + ch / 2 };
+        case "right":
+            return { x: base.x + cw, y: base.y + ch / 2 };
+        default:
+            return { x: base.x + cw / 2, y: base.y + ch / 2 };
+    }
+};
+
 /**
  * Calculate distance from point to line segment
  */

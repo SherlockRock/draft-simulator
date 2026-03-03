@@ -2197,6 +2197,26 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         ) ?? null
                                     );
                                 })()}
+                                seriesDraftIndex={(() => {
+                                    const draft = canvasDrafts.find(
+                                        (d) => d.Draft.id === connectionSource()!
+                                    );
+                                    if (!draft?.group_id) return undefined;
+                                    const group = canvasGroups.find(
+                                        (g) => g.id === draft.group_id
+                                    );
+                                    if (group?.type !== "series") return undefined;
+                                    const groupDrafts = canvasDrafts
+                                        .filter((d) => d.group_id === group.id)
+                                        .sort(
+                                            (a, b) =>
+                                                (a.Draft.seriesIndex ?? 0) -
+                                                (b.Draft.seriesIndex ?? 0)
+                                        );
+                                    return groupDrafts.findIndex(
+                                        (d) => d.Draft.id === draft.Draft.id
+                                    );
+                                })()}
                                 sourceAnchor={sourceAnchor()}
                                 mousePos={previewMousePos()}
                                 viewport={props.viewport}
@@ -2213,6 +2233,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 sourceAnchor={sourceAnchor()}
                                 mousePos={previewMousePos()}
                                 viewport={props.viewport}
+                                seriesDraftCount={(() => {
+                                    const group = canvasGroups.find(
+                                        (g) => g.id === groupConnectionSource()!
+                                    );
+                                    if (group?.type !== "series") return undefined;
+                                    return canvasDrafts.filter(
+                                        (d) => d.group_id === group.id
+                                    ).length;
+                                })()}
+                                layoutToggle={props.layoutToggle}
                             />
                         </Show>
                     </svg>
@@ -2293,6 +2323,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 onDeleteGroup={handleDeleteGroup}
                                 canEdit={canEdit}
                                 isConnectionMode={isConnectionMode()}
+                                layoutToggle={props.layoutToggle}
+                                onSelectAnchor={onGroupAnchorClick}
+                                isGroupSelected={groupConnectionSource() === group.id}
+                                sourceAnchor={sourceAnchor()}
                                 renderDraftCard={(cd) => {
                                     // Compute team names based on blueSideTeam
                                     const bst = cd.Draft.blueSideTeam ?? 1;

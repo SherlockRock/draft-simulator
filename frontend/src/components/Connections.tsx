@@ -11,6 +11,9 @@ import { ContextMenuPosition } from "../utils/types";
 import {
     getAnchorScreenPosition,
     getGroupAnchorScreenPosition,
+    getSeriesGroupDimensions,
+    getSeriesDraftWorldPosition,
+    getSeriesDraftAnchorWorldPosition,
     worldToScreen,
     screenToWorld,
     cardWidth,
@@ -63,6 +66,19 @@ export const ConnectionComponent = (props: {
         if (endpoint.type === "group") {
             const group = props.groups.find((g) => g.id === endpoint.group_id);
             if (!group) return null;
+            // Series groups need computed dimensions (no stored width/height)
+            if (group.type === "series") {
+                const groupDrafts = props.drafts.filter((d) => d.group_id === group.id);
+                const dims = getSeriesGroupDimensions(
+                    groupDrafts.length,
+                    props.layoutToggle()
+                );
+                return getGroupAnchorScreenPosition(
+                    { ...group, width: dims.width, height: dims.height },
+                    endpoint.anchor_type,
+                    props.viewport()
+                );
+            }
             return getGroupAnchorScreenPosition(
                 group,
                 endpoint.anchor_type,
@@ -71,12 +87,27 @@ export const ConnectionComponent = (props: {
         }
         const draft = findDraft(endpoint.draft_id);
         if (!draft) return null;
+        const group = findGroupForDraft(draft);
+        // Series group drafts: compute position from flexbox layout
+        if (group?.type === "series") {
+            const groupDrafts = props.drafts
+                .filter((d) => d.group_id === group.id)
+                .sort((a, b) => (a.Draft.seriesIndex ?? 0) - (b.Draft.seriesIndex ?? 0));
+            const index = groupDrafts.findIndex((d) => d.Draft.id === draft.Draft.id);
+            const worldPos = getSeriesDraftAnchorWorldPosition(
+                group,
+                index,
+                endpoint.anchor_type,
+                props.layoutToggle()
+            );
+            return worldToScreen(worldPos.x, worldPos.y, props.viewport());
+        }
         return getAnchorScreenPosition(
             draft,
             endpoint.anchor_type,
             props.layoutToggle(),
             props.viewport(),
-            findGroupForDraft(draft)
+            group
         );
     };
 
@@ -397,22 +428,48 @@ export const ConnectionPreview = (props: {
     mousePos: { x: number; y: number } | null;
     viewport: () => Viewport;
     layoutToggle: () => boolean;
+    seriesDraftIndex?: number;
 }) => {
     const startPos = () => {
+        const isSeriesGroup = props.startGroup?.type === "series";
+        const seriesIndex = props.seriesDraftIndex ?? 0;
+
         if (!props.sourceAnchor) {
             const vp = props.viewport();
             const currentWidth = cardWidth(props.layoutToggle());
             const currentHeight = cardHeight(props.layoutToggle());
-            let baseX = props.startDraft.positionX;
-            let baseY = props.startDraft.positionY;
-            if (props.startGroup) {
-                baseX += props.startGroup.positionX;
-                baseY += props.startGroup.positionY;
+            let baseX: number;
+            let baseY: number;
+            if (isSeriesGroup && props.startGroup) {
+                const pos = getSeriesDraftWorldPosition(
+                    props.startGroup,
+                    seriesIndex,
+                    props.layoutToggle()
+                );
+                baseX = pos.x;
+                baseY = pos.y;
+            } else {
+                baseX = props.startDraft.positionX;
+                baseY = props.startDraft.positionY;
+                if (props.startGroup) {
+                    baseX += props.startGroup.positionX;
+                    baseY += props.startGroup.positionY;
+                }
             }
             return {
                 x: (baseX + currentWidth / 2 - vp.x) * vp.zoom,
                 y: (baseY + currentHeight / 2 - vp.y) * vp.zoom
             };
+        }
+
+        if (isSeriesGroup && props.startGroup) {
+            const worldPos = getSeriesDraftAnchorWorldPosition(
+                props.startGroup,
+                seriesIndex,
+                props.sourceAnchor.type,
+                props.layoutToggle()
+            );
+            return worldToScreen(worldPos.x, worldPos.y, props.viewport());
         }
 
         return getAnchorScreenPosition(
@@ -445,20 +502,38 @@ export const GroupConnectionPreview = (props: {
     sourceAnchor: { type: AnchorType } | null;
     mousePos: { x: number; y: number } | null;
     viewport: () => Viewport;
+    seriesDraftCount?: number;
+    layoutToggle?: () => boolean;
 }) => {
+    const effectiveGroup = () => {
+        if (
+            props.startGroup.type === "series" &&
+            props.seriesDraftCount !== undefined &&
+            props.layoutToggle
+        ) {
+            const dims = getSeriesGroupDimensions(
+                props.seriesDraftCount,
+                props.layoutToggle()
+            );
+            return { ...props.startGroup, width: dims.width, height: dims.height };
+        }
+        return props.startGroup;
+    };
+
     const startPos = () => {
+        const group = effectiveGroup();
         if (!props.sourceAnchor) {
             const vp = props.viewport();
-            const w = props.startGroup.width ?? 400;
-            const h = props.startGroup.height ?? 200;
+            const w = group.width ?? 400;
+            const h = group.height ?? 200;
             return {
-                x: (props.startGroup.positionX + w / 2 - vp.x) * vp.zoom,
-                y: (props.startGroup.positionY + h / 2 - vp.y) * vp.zoom
+                x: (group.positionX + w / 2 - vp.x) * vp.zoom,
+                y: (group.positionY + h / 2 - vp.y) * vp.zoom
             };
         }
 
         return getGroupAnchorScreenPosition(
-            props.startGroup,
+            group,
             props.sourceAnchor.type,
             props.viewport()
         );

@@ -268,7 +268,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
     );
 };
 
-const GroupAnchorPoints = (props: {
+export const GroupAnchorPoints = (props: {
     groupId: string;
     width: number;
     height: number;

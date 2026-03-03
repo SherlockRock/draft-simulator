@@ -18,6 +18,7 @@ import {
 import { getSuggestedRole } from "../workflows/VersusWorkflow";
 import {
     draft,
+    VersusDraft,
     VersusState,
     PickChangeRequested,
     HeartbeatSchema,
@@ -273,6 +274,21 @@ const VersusDraftView: Component = () => {
                         ? { ...prev, picks: data.picks, completed: data.completed }
                         : prev
             );
+            // Also sync picks into versusDraft.Drafts[] so restriction computation stays current
+            queryClient.setQueryData(
+                ["versusDraft", params.id],
+                (prev: VersusDraft | undefined) => {
+                    if (!prev?.Drafts) return prev;
+                    return {
+                        ...prev,
+                        Drafts: prev.Drafts.map((d) =>
+                            d.id === data.draftId
+                                ? { ...d, picks: data.picks, completed: data.completed }
+                                : d
+                        )
+                    };
+                }
+            );
             setVersusState({
                 draftId: data.draftId,
                 currentPickIndex: data.currentPickIndex,
@@ -320,6 +336,21 @@ const VersusDraftView: Component = () => {
                     prev
                         ? { ...prev, picks: data.picks, completed: data.completed }
                         : prev
+            );
+            // Also sync picks into versusDraft.Drafts[] so restriction computation stays current
+            queryClient.setQueryData(
+                ["versusDraft", params.id],
+                (prev: VersusDraft | undefined) => {
+                    if (!prev?.Drafts) return prev;
+                    return {
+                        ...prev,
+                        Drafts: prev.Drafts.map((d) =>
+                            d.id === data.draftId
+                                ? { ...d, picks: data.picks, completed: data.completed }
+                                : d
+                        )
+                    };
+                }
             );
             setVersusState((prev) => ({
                 ...prev,
@@ -564,14 +595,7 @@ const VersusDraftView: Component = () => {
         return currentPick?.team === myTeam;
     };
 
-    const isSpectator = () => myRole() === "spectator";
-
-    const getCurrentPickInfo = () => {
-        const state = versusState();
-        const effectiveOrder = getEffectivePickOrder(state.firstPick || "blue");
-        if (state.currentPickIndex >= effectiveOrder.length) return null;
-        return effectiveOrder[state.currentPickIndex];
-    };
+    const isSpectator = () => !myRole() || myRole() === "spectator";
 
     // Actions
     const handleReady = () => {
@@ -1298,15 +1322,6 @@ const VersusDraftView: Component = () => {
                                                 Resume Draft
                                             </button>
                                         </Show>
-                                    </div>
-                                </Show>
-
-                                {/* Current Pick Info */}
-                                <Show when={getCurrentPickInfo()}>
-                                    <div class="mt-4 text-center text-sm text-slate-400">
-                                        Current:{" "}
-                                        {getCurrentPickInfo()?.team?.toUpperCase() ?? ""}{" "}
-                                        {getCurrentPickInfo()?.type ?? ""}
                                     </div>
                                 </Show>
                             </div>

@@ -1,7 +1,9 @@
 import { For, Show, createMemo, Accessor, JSX } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { ExternalLink, Check, Trash2 } from "lucide-solid";
-import { CanvasDraft, CanvasGroup, Viewport } from "../utils/schemas";
+import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/schemas";
+import { getSeriesGroupDimensions } from "../utils/helpers";
+import { GroupAnchorPoints } from "./CustomGroupContainer";
 
 type SeriesGroupContainerProps = {
     group: CanvasGroup;
@@ -11,8 +13,13 @@ type SeriesGroupContainerProps = {
     onDeleteGroup: (groupId: string) => void;
     canEdit: () => boolean;
     isConnectionMode: boolean;
+    layoutToggle: () => boolean;
     // Pass-through for CanvasCard rendering
     renderDraftCard: (draft: CanvasDraft) => JSX.Element;
+    // Connection anchor props
+    onSelectAnchor?: (groupId: string, anchorType: AnchorType) => void;
+    isGroupSelected?: boolean;
+    sourceAnchor?: { type: AnchorType } | null;
 };
 
 // Constants for layout
@@ -38,6 +45,10 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
             (a, b) => (a.Draft.seriesIndex ?? 0) - (b.Draft.seriesIndex ?? 0)
         );
     });
+
+    const groupDimensions = createMemo(() =>
+        getSeriesGroupDimensions(props.drafts.length, props.layoutToggle())
+    );
 
     const teamScore = createMemo(() => {
         let blueWins = 0;
@@ -209,6 +220,19 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
             >
                 <For each={sortedDrafts()}>{(draft) => props.renderDraftCard(draft)}</For>
             </div>
+
+            {/* Group anchor points for connections */}
+            <Show when={props.isConnectionMode && props.onSelectAnchor}>
+                <GroupAnchorPoints
+                    groupId={props.group.id}
+                    width={groupDimensions().width}
+                    height={groupDimensions().height}
+                    zoom={props.viewport().zoom}
+                    onSelectAnchor={props.onSelectAnchor!}
+                    isSelected={props.isGroupSelected ?? false}
+                    sourceAnchor={props.sourceAnchor ?? null}
+                />
+            </Show>
         </div>
     );
 };

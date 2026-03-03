@@ -481,6 +481,7 @@ export const WinnerUpdateSchema = z.object({
 export const DraftStatusUpdateSchema = z.object({
   draftId: z.string(),
   completed: z.boolean(),
+  picks: z.array(z.string()),
 });
 
 // =============================================================================

@@ -1,4 +1,4 @@
-import { Component } from "solid-js";
+import { Component, Show } from "solid-js";
 
 interface ReadyButtonProps {
     isReady: boolean;
@@ -12,9 +12,6 @@ interface ReadyButtonProps {
 }
 
 export const ReadyButton: Component<ReadyButtonProps> = (props) => {
-    // Don't show for spectators
-    if (props.isSpectator) return null;
-
     const handleClick = () => {
         if (!props.draftStarted) {
             // If already ready, allow unready
@@ -69,22 +66,24 @@ export const ReadyButton: Component<ReadyButtonProps> = (props) => {
     };
 
     return (
-        <button
-            onClick={handleClick}
-            disabled={isDisabled()}
-            class={`
-                group relative w-52
-                overflow-hidden rounded-lg py-4 text-center
-                text-[0.95rem] font-bold uppercase tracking-wider
-                transition-all duration-300 ease-out
-                active:scale-95 disabled:active:scale-100
-                ${stateStyles[getButtonState()]}
-            `}
-        >
-            <span class="absolute inset-0 -left-full h-full w-full bg-gradient-to-r from-transparent via-white/20 to-transparent group-disabled:hidden" />
+        <Show when={!props.isSpectator}>
+            <button
+                onClick={handleClick}
+                disabled={isDisabled()}
+                class={`
+                    group relative w-52
+                    overflow-hidden rounded-lg py-4 text-center
+                    text-[0.95rem] font-bold uppercase tracking-wider
+                    transition-all duration-300 ease-out
+                    active:scale-95 disabled:active:scale-100
+                    ${stateStyles[getButtonState()]}
+                `}
+            >
+                <span class="absolute inset-0 -left-full h-full w-full bg-gradient-to-r from-transparent via-white/20 to-transparent group-disabled:hidden" />
 
-            {/* Button text */}
-            <span class="relative z-10">{getButtonText()}</span>
-        </button>
+                {/* Button text */}
+                <span class="relative z-10">{getButtonText()}</span>
+            </button>
+        </Show>
     );
 };

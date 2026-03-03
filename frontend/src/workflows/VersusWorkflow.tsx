@@ -358,7 +358,7 @@ const VersusWorkflowInner: Component<RouteSectionProps> = (props) => {
                         ...prev.versusDraft,
                         Drafts: prev.versusDraft.Drafts.map((d) =>
                             d.id === data.draftId
-                                ? { ...d, completed: data.completed }
+                                ? { ...d, completed: data.completed, picks: data.picks }
                                 : d
                         )
                     }
