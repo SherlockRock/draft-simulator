@@ -66,7 +66,7 @@ const VersusFlowPanelContent: Component = () => {
 
     const canEditGameSettings = createMemo(() => {
         const role = myRole();
-        const isCaptain = role === "blue_captain" || role === "red_captain";
+        const isCaptain = role === "team1_captain" || role === "team2_captain";
         return isCaptain || isOwner();
     });
 
@@ -288,6 +288,8 @@ const VersusFlowPanelContent: Component = () => {
                         draft={draftState()?.draft}
                         myRole={myRole}
                         isCompetitive={versusDraft()?.competitive ?? false}
+                        blueTeamName={versusDraft()?.blueTeamName ?? ""}
+                        redTeamName={versusDraft()?.redTeamName ?? ""}
                         pendingRequest={callbacks()?.pendingPickChangeRequest() ?? null}
                         onRequestChange={
                             callbacks()?.handleRequestPickChange ?? fallbackAction

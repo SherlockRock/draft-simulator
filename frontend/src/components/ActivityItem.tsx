@@ -468,11 +468,11 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                             {/* Team names row (versus only) */}
                             <Show when={versus()}>
                                 <div class="flex flex-wrap items-center gap-x-2 text-sm">
-                                    <span class="text-blue-400">
+                                    <span class="text-violet-300">
                                         {versus()?.blueTeamName}
                                     </span>
                                     <span class="text-slate-500">vs</span>
-                                    <span class="text-red-400">
+                                    <span class="text-fuchsia-300">
                                         {versus()?.redTeamName}
                                     </span>
                                 </div>
@@ -772,7 +772,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                         onInput={(e) =>
                                             setEditBlueTeamName(e.currentTarget.value)
                                         }
-                                        class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-500"
                                     />
                                 </div>
                                 <div>
@@ -785,7 +785,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                         onInput={(e) =>
                                             setEditRedTeamName(e.currentTarget.value)
                                         }
-                                        class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-red-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                                        class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-fuchsia-300 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                                     />
                                 </div>
                             </div>

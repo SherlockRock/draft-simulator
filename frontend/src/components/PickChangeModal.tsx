@@ -1,5 +1,6 @@
 import { Component, Show, For, createSignal } from "solid-js";
-import { draft } from "../utils/schemas";
+import { draft, getEffectiveSide } from "../utils/schemas";
+import { getSideTeamName } from "../utils/versusPermissions";
 import { champions, championCategories } from "../utils/constants";
 import { useFilterableItems } from "../hooks/useFilterableItems";
 import { FilterBar } from "./FilterBar";
@@ -16,6 +17,8 @@ interface PickChangeModalProps {
     draft?: draft;
     myRole: () => string | null;
     isCompetitive: boolean;
+    blueTeamName: string;
+    redTeamName: string;
     pendingRequest?: PickChangeRequest | null;
     onRequestChange: (pickIndex: number, newChampion: string) => void;
     onApproveChange: (requestId: string) => void;
@@ -28,7 +31,11 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
     const [selectedChampion, setSelectedChampion] = createSignal<string | null>(null);
 
     const isSpectator = () => props.myRole() === "spectator";
-    const myTeam = () => (props.myRole()?.includes("blue") ? "blue" : "red");
+    const myTeam = () => {
+        const role = props.myRole();
+        if (!role || role === "spectator") return "blue";
+        return getEffectiveSide(role, props.draft?.blueSideTeam ?? 1);
+    };
 
     // Champion filtering for Step 2
     const {
@@ -315,9 +322,12 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                 <span
                                     class={`font-semibold ${getTeamColor(props.pendingRequest?.team ?? "blue")}`}
                                 >
-                                    {props.pendingRequest?.team === "blue"
-                                        ? "Team 1"
-                                        : "Team 2"}
+                                    {getSideTeamName(
+                                        props.pendingRequest?.team ?? "blue",
+                                        props.draft?.blueSideTeam ?? 1,
+                                        props.blueTeamName,
+                                        props.redTeamName
+                                    )}
                                 </span>{" "}
                                 wants to change a pick
                             </p>

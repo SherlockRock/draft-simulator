@@ -6,7 +6,7 @@ import { useVersusContext } from "../contexts/VersusContext";
 interface VersusChatPanelProps {
     socket: Socket;
     versusDraftId: string;
-    currentRole: "blue_captain" | "red_captain" | "spectator" | null;
+    currentRole: "team1_captain" | "team2_captain" | "spectator" | null;
 }
 
 export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
@@ -37,10 +37,10 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
 
     const getUsernameColor = (role: string) => {
         switch (role) {
-            case "blue_captain":
-                return "text-blue-400";
-            case "red_captain":
-                return "text-red-400";
+            case "team1_captain":
+                return "text-violet-300";
+            case "team2_captain":
+                return "text-fuchsia-300";
             default:
                 return "text-slate-400";
         }

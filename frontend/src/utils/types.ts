@@ -47,7 +47,7 @@ export type ContextMenuPosition = {
 
 export type ChatMessage = {
     username: string;
-    role: "blue_captain" | "red_captain" | "spectator";
+    role: "team1_captain" | "team2_captain" | "spectator";
     message: string;
     timestamp: number;
 };

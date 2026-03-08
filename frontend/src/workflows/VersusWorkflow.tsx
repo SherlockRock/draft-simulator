@@ -34,33 +34,26 @@ import {
 import { VersusSocketProvider, useVersusSocket } from "../providers/VersusSocketProvider";
 import { track } from "../utils/analytics";
 
-// Helper: compute team identity from role + side assignment
+// Helper: compute team identity from role (stable across games)
 const computeTeamIdentity = (
     role: string,
-    blueSideTeam: number,
     blueTeamName: string,
     redTeamName: string
 ): string => {
-    const isBlue = role.includes("blue");
-    const bst = blueSideTeam || 1;
-    if (isBlue) {
-        return bst === 1 ? blueTeamName : redTeamName;
-    } else {
-        return bst === 1 ? redTeamName : blueTeamName;
-    }
+    if (role === "team1_captain") return blueTeamName;
+    return redTeamName;
 };
 
-// Helper: compute suggested role for a new game based on team identity + side assignment
+// Helper: compute suggested role for a new game based on team identity
 export const getSuggestedRole = (
     teamIdentity: string | null,
-    blueSideTeam: number,
     blueTeamName: string,
     redTeamName: string
-): "blue_captain" | "red_captain" | null => {
+): "team1_captain" | "team2_captain" | null => {
     if (!teamIdentity) return null;
-    const bst = blueSideTeam || 1;
-    const blueTeam = bst === 1 ? blueTeamName : redTeamName;
-    return teamIdentity === blueTeam ? "blue_captain" : "red_captain";
+    if (teamIdentity === blueTeamName) return "team1_captain";
+    if (teamIdentity === redTeamName) return "team2_captain";
+    return null;
 };
 
 const VersusWorkflow: Component<RouteSectionProps> = (props) => {
@@ -183,7 +176,11 @@ const VersusWorkflowInner: Component<RouteSectionProps> = (props) => {
 
         // If auto-joined with a valid role, navigate to series overview
         if (response.autoJoinedRole && response.myParticipant) {
-            toast.success(`Reconnected as ${response.autoJoinedRole.replace("_", " ")}`, {
+            const roleLabel =
+                response.autoJoinedRole === "spectator"
+                    ? "Spectator"
+                    : `${response.autoJoinedRole === "team1_captain" ? response.versusDraft.blueTeamName : response.versusDraft.redTeamName} Captain`;
+            toast.success(`Reconnected as ${roleLabel}`, {
                 id: "reconnect-toast",
                 duration: 4000
             });
@@ -198,10 +195,8 @@ const VersusWorkflowInner: Component<RouteSectionProps> = (props) => {
 
             // Compute and store team identity on auto-join/reconnect
             if (response.autoJoinedRole !== "spectator") {
-                const currentDraft = response.versusDraft.Drafts?.[0];
                 const identity = computeTeamIdentity(
                     response.autoJoinedRole,
-                    currentDraft?.blueSideTeam || 1,
                     response.versusDraft.blueTeamName,
                     response.versusDraft.redTeamName
                 );
@@ -471,20 +466,17 @@ const VersusWorkflowInner: Component<RouteSectionProps> = (props) => {
                 });
 
                 // Compute and store team identity for per-game role re-prompt
+                let joinedLabel = "Spectator";
                 if (response.participant.role !== "spectator") {
-                    // Find the current draft's blueSideTeam from the Drafts array
                     const currentDraftId = params.draftId;
-                    const currentDraft = currentDraftId
-                        ? versusDraft.Drafts?.find((d) => d.id === currentDraftId)
-                        : versusDraft.Drafts?.[0];
                     const identity = computeTeamIdentity(
                         response.participant.role,
-                        currentDraft?.blueSideTeam || 1,
                         versusDraft.blueTeamName,
                         versusDraft.redTeamName
                     );
                     setMyTeamIdentity(identity);
                     sessionStorage.setItem(`teamIdentity:${versusDraft.id}`, identity);
+                    joinedLabel = `${identity} Captain`;
 
                     // Track which draft the user confirmed their role for
                     if (currentDraftId) {
@@ -492,7 +484,7 @@ const VersusWorkflowInner: Component<RouteSectionProps> = (props) => {
                     }
                 }
 
-                toast.success(`Joined as ${response.participant.role.replace("_", " ")}`);
+                toast.success(`Joined as ${joinedLabel}`);
 
                 // Navigate to series overview
                 navigate(`/versus/${versusDraft.id}`, { replace: true });
@@ -623,7 +615,7 @@ const VersusWorkflowInner: Component<RouteSectionProps> = (props) => {
         }
     });
 
-    const selectRole = (role: "blue_captain" | "red_captain" | "spectator") => {
+    const selectRole = (role: "team1_captain" | "team2_captain" | "spectator") => {
         const sock = currentSocket();
         const versusDraft = versusContext().versusDraft;
 

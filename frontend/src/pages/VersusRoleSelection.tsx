@@ -17,34 +17,23 @@ const VersusRoleSelection: Component = () => {
     const isConnected = createMemo(() => versusContext().connected);
     const error = createMemo(() => versusContext().error);
 
-    // Current active draft (first non-completed, or first)
-    const currentDraft = createMemo(() => {
-        const vd = versusDraft();
-        if (!vd?.Drafts?.length) return null;
-        return vd.Drafts.find((d) => !d.completed) ?? vd.Drafts[0];
-    });
-
-    // Compute suggested role based on team identity and current game's side assignment
+    // Compute suggested role based on team identity
     const suggestedRole = createMemo(() => {
         const vd = versusDraft();
         const identity = myTeamIdentity();
-        const d = currentDraft();
-        if (!vd || !identity || !d) return null;
-        return getSuggestedRole(
-            identity,
-            d.blueSideTeam || 1,
-            vd.blueTeamName,
-            vd.redTeamName
-        );
+        if (!vd || !identity) return null;
+        return getSuggestedRole(identity, vd.blueTeamName, vd.redTeamName);
     });
 
-    const isRoleTaken = (role: "blue_captain" | "red_captain") => {
+    const isRoleTaken = (role: "team1_captain" | "team2_captain") => {
         const parts = participants();
         if (!parts) return false;
         return parts.some((p) => p.role === role && p.isConnected);
     };
 
-    const handleJoinRole = async (role: "blue_captain" | "red_captain" | "spectator") => {
+    const handleJoinRole = async (
+        role: "team1_captain" | "team2_captain" | "spectator"
+    ) => {
         if (!versusDraft()) return;
 
         setIsJoining(true);
@@ -182,7 +171,7 @@ const VersusRoleSelection: Component = () => {
                             <div class="px-6 py-5">
                                 <div class="flex items-center justify-center gap-4">
                                     <div class="flex-1 text-right">
-                                        <span class="text-lg font-semibold text-blue-400">
+                                        <span class="text-lg font-semibold text-violet-300">
                                             {versusDraft()?.blueTeamName ?? ""}
                                         </span>
                                     </div>
@@ -190,7 +179,7 @@ const VersusRoleSelection: Component = () => {
                                         VS
                                     </div>
                                     <div class="flex-1 text-left">
-                                        <span class="text-lg font-semibold text-red-400">
+                                        <span class="text-lg font-semibold text-fuchsia-300">
                                             {versusDraft()?.redTeamName ?? ""}
                                         </span>
                                     </div>
@@ -226,38 +215,42 @@ const VersusRoleSelection: Component = () => {
                                 Choose Your Role
                             </h2>
 
-                            {/* Blue Captain */}
+                            {/* Team 1 Captain */}
                             <button
-                                onClick={() => handleJoinRole("blue_captain")}
-                                disabled={isRoleTaken("blue_captain") || isJoining()}
+                                onClick={() => handleJoinRole("team1_captain")}
+                                disabled={isRoleTaken("team1_captain") || isJoining()}
                                 class={`group relative w-full overflow-hidden rounded-xl border-2 p-4 text-left transition-all duration-200 ${
-                                    isRoleTaken("blue_captain")
+                                    isRoleTaken("team1_captain")
                                         ? "cursor-not-allowed border-slate-700/50 bg-slate-900/50 opacity-60"
-                                        : suggestedRole() === "blue_captain"
+                                        : suggestedRole() === "team1_captain"
                                           ? "cursor-pointer border-orange-400 bg-slate-800"
                                           : "cursor-pointer border-orange-500/30 bg-slate-800/80 hover:border-orange-400/60 hover:bg-slate-800"
                                 }`}
                             >
                                 <div
-                                    class={`absolute inset-0 bg-gradient-to-r from-orange-600/10 to-transparent transition-opacity ${suggestedRole() === "blue_captain" && !isRoleTaken("blue_captain") ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                                    class={`absolute inset-0 bg-gradient-to-r from-orange-600/10 to-transparent transition-opacity ${suggestedRole() === "team1_captain" && !isRoleTaken("team1_captain") ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
                                 />
                                 <div class="relative flex items-center justify-between">
                                     <div class="flex items-center gap-3">
                                         <div
                                             class={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                                                isRoleTaken("blue_captain")
+                                                isRoleTaken("team1_captain")
                                                     ? "bg-slate-700"
                                                     : "bg-orange-500/20"
                                             }`}
                                         >
                                             <User
                                                 size={20}
-                                                class={isRoleTaken("blue_captain") ? "text-slate-500" : "text-orange-400"}
+                                                class={
+                                                    isRoleTaken("team1_captain")
+                                                        ? "text-slate-500"
+                                                        : "text-orange-400"
+                                                }
                                             />
                                         </div>
                                         <div>
                                             <div
-                                                class={`font-semibold ${isRoleTaken("blue_captain") ? "text-slate-500" : "text-orange-400"}`}
+                                                class={`font-semibold ${isRoleTaken("team1_captain") ? "text-slate-500" : "text-orange-400"}`}
                                             >
                                                 {versusDraft()?.blueTeamName ?? ""}{" "}
                                                 Captain
@@ -271,7 +264,7 @@ const VersusRoleSelection: Component = () => {
                                     <div class="flex items-center gap-2">
                                         <Show
                                             when={
-                                                selectedRole() === "blue_captain" &&
+                                                selectedRole() === "team1_captain" &&
                                                 isJoining()
                                             }
                                         >
@@ -279,16 +272,16 @@ const VersusRoleSelection: Component = () => {
                                         </Show>
                                         <span
                                             class={`rounded px-2.5 py-1 text-xs font-medium ${
-                                                isRoleTaken("blue_captain")
+                                                isRoleTaken("team1_captain")
                                                     ? "bg-slate-700 text-slate-500"
-                                                    : suggestedRole() === "blue_captain"
+                                                    : suggestedRole() === "team1_captain"
                                                       ? "bg-teal-500/15 text-teal-400"
                                                       : "bg-emerald-500/15 text-emerald-400"
                                             }`}
                                         >
-                                            {isRoleTaken("blue_captain")
+                                            {isRoleTaken("team1_captain")
                                                 ? "Taken"
-                                                : suggestedRole() === "blue_captain"
+                                                : suggestedRole() === "team1_captain"
                                                   ? "Previously Selected Role"
                                                   : "Open"}
                                         </span>
@@ -296,38 +289,42 @@ const VersusRoleSelection: Component = () => {
                                 </div>
                             </button>
 
-                            {/* Red Captain */}
+                            {/* Team 2 Captain */}
                             <button
-                                onClick={() => handleJoinRole("red_captain")}
-                                disabled={isRoleTaken("red_captain") || isJoining()}
+                                onClick={() => handleJoinRole("team2_captain")}
+                                disabled={isRoleTaken("team2_captain") || isJoining()}
                                 class={`group relative w-full overflow-hidden rounded-xl border-2 p-4 text-left transition-all duration-200 ${
-                                    isRoleTaken("red_captain")
+                                    isRoleTaken("team2_captain")
                                         ? "cursor-not-allowed border-slate-700/50 bg-slate-900/50 opacity-60"
-                                        : suggestedRole() === "red_captain"
+                                        : suggestedRole() === "team2_captain"
                                           ? "cursor-pointer border-orange-400 bg-slate-800"
                                           : "cursor-pointer border-orange-500/30 bg-slate-800/80 hover:border-orange-400/60 hover:bg-slate-800"
                                 }`}
                             >
                                 <div
-                                    class={`absolute inset-0 bg-gradient-to-r from-orange-600/10 to-transparent transition-opacity ${suggestedRole() === "red_captain" && !isRoleTaken("red_captain") ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                                    class={`absolute inset-0 bg-gradient-to-r from-orange-600/10 to-transparent transition-opacity ${suggestedRole() === "team2_captain" && !isRoleTaken("team2_captain") ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
                                 />
                                 <div class="relative flex items-center justify-between">
                                     <div class="flex items-center gap-3">
                                         <div
                                             class={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                                                isRoleTaken("red_captain")
+                                                isRoleTaken("team2_captain")
                                                     ? "bg-slate-700"
                                                     : "bg-orange-500/20"
                                             }`}
                                         >
                                             <User
                                                 size={20}
-                                                class={isRoleTaken("red_captain") ? "text-slate-500" : "text-orange-400"}
+                                                class={
+                                                    isRoleTaken("team2_captain")
+                                                        ? "text-slate-500"
+                                                        : "text-orange-400"
+                                                }
                                             />
                                         </div>
                                         <div>
                                             <div
-                                                class={`font-semibold ${isRoleTaken("red_captain") ? "text-slate-500" : "text-orange-400"}`}
+                                                class={`font-semibold ${isRoleTaken("team2_captain") ? "text-slate-500" : "text-orange-400"}`}
                                             >
                                                 {versusDraft()?.redTeamName ?? ""} Captain
                                             </div>
@@ -340,7 +337,7 @@ const VersusRoleSelection: Component = () => {
                                     <div class="flex items-center gap-2">
                                         <Show
                                             when={
-                                                selectedRole() === "red_captain" &&
+                                                selectedRole() === "team2_captain" &&
                                                 isJoining()
                                             }
                                         >
@@ -348,16 +345,16 @@ const VersusRoleSelection: Component = () => {
                                         </Show>
                                         <span
                                             class={`rounded px-2.5 py-1 text-xs font-medium ${
-                                                isRoleTaken("red_captain")
+                                                isRoleTaken("team2_captain")
                                                     ? "bg-slate-700 text-slate-500"
-                                                    : suggestedRole() === "red_captain"
+                                                    : suggestedRole() === "team2_captain"
                                                       ? "bg-teal-500/15 text-teal-400"
                                                       : "bg-emerald-500/15 text-emerald-400"
                                             }`}
                                         >
-                                            {isRoleTaken("red_captain")
+                                            {isRoleTaken("team2_captain")
                                                 ? "Taken"
-                                                : suggestedRole() === "red_captain"
+                                                : suggestedRole() === "team2_captain"
                                                   ? "Previously Selected Role"
                                                   : "Open"}
                                         </span>

@@ -173,12 +173,12 @@ const VersusSeriesOverview: Component = () => {
                                                         getSeriesScore().redWins
                                                 }
                                             >
-                                                <div class="mt-1 inline-block rounded bg-blue-500/20 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-blue-300">
+                                                <div class="mt-1 inline-block rounded bg-violet-500/20 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-violet-300">
                                                     Winner
                                                 </div>
                                             </Show>
                                         </div>
-                                        <div class="flex h-14 w-14 items-center justify-center rounded-xl bg-blue-500/20 text-3xl font-black tabular-nums text-blue-400">
+                                        <div class="flex h-14 w-14 items-center justify-center rounded-xl bg-violet-500/20 text-3xl font-black tabular-nums text-violet-400">
                                             {getSeriesScore().blueWins}
                                         </div>
                                     </div>
@@ -190,7 +190,7 @@ const VersusSeriesOverview: Component = () => {
 
                                     {/* Red team */}
                                     <div class="flex flex-1 items-center justify-start gap-4">
-                                        <div class="flex h-14 w-14 items-center justify-center rounded-xl bg-red-500/20 text-3xl font-black tabular-nums text-red-400">
+                                        <div class="flex h-14 w-14 items-center justify-center rounded-xl bg-fuchsia-500/20 text-3xl font-black tabular-nums text-fuchsia-400">
                                             {getSeriesScore().redWins}
                                         </div>
                                         <div class="text-left">
@@ -205,7 +205,7 @@ const VersusSeriesOverview: Component = () => {
                                                         getSeriesScore().blueWins
                                                 }
                                             >
-                                                <div class="mt-1 inline-block rounded bg-red-500/20 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-red-300">
+                                                <div class="mt-1 inline-block rounded bg-fuchsia-500/20 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-fuchsia-300">
                                                     Winner
                                                 </div>
                                             </Show>

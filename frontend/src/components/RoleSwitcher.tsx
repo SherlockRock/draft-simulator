@@ -6,7 +6,7 @@ import toast from "solid-toast";
 
 interface RoleSwitcherProps {
     versusDraftId: string;
-    currentRole: "blue_captain" | "red_captain" | "spectator";
+    currentRole: "team1_captain" | "team2_captain" | "spectator";
 }
 
 export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
@@ -22,15 +22,18 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
 
     const getRoleDisplay = () => {
         const vd = versusContext().versusDraft;
-        if (props.currentRole === "blue_captain")
+        if (props.currentRole === "team1_captain")
             return vd ? `${vd.blueTeamName} Captain` : "Captain";
-        if (props.currentRole === "red_captain")
+        if (props.currentRole === "team2_captain")
             return vd ? `${vd.redTeamName} Captain` : "Captain";
         return "Spectator";
     };
 
     const getRoleStyles = () => {
-        if (props.currentRole === "blue_captain" || props.currentRole === "red_captain")
+        if (
+            props.currentRole === "team1_captain" ||
+            props.currentRole === "team2_captain"
+        )
             return {
                 pill: "bg-orange-500/20 text-orange-300 border-orange-500/60 hover:bg-orange-500/30",
                 dot: "bg-orange-400",

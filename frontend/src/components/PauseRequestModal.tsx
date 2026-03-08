@@ -1,9 +1,11 @@
 import { Component, Show } from "solid-js";
+import { getSideTeamName } from "../utils/versusPermissions";
 
 interface PauseRequestModalProps {
     isOpen: boolean;
     requestType: "pause" | "resume";
     requestingTeam: "blue" | "red";
+    blueSideTeam: number;
     blueTeamName: string;
     redTeamName: string;
     onApprove: () => void;
@@ -12,7 +14,12 @@ interface PauseRequestModalProps {
 
 export const PauseRequestModal: Component<PauseRequestModalProps> = (props) => {
     const getTeamName = () => {
-        return props.requestingTeam === "blue" ? props.blueTeamName : props.redTeamName;
+        return getSideTeamName(
+            props.requestingTeam,
+            props.blueSideTeam,
+            props.blueTeamName,
+            props.redTeamName
+        );
     };
 
     const getTeamColor = () => {

@@ -42,7 +42,7 @@ export type DraftCallbacks = {
 // Versus workflow context type definition
 export type VersusWorkflowContextValue = {
     versusContext: () => VersusSessionState;
-    selectRole: (role: "blue_captain" | "red_captain" | "spectator") => void;
+    selectRole: (role: "team1_captain" | "team2_captain" | "spectator") => void;
     leaveSession: () => void;
     releaseRole: () => void;
     socket: () => Socket | undefined;

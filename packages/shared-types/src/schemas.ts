@@ -198,7 +198,7 @@ export const VersusParticipantSchema = z.object({
   id: z.string(),
   versus_draft_id: z.string(),
   user_id: z.string().nullable().optional(),
-  role: z.enum(["blue_captain", "red_captain", "spectator"]),
+  role: z.enum(["team1_captain", "team2_captain", "spectator"]),
   socketId: z.string().nullable().optional(),
   reclaimToken: z.string().nullable().optional(),
   isConnected: z.boolean(),
@@ -228,12 +228,12 @@ export const VersusJoinResponseSchema = z.object({
   participants: z.array(VersusParticipantSchema),
   myParticipant: VersusParticipantSchema.nullable(),
   availableRoles: z.object({
-    blue_captain: z.boolean(),
-    red_captain: z.boolean(),
+    team1_captain: z.boolean(),
+    team2_captain: z.boolean(),
     spectator: z.boolean(),
   }),
   autoJoinedRole: z
-    .enum(["blue_captain", "red_captain", "spectator"])
+    .enum(["team1_captain", "team2_captain", "spectator"])
     .nullable(),
 });
 
@@ -481,7 +481,7 @@ export const PickChangeResponseSchema = z.object({
 
 export const VersusMessageSchema = z.object({
   username: z.string(),
-  role: z.enum(["blue_captain", "red_captain", "spectator"]),
+  role: z.enum(["team1_captain", "team2_captain", "spectator"]),
   message: z.string(),
   timestamp: z.number(),
 });
@@ -536,7 +536,7 @@ export const HeartbeatSchema = z.object({
 });
 
 export const RoleAvailableSchema = z.object({
-  role: z.enum(["blue_captain", "red_captain"]),
+  role: z.enum(["team1_captain", "team2_captain"]),
 });
 
 // =============================================================================
@@ -599,3 +599,20 @@ export type GroupMoved = z.infer<typeof GroupMovedSchema>;
 export type GroupResized = z.infer<typeof GroupResizedSchema>;
 export type Heartbeat = z.infer<typeof HeartbeatSchema>;
 export type RoleAvailable = z.infer<typeof RoleAvailableSchema>;
+
+// =============================================================================
+// Utility Functions
+// =============================================================================
+
+/**
+ * Derives the effective side (blue/red) from a team-based role and the current
+ * blueSideTeam assignment. Replaces all `role.includes("blue")` patterns.
+ */
+export function getEffectiveSide(
+  role: string,
+  blueSideTeam: number,
+): "blue" | "red" {
+  if (role === "team1_captain") return blueSideTeam === 1 ? "blue" : "red";
+  if (role === "team2_captain") return blueSideTeam === 1 ? "red" : "blue";
+  return "blue"; // fallback (spectators don't call this)
+}

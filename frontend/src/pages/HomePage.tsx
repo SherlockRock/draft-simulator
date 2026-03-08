@@ -37,7 +37,7 @@ const HomePage: Component = () => {
                             flowType="versus"
                             bullets={[
                                 "Create head-to-head competitive draft series (Best of 1, 3, 5, or 7)",
-                                "Share a single link for others to join as Blue Captain, Red Captain, or Spectator",
+                                "Share a single link for others to join as Team Captain or Spectator",
                                 "Choose between Fearless, Standard, or Ironman draft styles",
                                 "Utilize pauses and champion swap requests to prevent headaches"
                             ]}

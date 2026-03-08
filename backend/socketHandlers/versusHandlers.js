@@ -3,12 +3,11 @@ const VersusDraft = require("../models/VersusDraft");
 const VersusParticipant = require("../models/VersusParticipant");
 const { initializeState, getState } = require("../services/versusStateManager");
 const {
-  VERSUS_PICK_ORDER,
   getEffectivePickOrder,
   getPicksArrayIndex,
-  getCurrentPickIndexFromPicks,
 } = require("../utils/versusPickOrder");
 const { getRestrictedChampions } = require("../utils/seriesRestrictions");
+const { getEffectiveSide } = require("@draft-sim/shared-types");
 const crypto = require("crypto");
 
 function uuidv4() {
@@ -201,7 +200,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       const { versusDraftId, role } = data;
       console.log("versusSelectRole:", { versusDraftId, role });
 
-      if (!["blue_captain", "red_captain", "spectator"].includes(role)) {
+      if (!["team1_captain", "team2_captain", "spectator"].includes(role)) {
         socket.emit("versusRoleSelectResponse", {
           success: false,
           error: "Invalid role",
@@ -232,7 +231,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
 
       // For captain roles, clear old reclaim tokens before saving new one
       // This invalidates any previous claim to this role
-      if (role === "blue_captain" || role === "red_captain") {
+      if (role === "team1_captain" || role === "team2_captain") {
         await VersusParticipant.update(
           { reclaimToken: null },
           { where: { versus_draft_id: versusDraftId, role: role } },
@@ -544,8 +543,8 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       );
 
       const isCaptain =
-        participant?.role === "blue_captain" ||
-        participant?.role === "red_captain";
+        participant?.role === "team1_captain" ||
+        participant?.role === "team2_captain";
 
       // Load versus draft for owner check
       const versusDraft = await VersusDraft.findByPk(versusDraftId);
@@ -624,7 +623,11 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       }
 
       if (role && role.includes("captain")) {
-        const team = role.includes("blue") ? "blue" : "red";
+        const draft = await Draft.findByPk(draftId);
+        if (!draft) {
+          return socket.emit("error", { message: "Draft not found" });
+        }
+        const team = getEffectiveSide(role, draft.blueSideTeam);
         state.readyStatus[team] = true;
         // Broadcast ready update
         io.to(`draft:${draftId}`).emit("readyUpdate", {
@@ -669,7 +672,11 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       }
 
       if (role && role.includes("captain")) {
-        const team = role.includes("blue") ? "blue" : "red";
+        const draft = await Draft.findByPk(draftId);
+        if (!draft) {
+          return socket.emit("error", { message: "Draft not found" });
+        }
+        const team = getEffectiveSide(role, draft.blueSideTeam);
         state.readyStatus[team] = false;
         io.to(`draft:${draftId}`).emit("readyUpdate", {
           draftId,
@@ -688,7 +695,11 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
     try {
       const { draftId, role } = data;
       if (role && role.includes("captain")) {
-        const team = role.includes("blue") ? "blue" : "red";
+        const draft = await Draft.findByPk(draftId);
+        if (!draft) {
+          return socket.emit("error", { message: "Draft not found" });
+        }
+        const team = getEffectiveSide(role, draft.blueSideTeam);
         await processPickLock(io, draftId, team);
       }
     } catch (error) {
@@ -711,18 +722,10 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         return socket.emit("error", { message: "Invalid role" });
       }
 
-      const team = role.includes("blue") ? "blue" : "red";
-
       // Validate draft is not complete
       const effectiveOrder = getEffectivePickOrder(state.firstPick || "blue");
       if (state.currentPickIndex >= effectiveOrder.length) {
         return socket.emit("error", { message: "Draft is complete" });
-      }
-
-      // Validate it's this team's turn
-      const currentPick = effectiveOrder[state.currentPickIndex];
-      if (currentPick.team !== team) {
-        return socket.emit("error", { message: "Not your turn" });
       }
 
       // Validate not paused
@@ -734,6 +737,14 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       const draft = await Draft.findByPk(draftId);
       if (!draft) {
         return socket.emit("error", { message: "Draft not found" });
+      }
+
+      const team = getEffectiveSide(role, draft.blueSideTeam);
+
+      // Validate it's this team's turn
+      const currentPick = effectiveOrder[state.currentPickIndex];
+      if (currentPick.team !== team) {
+        return socket.emit("error", { message: "Not your turn" });
       }
 
       // Check if champion is already picked (excluding current pending slot)
@@ -810,12 +821,12 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         return socket.emit("error", { message: "Invalid role" });
       }
 
-      const team = role.includes("blue") ? "blue" : "red";
-
       const draft = await Draft.findByPk(draftId);
       if (!draft) {
         return socket.emit("error", { message: "Draft not found" });
       }
+
+      const team = getEffectiveSide(role, draft.blueSideTeam);
 
       const versusDraft = await VersusDraft.findByPk(draft.versus_draft_id);
       const state = getState(draftId);
@@ -896,7 +907,11 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         return socket.emit("error", { message: "Invalid role" });
       }
 
-      const team = role.includes("blue") ? "blue" : "red";
+      const draft = await Draft.findByPk(draftId);
+      if (!draft) {
+        return socket.emit("error", { message: "Draft not found" });
+      }
+      const team = getEffectiveSide(role, draft.blueSideTeam);
 
       const state = getState(draftId);
       if (!state) {
@@ -910,7 +925,6 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         });
       }
 
-      const draft = await Draft.findByPk(draftId);
       const PICK_TIMER_DURATION = 30000; // 30 seconds in ms
 
       // Calculate and store remaining time
@@ -945,7 +959,11 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         return socket.emit("error", { message: "Invalid role" });
       }
 
-      const team = role.includes("blue") ? "blue" : "red";
+      const draft = await Draft.findByPk(draftId);
+      if (!draft) {
+        return socket.emit("error", { message: "Draft not found" });
+      }
+      const team = getEffectiveSide(role, draft.blueSideTeam);
 
       const state = getState(draftId);
       if (!state) {
@@ -958,8 +976,6 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
           message: "Cannot approve your own resume request",
         });
       }
-
-      const draft = await Draft.findByPk(draftId);
       const PICK_TIMER_DURATION = 30000; // 30 seconds in ms
 
       // Clear resume request
@@ -1016,7 +1032,11 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         return socket.emit("error", { message: "Invalid role" });
       }
 
-      const team = role.includes("blue") ? "blue" : "red";
+      const draft = await Draft.findByPk(draftId);
+      if (!draft) {
+        return socket.emit("error", { message: "Draft not found" });
+      }
+      const team = getEffectiveSide(role, draft.blueSideTeam);
 
       const state = getState(draftId);
       if (!state) {
@@ -1052,12 +1072,12 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         return socket.emit("error", { message: "Invalid role" });
       }
 
-      const team = role.includes("blue") ? "blue" : "red";
-
       const draft = await Draft.findByPk(draftId);
       if (!draft) {
         return socket.emit("error", { message: "Draft not found" });
       }
+
+      const team = getEffectiveSide(role, draft.blueSideTeam);
 
       if (!draft.completed) {
         return socket.emit("error", {
@@ -1126,7 +1146,11 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         return socket.emit("error", { message: "Invalid role" });
       }
 
-      const team = role.includes("blue") ? "blue" : "red";
+      const draft = await Draft.findByPk(draftId);
+      if (!draft) {
+        return socket.emit("error", { message: "Draft not found" });
+      }
+      const team = getEffectiveSide(role, draft.blueSideTeam);
 
       const state = getState(draftId);
       if (!state) {
@@ -1146,8 +1170,6 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
           message: "Cannot approve your own request",
         });
       }
-
-      const draft = await Draft.findByPk(draftId);
 
       if (approved) {
         const updatedPicks = [...draft.picks];
@@ -1232,8 +1254,8 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       );
 
       const isCaptain =
-        participant?.role === "blue_captain" ||
-        participant?.role === "red_captain";
+        participant?.role === "team1_captain" ||
+        participant?.role === "team2_captain";
       const isOwner = socket.user?.id === versusDraft.owner_id;
 
       // Determine if this is the "current" game (latest completed, no newer completed drafts)

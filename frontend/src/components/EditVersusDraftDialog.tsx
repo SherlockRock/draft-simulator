@@ -143,7 +143,7 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
                                     onInput={(e) =>
                                         setBlueTeamName(e.currentTarget.value)
                                     }
-                                    class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-blue-500 focus:outline-none"
+                                    class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-violet-500 focus:outline-none"
                                 />
                                 {errors().blueTeamName && (
                                     <p class="mt-1 text-sm text-red-400">
@@ -160,7 +160,7 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
                                     type="text"
                                     value={redTeamName()}
                                     onInput={(e) => setRedTeamName(e.currentTarget.value)}
-                                    class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-red-500 focus:outline-none"
+                                    class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-fuchsia-500 focus:outline-none"
                                 />
                                 {errors().redTeamName && (
                                     <p class="mt-1 text-sm text-red-400">

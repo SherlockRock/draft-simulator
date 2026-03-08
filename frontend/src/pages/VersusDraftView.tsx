@@ -31,7 +31,8 @@ import {
     PickChangeRequestedSchema,
     RoleAvailableSchema,
     GameSettingsUpdateSchema,
-    WinnerUpdateSchema
+    WinnerUpdateSchema,
+    getEffectiveSide
 } from "../utils/schemas";
 import { fetchVersusDraft, fetchDraft, completeDraft } from "../utils/actions";
 import { Socket } from "socket.io-client";
@@ -70,6 +71,11 @@ const VersusDraftView: Component = () => {
     } = useVersusContext();
     const queryClient = useQueryClient();
     const myRole = createMemo(() => versusContext().myParticipant?.role || null);
+    const myEffectiveSide = createMemo(() => {
+        const role = myRole();
+        if (!role || role === "spectator") return null;
+        return getEffectiveSide(role, versusState().blueSideTeam ?? 1);
+    });
     const participantId = createMemo(() => versusContext().myParticipant?.id || null);
     const versusDraftQuery = useQuery(() => ({
         queryKey: ["versusDraft", params.id],
@@ -171,8 +177,15 @@ const VersusDraftView: Component = () => {
         const vd = versusDraftQuery.data;
         const identity = myTeamIdentity();
         if (!vd || !identity) return null;
-        const bst = versusState().blueSideTeam || draftQuery.data?.blueSideTeam || 1;
-        return getSuggestedRole(identity, bst, vd.blueTeamName, vd.redTeamName);
+        return getSuggestedRole(identity, vd.blueTeamName, vd.redTeamName);
+    });
+
+    // Compute the effective side for the suggested role (for the confirmation overlay)
+    const gameSuggestedSide = createMemo(() => {
+        const suggested = gameSuggestedRole();
+        if (!suggested) return null;
+        const bst = versusState().blueSideTeam ?? draftQuery.data?.blueSideTeam ?? 1;
+        return getEffectiveSide(suggested, bst);
     });
 
     const [showWinnerModal, setShowWinnerModal] = createSignal(false);
@@ -369,9 +382,8 @@ const VersusDraftView: Component = () => {
                 PauseRequestedSchema
             );
             if (!data) return;
-            const myTeam = myRole()?.includes("blue") ? "blue" : "red";
             // Only show modal if it's NOT your team requesting
-            if (data.team !== myTeam) {
+            if (data.team !== myEffectiveSide()) {
                 setPauseRequestType("pause");
                 setPauseRequestTeam(data.team);
                 setShowPauseRequest(true);
@@ -386,9 +398,8 @@ const VersusDraftView: Component = () => {
                 ResumeRequestedSchema
             );
             if (!data) return;
-            const myTeam = myRole()?.includes("blue") ? "blue" : "red";
             // Only show modal if it's NOT your team requesting
-            if (data.team !== myTeam) {
+            if (data.team !== myEffectiveSide()) {
                 setPauseRequestType("resume");
                 setPauseRequestTeam(data.team);
                 setShowPauseRequest(true);
@@ -451,7 +462,12 @@ const VersusDraftView: Component = () => {
                 RoleAvailableSchema
             );
             if (!data) return;
-            toast(`${data.role.replace("_", " ")} is now available`, {
+            const vd = versusDraftQuery.data;
+            const roleName =
+                data.role === "team1_captain"
+                    ? `${vd?.blueTeamName ?? "Team 1"} Captain`
+                    : `${vd?.redTeamName ?? "Team 2"} Captain`;
+            toast(`${roleName} is now available`, {
                 duration: 5000
             });
         });
@@ -591,8 +607,7 @@ const VersusDraftView: Component = () => {
 
         const effectiveOrder = getEffectivePickOrder(state.firstPick || "blue");
         const currentPick = effectiveOrder[state.currentPickIndex];
-        const myTeam = myRole()?.includes("blue") ? "blue" : "red";
-        return currentPick?.team === myTeam;
+        return currentPick?.team === myEffectiveSide();
     };
 
     const isSpectator = () => !myRole() || myRole() === "spectator";
@@ -937,7 +952,7 @@ const VersusDraftView: Component = () => {
                                 >
                                     Game {(draftQuery.data?.seriesIndex ?? 0) + 1}
                                 </div>
-                                <Show when={myTeamIdentity() && gameSuggestedRole()}>
+                                <Show when={myTeamIdentity() && gameSuggestedSide()}>
                                     <p class="text-sm text-slate-300">
                                         You are on{" "}
                                         <span class="font-semibold text-slate-100">
@@ -946,15 +961,12 @@ const VersusDraftView: Component = () => {
                                         . This game, your team is on{" "}
                                         <span
                                             class={`font-semibold ${
-                                                gameSuggestedRole() === "blue_captain"
+                                                gameSuggestedSide() === "blue"
                                                     ? "text-blue-400"
                                                     : "text-red-400"
                                             }`}
                                         >
-                                            {gameSuggestedRole()?.includes("blue")
-                                                ? "blue"
-                                                : "red"}{" "}
-                                            side
+                                            {gameSuggestedSide()} side
                                         </span>
                                         .
                                     </p>
@@ -983,11 +995,7 @@ const VersusDraftView: Component = () => {
                                     class="w-full rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-slate-50 transition-colors hover:bg-orange-500"
                                     onClick={handleConfirmGame}
                                 >
-                                    Continue as{" "}
-                                    {gameSuggestedRole()?.includes("blue")
-                                        ? "Blue"
-                                        : "Red"}{" "}
-                                    Captain
+                                    Continue as {myTeamIdentity()} Captain
                                 </button>
                                 <button
                                     class="mt-2 block w-full text-xs text-slate-500 transition-colors hover:text-slate-400"
@@ -1289,14 +1297,14 @@ const VersusDraftView: Component = () => {
                                             fallback={
                                                 <ReadyButton
                                                     isReady={
-                                                        myRole()?.includes("blue")
+                                                        myEffectiveSide() === "blue"
                                                             ? versusState().readyStatus
                                                                   .blue
                                                             : versusState().readyStatus
                                                                   .red
                                                     }
                                                     opponentReady={
-                                                        myRole()?.includes("blue")
+                                                        myEffectiveSide() === "blue"
                                                             ? versusState().readyStatus
                                                                   .red
                                                             : versusState().readyStatus
@@ -1356,6 +1364,11 @@ const VersusDraftView: Component = () => {
                             isOpen={showPauseRequest()}
                             requestType={pauseRequestType()}
                             requestingTeam={pauseRequestTeam()}
+                            blueSideTeam={
+                                versusState().blueSideTeam ??
+                                draftQuery.data?.blueSideTeam ??
+                                1
+                            }
                             blueTeamName={versusDraftQuery.data?.blueTeamName ?? ""}
                             redTeamName={versusDraftQuery.data?.redTeamName ?? ""}
                             onApprove={handleApproveRequest}

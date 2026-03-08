@@ -27,7 +27,7 @@ const VersusParticipant = sequelize.define("VersusParticipant", {
     type: DataTypes.STRING,
     allowNull: false,
     validate: {
-      isIn: [["blue_captain", "red_captain", "spectator"]],
+      isIn: [["team1_captain", "team2_captain", "spectator"]],
     },
   },
   lastSeenAt: {

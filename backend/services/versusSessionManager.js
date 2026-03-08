@@ -21,8 +21,8 @@ class VersusSessionManager {
         versusDraftId,
         participants: new Map(), // socketId -> participant data
         roleAssignments: {
-          blue_captain: null, // visitorId or null (visitorId = oderId or visitorId)
-          red_captain: null,
+          team1_captain: null, // visitorId or null (visitorId = oderId or visitorId)
+          team2_captain: null,
         },
       });
     }
@@ -52,10 +52,10 @@ class VersusSessionManager {
     session.participants.set(socket.id, participant);
 
     // Update role assignments for captains
-    if (role === "blue_captain") {
-      session.roleAssignments.blue_captain = visitorId;
-    } else if (role === "red_captain") {
-      session.roleAssignments.red_captain = visitorId;
+    if (role === "team1_captain") {
+      session.roleAssignments.team1_captain = visitorId;
+    } else if (role === "team2_captain") {
+      session.roleAssignments.team2_captain = visitorId;
     }
 
     return participant;
@@ -75,15 +75,15 @@ class VersusSessionManager {
 
     // Clear role assignment for captains
     if (
-      participant.role === "blue_captain" &&
-      session.roleAssignments.blue_captain === participant.visitorId
+      participant.role === "team1_captain" &&
+      session.roleAssignments.team1_captain === participant.visitorId
     ) {
-      session.roleAssignments.blue_captain = null;
+      session.roleAssignments.team1_captain = null;
     } else if (
-      participant.role === "red_captain" &&
-      session.roleAssignments.red_captain === participant.visitorId
+      participant.role === "team2_captain" &&
+      session.roleAssignments.team2_captain === participant.visitorId
     ) {
-      session.roleAssignments.red_captain = null;
+      session.roleAssignments.team2_captain = null;
     }
 
     session.participants.delete(socketId);
@@ -121,10 +121,10 @@ class VersusSessionManager {
     const session = this.sessions.get(versusDraftId);
     if (!session) return true;
 
-    if (role === "blue_captain") {
-      return session.roleAssignments.blue_captain === null;
-    } else if (role === "red_captain") {
-      return session.roleAssignments.red_captain === null;
+    if (role === "team1_captain") {
+      return session.roleAssignments.team1_captain === null;
+    } else if (role === "team2_captain") {
+      return session.roleAssignments.team2_captain === null;
     }
 
     // Spectators always available
@@ -136,8 +136,8 @@ class VersusSessionManager {
    */
   getAvailableRoles(versusDraftId) {
     return {
-      blue_captain: this.isRoleAvailable(versusDraftId, "blue_captain"),
-      red_captain: this.isRoleAvailable(versusDraftId, "red_captain"),
+      team1_captain: this.isRoleAvailable(versusDraftId, "team1_captain"),
+      team2_captain: this.isRoleAvailable(versusDraftId, "team2_captain"),
       spectator: true,
     };
   }
@@ -164,6 +164,5 @@ class VersusSessionManager {
     return session.participants.get(socketId) || null;
   }
 }
-
 
 module.exports = VersusSessionManager;
