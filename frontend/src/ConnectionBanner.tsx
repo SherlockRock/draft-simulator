@@ -1,5 +1,5 @@
 import { Show, Accessor } from "solid-js";
-import { Loader2, WifiOff, AlertTriangle } from "lucide-solid";
+import { LoaderCircle, WifiOff, AlertTriangle } from "lucide-solid";
 import { ConnectionStatus, ConnectionInfo } from "./providers/socketUtils";
 
 type Props = {
@@ -33,7 +33,7 @@ const ConnectionBanner = (props: Props) => {
             >
                 <div class="flex items-center gap-2">
                     <Show when={props.connectionStatus() === "connecting"}>
-                        <Loader2 size={20} class="animate-spin" />
+                        <LoaderCircle size={20} class="animate-spin" />
                         <span>
                             Reconnecting to server
                             <Show when={props.connectionInfo().reconnectAttempts > 0}>
