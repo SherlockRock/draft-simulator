@@ -19,7 +19,8 @@ import {
     ImportSeriesResponseSchema,
     UpdateCanvasNameResponseSchema,
     ShareDraftVerifySchema,
-    ShareCanvasVerifySchema
+    ShareCanvasVerifySchema,
+    CanvasGroupMetadata
 } from "./schemas";
 
 // Re-export types for backward compatibility
@@ -395,6 +396,7 @@ export const updateCanvasGroup = async (data: {
     positionY?: number;
     width?: number | null;
     height?: number | null;
+    metadata?: Partial<CanvasGroupMetadata>;
 }) => {
     return apiPut(
         `/canvas/${data.canvasId}/group/${data.groupId}`,
@@ -403,7 +405,8 @@ export const updateCanvasGroup = async (data: {
             positionX: data.positionX,
             positionY: data.positionY,
             width: data.width,
-            height: data.height
+            height: data.height,
+            metadata: data.metadata
         },
         z.object({ success: z.boolean(), group: CanvasGroupSchema })
     );
@@ -462,6 +465,7 @@ export const createVersusDraft = async (data: {
     competitive: boolean;
     icon: string;
     type: string;
+    disabledChampions?: string[];
 }) => {
     return apiPost("/versus-drafts", data, VersusDraftSchema);
 };
@@ -477,6 +481,7 @@ export const editVersusDraft = async (
         icon?: string;
         type?: string;
         length?: number;
+        disabledChampions?: string[];
     }
 ) => {
     return apiPut(`/versus-drafts/${versusDraftId}`, data, VersusDraftSchema);
@@ -524,7 +529,11 @@ export const handleGoogleLogin = async (code: string, state: string) => {
                 isNewUser: z.boolean().optional()
             })
         );
-        return { user: result.user, returnTo: result.returnTo, isNewUser: result.isNewUser };
+        return {
+            user: result.user,
+            returnTo: result.returnTo,
+            isNewUser: result.isNewUser
+        };
     } catch {
         return null;
     }

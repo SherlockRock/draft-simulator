@@ -1,8 +1,18 @@
-import { CanvasDraft, Connection, CanvasGroup, Viewport, AnchorType } from "./schemas";
+import {
+    CanvasDraft,
+    Connection,
+    CanvasGroup,
+    CanvasGroupMetadata,
+    Viewport,
+    AnchorType
+} from "./schemas";
 import { getLocalCanvas, saveLocalCanvas, LocalCanvas } from "./localCanvasStore";
 
 // Helper to safely cast anchor type with default
-const toAnchorType = (value: string | undefined, defaultValue: AnchorType): AnchorType => {
+const toAnchorType = (
+    value: string | undefined,
+    defaultValue: AnchorType
+): AnchorType => {
     if (value === "top" || value === "bottom" || value === "left" || value === "right") {
         return value;
     }
@@ -320,6 +330,7 @@ export const localUpdateGroup = (data: {
     positionY?: number;
     width?: number | null;
     height?: number | null;
+    metadata?: Partial<CanvasGroupMetadata>;
 }) => {
     return mutateLocal((canvas) => {
         const group = canvas.groups.find((g) => g.id === data.groupId);
@@ -329,6 +340,8 @@ export const localUpdateGroup = (data: {
             if (data.positionY !== undefined) group.positionY = data.positionY;
             if (data.width !== undefined) group.width = data.width;
             if (data.height !== undefined) group.height = data.height;
+            if (data.metadata !== undefined)
+                group.metadata = { ...group.metadata, ...data.metadata };
         }
         return { canvas, result: { success: true, group } };
     });

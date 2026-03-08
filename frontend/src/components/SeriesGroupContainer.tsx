@@ -1,6 +1,6 @@
 import { For, Show, createMemo, Accessor, JSX } from "solid-js";
 import { useNavigate } from "@solidjs/router";
-import { ExternalLink, Check, Trash2 } from "lucide-solid";
+import { ExternalLink, Check, Trash2, Settings } from "lucide-solid";
 import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/schemas";
 import { getSeriesGroupDimensions } from "../utils/helpers";
 import { GroupAnchorPoints } from "./CustomGroupContainer";
@@ -11,6 +11,7 @@ type SeriesGroupContainerProps = {
     viewport: Accessor<Viewport>;
     onGroupMouseDown: (groupId: string, e: MouseEvent) => void;
     onDeleteGroup: (groupId: string) => void;
+    onEditDisabledChampions: (groupId: string) => void;
     canEdit: () => boolean;
     isConnectionMode: boolean;
     layoutToggle: () => boolean;
@@ -194,8 +195,18 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                         </span>
                     </Show>
 
-                    {/* Delete Button */}
+                    {/* Settings + Delete Buttons */}
                     <Show when={props.canEdit()}>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                props.onEditDisabledChampions(props.group.id);
+                            }}
+                            class="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-purple-400"
+                            title="Disabled champions"
+                        >
+                            <Settings size={16} />
+                        </button>
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();

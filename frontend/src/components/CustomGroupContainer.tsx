@@ -1,5 +1,5 @@
 import { Show, createSignal, createMemo, createEffect, Accessor, JSX } from "solid-js";
-import { Trash2 } from "lucide-solid";
+import { Trash2, Settings } from "lucide-solid";
 import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/schemas";
 
 type CustomGroupContainerProps = {
@@ -8,6 +8,7 @@ type CustomGroupContainerProps = {
     viewport: Accessor<Viewport>;
     onGroupMouseDown: (groupId: string, e: MouseEvent) => void;
     onDeleteGroup: (groupId: string) => void;
+    onEditDisabledChampions: (groupId: string) => void;
     onRenameGroup: (groupId: string, newName: string) => void;
     onResizeGroup: (groupId: string, width: number, height: number) => void;
     onResizeEnd: (groupId: string, width: number, height: number) => void;
@@ -198,16 +199,28 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 </div>
 
                 <Show when={props.canEdit()}>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            props.onDeleteGroup(props.group.id);
-                        }}
-                        class="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-red-400"
-                        title="Delete group"
-                    >
-                        <Trash2 size={16} />
-                    </button>
+                    <div class="flex items-center gap-1">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                props.onEditDisabledChampions(props.group.id);
+                            }}
+                            class="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-purple-400"
+                            title="Disabled champions"
+                        >
+                            <Settings size={16} />
+                        </button>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                props.onDeleteGroup(props.group.id);
+                            }}
+                            class="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-red-400"
+                            title="Delete group"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    </div>
                 </Show>
             </div>
 

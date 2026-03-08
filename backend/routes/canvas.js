@@ -748,6 +748,7 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
           length: versusDraft.length,
           competitive: versusDraft.competitive,
           seriesType: versusDraft.type,
+          disabledChampions: versusDraft.disabledChampions || [],
         },
       },
       { transaction: t },
@@ -1121,7 +1122,7 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
 router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
   try {
     const { canvasId, groupId } = req.params;
-    const { name, positionX, positionY, width, height } = req.body;
+    const { name, positionX, positionY, width, height, metadata } = req.body;
 
     const userCanvas = await UserCanvas.findOne({
       where: { canvas_id: canvasId, user_id: req.user.id },
@@ -1157,6 +1158,9 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
     if (typeof positionY === "number") updates.positionY = positionY;
     if (typeof width === "number" || width === null) updates.width = width;
     if (typeof height === "number" || height === null) updates.height = height;
+    if (metadata && typeof metadata === "object") {
+      updates.metadata = { ...group.metadata, ...metadata };
+    }
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: "No valid fields to update" });

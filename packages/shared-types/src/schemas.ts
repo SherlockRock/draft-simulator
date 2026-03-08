@@ -76,6 +76,7 @@ export const CanvasGroupMetadataSchema = z.object({
   length: z.number().optional(),
   competitive: z.boolean().optional(),
   seriesType: z.string().optional(),
+  disabledChampions: z.array(z.string()).optional(),
 });
 
 export const CanvasGroupSchema = z.object({
@@ -157,6 +158,7 @@ export const VersusDraftSchema = z.object({
   competitive: z.boolean(),
   icon: z.string().nullable().optional(),
   type: z.string().nullable().optional(),
+  disabledChampions: z.array(z.string()).optional(),
   shareLink: z.string(),
   owner_id: z.string().nullable(),
   createdAt: z.string(),
@@ -284,24 +286,35 @@ export const CanvasListItemSchema = z.object({
   updatedAt: z.string(),
 });
 
-export const ActivityItemSchema = z.object({
-  resource_type: z.enum(["draft", "canvas", "versus"]),
+const ActivityBaseSchema = z.object({
   resource_id: z.string(),
   resource_name: z.string(),
   description: z.string().nullable().optional(),
-  public: z.boolean().optional(),
   icon: z.string().nullable().optional(),
   timestamp: z.string(),
   created_at: z.string(),
   is_owner: z.boolean(),
-  draft_type: z.string().optional(),
-  // Versus-specific fields
-  blueTeamName: z.string().optional(),
-  redTeamName: z.string().optional(),
-  length: z.number().optional(),
-  competitive: z.boolean().optional(),
-  type: z.string().optional(),
 });
+
+const CanvasActivitySchema = ActivityBaseSchema.extend({
+  resource_type: z.literal("canvas"),
+});
+
+const VersusActivitySchema = ActivityBaseSchema.extend({
+  resource_type: z.literal("versus"),
+  blueTeamName: z.string(),
+  redTeamName: z.string(),
+  length: z.number(),
+  competitive: z.boolean(),
+  type: z.string().nullable(),
+  disabledChampions: z.array(z.string()),
+  hasStarted: z.boolean(),
+});
+
+export const ActivityItemSchema = z.discriminatedUnion("resource_type", [
+  CanvasActivitySchema,
+  VersusActivitySchema,
+]);
 
 export const ActivityResponseSchema = z.object({
   activities: z.array(ActivityItemSchema),
@@ -534,6 +547,7 @@ export type Draft = z.infer<typeof DraftSchema>;
 // Lowercase alias for backward compatibility
 export type draft = Draft;
 export type CanvasDraft = z.infer<typeof CanvasDraftSchema>;
+export type CanvasGroupMetadata = z.infer<typeof CanvasGroupMetadataSchema>;
 export type CanvasGroup = z.infer<typeof CanvasGroupSchema>;
 export type Connection = z.infer<typeof ConnectionSchema>;
 export type ConnectionEndpoint = z.infer<typeof ConnectionEndpointSchema>;

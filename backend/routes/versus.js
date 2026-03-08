@@ -49,6 +49,7 @@ router.post("/", optionalAuth, async (req, res) => {
       competitive,
       icon,
       type,
+      disabledChampions,
     } = req.body;
 
     const ownerId = req.user?.id || null;
@@ -63,6 +64,7 @@ router.post("/", optionalAuth, async (req, res) => {
       competitive: competitive || false,
       icon: icon || "",
       type: type || "standard",
+      disabledChampions: Array.isArray(disabledChampions) ? disabledChampions : [],
       owner_id: ownerId,
     });
 
@@ -162,6 +164,7 @@ router.put("/:id", authenticate, async (req, res) => {
       blueTeamName,
       redTeamName,
       length,
+      disabledChampions,
     } = req.body;
 
     // Check if series has started (any picks made in first draft)
@@ -253,9 +256,10 @@ router.put("/:id", authenticate, async (req, res) => {
         ...(icon !== undefined && { icon }),
         ...(blueTeamName && { blueTeamName }),
         ...(redTeamName && { redTeamName }),
-        // Type changes allowed until Game 2 starts, length changes only before series starts
+        // Type changes allowed until Game 2 starts, length/disabledChampions changes only before series starts
         ...(!game2HasStarted && type !== undefined && { type }),
         ...(!hasStarted && length !== undefined && { length }),
+        ...(!hasStarted && Array.isArray(disabledChampions) && { disabledChampions }),
       },
       { transaction },
     );

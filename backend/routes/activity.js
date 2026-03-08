@@ -43,7 +43,7 @@ router.get("/recent", async (req, res) => {
     const offset = page * pageSize;
 
     // Filter by resource type if provided
-    const resourceType = req.query.resource_type; // 'draft', 'canvas', or undefined for all
+    const resourceType = req.query.resource_type; // 'canvas', 'versus', or undefined for all
 
     // Search and sort parameters
     const search = req.query.search || "";
@@ -52,34 +52,9 @@ router.get("/recent", async (req, res) => {
     // Fetch more items than needed to ensure proper pagination after sorting
     const fetchLimit = 50;
 
-    // Get user's owned drafts (standalone only - versus series drafts are excluded) if needed
-    const ownedDrafts =
-      resourceType === "canvas" || resourceType === "versus"
-        ? []
-        : await Draft.findAll({
-            where: {
-              owner_id: user.id,
-              type: "versus",
-              versus_draft_id: null,
-              ...(search && { name: { [Op.iLike]: `%${search}%` } }),
-            },
-            order: getSortOrder(sort),
-            limit: fetchLimit,
-            attributes: [
-              "id",
-              "name",
-              "description",
-              "public",
-              "type",
-              "icon",
-              "updatedAt",
-              "createdAt",
-            ],
-          });
-
     // Get user's canvases if needed
     const canvases =
-      resourceType === "draft" || resourceType === "versus"
+      resourceType === "versus"
         ? []
         : await Canvas.findAll({
             where: {
@@ -110,7 +85,7 @@ router.get("/recent", async (req, res) => {
 
     // Get user's versus drafts if needed (owned OR participated in)
     let versusDrafts = [];
-    if (resourceType !== "draft" && resourceType !== "canvas") {
+    if (resourceType !== "canvas") {
       // Get IDs of versus drafts where user is a participant
       const participatedVersusIds = await VersusParticipant.findAll({
         where: { user_id: user.id },
@@ -140,29 +115,23 @@ router.get("/recent", async (req, res) => {
           "length",
           "competitive",
           "type",
+          "disabledChampions",
           "updatedAt",
           "createdAt",
           "icon",
           "owner_id",
         ],
+        include: [
+          {
+            model: Draft,
+            as: "Drafts",
+            attributes: ["picks"],
+            order: [["seriesIndex", "ASC"]],
+            limit: 1,
+          },
+        ],
       });
     }
-
-    // Transform drafts to activity format
-    const draftActivities = [
-      ...ownedDrafts.map((draft) => ({
-        resource_type: "draft",
-        resource_id: draft.id,
-        resource_name: draft.name,
-        description: draft.description,
-        public: draft.public,
-        icon: draft.icon,
-        timestamp: draft.updatedAt,
-        created_at: draft.createdAt,
-        is_owner: true,
-        draft_type: draft.type,
-      })),
-    ];
 
     // Transform canvases to activity format
     const canvasActivities = canvases.map((canvas) => ({
@@ -177,25 +146,30 @@ router.get("/recent", async (req, res) => {
     }));
 
     // Transform versus drafts to activity format
-    const versusActivities = versusDrafts.map((versus) => ({
-      resource_type: "versus",
-      resource_id: versus.id,
-      resource_name: versus.name,
-      description: versus.description,
-      blueTeamName: versus.blueTeamName,
-      redTeamName: versus.redTeamName,
-      length: versus.length,
-      competitive: versus.competitive,
-      type: versus.type,
-      timestamp: versus.updatedAt,
-      created_at: versus.createdAt,
-      icon: versus.icon,
-      is_owner: versus.owner_id === user.id,
-    }));
+    const versusActivities = versusDrafts.map((versus) => {
+      const firstDraft = versus.Drafts?.[0];
+      const hasStarted = firstDraft?.picks?.some((p) => p && p !== "") ?? false;
+      return {
+        resource_type: "versus",
+        resource_id: versus.id,
+        resource_name: versus.name,
+        description: versus.description,
+        blueTeamName: versus.blueTeamName,
+        redTeamName: versus.redTeamName,
+        length: versus.length,
+        competitive: versus.competitive,
+        type: versus.type,
+        disabledChampions: versus.disabledChampions || [],
+        hasStarted,
+        timestamp: versus.updatedAt,
+        created_at: versus.createdAt,
+        icon: versus.icon,
+        is_owner: versus.owner_id === user.id,
+      };
+    });
 
     // Combine and sort
     const allActivities = [
-      ...draftActivities,
       ...canvasActivities,
       ...versusActivities,
     ];

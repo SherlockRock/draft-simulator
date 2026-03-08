@@ -1,4 +1,5 @@
 import { Component, createMemo, createSignal, For, Show } from "solid-js";
+import { X } from "lucide-solid";
 import { FilterBar } from "./FilterBar";
 import { useFilterableItems } from "../hooks/useFilterableItems";
 import {
@@ -20,6 +21,7 @@ interface ChampionPanelProps {
         string,
         { gameNumber: number; pickIndex: number }
     >;
+    disabledChampions?: () => string[];
     draft: () => draft | undefined;
     versusDraft: () => VersusDraft | undefined;
     isMyTurn: () => boolean;
@@ -78,14 +80,19 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
     // Check if draft type shows bans in restrictions (ironman only)
     const showBansInRestrictions = () => props.versusDraft()?.type === "ironman";
 
-    // Champions not in restricted list (for Available section)
+    // Champions not in restricted or disabled list (for Available section)
     // Current game picks stay visible but are rendered as disabled
     const availableChampions = createMemo(() => {
         const restricted = new Set(props.restrictedChampions());
+        const disabled = new Set(props.disabledChampions?.() ?? []);
 
         return champions
             .map((champ, index) => ({ champ, index: String(index) }))
-            .filter(({ index }) => !restricted.has(index));
+            .filter(
+                ({ index }) =>
+                    !restricted.has(index) &&
+                    !disabled.has(index)
+            );
     });
 
     // Inner component for a single game's restricted champions row
@@ -135,9 +142,11 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                 <div
                     class={`flex w-10 flex-shrink-0 flex-col items-center justify-center rounded-l ${gameBgColor()}`}
                 >
-                    <span class="text-[10px] font-bold text-white">Game</span>
-                    <span class="text-lg font-bold text-white">
-                        {gameProps.game.gameNumber}
+                    <span
+                        class="text-[10px] font-bold uppercase tracking-widest text-white"
+                        style={{ "writing-mode": "vertical-lr" }}
+                    >
+                        Game {gameProps.game.gameNumber}
                     </span>
                 </div>
 
@@ -218,6 +227,55 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                         <div class="custom-scrollbar flex-1 overflow-y-auto">
                             <Show when={!isFiltering()}>
                                 <div class="p-4">
+                                    {/* Disabled champions section */}
+                                    <Show
+                                        when={
+                                            (props.disabledChampions?.() ?? []).length > 0
+                                        }
+                                    >
+                                        <div class="mb-4 flex min-h-[4rem]">
+                                            <div class="flex w-10 flex-shrink-0 flex-col items-center justify-center rounded-l bg-red-700">
+                                                <span
+                                                    class="text-[10px] font-bold uppercase tracking-widest text-white"
+                                                    style="writing-mode: vertical-lr"
+                                                >
+                                                    Disabled
+                                                </span>
+                                            </div>
+                                            <div class="grid flex-1 grid-cols-5 content-center gap-1 px-2">
+                                                <For
+                                                    each={
+                                                        props.disabledChampions?.() ?? []
+                                                    }
+                                                >
+                                                    {(id) => {
+                                                        const champ =
+                                                            champions[parseInt(id)];
+                                                        if (!champ) return null;
+                                                        return (
+                                                            <div
+                                                                class="relative aspect-square w-full overflow-hidden rounded border-2 border-red-700"
+                                                                title={`${champ.name} - Disabled For Series`}
+                                                            >
+                                                                <img
+                                                                    src={champ.img}
+                                                                    alt={champ.name}
+                                                                    class="h-full w-full object-cover opacity-50"
+                                                                />
+                                                                <div class="absolute inset-0 flex items-center justify-center">
+                                                                    <X
+                                                                        size={20}
+                                                                        class="text-red-400"
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }}
+                                                </For>
+                                            </div>
+                                        </div>
+                                    </Show>
+
                                     {/* Game restricted sections */}
                                     <Show when={props.restrictedByGame().length > 0}>
                                         <For each={props.restrictedByGame()}>
@@ -358,8 +416,12 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                 );
                                             const isSeriesRestricted = () =>
                                                 props
-                                                    .restrictedChampions()
-                                                    .includes(champId());
+                                                    .restrictedChampionGameMap()
+                                                    .has(champId());
+                                            const isDisabled = () =>
+                                                (
+                                                    props.disabledChampions?.() ?? []
+                                                ).includes(champId());
                                             const isPendingSelection = () =>
                                                 props.getCurrentPendingChampion() ===
                                                     champId() && props.isMyTurn();
@@ -367,6 +429,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                 props.isMyTurn() &&
                                                 !isPicked() &&
                                                 !isSeriesRestricted() &&
+                                                !isDisabled() &&
                                                 !props.isPaused();
                                             const restrictionInfo = () =>
                                                 props
@@ -389,22 +452,26 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                         class={`relative aspect-square w-full overflow-hidden rounded border-2 transition-all ${
                                                             isPendingSelection()
                                                                 ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
-                                                                : isSeriesRestricted() &&
-                                                                    !isPendingSelection()
-                                                                  ? `cursor-not-allowed ${gameBorderColors[restrictionInfo()?.gameNumber ?? 1] ?? "border-slate-700"}`
-                                                                  : isPicked() &&
+                                                                : isDisabled()
+                                                                  ? "cursor-not-allowed border-red-700"
+                                                                  : isSeriesRestricted() &&
                                                                       !isPendingSelection()
-                                                                    ? `cursor-not-allowed ${gameBorderColors[currentGameNumber()] ?? "border-slate-700"}`
-                                                                    : canSelect()
-                                                                      ? "cursor-pointer border-slate-500 hover:scale-105 hover:border-slate-300"
-                                                                      : "cursor-default border-slate-600"
+                                                                    ? `cursor-not-allowed ${gameBorderColors[restrictionInfo()?.gameNumber ?? 1] ?? "border-slate-700"}`
+                                                                    : isPicked() &&
+                                                                        !isPendingSelection()
+                                                                      ? `cursor-not-allowed ${gameBorderColors[currentGameNumber()] ?? "border-slate-700"}`
+                                                                      : canSelect()
+                                                                        ? "cursor-pointer border-slate-500 hover:scale-105 hover:border-slate-300"
+                                                                        : "cursor-default border-slate-600"
                                                         }`}
                                                         title={
-                                                            isSeriesRestricted()
-                                                                ? `${champ.name} - Game ${restrictionInfo()?.gameNumber ?? 1} ${getDraftPositionText(restrictionInfo()?.pickIndex ?? 0)}`
-                                                                : isPicked()
-                                                                  ? `${champ.name} - Game ${currentGameNumber()} ${getDraftPositionText(currentPickIndex())}`
-                                                                  : champ.name
+                                                            isDisabled()
+                                                                ? `${champ.name} - Disabled For Series`
+                                                                : isSeriesRestricted()
+                                                                  ? `${champ.name} - Game ${restrictionInfo()?.gameNumber ?? 1} ${getDraftPositionText(restrictionInfo()?.pickIndex ?? 0)}`
+                                                                  : isPicked()
+                                                                    ? `${champ.name} - Game ${currentGameNumber()} ${getDraftPositionText(currentPickIndex())}`
+                                                                    : champ.name
                                                         }
                                                     >
                                                         <img
@@ -412,12 +479,27 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                             alt={champ.name}
                                                             class={`h-full w-full object-cover ${
                                                                 (isPicked() ||
-                                                                    isSeriesRestricted()) &&
+                                                                    isSeriesRestricted() ||
+                                                                    isDisabled()) &&
                                                                 !isPendingSelection()
                                                                     ? "opacity-40"
                                                                     : ""
                                                             }`}
                                                         />
+                                                        {/* Disabled overlay */}
+                                                        <Show
+                                                            when={
+                                                                isDisabled() &&
+                                                                !isPendingSelection()
+                                                            }
+                                                        >
+                                                            <div class="absolute inset-0 flex items-center justify-center bg-red-900/40">
+                                                                <X
+                                                                    size={20}
+                                                                    class="text-red-400"
+                                                                />
+                                                            </div>
+                                                        </Show>
                                                         {/* Restricted overlay badge */}
                                                         <Show
                                                             when={

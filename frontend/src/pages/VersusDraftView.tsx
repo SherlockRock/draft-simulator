@@ -806,7 +806,7 @@ const VersusDraftView: Component = () => {
         return bst === 1 ? vd.redTeamName : vd.blueTeamName;
     };
 
-    // Compute restricted champions for Fearless/Ironman modes
+    // Compute restricted champions for Fearless/Ironman modes (game-based restrictions only)
     const restrictedChampions = createMemo(() => {
         const vd = versusDraftQuery.data;
         const d = draftQuery.data;
@@ -1331,6 +1331,9 @@ const VersusDraftView: Component = () => {
                                 restrictedByGame={restrictedByGame}
                                 restrictedChampions={restrictedChampions}
                                 restrictedChampionGameMap={restrictedChampionGameMap}
+                                disabledChampions={() =>
+                                    versusDraftQuery.data?.disabledChampions ?? []
+                                }
                                 draft={() => draftQuery.data}
                                 versusDraft={() => versusDraftQuery.data}
                                 isMyTurn={isMyTurn}

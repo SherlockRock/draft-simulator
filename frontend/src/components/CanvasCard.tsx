@@ -38,6 +38,7 @@ type CanvasCardProps = {
     // Team name display (for series drafts)
     blueTeamName?: string;
     redTeamName?: string;
+    disabledChampions?: string[];
 };
 
 export const CanvasCard = (props: CanvasCardProps) => {
@@ -297,6 +298,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                             onSelectNext={props.onSelectNext}
                             onSelectPrevious={props.onSelectPrevious}
                             side={index < 10 ? "team1" : "team2"}
+                            disabledChampions={props.disabledChampions}
                         />
                     )}
                 </Index>

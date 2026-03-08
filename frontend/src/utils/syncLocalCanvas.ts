@@ -42,13 +42,16 @@ export const syncLocalCanvasToServer = async (): Promise<string | null> => {
         });
         groupIdMap.set(group.id, result.group.id);
 
-        // Set width/height if they were customized
-        if (group.width != null || group.height != null) {
+        // Sync width/height and metadata if they were customized
+        const hasSize = group.width != null || group.height != null;
+        const hasMetadata =
+            group.metadata && Object.keys(group.metadata).length > 0;
+        if (hasSize || hasMetadata) {
             await updateCanvasGroup({
                 canvasId,
                 groupId: result.group.id,
-                width: group.width,
-                height: group.height
+                ...(hasSize && { width: group.width, height: group.height }),
+                ...(hasMetadata && { metadata: group.metadata })
             });
         }
     }

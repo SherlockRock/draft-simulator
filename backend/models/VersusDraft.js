@@ -57,6 +57,10 @@ const VersusDraft = sequelize.define("VersusDraft", {
     allowNull: false,
     defaultValue: () => crypto.randomBytes(16).toString("hex"),
   },
+  disabledChampions: {
+    type: DataTypes.ARRAY(DataTypes.TEXT),
+    defaultValue: [],
+  },
   owner_id: {
     type: DataTypes.UUID,
     allowNull: true,

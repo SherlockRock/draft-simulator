@@ -2,9 +2,11 @@ import { createSignal, createEffect, createMemo, Show } from "solid-js";
 import { useMutation } from "@tanstack/solid-query";
 import { Dialog } from "./Dialog";
 import toast from "solid-toast";
-import { Plus } from "lucide-solid";
+import { Plus, ChevronDown, ChevronUp } from "lucide-solid";
 import { IconPicker } from "./IconPicker";
+import { ChampionToggleGrid } from "./ChampionToggleGrid";
 import { champions } from "../utils/constants";
+import { DisabledChampionsReadOnly } from "./DisabledChampionsReadOnly";
 import { VersusDraft } from "../utils/schemas";
 import { StyledSelect } from "./StyledSelect";
 import { editVersusDraft } from "../utils/actions";
@@ -27,6 +29,8 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
     const [type, setType] = createSignal("standard");
     const [length, setLength] = createSignal(1);
     const [errors, setErrors] = createSignal<Record<string, string>>({});
+    const [disabledChampions, setDisabledChampions] = createSignal<string[]>([]);
+    const [disabledExpanded, setDisabledExpanded] = createSignal(false);
 
     const mutation = useMutation(() => ({
         mutationFn: (data: Parameters<typeof editVersusDraft>[1]) =>
@@ -61,6 +65,8 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
             setIcon(props.versusDraft.icon || "");
             setType(props.versusDraft.type || "standard");
             setLength(props.versusDraft.length || 1);
+            setDisabledChampions([...(props.versusDraft.disabledChampions ?? [])]);
+            setDisabledExpanded(false);
             setErrors({});
         }
     });
@@ -95,7 +101,8 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
             competitive: competitive(),
             icon: icon(),
             type: type(),
-            length: length()
+            length: length(),
+            disabledChampions: disabledChampions()
         });
     };
 
@@ -270,6 +277,63 @@ export const EditVersusDraftDialog = (props: EditVersusDraftDialogProps) => {
                                 approval from both teams
                             </p>
                         </div>
+
+                        {/* Disabled Champions - editable before series starts, read-only after */}
+                        <Show when={!hasStarted()}>
+                            <div class="rounded-md border border-slate-600 bg-slate-700/50">
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setDisabledExpanded(!disabledExpanded())
+                                    }
+                                    class="flex w-full items-center justify-between px-3 py-2 text-sm text-slate-300 hover:text-slate-100"
+                                >
+                                    <span>
+                                        Disabled Champions{" "}
+                                        <span class="text-slate-400">
+                                            (
+                                            {disabledChampions().length > 0
+                                                ? `${disabledChampions().length} disabled`
+                                                : "None"}
+                                            )
+                                        </span>
+                                    </span>
+                                    <Show
+                                        when={disabledExpanded()}
+                                        fallback={<ChevronDown size={16} />}
+                                    >
+                                        <ChevronUp size={16} />
+                                    </Show>
+                                </button>
+                                <Show when={disabledExpanded()}>
+                                    <div class="border-t border-slate-600 px-3 pb-3 pt-2">
+                                        <ChampionToggleGrid
+                                            selectedChampions={disabledChampions}
+                                            onToggle={(champId) => {
+                                                setDisabledChampions((prev) =>
+                                                    prev.includes(champId)
+                                                        ? prev.filter(
+                                                              (id) => id !== champId
+                                                          )
+                                                        : [...prev, champId]
+                                                );
+                                            }}
+                                            theme="orange"
+                                        />
+                                    </div>
+                                </Show>
+                            </div>
+                        </Show>
+                        <Show
+                            when={
+                                hasStarted() &&
+                                (props.versusDraft.disabledChampions ?? []).length > 0
+                            }
+                        >
+                            <DisabledChampionsReadOnly
+                                championIds={props.versusDraft.disabledChampions ?? []}
+                            />
+                        </Show>
 
                         <div class="flex justify-end space-x-3 pt-4">
                             <button

@@ -23,6 +23,7 @@ type props = {
     onSelectNext: () => void;
     onSelectPrevious: () => void;
     side?: "team1" | "team2";
+    disabledChampions?: string[];
 };
 
 // CanvasSelect is only used in canvas context, so always use purple theme
@@ -47,11 +48,13 @@ export const CanvasSelect = (props: props) => {
     });
 
     createEffect(() => {
-        setUnavailableChampions(
-            props.draft.picks
-                .filter((value) => value !== "")
-                .map((value) => champions[Number(value)].name)
-        );
+        const pickedNames = props.draft.picks
+            .filter((value) => value !== "")
+            .map((value) => champions[Number(value)].name);
+        const disabledNames = (props.disabledChampions ?? [])
+            .map((id) => champions[Number(id)]?.name)
+            .filter(Boolean) as string[];
+        setUnavailableChampions([...new Set([...pickedNames, ...disabledNames])]);
     });
 
     createEffect(() => {

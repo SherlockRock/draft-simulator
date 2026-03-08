@@ -82,6 +82,7 @@ import { handleLogin } from "./utils/actions";
 import { SeriesGroupContainer } from "./components/SeriesGroupContainer";
 import { CustomGroupContainer } from "./components/CustomGroupContainer";
 import { DeleteGroupDialog } from "./components/DeleteGroupDialog";
+import { GroupSettingsDialog } from "./components/GroupDisabledChampionsDialog";
 import { DraftContextMenu } from "./components/DraftContextMenu";
 import { GroupContextMenu } from "./components/GroupContextMenu";
 import { useCanvasContext } from "./contexts/CanvasContext";
@@ -234,6 +235,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [importPosition, setImportPosition] = createSignal({ x: 0, y: 0 });
     const [isDeleteGroupDialogOpen, setIsDeleteGroupDialogOpen] = createSignal(false);
     const [groupToDelete, setGroupToDelete] = createSignal<CanvasGroup | null>(null);
+    const [disabledChampionsGroupId, setDisabledChampionsGroupId] = createSignal<
+        string | null
+    >(null);
     const [createGroupPosition, setCreateGroupPosition] = createSignal({ x: 0, y: 0 });
     const [dragOverGroupId, setDragOverGroupId] = createSignal<string | null>(null);
     const [exitingGroupId, setExitingGroupId] = createSignal<string | null>(null);
@@ -1407,6 +1411,41 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
+    const handleEditDisabledChampions = (groupId: string) => {
+        if (!canEdit()) return;
+        setDisabledChampionsGroupId(groupId);
+    };
+
+    const handleSaveGroupSettings = (data: {
+        name: string;
+        disabledChampions: string[];
+    }) => {
+        const groupId = disabledChampionsGroupId();
+        if (!groupId) return;
+
+        if (isLocalMode()) {
+            const group = canvasGroups.find((g) => g.id === groupId);
+            if (group) {
+                localUpdateGroup({
+                    groupId,
+                    name: data.name || undefined,
+                    metadata: {
+                        ...group.metadata,
+                        disabledChampions: data.disabledChampions
+                    }
+                });
+                refreshFromLocal();
+            }
+        } else {
+            updateGroupMutation.mutate({
+                canvasId: canvasId(),
+                groupId,
+                name: data.name || undefined,
+                metadata: { disabledChampions: data.disabledChampions }
+            });
+        }
+    };
+
     const handleDeleteGroup = (groupId: string) => {
         if (!canEdit()) return;
         const group = canvasGroups.find((g) => g.id === groupId);
@@ -2259,6 +2298,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     viewport={props.viewport}
                                     onGroupMouseDown={onGroupMouseDown}
                                     onDeleteGroup={handleDeleteGroup}
+                                    onEditDisabledChampions={handleEditDisabledChampions}
                                     onRenameGroup={handleRenameGroup}
                                     onResizeGroup={handleResizeGroup}
                                     onResizeEnd={handleResizeEnd}
@@ -2309,6 +2349,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 onEditingComplete={() =>
                                                     setEditingDraftId(null)
                                                 }
+                                                disabledChampions={
+                                                    group.metadata.disabledChampions
+                                                }
                                             />
                                         )}
                                     </For>
@@ -2321,6 +2364,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 viewport={props.viewport}
                                 onGroupMouseDown={onGroupMouseDown}
                                 onDeleteGroup={handleDeleteGroup}
+                                onEditDisabledChampions={handleEditDisabledChampions}
                                 canEdit={canEdit}
                                 isConnectionMode={isConnectionMode()}
                                 layoutToggle={props.layoutToggle}
@@ -2370,6 +2414,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                             }
                                             blueTeamName={blueTeamName}
                                             redTeamName={redTeamName}
+                                            disabledChampions={
+                                                group.metadata.disabledChampions
+                                            }
                                         />
                                     );
                                 }}
@@ -2508,6 +2555,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             )}
                         </Show>
                     }
+                />
+                {/* Group Settings Modal */}
+                <GroupSettingsDialog
+                    isOpen={() => disabledChampionsGroupId() !== null}
+                    onClose={() => setDisabledChampionsGroupId(null)}
+                    initialName={
+                        canvasGroups.find((g) => g.id === disabledChampionsGroupId())
+                            ?.name ?? ""
+                    }
+                    initialChampions={
+                        canvasGroups.find((g) => g.id === disabledChampionsGroupId())
+                            ?.metadata.disabledChampions ?? []
+                    }
+                    onSave={handleSaveGroupSettings}
                 />
                 {/* Context Menu */}
                 <Show when={contextMenuPosition()}>

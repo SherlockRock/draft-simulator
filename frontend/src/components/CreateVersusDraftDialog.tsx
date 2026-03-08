@@ -3,8 +3,9 @@ import { useMutation } from "@tanstack/solid-query";
 import { Dialog } from "./Dialog";
 import toast from "solid-toast";
 import { useNavigate } from "@solidjs/router";
-import { Plus } from "lucide-solid";
+import { Plus, ChevronDown, ChevronUp } from "lucide-solid";
 import { IconPicker } from "./IconPicker";
+import { ChampionToggleGrid } from "./ChampionToggleGrid";
 import { champions } from "../utils/constants";
 import { StyledSelect } from "./StyledSelect";
 import { createVersusDraft } from "../utils/actions";
@@ -27,6 +28,8 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
     const [showIconPicker, setShowIconPicker] = createSignal(false);
     const [type, setType] = createSignal("standard");
     const [errors, setErrors] = createSignal<Record<string, string>>({});
+    const [disabledChampions, setDisabledChampions] = createSignal<string[]>([]);
+    const [disabledExpanded, setDisabledExpanded] = createSignal(false);
 
     const mutation = useMutation(() => ({
         mutationFn: createVersusDraft,
@@ -57,6 +60,8 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
             setIcon("");
             setType("standard");
             setErrors({});
+            setDisabledChampions([]);
+            setDisabledExpanded(false);
         }
     });
 
@@ -90,7 +95,8 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
             length: length(),
             competitive: competitive(),
             icon: icon(),
-            type: type()
+            type: type(),
+            disabledChampions: disabledChampions()
         });
     };
 
@@ -260,6 +266,47 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                                 In competitive mode, pauses and pick changes require
                                 approval from both teams
                             </p>
+                        </div>
+
+                        {/* Disabled Champions */}
+                        <div class="rounded-md border border-slate-600 bg-slate-700/50">
+                            <button
+                                type="button"
+                                onClick={() => setDisabledExpanded(!disabledExpanded())}
+                                class="flex w-full items-center justify-between px-3 py-2 text-sm text-slate-300 hover:text-slate-100"
+                            >
+                                <span>
+                                    Disabled Champions{" "}
+                                    <span class="text-slate-400">
+                                        (
+                                        {disabledChampions().length > 0
+                                            ? `${disabledChampions().length} disabled`
+                                            : "None"}
+                                        )
+                                    </span>
+                                </span>
+                                <Show
+                                    when={disabledExpanded()}
+                                    fallback={<ChevronDown size={16} />}
+                                >
+                                    <ChevronUp size={16} />
+                                </Show>
+                            </button>
+                            <Show when={disabledExpanded()}>
+                                <div class="border-t border-slate-600 px-3 pb-3 pt-2">
+                                    <ChampionToggleGrid
+                                        selectedChampions={disabledChampions}
+                                        onToggle={(champId) => {
+                                            setDisabledChampions((prev) =>
+                                                prev.includes(champId)
+                                                    ? prev.filter((id) => id !== champId)
+                                                    : [...prev, champId]
+                                            );
+                                        }}
+                                        theme="orange"
+                                    />
+                                </div>
+                            </Show>
                         </div>
 
                         <div class="flex justify-end space-x-3 pt-4">

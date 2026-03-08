@@ -750,13 +750,21 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         });
       }
 
-      // Check series restrictions (Fearless/Ironman modes)
+      // Check series restrictions (Fearless/Ironman modes) and disabled champions
       if (draft.versus_draft_id) {
         const versusDraft = await VersusDraft.findByPk(draft.versus_draft_id, {
           include: [{ model: Draft, as: "Drafts" }],
         });
 
         if (versusDraft) {
+          // Check disabled champions
+          const disabledChampions = versusDraft.disabledChampions || [];
+          if (disabledChampions.includes(champion)) {
+            return socket.emit("error", {
+              message: "Champion is disabled for this series",
+            });
+          }
+
           const restrictedChampions = getRestrictedChampions(
             versusDraft.type,
             versusDraft.Drafts,

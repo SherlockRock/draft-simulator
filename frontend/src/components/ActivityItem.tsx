@@ -1,11 +1,20 @@
 import { Component, createSignal, Show, createEffect, onCleanup } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/solid-query";
-import { Share2, Pencil, Loader2, Check, Copy, Plus, X } from "lucide-solid";
+import {
+    Share2,
+    Pencil,
+    Loader2,
+    Check,
+    Copy,
+    Plus,
+    X,
+    ChevronDown,
+    ChevronUp
+} from "lucide-solid";
 import {
     generateVersusShareLink,
     generateCanvasShareLink,
-    editDraft,
     updateCanvasName,
     fetchCanvasUsers,
     updateCanvasUserPermission,
@@ -20,7 +29,9 @@ import { Dialog } from "./Dialog";
 import { CanvasSettingsDialog } from "./CanvasSettingsDialog";
 import { IconPicker } from "./IconPicker";
 import { IconDisplay } from "./IconDisplay";
+import { ChampionToggleGrid } from "./ChampionToggleGrid";
 import { champions } from "../utils/constants";
+import { DisabledChampionsReadOnly } from "./DisabledChampionsReadOnly";
 import { SelectTheme } from "../utils/selectTheme";
 
 interface ActivityItemProps {
@@ -29,13 +40,14 @@ interface ActivityItemProps {
 
 const getThemeFromActivity = (activity: Activity): SelectTheme => {
     if (activity.resource_type === "versus") return "orange";
-    if (activity.resource_type === "canvas") return "purple";
-    return "teal";
+    return "purple";
 };
 
 const ActivityItem: Component<ActivityItemProps> = (props) => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const versus = () =>
+        props.activity.resource_type === "versus" ? props.activity : undefined;
     const [isShareOpen, setIsShareOpen] = createSignal(false);
     const [isEditOpen, setIsEditOpen] = createSignal(false);
     const [isManageUsersOpen, setIsManageUsersOpen] = createSignal(false);
@@ -44,12 +56,13 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     const [editDescription, setEditDescription] = createSignal(
         props.activity.description || ""
     );
-    const [editPublic, setEditPublic] = createSignal(false);
     const [editIcon, setEditIcon] = createSignal("");
     const [showIconPicker, setShowIconPicker] = createSignal(false);
     const [editBlueTeamName, setEditBlueTeamName] = createSignal("");
     const [editRedTeamName, setEditRedTeamName] = createSignal("");
     const [editCompetitive, setEditCompetitive] = createSignal(false);
+    const [editDisabledChampions, setEditDisabledChampions] = createSignal<string[]>([]);
+    const [disabledExpanded, setDisabledExpanded] = createSignal(false);
 
     let shareButtonRef: HTMLDivElement | undefined;
     let cardRef: HTMLDivElement | undefined;
@@ -107,13 +120,13 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
             setEditName(props.activity.resource_name);
             setEditDescription(props.activity.description || "");
             setEditIcon(props.activity.icon || "");
-            if (props.activity.resource_type === "versus") {
-                setEditBlueTeamName(props.activity.blueTeamName || "Team 1");
-                setEditRedTeamName(props.activity.redTeamName || "Team 2");
-                setEditCompetitive(props.activity.competitive || false);
-            }
-            if (props.activity.resource_type === "draft") {
-                setEditPublic(props.activity.public || false);
+            const v = versus();
+            if (v) {
+                setEditBlueTeamName(v.blueTeamName || "Team 1");
+                setEditRedTeamName(v.redTeamName || "Team 2");
+                setEditCompetitive(v.competitive || false);
+                setEditDisabledChampions([...(v.disabledChampions ?? [])]);
+                setDisabledExpanded(false);
             }
         }
     });
@@ -170,23 +183,6 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
         }
     }));
 
-    const editDraftMutation = useMutation(() => ({
-        mutationFn: (data: {
-            name: string;
-            description?: string;
-            public: boolean;
-            icon?: string;
-        }) => editDraft(props.activity.resource_id, data),
-        onSuccess: () => {
-            setIsEditOpen(false);
-            toast.success("Draft updated successfully");
-            queryClient.invalidateQueries({ queryKey: ["recentActivity"] });
-        },
-        onError: () => {
-            toast.error("Failed to update");
-        }
-    }));
-
     const editCanvasMutation = useMutation(() => ({
         mutationFn: (data: { name: string; description?: string; icon?: string }) =>
             updateCanvasName({
@@ -213,6 +209,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
             redTeamName: string;
             competitive: boolean;
             icon: string;
+            disabledChampions: string[];
         }) => editVersusDraft(props.activity.resource_id, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["recentActivity"] });
@@ -239,8 +236,6 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
 
     const getDefaultIcon = () => {
         switch (props.activity.resource_type) {
-            case "draft":
-                return "📄";
             case "canvas":
                 return "🎨";
             case "versus":
@@ -252,13 +247,6 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
 
     const getColorClasses = () => {
         switch (props.activity.resource_type) {
-            case "draft":
-                return {
-                    badge: "bg-blue-500/20 text-blue-300",
-                    text: "text-blue-400",
-                    accent: "bg-blue-500",
-                    gradient: "from-blue-500/5 to-transparent"
-                };
             case "canvas":
                 return {
                     badge: "bg-purple-500/20 text-purple-300",
@@ -350,7 +338,6 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
         }
         setEditName(props.activity.resource_name);
         setEditDescription(props.activity.description || "");
-        setEditPublic(props.activity.public ?? false);
         setEditIcon(props.activity.icon || "");
         setIsEditOpen(true);
     };
@@ -381,14 +368,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     };
 
     const handleSaveEdit = () => {
-        if (props.activity.resource_type === "draft") {
-            editDraftMutation.mutate({
-                name: editName(),
-                description: editDescription(),
-                public: editPublic(),
-                icon: editIcon()
-            });
-        } else if (props.activity.resource_type === "canvas") {
+        if (props.activity.resource_type === "canvas") {
             editCanvasMutation.mutate({
                 name: editName(),
                 description: editDescription(),
@@ -401,7 +381,8 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                 blueTeamName: editBlueTeamName(),
                 redTeamName: editRedTeamName(),
                 competitive: editCompetitive(),
-                icon: editIcon()
+                icon: editIcon(),
+                disabledChampions: editDisabledChampions()
             });
         }
     };
@@ -485,14 +466,14 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                 </Show>
                             </div>
                             {/* Team names row (versus only) */}
-                            <Show when={props.activity.resource_type === "versus"}>
+                            <Show when={versus()}>
                                 <div class="flex flex-wrap items-center gap-x-2 text-sm">
                                     <span class="text-blue-400">
-                                        {props.activity.blueTeamName}
+                                        {versus()?.blueTeamName}
                                     </span>
                                     <span class="text-slate-500">vs</span>
                                     <span class="text-red-400">
-                                        {props.activity.redTeamName}
+                                        {versus()?.redTeamName}
                                     </span>
                                 </div>
                             </Show>
@@ -514,25 +495,25 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                         <span class="text-sm text-slate-400">
                             {formatTimestamp(props.activity.timestamp)}
                         </span>
-                        <Show when={props.activity.resource_type === "versus"}>
+                        <Show when={versus()}>
                             <div class="flex items-center gap-2">
                                 <span
                                     class="rounded px-2 py-0.5 text-xs"
                                     classList={{
                                         "bg-indigo-500/20 text-indigo-300":
-                                            props.activity.length === 1,
+                                            versus()?.length === 1,
                                         "bg-teal-500/20 text-teal-300":
-                                            props.activity.length === 3,
+                                            versus()?.length === 3,
                                         "bg-emerald-500/20 text-emerald-300":
-                                            props.activity.length === 5,
+                                            versus()?.length === 5,
                                         "bg-pink-500/20 text-pink-300":
-                                            props.activity.length === 7
+                                            versus()?.length === 7
                                     }}
                                 >
-                                    Bo{props.activity.length}
+                                    Bo{versus()?.length}
                                 </span>
                                 <Show
-                                    when={props.activity.competitive}
+                                    when={versus()?.competitive}
                                     fallback={
                                         <span class="rounded bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
                                             Scrim
@@ -543,22 +524,20 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                         Competitive
                                     </span>
                                 </Show>
-                                <Show when={props.activity.type}>
+                                <Show when={versus()?.type}>
                                     <span
                                         class="rounded px-2 py-0.5 text-xs"
                                         classList={{
                                             "bg-cyan-500/20 text-cyan-300":
-                                                props.activity.type === "standard",
+                                                versus()?.type === "standard",
                                             "bg-fuchsia-500/20 text-fuchsia-300":
-                                                props.activity.type === "fearless",
+                                                versus()?.type === "fearless",
                                             "bg-lime-500/20 text-lime-300":
-                                                props.activity.type === "ironman"
+                                                versus()?.type === "ironman"
                                         }}
                                     >
-                                        {(
-                                            props.activity.type?.charAt(0) ?? ""
-                                        ).toUpperCase() +
-                                            (props.activity.type?.slice(1) ?? "")}
+                                        {(versus()?.type?.charAt(0) ?? "").toUpperCase() +
+                                            (versus()?.type?.slice(1) ?? "")}
                                     </span>
                                 </Show>
                             </div>
@@ -827,21 +806,61 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                     teams
                                 </p>
                             </div>
-                        </Show>
-                        <Show when={props.activity.resource_type === "draft"}>
-                            <div class="mb-4">
-                                <label class="flex items-center gap-2 text-sm font-medium text-slate-200">
-                                    <input
-                                        type="checkbox"
-                                        checked={editPublic()}
-                                        onChange={(e) =>
-                                            setEditPublic(e.currentTarget.checked)
+                            <Show when={!versus()?.hasStarted}>
+                                <div class="mb-4 rounded-md border border-slate-600 bg-slate-700/50">
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setDisabledExpanded(!disabledExpanded())
                                         }
-                                        class="h-4 w-4 rounded border-slate-600 bg-slate-700 text-teal-500 focus:ring-2 focus:ring-teal-500"
-                                    />
-                                    Public
-                                </label>
-                            </div>
+                                        class="flex w-full items-center justify-between px-3 py-2 text-sm text-slate-300 hover:text-slate-100"
+                                    >
+                                        <span>
+                                            Disabled Champions{" "}
+                                            <span class="text-slate-400">
+                                                (
+                                                {editDisabledChampions().length > 0
+                                                    ? `${editDisabledChampions().length} disabled`
+                                                    : "None"}
+                                                )
+                                            </span>
+                                        </span>
+                                        <Show
+                                            when={disabledExpanded()}
+                                            fallback={<ChevronDown size={16} />}
+                                        >
+                                            <ChevronUp size={16} />
+                                        </Show>
+                                    </button>
+                                    <Show when={disabledExpanded()}>
+                                        <div class="border-t border-slate-600 px-3 pb-3 pt-2">
+                                            <ChampionToggleGrid
+                                                selectedChampions={editDisabledChampions}
+                                                onToggle={(champId) => {
+                                                    setEditDisabledChampions((prev) =>
+                                                        prev.includes(champId)
+                                                            ? prev.filter(
+                                                                  (id) => id !== champId
+                                                              )
+                                                            : [...prev, champId]
+                                                    );
+                                                }}
+                                                theme="orange"
+                                            />
+                                        </div>
+                                    </Show>
+                                </div>
+                            </Show>
+                            <Show
+                                when={
+                                    versus()?.hasStarted &&
+                                    (versus()?.disabledChampions ?? []).length > 0
+                                }
+                            >
+                                <DisabledChampionsReadOnly
+                                    championIds={versus()?.disabledChampions ?? []}
+                                />
+                            </Show>
                         </Show>
                         <div class="flex justify-end gap-2">
                             <button
