@@ -1,7 +1,17 @@
 import { Component, Show, For, createSignal } from "solid-js";
-import { draft, getEffectiveSide } from "../utils/schemas";
+import { X } from "lucide-solid";
+import { draft } from "../utils/schemas";
+import { getEffectiveSide } from "@draft-sim/shared-types";
 import { getSideTeamName } from "../utils/versusPermissions";
-import { champions, championCategories } from "../utils/constants";
+import {
+    champions,
+    championCategories,
+    gameBorderColors,
+    gameTextColorsMuted,
+    overlayTeamColor,
+    overlayBanColor,
+    overlayPickColor
+} from "../utils/constants";
 import { useFilterableItems } from "../hooks/useFilterableItems";
 import { FilterBar } from "./FilterBar";
 
@@ -19,6 +29,8 @@ interface PickChangeModalProps {
     isCompetitive: boolean;
     blueTeamName: string;
     redTeamName: string;
+    disabledChampions?: string[];
+    restrictedChampionGameMap?: Map<string, { gameNumber: number; pickIndex: number }>;
     pendingRequest?: PickChangeRequest | null;
     onRequestChange: (pickIndex: number, newChampion: string) => void;
     onApproveChange: (requestId: string) => void;
@@ -31,6 +43,30 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
     const [selectedChampion, setSelectedChampion] = createSignal<string | null>(null);
 
     const isSpectator = () => props.myRole() === "spectator";
+
+    // Draft position helpers (matching ChampionPanel)
+    const getDraftPositionParts = (
+        pickIndex: number
+    ): { team: number; type: "B" | "P"; num: number } => {
+        if (pickIndex < 5) return { team: 1, type: "B", num: pickIndex + 1 };
+        if (pickIndex < 10) return { team: 2, type: "B", num: pickIndex - 4 };
+        if (pickIndex < 15) return { team: 1, type: "P", num: pickIndex - 9 };
+        return { team: 2, type: "P", num: pickIndex - 14 };
+    };
+
+    const getPositionColor = (type: "B" | "P"): string => {
+        return type === "B" ? overlayBanColor : overlayPickColor;
+    };
+
+    const getDraftPositionText = (pickIndex: number): string => {
+        if (pickIndex < 5) return `Team 1 Ban ${pickIndex + 1}`;
+        if (pickIndex < 10) return `Team 2 Ban ${pickIndex - 4}`;
+        if (pickIndex < 15) return `Team 1 Pick ${pickIndex - 9}`;
+        return `Team 2 Pick ${pickIndex - 14}`;
+    };
+
+    const currentGameNumber = () => (props.draft?.seriesIndex ?? 0) + 1;
+
     const myTeam = () => {
         const role = props.myRole();
         if (!role || role === "spectator") return "blue";
@@ -253,6 +289,28 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                                     props.draft?.picks?.includes(
                                                         champIndex()
                                                     ) || false;
+                                                const isDisabled = () =>
+                                                    (
+                                                        props.disabledChampions ?? []
+                                                    ).includes(champIndex());
+                                                const isSeriesRestricted = () =>
+                                                    (
+                                                        props.restrictedChampionGameMap ??
+                                                        new Map()
+                                                    ).has(champIndex());
+                                                const restrictionInfo = () =>
+                                                    (
+                                                        props.restrictedChampionGameMap ??
+                                                        new Map()
+                                                    ).get(champIndex());
+                                                const currentPickIndex = () =>
+                                                    (props.draft?.picks ?? []).indexOf(
+                                                        champIndex()
+                                                    );
+                                                const isUnavailable = () =>
+                                                    isAlreadyPicked() ||
+                                                    isDisabled() ||
+                                                    isSeriesRestricted();
                                                 const isSelected = () =>
                                                     selectedChampion() === champIndex();
 
@@ -263,21 +321,150 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                                                 champIndex()
                                                             )
                                                         }
-                                                        disabled={isAlreadyPicked()}
-                                                        title={champion.name}
-                                                        class={`h-12 w-12 flex-shrink-0 rounded border-2 transition-all ${
+                                                        disabled={isUnavailable()}
+                                                        title={
+                                                            isDisabled()
+                                                                ? `${champion.name} - Disabled For Series`
+                                                                : isSeriesRestricted()
+                                                                  ? `${champion.name} - Game ${restrictionInfo()?.gameNumber ?? 1} ${getDraftPositionText(restrictionInfo()?.pickIndex ?? 0)}`
+                                                                  : isAlreadyPicked()
+                                                                    ? `${champion.name} - Game ${currentGameNumber()} ${getDraftPositionText(currentPickIndex())}`
+                                                                    : champion.name
+                                                        }
+                                                        class={`relative h-12 w-12 flex-shrink-0 overflow-hidden rounded border-2 transition-all ${
                                                             isSelected()
                                                                 ? "border-orange-500"
-                                                                : isAlreadyPicked()
-                                                                  ? "cursor-not-allowed border-transparent opacity-30"
-                                                                  : "border-transparent hover:border-slate-500"
+                                                                : isDisabled()
+                                                                  ? "cursor-not-allowed border-red-700"
+                                                                  : isSeriesRestricted()
+                                                                    ? `cursor-not-allowed ${gameBorderColors[restrictionInfo()?.gameNumber ?? 1] ?? "border-slate-700"}`
+                                                                    : isAlreadyPicked()
+                                                                      ? `cursor-not-allowed ${gameBorderColors[currentGameNumber()] ?? "border-slate-700"}`
+                                                                      : "border-transparent hover:border-slate-500"
                                                         }`}
                                                     >
                                                         <img
                                                             src={champion.img}
                                                             alt={champion.name}
-                                                            class={`h-full w-full rounded ${isAlreadyPicked() ? "grayscale" : ""}`}
+                                                            class={`h-full w-full rounded ${isUnavailable() ? "opacity-40" : ""}`}
                                                         />
+                                                        {/* Disabled overlay */}
+                                                        <Show when={isDisabled()}>
+                                                            <div class="absolute inset-0 flex items-center justify-center bg-red-900/40">
+                                                                <X
+                                                                    size={16}
+                                                                    class="text-red-400"
+                                                                />
+                                                            </div>
+                                                        </Show>
+                                                        {/* Current game picked overlay badge */}
+                                                        <Show
+                                                            when={
+                                                                isAlreadyPicked() &&
+                                                                !isSeriesRestricted() &&
+                                                                !isDisabled()
+                                                            }
+                                                        >
+                                                            {(() => {
+                                                                const parts =
+                                                                    getDraftPositionParts(
+                                                                        currentPickIndex()
+                                                                    );
+                                                                return (
+                                                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-0.5 py-px text-[7px] font-bold leading-tight">
+                                                                        <span
+                                                                            class={
+                                                                                gameTextColorsMuted[
+                                                                                    currentGameNumber()
+                                                                                ] ??
+                                                                                "text-slate-300"
+                                                                            }
+                                                                        >
+                                                                            G
+                                                                            {
+                                                                                currentGameNumber()
+                                                                            }
+                                                                        </span>
+                                                                        <span>
+                                                                            <span
+                                                                                class={
+                                                                                    overlayTeamColor
+                                                                                }
+                                                                            >
+                                                                                T
+                                                                                {
+                                                                                    parts.team
+                                                                                }
+                                                                            </span>
+                                                                            <span
+                                                                                class={getPositionColor(
+                                                                                    parts.type
+                                                                                )}
+                                                                            >
+                                                                                {
+                                                                                    parts.type
+                                                                                }
+                                                                                {
+                                                                                    parts.num
+                                                                                }
+                                                                            </span>
+                                                                        </span>
+                                                                    </div>
+                                                                );
+                                                            })()}
+                                                        </Show>
+                                                        {/* Series-restricted overlay badge */}
+                                                        <Show when={isSeriesRestricted()}>
+                                                            {(() => {
+                                                                const info =
+                                                                    restrictionInfo();
+                                                                const parts =
+                                                                    getDraftPositionParts(
+                                                                        info?.pickIndex ??
+                                                                            0
+                                                                    );
+                                                                const gameNum =
+                                                                    info?.gameNumber ?? 1;
+                                                                return (
+                                                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-0.5 py-px text-[7px] font-bold leading-tight">
+                                                                        <span
+                                                                            class={
+                                                                                gameTextColorsMuted[
+                                                                                    gameNum
+                                                                                ] ??
+                                                                                "text-slate-300"
+                                                                            }
+                                                                        >
+                                                                            G{gameNum}
+                                                                        </span>
+                                                                        <span>
+                                                                            <span
+                                                                                class={
+                                                                                    overlayTeamColor
+                                                                                }
+                                                                            >
+                                                                                T
+                                                                                {
+                                                                                    parts.team
+                                                                                }
+                                                                            </span>
+                                                                            <span
+                                                                                class={getPositionColor(
+                                                                                    parts.type
+                                                                                )}
+                                                                            >
+                                                                                {
+                                                                                    parts.type
+                                                                                }
+                                                                                {
+                                                                                    parts.num
+                                                                                }
+                                                                            </span>
+                                                                        </span>
+                                                                    </div>
+                                                                );
+                                                            })()}
+                                                        </Show>
                                                     </button>
                                                 );
                                             }}

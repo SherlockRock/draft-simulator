@@ -31,9 +31,9 @@ import {
     PickChangeRequestedSchema,
     RoleAvailableSchema,
     GameSettingsUpdateSchema,
-    WinnerUpdateSchema,
-    getEffectiveSide
+    WinnerUpdateSchema
 } from "../utils/schemas";
+import { getEffectiveSide } from "@draft-sim/shared-types";
 import { fetchVersusDraft, fetchDraft, completeDraft } from "../utils/actions";
 import { Socket } from "socket.io-client";
 import { validateSocketEvent } from "../utils/socketValidation";

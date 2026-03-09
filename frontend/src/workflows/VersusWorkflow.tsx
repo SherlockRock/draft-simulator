@@ -4,9 +4,10 @@ import {
     createEffect,
     onCleanup,
     Show,
-    untrack
+    untrack,
+    JSX
 } from "solid-js";
-import { useParams, useNavigate, RouteSectionProps } from "@solidjs/router";
+import { useParams, useNavigate, useLocation, RouteSectionProps } from "@solidjs/router";
 import FlowPanel from "../components/FlowPanel";
 import VersusFlowPanelContent from "../components/VersusFlowPanelContent";
 import {
@@ -59,14 +60,15 @@ export const getSuggestedRole = (
 const VersusWorkflow: Component<RouteSectionProps> = (props) => {
     return (
         <VersusSocketProvider>
-            <VersusWorkflowInner {...props} />
+            <VersusWorkflowInner>{props.children}</VersusWorkflowInner>
         </VersusSocketProvider>
     );
 };
 
-const VersusWorkflowInner: Component<RouteSectionProps> = (props) => {
+const VersusWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
     const params = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
 
     // Get socket from VersusSocketProvider instead of useUser
     const { socket: socketAccessor, connectionStatus: connectionStatusAccessor } =
@@ -608,7 +610,7 @@ const VersusWorkflowInner: Component<RouteSectionProps> = (props) => {
 
     // Clear session when leaving versus routes
     createEffect(() => {
-        const isVersusRoute = window.location.pathname.startsWith("/versus");
+        const isVersusRoute = location.pathname.startsWith("/versus");
 
         if (!isVersusRoute && versusContext().connected) {
             leaveSession();

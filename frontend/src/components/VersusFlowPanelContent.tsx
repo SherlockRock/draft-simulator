@@ -11,6 +11,7 @@ import { IconDisplay } from "./IconDisplay";
 import { WinnerReporter } from "./WinnerReporter";
 import { GameSettingsGrid } from "./GameSettingsGrid";
 import { canReportWinner } from "../utils/versusPermissions";
+import { getRestrictedChampionsByGame } from "../utils/seriesRestrictions";
 import { useUser } from "../userProvider";
 import { RoleSwitcher } from "./RoleSwitcher";
 import { EditVersusDraftDialog } from "./EditVersusDraftDialog";
@@ -78,6 +79,38 @@ const VersusFlowPanelContent: Component = () => {
     const redSideTeamName = createMemo(() => {
         const bst = draftState()?.draft?.blueSideTeam ?? 1;
         return bst === 1 ? versusDraft()?.redTeamName : versusDraft()?.blueTeamName;
+    });
+
+    // Restricted champion map for pick change modal (series restrictions like fearless)
+    const restrictedChampionGameMap = createMemo(() => {
+        const vd = versusDraft();
+        const d = draftState()?.draft;
+        if (!vd || !d)
+            return new Map<string, { gameNumber: number; pickIndex: number }>();
+        const byGame = getRestrictedChampionsByGame(
+            vd.type || "standard",
+            vd.Drafts || [],
+            d.seriesIndex ?? 0
+        );
+        const map = new Map<string, { gameNumber: number; pickIndex: number }>();
+        for (const game of byGame) {
+            const entries: [string[], number][] = [
+                [game.blueBans, 0],
+                [game.redBans, 5],
+                [game.bluePicks, 10],
+                [game.redPicks, 15]
+            ];
+            for (const [arr, offset] of entries) {
+                arr.forEach((id, i) => {
+                    if (id && id !== "")
+                        map.set(id, {
+                            gameNumber: game.gameNumber,
+                            pickIndex: offset + i
+                        });
+                });
+            }
+        }
+        return map;
     });
 
     const handleSettingsChange = (
@@ -290,6 +323,8 @@ const VersusFlowPanelContent: Component = () => {
                         isCompetitive={versusDraft()?.competitive ?? false}
                         blueTeamName={versusDraft()?.blueTeamName ?? ""}
                         redTeamName={versusDraft()?.redTeamName ?? ""}
+                        disabledChampions={versusDraft()?.disabledChampions ?? []}
+                        restrictedChampionGameMap={restrictedChampionGameMap()}
                         pendingRequest={callbacks()?.pendingPickChangeRequest() ?? null}
                         onRequestChange={
                             callbacks()?.handleRequestPickChange ?? fallbackAction

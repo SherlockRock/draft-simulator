@@ -1085,14 +1085,57 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         });
       }
 
-      const versusDraft = await VersusDraft.findByPk(draft.versus_draft_id);
+      const versusDraft = await VersusDraft.findByPk(draft.versus_draft_id, {
+        include: [{ model: Draft, as: "Drafts" }],
+      });
       const state = getState(draftId);
 
       if (!state) {
         return socket.emit("error", { message: "Draft state not found" });
       }
 
+      // Validate pickIndex belongs to the requesting team
+      const blueIndices = [0, 1, 2, 3, 4, 10, 11, 12, 13, 14];
+      const redIndices = [5, 6, 7, 8, 9, 15, 16, 17, 18, 19];
+      const teamIndices = team === "blue" ? blueIndices : redIndices;
+      if (!teamIndices.includes(pickIndex)) {
+        return socket.emit("error", {
+          message: "Cannot change the other team's picks",
+        });
+      }
+
       const oldChampion = draft.picks[pickIndex];
+
+      // Check if newChampion is already in the draft (excluding the slot being changed)
+      const picksWithoutSlot = draft.picks.filter((_, idx) => idx !== pickIndex);
+      if (picksWithoutSlot.includes(newChampion)) {
+        return socket.emit("error", {
+          message: "Champion is already picked or banned in this draft",
+        });
+      }
+
+      // Check disabled champions
+      const disabledChampions = versusDraft.disabledChampions || [];
+      if (disabledChampions.includes(newChampion)) {
+        return socket.emit("error", {
+          message: "Champion is disabled for this series",
+        });
+      }
+
+      // Check series-restricted champions (fearless/ironman)
+      if (versusDraft) {
+        const restrictedChampions = getRestrictedChampions(
+          versusDraft.type,
+          versusDraft.Drafts,
+          draft.seriesIndex,
+        );
+
+        if (restrictedChampions.includes(newChampion)) {
+          return socket.emit("error", {
+            message: "Champion restricted from previous games in this series",
+          });
+        }
+      }
 
       // Scrim mode: immediate change
       if (!versusDraft.competitive) {
