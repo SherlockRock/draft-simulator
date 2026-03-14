@@ -3,8 +3,8 @@
   "version": "0.0.1",
   "description": "First Pick backend",
   "scripts": {
-    "start": "node index.js",
-    "dev": "node --watch index.js"
+    "start": "node --require ./tracing.js index.js",
+    "dev": "node --watch --require ./tracing.js index.js"
   },
   "dependencies": {
     "@draft-sim/shared-types": "workspace:*",
