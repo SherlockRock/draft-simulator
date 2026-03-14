@@ -25,8 +25,9 @@ if (env.OTEL_EXPORTER_OTLP_ENDPOINT) {
 
   // --- Logs ---
   const logExporter = new OTLPLogExporter();
-  const loggerProvider = new LoggerProvider();
-  loggerProvider.addLogRecordProcessor(new BatchLogRecordProcessor(logExporter));
+  const loggerProvider = new LoggerProvider({
+    processors: [new BatchLogRecordProcessor(logExporter)],
+  });
   logs.setGlobalLoggerProvider(loggerProvider);
 
   // --- Console Patch ---
