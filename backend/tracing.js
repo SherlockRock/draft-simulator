@@ -1,3 +1,6 @@
+// Load .env before checking OTel config (--require runs before dotenv in index.js)
+require("dotenv").config();
+
 const { env } = require("node:process");
 
 // Only initialize OTel when endpoint is configured (production/staging)
@@ -68,14 +71,13 @@ if (env.OTEL_EXPORTER_OTLP_ENDPOINT) {
 
   sdk.start();
 
-  // Graceful shutdown
+  // Graceful shutdown — flush telemetry without calling process.exit(),
+  // so other shutdown handlers (Express, DB) can complete
   const shutdown = () => {
     sdk.shutdown()
       .then(() => loggerProvider.shutdown())
-      .then(() => process.exit(0))
       .catch((err) => {
         originalError("OTel shutdown error:", err);
-        process.exit(1);
       });
   };
 
