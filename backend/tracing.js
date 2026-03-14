@@ -82,4 +82,33 @@ if (env.OTEL_EXPORTER_OTLP_ENDPOINT) {
   process.on("SIGINT", shutdown);
 
   originalLog(`OpenTelemetry initialized for service: ${serviceName}`);
+
+  // --- Socket.IO Metrics ---
+  const { metrics } = require("@opentelemetry/api");
+  const meter = metrics.getMeter("socketio");
+
+  const socketConnections = meter.createUpDownCounter("socketio.connections", {
+    description: "Active Socket.IO connections",
+  });
+
+  const socketEvents = meter.createCounter("socketio.events", {
+    description: "Socket.IO events processed",
+  });
+
+  const socketEventDuration = meter.createHistogram("socketio.event.duration", {
+    description: "Socket.IO event handler duration in ms",
+    unit: "ms",
+  });
+
+  // Export for use in index.js
+  module.exports = {
+    socketConnections,
+    socketEvents,
+    socketEventDuration,
+  };
+}
+
+// When OTel is not enabled, export empty object
+if (!module.exports.socketConnections) {
+  module.exports = {};
 }

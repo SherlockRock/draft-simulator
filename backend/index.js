@@ -26,6 +26,23 @@ const { setupVersusHandlers } = require("./socketHandlers/versusHandlers");
 const { initializeTimerService } = require("./services/versusTimerService");
 const VersusSessionManager = require("./services/versusSessionManager");
 require("dotenv").config();
+const otelMetrics = require("./tracing");
+
+function wrapSocketHandler(socket, eventName, handler) {
+  socket.on(eventName, async (...args) => {
+    if (otelMetrics.socketEvents) {
+      otelMetrics.socketEvents.add(1, { event: eventName });
+    }
+    const start = Date.now();
+    try {
+      await handler(...args);
+    } finally {
+      if (otelMetrics.socketEventDuration) {
+        otelMetrics.socketEventDuration.record(Date.now() - start, { event: eventName });
+      }
+    }
+  });
+}
 
 function findCertPath() {
   const localPath = ".";
@@ -141,11 +158,14 @@ async function main() {
 
   io.on("connection", (socket) => {
     console.log(`New client connected: ${socket.id}`);
+    if (otelMetrics.socketConnections) {
+      otelMetrics.socketConnections.add(1);
+    }
 
     // Set up versus-specific handlers
     setupVersusHandlers(io, socket, versusSessionManager);
 
-    socket.on("newDraft", async (data) => {
+    wrapSocketHandler(socket, "newDraft", async (data) => {
       try {
         if ("id" in data && data.picks.length === 20) {
           // Find all canvases containing this draft
@@ -212,21 +232,21 @@ async function main() {
       }
     });
 
-    socket.on("joinRoom", async (room) => {
+    wrapSocketHandler(socket, "joinRoom", async (room) => {
       socket.join(room);
       console.log(`${socket.id} joined room: ${room}`);
       const roomSize = await socketService.getRoomSize(room);
       io.to(room).emit("userCountUpdate", roomSize);
     });
 
-    socket.on("leaveRoom", async (room) => {
+    wrapSocketHandler(socket, "leaveRoom", async (room) => {
       socket.leave(room);
       console.log(`${socket.id} left room: ${room}`);
       const roomSize = await socketService.getRoomSize(room);
       io.to(room).emit("userCountUpdate", roomSize);
     });
 
-    socket.on("canvasObjectMove", async (data) => {
+    wrapSocketHandler(socket, "canvasObjectMove", async (data) => {
       if (!socket.user) return;
       const userCanvas = await UserCanvas.findOne({
         where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },
@@ -248,7 +268,7 @@ async function main() {
       }
     });
 
-    socket.on("vertexMove", async (data) => {
+    wrapSocketHandler(socket, "vertexMove", async (data) => {
       if (!socket.user) return;
       const userCanvas = await UserCanvas.findOne({
         where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },
@@ -267,7 +287,7 @@ async function main() {
       }
     });
 
-    socket.on("groupMove", async (data) => {
+    wrapSocketHandler(socket, "groupMove", async (data) => {
       if (!socket.user) return;
       const userCanvas = await UserCanvas.findOne({
         where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },
@@ -285,7 +305,7 @@ async function main() {
       }
     });
 
-    socket.on("groupResize", async (data) => {
+    wrapSocketHandler(socket, "groupResize", async (data) => {
       if (!socket.user) return;
       const userCanvas = await UserCanvas.findOne({
         where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },
@@ -313,6 +333,9 @@ async function main() {
     });
 
     socket.on("disconnect", () => {
+      if (otelMetrics.socketConnections) {
+        otelMetrics.socketConnections.add(-1);
+      }
       console.log(`Client disconnected: ${socket.id}`);
     });
   });
