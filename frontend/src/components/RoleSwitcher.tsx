@@ -5,7 +5,6 @@ import { useVersusContext } from "../contexts/VersusContext";
 import toast from "solid-toast";
 
 interface RoleSwitcherProps {
-    versusDraftId: string;
     currentRole: "team1_captain" | "team2_captain" | "spectator";
 }
 
@@ -14,7 +13,10 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
     const [isOpen, setIsOpen] = createSignal(false);
 
     const handleSwitchRole = () => {
-        clearVersusRole(props.versusDraftId);
+        const vd = versusContext().versusDraft;
+        if (vd) {
+            clearVersusRole(vd.id);
+        }
         toast.success("Role released");
         setIsOpen(false);
         releaseRole();

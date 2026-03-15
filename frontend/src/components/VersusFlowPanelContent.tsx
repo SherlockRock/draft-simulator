@@ -246,7 +246,6 @@ const VersusFlowPanelContent: Component = () => {
                     </div>
 
                     <RoleSwitcher
-                        versusDraftId={params.id}
                         currentRole={myRole() || "spectator"}
                     />
                 </div>

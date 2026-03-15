@@ -77,6 +77,11 @@ export type VersusWorkflowContextValue = {
     // Per-game role confirmation tracking
     isNewGame: (draftId: string) => boolean;
     confirmGameRole: (draftId: string) => void;
+
+    // Inline role picker (for mid-series role switching)
+    showingRolePicker: () => boolean;
+    showRolePicker: () => void;
+    hideRolePicker: () => void;
 };
 
 export const VersusWorkflowContext = createContext<VersusWorkflowContextValue>();

@@ -33,6 +33,7 @@ import {
     type DraftCallbacks
 } from "../contexts/VersusContext";
 import { VersusSocketProvider, useVersusSocket } from "../providers/VersusSocketProvider";
+import InlineRolePicker from "../components/InlineRolePicker";
 import { track } from "../utils/analytics";
 
 // Helper: compute team identity from role (stable across games)
@@ -105,6 +106,9 @@ const VersusWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
     // Chat state (lifted to context to persist across FlowPanel open/close)
     const [chatMessages, setChatMessages] = createSignal<ChatMessage[]>([]);
     const [chatUserCount, setChatUserCount] = createSignal(0);
+
+    // Inline role picker visibility (for mid-series role switching)
+    const [showingRolePicker, setShowingRolePicker] = createSignal(false);
 
     const addChatMessage = (message: ChatMessage) => {
         setChatMessages((prev) => [...prev, message]);
@@ -488,8 +492,11 @@ const VersusWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
 
                 toast.success(`Joined as ${joinedLabel}`);
 
-                // Navigate to series overview
-                navigate(`/versus/${versusDraft.id}`, { replace: true });
+                setShowingRolePicker(false);
+                // Only navigate if we're on the join route (initial join flow)
+                if (params.linkToken) {
+                    navigate(`/versus/${versusDraft.id}`, { replace: true });
+                }
             }
         };
         sock.on("versusRoleSelectResponse", handleRoleSelectResponse);
@@ -659,9 +666,7 @@ const VersusWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
         const sock = currentSocket();
         const versusDraft = versusContext().versusDraft;
 
-        if (!sock || !versusDraft) {
-            return;
-        }
+        if (!sock || !versusDraft) return;
 
         sock.emit("versusReleaseRole", { versusDraftId: versusDraft.id });
 
@@ -671,8 +676,24 @@ const VersusWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
             myParticipant: null
         }));
 
-        // Navigate to role selection
-        navigate(`/versus/join/${versusDraft.shareLink}`);
+        // Show inline role picker instead of navigating
+        setShowingRolePicker(true);
+    };
+
+    const hideRolePicker = () => {
+        setShowingRolePicker(false);
+        // If user dismissed without picking, auto-select spectator
+        // to avoid roleless limbo (role was already released on server)
+        if (!versusContext().myParticipant) {
+            const sock = currentSocket();
+            const versusDraft = versusContext().versusDraft;
+            if (sock && versusDraft) {
+                sock.emit("versusSelectRole", {
+                    versusDraftId: versusDraft.id,
+                    role: "spectator"
+                });
+            }
+        }
     };
 
     const registerDraftState = (state: ActiveDraftState) => {
@@ -766,12 +787,15 @@ const VersusWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
         setGameSettings,
         myTeamIdentity,
         isNewGame,
-        confirmGameRole
+        confirmGameRole,
+        showingRolePicker,
+        showRolePicker: () => setShowingRolePicker(true),
+        hideRolePicker
     };
 
     return (
         <VersusWorkflowContext.Provider value={contextValue}>
-            <div class="flex flex-1 overflow-hidden">
+            <div class="relative flex flex-1 overflow-hidden">
                 {/* FlowPanel - visible in detail view, hidden on dashboard and during role selection */}
                 <Show when={!params.linkToken && params.id}>
                     <FlowPanel flow="versus">
@@ -780,6 +804,10 @@ const VersusWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
                 </Show>
                 {/* Child routes render here */}
                 {props.children}
+                {/* Inline role picker overlay — rendered above children */}
+                <Show when={showingRolePicker()}>
+                    <InlineRolePicker />
+                </Show>
             </div>
         </VersusWorkflowContext.Provider>
     );
