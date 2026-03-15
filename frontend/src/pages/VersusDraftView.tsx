@@ -70,6 +70,18 @@ const VersusDraftView: Component = () => {
         myTeamIdentity
     } = useVersusContext();
     const queryClient = useQueryClient();
+    // versusState must be declared before createMemos that reference it
+    // (createMemo runs eagerly on creation — TDZ if declared after)
+    const [versusState, setVersusState] = createSignal<VersusState>({
+        draftId: params.draftId,
+        currentPickIndex: 0,
+        timerStartedAt: null,
+        isPaused: false,
+        readyStatus: { blue: false, red: false },
+        completed: false,
+        firstPick: "blue",
+        blueSideTeam: 1
+    });
     const myRole = createMemo(() => versusContext().myParticipant?.role || null);
     const myEffectiveSide = createMemo(() => {
         const role = myRole();
@@ -87,16 +99,6 @@ const VersusDraftView: Component = () => {
         queryFn: () => fetchDraft(params.draftId),
         enabled: !!params.draftId
     }));
-    const [versusState, setVersusState] = createSignal<VersusState>({
-        draftId: params.draftId,
-        currentPickIndex: 0,
-        timerStartedAt: null,
-        isPaused: false,
-        readyStatus: { blue: false, red: false },
-        completed: false,
-        firstPick: "blue",
-        blueSideTeam: 1
-    });
     // Gate panel registration on first socket sync to prevent stale/pre-sync data flash
     const [hasSynced, setHasSynced] = createSignal(false);
 
