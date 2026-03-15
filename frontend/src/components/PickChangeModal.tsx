@@ -1,4 +1,4 @@
-import { Component, Show, For, createSignal } from "solid-js";
+import { Component, Show, For, createSignal, createEffect, onCleanup } from "solid-js";
 import { X } from "lucide-solid";
 import { draft } from "../utils/schemas";
 import { getEffectiveSide } from "@draft-sim/shared-types";
@@ -14,6 +14,7 @@ import {
 } from "../utils/constants";
 import { useFilterableItems } from "../hooks/useFilterableItems";
 import { FilterBar } from "./FilterBar";
+import { getEffectivePickOrder, getPicksArrayIndex } from "../utils/versusPickOrder";
 
 interface PickChangeRequest {
     requestId: string;
@@ -29,6 +30,10 @@ interface PickChangeModalProps {
     isCompetitive: boolean;
     blueTeamName: string;
     redTeamName: string;
+    completedAt?: string | null;
+    changeWindowSeconds: number;
+    currentPickIndex: number;
+    firstPick: "blue" | "red";
     disabledChampions?: string[];
     restrictedChampionGameMap?: Map<string, { gameNumber: number; pickIndex: number }>;
     pendingRequest?: PickChangeRequest | null;
@@ -43,6 +48,68 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
     const [selectedChampion, setSelectedChampion] = createSignal<string | null>(null);
 
     const isSpectator = () => props.myRole() === "spectator";
+
+    // Countdown timer for pick change window
+    const [timeRemaining, setTimeRemaining] = createSignal<number | null>(null);
+
+    createEffect(() => {
+        const completedAt = props.completedAt;
+        if (!completedAt) {
+            setTimeRemaining(null);
+            return;
+        }
+
+        const expiresAt =
+            new Date(completedAt).getTime() + props.changeWindowSeconds * 1000;
+
+        const update = () => {
+            const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+            setTimeRemaining(remaining);
+        };
+        update();
+
+        const interval = setInterval(update, 1000);
+        onCleanup(() => clearInterval(interval));
+    });
+
+    const isLocked = () => {
+        const remaining = timeRemaining();
+        return remaining !== null && remaining <= 0;
+    };
+
+    const formatTime = (seconds: number): string => {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}:${s.toString().padStart(2, "0")}`;
+    };
+
+    // Compute which picks array indices have been locked in and belong to my team
+    const lockedPickIndices = () => {
+        if (props.draft?.completed) return null; // null = all changeable (post-completion)
+        const effectiveOrder = getEffectivePickOrder(props.firstPick);
+        const team = myTeam();
+        const locked = new Set<number>();
+        for (let i = 0; i < props.currentPickIndex; i++) {
+            const item = effectiveOrder[i];
+            const picksIdx = getPicksArrayIndex(i, props.firstPick);
+            if (item.team === team) {
+                locked.add(picksIdx);
+            }
+        }
+        return locked;
+    };
+
+    // Find the captain's most recently locked pick/ban index
+    const myLastLockedIndex = () => {
+        const effectiveOrder = getEffectivePickOrder(props.firstPick);
+        const team = myTeam();
+        for (let i = props.currentPickIndex - 1; i >= 0; i--) {
+            if (effectiveOrder[i].team === team) {
+                return getPicksArrayIndex(i, props.firstPick);
+            }
+        }
+        return null;
+    };
 
     // Draft position helpers (matching ChampionPanel)
     const getDraftPositionParts = (
@@ -87,38 +154,52 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
         categoryMap: championCategories
     });
 
-    // Get my team's bans for selection
+    // Get my team's bans for selection (filtered to locked-only during live draft)
     const getMyBans = () => {
         if (!props.draft) return [];
         const picks = props.draft.picks || [];
         const team = myTeam();
 
+        let bans;
         if (team === "blue") {
-            return picks
+            bans = picks
                 .slice(0, 5)
                 .map((champion, idx) => ({ champion, pickIndex: idx }));
         } else {
-            return picks
+            bans = picks
                 .slice(5, 10)
                 .map((champion, idx) => ({ champion, pickIndex: idx + 5 }));
         }
+
+        const locked = lockedPickIndices();
+        if (locked) {
+            bans = bans.filter((b) => locked.has(b.pickIndex));
+        }
+        return bans;
     };
 
-    // Get my team's picks for selection
+    // Get my team's picks for selection (filtered to locked-only during live draft)
     const getMyPicks = () => {
         if (!props.draft) return [];
         const picks = props.draft.picks || [];
         const team = myTeam();
 
+        let teamPicks;
         if (team === "blue") {
-            return picks
+            teamPicks = picks
                 .slice(10, 15)
                 .map((champion, idx) => ({ champion, pickIndex: idx + 10 }));
         } else {
-            return picks
+            teamPicks = picks
                 .slice(15, 20)
                 .map((champion, idx) => ({ champion, pickIndex: idx + 15 }));
         }
+
+        const locked = lockedPickIndices();
+        if (locked) {
+            teamPicks = teamPicks.filter((p) => locked.has(p.pickIndex));
+        }
+        return teamPicks;
     };
 
     const getChampionName = (championIndex: string) => {
@@ -132,11 +213,17 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
     };
 
     const handleOpenModal = () => {
-        if (isSpectator() || !props.draft?.completed) return;
+        if (isSpectator() || isLocked()) return;
         setIsOpen(true);
-        setSelectedPickIndex(null);
         setSelectedChampion(null);
         clearFilters();
+
+        // Auto-select the captain's most recently locked pick/ban during live draft
+        if (!props.draft?.completed) {
+            setSelectedPickIndex(myLastLockedIndex());
+        } else {
+            setSelectedPickIndex(null);
+        }
     };
 
     const handleSelectPick = (pickIndex: number) => {
@@ -164,16 +251,30 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
         props.onRejectChange(props.pendingRequest.requestId);
     };
 
+    const hasChangeableSlots = () => {
+        return getMyBans().length > 0 || getMyPicks().length > 0;
+    };
+
     return (
         <>
             {/* Request Change Button */}
-            <Show when={props.draft?.completed && !isSpectator()}>
+            <Show when={!isSpectator() && !isLocked() && hasChangeableSlots()}>
                 <button
                     onClick={handleOpenModal}
                     class="w-full rounded border border-orange-600/40 bg-orange-600/10 px-3 py-1.5 text-sm font-medium text-orange-400 transition-all hover:border-orange-500/60 hover:bg-orange-600/15"
                 >
-                    Request Pick Change
+                    <Show
+                        when={timeRemaining() !== null && timeRemaining()! > 0}
+                        fallback="Request Pick Change"
+                    >
+                        Request Pick Change ({formatTime(timeRemaining()!)})
+                    </Show>
                 </button>
+            </Show>
+            <Show when={!isSpectator() && isLocked()}>
+                <div class="w-full rounded border border-slate-600/40 bg-slate-700/30 px-3 py-1.5 text-center text-sm font-medium text-slate-500">
+                    Picks Locked
+                </div>
             </Show>
 
             {/* Request Change Modal */}
@@ -381,9 +482,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                                                             }
                                                                         >
                                                                             G
-                                                                            {
-                                                                                currentGameNumber()
-                                                                            }
+                                                                            {currentGameNumber()}
                                                                         </span>
                                                                         <span>
                                                                             <span

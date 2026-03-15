@@ -520,6 +520,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
           countdownStartedAt: state.countdownStartedAt,
           readyStatus: state.readyStatus,
           completed: draft.completed,
+          completedAt: draft.completedAt,
           winner: draft.winner,
           firstPick: draft.firstPick,
           blueSideTeam: draft.blueSideTeam,
@@ -805,6 +806,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         timerStartedAt: state.timerStartedAt,
         isPaused: state.isPaused,
         completed: draft.completed,
+        completedAt: draft.completedAt,
       });
     } catch (error) {
       console.error("Error processing versus pick:", error);
@@ -870,6 +872,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
           timerStartedAt: state.timerStartedAt,
           isPaused: state.isPaused,
           completed: draft.completed,
+          completedAt: draft.completedAt,
         });
       } else {
         // Competitive mode: request approval for both pause and resume
@@ -943,6 +946,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         timerStartedAt: state.timerStartedAt,
         isPaused: state.isPaused,
         completed: draft.completed,
+        completedAt: draft.completedAt,
       });
     } catch (error) {
       console.error("Error approving pause:", error);
@@ -1015,6 +1019,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
           timerStartedAt: currentState.timerStartedAt,
           isPaused: currentState.isPaused,
           completed: draft.completed,
+          completedAt: draft.completedAt,
         });
       }, 3000);
     } catch (error) {
@@ -1079,15 +1084,21 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
 
       const team = getEffectiveSide(role, draft.blueSideTeam);
 
-      if (!draft.completed) {
-        return socket.emit("error", {
-          message: "Can only change picks after draft is complete",
-        });
-      }
-
       const versusDraft = await VersusDraft.findByPk(draft.versus_draft_id, {
         include: [{ model: Draft, as: "Drafts" }],
       });
+
+      // If draft is completed, enforce the pick change time window
+      if (draft.completed && draft.completedAt) {
+        const windowSeconds = versusDraft.competitive ? 120 : 600;
+        const expiresAt = new Date(draft.completedAt).getTime() + windowSeconds * 1000;
+        if (Date.now() > expiresAt) {
+          return socket.emit("error", {
+            message: "Pick change window has expired",
+          });
+        }
+      }
+
       const state = getState(draftId);
 
       if (!state) {
@@ -1151,6 +1162,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
           timerStartedAt: state.timerStartedAt,
           isPaused: state.isPaused,
           completed: draft.completed,
+          completedAt: draft.completedAt,
         });
       } else {
         // Competitive mode: request approval
@@ -1195,9 +1207,31 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       }
       const team = getEffectiveSide(role, draft.blueSideTeam);
 
+      const versusDraft = await VersusDraft.findByPk(draft.versus_draft_id);
+
       const state = getState(draftId);
       if (!state) {
         return socket.emit("error", { message: "Draft state not found" });
+      }
+
+      // Sweep expired pending requests if draft is completed and window has passed
+      if (draft.completed && draft.completedAt) {
+        const windowSeconds = versusDraft?.competitive ? 120 : 600;
+        const expiresAt = new Date(draft.completedAt).getTime() + windowSeconds * 1000;
+        if (Date.now() > expiresAt) {
+          const pendingRequests = state.pickChangeRequests.filter(
+            (r) => r.status === "pending",
+          );
+          for (const req of pendingRequests) {
+            req.status = "rejected";
+            io.to(`draft:${draftId}`).emit("pickChangeRejected", {
+              requestId: req.requestId,
+            });
+          }
+          return socket.emit("error", {
+            message: "Pick change window has expired",
+          });
+        }
       }
 
       const request = state.pickChangeRequests.find(
@@ -1229,6 +1263,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
           timerStartedAt: state.timerStartedAt,
           isPaused: state.isPaused,
           completed: draft.completed,
+          completedAt: draft.completedAt,
         });
 
         io.to(`draft:${draftId}`).emit("pickChangeApproved", {
@@ -1356,6 +1391,7 @@ async function processPickLock(io, draftId, team) {
 
   if (state.currentPickIndex >= 20) {
     draft.completed = true;
+    draft.completedAt = new Date();
     state.timerStartedAt = null;
     await draft.save();
 
@@ -1384,6 +1420,7 @@ async function processPickLock(io, draftId, team) {
     timerStartedAt: state.timerStartedAt,
     isPaused: state.isPaused,
     completed: draft.completed,
+    completedAt: draft.completedAt,
     firstPick: state.firstPick || "blue",
   });
 }

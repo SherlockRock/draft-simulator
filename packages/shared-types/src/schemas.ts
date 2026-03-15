@@ -30,6 +30,7 @@ export const DraftSchema = z.object({
   versus_draft_id: z.string().nullable().optional(),
   seriesIndex: z.number().nullable().optional(),
   completed: z.boolean().optional(),
+  completedAt: z.string().nullable().optional(),
   winner: z.enum(["blue", "red"]).nullable().optional(),
   firstPick: z.enum(["blue", "red"]),
   blueSideTeam: z.union([z.literal(1), z.literal(2)]),
@@ -217,6 +218,7 @@ export const VersusStateSchema = z.object({
     red: z.boolean(),
   }),
   completed: z.boolean(),
+  completedAt: z.string().nullable().optional(),
   winner: z.enum(["blue", "red"]).nullable().optional(),
   firstPick: z.enum(["blue", "red"]).optional(),
   blueSideTeam: z.union([z.literal(1), z.literal(2)]).optional(),
@@ -399,6 +401,7 @@ export const DraftStateSyncSchema = z.object({
     red: z.boolean(),
   }),
   completed: z.boolean(),
+  completedAt: z.string().nullable().optional(),
   winner: z.enum(["blue", "red"]).nullable().optional(),
   firstPick: z.enum(["blue", "red"]),
   blueSideTeam: z.union([z.literal(1), z.literal(2)]),
@@ -411,6 +414,7 @@ export const DraftUpdateSchema = z.object({
   timerStartedAt: z.number().nullable(),
   isPaused: z.boolean(),
   completed: z.boolean(),
+  completedAt: z.string().nullable().optional(),
   firstPick: z.enum(["blue", "red"]).optional(),
 });
 

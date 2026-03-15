@@ -20,6 +20,7 @@ export type ActiveDraftState = {
     isPaused: boolean;
     readyStatus: { blue: boolean; red: boolean };
     completed: boolean;
+    completedAt?: string | null;
     winner?: "blue" | "red" | null;
     draft: Draft;
 };

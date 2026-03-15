@@ -80,6 +80,11 @@ const Draft = sequelize.define("Draft", {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
   },
+  completedAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    defaultValue: null,
+  },
   winner: {
     type: DataTypes.STRING,
     allowNull: true,

@@ -286,7 +286,12 @@ const VersusDraftView: Component = () => {
                 ["draft", params.draftId],
                 (prev: draft | undefined) =>
                     prev
-                        ? { ...prev, picks: data.picks, completed: data.completed }
+                        ? {
+                              ...prev,
+                              picks: data.picks,
+                              completed: data.completed,
+                              completedAt: data.completedAt
+                          }
                         : prev
             );
             // Also sync picks into versusDraft.Drafts[] so restriction computation stays current
@@ -298,7 +303,12 @@ const VersusDraftView: Component = () => {
                         ...prev,
                         Drafts: prev.Drafts.map((d) =>
                             d.id === data.draftId
-                                ? { ...d, picks: data.picks, completed: data.completed }
+                                ? {
+                                      ...d,
+                                      picks: data.picks,
+                                      completed: data.completed,
+                                      completedAt: data.completedAt
+                                  }
                                 : d
                         )
                     };
@@ -311,6 +321,7 @@ const VersusDraftView: Component = () => {
                 isPaused: data.isPaused,
                 readyStatus: data.readyStatus,
                 completed: data.completed,
+                completedAt: data.completedAt,
                 winner: data.winner,
                 firstPick: data.firstPick,
                 blueSideTeam: data.blueSideTeam
@@ -349,7 +360,12 @@ const VersusDraftView: Component = () => {
                 ["draft", params.draftId],
                 (prev: draft | undefined) =>
                     prev
-                        ? { ...prev, picks: data.picks, completed: data.completed }
+                        ? {
+                              ...prev,
+                              picks: data.picks,
+                              completed: data.completed,
+                              completedAt: data.completedAt
+                          }
                         : prev
             );
             // Also sync picks into versusDraft.Drafts[] so restriction computation stays current
@@ -361,7 +377,12 @@ const VersusDraftView: Component = () => {
                         ...prev,
                         Drafts: prev.Drafts.map((d) =>
                             d.id === data.draftId
-                                ? { ...d, picks: data.picks, completed: data.completed }
+                                ? {
+                                      ...d,
+                                      picks: data.picks,
+                                      completed: data.completed,
+                                      completedAt: data.completedAt
+                                  }
                                 : d
                         )
                     };
@@ -372,7 +393,8 @@ const VersusDraftView: Component = () => {
                 currentPickIndex: data.currentPickIndex,
                 timerStartedAt: data.timerStartedAt,
                 isPaused: data.isPaused,
-                completed: data.completed
+                completed: data.completed,
+                completedAt: data.completedAt
             }));
         });
 
@@ -589,6 +611,7 @@ const VersusDraftView: Component = () => {
                 isPaused: state.isPaused,
                 readyStatus: state.readyStatus,
                 completed: synced ? state.completed : (draftData.completed ?? false),
+                completedAt: synced ? state.completedAt : draftData.completedAt,
                 winner: synced ? state.winner : draftData.winner,
                 draft: draftData
             };

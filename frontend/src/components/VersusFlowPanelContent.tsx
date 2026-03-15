@@ -245,9 +245,7 @@ const VersusFlowPanelContent: Component = () => {
                         </div>
                     </div>
 
-                    <RoleSwitcher
-                        currentRole={myRole() || "spectator"}
-                    />
+                    <RoleSwitcher currentRole={myRole() || "spectator"} />
                 </div>
             </Show>
 
@@ -308,7 +306,6 @@ const VersusFlowPanelContent: Component = () => {
             <Show
                 when={
                     isInDraftView() &&
-                    draftState()?.completed &&
                     draftState()?.draft &&
                     draftState()?.draftId === params.draftId &&
                     callbacks() &&
@@ -322,6 +319,12 @@ const VersusFlowPanelContent: Component = () => {
                         isCompetitive={versusDraft()?.competitive ?? false}
                         blueTeamName={versusDraft()?.blueTeamName ?? ""}
                         redTeamName={versusDraft()?.redTeamName ?? ""}
+                        completedAt={draftState()?.completedAt}
+                        changeWindowSeconds={
+                            (versusDraft()?.competitive ?? false) ? 120 : 600
+                        }
+                        currentPickIndex={draftState()?.currentPickIndex ?? 0}
+                        firstPick={draftState()?.draft?.firstPick ?? "blue"}
                         disabledChampions={versusDraft()?.disabledChampions ?? []}
                         restrictedChampionGameMap={restrictedChampionGameMap()}
                         pendingRequest={callbacks()?.pendingPickChangeRequest() ?? null}
