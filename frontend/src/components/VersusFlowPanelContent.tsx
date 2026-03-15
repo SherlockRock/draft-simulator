@@ -346,6 +346,8 @@ const VersusFlowPanelContent: Component = () => {
                         socket={socket()!}
                         versusDraftId={versusDraft()?.id ?? ""}
                         currentRole={myRole()}
+                        isInDraftView={isInDraftView()}
+                        blueSideTeam={(draftState()?.draft?.blueSideTeam ?? 1) as 1 | 2}
                     />
                 </div>
             </Show>

@@ -7,6 +7,8 @@ interface VersusChatPanelProps {
     socket: Socket;
     versusDraftId: string;
     currentRole: "team1_captain" | "team2_captain" | "spectator" | null;
+    blueSideTeam?: 1 | 2;
+    isInDraftView?: boolean;
 }
 
 export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
@@ -36,6 +38,18 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
     };
 
     const getUsernameColor = (role: string) => {
+        if (props.isInDraftView) {
+            const bst = props.blueSideTeam ?? 1;
+            const team1IsBlue = bst === 1;
+            switch (role) {
+                case "team1_captain":
+                    return team1IsBlue ? "text-blue-400" : "text-red-400";
+                case "team2_captain":
+                    return team1IsBlue ? "text-red-400" : "text-blue-400";
+                default:
+                    return "text-slate-400";
+            }
+        }
         switch (role) {
             case "team1_captain":
                 return "text-violet-300";

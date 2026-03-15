@@ -144,6 +144,7 @@ router.post("/", protect, async (req, res) => {
       picks,
       description,
       icon,
+      group_id,
     } = req.body;
 
     let finalName = name || "New Draft";
@@ -193,6 +194,7 @@ router.post("/", protect, async (req, res) => {
         draft_id: draft.id,
         positionX: positionX || 50,
         positionY: positionY || 50,
+        group_id: group_id || null,
       });
       canvas.updatedAt = new Date();
       await canvas.save();

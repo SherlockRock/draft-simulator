@@ -340,6 +340,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             canvas_id: string;
             positionX: number;
             positionY: number;
+            group_id?: string;
         }) => {
             return postNewDraft(data);
         },
@@ -2583,12 +2584,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             class="w-full px-4 py-2 text-left text-sm text-slate-200 hover:bg-slate-600"
                             onClick={() => {
                                 const pos = contextMenuWorldPosition();
+                                const group = findGroupAtPosition(pos.x, pos.y);
+                                const draftX = group ? pos.x - group.positionX : pos.x;
+                                const draftY = group ? pos.y - group.positionY : pos.y;
                                 if (isLocalMode()) {
                                     localNewDraft({
                                         name: "New Draft",
                                         picks: Array(20).fill(""),
-                                        positionX: pos.x,
-                                        positionY: pos.y
+                                        positionX: draftX,
+                                        positionY: draftY,
+                                        group_id: group?.id ?? null
                                     });
                                     refreshFromLocal();
                                     toast.success("Successfully created new draft!");
@@ -2598,8 +2603,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         picks: Array(20).fill(""),
                                         public: false,
                                         canvas_id: canvasId(),
-                                        positionX: pos.x,
-                                        positionY: pos.y
+                                        positionX: draftX,
+                                        positionY: draftY,
+                                        group_id: group?.id ?? undefined
                                     });
                                 }
                                 closeContextMenu();

@@ -42,6 +42,7 @@ export const postNewDraft = async (data: {
     canvas_id?: string;
     positionX?: number;
     positionY?: number;
+    group_id?: string;
 }) => {
     const result = await apiPost("/drafts", data, DraftSchema);
     track("draft_created");
@@ -52,7 +53,10 @@ export const fetchDraft = async (id: string) => {
     return apiGet(`/drafts/${id}`, DraftSchema);
 };
 
-export const completeDraft = async (draftId: string, data: { winner: "blue" | "red" | null }) => {
+export const completeDraft = async (
+    draftId: string,
+    data: { winner: "blue" | "red" | null }
+) => {
     return apiPost(`/drafts/${draftId}/complete`, data, DraftSchema);
 };
 

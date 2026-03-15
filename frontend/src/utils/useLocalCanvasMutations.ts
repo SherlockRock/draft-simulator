@@ -48,13 +48,14 @@ export const localNewDraft = (data: {
     picks: string[];
     positionX: number;
     positionY: number;
+    group_id?: string | null;
 }) => {
     return mutateLocal((canvas) => {
         const draftId = crypto.randomUUID();
         const newDraft: CanvasDraft = {
             positionX: data.positionX,
             positionY: data.positionY,
-            group_id: null,
+            group_id: data.group_id ?? null,
             source_type: "canvas",
             Draft: {
                 id: draftId,
