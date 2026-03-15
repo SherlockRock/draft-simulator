@@ -16,7 +16,7 @@ export const Dialog = (props: {
             }}
             onWheel={(e: WheelEvent) => e.stopPropagation()}
         >
-            <div class="rounded-lg bg-slate-800 p-6 shadow-lg">{props.body}</div>
+            <div class="max-h-[90vh] overflow-y-auto rounded-lg bg-slate-800 p-6 shadow-lg">{props.body}</div>
         </div>
     </Show>
 );
