@@ -384,7 +384,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const updatePositionMutation = useMutation(() => ({
         mutationFn: updateCanvasDraftPosition,
-        onError: (error: Error) => {
+        onMutate: (variables) => {
+            const draft = canvasDrafts.find((d) => d.Draft.id === variables.draftId);
+            return { prevX: draft?.positionX, prevY: draft?.positionY };
+        },
+        onError: (error: Error, variables, context) => {
+            const prevX = context?.prevX;
+            const prevY = context?.prevY;
+            if (prevX != null && prevY != null) {
+                setCanvasDrafts(
+                    canvasDrafts.map((d) =>
+                        d.Draft.id === variables.draftId
+                            ? { ...d, positionX: prevX, positionY: prevY }
+                            : d
+                    )
+                );
+            }
             toast.error(`Failed to save position: ${error.message}`);
         }
     }));
@@ -463,7 +478,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const createVertexMutation = useMutation(() => ({
         mutationFn: createVertex,
-        onSuccess: () => {},
         onError: (error: Error) => {
             toast.error(`Failed to create vertex: ${error.message}`);
         }
@@ -471,7 +485,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const updateVertexMutation = useMutation(() => ({
         mutationFn: updateVertex,
-        onError: (error: Error) => {
+        onMutate: () => {
+            // Vertex positions are updated via socket canvasUpdate; store snapshot for rollback
+            return { needsRefetch: true };
+        },
+        onError: (error: Error, _vars, context) => {
+            if (context?.needsRefetch) {
+                canvasContext.refetchCanvas();
+            }
             toast.error(`Failed to update vertex: ${error.message}`);
         }
     }));
@@ -488,7 +509,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const updateGroupPositionMutation = useMutation(() => ({
         mutationFn: updateCanvasGroupPosition,
-        onError: (error: Error) => {
+        onMutate: (variables) => {
+            const group = canvasGroups.find((g) => g.id === variables.groupId);
+            return { prevX: group?.positionX, prevY: group?.positionY };
+        },
+        onError: (error: Error, variables, context) => {
+            const prevX = context?.prevX;
+            const prevY = context?.prevY;
+            if (prevX != null && prevY != null) {
+                setCanvasGroups(
+                    canvasGroups.map((g) =>
+                        g.id === variables.groupId
+                            ? { ...g, positionX: prevX, positionY: prevY }
+                            : g
+                    )
+                );
+            }
             toast.error(`Failed to save group position: ${error.message}`);
         }
     }));
@@ -559,7 +595,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const updateGroupMutation = useMutation(() => ({
         mutationFn: updateCanvasGroup,
-        onSuccess: () => {},
         onError: (error: Error) => {
             toast.error(`Failed to update group: ${error.message}`);
         }
