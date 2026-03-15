@@ -12,7 +12,7 @@ import {
 } from "solid-js";
 import { createStore } from "solid-js/store";
 import { champions } from "./utils/constants";
-import { useMutation, useQueryClient } from "@tanstack/solid-query";
+import { useMutation } from "@tanstack/solid-query";
 import {
     postNewDraft,
     updateCanvasDraftPosition,
@@ -121,7 +121,6 @@ type CanvasComponentProps = {
 const CanvasComponent = (props: CanvasComponentProps) => {
     const params = useParams();
     const navigate = useNavigate();
-    const queryClient = useQueryClient();
     const {
         socket: socketAccessor,
         connectionStatus,
@@ -344,10 +343,29 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }) => {
             return postNewDraft(data);
         },
+        onMutate: (variables) => {
+            const tempId = `temp-${Date.now()}`;
+            const tempDraft: CanvasDraft = {
+                positionX: variables.positionX,
+                positionY: variables.positionY,
+                group_id: variables.group_id ?? null,
+                Draft: {
+                    name: variables.name,
+                    id: tempId,
+                    picks: variables.picks,
+                    type: "canvas"
+                }
+            };
+            setCanvasDrafts([...canvasDrafts, tempDraft]);
+            return { tempId };
+        },
         onSuccess: () => {
             toast.success("Successfully created new draft!");
         },
-        onError: (error) => {
+        onError: (error, _vars, context) => {
+            if (context?.tempId) {
+                setCanvasDrafts(canvasDrafts.filter((d) => d.Draft.id !== context.tempId));
+            }
             toast.error(`Error creating new draft: ${error.message}`);
         }
     }));
@@ -357,7 +375,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             return editDraft(data.id, data, canvasId());
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
             toast.success("Successfully edited draft!");
         },
         onError: (error) => {
@@ -367,20 +384,46 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const updatePositionMutation = useMutation(() => ({
         mutationFn: updateCanvasDraftPosition,
-        onError: (error: Error) => {
+        onMutate: (variables) => {
+            const draft = canvasDrafts.find((d) => d.Draft.id === variables.draftId);
+            return { prevX: draft?.positionX, prevY: draft?.positionY };
+        },
+        onError: (error: Error, variables, context) => {
+            const prevX = context?.prevX;
+            const prevY = context?.prevY;
+            if (prevX != null && prevY != null) {
+                setCanvasDrafts(
+                    canvasDrafts.map((d) =>
+                        d.Draft.id === variables.draftId
+                            ? { ...d, positionX: prevX, positionY: prevY }
+                            : d
+                    )
+                );
+            }
             toast.error(`Failed to save position: ${error.message}`);
-            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
         }
     }));
 
     const deleteDraftMutation = useMutation(() => ({
         mutationFn: deleteDraftFromCanvas,
-        onSuccess: () => {
+        onMutate: (variables) => {
+            const removedDraft = canvasDrafts.find(
+                (d) => d.Draft.id === variables.draft
+            );
+            setCanvasDrafts(
+                canvasDrafts.filter((d) => d.Draft.id !== variables.draft)
+            );
             setIsDeleteDialogOpen(false);
             setDraftToDelete(null);
+            return { removedDraft };
+        },
+        onSuccess: () => {
             toast.success("Successfully deleted draft");
         },
-        onError: (error: Error) => {
+        onError: (error, _vars, context) => {
+            if (context?.removedDraft) {
+                setCanvasDrafts([...canvasDrafts, context.removedDraft]);
+            }
             toast.error(`Error deleting draft: ${error.message}`);
         }
     }));
@@ -406,7 +449,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         mutationFn: createConnection,
         onSuccess: () => {
             toast.success("Connection created!");
-            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
         },
         onError: (error: Error) => {
             toast.error(`Failed to create connection: ${error.message}`);
@@ -417,7 +459,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         mutationFn: updateConnection,
         onSuccess: () => {
             toast.success("Connection updated!");
-            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
             setSelectedVertexForConnection(null);
         },
         onError: (error: Error) => {
@@ -429,7 +470,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         mutationFn: deleteConnection,
         onSuccess: () => {
             toast.success("Connection deleted!");
-            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
         },
         onError: (error: Error) => {
             toast.error(`Failed to delete connection: ${error.message}`);
@@ -438,9 +478,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const createVertexMutation = useMutation(() => ({
         mutationFn: createVertex,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
-        },
         onError: (error: Error) => {
             toast.error(`Failed to create vertex: ${error.message}`);
         }
@@ -448,9 +485,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const updateVertexMutation = useMutation(() => ({
         mutationFn: updateVertex,
-        onError: (error: Error) => {
+        onMutate: () => {
+            // Vertex positions are updated via socket canvasUpdate; store snapshot for rollback
+            return { needsRefetch: true };
+        },
+        onError: (error: Error, _vars, context) => {
+            if (context?.needsRefetch) {
+                canvasContext.refetchCanvas();
+            }
             toast.error(`Failed to update vertex: ${error.message}`);
-            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
         }
     }));
 
@@ -458,7 +501,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         mutationFn: deleteVertex,
         onSuccess: () => {
             toast.success("Vertex deleted!");
-            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
         },
         onError: (error: Error) => {
             toast.error(`Failed to delete vertex: ${error.message}`);
@@ -467,48 +509,92 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const updateGroupPositionMutation = useMutation(() => ({
         mutationFn: updateCanvasGroupPosition,
-        onError: (error: Error) => {
+        onMutate: (variables) => {
+            const group = canvasGroups.find((g) => g.id === variables.groupId);
+            return { prevX: group?.positionX, prevY: group?.positionY };
+        },
+        onError: (error: Error, variables, context) => {
+            const prevX = context?.prevX;
+            const prevY = context?.prevY;
+            if (prevX != null && prevY != null) {
+                setCanvasGroups(
+                    canvasGroups.map((g) =>
+                        g.id === variables.groupId
+                            ? { ...g, positionX: prevX, positionY: prevY }
+                            : g
+                    )
+                );
+            }
             toast.error(`Failed to save group position: ${error.message}`);
-            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
         }
     }));
 
     const deleteGroupMutation = useMutation(() => ({
         mutationFn: deleteCanvasGroup,
-        onSuccess: () => {
+        onMutate: () => {
             const deletedGroupId = groupToDelete()?.id;
-            setIsDeleteGroupDialogOpen(false);
-            setGroupToDelete(null);
+            const removedGroup = deletedGroupId
+                ? canvasGroups.find((g) => g.id === deletedGroupId)
+                : undefined;
+            const removedDrafts = deletedGroupId
+                ? canvasDrafts.filter((cd) => cd.group_id === deletedGroupId)
+                : [];
             if (deletedGroupId) {
                 setCanvasGroups(canvasGroups.filter((g) => g.id !== deletedGroupId));
                 setCanvasDrafts(
                     canvasDrafts.filter((cd) => cd.group_id !== deletedGroupId)
                 );
             }
-            toast.success("Group removed from canvas");
-            canvasContext.refetchCanvas();
+            setIsDeleteGroupDialogOpen(false);
+            setGroupToDelete(null);
+            return { removedGroup, removedDrafts };
         },
-        onError: (error: Error) => {
+        onSuccess: () => {
+            toast.success("Group removed from canvas");
+        },
+        onError: (error, _vars, context) => {
+            if (context?.removedGroup) {
+                setCanvasGroups([...canvasGroups, context.removedGroup]);
+            }
+            if (context?.removedDrafts?.length) {
+                setCanvasDrafts([...canvasDrafts, ...context.removedDrafts]);
+            }
             toast.error(`Error removing group: ${error.message}`);
         }
     }));
 
     const createGroupMutation = useMutation(() => ({
         mutationFn: createCanvasGroup,
+        onMutate: (variables) => {
+            const tempId = `temp-${Date.now()}`;
+            const tempGroup: CanvasGroup = {
+                id: tempId,
+                canvas_id: canvasId(),
+                name: "New Group",
+                type: "custom",
+                positionX: variables.positionX,
+                positionY: variables.positionY,
+                width: null,
+                height: null,
+                versus_draft_id: null,
+                metadata: {}
+            };
+            setCanvasGroups([...canvasGroups, tempGroup]);
+            return { tempId };
+        },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
             toast.success("Group created");
         },
-        onError: (error: Error) => {
+        onError: (error, _vars, context) => {
+            if (context?.tempId) {
+                setCanvasGroups(canvasGroups.filter((g) => g.id !== context.tempId));
+            }
             toast.error(`Failed to create group: ${error.message}`);
         }
     }));
 
     const updateGroupMutation = useMutation(() => ({
         mutationFn: updateCanvasGroup,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["canvas", canvasId()] });
-        },
         onError: (error: Error) => {
             toast.error(`Failed to update group: ${error.message}`);
         }

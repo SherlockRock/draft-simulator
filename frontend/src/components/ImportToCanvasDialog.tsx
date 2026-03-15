@@ -1,5 +1,5 @@
 import { Component, createSignal, For, Show, createMemo } from "solid-js";
-import { useQuery, createMutation, useQueryClient } from "@tanstack/solid-query";
+import { useQuery, createMutation } from "@tanstack/solid-query";
 import {
     fetchUserVersusSeries,
     importDraftToCanvas,
@@ -17,7 +17,6 @@ type Props = {
 };
 
 export const ImportToCanvasDialog: Component<Props> = (props) => {
-    const queryClient = useQueryClient();
     const [searchQuery, setSearchQuery] = createSignal("");
     const [selectedSeriesId, setSelectedSeriesId] = createSignal<string | null>(null);
     const [expandedSeriesId, setExpandedSeriesId] = createSignal<string | null>(null);
@@ -38,7 +37,6 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
             }),
         onSuccess: () => {
             toast.success("Draft imported to canvas");
-            queryClient.invalidateQueries({ queryKey: ["canvas", props.canvasId] });
             props.onSuccess();
             props.onClose();
         },
@@ -57,7 +55,6 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
             }),
         onSuccess: () => {
             toast.success("Series imported to canvas");
-            queryClient.invalidateQueries({ queryKey: ["canvas", props.canvasId] });
             props.onSuccess();
             props.onClose();
         },
