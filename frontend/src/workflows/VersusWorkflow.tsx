@@ -214,8 +214,7 @@ const VersusWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
             }
 
             if (params.linkToken) {
-                // No auto-join, stay on role selection page
-                navigate(`/versus/${response.versusDraft.id}`);
+                navigate(`/versus/${response.versusDraft.id}`, { replace: true });
             }
         }
 
