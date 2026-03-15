@@ -14,9 +14,9 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
 
     const handleSwitchRole = () => {
         const vd = versusContext().versusDraft;
-        if (vd) {
-            clearVersusRole(vd.id);
-        }
+        if (!vd) return;
+
+        clearVersusRole(vd.id);
         toast.success("Role released");
         setIsOpen(false);
         releaseRole();
