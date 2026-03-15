@@ -347,6 +347,54 @@ router.put("/:id", protect, async (req, res) => {
     await draft.save();
     res.json(draft);
     socketService.emitToRoom(draft.id, "draftUpdate", draft.toJSON());
+
+    // Broadcast to canvas room so other canvas users see the edit
+    const { canvas_id } = req.query;
+    if (canvas_id) {
+      const canvas = await Canvas.findByPk(canvas_id);
+      if (canvas) {
+        const canvasDrafts = await CanvasDraft.findAll({
+          where: { canvas_id },
+          attributes: [
+            "positionX",
+            "positionY",
+            "is_locked",
+            "group_id",
+            "source_type",
+          ],
+          include: [
+            {
+              model: Draft,
+              attributes: [
+                "name",
+                "id",
+                "picks",
+                "type",
+                "versus_draft_id",
+                "seriesIndex",
+                "completed",
+                "winner",
+              ],
+            },
+          ],
+          raw: true,
+          nest: true,
+        });
+        const connections = await CanvasConnection.findAll({
+          where: { canvas_id },
+          raw: true,
+        });
+        const groups = await CanvasGroup.findAll({
+          where: { canvas_id },
+        });
+        socketService.emitToRoom(canvas_id, "canvasUpdate", {
+          canvas: canvas.toJSON(),
+          drafts: canvasDrafts,
+          connections: connections,
+          groups: groups.map((g) => g.toJSON()),
+        });
+      }
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server Error" });
