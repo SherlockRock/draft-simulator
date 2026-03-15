@@ -14,8 +14,10 @@ if (env.OTEL_EXPORTER_OTLP_ENDPOINT) {
   const { PeriodicExportingMetricReader } = require("@opentelemetry/sdk-metrics");
   const { BatchLogRecordProcessor, LoggerProvider } = require("@opentelemetry/sdk-logs");
   const { logs } = require("@opentelemetry/api-logs");
+  const { resourceFromAttributes } = require("@opentelemetry/resources");
 
   const serviceName = env.OTEL_SERVICE_NAME || "firstpick-backend";
+  const resource = resourceFromAttributes({ "service.name": serviceName });
 
   // --- Traces ---
   const traceExporter = new OTLPTraceExporter();
@@ -29,6 +31,7 @@ if (env.OTEL_EXPORTER_OTLP_ENDPOINT) {
   // --- Logs ---
   const logExporter = new OTLPLogExporter();
   const loggerProvider = new LoggerProvider({
+    resource,
     processors: [new BatchLogRecordProcessor(logExporter)],
   });
   logs.setGlobalLoggerProvider(loggerProvider);
