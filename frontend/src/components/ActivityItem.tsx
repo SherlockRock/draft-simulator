@@ -857,9 +857,11 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                     (versus()?.disabledChampions ?? []).length > 0
                                 }
                             >
-                                <DisabledChampionsReadOnly
-                                    championIds={versus()?.disabledChampions ?? []}
-                                />
+                                <div class="mb-4">
+                                    <DisabledChampionsReadOnly
+                                        championIds={versus()?.disabledChampions ?? []}
+                                    />
+                                </div>
                             </Show>
                         </Show>
                         <div class="flex justify-end gap-2">
