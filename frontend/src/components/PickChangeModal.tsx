@@ -1,4 +1,4 @@
-import { Component, Show, For, createSignal, createEffect, onCleanup } from "solid-js";
+import { Component, Show, For, createSignal, createEffect, onCleanup, onMount } from "solid-js";
 import { X } from "lucide-solid";
 import { draft } from "../utils/schemas";
 import { getEffectiveSide } from "@draft-sim/shared-types";
@@ -40,6 +40,13 @@ interface PickChangeModalProps {
     onRequestChange: (pickIndex: number, newChampion: string) => void;
     onApproveChange: (requestId: string) => void;
     onRejectChange: (requestId: string) => void;
+    hideButton?: boolean;
+    onOpenRef?: (openFn: () => void) => void;
+    onStateRef?: (state: {
+        isLocked: () => boolean;
+        timeRemaining: () => number | null;
+        hasChangeableSlots: () => boolean;
+    }) => void;
 }
 
 export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
@@ -255,26 +262,33 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
         return getMyBans().length > 0 || getMyPicks().length > 0;
     };
 
+    onMount(() => {
+        props.onOpenRef?.(handleOpenModal);
+        props.onStateRef?.({ isLocked, timeRemaining, hasChangeableSlots });
+    });
+
     return (
         <>
             {/* Request Change Button */}
-            <Show when={!isSpectator() && !isLocked() && hasChangeableSlots()}>
-                <button
-                    onClick={handleOpenModal}
-                    class="w-full rounded border border-orange-600/40 bg-orange-600/10 px-3 py-1.5 text-sm font-medium text-orange-400 transition-all hover:border-orange-500/60 hover:bg-orange-600/15"
-                >
-                    <Show
-                        when={timeRemaining() !== null && timeRemaining()! > 0}
-                        fallback="Request Pick Change"
+            <Show when={!props.hideButton}>
+                <Show when={!isSpectator() && !isLocked() && hasChangeableSlots()}>
+                    <button
+                        onClick={handleOpenModal}
+                        class="w-full rounded border border-orange-600/40 bg-orange-600/10 px-3 py-1.5 text-sm font-medium text-orange-400 transition-all hover:border-orange-500/60 hover:bg-orange-600/15"
                     >
-                        Request Pick Change ({formatTime(timeRemaining()!)})
-                    </Show>
-                </button>
-            </Show>
-            <Show when={!isSpectator() && isLocked()}>
-                <div class="w-full rounded border border-slate-600/40 bg-slate-700/30 px-3 py-1.5 text-center text-sm font-medium text-slate-500">
-                    Picks Locked
-                </div>
+                        <Show
+                            when={timeRemaining() !== null && timeRemaining()! > 0}
+                            fallback="Request Pick Change"
+                        >
+                            Request Pick Change ({formatTime(timeRemaining()!)})
+                        </Show>
+                    </button>
+                </Show>
+                <Show when={!isSpectator() && isLocked()}>
+                    <div class="w-full rounded border border-slate-600/40 bg-slate-700/30 px-3 py-1.5 text-center text-sm font-medium text-slate-500">
+                        Picks Locked
+                    </div>
+                </Show>
             </Show>
 
             {/* Request Change Modal */}

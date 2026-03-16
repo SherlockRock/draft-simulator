@@ -1,6 +1,6 @@
 import { Component, Show, createMemo, createSignal } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
-import { Pencil, Check, Share2, Pause, Play } from "lucide-solid";
+import { Pencil, Check, Share2, Pause, Play, RefreshCw } from "lucide-solid";
 import { track } from "../utils/analytics";
 import { useVersusContext } from "../contexts/VersusContext";
 import { VersusChatPanel } from "./VersusChatPanel";
@@ -34,6 +34,14 @@ const VersusFlowPanelContent: Component = () => {
     const userId = createMemo(() => user()?.id || null);
     const [copied, setCopied] = createSignal(false);
     const [showEditDialog, setShowEditDialog] = createSignal(false);
+
+    // Refs for PickChangeModal external trigger (B1 icon in title bar)
+    let openPickChangeModal: (() => void) | undefined;
+    let pickChangeState: {
+        isLocked: () => boolean;
+        timeRemaining: () => number | null;
+        hasChangeableSlots: () => boolean;
+    } | undefined;
     const queryClient = useQueryClient();
 
     const versusDraft = createMemo(() => versusContext().versusDraft);
@@ -113,6 +121,23 @@ const VersusFlowPanelContent: Component = () => {
         return map;
     });
 
+    const pickChangeTooltip = () => {
+        if (!pickChangeState) return "Request Pick Change";
+        if (pickChangeState.isLocked()) return "Picks Locked";
+        const remaining = pickChangeState.timeRemaining();
+        if (remaining !== null && remaining > 0) {
+            const m = Math.floor(remaining / 60);
+            const s = remaining % 60;
+            return `Request Pick Change (${m}:${s.toString().padStart(2, "0")})`;
+        }
+        return "Request Pick Change";
+    };
+
+    const pickChangeDisabled = () => {
+        if (!pickChangeState) return true;
+        return pickChangeState.isLocked() || !pickChangeState.hasChangeableSlots();
+    };
+
     const handleSettingsChange = (
         draftId: string,
         settings: { firstPick?: "blue" | "red"; blueSideTeam?: 1 | 2 }
@@ -161,10 +186,10 @@ const VersusFlowPanelContent: Component = () => {
             {/* Match Info Section - shown when in a series */}
             <Show when={isInSeries() && versusDraft()}>
                 <div class="flex flex-col gap-2 px-3">
-                    {/* Combined title bar: split-button with icon segment */}
-                    <div class="group/bar flex">
-                        {/* Left: icon + name */}
-                        <div class="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-l-md border border-r-0 border-orange-700 bg-slate-800 px-2 transition-colors group-hover/bar:border-orange-400">
+                    {/* Two-row title card */}
+                    <div class="group/bar overflow-hidden rounded-md border border-orange-700 transition-colors hover:border-orange-400">
+                        {/* Row 1: icon + name */}
+                        <div class="flex items-center gap-2 bg-slate-800 px-2.5 py-1.5">
                             {/* Series icon with description tooltip */}
                             <div class="group/icon relative flex-shrink-0">
                                 <IconDisplay
@@ -188,12 +213,12 @@ const VersusFlowPanelContent: Component = () => {
                             </span>
                         </div>
 
-                        {/* Right: action icons segment */}
-                        <div class="flex h-10 flex-shrink-0 items-stretch overflow-hidden rounded-r-md border border-l-0 border-orange-700 bg-slate-700 text-slate-400 transition-colors group-hover/bar:border-orange-400">
+                        {/* Row 2: action buttons */}
+                        <div class="flex items-center border-t border-orange-700/50 bg-slate-700 text-slate-400">
                             <Show when={isOwner()}>
                                 <button
                                     onClick={() => setShowEditDialog(true)}
-                                    class="flex items-center px-2.5 transition-colors hover:bg-orange-600 hover:text-slate-200"
+                                    class="flex items-center px-2.5 py-1.5 transition-colors hover:bg-orange-600 hover:text-slate-200"
                                     title="Edit series"
                                 >
                                     <Pencil size={14} />
@@ -202,7 +227,7 @@ const VersusFlowPanelContent: Component = () => {
 
                             <button
                                 onClick={handleCopyLink}
-                                class={`flex items-center px-2.5 transition-colors ${
+                                class={`flex items-center px-2.5 py-1.5 transition-colors ${
                                     copied()
                                         ? "text-orange-400"
                                         : "hover:bg-orange-600 hover:text-slate-200"
@@ -226,7 +251,7 @@ const VersusFlowPanelContent: Component = () => {
                             >
                                 <button
                                     onClick={() => callbacks()?.handlePause()}
-                                    class={`flex items-center px-2.5 transition-colors hover:bg-orange-600 hover:text-slate-200 ${
+                                    class={`flex items-center px-2.5 py-1.5 transition-colors hover:bg-orange-600 hover:text-slate-200 ${
                                         draftState()?.isPaused ? "text-orange-400" : ""
                                     }`}
                                     title={
@@ -240,6 +265,28 @@ const VersusFlowPanelContent: Component = () => {
                                     ) : (
                                         <Pause size={14} />
                                     )}
+                                </button>
+                            </Show>
+
+                            {/* Pick Change icon */}
+                            <Show
+                                when={
+                                    isInDraftView() &&
+                                    draftState()?.draft &&
+                                    !isSpectator()
+                                }
+                            >
+                                <button
+                                    onClick={() => openPickChangeModal?.()}
+                                    disabled={pickChangeDisabled()}
+                                    class={`flex items-center px-2.5 py-1.5 transition-colors ${
+                                        pickChangeDisabled()
+                                            ? "cursor-not-allowed text-slate-600"
+                                            : "text-orange-400 hover:bg-orange-600 hover:text-slate-200"
+                                    }`}
+                                    title={pickChangeTooltip()}
+                                >
+                                    <RefreshCw size={14} />
                                 </button>
                             </Show>
                         </div>
@@ -302,7 +349,7 @@ const VersusFlowPanelContent: Component = () => {
                 </div>
             </Show>
 
-            {/* Pick Change Modal */}
+            {/* Pick Change Modal (button hidden — triggered from title bar icon) */}
             <Show
                 when={
                     isInDraftView() &&
@@ -312,33 +359,34 @@ const VersusFlowPanelContent: Component = () => {
                     !isSpectator()
                 }
             >
-                <div class="px-3">
-                    <PickChangeModal
-                        draft={draftState()?.draft}
-                        myRole={myRole}
-                        isCompetitive={versusDraft()?.competitive ?? false}
-                        blueTeamName={versusDraft()?.blueTeamName ?? ""}
-                        redTeamName={versusDraft()?.redTeamName ?? ""}
-                        completedAt={draftState()?.completedAt}
-                        changeWindowSeconds={
-                            (versusDraft()?.competitive ?? false) ? 120 : 600
-                        }
-                        currentPickIndex={draftState()?.currentPickIndex ?? 0}
-                        firstPick={draftState()?.draft?.firstPick ?? "blue"}
-                        disabledChampions={versusDraft()?.disabledChampions ?? []}
-                        restrictedChampionGameMap={restrictedChampionGameMap()}
-                        pendingRequest={callbacks()?.pendingPickChangeRequest() ?? null}
-                        onRequestChange={
-                            callbacks()?.handleRequestPickChange ?? fallbackAction
-                        }
-                        onApproveChange={
-                            callbacks()?.handleApprovePickChange ?? fallbackAction
-                        }
-                        onRejectChange={
-                            callbacks()?.handleRejectPickChange ?? fallbackAction
-                        }
-                    />
-                </div>
+                <PickChangeModal
+                    draft={draftState()?.draft}
+                    myRole={myRole}
+                    isCompetitive={versusDraft()?.competitive ?? false}
+                    blueTeamName={versusDraft()?.blueTeamName ?? ""}
+                    redTeamName={versusDraft()?.redTeamName ?? ""}
+                    completedAt={draftState()?.completedAt}
+                    changeWindowSeconds={
+                        (versusDraft()?.competitive ?? false) ? 120 : 600
+                    }
+                    currentPickIndex={draftState()?.currentPickIndex ?? 0}
+                    firstPick={draftState()?.draft?.firstPick ?? "blue"}
+                    disabledChampions={versusDraft()?.disabledChampions ?? []}
+                    restrictedChampionGameMap={restrictedChampionGameMap()}
+                    pendingRequest={callbacks()?.pendingPickChangeRequest() ?? null}
+                    onRequestChange={
+                        callbacks()?.handleRequestPickChange ?? fallbackAction
+                    }
+                    onApproveChange={
+                        callbacks()?.handleApprovePickChange ?? fallbackAction
+                    }
+                    onRejectChange={
+                        callbacks()?.handleRejectPickChange ?? fallbackAction
+                    }
+                    hideButton={true}
+                    onOpenRef={(fn) => { openPickChangeModal = fn; }}
+                    onStateRef={(state) => { pickChangeState = state; }}
+                />
             </Show>
 
             {/* Chat Section - always visible when connected */}
