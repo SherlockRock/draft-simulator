@@ -35,13 +35,13 @@ const VersusFlowPanelContent: Component = () => {
     const [copied, setCopied] = createSignal(false);
     const [showEditDialog, setShowEditDialog] = createSignal(false);
 
-    // Refs for PickChangeModal external trigger (B1 icon in title bar)
-    let openPickChangeModal: (() => void) | undefined;
-    let pickChangeState: {
+    // Refs for PickChangeModal external trigger (icon in title bar)
+    const [openPickChangeModal, setOpenPickChangeModal] = createSignal<(() => void) | undefined>();
+    const [pickChangeState, setPickChangeState] = createSignal<{
         isLocked: () => boolean;
         timeRemaining: () => number | null;
         hasChangeableSlots: () => boolean;
-    } | undefined;
+    }>();
     const queryClient = useQueryClient();
 
     const versusDraft = createMemo(() => versusContext().versusDraft);
@@ -122,9 +122,10 @@ const VersusFlowPanelContent: Component = () => {
     });
 
     const pickChangeTooltip = () => {
-        if (!pickChangeState) return "Request Pick Change";
-        if (pickChangeState.isLocked()) return "Picks Locked";
-        const remaining = pickChangeState.timeRemaining();
+        const state = pickChangeState();
+        if (!state) return "Request Pick Change";
+        if (state.isLocked()) return "Picks Locked";
+        const remaining = state.timeRemaining();
         if (remaining !== null && remaining > 0) {
             const m = Math.floor(remaining / 60);
             const s = remaining % 60;
@@ -134,8 +135,9 @@ const VersusFlowPanelContent: Component = () => {
     };
 
     const pickChangeDisabled = () => {
-        if (!pickChangeState) return true;
-        return pickChangeState.isLocked() || !pickChangeState.hasChangeableSlots();
+        const state = pickChangeState();
+        if (!state) return true;
+        return state.isLocked() || !state.hasChangeableSlots();
     };
 
     const handleSettingsChange = (
@@ -277,7 +279,7 @@ const VersusFlowPanelContent: Component = () => {
                                 }
                             >
                                 <button
-                                    onClick={() => openPickChangeModal?.()}
+                                    onClick={() => openPickChangeModal()?.()}
                                     disabled={pickChangeDisabled()}
                                     class={`flex items-center px-2.5 py-1.5 transition-colors ${
                                         pickChangeDisabled()
@@ -384,8 +386,8 @@ const VersusFlowPanelContent: Component = () => {
                         callbacks()?.handleRejectPickChange ?? fallbackAction
                     }
                     hideButton={true}
-                    onOpenRef={(fn) => { openPickChangeModal = fn; }}
-                    onStateRef={(state) => { pickChangeState = state; }}
+                    onOpenRef={(fn) => { setOpenPickChangeModal(() => fn); }}
+                    onStateRef={(state) => { setPickChangeState(() => state); }}
                 />
             </Show>
 
