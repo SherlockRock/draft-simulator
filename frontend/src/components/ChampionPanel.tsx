@@ -1,7 +1,7 @@
 import { Component, createMemo, createSignal, For, Show } from "solid-js";
 import { X } from "lucide-solid";
-import { FilterBar } from "./FilterBar";
-import { useFilterableItems } from "../hooks/useFilterableItems";
+import { RoleFilter } from "./RoleFilter";
+import { useMultiFilterableItems } from "../hooks/useFilterableItems";
 import {
     champions,
     championCategories,
@@ -37,18 +37,19 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
     const {
         searchText,
         setSearchText,
-        selectedCategory,
-        setSelectedCategory,
+        selectedCategories,
+        toggleCategory,
         filteredItems: filteredChampions,
-        categories: championCategoryList
-    } = useFilterableItems({
+        categories: championCategoryList,
+        clearCategories
+    } = useMultiFilterableItems({
         items: champions,
         categoryMap: championCategories
     });
 
     // Derived: are we filtering?
     const isFiltering = createMemo(
-        () => searchText() !== "" || selectedCategory() !== ""
+        () => searchText() !== "" || selectedCategories().size > 0
     );
 
     // Parse pick index into components for colorized rendering
@@ -211,14 +212,20 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                     <div class="flex flex-1 flex-col">
                         {/* Filter bar - fixed at top */}
                         <div class="border-b border-slate-700 px-4 py-3">
-                            <FilterBar
-                                searchText={searchText}
-                                onSearchChange={setSearchText}
-                                selectedCategory={selectedCategory}
-                                onCategoryChange={setSelectedCategory}
+                            <div class="flex rounded-md bg-slate-800">
+                                <input
+                                    type="text"
+                                    value={searchText()}
+                                    onInput={(e) => setSearchText(e.currentTarget.value)}
+                                    placeholder="Search champions..."
+                                    class="w-full bg-inherit p-2 text-slate-50 placeholder:text-slate-400 focus:outline-none"
+                                />
+                            </div>
+                            <RoleFilter
                                 categories={championCategoryList}
-                                searchPlaceholder="Search champions..."
-                                categoryPlaceholder="Role"
+                                selectedCategories={selectedCategories}
+                                onToggle={toggleCategory}
+                                onClearAll={clearCategories}
                                 theme="orange"
                             />
                         </div>
