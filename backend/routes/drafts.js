@@ -14,36 +14,8 @@ const {
 } = require("../models/Canvas.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
-const { Op } = require("sequelize");
 const { draftHasSharedWithUser } = require("../helpers.js");
 const User = require("../models/User.js");
-
-router.get("/dropdown", async (req, res) => {
-  try {
-    const user = await getUserFromRequest(req);
-
-    if (!user) {
-      return res.json([]);
-    }
-
-    const ownedDrafts = await Draft.findAll({
-      where: { owner_id: user.id, type: { [Op.ne]: "versus" } },
-    });
-    const sharedDrafts = await user.getSharedDrafts({
-      where: { type: { [Op.ne]: "versus" } },
-      joinTableAttributes: [],
-    });
-    const allDrafts = [...ownedDrafts, ...sharedDrafts];
-    const uniqueDrafts = Array.from(
-      new Map(allDrafts.map((draft) => [draft.id, draft])).values(),
-    );
-
-    res.json(uniqueDrafts.map((draft) => ({ id: draft.id, name: draft.name })));
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server Error" });
-  }
-});
 
 // Get user's drafts with optional type filter
 router.get("/", async (req, res) => {

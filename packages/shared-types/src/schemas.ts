@@ -353,12 +353,6 @@ export const ImportSeriesResponseSchema = z.object({
   group: CanvasGroupSchema,
 });
 
-export const ShareDraftVerifySchema = z.object({
-  success: z.boolean(),
-  draftId: z.string(),
-  canvasId: z.string().nullable(),
-});
-
 export const ShareCanvasVerifySchema = z.object({
   success: z.boolean(),
   canvasId: z.string(),

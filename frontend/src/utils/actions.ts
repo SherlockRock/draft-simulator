@@ -18,7 +18,6 @@ import {
     SuccessSchema,
     ImportSeriesResponseSchema,
     UpdateCanvasNameResponseSchema,
-    ShareDraftVerifySchema,
     ShareCanvasVerifySchema,
     CanvasGroupMetadata
 } from "./schemas";
@@ -516,7 +515,7 @@ export const handleRevoke = async () => {
 };
 
 export const handleLogin = () => {
-    const returnTo = window.location.pathname;
+    const returnTo = window.location.pathname + window.location.search;
     const state = btoa(returnTo);
     const googleLoginURL = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${import.meta.env.VITE_GOOGLE_CLIENT_ID}&redirect_uri=${window.location.origin}/oauth2callback&response_type=code&scope=openid%20profile%20email&state=${encodeURIComponent(state)}`;
     window.location.href = googleLoginURL;
@@ -568,10 +567,6 @@ export const deleteUserAccount = async (confirmEmail: string) => {
 // Other
 // =============================================================================
 
-export const verifyShareDraftLink = async (token: string) => {
-    return apiGet(`/shares/verify-link?token=${token}`, ShareDraftVerifySchema);
-};
-
 export const verifyShareCanvasLink = async (token: string) => {
     return apiGet(`/shares/verify-canvas-link?token=${token}`, ShareCanvasVerifySchema);
 };
@@ -595,6 +590,3 @@ export const fetchRecentActivity = async (
     return apiGet(`/activity/recent?${params}`, ActivityResponseSchema);
 };
 
-export const fetchStandaloneDrafts = async () => {
-    return apiGet("/drafts?type=standalone", z.array(DraftSchema));
-};
