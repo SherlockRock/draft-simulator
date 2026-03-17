@@ -670,13 +670,52 @@ const VersusDraftView: Component = () => {
         const socket = socketAccessor();
         if (!socket) return;
 
+        const state = versusState();
+        const picksIndex = getPicksArrayIndex(
+            state.currentPickIndex,
+            state.firstPick || "blue"
+        );
+
+        // Optimistic: update cache immediately so highlight appears instantly
+        queryClient.setQueryData(["draft", params.draftId], (prev: draft | undefined) =>
+            prev
+                ? {
+                      ...prev,
+                      picks: prev.picks.map((p: string, i: number) =>
+                          i === picksIndex ? championIndex : p
+                      )
+                  }
+                : prev
+        );
+
         // Clicking a champion saves it as pending pick (visible to all)
         // User must click "Lock In" button to advance to next pick
-        socket.emit("versusPick", {
-            draftId: params.draftId,
-            champion: championIndex,
-            role: myRole()
-        });
+        socket.emit(
+            "versusPick",
+            {
+                draftId: params.draftId,
+                champion: championIndex,
+                role: myRole()
+            },
+            (response: { success: boolean; message?: string }) => {
+                if (!response.success) {
+                    // Rollback: clear the optimistic pick
+                    queryClient.setQueryData(
+                        ["draft", params.draftId],
+                        (prev: draft | undefined) =>
+                            prev
+                                ? {
+                                      ...prev,
+                                      picks: prev.picks.map((p: string, i: number) =>
+                                          i === picksIndex ? "" : p
+                                      )
+                                  }
+                                : prev
+                    );
+                    toast.error(response.message || "Pick rejected");
+                }
+            }
+        );
     };
 
     const declareWinnerMutation = useMutation(() => ({

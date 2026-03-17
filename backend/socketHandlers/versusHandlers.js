@@ -710,34 +710,34 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Versus pick (saves pending pick without advancing)
-  socket.on("versusPick", async (data) => {
+  socket.on("versusPick", async (data, callback) => {
     try {
       const { draftId, champion, role } = data;
 
       const state = getState(draftId);
       if (!state) {
-        return socket.emit("error", { message: "Draft state not found" });
+        return callback?.({ success: false, message: "Draft state not found" });
       }
 
       if (!role || !role.includes("captain")) {
-        return socket.emit("error", { message: "Invalid role" });
+        return callback?.({ success: false, message: "Invalid role" });
       }
 
       // Validate draft is not complete
       const effectiveOrder = getEffectivePickOrder(state.firstPick || "blue");
       if (state.currentPickIndex >= effectiveOrder.length) {
-        return socket.emit("error", { message: "Draft is complete" });
+        return callback?.({ success: false, message: "Draft is complete" });
       }
 
       // Validate not paused
       if (state.isPaused) {
-        return socket.emit("error", { message: "Draft is paused" });
+        return callback?.({ success: false, message: "Draft is paused" });
       }
 
       // Get draft and validate champion not already picked
       const draft = await Draft.findByPk(draftId);
       if (!draft) {
-        return socket.emit("error", { message: "Draft not found" });
+        return callback?.({ success: false, message: "Draft not found" });
       }
 
       const team = getEffectiveSide(role, draft.blueSideTeam);
@@ -745,7 +745,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       // Validate it's this team's turn
       const currentPick = effectiveOrder[state.currentPickIndex];
       if (currentPick.team !== team) {
-        return socket.emit("error", { message: "Not your turn" });
+        return callback?.({ success: false, message: "Not your turn" });
       }
 
       // Check if champion is already picked (excluding current pending slot)
@@ -757,7 +757,8 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         (_, idx) => idx !== picksIndex,
       );
       if (picksWithoutCurrent.includes(champion)) {
-        return socket.emit("error", {
+        return callback?.({
+          success: false,
           message: "Champion already picked/banned",
         });
       }
@@ -772,7 +773,8 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
           // Check disabled champions
           const disabledChampions = versusDraft.disabledChampions || [];
           if (disabledChampions.includes(champion)) {
-            return socket.emit("error", {
+            return callback?.({
+              success: false,
               message: "Champion is disabled for this series",
             });
           }
@@ -784,7 +786,8 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
           );
 
           if (restrictedChampions.includes(champion)) {
-            return socket.emit("error", {
+            return callback?.({
+              success: false,
               message: "Champion restricted from previous games in this series",
             });
           }
@@ -808,9 +811,11 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         completed: draft.completed,
         completedAt: draft.completedAt,
       });
+
+      callback?.({ success: true });
     } catch (error) {
       console.error("Error processing versus pick:", error);
-      socket.emit("error", { message: "Failed to process pick" });
+      callback?.({ success: false, message: "Failed to process pick" });
     }
   });
 
@@ -1091,7 +1096,8 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       // If draft is completed, enforce the pick change time window
       if (draft.completed && draft.completedAt) {
         const windowSeconds = versusDraft.competitive ? 120 : 600;
-        const expiresAt = new Date(draft.completedAt).getTime() + windowSeconds * 1000;
+        const expiresAt =
+          new Date(draft.completedAt).getTime() + windowSeconds * 1000;
         if (Date.now() > expiresAt) {
           return socket.emit("error", {
             message: "Pick change window has expired",
@@ -1118,7 +1124,9 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       const oldChampion = draft.picks[pickIndex];
 
       // Check if newChampion is already in the draft (excluding the slot being changed)
-      const picksWithoutSlot = draft.picks.filter((_, idx) => idx !== pickIndex);
+      const picksWithoutSlot = draft.picks.filter(
+        (_, idx) => idx !== pickIndex,
+      );
       if (picksWithoutSlot.includes(newChampion)) {
         return socket.emit("error", {
           message: "Champion is already picked or banned in this draft",
@@ -1217,7 +1225,8 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       // Sweep expired pending requests if draft is completed and window has passed
       if (draft.completed && draft.completedAt) {
         const windowSeconds = versusDraft?.competitive ? 120 : 600;
-        const expiresAt = new Date(draft.completedAt).getTime() + windowSeconds * 1000;
+        const expiresAt =
+          new Date(draft.completedAt).getTime() + windowSeconds * 1000;
         if (Date.now() > expiresAt) {
           const pendingRequests = state.pickChangeRequests.filter(
             (r) => r.status === "pending",
