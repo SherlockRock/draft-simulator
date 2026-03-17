@@ -595,6 +595,3 @@ export const fetchRecentActivity = async (
     return apiGet(`/activity/recent?${params}`, ActivityResponseSchema);
 };
 
-export const fetchStandaloneDrafts = async () => {
-    return apiGet("/drafts?type=standalone", z.array(DraftSchema));
-};

@@ -64,7 +64,7 @@ const CanvasDraft = sequelize.define("CanvasDraft", {
     references: { model: "CanvasGroups", key: "id" },
   },
   source_type: {
-    type: DataTypes.ENUM("canvas", "standalone", "versus"),
+    type: DataTypes.ENUM("canvas", "versus"),
     defaultValue: "canvas",
   },
 }, {

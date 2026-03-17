@@ -40,8 +40,6 @@ const draftHasSharedWithUser = async (draft, user) => {
 /**
  * Generates a unique name for a draft within a specific canvas.
  * If the name exists, appends " 1", " 2", etc. until a unique name is found.
- * Only checks canvas drafts (type = 'canvas') for uniqueness.
- * Standalone drafts on the canvas are ignored.
  *
  * @param {string} baseName - The desired draft name
  * @param {string} canvasId - The canvas ID to check uniqueness within

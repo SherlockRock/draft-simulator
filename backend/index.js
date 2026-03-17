@@ -205,7 +205,7 @@ async function main() {
               return;
             }
           } else {
-            // Standalone draft: require sign-in and ownership
+            // Non-canvas draft: require sign-in and ownership
             if (!socket.user) {
               return;
             }

@@ -584,7 +584,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-// Import existing standalone draft to canvas
+// Import existing draft to canvas
 router.post("/:canvasId/import/draft", protect, async (req, res) => {
   try {
     const { canvasId } = req.params;
