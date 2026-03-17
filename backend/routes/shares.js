@@ -1,124 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
-const Draft = require("../models/Draft");
-const { Canvas, UserCanvas, CanvasDraft } = require("../models/Canvas");
+const { Canvas, UserCanvas } = require("../models/Canvas");
 const User = require("../models/User");
 const { protect, getUserFromRequest } = require("../middleware/auth");
-const DraftShare = require("../models/DraftShare");
 
-router.post("/:draftId/share", protect, async (req, res) => {
-  try {
-    const { userId, accessLevel } = req.body;
-    const draft = await Draft.findByPk(req.params.draftId);
-
-    if (!draft) {
-      return res.status(404).json({ error: "Draft not found" });
-    }
-
-    if (draft.owner_id !== req.user.id) {
-      return res
-        .status(403)
-        .json({ error: "Not authorized to share this draft" });
-    }
-
-    const userToShareWith = await User.findByPk(userId);
-    if (!userToShareWith) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    await draft.addSharedWith(userToShareWith, {
-      through: { access_level: accessLevel },
-    });
-
-    res.status(200).json({ message: "Draft shared successfully" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server Error" });
-  }
-});
-
-router.post("/:draftId/generate-link", protect, async (req, res) => {
-  try {
-    const draft = await Draft.findByPk(req.params.draftId);
-
-    if (!draft) {
-      return res.status(404).json({ error: "Draft not found" });
-    }
-
-    if (draft.owner_id !== req.user.id) {
-      return res.status(403).json({
-        error: "Not authorized to generate a share link for this draft",
-      });
-    }
-
-    const shareToken = jwt.sign(
-      { draftId: draft.id },
-      process.env.SHARE_JWT_SECRET,
-      { expiresIn: "1h" }
-    );
-    const shareLink = `${process.env.FRONTEND_ORIGIN}/share/draft?token=${shareToken}`;
-
-    res.json({ shareLink });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server Error" });
-  }
-});
-
-router.get("/verify-link", async (req, res) => {
-  try {
-    const user = await getUserFromRequest(req);
-    console.log("VERIFY LINK - USER:", user);
-    if (!user) {
-      console.log("NO USER - Returning 401");
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
-    const { token } = req.query;
-    if (!token) {
-      console.log("NO TOKEN PROVIDED");
-      return res.status(400).json({ error: "Share token is required" });
-    }
-
-    const decoded = jwt.verify(token, process.env.SHARE_JWT_SECRET);
-    const draft = await Draft.findByPk(decoded.draftId);
-
-    if (!draft) {
-      console.log("DRAFT NOT FOUND for ID:", decoded.draftId);
-      return res.status(404).json({ error: "Draft not found" });
-    }
-
-    const existingAccess = await DraftShare.findAll({
-      where: { draft_id: draft.id, user_id: user.id },
-    });
-
-    if (!existingAccess.length > 0) {
-      await draft.addSharedWith(user, { through: { access_level: "viewer" } });
-    }
-
-    // Look up the canvas this draft belongs to
-    const canvasDraft = await CanvasDraft.findOne({
-      where: { draft_id: draft.id },
-    });
-
-    res.json({
-      success: true,
-      draftId: draft.id,
-      canvasId: canvasDraft?.canvas_id || null,
-    });
-  } catch (err) {
-    console.error("SHARE VERIFICATION ERROR:", err);
-    if (err.name === "TokenExpiredError") {
-      return res.status(401).json({ error: "Share link has expired." });
-    } else if (err.name === "JsonWebTokenError") {
-      return res.status(401).json({ error: "Invalid share link." });
-    }
-    res.status(500).json({ error: "Server Error" });
-  }
-});
-
-// Canvas share routes
 router.post("/:canvasId/share", protect, async (req, res) => {
   try {
     const { userId, accessLevel } = req.body;
@@ -185,7 +71,7 @@ router.post("/:canvasId/generate-canvas-link", protect, async (req, res) => {
     const shareToken = jwt.sign(
       { canvasId: canvas.id, permissions: sharePermissions },
       process.env.SHARE_JWT_SECRET,
-      { expiresIn: "1h" }
+      { expiresIn: "1h" },
     );
     const shareLink = `${process.env.FRONTEND_ORIGIN}/share/canvas?token=${shareToken}`;
 

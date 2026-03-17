@@ -36,7 +36,9 @@ const VersusFlowPanelContent: Component = () => {
     const [showEditDialog, setShowEditDialog] = createSignal(false);
 
     // Refs for PickChangeModal external trigger (icon in title bar)
-    const [openPickChangeModal, setOpenPickChangeModal] = createSignal<(() => void) | undefined>();
+    const [openPickChangeModal, setOpenPickChangeModal] = createSignal<
+        (() => void) | undefined
+    >();
     const [pickChangeState, setPickChangeState] = createSignal<{
         isLocked: () => boolean;
         timeRemaining: () => number | null;
@@ -140,6 +142,17 @@ const VersusFlowPanelContent: Component = () => {
         return state.isLocked() || !state.hasChangeableSlots();
     };
 
+    const catFace = createMemo<{ eye: string; mouth: string; suffix: string }>(() => {
+        const ds = draftState();
+        if (!ds || !isInDraftView()) return { eye: "-", mouth: "ω", suffix: "" };
+        if (ds.completed) return { eye: "-", mouth: "ω", suffix: "" };
+        if (ds.isPaused) return { eye: "-", mouth: "ω", suffix: "" };
+        if (!callbacks()?.draftStarted()) return { eye: "-", mouth: "ω", suffix: "" };
+        const myTurn = callbacks()?.isMyTurn() ?? false;
+        if (myTurn) return { eye: "◕", mouth: "ᴗ", suffix: "" };
+        return { eye: "◕", mouth: ".", suffix: "" };
+    });
+
     const handleSettingsChange = (
         draftId: string,
         settings: { firstPick?: "blue" | "red"; blueSideTeam?: 1 | 2 }
@@ -215,82 +228,88 @@ const VersusFlowPanelContent: Component = () => {
                             </span>
                         </div>
 
-                        {/* Row 2: action buttons */}
+                        {/* Row 2: cat mascot + action buttons */}
                         <div class="flex items-center border-t border-orange-700/50 bg-slate-700 text-slate-400">
-                            <Show when={isOwner()}>
-                                <button
-                                    onClick={() => setShowEditDialog(true)}
-                                    class="flex items-center px-2.5 py-1.5 transition-colors hover:bg-orange-600 hover:text-slate-200"
-                                    title="Edit series"
-                                >
-                                    <Pencil size={14} />
-                                </button>
-                            </Show>
+                            {/* Cat mascot — reacts to draft state */}
+                            <span class="animate-cat-breathe min-w-0 flex-1 select-none overflow-hidden whitespace-nowrap py-1 text-center text-xs text-orange-400">
+                                =^<span class="animate-cat-blink">{catFace().eye}</span>
+                                {catFace().mouth}
+                                <span class="animate-cat-blink">{catFace().eye}</span>^=
+                                {catFace().suffix}
+                            </span>
 
-                            <button
-                                onClick={handleCopyLink}
-                                class={`flex items-center px-2.5 py-1.5 transition-colors ${
-                                    copied()
-                                        ? "text-orange-400"
-                                        : "hover:bg-orange-600 hover:text-slate-200"
-                                }`}
-                                title={copied() ? "Link copied!" : "Share invite link"}
-                            >
-                                {copied() ? (
-                                    <Check size={14} class="text-orange-400" />
-                                ) : (
-                                    <Share2 size={14} />
-                                )}
-                            </button>
-
-                            <Show
-                                when={
-                                    isInDraftView() &&
-                                    callbacks()?.draftStarted() &&
-                                    !draftState()?.completed &&
-                                    !isSpectator()
-                                }
-                            >
-                                <button
-                                    onClick={() => callbacks()?.handlePause()}
-                                    class={`flex items-center px-2.5 py-1.5 transition-colors hover:bg-orange-600 hover:text-slate-200 ${
-                                        draftState()?.isPaused ? "text-orange-400" : ""
-                                    }`}
-                                    title={
-                                        draftState()?.isPaused
-                                            ? "Resume draft"
-                                            : "Pause draft"
+                            <div class="ml-auto flex items-center">
+                                {/* Pick Change icon */}
+                                <Show
+                                    when={
+                                        isInDraftView() &&
+                                        draftState()?.draft &&
+                                        !isSpectator()
                                     }
                                 >
-                                    {draftState()?.isPaused ? (
-                                        <Play size={14} />
+                                    <button
+                                        onClick={() => openPickChangeModal()?.()}
+                                        disabled={pickChangeDisabled()}
+                                        class={`flex items-center border-l border-orange-700/50 px-2.5 py-1.5 transition-colors ${
+                                            pickChangeDisabled()
+                                                ? "cursor-not-allowed text-slate-600"
+                                                : "text-orange-400 hover:bg-orange-600 hover:text-slate-200"
+                                        }`}
+                                        title={pickChangeTooltip()}
+                                    >
+                                        <RefreshCw size={14} />
+                                    </button>
+                                </Show>
+
+                                <Show
+                                    when={
+                                        isInDraftView() &&
+                                        callbacks()?.draftStarted() &&
+                                        !draftState()?.completed &&
+                                        !isSpectator()
+                                    }
+                                >
+                                    <button
+                                        onClick={() => callbacks()?.handlePause()}
+                                        class="flex items-center border-l border-orange-700/50 px-2.5 py-1.5 text-orange-400 transition-colors hover:bg-orange-600 hover:text-slate-200"
+                                        title={
+                                            draftState()?.isPaused
+                                                ? "Resume draft"
+                                                : "Pause draft"
+                                        }
+                                    >
+                                        {draftState()?.isPaused ? (
+                                            <Play size={14} />
+                                        ) : (
+                                            <Pause size={14} />
+                                        )}
+                                    </button>
+                                </Show>
+
+                                <button
+                                    onClick={handleCopyLink}
+                                    class="flex items-center border-l border-orange-700/50 px-2.5 py-1.5 text-orange-400 transition-colors hover:bg-orange-600 hover:text-slate-200"
+                                    title={
+                                        copied() ? "Link copied!" : "Share invite link"
+                                    }
+                                >
+                                    {copied() ? (
+                                        <Check size={14} />
                                     ) : (
-                                        <Pause size={14} />
+                                        <Share2 size={14} />
                                     )}
                                 </button>
-                            </Show>
 
-                            {/* Pick Change icon */}
-                            <Show
-                                when={
-                                    isInDraftView() &&
-                                    draftState()?.draft &&
-                                    !isSpectator()
-                                }
-                            >
-                                <button
-                                    onClick={() => openPickChangeModal()?.()}
-                                    disabled={pickChangeDisabled()}
-                                    class={`flex items-center px-2.5 py-1.5 transition-colors ${
-                                        pickChangeDisabled()
-                                            ? "cursor-not-allowed text-slate-600"
-                                            : "text-orange-400 hover:bg-orange-600 hover:text-slate-200"
-                                    }`}
-                                    title={pickChangeTooltip()}
-                                >
-                                    <RefreshCw size={14} />
-                                </button>
-                            </Show>
+                                <Show when={isOwner()}>
+                                    <button
+                                        onClick={() => setShowEditDialog(true)}
+                                        class="flex items-center border-l border-orange-700/50 px-2.5 py-1.5 text-orange-400 transition-colors hover:bg-orange-600 hover:text-slate-200"
+                                        title="Edit series"
+                                    >
+                                        <Pencil size={14} />
+                                    </button>
+                                </Show>
+                            </div>
                         </div>
                     </div>
 
@@ -382,12 +401,14 @@ const VersusFlowPanelContent: Component = () => {
                     onApproveChange={
                         callbacks()?.handleApprovePickChange ?? fallbackAction
                     }
-                    onRejectChange={
-                        callbacks()?.handleRejectPickChange ?? fallbackAction
-                    }
+                    onRejectChange={callbacks()?.handleRejectPickChange ?? fallbackAction}
                     hideButton={true}
-                    onOpenRef={(fn) => { setOpenPickChangeModal(() => fn); }}
-                    onStateRef={(state) => { setPickChangeState(() => state); }}
+                    onOpenRef={(fn) => {
+                        setOpenPickChangeModal(() => fn);
+                    }}
+                    onStateRef={(state) => {
+                        setPickChangeState(() => state);
+                    }}
                 />
             </Show>
 
