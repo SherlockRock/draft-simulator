@@ -1,6 +1,6 @@
 import { Component, For, Show, createMemo } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
-import { Lock, ChevronRight, Flag } from "lucide-solid";
+import { Lock, ChevronRight, Flag, Swords } from "lucide-solid";
 import { draft } from "../utils/schemas";
 import { useVersusContext } from "../contexts/VersusContext";
 import { IconDisplay } from "../components/IconDisplay";
@@ -99,7 +99,7 @@ const VersusSeriesOverview: Component = () => {
                                 <div class="flex items-center gap-4">
                                     <IconDisplay
                                         icon={versusDraft()?.icon}
-                                        defaultIcon="⚔️"
+                                        defaultIcon={<Swords size={44} class="text-orange-400" />}
                                         size="md"
                                         className="rounded-xl border border-slate-600/50 bg-slate-800"
                                     />

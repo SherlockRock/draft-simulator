@@ -1,5 +1,6 @@
 import { Component, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
+import { LayoutDashboard, Swords } from "lucide-solid";
 import FlowCard from "../components/FlowCard";
 import ActivityList from "../components/ActivityList";
 import { useUser } from "../userProvider";
@@ -18,7 +19,7 @@ const HomePage: Component = () => {
                         <FlowCard
                             title="Canvas"
                             description="Visual workspace for organizing drafts"
-                            icon="🎨"
+                            icon={<LayoutDashboard size={44} class="text-purple-400" />}
                             onClick={() => navigate("/canvas")}
                             flowType="canvas"
                             bullets={[
@@ -32,7 +33,7 @@ const HomePage: Component = () => {
                         <FlowCard
                             title="Versus"
                             description="Head-to-head competitive draft series"
-                            icon="⚔️"
+                            icon={<Swords size={44} class="text-orange-400" />}
                             onClick={() => navigate("/versus")}
                             flowType="versus"
                             bullets={[

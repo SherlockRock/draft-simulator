@@ -1,5 +1,6 @@
 import { Component, Show } from "solid-js";
 import { useNavigate, useLocation } from "@solidjs/router";
+import { Pickaxe, LayoutDashboard, Swords } from "lucide-solid";
 import { useUser } from "../userProvider";
 import { handleLogin, handleRevoke } from "../utils/actions";
 
@@ -52,7 +53,10 @@ const GlobalNavBar: Component = () => {
                                 : "bg-slate-800 text-slate-300 hover:bg-slate-700"
                         }`}
                     >
-                        <span>🏠</span>
+                        <Pickaxe
+                            size={18}
+                            class={activeFlow() === null ? "" : "text-teal-400"}
+                        />
                         <span>Home</span>
                     </button>
                     <button
@@ -63,7 +67,10 @@ const GlobalNavBar: Component = () => {
                                 : "bg-slate-800 text-slate-300 hover:bg-slate-700"
                         }`}
                     >
-                        <span>🎨</span>
+                        <LayoutDashboard
+                            size={18}
+                            class={activeFlow() === "canvas" ? "" : "text-purple-400"}
+                        />
                         <span>Canvas</span>
                     </button>
                     <button
@@ -74,7 +81,10 @@ const GlobalNavBar: Component = () => {
                                 : "bg-slate-800 text-slate-300 hover:bg-slate-700"
                         }`}
                     >
-                        <span>⚔️</span>
+                        <Swords
+                            size={18}
+                            class={activeFlow() === "versus" ? "" : "text-orange-400"}
+                        />
                         <span>Versus</span>
                     </button>
                 </div>

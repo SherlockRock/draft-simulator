@@ -1,9 +1,9 @@
-import { Component, For, Show } from "solid-js";
+import { Component, For, Show, JSX } from "solid-js";
 
 interface FlowCardProps {
     title: string;
     description: string;
-    icon: string;
+    icon: JSX.Element;
     onClick: () => void;
     disabled?: boolean;
     flowType?: "draft" | "canvas" | "versus";
@@ -72,7 +72,7 @@ const FlowCard: Component<FlowCardProps> = (props) => {
             {/* Content */}
             <div class="relative flex flex-col items-start gap-4 p-8">
                 <div class="flex items-center gap-3">
-                    <span class="text-5xl">{props.icon}</span>
+                    {props.icon}
                     <h3 class="text-3xl font-bold">{props.title}</h3>
                 </div>
                 <p class="text-base text-slate-400">{props.description}</p>

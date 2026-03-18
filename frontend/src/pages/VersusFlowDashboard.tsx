@@ -1,5 +1,6 @@
 import { Component, createSignal, createEffect, Show } from "solid-js";
 import { useQuery, useInfiniteQuery } from "@tanstack/solid-query";
+import { Swords } from "lucide-solid";
 import ActivityList from "../components/ActivityList";
 import { useUser } from "../userProvider";
 import { CreateVersusDraftDialog } from "../components/CreateVersusDraftDialog";
@@ -66,7 +67,7 @@ const VersusFlowDashboard: Component = () => {
 
                         {/* Title + tagline */}
                         <div class="relative flex flex-1 items-center gap-3 py-6 pl-8 pr-4">
-                            <span class="text-4xl">⚔️</span>
+                            <Swords size={44} class="text-orange-400" />
                             <div>
                                 <h1 class="text-2xl font-bold text-slate-50">
                                     Versus Mode

@@ -1,6 +1,6 @@
 import { Component, createSignal, Show, createMemo } from "solid-js";
 import toast from "solid-toast";
-import { AlertTriangle, EyeOff, Check, Share2, User, Eye } from "lucide-solid";
+import { AlertTriangle, EyeOff, Check, Share2, User, Eye, Swords } from "lucide-solid";
 import { track } from "../utils/analytics";
 import { useVersusContext } from "../contexts/VersusContext";
 import { getSuggestedRole } from "../workflows/VersusWorkflow";
@@ -113,7 +113,7 @@ const VersusRoleSelection: Component = () => {
                             <div class="flex items-center gap-4 border-b border-slate-700/50 px-6 py-5">
                                 <IconDisplay
                                     icon={versusDraft()?.icon}
-                                    defaultIcon="⚔️"
+                                    defaultIcon={<Swords size={44} class="text-orange-400" />}
                                     size="md"
                                     className="rounded-xl border border-slate-600/50 bg-slate-800"
                                 />

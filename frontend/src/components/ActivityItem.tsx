@@ -10,7 +10,10 @@ import {
     Plus,
     X,
     ChevronDown,
-    ChevronUp
+    ChevronUp,
+    LayoutDashboard,
+    Swords,
+    FileText
 } from "lucide-solid";
 import {
     generateVersusShareLink,
@@ -237,11 +240,11 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     const getDefaultIcon = () => {
         switch (props.activity.resource_type) {
             case "canvas":
-                return "🎨";
+                return <LayoutDashboard size={44} class="text-purple-400" />;
             case "versus":
-                return "⚔️";
+                return <Swords size={44} class="text-orange-400" />;
             default:
-                return "📄";
+                return <FileText size={44} class="text-slate-400" />;
         }
     };
 

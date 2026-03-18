@@ -1,9 +1,9 @@
-import { Component, Show } from "solid-js";
+import { Component, Show, JSX } from "solid-js";
 import { champions } from "../utils/constants";
 
 interface IconDisplayProps {
     icon?: string | null;
-    defaultIcon?: string;
+    defaultIcon?: string | JSX.Element;
     size?: "xs" | "sm" | "md" | "lg";
     className?: string;
 }
@@ -38,9 +38,13 @@ export const IconDisplay: Component<IconDisplayProps> = (props) => {
             <Show
                 when={props.icon}
                 fallback={
-                    <span class={`text-center leading-none ${sizes.text}`}>
-                        {props.defaultIcon || ""}
-                    </span>
+                    typeof props.defaultIcon === "string" ? (
+                        <span class={`text-center leading-none ${sizes.text}`}>
+                            {props.defaultIcon}
+                        </span>
+                    ) : (
+                        (props.defaultIcon ?? null)
+                    )
                 }
             >
                 <Show

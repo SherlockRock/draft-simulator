@@ -1,5 +1,6 @@
 import { Component, Show, createSignal } from "solid-js";
 import { useNavigate } from "@solidjs/router";
+import { LayoutDashboard } from "lucide-solid";
 import ActivityList from "../components/ActivityList";
 import { useUser } from "../userProvider";
 import { CreateCanvasDialog } from "../components/CreateCanvasDialog";
@@ -16,7 +17,7 @@ const CanvasFlowDashboard: Component = () => {
 
     return (
         <div class="flex-1 overflow-auto bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
-            <div class="mx-auto min-h-full max-w-7xl flex flex-col justify-center p-8">
+            <div class="mx-auto flex min-h-full max-w-7xl flex-col justify-center p-8">
                 {/* Inline banner */}
                 <div class="mx-auto mb-12 max-w-3xl">
                     <div class="relative flex items-center overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800">
@@ -28,7 +29,7 @@ const CanvasFlowDashboard: Component = () => {
 
                         {/* Title + tagline */}
                         <div class="relative flex flex-1 items-center gap-3 py-6 pl-8 pr-4">
-                            <span class="text-4xl">🎨</span>
+                            <LayoutDashboard size={44} class="text-purple-400" />
                             <div>
                                 <h1 class="text-2xl font-bold text-slate-50">
                                     Canvas Mode

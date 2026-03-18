@@ -6,7 +6,8 @@ import {
     Import,
     GitBranch,
     Settings,
-    Share2
+    Share2,
+    LayoutDashboard
 } from "lucide-solid";
 import { IconDisplay } from "./IconDisplay";
 import { champions } from "../utils/constants";
@@ -93,7 +94,9 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
                     >
                         <Show
                             when={props.icon}
-                            fallback={<span class="text-2xl">🎨</span>}
+                            fallback={
+                                <LayoutDashboard size={32} class="text-purple-400" />
+                            }
                         >
                             <IconDisplay
                                 icon={props.icon}

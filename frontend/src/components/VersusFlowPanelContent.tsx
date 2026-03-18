@@ -1,6 +1,6 @@
 import { Component, Show, createMemo, createSignal } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
-import { Pencil, Check, Share2, Pause, Play, RefreshCw } from "lucide-solid";
+import { Pencil, Check, Share2, Pause, Play, RefreshCw, Swords } from "lucide-solid";
 import { track } from "../utils/analytics";
 import { useVersusContext } from "../contexts/VersusContext";
 import { VersusChatPanel } from "./VersusChatPanel";
@@ -209,7 +209,9 @@ const VersusFlowPanelContent: Component = () => {
                             <div class="group/icon relative flex-shrink-0">
                                 <IconDisplay
                                     icon={versusDraft()?.icon}
-                                    defaultIcon="⚔️"
+                                    defaultIcon={
+                                        <Swords size={22} class="text-orange-400" />
+                                    }
                                     size="xs"
                                     className="rounded-md"
                                 />
@@ -231,7 +233,7 @@ const VersusFlowPanelContent: Component = () => {
                         {/* Row 2: cat mascot + action buttons */}
                         <div class="flex items-center border-t border-orange-700/50 bg-slate-700 text-slate-400">
                             {/* Cat mascot — reacts to draft state */}
-                            <span class="animate-cat-breathe min-w-0 flex-1 select-none overflow-hidden whitespace-nowrap py-1 text-center text-xs text-orange-400">
+                            <span class="min-w-0 flex-1 animate-cat-breathe select-none overflow-hidden whitespace-nowrap py-1 text-center text-xs text-orange-400">
                                 =^<span class="animate-cat-blink">{catFace().eye}</span>
                                 {catFace().mouth}
                                 <span class="animate-cat-blink">{catFace().eye}</span>^=
