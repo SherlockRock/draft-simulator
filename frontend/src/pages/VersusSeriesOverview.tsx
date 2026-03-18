@@ -99,7 +99,9 @@ const VersusSeriesOverview: Component = () => {
                                 <div class="flex items-center gap-4">
                                     <IconDisplay
                                         icon={versusDraft()?.icon}
-                                        defaultIcon={<Swords size={44} class="text-orange-400" />}
+                                        defaultIcon={
+                                            <Swords size={44} class="text-orange-400" />
+                                        }
                                         size="md"
                                         className="rounded-xl border border-slate-600/50 bg-slate-800"
                                     />
