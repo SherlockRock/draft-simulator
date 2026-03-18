@@ -1,4 +1,4 @@
-import { Component, For, createSignal } from "solid-js";
+import { Component, For, createEffect, createSignal, on } from "solid-js";
 import { Socket } from "socket.io-client";
 import { useUser } from "../userProvider";
 import { useVersusContext } from "../contexts/VersusContext";
@@ -17,6 +17,26 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
     const { chatMessages } = useVersusContext();
     const [messageInput, setMessageInput] = createSignal("");
     let messagesEndRef: HTMLDivElement | undefined;
+    let containerRef: HTMLDivElement | undefined;
+
+    const formatTime = (ts: number) => {
+        const d = new Date(ts);
+        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    };
+
+    createEffect(
+        on(
+            () => chatMessages(),
+            () => {
+                if (!containerRef) return;
+                const { scrollTop, scrollHeight, clientHeight } = containerRef;
+                const isNearBottom = scrollHeight - scrollTop - clientHeight < 60;
+                if (isNearBottom) {
+                    messagesEndRef?.scrollIntoView({ behavior: "smooth" });
+                }
+            }
+        )
+    );
 
     const handleSend = (e: Event) => {
         e.preventDefault();
@@ -34,6 +54,7 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
             });
 
             setMessageInput("");
+            messagesEndRef?.scrollIntoView({ behavior: "smooth" });
         }
     };
 
@@ -71,16 +92,22 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
                 </div>
 
                 {/* Messages */}
-                <div class="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-2">
+                <div
+                    ref={containerRef}
+                    class="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-2"
+                >
                     <For each={chatMessages()}>
                         {(msg) => (
-                            <div class="mb-2 flex flex-wrap text-sm">
+                            <div class="mb-2 flex flex-wrap items-baseline text-sm">
+                                <span class="shrink-0 text-[10px] text-slate-500">
+                                    {formatTime(msg.timestamp)}
+                                </span>
                                 <span
                                     class={`pl-1 font-medium ${getUsernameColor(msg.role)}`}
                                 >
                                     {msg.username}:
                                 </span>
-                                <span class="break-all pl-1 text-slate-100">
+                                <span class="min-w-0 break-words pl-1 text-slate-100">
                                     {msg.message}
                                 </span>
                             </div>
