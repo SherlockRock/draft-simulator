@@ -25,6 +25,7 @@ import {
 import { useNavigate, useParams } from "@solidjs/router";
 import { useCanvasSocket } from "./providers/CanvasSocketProvider";
 import { SearchableSelect } from "./components/SearchableSelect";
+import { FilterBar } from "./components/FilterBar";
 import {
     createDraggable,
     createDroppable,
@@ -119,15 +120,6 @@ function Draft(props: props) {
             socket.off("draftUpdate");
         });
     });
-
-    const handleSearch = (
-        event: InputEvent & {
-            currentTarget: HTMLInputElement;
-            target: HTMLInputElement;
-        }
-    ) => {
-        setSearchWord(event.target.value);
-    };
 
     const handleSelectText = (newText: string) => {
         setSelectText(newText);
@@ -408,14 +400,11 @@ function Draft(props: props) {
                                     </Index>
                                 </div>
                                 <div class="flex min-h-0 w-[min(40vw,600px)] flex-col rounded-t-md">
-                                    <div class="flex rounded-tl-md bg-slate-800">
-                                        <input
-                                            class="w-full rounded-tl-md bg-slate-800 p-1 text-slate-50 placeholder:text-slate-200 focus:outline-none"
-                                            type="text"
-                                            value={searchWord()}
-                                            onInput={handleSearch}
-                                            placeholder="Search Champions..."
-                                        />
+                                    <FilterBar
+                                        searchText={searchWord}
+                                        onSearchChange={setSearchWord}
+                                        searchPlaceholder="Search Champions..."
+                                    >
                                         <SearchableSelect
                                             placeholder="Sort by Role"
                                             currentlySelected={currentlySelected()}
@@ -425,7 +414,7 @@ function Draft(props: props) {
                                             onValidSelect={onValidSelect}
                                             theme={props.theme}
                                         />
-                                    </div>
+                                    </FilterBar>
                                     <div class="custom-scrollbar min-h-0 flex-1 overflow-auto">
                                         <Droppable id={-1}>
                                             <div

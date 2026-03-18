@@ -1,6 +1,7 @@
 import { Component, For, Show } from "solid-js";
 import { FilterBar } from "./FilterBar";
-import { useFilterableItems } from "../hooks/useFilterableItems";
+import { RoleFilter } from "./RoleFilter";
+import { useMultiFilterableItems } from "../hooks/useFilterableItems";
 import { champions, championCategories } from "../utils/constants";
 import { X } from "lucide-solid";
 
@@ -14,11 +15,12 @@ export const ChampionToggleGrid: Component<ChampionToggleGridProps> = (props) =>
     const {
         searchText,
         setSearchText,
-        selectedCategory,
-        setSelectedCategory,
+        selectedCategories,
+        toggleCategory,
+        clearCategories,
         filteredItems: filteredChampions,
         categories: championCategoryList
-    } = useFilterableItems({
+    } = useMultiFilterableItems({
         items: champions,
         categoryMap: championCategories
     });
@@ -27,16 +29,20 @@ export const ChampionToggleGrid: Component<ChampionToggleGridProps> = (props) =>
 
     return (
         <div class="flex flex-col gap-3">
-            <FilterBar
-                searchText={searchText}
-                onSearchChange={setSearchText}
-                selectedCategory={selectedCategory}
-                onCategoryChange={setSelectedCategory}
-                categories={championCategoryList}
-                searchPlaceholder="Search champions..."
-                categoryPlaceholder="Role"
-                theme={props.theme ?? "orange"}
-            />
+            <div>
+                <FilterBar
+                    searchText={searchText}
+                    onSearchChange={setSearchText}
+                    searchPlaceholder="Search champions..."
+                />
+                <RoleFilter
+                    categories={championCategoryList}
+                    selectedCategories={selectedCategories}
+                    onToggle={toggleCategory}
+                    onClearAll={clearCategories}
+                    theme={props.theme ?? "orange"}
+                />
+            </div>
 
             <div class="custom-scrollbar max-h-[320px] overflow-y-auto pr-1">
                 <div class="grid grid-cols-6 gap-1.5">

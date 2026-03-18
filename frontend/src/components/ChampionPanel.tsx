@@ -1,5 +1,6 @@
 import { Component, createMemo, createSignal, For, Show } from "solid-js";
 import { X } from "lucide-solid";
+import { FilterBar } from "./FilterBar";
 import { RoleFilter } from "./RoleFilter";
 import { useMultiFilterableItems } from "../hooks/useFilterableItems";
 import {
@@ -212,15 +213,11 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                     <div class="flex flex-1 flex-col">
                         {/* Filter bar - fixed at top */}
                         <div class="border-b border-slate-700 px-4 py-3">
-                            <div class="flex rounded-md bg-slate-800">
-                                <input
-                                    type="text"
-                                    value={searchText()}
-                                    onInput={(e) => setSearchText(e.currentTarget.value)}
-                                    placeholder="Search champions..."
-                                    class="w-full bg-inherit p-2 text-slate-50 placeholder:text-slate-400 focus:outline-none"
-                                />
-                            </div>
+                            <FilterBar
+                                searchText={searchText}
+                                onSearchChange={setSearchText}
+                                searchPlaceholder="Search champions..."
+                            />
                             <RoleFilter
                                 categories={championCategoryList}
                                 selectedCategories={selectedCategories}

@@ -12,8 +12,9 @@ import {
     overlayBanColor,
     overlayPickColor
 } from "../utils/constants";
-import { useFilterableItems } from "../hooks/useFilterableItems";
+import { useMultiFilterableItems } from "../hooks/useFilterableItems";
 import { FilterBar } from "./FilterBar";
+import { RoleFilter } from "./RoleFilter";
 import { getEffectivePickOrder, getPicksArrayIndex } from "../utils/versusPickOrder";
 
 interface PickChangeRequest {
@@ -151,12 +152,13 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
     const {
         searchText,
         setSearchText,
-        selectedCategory,
-        setSelectedCategory,
+        selectedCategories,
+        toggleCategory,
+        clearCategories,
         filteredItems: filteredChampions,
         categories: championCategoryList,
         clearFilters
-    } = useFilterableItems({
+    } = useMultiFilterableItems({
         items: champions,
         categoryMap: championCategories
     });
@@ -386,11 +388,13 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                     <FilterBar
                                         searchText={searchText}
                                         onSearchChange={setSearchText}
-                                        selectedCategory={selectedCategory}
-                                        onCategoryChange={setSelectedCategory}
-                                        categories={championCategoryList}
                                         searchPlaceholder="Search champions..."
-                                        categoryPlaceholder="Role"
+                                    />
+                                    <RoleFilter
+                                        categories={championCategoryList}
+                                        selectedCategories={selectedCategories}
+                                        onToggle={toggleCategory}
+                                        onClearAll={clearCategories}
                                         theme="orange"
                                     />
                                 </div>

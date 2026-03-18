@@ -8,6 +8,7 @@ import {
 } from "../utils/constants";
 import { useFilterableItems } from "../hooks/useFilterableItems";
 import { FilterBar } from "./FilterBar";
+import { SearchableSelect } from "./SearchableSelect";
 import { SelectTheme, getThemeColors } from "../utils/selectTheme";
 
 interface IconPickerProps {
@@ -102,13 +103,18 @@ export const IconPicker = (props: IconPickerProps) => {
                                 <FilterBar
                                     searchText={championFilter.searchText}
                                     onSearchChange={championFilter.setSearchText}
-                                    selectedCategory={championFilter.selectedCategory}
-                                    onCategoryChange={championFilter.setSelectedCategory}
-                                    categories={championFilter.categories}
                                     searchPlaceholder="Search champions..."
-                                    categoryPlaceholder="Role"
-                                    theme={props.theme}
-                                />
+                                >
+                                    <SearchableSelect
+                                        placeholder="Role"
+                                        currentlySelected={championFilter.selectedCategory()}
+                                        sortOptions={championFilter.categories}
+                                        selectText={championFilter.selectedCategory()}
+                                        setSelectText={championFilter.setSelectedCategory}
+                                        onValidSelect={championFilter.setSelectedCategory}
+                                        theme={props.theme}
+                                    />
+                                </FilterBar>
                             </div>
                             <div class="grid grid-cols-8 gap-2 p-2 sm:grid-cols-10 md:grid-cols-12">
                                 <For each={championFilter.filteredItems()}>
@@ -146,13 +152,18 @@ export const IconPicker = (props: IconPickerProps) => {
                                 <FilterBar
                                     searchText={emojiFilter.searchText}
                                     onSearchChange={emojiFilter.setSearchText}
-                                    selectedCategory={emojiFilter.selectedCategory}
-                                    onCategoryChange={emojiFilter.setSelectedCategory}
-                                    categories={emojiFilter.categories}
                                     searchPlaceholder="Search emojis..."
-                                    categoryPlaceholder="Category"
-                                    theme={props.theme}
-                                />
+                                >
+                                    <SearchableSelect
+                                        placeholder="Category"
+                                        currentlySelected={emojiFilter.selectedCategory()}
+                                        sortOptions={emojiFilter.categories}
+                                        selectText={emojiFilter.selectedCategory()}
+                                        setSelectText={emojiFilter.setSelectedCategory}
+                                        onValidSelect={emojiFilter.setSelectedCategory}
+                                        theme={props.theme}
+                                    />
+                                </FilterBar>
                             </div>
                             <div class="grid grid-cols-8 gap-2 p-2 sm:grid-cols-10 md:grid-cols-12">
                                 <For each={emojiFilter.filteredItems()}>

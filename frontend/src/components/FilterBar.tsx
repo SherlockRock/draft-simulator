@@ -1,16 +1,11 @@
-import { Accessor, Component } from "solid-js";
-import { SearchableSelect } from "./SearchableSelect";
-import { SelectTheme } from "../utils/selectTheme";
+import { Accessor, Component, JSX, Show } from "solid-js";
+import { X } from "lucide-solid";
 
 interface FilterBarProps {
     searchText: Accessor<string>;
     onSearchChange: (value: string) => void;
-    selectedCategory: Accessor<string>;
-    onCategoryChange: (value: string) => void;
-    categories: string[];
     searchPlaceholder?: string;
-    categoryPlaceholder?: string;
-    theme?: SelectTheme;
+    children?: JSX.Element;
 }
 
 export const FilterBar: Component<FilterBarProps> = (props) => {
@@ -23,15 +18,17 @@ export const FilterBar: Component<FilterBarProps> = (props) => {
                 placeholder={props.searchPlaceholder || "Search..."}
                 class="w-full bg-inherit p-2 text-slate-50 placeholder:text-slate-400 focus:outline-none"
             />
-            <SearchableSelect
-                placeholder={props.categoryPlaceholder || "Filter"}
-                currentlySelected={props.selectedCategory()}
-                sortOptions={props.categories}
-                selectText={props.selectedCategory()}
-                setSelectText={props.onCategoryChange}
-                onValidSelect={props.onCategoryChange}
-                theme={props.theme}
-            />
+            <Show when={props.searchText() !== ""}>
+                <button
+                    type="button"
+                    onClick={() => props.onSearchChange("")}
+                    class="flex items-center px-2 text-slate-400 transition-colors hover:text-slate-200"
+                    title="Clear search"
+                >
+                    <X size={14} />
+                </button>
+            </Show>
+            {props.children}
         </div>
     );
 };
