@@ -466,6 +466,13 @@ const VersusDraftView: Component = () => {
                 PickChangeRequestedSchema
             );
             if (!data) return;
+
+            // Only show approval modal to the opposing captain
+            const role = myRole();
+            if (!role || role === "spectator") return;
+            const mySide = myEffectiveSide();
+            if (data.team === mySide) return; // I'm the requester — already got a toast at submit time
+
             setPendingPickChangeRequest(data);
             toast(
                 `${data.team === "blue" ? versusDraftQuery.data?.blueTeamName : versusDraftQuery.data?.redTeamName} requested a pick change`
