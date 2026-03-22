@@ -9,6 +9,15 @@
     "build": "pnpm --filter @draft-sim/shared-types build && pnpm --filter draft-simulator-frontend build",
     "build:types": "pnpm --filter @draft-sim/shared-types build",
     "typecheck": "pnpm --filter draft-simulator-frontend exec tsc --noEmit",
-    "update-champions": "node scripts/update-champions.mjs"
+    "update-champions": "node scripts/update-champions.mjs",
+    "update-images": "node scripts/update-champion-images.mjs"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "sharp"
+    ]
   }
 }
