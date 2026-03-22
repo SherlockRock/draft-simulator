@@ -264,12 +264,12 @@ const VersusSeriesOverview: Component = () => {
                                                     />
                                                 </Show>
 
-                                                <div class="flex items-center justify-between p-5">
+                                                <div class="flex items-center justify-between gap-3 p-5">
                                                     {/* Left zone: game identity */}
-                                                    <div class="flex items-center gap-4">
+                                                    <div class="flex min-w-0 items-center gap-4">
                                                         {/* Game number badge */}
                                                         <div
-                                                            class={`flex h-10 w-10 items-center justify-center rounded-lg text-sm font-bold ${
+                                                            class={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm font-bold ${
                                                                 status === "complete"
                                                                     ? draft.winner ===
                                                                       "blue"
@@ -284,14 +284,14 @@ const VersusSeriesOverview: Component = () => {
                                                         </div>
 
                                                         <h3
-                                                            class={`font-semibold ${gameTextColors[index() + 1] ?? "text-slate-100"}`}
+                                                            class={`whitespace-nowrap font-semibold ${gameTextColors[index() + 1] ?? "text-slate-100"}`}
                                                         >
                                                             Game {index() + 1}
                                                         </h3>
 
                                                         {/* Status indicator */}
                                                         <span
-                                                            class={`rounded px-2.5 py-0.5 text-xs font-medium ${
+                                                            class={`hidden rounded px-2.5 py-0.5 text-xs font-medium min-[850px]:inline-flex ${
                                                                 status === "complete"
                                                                     ? "bg-green-500/20 text-green-300"
                                                                     : status === "active"
@@ -313,7 +313,7 @@ const VersusSeriesOverview: Component = () => {
                                                     </div>
 
                                                     {/* Right zone: 1st pick + winner + nav */}
-                                                    <div class="flex items-center gap-3">
+                                                    <div class="flex shrink-0 items-center gap-3">
                                                         {/* 1st pick chip */}
                                                         <Show
                                                             when={
@@ -321,7 +321,7 @@ const VersusSeriesOverview: Component = () => {
                                                                 status === "active"
                                                             }
                                                         >
-                                                            <span class="flex items-center gap-1.5 rounded-md bg-slate-700/50 px-2.5 py-1 text-xs font-medium text-slate-400">
+                                                            <span class="hidden items-center gap-1.5 rounded-md bg-slate-700/50 px-2.5 py-1 text-xs font-medium text-slate-400 min-[800px]:flex">
                                                                 <Flag
                                                                     size={10}
                                                                     class="text-orange-400/70"
@@ -360,7 +360,7 @@ const VersusSeriesOverview: Component = () => {
 
                                                         {/* Winner reporter */}
                                                         <Show when={draft.completed}>
-                                                            <div class="relative">
+                                                            <div class="relative hidden min-[650px]:inline-flex">
                                                                 <span class="absolute -top-[22px] left-1/2 -translate-x-1/2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                                                                     Winner
                                                                 </span>
