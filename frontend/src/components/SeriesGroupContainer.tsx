@@ -52,13 +52,18 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
     );
 
     const teamScore = createMemo(() => {
-        let blueWins = 0;
-        let redWins = 0;
+        let team1Wins = 0;
+        let team2Wins = 0;
         props.drafts.forEach((d) => {
-            if (d.Draft.winner === "blue") blueWins++;
-            if (d.Draft.winner === "red") redWins++;
+            if (!d.Draft.winner) return;
+            const bst = d.Draft.blueSideTeam || 1;
+            const team1Won =
+                (d.Draft.winner === "blue" && bst === 1) ||
+                (d.Draft.winner === "red" && bst === 2);
+            if (team1Won) team1Wins++;
+            else team2Wins++;
         });
-        return { blue: blueWins, red: redWins };
+        return { blue: team1Wins, red: team2Wins };
     });
 
     const isCompleted = createMemo(() => {

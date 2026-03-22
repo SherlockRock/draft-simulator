@@ -494,7 +494,25 @@ const VersusWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
                 setShowingRolePicker(false);
                 // Only navigate if we're on the join route (initial join flow)
                 if (params.linkToken) {
-                    navigate(`/versus/${versusDraft.id}`, { replace: true });
+                    // Find the current active game to skip the series overview
+                    const drafts = versusDraft.Drafts || [];
+                    const activeGameIndex = drafts.findIndex((d, i) => {
+                        if (d.completed) return false;
+                        return (
+                            i === 0 || drafts.slice(0, i).every((prev) => prev.completed)
+                        );
+                    });
+                    const activeGame =
+                        activeGameIndex >= 0 ? drafts[activeGameIndex] : null;
+
+                    if (activeGame) {
+                        navigate(`/versus/${versusDraft.id}/draft/${activeGame.id}`, {
+                            replace: true
+                        });
+                    } else {
+                        // All games completed — fall back to series overview
+                        navigate(`/versus/${versusDraft.id}`, { replace: true });
+                    }
                 }
             }
         };

@@ -24,6 +24,7 @@ router.get("/", authenticate, async (req, res) => {
             "seriesIndex",
             "completed",
             "winner",
+            "blueSideTeam",
           ],
         },
       ],
@@ -64,7 +65,9 @@ router.post("/", optionalAuth, async (req, res) => {
       competitive: competitive || false,
       icon: icon || "",
       type: type || "standard",
-      disabledChampions: Array.isArray(disabledChampions) ? disabledChampions : [],
+      disabledChampions: Array.isArray(disabledChampions)
+        ? disabledChampions
+        : [],
       owner_id: ownerId,
     });
 
@@ -259,7 +262,8 @@ router.put("/:id", authenticate, async (req, res) => {
         // Type changes allowed until Game 2 starts, length/disabledChampions changes only before series starts
         ...(!game2HasStarted && type !== undefined && { type }),
         ...(!hasStarted && length !== undefined && { length }),
-        ...(!hasStarted && Array.isArray(disabledChampions) && { disabledChampions }),
+        ...(!hasStarted &&
+          Array.isArray(disabledChampions) && { disabledChampions }),
       },
       { transaction },
     );

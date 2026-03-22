@@ -56,13 +56,19 @@ const VersusSeriesOverview: Component = () => {
 
     const getSeriesScore = () => {
         const drafts = versusDraft()?.Drafts || [];
-        let blueWins = 0;
-        let redWins = 0;
+        let team1Wins = 0;
+        let team2Wins = 0;
         drafts.forEach((draft) => {
-            if (draft.winner === "blue") blueWins++;
-            if (draft.winner === "red") redWins++;
+            if (!draft.winner) return;
+            const bst = draft.blueSideTeam || 1;
+            // Translate side-based winner to team-based winner
+            const team1WonThisGame =
+                (draft.winner === "blue" && bst === 1) ||
+                (draft.winner === "red" && bst === 2);
+            if (team1WonThisGame) team1Wins++;
+            else team2Wins++;
         });
-        return { blueWins, redWins };
+        return { blueWins: team1Wins, redWins: team2Wins };
     };
 
     const getWinsNeeded = () => Math.ceil((versusDraft()?.length || 1) / 2);

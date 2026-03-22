@@ -175,6 +175,7 @@ export const VersusDraftListItemDraftSchema = z.object({
   seriesIndex: z.number().nullable().optional(),
   completed: z.boolean().optional(),
   winner: z.enum(["blue", "red"]).nullable().optional(),
+  blueSideTeam: z.union([z.literal(1), z.literal(2)]).optional(),
 });
 
 // Schema for GET /versus-drafts list endpoint
