@@ -13,6 +13,7 @@ import AurelionSol from "/src/assets/AurelionSolSquare.webp";
 import Aurora from "/src/assets/AuroraSquare.webp";
 import Azir from "/src/assets/AzirSquare.webp";
 import Bard from "/src/assets/BardSquare.webp";
+import BelVeth from "/src/assets/BelvethSquare.png";
 import Blitzcrank from "/src/assets/BlitzcrankSquare.webp";
 import Brand from "/src/assets/BrandSquare.webp";
 import Braum from "/src/assets/BraumSquare.webp";
@@ -170,6 +171,13 @@ import Zilean from "/src/assets/ZileanSquare.webp";
 import Zoe from "/src/assets/ZoeSquare.webp";
 import Zyra from "/src/assets/ZyraSquare.webp";
 
+import championData from "../data/champions.json";
+
+// Build name→positions lookup from generated data
+const positionsByName = new Map<string, string[]>(
+    championData.champions.map((c) => [c.name, c.positions])
+);
+
 export const champions = [
     { name: "Aatrox", img: Aatrox },
     { name: "Ahri", img: Ahri },
@@ -225,7 +233,7 @@ export const champions = [
     { name: "Jayce", img: Jayce },
     { name: "Jhin", img: Jhin },
     { name: "Jinx", img: Jinx },
-    { name: "K'sante", img: Ksante },
+    { name: "K'Sante", img: Ksante },
     { name: "Kai'Sa", img: KaiSa },
     { name: "Kalista", img: Kalista },
     { name: "Karma", img: Karma },
@@ -341,45 +349,18 @@ export const champions = [
     { name: "Ziggs", img: Ziggs },
     { name: "Zilean", img: Zilean },
     { name: "Zoe", img: Zoe },
-    { name: "Zyra", img: Zyra }
-];
-
-export const topChamps = [
-    0, 2, 3, 17, 18, 19, 21, 23, 30, 33, 34, 35, 36, 38, 37, 39, 40, 41, 42, 46, 47, 50,
-    53, 57, 59, 62, 67, 72, 74, 78, 82, 88, 90, 91, 92, 95, 101, 102, 103, 104, 107, 110,
-    112, 113, 114, 115, 117, 120, 123, 127, 130, 131, 134, 135, 136, 137, 144, 145, 146
-];
-
-export const jungleChamps = [
-    5, 22, 23, 25, 26, 27, 29, 36, 37, 39, 43, 45, 54, 58, 60, 61, 65, 67, 75, 85, 86, 87,
-    88, 92, 97, 98, 99, 107, 111, 113, 117, 124, 125, 130, 134, 141, 142, 145, 146, 147,
-    150, 155
-];
-
-export const midChamps = [
-    1, 2, 3, 6, 7, 10, 11, 14, 18, 20, 25, 31, 32, 36, 40, 42, 47, 50, 51, 53, 54, 55, 56,
-    64, 68, 71, 73, 80, 84, 89, 91, 94, 105, 109, 120, 121, 122, 124, 125, 129, 132, 138,
-    139, 140, 143, 144, 149, 151, 152, 156, 158, 159, 160
-];
-
-export const botChamps = [
-    8, 9, 16, 18, 24, 28, 48, 49, 51, 52, 54, 63, 69, 77, 106, 108, 109, 116, 120, 122,
-    129, 133, 136, 137, 138, 139, 148, 151, 157, 158
-];
-
-export const supportChamps = [
-    4, 5, 7, 9, 12, 13, 14, 15, 36, 40, 44, 45, 53, 66, 70, 71, 76, 79, 81, 83, 92, 93,
-    99, 100, 108, 109, 110, 111, 118, 119, 120, 123, 126, 128, 139, 149, 159, 161
-];
+    { name: "Zyra", img: Zyra },
+    { name: "Bel'Veth", img: BelVeth }
+].map((c) => ({ ...c, positions: positionsByName.get(c.name) ?? [] }));
 
 export const sortOptions = ["Top", "Jungle", "Mid", "Bot", "Support"];
 
 export const championCategories: Record<string, number[]> = {
-    Top: topChamps,
-    Jungle: jungleChamps,
-    Mid: midChamps,
-    Bot: botChamps,
-    Support: supportChamps
+    Top: champions.flatMap((c, i) => (c.positions.includes("TOP") ? [i] : [])),
+    Jungle: champions.flatMap((c, i) => (c.positions.includes("JUNGLE") ? [i] : [])),
+    Mid: champions.flatMap((c, i) => (c.positions.includes("MIDDLE") ? [i] : [])),
+    Bot: champions.flatMap((c, i) => (c.positions.includes("BOTTOM") ? [i] : [])),
+    Support: champions.flatMap((c, i) => (c.positions.includes("SUPPORT") ? [i] : []))
 };
 
 export const indexToShorthandHorizontal = [
