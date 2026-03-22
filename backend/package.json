@@ -4,7 +4,11 @@
   "description": "First Pick backend",
   "scripts": {
     "start": "node --require ./tracing.js index.js",
-    "dev": "node --watch --require ./tracing.js index.js"
+    "dev": "node --watch --require ./tracing.js index.js",
+    "db:migrate": "npx sequelize-cli db:migrate",
+    "db:migrate:undo": "npx sequelize-cli db:migrate:undo",
+    "db:migrate:status": "npx sequelize-cli db:migrate:status",
+    "migration:generate": "npx sequelize-cli migration:generate"
   },
   "dependencies": {
     "@draft-sim/shared-types": "workspace:*",
@@ -32,5 +36,8 @@
     "pg-hstore": "^2.3.4",
     "sequelize": "^6.37.5",
     "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "sequelize-cli": "^6.6.5"
   }
 }
