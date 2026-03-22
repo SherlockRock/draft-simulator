@@ -1308,20 +1308,25 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Report winner for a draft
-  socket.on("versusReportWinner", async (data) => {
+  socket.on("versusReportWinner", async (data, callback) => {
     try {
       const { versusDraftId, draftId, winner } = data;
 
       if (!["blue", "red"].includes(winner)) {
+        if (typeof callback === "function") callback({ error: "Invalid winner value" });
         return socket.emit("versusError", { error: "Invalid winner value" });
       }
 
+      const ack = typeof callback === "function" ? callback : () => {};
+
       const draft = await Draft.findByPk(draftId);
       if (!draft) {
+        ack({ error: "Draft not found" });
         return socket.emit("versusError", { error: "Draft not found" });
       }
 
       if (!draft.completed) {
+        ack({ error: "Draft is not completed" });
         return socket.emit("versusError", { error: "Draft is not completed" });
       }
 
@@ -1331,6 +1336,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       });
 
       if (!versusDraft) {
+        ack({ error: "Versus draft not found" });
         return socket.emit("versusError", { error: "Versus draft not found" });
       }
 
@@ -1356,6 +1362,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
       const canReport = hasNewerCompletedDraft ? isOwner : isCaptain || isOwner;
 
       if (!canReport) {
+        ack({ error: "You don't have permission to report the winner" });
         return socket.emit("versusError", {
           error: "You don't have permission to report the winner",
         });
@@ -1373,8 +1380,12 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
         draftId,
         winner,
       });
+
+      ack({ success: true });
     } catch (error) {
       console.error("Error reporting winner:", error);
+      const ack = typeof callback === "function" ? callback : () => {};
+      ack({ error: "Failed to report winner" });
       socket.emit("versusError", { error: "Failed to report winner" });
     }
   });

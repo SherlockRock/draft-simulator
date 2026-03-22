@@ -71,6 +71,17 @@ const VersusSeriesOverview: Component = () => {
         return { blueWins: team1Wins, redWins: team2Wins };
     };
 
+    // Translate a side-based winner to the team that actually won
+    const getTeamWinner = (
+        winner: "blue" | "red" | null | undefined,
+        blueSideTeam: number | undefined
+    ): "team1" | "team2" | null => {
+        if (!winner) return null;
+        const bst = blueSideTeam || 1;
+        if (bst === 1) return winner === "blue" ? "team1" : "team2";
+        return winner === "blue" ? "team2" : "team1";
+    };
+
     const getWinsNeeded = () => Math.ceil((versusDraft()?.length || 1) / 2);
 
     const isSeriesDecided = createMemo(() => {
@@ -263,9 +274,12 @@ const VersusSeriesOverview: Component = () => {
                                                 <Show when={draft.winner}>
                                                     <div
                                                         class={`absolute left-0 top-0 h-full w-1 ${
-                                                            draft.winner === "blue"
-                                                                ? "bg-blue-500"
-                                                                : "bg-red-500"
+                                                            getTeamWinner(
+                                                                draft.winner,
+                                                                draft.blueSideTeam
+                                                            ) === "team1"
+                                                                ? "bg-violet-500"
+                                                                : "bg-fuchsia-500"
                                                         }`}
                                                     />
                                                 </Show>
@@ -277,10 +291,12 @@ const VersusSeriesOverview: Component = () => {
                                                         <div
                                                             class={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm font-bold ${
                                                                 status === "complete"
-                                                                    ? draft.winner ===
-                                                                      "blue"
-                                                                        ? "bg-blue-500/20 text-blue-300"
-                                                                        : "bg-red-500/20 text-red-300"
+                                                                    ? getTeamWinner(
+                                                                          draft.winner,
+                                                                          draft.blueSideTeam
+                                                                      ) === "team1"
+                                                                        ? "bg-violet-500/20 text-violet-300"
+                                                                        : "bg-fuchsia-500/20 text-fuchsia-300"
                                                                     : status === "active"
                                                                       ? "bg-orange-500/20 text-orange-300"
                                                                       : "bg-slate-700/50 text-slate-500"

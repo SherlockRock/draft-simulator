@@ -734,6 +734,9 @@ const VersusWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
         const vd = versusContext().versusDraft;
         if (!sock || !vd) return;
 
+        // Save previous winner for rollback
+        const previousWinner = vd.Drafts?.find((d) => d.id === draftId)?.winner ?? null;
+
         // Optimistic update - update local state immediately
         setVersusContext((prev) => {
             if (!prev.versusDraft?.Drafts) return prev;
@@ -748,12 +751,34 @@ const VersusWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
             };
         });
 
-        // Emit socket event for other users
-        sock.emit("versusReportWinner", {
-            versusDraftId: vd.id,
-            draftId,
-            winner
-        });
+        // Emit socket event with acknowledgment callback for rollback on failure
+        sock.emit(
+            "versusReportWinner",
+            {
+                versusDraftId: vd.id,
+                draftId,
+                winner
+            },
+            (response: { error?: string; success?: boolean }) => {
+                if (response?.error) {
+                    // Roll back optimistic update
+                    setVersusContext((prev) => {
+                        if (!prev.versusDraft?.Drafts) return prev;
+                        return {
+                            ...prev,
+                            versusDraft: {
+                                ...prev.versusDraft,
+                                Drafts: prev.versusDraft.Drafts.map((d) =>
+                                    d.id === draftId
+                                        ? { ...d, winner: previousWinner }
+                                        : d
+                                )
+                            }
+                        };
+                    });
+                }
+            }
+        );
     };
 
     const setGameSettings = (
