@@ -62,7 +62,6 @@ async function main() {
     try {
       await sequelize.authenticate();
       setupAssociations(sequelize);
-      await sequelize.sync({ alter: true }); // Sync all defined models to the database
     } catch (error) {
       console.error("Unable to connect to the database:", error);
     }
