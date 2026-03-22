@@ -28,17 +28,17 @@ const VersusSessionManager = require("./services/versusSessionManager");
 require("dotenv").config();
 const otelMetrics = require("./tracing");
 
-function wrapSocketHandler(socket, eventName, handler) {
+function wrapSocketHandler(socket, eventName, handler, flow = "canvas") {
   socket.on(eventName, async (...args) => {
     if (otelMetrics.socketEvents) {
-      otelMetrics.socketEvents.add(1, { event: eventName });
+      otelMetrics.socketEvents.add(1, { event: eventName, flow });
     }
     const start = Date.now();
     try {
       await handler(...args);
     } finally {
       if (otelMetrics.socketEventDuration) {
-        otelMetrics.socketEventDuration.record(Date.now() - start, { event: eventName });
+        otelMetrics.socketEventDuration.record(Date.now() - start, { event: eventName, flow });
       }
     }
   });
@@ -163,7 +163,7 @@ async function main() {
     }
 
     // Set up versus-specific handlers
-    setupVersusHandlers(io, socket, versusSessionManager);
+    setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler);
 
     wrapSocketHandler(socket, "newDraft", async (data) => {
       try {

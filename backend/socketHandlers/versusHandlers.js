@@ -14,9 +14,11 @@ function uuidv4() {
   return crypto.randomUUID();
 }
 
-function setupVersusHandlers(io, socket, versusSessionManager) {
+function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler) {
+  const wrap = (eventName, handler) =>
+    wrapSocketHandler(socket, eventName, handler, "versus");
   // Join versus session (initial handshake)
-  socket.on("versusJoin", async (data) => {
+  wrap("versusJoin", async (data) => {
     try {
       const { linkToken, versusDraftId, storedRole, defaultToSpectator } = data;
       console.log("versusJoin:", {
@@ -195,7 +197,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Select role in versus session
-  socket.on("versusSelectRole", async (data) => {
+  wrap("versusSelectRole", async (data) => {
     try {
       const { versusDraftId, role } = data;
       console.log("versusSelectRole:", { versusDraftId, role });
@@ -279,7 +281,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Leave versus session
-  socket.on("versusLeave", async (data) => {
+  wrap("versusLeave", async (data) => {
     try {
       const { versusDraftId } = data;
       console.log("versusLeave:", { versusDraftId, socketId: socket.id });
@@ -310,7 +312,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Release role (switch role flow) - removes role but stays in session
-  socket.on("versusReleaseRole", async (data) => {
+  wrap("versusReleaseRole", async (data) => {
     try {
       const { versusDraftId } = data;
       console.log("versusReleaseRole:", { versusDraftId, socketId: socket.id });
@@ -382,7 +384,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Request sync after reconnection
-  socket.on("versusRequestSync", async (data) => {
+  wrap("versusRequestSync", async (data) => {
     try {
       const { versusDraftId, storedRole } = data;
 
@@ -479,7 +481,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Join versus draft room (for draft view)
-  socket.on("joinVersusDraft", async (data) => {
+  wrap("joinVersusDraft", async (data) => {
     try {
       const { versusDraftId, draftId, role, participantId } = data;
 
@@ -533,7 +535,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Set game settings (first pick, side assignment)
-  socket.on("versusSetGameSettings", async (data) => {
+  wrap("versusSetGameSettings", async (data) => {
     try {
       const { versusDraftId, draftId, firstPick, blueSideTeam } = data;
 
@@ -615,7 +617,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Captain ready
-  socket.on("captainReady", async (data) => {
+  wrap("captainReady", async (data) => {
     try {
       const { draftId, role } = data;
       const state = getState(draftId);
@@ -657,7 +659,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Captain unready
-  socket.on("captainUnready", async (data) => {
+  wrap("captainUnready", async (data) => {
     try {
       const { draftId, role } = data;
       const state = getState(draftId);
@@ -692,7 +694,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Lock in pick (manual)
-  socket.on("lockInPick", async (data) => {
+  wrap("lockInPick", async (data) => {
     try {
       const { draftId, role } = data;
       if (role && role.includes("captain")) {
@@ -710,7 +712,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Versus pick (saves pending pick without advancing)
-  socket.on("versusPick", async (data, callback) => {
+  wrap("versusPick", async (data, callback) => {
     try {
       const { draftId, champion, role } = data;
 
@@ -820,7 +822,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Request pause
-  socket.on("requestPause", async (data) => {
+  wrap("requestPause", async (data) => {
     try {
       const { draftId, role } = data;
 
@@ -907,7 +909,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Approve pause
-  socket.on("approvePause", async (data) => {
+  wrap("approvePause", async (data) => {
     try {
       const { draftId, role } = data;
 
@@ -960,7 +962,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Approve resume
-  socket.on("approveResume", async (data) => {
+  wrap("approveResume", async (data) => {
     try {
       const { draftId, role } = data;
 
@@ -1034,7 +1036,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Reject resume
-  socket.on("rejectResume", async (data) => {
+  wrap("rejectResume", async (data) => {
     try {
       const { draftId, role } = data;
 
@@ -1074,7 +1076,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Request pick change
-  socket.on("requestPickChange", async (data) => {
+  wrap("requestPickChange", async (data) => {
     try {
       const { draftId, pickIndex, newChampion, role } = data;
 
@@ -1201,7 +1203,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Respond to pick change request
-  socket.on("respondPickChange", async (data) => {
+  wrap("respondPickChange", async (data) => {
     try {
       const { draftId, requestId, approved, role } = data;
 
@@ -1292,7 +1294,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Send versus message (chat)
-  socket.on("sendVersusMessage", async (data) => {
+  wrap("sendVersusMessage", async (data) => {
     try {
       const { versusDraftId, message, role, username } = data;
       console.log("sendVersusMessage:", data);
@@ -1308,7 +1310,7 @@ function setupVersusHandlers(io, socket, versusSessionManager) {
   });
 
   // Report winner for a draft
-  socket.on("versusReportWinner", async (data, callback) => {
+  wrap("versusReportWinner", async (data, callback) => {
     try {
       const { versusDraftId, draftId, winner } = data;
 
