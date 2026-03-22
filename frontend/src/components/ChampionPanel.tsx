@@ -82,6 +82,9 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
     // Check if draft type shows bans in restrictions (ironman only)
     const showBansInRestrictions = () => props.versusDraft()?.type === "ironman";
 
+    // Memoize picks as a Set to avoid per-button .includes() on array
+    const pickedSet = createMemo(() => new Set(props.draft()?.picks ?? []));
+
     // Champions not in restricted or disabled list (for Available section)
     // Current game picks stay visible but are rendered as disabled
     const availableChampions = createMemo(() => {
@@ -193,7 +196,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
 
     return (
         <div
-            class={`flex flex-col border-l border-slate-700 bg-slate-800 transition-all duration-300 ${
+            class={`flex flex-col border-l border-slate-700 bg-slate-800 transition-[width] duration-300 ${
                 isExpanded() ? "w-[min(26vw,384px)]" : "w-5"
             }`}
         >
@@ -296,9 +299,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                             <For each={availableChampions()}>
                                                 {({ champ, index }) => {
                                                     const isPicked = () =>
-                                                        (
-                                                            props.draft()?.picks ?? []
-                                                        ).includes(index);
+                                                        pickedSet().has(index);
                                                     const isPendingSelection = () =>
                                                         props.getCurrentPendingChampion() ===
                                                             index && props.isMyTurn();
@@ -320,7 +321,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                                     index
                                                                 )
                                                             }
-                                                            class={`relative aspect-square w-full overflow-hidden rounded border-2 transition-all ${
+                                                            class={`relative aspect-square w-full overflow-hidden rounded border-2 [contain:content] transition-[transform,border-color,box-shadow] duration-150 ${
                                                                 isPendingSelection()
                                                                     ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
                                                                     : isPicked() &&
@@ -415,9 +416,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                         {({ item: champ, originalIndex }) => {
                                             const champId = () => String(originalIndex);
                                             const isPicked = () =>
-                                                (props.draft()?.picks ?? []).includes(
-                                                    champId()
-                                                );
+                                                pickedSet().has(champId());
                                             const isSeriesRestricted = () =>
                                                 props
                                                     .restrictedChampionGameMap()
@@ -453,7 +452,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                                 champId()
                                                             )
                                                         }
-                                                        class={`relative aspect-square w-full overflow-hidden rounded border-2 transition-all ${
+                                                        class={`relative aspect-square w-full overflow-hidden rounded border-2 [contain:content] transition-[transform,border-color,box-shadow] duration-150 ${
                                                             isPendingSelection()
                                                                 ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
                                                                 : isDisabled()
