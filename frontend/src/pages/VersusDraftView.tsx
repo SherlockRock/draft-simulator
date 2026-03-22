@@ -129,6 +129,10 @@ const VersusDraftView: Component = () => {
 
     // Per-game role re-prompt: track whether user needs to confirm role for this game
     const [needsGameConfirm, setNeedsGameConfirm] = createSignal(false);
+    // Track which draft has already had side alternation applied (prevent re-emission)
+    const [lastAlternatedDraft, setLastAlternatedDraft] = createSignal<string | null>(
+        null
+    );
 
     createEffect(() => {
         const role = myRole();
@@ -155,6 +159,31 @@ const VersusDraftView: Component = () => {
         } else {
             setNeedsGameConfirm(false);
         }
+    });
+
+    // Auto-alternate blueSideTeam from previous game when confirmation overlay triggers
+    createEffect(() => {
+        if (!needsGameConfirm()) return;
+        const draftId = params.draftId;
+        if (lastAlternatedDraft() === draftId) return;
+
+        const d = draftQuery.data;
+        const vd = versusDraftQuery.data;
+        const currentIndex = d?.seriesIndex ?? 0;
+        if (currentIndex === 0 || !vd?.Drafts) return;
+
+        const prevDraft = vd.Drafts.find((game) => game.seriesIndex === currentIndex - 1);
+        if (!prevDraft) return;
+
+        const prevBlueSide = prevDraft.blueSideTeam ?? 1;
+        const newBlueSideTeam: 1 | 2 = prevBlueSide === 1 ? 2 : 1;
+        const prevFirstPick = (prevDraft.firstPick as "blue" | "red") ?? "blue";
+
+        setLastAlternatedDraft(draftId);
+        handleConfirmSettingsChange(draftId, {
+            blueSideTeam: newBlueSideTeam,
+            firstPick: prevFirstPick
+        });
     });
 
     const handleConfirmGame = () => {
