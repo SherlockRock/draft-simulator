@@ -205,6 +205,9 @@ export const CanvasSelect = (props: props) => {
                     <input
                         ref={inputRef}
                         value={selectText() ?? props.indexToShorthand[props.index()]}
+                        onClick={() => {
+                            if (!props.disabled) setDropdownOpen(true);
+                        }}
                         onInput={(e) => {
                             setDropdownIndex(0);
                             setSelectText(e.target.value);
