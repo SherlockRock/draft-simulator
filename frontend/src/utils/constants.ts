@@ -194,6 +194,7 @@ export const champions = [
     { name: "Aurora", img: Aurora },
     { name: "Azir", img: Azir },
     { name: "Bard", img: Bard },
+    { name: "Bel'Veth", img: BelVeth },
     { name: "Blitzcrank", img: Blitzcrank },
     { name: "Brand", img: Brand },
     { name: "Braum", img: Braum },
@@ -349,8 +350,7 @@ export const champions = [
     { name: "Ziggs", img: Ziggs },
     { name: "Zilean", img: Zilean },
     { name: "Zoe", img: Zoe },
-    { name: "Zyra", img: Zyra },
-    { name: "Bel'Veth", img: BelVeth }
+    { name: "Zyra", img: Zyra }
 ].map((c) => ({ ...c, positions: positionsByName.get(c.name) ?? [] }));
 
 export const sortOptions = ["Top", "Jungle", "Mid", "Bot", "Support"];

@@ -32,7 +32,7 @@ const colors = getThemeColors("purple");
 export const CanvasSelect = (props: props) => {
     const [isFocused, setIsFocused] = createSignal(false);
     const [dropdownOpen, setDropdownOpen] = createSignal(false);
-    const [dropdownIndex, setDropdownIndex] = createSignal(-1);
+    const [dropdownIndex, setDropdownIndex] = createSignal(0);
     const [selectText, setSelectText] = createSignal("");
     const [unavailableChampions, setUnavailableChampions] = createSignal<string[]>([]);
 
