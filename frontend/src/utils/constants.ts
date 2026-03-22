@@ -13,7 +13,7 @@ import AurelionSol from "/src/assets/AurelionSolSquare.webp";
 import Aurora from "/src/assets/AuroraSquare.webp";
 import Azir from "/src/assets/AzirSquare.webp";
 import Bard from "/src/assets/BardSquare.webp";
-import BelVeth from "/src/assets/BelvethSquare.png";
+import Belveth from "/src/assets/BelvethSquare.webp";
 import Blitzcrank from "/src/assets/BlitzcrankSquare.webp";
 import Brand from "/src/assets/BrandSquare.webp";
 import Braum from "/src/assets/BraumSquare.webp";
@@ -21,7 +21,7 @@ import Briar from "/src/assets/BriarSquare.webp";
 import Caitlyn from "/src/assets/CaitlynSquare.webp";
 import Camille from "/src/assets/CamilleSquare.webp";
 import Cassiopeia from "/src/assets/CassiopeiaSquare.webp";
-import ChoGath from "/src/assets/ChogathSquare.webp";
+import Chogath from "/src/assets/ChogathSquare.webp";
 import Corki from "/src/assets/CorkiSquare.webp";
 import Darius from "/src/assets/DariusSquare.webp";
 import Diana from "/src/assets/DianaSquare.webp";
@@ -53,8 +53,8 @@ import Jax from "/src/assets/JaxSquare.webp";
 import Jayce from "/src/assets/JayceSquare.webp";
 import Jhin from "/src/assets/JhinSquare.webp";
 import Jinx from "/src/assets/JinxSquare.webp";
-import Ksante from "/src/assets/KsanteSquare.webp";
-import KaiSa from "/src/assets/KaisaSquare.webp";
+import KSante from "/src/assets/KSanteSquare.webp";
+import Kaisa from "/src/assets/KaisaSquare.webp";
 import Kalista from "/src/assets/KalistaSquare.webp";
 import Karma from "/src/assets/KarmaSquare.webp";
 import Karthus from "/src/assets/KarthusSquare.webp";
@@ -63,11 +63,11 @@ import Katarina from "/src/assets/KatarinaSquare.webp";
 import Kayle from "/src/assets/KayleSquare.webp";
 import Kayn from "/src/assets/KaynSquare.webp";
 import Kennen from "/src/assets/KennenSquare.webp";
-import KhaZix from "/src/assets/KhazixSquare.webp";
+import Khazix from "/src/assets/KhazixSquare.webp";
 import Kindred from "/src/assets/KindredSquare.webp";
 import Kled from "/src/assets/KledSquare.webp";
-import KogMaw from "/src/assets/KogmawSquare.webp";
-import LeBlanc from "/src/assets/LeBlancSquare.webp";
+import KogMaw from "/src/assets/KogMawSquare.webp";
+import Leblanc from "/src/assets/LeblancSquare.webp";
 import LeeSin from "/src/assets/LeeSinSquare.webp";
 import Leona from "/src/assets/LeonaSquare.webp";
 import Lillia from "/src/assets/LilliaSquare.webp";
@@ -103,9 +103,9 @@ import Qiyana from "/src/assets/QiyanaSquare.webp";
 import Quinn from "/src/assets/QuinnSquare.webp";
 import Rakan from "/src/assets/RakanSquare.webp";
 import Rammus from "/src/assets/RammusSquare.webp";
-import RekSai from "/src/assets/ReksaiSquare.webp";
+import RekSai from "/src/assets/RekSaiSquare.webp";
 import Rell from "/src/assets/RellSquare.webp";
-import RenataGlasc from "/src/assets/RenataGlascSquare.webp";
+import Renata from "/src/assets/RenataSquare.webp";
 import Renekton from "/src/assets/RenektonSquare.webp";
 import Rengar from "/src/assets/RengarSquare.webp";
 import Riven from "/src/assets/RivenSquare.webp";
@@ -145,7 +145,7 @@ import Urgot from "/src/assets/UrgotSquare.webp";
 import Varus from "/src/assets/VarusSquare.webp";
 import Vayne from "/src/assets/VayneSquare.webp";
 import Veigar from "/src/assets/VeigarSquare.webp";
-import VelKoz from "/src/assets/VelkozSquare.webp";
+import Velkoz from "/src/assets/VelkozSquare.webp";
 import Vex from "/src/assets/VexSquare.webp";
 import Vi from "/src/assets/ViSquare.webp";
 import Viego from "/src/assets/ViegoSquare.webp";
@@ -153,7 +153,7 @@ import Viktor from "/src/assets/ViktorSquare.webp";
 import Vladimir from "/src/assets/VladimirSquare.webp";
 import Volibear from "/src/assets/VolibearSquare.webp";
 import Warwick from "/src/assets/WarwickSquare.webp";
-import Wukong from "/src/assets/WukongSquare.webp";
+import MonkeyKing from "/src/assets/MonkeyKingSquare.webp";
 import Xayah from "/src/assets/XayahSquare.webp";
 import Xerath from "/src/assets/XerathSquare.webp";
 import XinZhao from "/src/assets/XinZhaoSquare.webp";
@@ -173,7 +173,7 @@ import Zyra from "/src/assets/ZyraSquare.webp";
 
 import championData from "../data/champions.json";
 
-// Build name→positions lookup from generated data
+// Build name->positions lookup from generated data
 const positionsByName = new Map<string, string[]>(
     championData.champions.map((c) => [c.name, c.positions])
 );
@@ -194,7 +194,7 @@ export const champions = [
     { name: "Aurora", img: Aurora },
     { name: "Azir", img: Azir },
     { name: "Bard", img: Bard },
-    { name: "Bel'Veth", img: BelVeth },
+    { name: "Bel'Veth", img: Belveth },
     { name: "Blitzcrank", img: Blitzcrank },
     { name: "Brand", img: Brand },
     { name: "Braum", img: Braum },
@@ -202,7 +202,7 @@ export const champions = [
     { name: "Caitlyn", img: Caitlyn },
     { name: "Camille", img: Camille },
     { name: "Cassiopeia", img: Cassiopeia },
-    { name: "Cho'Gath", img: ChoGath },
+    { name: "Cho'Gath", img: Chogath },
     { name: "Corki", img: Corki },
     { name: "Darius", img: Darius },
     { name: "Diana", img: Diana },
@@ -234,8 +234,8 @@ export const champions = [
     { name: "Jayce", img: Jayce },
     { name: "Jhin", img: Jhin },
     { name: "Jinx", img: Jinx },
-    { name: "K'Sante", img: Ksante },
-    { name: "Kai'Sa", img: KaiSa },
+    { name: "K'Sante", img: KSante },
+    { name: "Kai'Sa", img: Kaisa },
     { name: "Kalista", img: Kalista },
     { name: "Karma", img: Karma },
     { name: "Karthus", img: Karthus },
@@ -244,11 +244,11 @@ export const champions = [
     { name: "Kayle", img: Kayle },
     { name: "Kayn", img: Kayn },
     { name: "Kennen", img: Kennen },
-    { name: "Kha'Zix", img: KhaZix },
+    { name: "Kha'Zix", img: Khazix },
     { name: "Kindred", img: Kindred },
     { name: "Kled", img: Kled },
     { name: "Kog'Maw", img: KogMaw },
-    { name: "LeBlanc", img: LeBlanc },
+    { name: "LeBlanc", img: Leblanc },
     { name: "Lee Sin", img: LeeSin },
     { name: "Leona", img: Leona },
     { name: "Lillia", img: Lillia },
@@ -286,7 +286,7 @@ export const champions = [
     { name: "Rammus", img: Rammus },
     { name: "Rek'Sai", img: RekSai },
     { name: "Rell", img: Rell },
-    { name: "Renata Glasc", img: RenataGlasc },
+    { name: "Renata Glasc", img: Renata },
     { name: "Renekton", img: Renekton },
     { name: "Rengar", img: Rengar },
     { name: "Riven", img: Riven },
@@ -326,7 +326,7 @@ export const champions = [
     { name: "Varus", img: Varus },
     { name: "Vayne", img: Vayne },
     { name: "Veigar", img: Veigar },
-    { name: "Vel'Koz", img: VelKoz },
+    { name: "Vel'Koz", img: Velkoz },
     { name: "Vex", img: Vex },
     { name: "Vi", img: Vi },
     { name: "Viego", img: Viego },
@@ -334,7 +334,7 @@ export const champions = [
     { name: "Vladimir", img: Vladimir },
     { name: "Volibear", img: Volibear },
     { name: "Warwick", img: Warwick },
-    { name: "Wukong", img: Wukong },
+    { name: "Wukong", img: MonkeyKing },
     { name: "Xayah", img: Xayah },
     { name: "Xerath", img: Xerath },
     { name: "Xin Zhao", img: XinZhao },
@@ -352,6 +352,8 @@ export const champions = [
     { name: "Zoe", img: Zoe },
     { name: "Zyra", img: Zyra }
 ].map((c) => ({ ...c, positions: positionsByName.get(c.name) ?? [] }));
+
+// --- GENERATED ABOVE / MANUAL BELOW ---
 
 export const sortOptions = ["Top", "Jungle", "Mid", "Bot", "Support"];
 

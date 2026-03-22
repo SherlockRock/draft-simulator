@@ -16,6 +16,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ASSETS_DIR = join(__dirname, "..", "frontend", "src", "assets");
 const CHAMPIONS_JSON = join(__dirname, "..", "frontend", "src", "data", "champions.json");
 
+const CONSTANTS_PATH = join(__dirname, "..", "frontend", "src", "utils", "constants.ts");
+
 const DDRAGON_SQUARE_URL = (version, id) =>
     `https://ddragon.leagueoflegends.com/cdn/${version}/img/champion/${id}.png`;
 
@@ -77,6 +79,91 @@ function cleanOldSquares() {
     return removed;
 }
 
+function generateConstants(champions) {
+    // Read existing constants.ts to extract current champion order
+    const existingContent = readFileSync(CONSTANTS_PATH, "utf-8");
+
+    // Extract existing champion names in order from the array
+    const namePattern = /\{ name: "([^"]+)"/g;
+    const existingNames = [];
+    // Only match within the champions array section
+    const arraySection = existingContent.match(
+        /export const champions = \[([\s\S]*?)\]\.map/
+    );
+    if (arraySection) {
+        let match;
+        while ((match = namePattern.exec(arraySection[1])) !== null) {
+            existingNames.push(match[1]);
+        }
+    }
+
+    // Build name->champion lookup from champions.json
+    const champByName = new Map(champions.map((c) => [c.name, c]));
+
+    // Preserve existing order, filter out removed champions
+    const ordered = existingNames
+        .filter((name) => champByName.has(name))
+        .map((name) => champByName.get(name));
+
+    // Append new champions (not in existing order) alphabetically
+    const existingSet = new Set(existingNames);
+    const newChamps = champions
+        .filter((c) => !existingSet.has(c.name))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    ordered.push(...newChamps);
+
+    if (newChamps.length > 0) {
+        console.log(`\nNew champions appended: ${newChamps.map((c) => c.name).join(", ")}`);
+    }
+
+    // Generate import lines
+    const imports = ordered
+        .map((c) => `import ${c.id} from "/src/assets/${c.id}Square.webp";`)
+        .join("\n");
+
+    // Generate champions array
+    const entries = ordered
+        .map((c) => `    { name: "${c.name}", img: ${c.id} }`)
+        .join(",\n");
+
+    // Find manual section (everything after the marker or after sortOptions)
+    const marker = "// --- GENERATED ABOVE / MANUAL BELOW ---";
+    let manualSection;
+    const markerIndex = existingContent.indexOf(marker);
+    if (markerIndex !== -1) {
+        manualSection = existingContent.slice(markerIndex + marker.length).trimStart();
+    } else {
+        // First run: find sortOptions as the boundary
+        const sortIndex = existingContent.indexOf("export const sortOptions");
+        if (sortIndex === -1) {
+            throw new Error("Cannot find manual section boundary in constants.ts");
+        }
+        manualSection = existingContent.slice(sortIndex);
+    }
+
+    // Assemble
+    const generated = `${imports}
+
+import championData from "../data/champions.json";
+
+// Build name->positions lookup from generated data
+const positionsByName = new Map<string, string[]>(
+    championData.champions.map((c) => [c.name, c.positions])
+);
+
+export const champions = [
+${entries}
+].map((c) => ({ ...c, positions: positionsByName.get(c.name) ?? [] }));
+
+${marker}
+
+${manualSection}`;
+
+    writeFileSync(CONSTANTS_PATH, generated);
+    console.log(`\nGenerated ${CONSTANTS_PATH}`);
+    console.log(`  ${ordered.length} champions (${newChamps.length} new)`);
+}
+
 async function main() {
     // 1. Read champion data
     const data = JSON.parse(readFileSync(CHAMPIONS_JSON, "utf-8"));
@@ -107,6 +194,9 @@ async function main() {
     console.log(`  Average: ${(totalBytes / results.length / 1024).toFixed(1)} KB`);
     console.log(`  Largest: ${sorted[0].id} (${(sorted[0].size / 1024).toFixed(1)} KB)`);
     console.log(`  Smallest: ${sorted[sorted.length - 1].id} (${(sorted[sorted.length - 1].size / 1024).toFixed(1)} KB)`);
+
+    // 5. Generate constants.ts
+    generateConstants(champions);
 }
 
 main().catch((err) => {
