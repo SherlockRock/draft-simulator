@@ -2,7 +2,7 @@ import { createSignal, createMemo, Accessor, Setter } from "solid-js";
 
 interface FilterableItem {
     name: string;
-    [key: string]: string | number | boolean | null | undefined;
+    [key: string]: string | string[] | number | boolean | null | undefined;
 }
 
 interface UseFilterableItemsOptions<T extends FilterableItem> {

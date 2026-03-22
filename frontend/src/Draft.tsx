@@ -13,15 +13,7 @@ import {
     JSX,
     Show
 } from "solid-js";
-import {
-    botChamps,
-    champions,
-    jungleChamps,
-    midChamps,
-    sortOptions,
-    supportChamps,
-    topChamps
-} from "./utils/constants";
+import { championCategories, champions, sortOptions } from "./utils/constants";
 import { useNavigate, useParams } from "@solidjs/router";
 import { useCanvasSocket } from "./providers/CanvasSocketProvider";
 import { SearchableSelect } from "./components/SearchableSelect";
@@ -206,27 +198,8 @@ function Draft(props: props) {
     };
 
     const sortChamps = (searchWord: string, currentlySorting: string) => {
-        let holdChamps;
-        switch (currentlySorting) {
-            case "Top":
-                holdChamps = topChamps.map((each) => champions[each]);
-                break;
-            case "Jungle":
-                holdChamps = jungleChamps.map((each) => champions[each]);
-                break;
-            case "Mid":
-                holdChamps = midChamps.map((each) => champions[each]);
-                break;
-            case "Bot":
-                holdChamps = botChamps.map((each) => champions[each]);
-                break;
-            case "Support":
-                holdChamps = supportChamps.map((each) => champions[each]);
-                break;
-            default:
-                holdChamps = [...champions];
-                break;
-        }
+        const indices = championCategories[currentlySorting];
+        const holdChamps = indices ? indices.map((i) => champions[i]) : [...champions];
         return holdChamps.filter((champ) =>
             champ.name.toLowerCase().includes(searchWord)
         );
