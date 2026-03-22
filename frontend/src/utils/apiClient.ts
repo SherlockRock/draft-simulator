@@ -24,6 +24,21 @@ const BASE_URL =
 // don't fire multiple refresh requests.
 let refreshPromise: Promise<boolean> | null = null;
 
+// Tracks whether we've already detected auth expiry to avoid
+// redundant refresh attempts on subsequent 401s.
+let authIsExpired = false;
+
+// Callback fired when a token refresh fails, signaling auth expiry.
+let onAuthExpired: (() => void) | null = null;
+
+export function setAuthExpiredHandler(handler: () => void) {
+    onAuthExpired = handler;
+}
+
+export function resetAuthExpired() {
+    authIsExpired = false;
+}
+
 async function refreshAccessToken(): Promise<boolean> {
     try {
         const res = await fetch(`${BASE_URL}/auth/refresh-token`, {
@@ -42,6 +57,9 @@ async function fetchWithRefresh(url: string, options: RequestInit): Promise<Resp
     const res = await fetch(url, options);
     if (res.status !== 401) return res;
 
+    // Don't attempt refresh if we already know auth is expired
+    if (authIsExpired) return res;
+
     if (!refreshPromise) {
         refreshPromise = refreshAccessToken().finally(() => {
             refreshPromise = null;
@@ -49,7 +67,11 @@ async function fetchWithRefresh(url: string, options: RequestInit): Promise<Resp
     }
 
     const refreshed = await refreshPromise;
-    if (!refreshed) return res;
+    if (!refreshed) {
+        authIsExpired = true;
+        onAuthExpired?.();
+        return res;
+    }
 
     return fetch(url, options);
 }

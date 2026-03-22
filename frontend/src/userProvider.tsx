@@ -1,9 +1,17 @@
-import { Accessor, createContext, createMemo, useContext, JSX } from "solid-js";
+import {
+    Accessor,
+    createContext,
+    createMemo,
+    createSignal,
+    useContext,
+    JSX
+} from "solid-js";
 import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import { fetchUserDetails, handleGoogleLogin, handleRevoke } from "./utils/actions";
 import { useNavigate } from "@solidjs/router";
 import { syncLocalCanvasToServer } from "./utils/syncLocalCanvas";
 import { clearLocalCanvas } from "./utils/localCanvasStore";
+import { setAuthExpiredHandler, resetAuthExpired } from "./utils/apiClient";
 import toast from "solid-toast";
 import { identifyUser, resetUser, track } from "./utils/analytics";
 
@@ -20,6 +28,7 @@ interface UserAccessor {
     loading: boolean;
     isError: boolean;
     error: Error | null;
+    authExpired: boolean;
 }
 
 interface UserActions {
@@ -36,10 +45,18 @@ export function UserProvider(props: { children: JSX.Element }) {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
+    const [authExpired, setAuthExpired] = createSignal(false);
+
+    setAuthExpiredHandler(() => {
+        setAuthExpired(true);
+        queryClient.setQueryData(["user"], null);
+        toast("Session expired — please sign in to continue");
+    });
+
     const isOAuthCallback = () => window.location.pathname.includes("/oauth2callback");
 
     const userQuery = useQuery(() => {
-        const enabled = !isOAuthCallback();
+        const enabled = !isOAuthCallback() && !authExpired();
 
         return {
             queryKey: ["user"],
@@ -60,6 +77,8 @@ export function UserProvider(props: { children: JSX.Element }) {
     });
 
     const login = async (code: string, state: string) => {
+        setAuthExpired(false);
+        resetAuthExpired();
         const res = await handleGoogleLogin(code, state);
         userQuery.refetch();
 
@@ -118,6 +137,9 @@ export function UserProvider(props: { children: JSX.Element }) {
         },
         get error() {
             return userQuery.error;
+        },
+        get authExpired() {
+            return authExpired();
         }
     });
 
