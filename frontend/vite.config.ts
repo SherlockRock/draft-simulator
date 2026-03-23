@@ -23,6 +23,9 @@ export default defineConfig(({ mode }) => {
 
     return {
         plugins: [solidPlugin()],
+        resolve: {
+            dedupe: ["solid-js", "solid-js/web", "solid-js/store"]
+        },
         server: {
             https: certPath
                 ? {

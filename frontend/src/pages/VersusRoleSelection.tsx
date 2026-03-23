@@ -1,4 +1,5 @@
 import { Component, createSignal, Show, createMemo } from "solid-js";
+import { Title, Meta } from "@solidjs/meta";
 import toast from "solid-toast";
 import { AlertTriangle, EyeOff, Check, Share2, User, Eye, Swords } from "lucide-solid";
 import { track } from "../utils/analytics";
@@ -63,6 +64,8 @@ const VersusRoleSelection: Component = () => {
 
     return (
         <div class="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px] p-6">
+            <Title>Join Versus - First Pick</Title>
+            <Meta name="description" content="Join a live draft session." />
             <Show
                 when={isConnected() && !error()}
                 fallback={

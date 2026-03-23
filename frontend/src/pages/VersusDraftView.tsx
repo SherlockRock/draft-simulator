@@ -7,6 +7,7 @@ import {
     For,
     Show
 } from "solid-js";
+import { Title } from "@solidjs/meta";
 import { useParams, useNavigate } from "@solidjs/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/solid-query";
 import { useVersusSocket } from "../providers/VersusSocketProvider";
@@ -71,7 +72,7 @@ const VersusDraftView: Component = () => {
     } = useVersusContext();
     const queryClient = useQueryClient();
     // versusState must be declared before createMemos that reference it
-    // (createMemo runs eagerly on creation — TDZ if declared after)
+    // (createMemo runs eagerly on creation - TDZ if declared after)
     const [versusState, setVersusState] = createSignal<VersusState>({
         draftId: params.draftId,
         currentPickIndex: 0,
@@ -500,7 +501,7 @@ const VersusDraftView: Component = () => {
             const role = myRole();
             if (!role || role === "spectator") return;
             const mySide = myEffectiveSide();
-            if (data.team === mySide) return; // I'm the requester — already got a toast at submit time
+            if (data.team === mySide) return; // I'm the requester - already got a toast at submit time
 
             setPendingPickChangeRequest(data);
             toast(
@@ -1037,6 +1038,8 @@ const VersusDraftView: Component = () => {
     });
 
     return (
+        <>
+        <Title>Draft - First Pick</Title>
         <Show
             when={!versusDraftQuery.isPending && !draftQuery.isPending}
             fallback={<div class="p-8">Loading...</div>}
@@ -1492,6 +1495,7 @@ const VersusDraftView: Component = () => {
                 </Show>
             </Show>
         </Show>
+        </>
     );
 };
 

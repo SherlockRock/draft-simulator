@@ -1,4 +1,5 @@
 import { Component, createEffect, createSignal, onCleanup } from "solid-js";
+import { Title } from "@solidjs/meta";
 import { postNewDraft } from "../utils/actions";
 import CanvasComponent from "../Canvas";
 import { useParams } from "@solidjs/router";
@@ -107,6 +108,7 @@ const CanvasDetailView: Component = () => {
 
     return (
         <AuthGuard requireAuth={!isLocalMode()}>
+            <Title>{canvas()?.name ? `${canvas()?.name} - First Pick` : "Canvas - First Pick"}</Title>
             <div ref={canvasContainerRef} class="flex-1 overflow-hidden">
                 <CanvasComponent
                     canvasData={canvas()}

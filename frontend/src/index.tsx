@@ -1,28 +1,31 @@
 /* @refresh reload */
+import { lazy } from "solid-js";
 import { render } from "solid-js/web";
 import { Router, Route } from "@solidjs/router";
+import { MetaProvider } from "@solidjs/meta";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 
 import "./index.css";
 import App from "./App";
 import { UserWrapper } from "./UserWrapper";
 import AuthCallback from "./AuthCallback";
-import ShareCanvasPage from "./ShareCanvasPage";
-import HomePage from "./pages/HomePage";
-import SettingsPage from "./pages/SettingsPage";
-
-import CanvasFlowDashboard from "./pages/CanvasFlowDashboard";
 import CanvasEntryRedirect from "./components/CanvasEntryRedirect";
-import VersusFlowDashboard from "./pages/VersusFlowDashboard";
-import DraftDetailView from "./pages/DraftDetailView";
-import CanvasDetailView from "./pages/CanvasDetailView";
 import DraftWorkflow from "./workflows/DraftWorkflow";
 import CanvasWorkflow from "./workflows/CanvasWorkflow";
 import VersusWorkflow from "./workflows/VersusWorkflow";
-import VersusSeriesOverview from "./pages/VersusSeriesOverview";
-import VersusRoleSelection from "./pages/VersusRoleSelection";
-import VersusDraftView from "./pages/VersusDraftView";
 import { initAnalytics } from "./utils/analytics";
+
+// Lazy-loaded page components for code splitting
+const ShareCanvasPage = lazy(() => import("./ShareCanvasPage"));
+const HomePage = lazy(() => import("./pages/HomePage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const CanvasFlowDashboard = lazy(() => import("./pages/CanvasFlowDashboard"));
+const VersusFlowDashboard = lazy(() => import("./pages/VersusFlowDashboard"));
+const DraftDetailView = lazy(() => import("./pages/DraftDetailView"));
+const CanvasDetailView = lazy(() => import("./pages/CanvasDetailView"));
+const VersusSeriesOverview = lazy(() => import("./pages/VersusSeriesOverview"));
+const VersusRoleSelection = lazy(() => import("./pages/VersusRoleSelection"));
+const VersusDraftView = lazy(() => import("./pages/VersusDraftView"));
 
 initAnalytics();
 
@@ -38,6 +41,7 @@ const queryClient = new QueryClient();
 
 render(
     () => (
+        <MetaProvider>
         <QueryClientProvider client={queryClient}>
             <Router root={App}>
                 <Route path="/share/canvas" component={ShareCanvasPage} />
@@ -63,6 +67,7 @@ render(
                 </Route>
             </Router>
         </QueryClientProvider>
+        </MetaProvider>
     ),
     root!
 );

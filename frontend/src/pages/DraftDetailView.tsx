@@ -1,4 +1,5 @@
 import { Component, Show, createMemo, createEffect } from "solid-js";
+import { Title } from "@solidjs/meta";
 import Draft from "../Draft";
 import { useDraftContext } from "../workflows/DraftWorkflow";
 import { useCanvasContext } from "../contexts/CanvasContext";
@@ -55,6 +56,7 @@ const DraftDetailView: Component = () => {
 
     return (
         <div class="flex-1 overflow-y-auto">
+            <Title>Draft - First Pick</Title>
             <Show
                 when={draft()}
                 fallback={

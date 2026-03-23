@@ -1,4 +1,5 @@
 import { Component, Show, createSignal } from "solid-js";
+import { Title } from "@solidjs/meta";
 import { useNavigate } from "@solidjs/router";
 import { Info } from "lucide-solid";
 import { useUser } from "../userProvider";
@@ -44,6 +45,7 @@ const SettingsPage: Component = () => {
 
     return (
         <AuthGuard requireAuth>
+            <Title>Settings - First Pick</Title>
             <div class="flex-1 overflow-auto bg-slate-900">
                 <Show
                     when={user()}

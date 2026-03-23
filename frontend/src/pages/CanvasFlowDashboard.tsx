@@ -1,5 +1,6 @@
 import { Component, Show, createSignal } from "solid-js";
 import { useNavigate } from "@solidjs/router";
+import { Title, Meta } from "@solidjs/meta";
 import { LayoutDashboard } from "lucide-solid";
 import ActivityList from "../components/ActivityList";
 import { useUser } from "../userProvider";
@@ -17,6 +18,8 @@ const CanvasFlowDashboard: Component = () => {
 
     return (
         <div class="flex-1 overflow-auto bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
+            <Title>Canvas Dashboard - First Pick</Title>
+            <Meta name="description" content="Visual workspace for organizing and planning drafts." />
             <div class="mx-auto flex min-h-full max-w-7xl flex-col justify-center p-8">
                 {/* Inline banner */}
                 <div class="mx-auto mb-12 max-w-3xl">

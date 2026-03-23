@@ -32,6 +32,7 @@
         "@draft-sim/shared-types": "workspace:*",
         "@eslint/eslintrc": "^3.2.0",
         "@eslint/js": "^9.15.0",
+        "@solidjs/meta": "^0.29.4",
         "@solidjs/router": "^0.15.1",
         "@tanstack/solid-query": "^5.90.3",
         "@thisbeyond/solid-dnd": "^0.7.5",

@@ -1,4 +1,5 @@
 import { Component, For, Show, createMemo } from "solid-js";
+import { Title } from "@solidjs/meta";
 import { useParams, useNavigate } from "@solidjs/router";
 import { Lock, ChevronRight, Flag, Swords } from "lucide-solid";
 import { draft } from "../utils/schemas";
@@ -96,6 +97,7 @@ const VersusSeriesOverview: Component = () => {
 
     return (
         <div class="flex-1 overflow-auto bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
+            <Title>{versusDraft()?.blueTeamName && versusDraft()?.redTeamName ? `${versusDraft()?.blueTeamName} vs ${versusDraft()?.redTeamName} - First Pick` : "Versus Series - First Pick"}</Title>
             <Show
                 when={isConnected()}
                 fallback={

@@ -1,5 +1,6 @@
 import { useSearchParams, useNavigate } from "@solidjs/router";
 import { createSignal, onMount, Show } from "solid-js";
+import { Title, Meta } from "@solidjs/meta";
 import { useMutation } from "@tanstack/solid-query";
 import { toast } from "solid-toast";
 import { Lock } from "lucide-solid";
@@ -37,6 +38,8 @@ const ShareCanvasPage = () => {
 
     return (
         <div class="flex h-full w-full flex-col items-center justify-center bg-slate-800">
+            <Title>Shared Canvas - First Pick</Title>
+            <Meta name="description" content="View a shared draft canvas." />
             <Show when={needsAuth()}>
                 <div class="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-slate-700/50 ring-1 ring-slate-600/50">
                     <Lock size={28} class="text-slate-400" />

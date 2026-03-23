@@ -1,5 +1,6 @@
 import { Component, createSignal, createEffect, Show } from "solid-js";
 import { useQuery, useInfiniteQuery } from "@tanstack/solid-query";
+import { Title, Meta } from "@solidjs/meta";
 import { Swords } from "lucide-solid";
 import ActivityList from "../components/ActivityList";
 import { useUser } from "../userProvider";
@@ -35,7 +36,7 @@ const VersusFlowDashboard: Component = () => {
         if (userQuery.isLoading) return;
 
         if (userQuery.data) {
-            // Wait for fresh data — stale cache may show empty activity on remount
+            // Wait for fresh data - stale cache may show empty activity on remount
             if (activityQuery.isFetching) return;
             const data = activityQuery.data;
             if (data === undefined) return;
@@ -55,6 +56,8 @@ const VersusFlowDashboard: Component = () => {
 
     return (
         <div class="flex-1 overflow-auto bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
+            <Title>Versus - First Pick</Title>
+            <Meta name="description" content="Real-time collaborative drafting against opponents." />
             <div class="mx-auto flex min-h-full max-w-7xl flex-col justify-center p-8">
                 {/* Inline banner */}
                 <div class="mx-auto mb-12 max-w-3xl">
