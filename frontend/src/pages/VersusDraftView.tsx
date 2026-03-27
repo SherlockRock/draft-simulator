@@ -51,12 +51,14 @@ import {
     getRestrictedChampions,
     getRestrictedChampionsByGame
 } from "../utils/seriesRestrictions";
+import { useUser } from "../userProvider";
 
 const VersusDraftView: Component = () => {
     const params = useParams<{ id: string; draftId: string }>();
     const navigate = useNavigate();
     const { socket: socketAccessor, connectionStatus: connectionStatusAccessor } =
         useVersusSocket();
+    const [user] = useUser()();
 
     // Get role and participant info from context (single source of truth)
     const {
@@ -1475,6 +1477,7 @@ const VersusDraftView: Component = () => {
                                     isPaused={() => versusState().isPaused}
                                     getCurrentPendingChampion={getCurrentPendingChampion}
                                     onChampionSelect={handleChampionSelect}
+                                    keyboardControls={user()?.keyboard_controls ?? false}
                                 />
                             </div>
 

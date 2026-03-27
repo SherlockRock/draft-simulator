@@ -1,4 +1,4 @@
-import { Component, createMemo, createSignal, For, Show } from "solid-js";
+import { Component, createMemo, createSignal, For, Show, onCleanup } from "solid-js";
 import { X } from "lucide-solid";
 import { FilterBar } from "./FilterBar";
 import { RoleFilter } from "./RoleFilter";
@@ -29,6 +29,7 @@ interface ChampionPanelProps {
     isPaused: () => boolean;
     getCurrentPendingChampion: () => string | null;
     onChampionSelect: (champId: string) => void;
+    keyboardControls?: boolean;
 }
 
 export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
@@ -47,6 +48,66 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
         items: champions,
         categoryMap: championCategories
     });
+
+    // Ref for FilterBar input (for programmatic focus)
+    let filterInputRef: HTMLInputElement | undefined;
+
+    // Window-level keydown listener for type-anywhere filtering
+    // Non-reactive prop check is intentional — ChampionPanel is recreated per draft,
+    // so the setting value at creation time is stable for the component's lifetime.
+    if (props.keyboardControls) {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Skip if panel is collapsed
+            if (!isExpanded()) return;
+
+            // Skip if any input/textarea/select is focused (except our FilterBar)
+            const active = document.activeElement;
+            if (
+                active &&
+                active !== filterInputRef &&
+                (active.tagName === "INPUT" ||
+                    active.tagName === "TEXTAREA" ||
+                    active.tagName === "SELECT")
+            ) {
+                return;
+            }
+
+            // Escape: clear search and blur
+            if (e.key === "Escape") {
+                if (searchText() !== "") {
+                    setSearchText("");
+                    filterInputRef?.blur();
+                    e.preventDefault();
+                }
+                return;
+            }
+
+            // Skip modifier keys, function keys, and non-printable keys
+            if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) {
+                return;
+            }
+
+            // If FilterBar input is already focused, let native handling work
+            if (document.activeElement === filterInputRef) return;
+
+            // Redirect: focus input, set search text
+            e.preventDefault();
+            setSearchText(searchText() + e.key);
+            filterInputRef?.focus();
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
+    }
+
+    // Wrapper to clear search on champion select
+    const handleChampionSelect = (champId: string) => {
+        props.onChampionSelect(champId);
+        if (props.keyboardControls) {
+            setSearchText("");
+            filterInputRef?.blur();
+        }
+    };
 
     // Derived: are we filtering?
     const isFiltering = createMemo(
@@ -216,6 +277,10 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                 searchText={searchText}
                                 onSearchChange={setSearchText}
                                 searchPlaceholder="Search champions..."
+                                inputRef={(el) => {
+                                    filterInputRef = el;
+                                }}
+                                accent="orange"
                             />
                             <RoleFilter
                                 categories={championCategoryList}
@@ -313,7 +378,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                         <button
                                                             onClick={() =>
                                                                 canSelect() &&
-                                                                props.onChampionSelect(
+                                                                handleChampionSelect(
                                                                     index
                                                                 )
                                                             }
@@ -444,7 +509,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                     <button
                                                         onClick={() =>
                                                             canSelect() &&
-                                                            props.onChampionSelect(
+                                                            handleChampionSelect(
                                                                 champId()
                                                             )
                                                         }

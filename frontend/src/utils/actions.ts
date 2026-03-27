@@ -559,6 +559,10 @@ export const exportUserData = async () => {
     );
 };
 
+export const updatePreferences = async (prefs: { keyboard_controls: boolean }) => {
+    return apiPatch("/users/me/preferences", prefs, UserDetailsSchema);
+};
+
 export const updateDisplayName = async (displayName: string | null) => {
     const result = await apiPatch(
         "/users/me",

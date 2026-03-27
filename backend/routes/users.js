@@ -55,6 +55,7 @@ router.patch("/me", protect, async (req, res) => {
         email: req.user.email,
         picture: req.user.picture,
         display_name: req.user.display_name,
+        keyboard_controls: req.user.keyboard_controls,
       },
     });
   } catch (error) {
@@ -227,6 +228,30 @@ router.delete("/me", protect, async (req, res) => {
   } catch (error) {
     console.error("Delete account error:", error);
     res.status(500).json({ error: "Failed to delete account" });
+  }
+});
+
+router.patch("/me/preferences", protect, async (req, res) => {
+  try {
+    const { keyboard_controls } = req.body;
+
+    if (typeof keyboard_controls !== "boolean") {
+      return res.status(400).json({ error: "keyboard_controls must be a boolean" });
+    }
+
+    await req.user.update({ keyboard_controls });
+
+    res.json({
+      id: req.user.id,
+      name: req.user.name,
+      email: req.user.email,
+      picture: req.user.picture,
+      display_name: req.user.display_name,
+      keyboard_controls: req.user.keyboard_controls,
+    });
+  } catch (error) {
+    console.error("Update preferences error:", error);
+    res.status(500).json({ error: "Failed to update preferences" });
   }
 });
 

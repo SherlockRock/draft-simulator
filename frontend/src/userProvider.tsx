@@ -15,12 +15,13 @@ import { setAuthExpiredHandler, resetAuthExpired } from "./utils/apiClient";
 import toast from "solid-toast";
 import { identifyUser, resetUser, track } from "./utils/analytics";
 
-type UserData = {
+export type UserData = {
     id: string;
     name: string;
     email: string;
     picture: string;
     display_name: string | null;
+    keyboard_controls: boolean;
 };
 
 export const getDisplayName = (u: UserData | null | undefined): string =>

@@ -3,13 +3,20 @@ import { Title } from "@solidjs/meta";
 import { useNavigate } from "@solidjs/router";
 import { Info } from "lucide-solid";
 import toast from "solid-toast";
-import { useUser } from "../userProvider";
+import { useQueryClient } from "@tanstack/solid-query";
+import { useUser, type UserData } from "../userProvider";
 import { AuthGuard } from "../components/AuthGuard";
 import { DeleteAccountModal } from "../components/DeleteAccountModal";
-import { exportUserData, deleteUserAccount, updateDisplayName } from "../utils/actions";
+import {
+    exportUserData,
+    deleteUserAccount,
+    updateDisplayName,
+    updatePreferences
+} from "../utils/actions";
 
 const SettingsPage: Component = () => {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const context = useUser();
     const [user, actions] = context();
     const [isExporting, setIsExporting] = createSignal(false);
@@ -198,6 +205,66 @@ const SettingsPage: Component = () => {
                                         ? ""
                                         : " Leave empty to use your Google name."}
                                 </p>
+                            </div>
+                        </div>
+
+                        {/* Preferences Section */}
+                        <div class="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-6">
+                            <h2 class="mb-4 text-xl font-semibold text-slate-200">
+                                Preferences
+                            </h2>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-slate-100">Keyboard controls</p>
+                                    <p class="text-sm text-slate-400">
+                                        Start typing to filter champions during versus
+                                        drafts without clicking the search bar
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        const newValue = !user()?.keyboard_controls;
+                                        queryClient.setQueryData(
+                                            ["user"],
+                                            (prev: UserData | null | undefined) =>
+                                                prev
+                                                    ? {
+                                                          ...prev,
+                                                          keyboard_controls: newValue
+                                                      }
+                                                    : prev
+                                        );
+                                        try {
+                                            await updatePreferences({
+                                                keyboard_controls: newValue
+                                            });
+                                        } catch {
+                                            queryClient.setQueryData(
+                                                ["user"],
+                                                (prev: UserData | null | undefined) =>
+                                                    prev
+                                                        ? {
+                                                              ...prev,
+                                                              keyboard_controls: !newValue
+                                                          }
+                                                        : prev
+                                            );
+                                        }
+                                    }}
+                                    class={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
+                                        user()?.keyboard_controls
+                                            ? "bg-teal-500"
+                                            : "bg-slate-600"
+                                    }`}
+                                >
+                                    <span
+                                        class={`inline-block h-5 w-5 rounded-full bg-slate-50 shadow transition-transform duration-200 ${
+                                            user()?.keyboard_controls
+                                                ? "translate-x-5"
+                                                : "translate-x-0"
+                                        }`}
+                                    />
+                                </button>
                             </div>
                         </div>
 

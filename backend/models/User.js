@@ -24,6 +24,10 @@ const User = sequelize.define("User", {
     defaultValue: null,
     allowNull: true,
   },
+  keyboard_controls: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
 });
 
 module.exports = User;

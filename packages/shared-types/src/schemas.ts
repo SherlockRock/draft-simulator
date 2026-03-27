@@ -278,6 +278,7 @@ export const UserDetailsSchema = z.object({
   email: z.string(),
   picture: z.string(),
   display_name: z.string().nullable(),
+  keyboard_controls: z.boolean(),
 });
 
 export const AuthResponseSchema = z.object({
