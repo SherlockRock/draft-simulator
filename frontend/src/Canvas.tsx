@@ -364,7 +364,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         },
         onError: (error, _vars, context) => {
             if (context?.tempId) {
-                setCanvasDrafts(canvasDrafts.filter((d) => d.Draft.id !== context.tempId));
+                setCanvasDrafts(
+                    canvasDrafts.filter((d) => d.Draft.id !== context.tempId)
+                );
             }
             toast.error(`Error creating new draft: ${error.message}`);
         }
@@ -407,12 +409,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const deleteDraftMutation = useMutation(() => ({
         mutationFn: deleteDraftFromCanvas,
         onMutate: (variables) => {
-            const removedDraft = canvasDrafts.find(
-                (d) => d.Draft.id === variables.draft
-            );
-            setCanvasDrafts(
-                canvasDrafts.filter((d) => d.Draft.id !== variables.draft)
-            );
+            const removedDraft = canvasDrafts.find((d) => d.Draft.id === variables.draft);
+            setCanvasDrafts(canvasDrafts.filter((d) => d.Draft.id !== variables.draft));
             setIsDeleteDialogOpen(false);
             setDraftToDelete(null);
             return { removedDraft };

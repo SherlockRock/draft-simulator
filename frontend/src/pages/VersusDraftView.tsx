@@ -1039,462 +1039,486 @@ const VersusDraftView: Component = () => {
 
     return (
         <>
-        <Title>Draft - First Pick</Title>
-        <Show
-            when={!versusDraftQuery.isPending && !draftQuery.isPending}
-            fallback={<div class="p-8">Loading...</div>}
-        >
-            <Show when={versusDraftQuery.data && draftQuery.data}>
-                {/* Per-game role confirmation overlay */}
-                <Show when={needsGameConfirm()}>
-                    <div class="flex h-full min-w-0 flex-1 flex-col items-center justify-center bg-slate-900">
-                        <div class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-700/50 bg-slate-800/90 shadow-2xl">
-                            <div class="p-8 text-center">
-                                <div
-                                    class={`mb-4 text-sm font-semibold uppercase tracking-wider ${gameTextColors[(draftQuery.data?.seriesIndex ?? 0) + 1] ?? "text-slate-500"}`}
-                                >
-                                    Game {(draftQuery.data?.seriesIndex ?? 0) + 1}
+            <Title>Draft - First Pick</Title>
+            <Show
+                when={!versusDraftQuery.isPending && !draftQuery.isPending}
+                fallback={<div class="p-8">Loading...</div>}
+            >
+                <Show when={versusDraftQuery.data && draftQuery.data}>
+                    {/* Per-game role confirmation overlay */}
+                    <Show when={needsGameConfirm()}>
+                        <div class="flex h-full min-w-0 flex-1 flex-col items-center justify-center bg-slate-900">
+                            <div class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-700/50 bg-slate-800/90 shadow-2xl">
+                                <div class="p-8 text-center">
+                                    <div
+                                        class={`mb-4 text-sm font-semibold uppercase tracking-wider ${gameTextColors[(draftQuery.data?.seriesIndex ?? 0) + 1] ?? "text-slate-500"}`}
+                                    >
+                                        Game {(draftQuery.data?.seriesIndex ?? 0) + 1}
+                                    </div>
+                                    <Show when={myTeamIdentity() && gameSuggestedSide()}>
+                                        <p class="text-sm text-slate-300">
+                                            You are on{" "}
+                                            <span class="font-semibold text-slate-100">
+                                                {myTeamIdentity()}
+                                            </span>
+                                            . This game, your team is on{" "}
+                                            <span
+                                                class={`font-semibold ${
+                                                    gameSuggestedSide() === "blue"
+                                                        ? "text-blue-400"
+                                                        : "text-red-400"
+                                                }`}
+                                            >
+                                                {gameSuggestedSide()} side
+                                            </span>
+                                            .
+                                        </p>
+                                    </Show>
                                 </div>
-                                <Show when={myTeamIdentity() && gameSuggestedSide()}>
-                                    <p class="text-sm text-slate-300">
-                                        You are on{" "}
-                                        <span class="font-semibold text-slate-100">
-                                            {myTeamIdentity()}
-                                        </span>
-                                        . This game, your team is on{" "}
-                                        <span
-                                            class={`font-semibold ${
-                                                gameSuggestedSide() === "blue"
-                                                    ? "text-blue-400"
-                                                    : "text-red-400"
-                                            }`}
-                                        >
-                                            {gameSuggestedSide()} side
-                                        </span>
-                                        .
-                                    </p>
-                                </Show>
+                                <div class="border-t border-slate-700/50 px-8 py-4">
+                                    <div class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                                        Game Settings
+                                    </div>
+                                    <GameSettingsGrid
+                                        draftId={params.draftId}
+                                        teamOneName={
+                                            versusDraftQuery.data?.blueTeamName ?? ""
+                                        }
+                                        teamTwoName={
+                                            versusDraftQuery.data?.redTeamName ?? ""
+                                        }
+                                        blueSideTeam={
+                                            (versusState().blueSideTeam || 1) as 1 | 2
+                                        }
+                                        firstPick={versusState().firstPick || "blue"}
+                                        canEdit={true}
+                                        onSettingsChange={handleConfirmSettingsChange}
+                                    />
+                                </div>
+                                <div class="border-t border-slate-700/50 px-8 pb-8 pt-4 text-center">
+                                    <button
+                                        class="w-full rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-slate-50 transition-colors hover:bg-orange-500"
+                                        onClick={handleConfirmGame}
+                                    >
+                                        Continue as {myTeamIdentity()} Captain
+                                    </button>
+                                    <button
+                                        class="mt-2 block w-full text-xs text-slate-500 transition-colors hover:text-slate-400"
+                                        onClick={() => {
+                                            const vd = versusContext().versusDraft;
+                                            if (vd)
+                                                navigate(`/versus/join/${vd.shareLink}`);
+                                        }}
+                                    >
+                                        Switch teams
+                                    </button>
+                                </div>
                             </div>
-                            <div class="border-t border-slate-700/50 px-8 py-4">
-                                <div class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                                    Game Settings
+                        </div>
+                    </Show>
+                    <Show when={!needsGameConfirm()}>
+                        <div class="flex h-full min-w-0 flex-1 flex-col bg-slate-900">
+                            {/* Main Content */}
+                            <div class="flex flex-1 overflow-hidden">
+                                {/* Drafts Display - now takes full remaining width */}
+                                <div class="flex min-w-0 flex-1 flex-col p-6">
+                                    {/* Team Names */}
+                                    <div class="mb-4 flex items-center">
+                                        {/* Blue Team */}
+                                        <div class="flex min-w-0 flex-1 flex-col items-start gap-1">
+                                            <div class="h-5">
+                                                <Show
+                                                    when={
+                                                        (versusState().firstPick ||
+                                                            "blue") === "blue"
+                                                    }
+                                                >
+                                                    <span class="rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+                                                        1st Pick
+                                                    </span>
+                                                </Show>
+                                            </div>
+                                            <div class="text-xl font-bold text-blue-400">
+                                                {blueSideTeamName()}
+                                            </div>
+                                            <Show when={!draftStarted()}>
+                                                <div
+                                                    class={`flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${
+                                                        versusState().readyStatus.blue
+                                                            ? "border border-emerald-500/50 bg-emerald-500/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+                                                            : "border border-slate-600/50 bg-slate-700/50 text-slate-500"
+                                                    }`}
+                                                >
+                                                    <div
+                                                        class={`h-2 w-2 rounded-full transition-all duration-300 ${
+                                                            versusState().readyStatus.blue
+                                                                ? "animate-pulse bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
+                                                                : "bg-slate-500"
+                                                        }`}
+                                                    />
+                                                    <span>
+                                                        {versusState().readyStatus.blue
+                                                            ? "Ready"
+                                                            : "Not Ready"}
+                                                    </span>
+                                                </div>
+                                            </Show>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <span
+                                                class={`rounded bg-slate-700 px-2 py-0.5 text-xs font-semibold ${gameTextColors[(draftQuery.data?.seriesIndex ?? 0) + 1] ?? "text-slate-300"}`}
+                                            >
+                                                Game{" "}
+                                                {(draftQuery.data?.seriesIndex ?? 0) + 1}
+                                            </span>
+                                            <span class="text-slate-500">vs</span>
+                                            <Show
+                                                when={!versusState().completed}
+                                                fallback={
+                                                    <Show when={nextGame()}>
+                                                        <button
+                                                            onClick={() =>
+                                                                navigate(
+                                                                    `/versus/${params.id}/draft/${nextGame()?.id ?? ""}`
+                                                                )
+                                                            }
+                                                            class="group mt-1 flex items-center gap-2 text-orange-400 transition-colors hover:text-orange-300"
+                                                        >
+                                                            <span class="text-sm font-medium">
+                                                                Next Game
+                                                            </span>
+                                                            <span class="transition-transform group-hover:translate-x-1">
+                                                                →
+                                                            </span>
+                                                        </button>
+                                                    </Show>
+                                                }
+                                            >
+                                                <VersusTimer
+                                                    timerStartedAt={
+                                                        versusState().timerStartedAt
+                                                    }
+                                                    duration={30}
+                                                    isPaused={versusState().isPaused}
+                                                />
+                                            </Show>
+                                        </div>
+                                        {/* Red Team */}
+                                        <div class="flex min-w-0 flex-1 flex-col items-end gap-1">
+                                            <div class="h-5">
+                                                <Show
+                                                    when={
+                                                        (versusState().firstPick ||
+                                                            "blue") === "red"
+                                                    }
+                                                >
+                                                    <span class="rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+                                                        1st Pick
+                                                    </span>
+                                                </Show>
+                                            </div>
+                                            <div class="text-xl font-bold text-red-400">
+                                                {redSideTeamName()}
+                                            </div>
+                                            <Show when={!draftStarted()}>
+                                                <div
+                                                    class={`flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${
+                                                        versusState().readyStatus.red
+                                                            ? "border border-emerald-500/50 bg-emerald-500/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+                                                            : "border border-slate-600/50 bg-slate-700/50 text-slate-500"
+                                                    }`}
+                                                >
+                                                    <div
+                                                        class={`h-2 w-2 rounded-full transition-all duration-300 ${
+                                                            versusState().readyStatus.red
+                                                                ? "animate-pulse bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
+                                                                : "bg-slate-500"
+                                                        }`}
+                                                    />
+                                                    <span>
+                                                        {versusState().readyStatus.red
+                                                            ? "Ready"
+                                                            : "Not Ready"}
+                                                    </span>
+                                                </div>
+                                            </Show>
+                                        </div>
+                                    </div>
+
+                                    {/* Bans */}
+                                    <div class="mb-6 mt-2">
+                                        <div class="flex justify-between gap-[clamp(1rem,5vw,6rem)]">
+                                            <div class="flex min-w-0 flex-1 gap-2">
+                                                <For each={getTeamBans("blue")}>
+                                                    {(ban, index) => (
+                                                        <div
+                                                            class={`relative aspect-square flex-1 overflow-hidden rounded border-2 bg-slate-800 transition-all ${
+                                                                isBanActive(
+                                                                    "blue",
+                                                                    index()
+                                                                )
+                                                                    ? "animate-pulse border-orange-400 ring-4 ring-orange-400/50"
+                                                                    : "border-blue-600/30"
+                                                            }`}
+                                                        >
+                                                            <Show
+                                                                when={ban && ban !== ""}
+                                                            >
+                                                                <img
+                                                                    src={
+                                                                        champions[
+                                                                            parseInt(ban)
+                                                                        ].img
+                                                                    }
+                                                                    alt=""
+                                                                    class="h-full w-full object-cover"
+                                                                />
+                                                                <div class="absolute inset-0 flex items-center justify-center">
+                                                                    <div class="h-[100%] w-1 -rotate-45 bg-slate-200" />
+                                                                </div>
+                                                            </Show>
+                                                        </div>
+                                                    )}
+                                                </For>
+                                            </div>
+                                            <div class="flex min-w-0 flex-1 gap-2">
+                                                <For each={getTeamBans("red")}>
+                                                    {(ban, index) => (
+                                                        <div
+                                                            class={`relative aspect-square flex-1 overflow-hidden rounded border-2 bg-slate-800 transition-all ${
+                                                                isBanActive(
+                                                                    "red",
+                                                                    index()
+                                                                )
+                                                                    ? "animate-pulse border-orange-400 ring-4 ring-orange-400/50"
+                                                                    : "border-red-600/30"
+                                                            }`}
+                                                        >
+                                                            <Show
+                                                                when={ban && ban !== ""}
+                                                            >
+                                                                <img
+                                                                    src={
+                                                                        champions[
+                                                                            parseInt(ban)
+                                                                        ].img
+                                                                    }
+                                                                    alt=""
+                                                                    class="h-full w-full object-cover"
+                                                                />
+                                                                <div class="absolute inset-0 flex items-center justify-center">
+                                                                    <div class="h-[100%] w-1 -rotate-45 bg-slate-200" />
+                                                                </div>
+                                                            </Show>
+                                                        </div>
+                                                    )}
+                                                </For>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Picks */}
+                                    <div class="mb-6 flex min-h-0 flex-1 gap-[clamp(1rem,4vw,6rem)]">
+                                        {/* Blue Picks */}
+                                        <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+                                            <div class="flex min-h-0 flex-1 flex-col gap-2">
+                                                <For each={getTeamPicks("blue")}>
+                                                    {(pick, index) => (
+                                                        <div
+                                                            class={`relative min-h-0 flex-1 overflow-hidden rounded border-2 bg-slate-900 transition-all ${
+                                                                isPickActive(
+                                                                    "blue",
+                                                                    index()
+                                                                )
+                                                                    ? "animate-pulse border-orange-400 ring-4 ring-orange-400/50"
+                                                                    : "border-blue-600/30"
+                                                            } ${isSlotAnimating("blue", "pick", index()) ? "animate-pop" : ""}`}
+                                                        >
+                                                            <Show
+                                                                when={pick && pick !== ""}
+                                                            >
+                                                                <img
+                                                                    src={getSplashUrl(
+                                                                        champions[
+                                                                            parseInt(pick)
+                                                                        ].name
+                                                                    )}
+                                                                    alt={
+                                                                        champions[
+                                                                            parseInt(pick)
+                                                                        ].name
+                                                                    }
+                                                                    class="h-full w-full -translate-x-[15%] scale-[1.25] object-cover object-[center_25%]"
+                                                                />
+                                                                <div class="absolute inset-0 bg-gradient-to-r from-transparent via-transparent via-50% to-black" />
+                                                                <span class="absolute bottom-2 right-3 text-lg font-semibold tracking-wide text-slate-100 drop-shadow-lg">
+                                                                    {
+                                                                        champions[
+                                                                            parseInt(pick)
+                                                                        ].name
+                                                                    }
+                                                                </span>
+                                                            </Show>
+                                                        </div>
+                                                    )}
+                                                </For>
+                                            </div>
+                                        </div>
+
+                                        {/* Red Picks */}
+                                        <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+                                            <div class="flex min-h-0 flex-1 flex-col gap-2">
+                                                <For each={getTeamPicks("red")}>
+                                                    {(pick, index) => (
+                                                        <div
+                                                            class={`relative min-h-0 flex-1 overflow-hidden rounded border-2 bg-slate-900 transition-all ${
+                                                                isPickActive(
+                                                                    "red",
+                                                                    index()
+                                                                )
+                                                                    ? "animate-pulse border-orange-400 ring-4 ring-orange-400/50"
+                                                                    : "border-red-600/30"
+                                                            } ${isSlotAnimating("red", "pick", index()) ? "animate-pop" : ""}`}
+                                                        >
+                                                            <Show
+                                                                when={pick && pick !== ""}
+                                                            >
+                                                                <img
+                                                                    src={getSplashUrl(
+                                                                        champions[
+                                                                            parseInt(pick)
+                                                                        ].name
+                                                                    )}
+                                                                    alt={
+                                                                        champions[
+                                                                            parseInt(pick)
+                                                                        ].name
+                                                                    }
+                                                                    class="h-full w-full translate-x-[15%] scale-[1.25] object-cover object-[center_25%]"
+                                                                />
+                                                                <div class="absolute inset-0 bg-gradient-to-l from-transparent via-transparent via-50% to-black" />
+                                                                <span class="absolute bottom-2 left-3 text-lg font-semibold tracking-wide text-slate-100 drop-shadow-lg">
+                                                                    {
+                                                                        champions[
+                                                                            parseInt(pick)
+                                                                        ].name
+                                                                    }
+                                                                </span>
+                                                            </Show>
+                                                        </div>
+                                                    )}
+                                                </For>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Ready/Lock In Button or Resume Button */}
+                                    <Show when={!versusState().completed}>
+                                        <div class="flex justify-center">
+                                            <Show
+                                                when={
+                                                    versusState().isPaused &&
+                                                    draftStarted() &&
+                                                    !isSpectator()
+                                                }
+                                                fallback={
+                                                    <ReadyButton
+                                                        isReady={
+                                                            myEffectiveSide() === "blue"
+                                                                ? versusState()
+                                                                      .readyStatus.blue
+                                                                : versusState()
+                                                                      .readyStatus.red
+                                                        }
+                                                        opponentReady={
+                                                            myEffectiveSide() === "blue"
+                                                                ? versusState()
+                                                                      .readyStatus.red
+                                                                : versusState()
+                                                                      .readyStatus.blue
+                                                        }
+                                                        draftStarted={draftStarted()}
+                                                        isSpectator={isSpectator()}
+                                                        onReady={handleReady}
+                                                        onUnready={handleUnready}
+                                                        onLockIn={handleLockIn}
+                                                        disabled={
+                                                            !isMyTurn() ||
+                                                            !hasPendingPick() ||
+                                                            versusState().isPaused
+                                                        }
+                                                    />
+                                                }
+                                            >
+                                                <button
+                                                    onClick={handlePause}
+                                                    class="w-52 rounded-lg border-2 border-orange-500/60 bg-orange-500/15 py-4 text-center text-[0.95rem] font-bold uppercase tracking-wider text-orange-400 transition-all duration-300 ease-out hover:scale-105 hover:bg-orange-500/25 active:scale-95"
+                                                >
+                                                    Resume Draft
+                                                </button>
+                                            </Show>
+                                        </div>
+                                    </Show>
                                 </div>
-                                <GameSettingsGrid
-                                    draftId={params.draftId}
-                                    teamOneName={
-                                        versusDraftQuery.data?.blueTeamName ?? ""
+
+                                {/* Champion Panel */}
+                                <ChampionPanel
+                                    restrictedByGame={restrictedByGame}
+                                    restrictedChampions={restrictedChampions}
+                                    restrictedChampionGameMap={restrictedChampionGameMap}
+                                    disabledChampions={() =>
+                                        versusDraftQuery.data?.disabledChampions ?? []
                                     }
-                                    teamTwoName={versusDraftQuery.data?.redTeamName ?? ""}
-                                    blueSideTeam={
-                                        (versusState().blueSideTeam || 1) as 1 | 2
-                                    }
-                                    firstPick={versusState().firstPick || "blue"}
-                                    canEdit={true}
-                                    onSettingsChange={handleConfirmSettingsChange}
+                                    draft={() => draftQuery.data}
+                                    versusDraft={() => versusDraftQuery.data}
+                                    isMyTurn={isMyTurn}
+                                    isPaused={() => versusState().isPaused}
+                                    getCurrentPendingChampion={getCurrentPendingChampion}
+                                    onChampionSelect={handleChampionSelect}
                                 />
                             </div>
-                            <div class="border-t border-slate-700/50 px-8 pb-8 pt-4 text-center">
-                                <button
-                                    class="w-full rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-slate-50 transition-colors hover:bg-orange-500"
-                                    onClick={handleConfirmGame}
-                                >
-                                    Continue as {myTeamIdentity()} Captain
-                                </button>
-                                <button
-                                    class="mt-2 block w-full text-xs text-slate-500 transition-colors hover:text-slate-400"
-                                    onClick={() => {
-                                        const vd = versusContext().versusDraft;
-                                        if (vd) navigate(`/versus/join/${vd.shareLink}`);
-                                    }}
-                                >
-                                    Switch teams
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </Show>
-                <Show when={!needsGameConfirm()}>
-                    <div class="flex h-full min-w-0 flex-1 flex-col bg-slate-900">
-                        {/* Main Content */}
-                        <div class="flex flex-1 overflow-hidden">
-                            {/* Drafts Display - now takes full remaining width */}
-                            <div class="flex min-w-0 flex-1 flex-col p-6">
-                                {/* Team Names */}
-                                <div class="mb-4 flex items-center">
-                                    {/* Blue Team */}
-                                    <div class="flex min-w-0 flex-1 flex-col items-start gap-1">
-                                        <div class="h-5">
-                                            <Show
-                                                when={
-                                                    (versusState().firstPick ||
-                                                        "blue") === "blue"
-                                                }
-                                            >
-                                                <span class="rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
-                                                    1st Pick
-                                                </span>
-                                            </Show>
-                                        </div>
-                                        <div class="text-xl font-bold text-blue-400">
-                                            {blueSideTeamName()}
-                                        </div>
-                                        <Show when={!draftStarted()}>
-                                            <div
-                                                class={`flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${
-                                                    versusState().readyStatus.blue
-                                                        ? "border border-emerald-500/50 bg-emerald-500/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
-                                                        : "border border-slate-600/50 bg-slate-700/50 text-slate-500"
-                                                }`}
-                                            >
-                                                <div
-                                                    class={`h-2 w-2 rounded-full transition-all duration-300 ${
-                                                        versusState().readyStatus.blue
-                                                            ? "animate-pulse bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
-                                                            : "bg-slate-500"
-                                                    }`}
-                                                />
-                                                <span>
-                                                    {versusState().readyStatus.blue
-                                                        ? "Ready"
-                                                        : "Not Ready"}
-                                                </span>
-                                            </div>
-                                        </Show>
-                                    </div>
-                                    <div class="flex flex-col items-center gap-1">
-                                        <span
-                                            class={`rounded bg-slate-700 px-2 py-0.5 text-xs font-semibold ${gameTextColors[(draftQuery.data?.seriesIndex ?? 0) + 1] ?? "text-slate-300"}`}
-                                        >
-                                            Game {(draftQuery.data?.seriesIndex ?? 0) + 1}
-                                        </span>
-                                        <span class="text-slate-500">vs</span>
-                                        <Show
-                                            when={!versusState().completed}
-                                            fallback={
-                                                <Show when={nextGame()}>
-                                                    <button
-                                                        onClick={() =>
-                                                            navigate(
-                                                                `/versus/${params.id}/draft/${nextGame()?.id ?? ""}`
-                                                            )
-                                                        }
-                                                        class="group mt-1 flex items-center gap-2 text-orange-400 transition-colors hover:text-orange-300"
-                                                    >
-                                                        <span class="text-sm font-medium">
-                                                            Next Game
-                                                        </span>
-                                                        <span class="transition-transform group-hover:translate-x-1">
-                                                            →
-                                                        </span>
-                                                    </button>
-                                                </Show>
-                                            }
-                                        >
-                                            <VersusTimer
-                                                timerStartedAt={
-                                                    versusState().timerStartedAt
-                                                }
-                                                duration={30}
-                                                isPaused={versusState().isPaused}
-                                            />
-                                        </Show>
-                                    </div>
-                                    {/* Red Team */}
-                                    <div class="flex min-w-0 flex-1 flex-col items-end gap-1">
-                                        <div class="h-5">
-                                            <Show
-                                                when={
-                                                    (versusState().firstPick ||
-                                                        "blue") === "red"
-                                                }
-                                            >
-                                                <span class="rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
-                                                    1st Pick
-                                                </span>
-                                            </Show>
-                                        </div>
-                                        <div class="text-xl font-bold text-red-400">
-                                            {redSideTeamName()}
-                                        </div>
-                                        <Show when={!draftStarted()}>
-                                            <div
-                                                class={`flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${
-                                                    versusState().readyStatus.red
-                                                        ? "border border-emerald-500/50 bg-emerald-500/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
-                                                        : "border border-slate-600/50 bg-slate-700/50 text-slate-500"
-                                                }`}
-                                            >
-                                                <div
-                                                    class={`h-2 w-2 rounded-full transition-all duration-300 ${
-                                                        versusState().readyStatus.red
-                                                            ? "animate-pulse bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
-                                                            : "bg-slate-500"
-                                                    }`}
-                                                />
-                                                <span>
-                                                    {versusState().readyStatus.red
-                                                        ? "Ready"
-                                                        : "Not Ready"}
-                                                </span>
-                                            </div>
-                                        </Show>
-                                    </div>
-                                </div>
 
-                                {/* Bans */}
-                                <div class="mb-6 mt-2">
-                                    <div class="flex justify-between gap-[clamp(1rem,5vw,6rem)]">
-                                        <div class="flex min-w-0 flex-1 gap-2">
-                                            <For each={getTeamBans("blue")}>
-                                                {(ban, index) => (
-                                                    <div
-                                                        class={`relative aspect-square flex-1 overflow-hidden rounded border-2 bg-slate-800 transition-all ${
-                                                            isBanActive("blue", index())
-                                                                ? "animate-pulse border-orange-400 ring-4 ring-orange-400/50"
-                                                                : "border-blue-600/30"
-                                                        }`}
-                                                    >
-                                                        <Show when={ban && ban !== ""}>
-                                                            <img
-                                                                src={
-                                                                    champions[
-                                                                        parseInt(ban)
-                                                                    ].img
-                                                                }
-                                                                alt=""
-                                                                class="h-full w-full object-cover"
-                                                            />
-                                                            <div class="absolute inset-0 flex items-center justify-center">
-                                                                <div class="h-[100%] w-1 -rotate-45 bg-slate-200" />
-                                                            </div>
-                                                        </Show>
-                                                    </div>
-                                                )}
-                                            </For>
-                                        </div>
-                                        <div class="flex min-w-0 flex-1 gap-2">
-                                            <For each={getTeamBans("red")}>
-                                                {(ban, index) => (
-                                                    <div
-                                                        class={`relative aspect-square flex-1 overflow-hidden rounded border-2 bg-slate-800 transition-all ${
-                                                            isBanActive("red", index())
-                                                                ? "animate-pulse border-orange-400 ring-4 ring-orange-400/50"
-                                                                : "border-red-600/30"
-                                                        }`}
-                                                    >
-                                                        <Show when={ban && ban !== ""}>
-                                                            <img
-                                                                src={
-                                                                    champions[
-                                                                        parseInt(ban)
-                                                                    ].img
-                                                                }
-                                                                alt=""
-                                                                class="h-full w-full object-cover"
-                                                            />
-                                                            <div class="absolute inset-0 flex items-center justify-center">
-                                                                <div class="h-[100%] w-1 -rotate-45 bg-slate-200" />
-                                                            </div>
-                                                        </Show>
-                                                    </div>
-                                                )}
-                                            </For>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Picks */}
-                                <div class="mb-6 flex min-h-0 flex-1 gap-[clamp(1rem,4vw,6rem)]">
-                                    {/* Blue Picks */}
-                                    <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-                                        <div class="flex min-h-0 flex-1 flex-col gap-2">
-                                            <For each={getTeamPicks("blue")}>
-                                                {(pick, index) => (
-                                                    <div
-                                                        class={`relative min-h-0 flex-1 overflow-hidden rounded border-2 bg-slate-900 transition-all ${
-                                                            isPickActive("blue", index())
-                                                                ? "animate-pulse border-orange-400 ring-4 ring-orange-400/50"
-                                                                : "border-blue-600/30"
-                                                        } ${isSlotAnimating("blue", "pick", index()) ? "animate-pop" : ""}`}
-                                                    >
-                                                        <Show when={pick && pick !== ""}>
-                                                            <img
-                                                                src={getSplashUrl(
-                                                                    champions[
-                                                                        parseInt(pick)
-                                                                    ].name
-                                                                )}
-                                                                alt={
-                                                                    champions[
-                                                                        parseInt(pick)
-                                                                    ].name
-                                                                }
-                                                                class="h-full w-full -translate-x-[15%] scale-[1.25] object-cover object-[center_25%]"
-                                                            />
-                                                            <div class="absolute inset-0 bg-gradient-to-r from-transparent via-transparent via-50% to-black" />
-                                                            <span class="absolute bottom-2 right-3 text-lg font-semibold tracking-wide text-slate-100 drop-shadow-lg">
-                                                                {
-                                                                    champions[
-                                                                        parseInt(pick)
-                                                                    ].name
-                                                                }
-                                                            </span>
-                                                        </Show>
-                                                    </div>
-                                                )}
-                                            </For>
-                                        </div>
-                                    </div>
-
-                                    {/* Red Picks */}
-                                    <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-                                        <div class="flex min-h-0 flex-1 flex-col gap-2">
-                                            <For each={getTeamPicks("red")}>
-                                                {(pick, index) => (
-                                                    <div
-                                                        class={`relative min-h-0 flex-1 overflow-hidden rounded border-2 bg-slate-900 transition-all ${
-                                                            isPickActive("red", index())
-                                                                ? "animate-pulse border-orange-400 ring-4 ring-orange-400/50"
-                                                                : "border-red-600/30"
-                                                        } ${isSlotAnimating("red", "pick", index()) ? "animate-pop" : ""}`}
-                                                    >
-                                                        <Show when={pick && pick !== ""}>
-                                                            <img
-                                                                src={getSplashUrl(
-                                                                    champions[
-                                                                        parseInt(pick)
-                                                                    ].name
-                                                                )}
-                                                                alt={
-                                                                    champions[
-                                                                        parseInt(pick)
-                                                                    ].name
-                                                                }
-                                                                class="h-full w-full translate-x-[15%] scale-[1.25] object-cover object-[center_25%]"
-                                                            />
-                                                            <div class="absolute inset-0 bg-gradient-to-l from-transparent via-transparent via-50% to-black" />
-                                                            <span class="absolute bottom-2 left-3 text-lg font-semibold tracking-wide text-slate-100 drop-shadow-lg">
-                                                                {
-                                                                    champions[
-                                                                        parseInt(pick)
-                                                                    ].name
-                                                                }
-                                                            </span>
-                                                        </Show>
-                                                    </div>
-                                                )}
-                                            </For>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Ready/Lock In Button or Resume Button */}
-                                <Show when={!versusState().completed}>
-                                    <div class="flex justify-center">
-                                        <Show
-                                            when={
-                                                versusState().isPaused &&
-                                                draftStarted() &&
-                                                !isSpectator()
-                                            }
-                                            fallback={
-                                                <ReadyButton
-                                                    isReady={
-                                                        myEffectiveSide() === "blue"
-                                                            ? versusState().readyStatus
-                                                                  .blue
-                                                            : versusState().readyStatus
-                                                                  .red
-                                                    }
-                                                    opponentReady={
-                                                        myEffectiveSide() === "blue"
-                                                            ? versusState().readyStatus
-                                                                  .red
-                                                            : versusState().readyStatus
-                                                                  .blue
-                                                    }
-                                                    draftStarted={draftStarted()}
-                                                    isSpectator={isSpectator()}
-                                                    onReady={handleReady}
-                                                    onUnready={handleUnready}
-                                                    onLockIn={handleLockIn}
-                                                    disabled={
-                                                        !isMyTurn() ||
-                                                        !hasPendingPick() ||
-                                                        versusState().isPaused
-                                                    }
-                                                />
-                                            }
-                                        >
-                                            <button
-                                                onClick={handlePause}
-                                                class="w-52 rounded-lg border-2 border-orange-500/60 bg-orange-500/15 py-4 text-center text-[0.95rem] font-bold uppercase tracking-wider text-orange-400 transition-all duration-300 ease-out hover:scale-105 hover:bg-orange-500/25 active:scale-95"
-                                            >
-                                                Resume Draft
-                                            </button>
-                                        </Show>
-                                    </div>
-                                </Show>
-                            </div>
-
-                            {/* Champion Panel */}
-                            <ChampionPanel
-                                restrictedByGame={restrictedByGame}
-                                restrictedChampions={restrictedChampions}
-                                restrictedChampionGameMap={restrictedChampionGameMap}
-                                disabledChampions={() =>
-                                    versusDraftQuery.data?.disabledChampions ?? []
-                                }
-                                draft={() => draftQuery.data}
-                                versusDraft={() => versusDraftQuery.data}
-                                isMyTurn={isMyTurn}
-                                isPaused={() => versusState().isPaused}
-                                getCurrentPendingChampion={getCurrentPendingChampion}
-                                onChampionSelect={handleChampionSelect}
+                            {/* Modals */}
+                            <WinnerDeclarationModal
+                                isOpen={showWinnerModal()}
+                                blueTeamName={versusDraftQuery.data?.blueTeamName ?? ""}
+                                redTeamName={versusDraftQuery.data?.redTeamName ?? ""}
+                                onDeclareWinner={handleDeclareWinner}
+                                isSpectator={isSpectator()}
                             />
-                        </div>
 
-                        {/* Modals */}
-                        <WinnerDeclarationModal
-                            isOpen={showWinnerModal()}
-                            blueTeamName={versusDraftQuery.data?.blueTeamName ?? ""}
-                            redTeamName={versusDraftQuery.data?.redTeamName ?? ""}
-                            onDeclareWinner={handleDeclareWinner}
-                            isSpectator={isSpectator()}
-                        />
+                            <PauseRequestModal
+                                isOpen={showPauseRequest()}
+                                requestType={pauseRequestType()}
+                                requestingTeam={pauseRequestTeam()}
+                                blueSideTeam={
+                                    versusState().blueSideTeam ??
+                                    draftQuery.data?.blueSideTeam ??
+                                    1
+                                }
+                                blueTeamName={versusDraftQuery.data?.blueTeamName ?? ""}
+                                redTeamName={versusDraftQuery.data?.redTeamName ?? ""}
+                                onApprove={handleApproveRequest}
+                                onReject={handleRejectRequest}
+                            />
 
-                        <PauseRequestModal
-                            isOpen={showPauseRequest()}
-                            requestType={pauseRequestType()}
-                            requestingTeam={pauseRequestTeam()}
-                            blueSideTeam={
-                                versusState().blueSideTeam ??
-                                draftQuery.data?.blueSideTeam ??
-                                1
-                            }
-                            blueTeamName={versusDraftQuery.data?.blueTeamName ?? ""}
-                            redTeamName={versusDraftQuery.data?.redTeamName ?? ""}
-                            onApprove={handleApproveRequest}
-                            onReject={handleRejectRequest}
-                        />
-
-                        {/* Resume Countdown Overlay */}
-                        <Show when={isCountingDown()}>
-                            <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-                                <div class="text-center">
-                                    <div class="mb-4 animate-pulse text-9xl font-bold text-orange-400">
-                                        {countdownValue()}
+                            {/* Resume Countdown Overlay */}
+                            <Show when={isCountingDown()}>
+                                <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+                                    <div class="text-center">
+                                        <div class="mb-4 animate-pulse text-9xl font-bold text-orange-400">
+                                            {countdownValue()}
+                                        </div>
+                                        <p class="text-2xl font-semibold text-slate-300">
+                                            Resuming...
+                                        </p>
                                     </div>
-                                    <p class="text-2xl font-semibold text-slate-300">
-                                        Resuming...
-                                    </p>
                                 </div>
-                            </div>
-                        </Show>
-                    </div>
+                            </Show>
+                        </div>
+                    </Show>
                 </Show>
             </Show>
-        </Show>
         </>
     );
 };

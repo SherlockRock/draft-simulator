@@ -97,7 +97,11 @@ const VersusSeriesOverview: Component = () => {
 
     return (
         <div class="flex-1 overflow-auto bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
-            <Title>{versusDraft()?.blueTeamName && versusDraft()?.redTeamName ? `${versusDraft()?.blueTeamName} vs ${versusDraft()?.redTeamName} - First Pick` : "Versus Series - First Pick"}</Title>
+            <Title>
+                {versusDraft()?.blueTeamName && versusDraft()?.redTeamName
+                    ? `${versusDraft()?.blueTeamName} vs ${versusDraft()?.redTeamName} - First Pick`
+                    : "Versus Series - First Pick"}
+            </Title>
             <Show
                 when={isConnected()}
                 fallback={

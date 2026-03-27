@@ -93,11 +93,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
 
         return champions
             .map((champ, index) => ({ champ, index: String(index) }))
-            .filter(
-                ({ index }) =>
-                    !restricted.has(index) &&
-                    !disabled.has(index)
-            );
+            .filter(({ index }) => !restricted.has(index) && !disabled.has(index));
     });
 
     // Inner component for a single game's restricted champions row
@@ -321,7 +317,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                                     index
                                                                 )
                                                             }
-                                                            class={`relative aspect-square w-full overflow-hidden rounded border-2 [contain:content] transition-[transform,border-color,box-shadow] duration-150 ${
+                                                            class={`relative aspect-square w-full overflow-hidden rounded border-2 transition-[transform,border-color,box-shadow] duration-150 [contain:content] ${
                                                                 isPendingSelection()
                                                                     ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
                                                                     : isPicked() &&
@@ -452,7 +448,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                                 champId()
                                                             )
                                                         }
-                                                        class={`relative aspect-square w-full overflow-hidden rounded border-2 [contain:content] transition-[transform,border-color,box-shadow] duration-150 ${
+                                                        class={`relative aspect-square w-full overflow-hidden rounded border-2 transition-[transform,border-color,box-shadow] duration-150 [contain:content] ${
                                                             isPendingSelection()
                                                                 ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
                                                                 : isDisabled()
