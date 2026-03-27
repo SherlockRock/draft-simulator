@@ -559,6 +559,15 @@ export const exportUserData = async () => {
     );
 };
 
+export const updateDisplayName = async (displayName: string | null) => {
+    const result = await apiPatch(
+        "/users/me",
+        { displayName },
+        z.object({ user: UserDetailsSchema })
+    );
+    return result.user;
+};
+
 export const deleteUserAccount = async (confirmEmail: string) => {
     return apiDelete("/users/me", SuccessSchema, { confirmEmail });
 };
@@ -589,4 +598,3 @@ export const fetchRecentActivity = async (
     }
     return apiGet(`/activity/recent?${params}`, ActivityResponseSchema);
 };
-

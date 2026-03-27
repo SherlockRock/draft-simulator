@@ -20,7 +20,11 @@ type UserData = {
     name: string;
     email: string;
     picture: string;
+    display_name: string | null;
 };
+
+export const getDisplayName = (u: UserData | null | undefined): string =>
+    u?.display_name ?? u?.name ?? "";
 
 interface UserAccessor {
     (): UserData | null | undefined;
@@ -90,6 +94,12 @@ export function UserProvider(props: { children: JSX.Element }) {
             track(res.isNewUser ? "user_signed_up" : "user_logged_in", {
                 method: "google"
             });
+            if (res.isNewUser) {
+                toast("Tip: You can set a custom display name in Settings.", {
+                    duration: 6000
+                });
+                toast.success("Welcome to First Pick!");
+            }
         }
 
         // Check for local canvas to sync

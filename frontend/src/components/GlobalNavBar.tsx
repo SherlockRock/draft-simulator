@@ -1,7 +1,7 @@
 import { Component, Show } from "solid-js";
 import { useNavigate, useLocation } from "@solidjs/router";
 import { Pickaxe, LayoutDashboard, Swords } from "lucide-solid";
-import { useUser } from "../userProvider";
+import { useUser, getDisplayName } from "../userProvider";
 import { handleLogin, handleRevoke } from "../utils/actions";
 
 const GlobalNavBar: Component = () => {
@@ -92,16 +92,18 @@ const GlobalNavBar: Component = () => {
 
             {/* User Section */}
             <div class="flex items-center gap-3">
-                <Show when={user()?.name}>
+                <Show when={getDisplayName(user())}>
                     <div class="flex items-center gap-3">
                         <Show when={user()?.picture}>
                             <img
                                 src={user()?.picture}
-                                alt={user()?.name}
+                                alt={getDisplayName(user())}
                                 class="h-8 w-8 rounded-full"
                             />
                         </Show>
-                        <span class="font-medium text-slate-200">{user()?.name}</span>
+                        <span class="font-medium text-slate-200">
+                            {getDisplayName(user())}
+                        </span>
                         <button
                             onClick={() => navigate("/settings")}
                             class="rounded-md bg-slate-800 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-700"
@@ -116,7 +118,7 @@ const GlobalNavBar: Component = () => {
                         </button>
                     </div>
                 </Show>
-                <Show when={!user()?.name}>
+                <Show when={!getDisplayName(user())}>
                     <button
                         onClick={handleLogin}
                         class="rounded-md bg-teal-700 px-4 py-2 font-medium text-slate-100 transition-colors hover:bg-teal-600"

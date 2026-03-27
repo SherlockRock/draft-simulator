@@ -140,6 +140,7 @@ export const CanvasUserSchema = z.object({
   name: z.string(),
   email: z.string(),
   picture: z.string(),
+  display_name: z.string().nullable(),
   permissions: z.enum(["view", "edit", "admin"]),
   lastAccessedAt: z.string(),
   isOwner: z.boolean(),
@@ -276,6 +277,7 @@ export const UserDetailsSchema = z.object({
   name: z.string(),
   email: z.string(),
   picture: z.string(),
+  display_name: z.string().nullable(),
 });
 
 export const AuthResponseSchema = z.object({

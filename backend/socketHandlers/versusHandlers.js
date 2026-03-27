@@ -1299,7 +1299,7 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
       const { versusDraftId, message, role, username } = data;
       console.log("sendVersusMessage:", data);
       io.to(`versus:${versusDraftId}`).emit("newVersusMessage", {
-        username: username || socket.user?.name || socket.id,
+        username: username || socket.user?.display_name || socket.user?.name || socket.id,
         role,
         message,
         timestamp: Date.now(),

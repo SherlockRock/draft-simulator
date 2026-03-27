@@ -1468,6 +1468,7 @@ router.get("/:canvasId/users", protect, async (req, res) => {
       name: user.name,
       email: user.email,
       picture: user.picture,
+      display_name: user.display_name,
       permissions: user.UserCanvas.permissions,
       lastAccessedAt: user.UserCanvas.lastAccessedAt,
       isOwner: user.id === ownerId,

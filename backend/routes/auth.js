@@ -74,6 +74,7 @@ router.post("/google/callback", async (req, res) => {
       name: loggedInUser.name,
       email: loggedInUser.email,
       picture: loggedInUser.picture,
+      display_name: loggedInUser.display_name,
     };
 
     const accessToken = jwt.sign(user, process.env.JWT_SECRET, {
@@ -166,6 +167,7 @@ router.get("/refresh-token", async (req, res) => {
           name: loggedInUser.name,
           email: loggedInUser.email,
           picture: loggedInUser.picture,
+          display_name: loggedInUser.display_name,
         };
         const newToken = jwt.sign(user, JWT_SECRET, {
           expiresIn: "1d",

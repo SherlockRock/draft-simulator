@@ -348,13 +348,17 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                                                     <img
                                                                         src={user.picture}
                                                                         class="h-8 w-8 rounded-full"
-                                                                        alt={user.name}
+                                                                        alt={
+                                                                            user.display_name ??
+                                                                            user.name
+                                                                        }
                                                                     />
                                                                 )}
                                                                 <div>
                                                                     <div class="flex items-center gap-2">
                                                                         <span class="text-sm font-medium">
-                                                                            {user.name}
+                                                                            {user.display_name ??
+                                                                                user.name}
                                                                         </span>
                                                                         <Show
                                                                             when={isOwner()}
@@ -433,7 +437,9 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                                                 </div>
                                                                 <div>
                                                                     <span class="text-sm font-medium">
-                                                                        Remove {user.name}
+                                                                        Remove{" "}
+                                                                        {user.display_name ??
+                                                                            user.name}
                                                                         ?
                                                                     </span>
                                                                     <div class="text-xs text-slate-400">

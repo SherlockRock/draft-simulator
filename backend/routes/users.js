@@ -22,6 +22,47 @@ router.get("/", async (req, res) => {
   }
 });
 
+router.patch("/me", protect, async (req, res) => {
+  try {
+    const { displayName } = req.body;
+
+    if (displayName !== null) {
+      if (typeof displayName !== "string") {
+        return res.status(400).json({ error: "Display name must be a string or null" });
+      }
+
+      const trimmed = displayName.trim();
+
+      if (trimmed.length < 3 || trimmed.length > 16) {
+        return res.status(400).json({ error: "Display name must be 3-16 characters" });
+      }
+
+      if (!/^[a-zA-Z0-9 _]{3,16}$/.test(trimmed)) {
+        return res.status(400).json({ error: "Display name can only contain letters, numbers, spaces, and underscores" });
+      }
+
+      req.user.display_name = trimmed;
+    } else {
+      req.user.display_name = null;
+    }
+
+    await req.user.save();
+
+    res.json({
+      user: {
+        id: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+        picture: req.user.picture,
+        display_name: req.user.display_name,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to update display name:", error);
+    res.status(500).json({ error: "Failed to update display name" });
+  }
+});
+
 router.get("/me/export", protect, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -31,6 +72,7 @@ router.get("/me/export", protect, async (req, res) => {
       name: req.user.name,
       email: req.user.email,
       picture: req.user.picture,
+      display_name: req.user.display_name,
       createdAt: req.user.createdAt,
     };
 

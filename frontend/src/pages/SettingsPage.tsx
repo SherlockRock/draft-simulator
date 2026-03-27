@@ -1,11 +1,12 @@
-import { Component, Show, createSignal } from "solid-js";
+import { Component, Show, createEffect, createSignal } from "solid-js";
 import { Title } from "@solidjs/meta";
 import { useNavigate } from "@solidjs/router";
 import { Info } from "lucide-solid";
+import toast from "solid-toast";
 import { useUser } from "../userProvider";
 import { AuthGuard } from "../components/AuthGuard";
 import { DeleteAccountModal } from "../components/DeleteAccountModal";
-import { exportUserData, deleteUserAccount } from "../utils/actions";
+import { exportUserData, deleteUserAccount, updateDisplayName } from "../utils/actions";
 
 const SettingsPage: Component = () => {
     const navigate = useNavigate();
@@ -14,6 +15,55 @@ const SettingsPage: Component = () => {
     const [isExporting, setIsExporting] = createSignal(false);
     const [showDeleteModal, setShowDeleteModal] = createSignal(false);
     const [showTooltip, setShowTooltip] = createSignal(false);
+    const [displayName, setDisplayName] = createSignal("");
+    const [isSaving, setIsSaving] = createSignal(false);
+    const [nameError, setNameError] = createSignal("");
+
+    createEffect(() => {
+        const u = user();
+        if (u) setDisplayName(u.display_name ?? "");
+    });
+
+    const handleSaveDisplayName = async () => {
+        const value = displayName().trim();
+
+        if (value === "") {
+            setIsSaving(true);
+            try {
+                await updateDisplayName(null);
+                actions.refetch();
+                setNameError("");
+                toast.success("Display name reset to Google name");
+            } catch {
+                toast.error("Failed to update display name");
+            } finally {
+                setIsSaving(false);
+            }
+            return;
+        }
+
+        if (value.length < 3 || value.length > 16) {
+            setNameError("Must be 3-16 characters");
+            return;
+        }
+
+        if (!/^[a-zA-Z0-9 _]{3,16}$/.test(value)) {
+            setNameError("Only letters, numbers, spaces, and underscores");
+            return;
+        }
+
+        setIsSaving(true);
+        setNameError("");
+        try {
+            await updateDisplayName(value);
+            actions.refetch();
+            toast.success("Display name updated");
+        } catch {
+            toast.error("Failed to update display name");
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     const handleExport = async () => {
         setIsExporting(true);
@@ -79,7 +129,7 @@ const SettingsPage: Component = () => {
                                                 Data from Google:
                                             </p>
                                             <ul class="mb-2 list-inside list-disc space-y-1">
-                                                <li>Display name</li>
+                                                <li>Name</li>
                                                 <li>Email address</li>
                                                 <li>Profile picture</li>
                                             </ul>
@@ -108,6 +158,46 @@ const SettingsPage: Component = () => {
                                         Managed by Google
                                     </p>
                                 </div>
+                            </div>
+
+                            {/* Divider */}
+                            <div class="my-4 border-t border-slate-700" />
+
+                            {/* Display Name */}
+                            <div>
+                                <label class="text-xs font-medium uppercase tracking-wide text-slate-400">
+                                    Display Name
+                                </label>
+                                <div class="mt-1.5 flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={displayName()}
+                                        onInput={(e) => {
+                                            setDisplayName(e.currentTarget.value);
+                                            setNameError("");
+                                        }}
+                                        placeholder="Enter display name..."
+                                        maxLength={16}
+                                        class="flex-1 rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-teal-500 focus:outline-none"
+                                    />
+                                    <button
+                                        onClick={handleSaveDisplayName}
+                                        disabled={isSaving()}
+                                        class="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-slate-100 transition-colors hover:bg-teal-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        {isSaving() ? "Saving..." : "Save"}
+                                    </button>
+                                </div>
+                                <Show when={nameError()}>
+                                    <p class="mt-1 text-xs text-red-400">{nameError()}</p>
+                                </Show>
+                                <p class="mt-1.5 text-xs text-slate-500">
+                                    3-16 characters. Letters, numbers, spaces, and
+                                    underscores.
+                                    {displayName()
+                                        ? ""
+                                        : " Leave empty to use your Google name."}
+                                </p>
                             </div>
                         </div>
 

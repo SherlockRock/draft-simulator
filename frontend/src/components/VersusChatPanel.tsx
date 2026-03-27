@@ -44,7 +44,9 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
         if (msg && props.socket) {
             const currentUser = user();
             const username =
-                currentUser && "name" in currentUser ? currentUser.name : props.socket.id;
+                currentUser && "name" in currentUser
+                    ? (currentUser.display_name ?? currentUser.name)
+                    : props.socket.id;
 
             props.socket.emit("sendVersusMessage", {
                 versusDraftId: props.versusDraftId,
