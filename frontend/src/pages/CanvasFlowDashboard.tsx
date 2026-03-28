@@ -20,7 +20,7 @@ const CanvasFlowDashboard: Component = () => {
         <div class="flex-1 overflow-auto bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
             <Title>Canvas Dashboard - First Pick</Title>
             <Meta name="description" content="Visual workspace for organizing and planning drafts." />
-            <div class="mx-auto flex min-h-full max-w-7xl flex-col justify-center p-8">
+            <div class="mx-auto flex min-h-full max-w-7xl flex-col p-8">
                 {/* Inline banner */}
                 <div class="mx-auto mb-12 max-w-3xl">
                     <div class="relative flex items-center overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800">
@@ -57,7 +57,7 @@ const CanvasFlowDashboard: Component = () => {
 
                 {/* Recent Canvas Activity - full width of container */}
                 <Show when={user()}>
-                    <section>
+                    <section class="flex flex-1 flex-col">
                         <h2 class="mb-5 text-xl font-semibold text-slate-200">
                             Recent Canvas Activity
                         </h2>
@@ -66,6 +66,7 @@ const CanvasFlowDashboard: Component = () => {
                             resourceType="canvas"
                             accentColor="purple"
                             emptyMessage="No recent canvas activity"
+                            keyboardControls={user()?.keyboard_controls ?? false}
                         />
                     </section>
                 </Show>

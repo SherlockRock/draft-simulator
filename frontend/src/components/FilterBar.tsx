@@ -9,6 +9,10 @@ const accentStyles = {
     purple: {
         active: "border-purple-500",
         idle: "border-transparent focus-within:border-purple-400"
+    },
+    teal: {
+        active: "border-teal-500",
+        idle: "border-transparent focus-within:border-teal-400"
     }
 } as const;
 
@@ -26,7 +30,7 @@ export const FilterBar: Component<FilterBarProps> = (props) => {
 
     return (
         <div
-            class={`flex overflow-hidden bg-slate-800 transition-all duration-200 ${
+            class={`flex flex-1 min-w-0 overflow-hidden bg-inherit transition-all duration-200 ${
                 accent()
                     ? `rounded-b-sm rounded-t-md border-b-2 ${props.searchText() !== "" ? accent()!.active : accent()!.idle}`
                     : "rounded-md"

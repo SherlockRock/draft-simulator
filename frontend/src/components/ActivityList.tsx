@@ -12,6 +12,7 @@ import { useSearchParams } from "@solidjs/router";
 import { useInfiniteQuery } from "@tanstack/solid-query";
 import { fetchRecentActivity } from "../utils/actions";
 import ActivityItem from "./ActivityItem";
+import { FilterBar } from "./FilterBar";
 import { StyledSelect } from "./StyledSelect";
 import { SelectTheme } from "../utils/selectTheme";
 
@@ -23,6 +24,7 @@ interface ActivityListProps {
     resourceType?: "draft" | "canvas" | "versus";
     accentColor?: AccentColor;
     emptyMessage?: string;
+    keyboardControls?: boolean;
 }
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
@@ -44,6 +46,50 @@ const ActivityList: Component<ActivityListProps> = (props) => {
         getParamString(searchParams.search)
     );
     let debounceTimeout: number | undefined;
+    let filterInputRef: HTMLInputElement | undefined;
+
+    // Window-level keydown listener for type-anywhere filtering
+    if (props.keyboardControls) {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Skip if any input/textarea/select is focused (except our FilterBar)
+            const active = document.activeElement;
+            if (
+                active &&
+                active !== filterInputRef &&
+                (active.tagName === "INPUT" ||
+                    active.tagName === "TEXTAREA" ||
+                    active.tagName === "SELECT")
+            ) {
+                return;
+            }
+
+            // Escape: clear search and blur
+            if (e.key === "Escape") {
+                if (searchInput() !== "") {
+                    handleSearchInput("");
+                    filterInputRef?.blur();
+                    e.preventDefault();
+                }
+                return;
+            }
+
+            // Skip modifier keys, function keys, and non-printable keys
+            if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) {
+                return;
+            }
+
+            // If FilterBar input is already focused, let native handling work
+            if (document.activeElement === filterInputRef) return;
+
+            // Redirect: focus input, set search text
+            e.preventDefault();
+            handleSearchInput(searchInput() + e.key);
+            filterInputRef?.focus();
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
+    }
 
     // Read sort from URL, default to "recent"
     const currentSort = createMemo(
@@ -108,15 +154,14 @@ const ActivityList: Component<ActivityListProps> = (props) => {
     };
 
     return (
-        <div>
+        <div class="flex flex-1 flex-col">
             {/* Filter Controls - matches champion search layout */}
             <div class="mb-4 flex gap-2">
-                <input
-                    type="text"
-                    placeholder="Search..."
-                    value={searchInput()}
-                    onInput={(e) => handleSearchInput(e.currentTarget.value)}
-                    class="w-full bg-transparent p-2 text-slate-50 placeholder:text-slate-200 focus:outline-none"
+                <FilterBar
+                    searchText={searchInput}
+                    onSearchChange={handleSearchInput}
+                    inputRef={(el) => (filterInputRef = el)}
+                    accent={props.accentColor}
                 />
                 <StyledSelect
                     value={currentSort()}
@@ -141,10 +186,12 @@ const ActivityList: Component<ActivityListProps> = (props) => {
                             (page) => page.activities.length > 0
                         )}
                         fallback={
-                            <div class="rounded-lg border border-slate-700/50 bg-slate-800/50 p-8 text-center text-slate-400">
-                                {currentSearch()
-                                    ? `No activities matching "${currentSearch()}"`
-                                    : props.emptyMessage || "No recent activity"}
+                            <div class="flex flex-1 items-center justify-center">
+                                <div class="rounded-lg border border-slate-700/50 bg-slate-800/50 p-8 text-center text-slate-400">
+                                    {currentSearch()
+                                        ? `No activities matching "${currentSearch()}"`
+                                        : props.emptyMessage || "No recent activity"}
+                                </div>
                             </div>
                         }
                     >

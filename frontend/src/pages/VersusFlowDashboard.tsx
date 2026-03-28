@@ -58,7 +58,7 @@ const VersusFlowDashboard: Component = () => {
         <div class="flex-1 overflow-auto bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
             <Title>Versus - First Pick</Title>
             <Meta name="description" content="Real-time collaborative drafting against opponents." />
-            <div class="mx-auto flex min-h-full max-w-7xl flex-col justify-center p-8">
+            <div class="mx-auto flex min-h-full max-w-7xl flex-col p-8">
                 {/* Inline banner */}
                 <div class="mx-auto mb-12 max-w-3xl">
                     <div class="relative flex items-center overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800">
@@ -95,7 +95,7 @@ const VersusFlowDashboard: Component = () => {
 
                 {/* Recent Versus Activity - full width of container */}
                 <Show when={user()}>
-                    <section>
+                    <section class="flex flex-1 flex-col">
                         <h2 class="mb-5 text-xl font-semibold text-slate-200">
                             Recent Versus Activity
                         </h2>
@@ -104,6 +104,7 @@ const VersusFlowDashboard: Component = () => {
                             resourceType="versus"
                             accentColor="orange"
                             emptyMessage="No recent versus activity. Create your first versus draft to get started!"
+                            keyboardControls={user()?.keyboard_controls ?? false}
                         />
                     </section>
                 </Show>
