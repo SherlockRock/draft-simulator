@@ -55,7 +55,7 @@ const DraftDetailView: Component = () => {
     });
 
     return (
-        <div class="flex-1 overflow-y-auto">
+        <div class="flex-1 overflow-y-auto bg-slate-700 bg-[radial-gradient(circle,rgba(148,163,184,0.15)_1px,transparent_1px)] bg-[length:32px_32px]">
             <Title>Draft - First Pick</Title>
             <Show
                 when={draft()}

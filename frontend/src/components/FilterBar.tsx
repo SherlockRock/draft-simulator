@@ -30,7 +30,7 @@ export const FilterBar: Component<FilterBarProps> = (props) => {
 
     return (
         <div
-            class={`flex flex-1 min-w-0 overflow-hidden bg-inherit transition-all duration-200 ${
+            class={`flex min-w-0 w-full overflow-hidden bg-inherit transition-all duration-200 ${
                 accent()
                     ? `rounded-b-sm rounded-t-md border-b-2 ${props.searchText() !== "" ? accent()!.active : accent()!.idle}`
                     : "rounded-md"
@@ -42,7 +42,7 @@ export const FilterBar: Component<FilterBarProps> = (props) => {
                 value={props.searchText()}
                 onInput={(e) => props.onSearchChange(e.currentTarget.value)}
                 placeholder={props.searchPlaceholder || "Search..."}
-                class="w-full bg-inherit p-2 text-slate-50 placeholder:text-slate-400 focus:outline-none"
+                class="min-w-0 flex-1 bg-inherit p-2 text-slate-50 placeholder:text-slate-400 focus:outline-none"
             />
             <button
                 type="button"

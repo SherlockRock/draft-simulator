@@ -13,11 +13,11 @@ import {
     JSX,
     Show
 } from "solid-js";
-import { championCategories, champions, sortOptions } from "./utils/constants";
+import { championCategories, champions } from "./utils/constants";
 import { useNavigate, useParams } from "@solidjs/router";
 import { useCanvasSocket } from "./providers/CanvasSocketProvider";
-import { SearchableSelect } from "./components/SearchableSelect";
 import { FilterBar } from "./components/FilterBar";
+import { RoleFilter } from "./components/RoleFilter";
 import {
     createDraggable,
     createDroppable,
@@ -29,6 +29,7 @@ import {
 import type { Draft as DraftType, draft } from "./utils/schemas";
 import BlankSquare from "/src/assets/BlankSquare.webp";
 import { SelectTheme } from "./utils/selectTheme";
+import { useMultiFilterableItems } from "./hooks/useFilterableItems";
 
 type draggableProps = {
     name: string;
@@ -70,18 +71,69 @@ type props = {
     blueTeamName?: string;
     redTeamName?: string;
     theme?: SelectTheme;
+    restrictedChampions?: () => string[];
+    disabledChampions?: () => string[];
 };
 
 function Draft(props: props) {
     const params = useParams();
     const navigate = useNavigate();
     const { socket: socketAccessor } = useCanvasSocket();
-    const [searchWord, setSearchWord] = createSignal("");
     const [selectedChampion, setSelectedChampion] = createSignal("");
-    const [selectText, setSelectText] = createSignal("");
-    const [currentlySelected, setCurrentlySelected] = createSignal("");
     const [currentDragged, setCurrentDragged] = createSignal("");
     const [anonDraft, setAnonDraft] = createSignal<boolean>(true);
+    let filterInputRef: HTMLInputElement | undefined;
+    const {
+        searchText,
+        setSearchText,
+        selectedCategories,
+        toggleCategory,
+        filteredItems: filteredChampions,
+        categories: championCategoryList,
+        clearCategories
+    } = useMultiFilterableItems({
+        items: champions,
+        categoryMap: championCategories
+    });
+
+    const handleSearchInput = (value: string) => {
+        setSearchText(value);
+    };
+
+    const handleFilterKeyDown = (e: KeyboardEvent) => {
+        const active = document.activeElement;
+        if (
+            active &&
+            active !== filterInputRef &&
+            (active.tagName === "INPUT" ||
+                active.tagName === "TEXTAREA" ||
+                active.tagName === "SELECT")
+        ) {
+            return;
+        }
+
+        if (e.key === "Escape") {
+            if (searchText() !== "") {
+                handleSearchInput("");
+                filterInputRef?.blur();
+                e.preventDefault();
+            }
+            return;
+        }
+
+        if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) {
+            return;
+        }
+
+        if (document.activeElement === filterInputRef) return;
+
+        e.preventDefault();
+        handleSearchInput(searchText() + e.key);
+        filterInputRef?.focus();
+    };
+
+    window.addEventListener("keydown", handleFilterKeyDown);
+    onCleanup(() => window.removeEventListener("keydown", handleFilterKeyDown));
 
     createEffect(() => {
         const holdDraft = props.draft();
@@ -112,11 +164,6 @@ function Draft(props: props) {
             socket.off("draftUpdate");
         });
     });
-
-    const handleSelectText = (newText: string) => {
-        setSelectText(newText);
-        setCurrentlySelected("");
-    };
 
     const handlePick = (index: number, championId: string) => {
         if (props.isLocked) return;
@@ -165,6 +212,9 @@ function Draft(props: props) {
 
     const tableClass = (champ: string) => {
         const champNum = String(champions.findIndex((c) => c.name === champ));
+        if (unavailableSet().has(champNum)) {
+            return "block w-full border-2 border-red-900/50 brightness-[30%] cursor-not-allowed";
+        }
         if (selectedChampion() === champNum) {
             return "block w-full border-2 border-blue-700 hover:cursor-move";
         } else if (props.draft()?.picks.includes(champNum)) {
@@ -188,28 +238,28 @@ function Draft(props: props) {
 
     const handleSelectedChamp = (champ: string) => {
         if (props.isLocked) return;
+        if (unavailableSet().has(champ)) return;
         if (!props.draft()?.picks.includes(champ)) {
             setSelectedChampion(champ);
         }
-    };
-
-    const onValidSelect = (newValue: string) => {
-        setCurrentlySelected(newValue);
-    };
-
-    const sortChamps = (searchWord: string, currentlySorting: string) => {
-        const indices = championCategories[currentlySorting];
-        const holdChamps = indices ? indices.map((i) => champions[i]) : [...champions];
-        return holdChamps.filter((champ) =>
-            champ.name.toLowerCase().includes(searchWord)
-        );
     };
 
     const champNumberToImg = (champ: string) => {
         return champ === "" ? "" : champions[Number(champ)].img;
     };
 
-    const holdChamps = createMemo(() => sortChamps(searchWord(), selectText()));
+    const unavailableSet = createMemo(() => {
+        const set = new Set<string>();
+        for (const id of props.restrictedChampions?.() ?? []) set.add(id);
+        for (const id of props.disabledChampions?.() ?? []) set.add(id);
+        return set;
+    });
+
+    const availableChampions = createMemo(() =>
+        filteredChampions().filter(
+            ({ originalIndex }) => !unavailableSet().has(String(originalIndex))
+        )
+    );
 
     return (
         <div class="flex h-full w-full flex-col px-2" draggable="false">
@@ -372,22 +422,25 @@ function Draft(props: props) {
                                         )}
                                     </Index>
                                 </div>
-                                <div class="flex min-h-0 w-[min(40vw,600px)] flex-col rounded-t-md">
-                                    <FilterBar
-                                        searchText={searchWord}
-                                        onSearchChange={setSearchWord}
-                                        searchPlaceholder="Search Champions..."
-                                    >
-                                        <SearchableSelect
-                                            placeholder="Sort by Role"
-                                            currentlySelected={currentlySelected()}
-                                            sortOptions={sortOptions}
-                                            selectText={selectText()}
-                                            setSelectText={handleSelectText}
-                                            onValidSelect={onValidSelect}
+                                <div class="flex min-h-0 w-[min(40vw,600px)] flex-col">
+                                    <div class="rounded-t-md border-b border-slate-700 bg-slate-700 px-4 py-3">
+                                        <FilterBar
+                                            searchText={searchText}
+                                            onSearchChange={handleSearchInput}
+                                            searchPlaceholder="Search champions..."
+                                            accent={props.theme}
+                                            inputRef={(el) => {
+                                                filterInputRef = el;
+                                            }}
+                                        />
+                                        <RoleFilter
+                                            categories={championCategoryList}
+                                            selectedCategories={selectedCategories}
+                                            onToggle={toggleCategory}
+                                            onClearAll={clearCategories}
                                             theme={props.theme}
                                         />
-                                    </FilterBar>
+                                    </div>
                                     <div class="custom-scrollbar min-h-0 flex-1 overflow-auto">
                                         <Droppable id={-1}>
                                             <div
@@ -398,11 +451,11 @@ function Draft(props: props) {
                                                 }}
                                             >
                                                 {/* Table Search Results */}
-                                                <For each={holdChamps()}>
-                                                    {(champ, index) => (
+                                                <For each={availableChampions()}>
+                                                    {({ item: champ, originalIndex }) => (
                                                         <>
                                                             <DraggableWrapper
-                                                                name={`unpicked-${index()}`}
+                                                                name={`unpicked-${originalIndex}`}
                                                             >
                                                                 <img
                                                                     class={tableClass(
@@ -412,7 +465,7 @@ function Draft(props: props) {
                                                                     onClick={() =>
                                                                         handleSelectedChamp(
                                                                             String(
-                                                                                index()
+                                                                                originalIndex
                                                                             )
                                                                         )
                                                                     }

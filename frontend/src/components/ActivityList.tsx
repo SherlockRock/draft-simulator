@@ -157,12 +157,14 @@ const ActivityList: Component<ActivityListProps> = (props) => {
         <div class="flex flex-1 flex-col">
             {/* Filter Controls - matches champion search layout */}
             <div class="mb-4 flex gap-2">
-                <FilterBar
-                    searchText={searchInput}
-                    onSearchChange={handleSearchInput}
-                    inputRef={(el) => (filterInputRef = el)}
-                    accent={props.accentColor}
-                />
+                <div class="min-w-0 flex-1">
+                    <FilterBar
+                        searchText={searchInput}
+                        onSearchChange={handleSearchInput}
+                        inputRef={(el) => (filterInputRef = el)}
+                        accent={props.accentColor}
+                    />
+                </div>
                 <StyledSelect
                     value={currentSort()}
                     onChange={(value) => handleSortChange(value as SortOption)}
