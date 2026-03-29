@@ -15,6 +15,16 @@ export class ValidationError extends Error {
     }
 }
 
+export class ApiError extends Error {
+    public status: number;
+
+    constructor(status: number) {
+        super(`API error: ${status}`);
+        this.name = "ApiError";
+        this.status = status;
+    }
+}
+
 const BASE_URL =
     import.meta.env.VITE_ENVIRONMENT === "production"
         ? `${import.meta.env.VITE_API_URL}/api`
@@ -98,7 +108,7 @@ export async function apiGet<T>(path: string, schema: z.ZodType<T>): Promise<T> 
         credentials: "include"
     });
     if (!res.ok) {
-        throw new Error(`API error: ${res.status}`);
+        throw new ApiError(res.status);
     }
     const data = await res.json();
     return validateResponse(data, schema);
@@ -119,7 +129,7 @@ export async function apiPost<T>(
         body: JSON.stringify(body)
     });
     if (!res.ok) {
-        throw new Error(`API error: ${res.status}`);
+        throw new ApiError(res.status);
     }
     const data = await res.json();
     return validateResponse(data, schema);
@@ -140,7 +150,7 @@ export async function apiPut<T>(
         body: JSON.stringify(body)
     });
     if (!res.ok) {
-        throw new Error(`API error: ${res.status}`);
+        throw new ApiError(res.status);
     }
     const data = await res.json();
     return validateResponse(data, schema);
@@ -164,7 +174,7 @@ export async function apiDelete<T>(
     }
     const res = await fetchWithRefresh(`${BASE_URL}${path}`, options);
     if (!res.ok) {
-        throw new Error(`API error: ${res.status}`);
+        throw new ApiError(res.status);
     }
     const data = await res.json();
     return validateResponse(data, schema);
@@ -185,7 +195,7 @@ export async function apiPatch<T>(
         body: JSON.stringify(body)
     });
     if (!res.ok) {
-        throw new Error(`API error: ${res.status}`);
+        throw new ApiError(res.status);
     }
     const data = await res.json();
     return validateResponse(data, schema);

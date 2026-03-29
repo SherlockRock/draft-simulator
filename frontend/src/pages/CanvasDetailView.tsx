@@ -6,7 +6,6 @@ import { useParams } from "@solidjs/router";
 import { useMutation } from "@tanstack/solid-query";
 import { Viewport } from "../utils/schemas";
 import toast from "solid-toast";
-import { AuthGuard } from "../components/AuthGuard";
 import { cardHeight, cardWidth } from "../utils/helpers";
 import { localNewDraft } from "../utils/useLocalCanvasMutations";
 import { getLocalCanvas } from "../utils/localCanvasStore";
@@ -104,10 +103,8 @@ const CanvasDetailView: Component = () => {
         });
     });
 
-    const isLocalMode = () => canvasId() === "local";
-
     return (
-        <AuthGuard requireAuth={!isLocalMode()}>
+        <>
             <Title>{canvas()?.name ? `${canvas()?.name} - First Pick` : "Canvas - First Pick"}</Title>
             <div ref={canvasContainerRef} class="flex-1 overflow-hidden">
                 <CanvasComponent
@@ -127,7 +124,7 @@ const CanvasDetailView: Component = () => {
                     sharePopperContent={sharePopperContent()}
                 />
             </div>
-        </AuthGuard>
+        </>
     );
 };
 

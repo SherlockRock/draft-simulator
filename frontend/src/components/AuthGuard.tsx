@@ -28,7 +28,7 @@ export const AuthGuard = (props: AuthGuardProps) => {
 
     return (
         <Show
-            when={!props.requireAuth || user() != null}
+            when={!props.requireAuth || !user.isLoading}
             fallback={
                 <div class="flex h-full w-full items-center justify-center bg-slate-700">
                     <div class="align-center flex flex-col items-center">
@@ -38,7 +38,9 @@ export const AuthGuard = (props: AuthGuardProps) => {
                 </div>
             }
         >
-            {props.children}
+            <Show when={!props.requireAuth || (user() != null && !user.authExpired)}>
+                {props.children}
+            </Show>
         </Show>
     );
 };

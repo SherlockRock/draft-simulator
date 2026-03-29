@@ -55,7 +55,6 @@ export function UserProvider(props: { children: JSX.Element }) {
     setAuthExpiredHandler(() => {
         setAuthExpired(true);
         queryClient.setQueryData(["user"], null);
-        toast("Session expired — please sign in to continue");
     });
 
     const isOAuthCallback = () => window.location.pathname.includes("/oauth2callback");
@@ -136,21 +135,26 @@ export function UserProvider(props: { children: JSX.Element }) {
     };
 
     // Create a compatibility wrapper that mimics the old createResource API
+    const isLoading = createMemo(() => userQuery.isLoading);
+    const isError = createMemo(() => userQuery.isError);
+    const error = createMemo(() => userQuery.error ?? null);
+    const isAuthExpired = createMemo(() => authExpired());
+
     const userAccessor: UserAccessor = Object.assign(() => userQuery.data, {
         get isLoading() {
-            return userQuery.isLoading;
+            return isLoading();
         },
         get loading() {
-            return userQuery.isLoading;
+            return isLoading();
         },
         get isError() {
-            return userQuery.isError;
+            return isError();
         },
         get error() {
-            return userQuery.error;
+            return error();
         },
         get authExpired() {
-            return authExpired();
+            return isAuthExpired();
         }
     });
 
