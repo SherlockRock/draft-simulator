@@ -75,10 +75,6 @@ export type VersusWorkflowContextValue = {
     // Team identity tracking for per-game role re-prompt
     myTeamIdentity: () => string | null;
 
-    // Per-game role confirmation tracking
-    isNewGame: (draftId: string) => boolean;
-    confirmGameRole: (draftId: string) => void;
-
     // Inline role picker (for mid-series role switching)
     showingRolePicker: () => boolean;
     showRolePicker: () => void;

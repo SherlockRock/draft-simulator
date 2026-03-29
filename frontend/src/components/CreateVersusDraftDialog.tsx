@@ -8,6 +8,7 @@ import { IconPicker } from "./IconPicker";
 import { ChampionToggleGrid } from "./ChampionToggleGrid";
 import { champions } from "../utils/constants";
 import { StyledSelect } from "./StyledSelect";
+import { GameSettingsGrid } from "./GameSettingsGrid";
 import { createVersusDraft } from "../utils/actions";
 import { track } from "../utils/analytics";
 
@@ -30,6 +31,8 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
     const [errors, setErrors] = createSignal<Record<string, string>>({});
     const [disabledChampions, setDisabledChampions] = createSignal<string[]>([]);
     const [disabledExpanded, setDisabledExpanded] = createSignal(false);
+    const [blueSideTeam, setBlueSideTeam] = createSignal<1 | 2>(1);
+    const [firstPick, setFirstPick] = createSignal<"blue" | "red">("blue");
 
     const mutation = useMutation(() => ({
         mutationFn: createVersusDraft,
@@ -62,6 +65,8 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
             setErrors({});
             setDisabledChampions([]);
             setDisabledExpanded(false);
+            setBlueSideTeam(1);
+            setFirstPick("blue");
         }
     });
 
@@ -96,7 +101,9 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
             competitive: competitive(),
             icon: icon(),
             type: type(),
-            disabledChampions: disabledChampions()
+            disabledChampions: disabledChampions(),
+            blueSideTeam: blueSideTeam(),
+            firstPick: firstPick()
         });
     };
 
@@ -162,6 +169,30 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                                     </p>
                                 )}
                             </div>
+                        </div>
+
+                        <div>
+                            <label class="mb-2 block text-sm font-medium text-slate-300">
+                                Game 1 Side Selection
+                            </label>
+                            <GameSettingsGrid
+                                draftId="create"
+                                teamOneName={blueTeamName() || "Team 1"}
+                                teamTwoName={redTeamName() || "Team 2"}
+                                blueSideTeam={blueSideTeam()}
+                                firstPick={firstPick()}
+                                canEdit={true}
+                                onSettingsChange={(_id, settings) => {
+                                    if (settings.blueSideTeam !== undefined)
+                                        setBlueSideTeam(settings.blueSideTeam);
+                                    if (settings.firstPick !== undefined)
+                                        setFirstPick(settings.firstPick);
+                                }}
+                            />
+                            <p class="mt-2 text-xs text-slate-400">
+                                These settings apply to game 1 only. Later games alternate
+                                automatically.
+                            </p>
                         </div>
 
                         <div>

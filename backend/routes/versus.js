@@ -51,6 +51,8 @@ router.post("/", optionalAuth, async (req, res) => {
       icon,
       type,
       disabledChampions,
+      blueSideTeam,
+      firstPick,
     } = req.body;
 
     const ownerId = req.user?.id || null;
@@ -82,6 +84,10 @@ router.post("/", optionalAuth, async (req, res) => {
           seriesIndex: i,
           owner_id: ownerId,
           description: description || "",
+          ...(i === 0 && {
+            blueSideTeam: blueSideTeam ?? 1,
+            firstPick: firstPick ?? "blue",
+          }),
         }),
       );
     }

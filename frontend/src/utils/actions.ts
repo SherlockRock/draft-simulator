@@ -469,6 +469,8 @@ export const createVersusDraft = async (data: {
     icon: string;
     type: string;
     disabledChampions?: string[];
+    blueSideTeam: 1 | 2;
+    firstPick: "blue" | "red";
 }) => {
     return apiPost("/versus-drafts", data, VersusDraftSchema);
 };

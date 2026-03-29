@@ -130,23 +130,6 @@ const VersusWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
         }
     });
 
-    // Per-game role confirmation: check if user needs to re-select for a new game
-    const isNewGame = (draftId: string): boolean => {
-        const versusDraftId = params.id;
-        if (!versusDraftId) return false;
-        const lastConfirmed = sessionStorage.getItem(
-            `lastConfirmedDraft:${versusDraftId}`
-        );
-        return lastConfirmed !== draftId;
-    };
-
-    const confirmGameRole = (draftId: string) => {
-        const versusDraftId = params.id;
-        if (versusDraftId) {
-            sessionStorage.setItem(`lastConfirmedDraft:${versusDraftId}`, draftId);
-        }
-    };
-
     // Join response handler
     const handleJoinResponse = (rawData: unknown) => {
         const response = validateSocketEvent(
@@ -473,7 +456,6 @@ const VersusWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
                 // Compute and store team identity for per-game role re-prompt
                 let joinedLabel = "Spectator";
                 if (response.participant.role !== "spectator") {
-                    const currentDraftId = params.draftId;
                     const identity = computeTeamIdentity(
                         response.participant.role,
                         versusDraft.blueTeamName,
@@ -482,11 +464,6 @@ const VersusWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
                     setMyTeamIdentity(identity);
                     sessionStorage.setItem(`teamIdentity:${versusDraft.id}`, identity);
                     joinedLabel = `${identity} Captain`;
-
-                    // Track which draft the user confirmed their role for
-                    if (currentDraftId) {
-                        confirmGameRole(currentDraftId);
-                    }
                 }
 
                 toast.success(`Joined as ${joinedLabel}`);
@@ -828,8 +805,6 @@ const VersusWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
         reportWinner,
         setGameSettings,
         myTeamIdentity,
-        isNewGame,
-        confirmGameRole,
         showingRolePicker,
         showRolePicker: () => setShowingRolePicker(true),
         hideRolePicker
