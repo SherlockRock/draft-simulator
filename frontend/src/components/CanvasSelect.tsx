@@ -23,6 +23,7 @@ type props = {
     onSelectNext: () => void;
     onSelectPrevious: () => void;
     side?: "team1" | "team2";
+    restrictedChampions?: string[];
     disabledChampions?: string[];
 };
 
@@ -51,10 +52,15 @@ export const CanvasSelect = (props: props) => {
         const pickedNames = props.draft.picks
             .filter((value) => value !== "")
             .map((value) => champions[Number(value)].name);
+        const restrictedNames = (props.restrictedChampions ?? [])
+            .map((id) => champions[Number(id)]?.name)
+            .filter(Boolean) as string[];
         const disabledNames = (props.disabledChampions ?? [])
             .map((id) => champions[Number(id)]?.name)
             .filter(Boolean) as string[];
-        setUnavailableChampions([...new Set([...pickedNames, ...disabledNames])]);
+        setUnavailableChampions([
+            ...new Set([...pickedNames, ...restrictedNames, ...disabledNames]),
+        ]);
     });
 
     createEffect(() => {

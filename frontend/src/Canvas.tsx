@@ -88,6 +88,7 @@ import { GroupContextMenu } from "./components/GroupContextMenu";
 import { useCanvasContext } from "./contexts/CanvasContext";
 import { useCanvasSocket } from "./providers/CanvasSocketProvider";
 import CanvasSidebar from "./components/CanvasSidebar";
+import { getGroupRestrictedChampions } from "./utils/groupRestrictions";
 
 const debounce = <T extends unknown[]>(func: (...args: T) => void, limit: number) => {
     let inDebounce: boolean;
@@ -593,6 +594,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const updateGroupMutation = useMutation(() => ({
         mutationFn: updateCanvasGroup,
+        onSuccess: (data, variables) => {
+            setCanvasGroups((g) => g.id === variables.groupId, data.group);
+            canvasContext.mutateCanvas((prev: CanvasResposnse | undefined) => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
+                    groups: prev.groups.map((group) =>
+                        group.id === variables.groupId ? data.group : group
+                    )
+                };
+            });
+        },
         onError: (error: Error) => {
             toast.error(`Failed to update group: ${error.message}`);
         }
@@ -976,6 +989,30 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 }
             }
         }
+    };
+
+    const getRestrictedChampionsForDraft = (canvasDraft: CanvasDraft): string[] => {
+        if (!canvasDraft.group_id) return [];
+
+        const group = canvasGroups.find((g) => g.id === canvasDraft.group_id);
+        if (!group || group.type !== "custom") return [];
+
+        const draftMode = group.metadata.draftMode;
+        if (!draftMode || draftMode === "standard") return [];
+
+        const siblingDrafts = canvasDrafts
+            .filter((cd) => cd.group_id === group.id)
+            .map((cd) => ({
+                id: cd.Draft.id,
+                name: cd.Draft.name,
+                picks: cd.Draft.picks
+            }));
+
+        return getGroupRestrictedChampions(
+            draftMode,
+            siblingDrafts,
+            canvasDraft.Draft.id
+        );
     };
 
     const handleNameChange = (draftId: string, newName: string) => {
@@ -1504,6 +1541,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const handleSaveGroupSettings = (data: {
         name: string;
         disabledChampions: string[];
+        draftMode: import("@draft-sim/shared-types").DraftMode;
     }) => {
         const groupId = disabledChampionsGroupId();
         if (!groupId) return;
@@ -1516,7 +1554,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     name: data.name || undefined,
                     metadata: {
                         ...group.metadata,
-                        disabledChampions: data.disabledChampions
+                        disabledChampions: data.disabledChampions,
+                        draftMode: data.draftMode
                     }
                 });
                 refreshFromLocal();
@@ -1526,7 +1565,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 canvasId: canvasId(),
                 groupId,
                 name: data.name || undefined,
-                metadata: { disabledChampions: data.disabledChampions }
+                metadata: {
+                    disabledChampions: data.disabledChampions,
+                    draftMode: data.draftMode
+                }
             });
         }
     };
@@ -2434,6 +2476,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 onEditingComplete={() =>
                                                     setEditingDraftId(null)
                                                 }
+                                                restrictedChampions={getRestrictedChampionsForDraft(
+                                                    cd
+                                                )}
                                                 disabledChampions={
                                                     group.metadata.disabledChampions
                                                 }
@@ -2499,6 +2544,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                             }
                                             blueTeamName={blueTeamName}
                                             redTeamName={redTeamName}
+                                            restrictedChampions={getRestrictedChampionsForDraft(
+                                                cd
+                                            )}
                                             disabledChampions={
                                                 group.metadata.disabledChampions
                                             }
@@ -2537,6 +2585,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             canEdit={canEdit}
                             editingDraftId={editingDraftId}
                             onEditingComplete={() => setEditingDraftId(null)}
+                            restrictedChampions={getRestrictedChampionsForDraft(cd)}
                         />
                     )}
                 </For>
@@ -2652,6 +2701,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     initialChampions={
                         canvasGroups.find((g) => g.id === disabledChampionsGroupId())
                             ?.metadata.disabledChampions ?? []
+                    }
+                    initialDraftMode={
+                        canvasGroups.find((g) => g.id === disabledChampionsGroupId())
+                            ?.metadata.draftMode ?? "standard"
                     }
                     onSave={handleSaveGroupSettings}
                 />

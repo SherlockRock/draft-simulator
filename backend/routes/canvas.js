@@ -1440,7 +1440,7 @@ router.get("/:canvasId/users", protect, async (req, res) => {
       include: [
         {
           model: User,
-          attributes: ["id", "name", "email", "picture"],
+          attributes: ["id", "name", "email", "picture", "display_name"],
           through: {
             attributes: ["permissions", "lastAccessedAt", "createdAt"],
           },

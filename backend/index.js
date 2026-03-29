@@ -21,7 +21,8 @@ const Draft = require("./models/Draft");
 const User = require("./models/User");
 const setupAssociations = require("./models/associations");
 const socketService = require("./middleware/socketService");
-const { UserCanvas, CanvasDraft } = require("./models/Canvas");
+const { UserCanvas, CanvasDraft, CanvasGroup } = require("./models/Canvas");
+const { getGroupRestrictedChampions } = require("./utils/groupRestrictions");
 const { setupVersusHandlers } = require("./socketHandlers/versusHandlers");
 const { initializeTimerService } = require("./services/versusTimerService");
 const VersusSessionManager = require("./services/versusSessionManager");
@@ -38,7 +39,10 @@ function wrapSocketHandler(socket, eventName, handler, flow = "canvas") {
       await handler(...args);
     } finally {
       if (otelMetrics.socketEventDuration) {
-        otelMetrics.socketEventDuration.record(Date.now() - start, { event: eventName, flow });
+        otelMetrics.socketEventDuration.record(Date.now() - start, {
+          event: eventName,
+          flow,
+        });
       }
     }
   });
@@ -98,7 +102,8 @@ async function main() {
   app.use("/api/versus-drafts", versusRoutes);
 
   let server;
-  const certPath = process.env.ENVIRONMENT === "development" ? findCertPath() : null;
+  const certPath =
+    process.env.ENVIRONMENT === "development" ? findCertPath() : null;
   if (certPath) {
     const key = await readFile(path.join(certPath, "localhost+2-key.pem"));
     const cert = await readFile(path.join(certPath, "localhost+2.pem"));
@@ -170,7 +175,7 @@ async function main() {
           // Find all canvases containing this draft
           const canvasDrafts = await CanvasDraft.findAll({
             where: { draft_id: data.id },
-            attributes: ["canvas_id", "is_locked"],
+            attributes: ["canvas_id", "is_locked", "group_id"],
           });
 
           if (canvasDrafts.length > 0) {
@@ -199,7 +204,7 @@ async function main() {
               return;
             }
             // Check if draft is locked in any canvas
-            const isLocked = canvasDrafts.some(cd => cd.is_locked);
+            const isLocked = canvasDrafts.some((cd) => cd.is_locked);
             if (isLocked) {
               return;
             }
@@ -211,6 +216,98 @@ async function main() {
             const draft = await Draft.findByPk(data.id);
             if (!draft || socket.user.dataValues.id !== draft.owner_id) {
               return;
+            }
+          }
+
+          // Check group-level restrictions (draftMode + disabledChampions)
+          const groupId =
+            canvasDrafts.length > 0
+              ? canvasDrafts.find((cd) => cd.group_id)?.group_id
+              : null;
+
+          if (groupId) {
+            const group = await CanvasGroup.findByPk(groupId, {
+              attributes: ["metadata"],
+            });
+
+            if (group) {
+              const metadata = group.metadata || {};
+              const disabledChampions = metadata.disabledChampions || [];
+              const draftMode = metadata.draftMode;
+
+              const hasDisabled = disabledChampions.length > 0;
+              const hasRestrictions = draftMode && draftMode !== "standard";
+
+              if (hasDisabled || hasRestrictions) {
+                // Fetch current picks to only validate newly added champions
+                const currentDraft = await Draft.findByPk(data.id, {
+                  attributes: ["picks"],
+                });
+                const currentPicks = currentDraft?.picks || [];
+
+                // Find indices where a new champion was placed
+                const changedIndices = [];
+                for (let i = 0; i < 20; i++) {
+                  const newPick = data.picks[i] || "";
+                  const oldPick = currentPicks[i] || "";
+                  if (newPick !== "" && newPick !== oldPick) {
+                    changedIndices.push(i);
+                  }
+                }
+
+                // Check disabled champions on changed picks
+                if (hasDisabled && changedIndices.length > 0) {
+                  const disabledSet = new Set(disabledChampions);
+                  for (const i of changedIndices) {
+                    if (disabledSet.has(data.picks[i])) {
+                      socket.emit("error", {
+                        message: "Champion is disabled for this group",
+                      });
+                      return;
+                    }
+                  }
+                }
+
+                // Check draft mode restrictions on changed picks
+                if (hasRestrictions && changedIndices.length > 0) {
+                  const siblingDrafts = await CanvasDraft.findAll({
+                    where: { group_id: groupId },
+                    include: [
+                      {
+                        model: Draft,
+                        attributes: ["id", "picks"],
+                      },
+                    ],
+                  });
+
+                  const draftsForRestriction = siblingDrafts
+                    .filter((cd) => cd.Draft)
+                    .map((cd) => ({
+                      id: cd.Draft.id,
+                      picks: cd.Draft.picks,
+                    }));
+
+                  const restricted = getGroupRestrictedChampions(
+                    draftMode,
+                    draftsForRestriction,
+                    data.id,
+                  );
+
+                  if (restricted.length > 0) {
+                    const restrictedSet = new Set(restricted);
+                    // Check only changed indices, respecting mode scope
+                    const startIndex = draftMode === "ironman" ? 0 : 10;
+                    for (const i of changedIndices) {
+                      if (i >= startIndex && restrictedSet.has(data.picks[i])) {
+                        socket.emit("error", {
+                          message: "Champion restricted by group draft mode",
+                        });
+                        return;
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
 

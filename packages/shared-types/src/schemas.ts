@@ -71,6 +71,8 @@ export const CanvasDraftSchema = z.object({
 // Canvas Group Schemas
 // =============================================================================
 
+export const DraftModeSchema = z.enum(["standard", "fearless", "ironman"]);
+
 export const CanvasGroupMetadataSchema = z.object({
   blueTeamName: z.string().optional(),
   redTeamName: z.string().optional(),
@@ -78,6 +80,7 @@ export const CanvasGroupMetadataSchema = z.object({
   competitive: z.boolean().optional(),
   seriesType: z.string().optional(),
   disabledChampions: z.array(z.string()).optional(),
+  draftMode: DraftModeSchema.optional(),
 });
 
 export const CanvasGroupSchema = z.object({
@@ -550,6 +553,7 @@ export type Draft = z.infer<typeof DraftSchema>;
 export type draft = Draft;
 export type CanvasDraft = z.infer<typeof CanvasDraftSchema>;
 export type CanvasGroupMetadata = z.infer<typeof CanvasGroupMetadataSchema>;
+export type DraftMode = z.infer<typeof DraftModeSchema>;
 export type CanvasGroup = z.infer<typeof CanvasGroupSchema>;
 export type Connection = z.infer<typeof ConnectionSchema>;
 export type ConnectionEndpoint = z.infer<typeof ConnectionEndpointSchema>;

@@ -296,7 +296,15 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
             {/* Request Change Modal */}
             <Show when={isOpen()}>
                 <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-                    <div class="w-full max-w-4xl rounded-lg border border-slate-700 bg-slate-800 p-8">
+                    <div class="relative w-full max-w-4xl rounded-lg border border-slate-700 bg-slate-800 p-8 pt-10">
+                        <button
+                            type="button"
+                            onClick={() => setIsOpen(false)}
+                            class="absolute right-4 top-4 text-slate-400 transition-colors hover:text-slate-200"
+                            aria-label="Close dialog"
+                        >
+                            <X size={20} />
+                        </button>
                         <h2 class="mb-4 text-2xl font-bold text-slate-50">
                             Request Pick Change
                         </h2>
@@ -616,7 +624,15 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
             {/* Pending Request Approval Modal */}
             <Show when={props.pendingRequest}>
                 <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-                    <div class="w-full max-w-md rounded-lg border border-slate-700 bg-slate-800 p-8">
+                    <div class="relative w-full max-w-md rounded-lg border border-slate-700 bg-slate-800 p-8 pt-10">
+                        <button
+                            type="button"
+                            onClick={handleReject}
+                            class="absolute right-4 top-4 text-slate-400 transition-colors hover:text-slate-200"
+                            aria-label="Close dialog"
+                        >
+                            <X size={20} />
+                        </button>
                         <div class="mb-6 text-center">
                             <div class="mb-4 text-6xl">🔄</div>
                             <h2 class="mb-2 text-2xl font-bold text-slate-50">

@@ -1348,6 +1348,7 @@ const VersusDraftView: Component = () => {
                             redTeamName={versusDraftQuery.data?.redTeamName ?? ""}
                             onDeclareWinner={handleDeclareWinner}
                             isSpectator={isSpectator()}
+                            onClose={() => setShowWinnerModal(false)}
                         />
 
                         <PauseRequestModal
@@ -1363,6 +1364,7 @@ const VersusDraftView: Component = () => {
                             redTeamName={versusDraftQuery.data?.redTeamName ?? ""}
                             onApprove={handleApproveRequest}
                             onReject={handleRejectRequest}
+                            onClose={() => setShowPauseRequest(false)}
                         />
 
                         {/* Resume Countdown Overlay */}

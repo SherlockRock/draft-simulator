@@ -1,4 +1,5 @@
 import { Component, Show } from "solid-js";
+import { X } from "lucide-solid";
 import { getSideTeamName } from "../utils/versusPermissions";
 
 interface PauseRequestModalProps {
@@ -10,6 +11,7 @@ interface PauseRequestModalProps {
     redTeamName: string;
     onApprove: () => void;
     onReject: () => void;
+    onClose?: () => void;
 }
 
 export const PauseRequestModal: Component<PauseRequestModalProps> = (props) => {
@@ -42,7 +44,17 @@ export const PauseRequestModal: Component<PauseRequestModalProps> = (props) => {
     return (
         <Show when={props.isOpen}>
             <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-                <div class="w-full max-w-md rounded-lg border border-slate-700 bg-slate-800 p-8">
+                <div class="relative w-full max-w-md rounded-lg border border-slate-700 bg-slate-800 p-8 pt-10">
+                    <Show when={props.onClose}>
+                        <button
+                            type="button"
+                            onClick={() => props.onClose?.()}
+                            class="absolute right-4 top-4 text-slate-400 transition-colors hover:text-slate-200"
+                            aria-label="Close dialog"
+                        >
+                            <X size={20} />
+                        </button>
+                    </Show>
                     <div class="mb-6 text-center">
                         <div class="mb-4 text-6xl">{getIcon()}</div>
                         <h2 class="mb-2 text-2xl font-bold text-slate-50">
