@@ -30,7 +30,7 @@ export const FilterBar: Component<FilterBarProps> = (props) => {
 
     return (
         <div
-            class={`flex min-w-0 w-full overflow-hidden bg-inherit transition-all duration-200 ${
+            class={`flex w-full min-w-0 overflow-hidden bg-inherit transition-all duration-200 ${
                 accent()
                     ? `rounded-b-sm rounded-t-md border-b-2 ${props.searchText() !== "" ? accent()!.active : accent()!.idle}`
                     : "rounded-md"

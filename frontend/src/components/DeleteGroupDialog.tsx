@@ -15,7 +15,8 @@ export const DeleteGroupDialog = (props: DeleteGroupDialogProps) => {
                 Delete group "{props.group.name}"?
             </h3>
             <p class="mb-6 text-slate-200">
-                This group contains {props.draftCount} draft{props.draftCount !== 1 ? "s" : ""}.
+                This group contains {props.draftCount} draft
+                {props.draftCount !== 1 ? "s" : ""}.
             </p>
             <div class="flex justify-end gap-3">
                 <button

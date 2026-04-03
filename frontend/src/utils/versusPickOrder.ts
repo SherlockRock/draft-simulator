@@ -37,7 +37,7 @@ export function getEffectivePickOrder(
     if (firstPick === "blue") return VERSUS_PICK_ORDER;
     return VERSUS_PICK_ORDER.map((item) => ({
         ...item,
-        team: item.team === "blue" ? "red" : "blue",
+        team: item.team === "blue" ? "red" : "blue"
     }));
 }
 

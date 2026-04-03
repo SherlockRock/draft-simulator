@@ -306,12 +306,13 @@ function Draft(props: props) {
         champId: string;
         champName: string;
         img: string;
-        className: string;
+        class?: string;
+        className?: string;
         onClick: () => void;
     }) => (
         <div class="relative">
             <img
-                class={tileProps.className}
+                class={tileProps.class ?? tileProps.className}
                 src={tileProps.img}
                 onClick={tileProps.onClick}
                 draggable="false"
@@ -529,7 +530,7 @@ function Draft(props: props) {
                                                                     )}
                                                                     champName={champ.name}
                                                                     img={champ.img}
-                                                                    className={tableClass(
+                                                                    class={tableClass(
                                                                         String(champ.name)
                                                                     )}
                                                                     onClick={() =>

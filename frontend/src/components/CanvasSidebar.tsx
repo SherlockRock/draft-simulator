@@ -128,7 +128,7 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
                             <IconDisplay
                                 icon={props.icon}
                                 size="sm"
-                                className="!h-9 !w-9 [&_img]:!h-9 [&_img]:!w-9 [&_span]:!text-2xl"
+                                class="!h-9 !w-9 [&_img]:!h-9 [&_img]:!w-9 [&_span]:!text-2xl"
                             />
                         </Show>
                     </div>

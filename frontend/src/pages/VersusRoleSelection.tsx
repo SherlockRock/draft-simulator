@@ -116,9 +116,11 @@ const VersusRoleSelection: Component = () => {
                             <div class="flex items-center gap-4 border-b border-slate-700/50 px-6 py-5">
                                 <IconDisplay
                                     icon={versusDraft()?.icon}
-                                    defaultIcon={<Swords size={44} class="text-orange-400" />}
+                                    defaultIcon={
+                                        <Swords size={44} class="text-orange-400" />
+                                    }
                                     size="md"
-                                    className="rounded-xl border border-slate-600/50 bg-slate-800"
+                                    class="rounded-xl border border-slate-600/50 bg-slate-800"
                                 />
                                 <div class="min-w-0 flex-1">
                                     <h1 class="truncate text-xl font-bold tracking-tight text-slate-50">

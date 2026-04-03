@@ -270,9 +270,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     const hasAdminPermissions = () => canvas()?.userPermissions === "admin";
     const hasEditPermissions = () =>
         canvas()?.userPermissions === "edit" || canvas()?.userPermissions === "admin";
-    const cardLayout = createMemo<CardLayout>(
-        () => canvas()?.cardLayout ?? "vertical"
-    );
+    const cardLayout = createMemo<CardLayout>(() => canvas()?.cardLayout ?? "vertical");
 
     const setCardLayout = (layout: CardLayout) => {
         const currentCanvasId = canvasId();
@@ -627,7 +625,9 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                     <button
                                                         onClick={handleCopyViewLink}
                                                         class="shrink-0 rounded-md bg-purple-500 p-1.5 text-slate-50 hover:bg-purple-400 disabled:opacity-50"
-                                                        disabled={!viewShareLinkQuery.data}
+                                                        disabled={
+                                                            !viewShareLinkQuery.data
+                                                        }
                                                     >
                                                         <Show
                                                             when={copied() !== "view"}
@@ -658,7 +658,9 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                     <button
                                                         onClick={handleCopyEditLink}
                                                         class="shrink-0 rounded-md bg-purple-500 p-1.5 text-slate-50 hover:bg-purple-400 disabled:opacity-50"
-                                                        disabled={!editShareLinkQuery.data}
+                                                        disabled={
+                                                            !editShareLinkQuery.data
+                                                        }
                                                     >
                                                         <Show
                                                             when={copied() !== "edit"}

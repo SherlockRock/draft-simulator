@@ -21,7 +21,7 @@ export const DeleteAccountModal: Component<DeleteAccountModalProps> = (props) =>
         setError("");
         try {
             await props.onConfirm(confirmEmail());
-        } catch (e) {
+        } catch {
             setError("Failed to delete account. Please try again.");
             setIsDeleting(false);
         }
@@ -56,8 +56,8 @@ export const DeleteAccountModal: Component<DeleteAccountModalProps> = (props) =>
                             <li>All drafts on those canvases</li>
                         </ul>
                         <p class="text-sm text-slate-400">
-                            Versus series you created will remain but show "Deleted User" as
-                            creator.
+                            Versus series you created will remain but show "Deleted User"
+                            as creator.
                         </p>
                         <p class="mt-3 text-sm text-slate-400">
                             To fully disconnect from Google, also{" "}

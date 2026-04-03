@@ -94,9 +94,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
     const isHorizontal = createMemo(() => props.cardLayout() === "horizontal");
     const isVertical = createMemo(() => props.cardLayout() === "vertical");
     const isWide = createMemo(() => props.cardLayout() === "wide");
-    const isWideDraftOrder = createMemo(
-        () => props.cardLayout() === "wide-draft-order"
-    );
+    const isWideDraftOrder = createMemo(() => props.cardLayout() === "wide-draft-order");
     const isCompact = createMemo(() => props.cardLayout() === "compact");
     const isDraftOrder = createMemo(() => props.cardLayout() === "draft-order");
     const selected = createMemo(
@@ -108,9 +106,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
 
     const sectionPanelClass =
         "rounded-xl border border-slate-700/80 bg-slate-800/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]";
-    const slotLabels = createMemo(() =>
-        getIndexToShorthandForLayout(props.cardLayout())
-    );
+    const slotLabels = createMemo(() => getIndexToShorthandForLayout(props.cardLayout()));
     const wideSectionClass = "grid h-full min-h-0 grid-cols-2 gap-3";
     const classicHorizontalGridClass = "grid h-full min-h-0 grid-cols-4 gap-3";
     const headerPaddingClass = createMemo(() =>
@@ -136,13 +132,19 @@ export const CanvasCard = (props: CanvasCardProps) => {
         isCompact() ? "px-1.5 py-0.5" : isVertical() ? "px-1.5 py-1" : "px-2 py-1.5"
     );
     const standardRailInsetClass = createMemo(() =>
-        isCompact() ? "bottom-px top-px" : isVertical() ? "bottom-px top-px" : "bottom-0.5 top-0.5"
+        isCompact()
+            ? "bottom-px top-px"
+            : isVertical()
+              ? "bottom-px top-px"
+              : "bottom-0.5 top-0.5"
     );
     const standardSlotInsetClass = createMemo(() =>
         isCompact() ? "py-0" : isVertical() ? "py-px" : "py-0.5"
     );
     const bodyPaddingClass = createMemo(() =>
-        isCompact() || isVertical() ? "min-h-0 flex-1 px-3 pb-2.5" : "min-h-0 flex-1 px-3 pb-3"
+        isCompact() || isVertical()
+            ? "min-h-0 flex-1 px-3 pb-2.5"
+            : "min-h-0 flex-1 px-3 pb-3"
     );
 
     const getPhaseRailClass = (label: string) =>
@@ -154,7 +156,9 @@ export const CanvasCard = (props: CanvasCardProps) => {
         panelClass = "flex-1",
         paddingClass = "p-2.5"
     ) => (
-        <div class={`${sectionPanelClass} flex min-h-0 flex-col ${paddingClass} ${panelClass}`}>
+        <div
+            class={`${sectionPanelClass} flex min-h-0 flex-col ${paddingClass} ${panelClass}`}
+        >
             <div class={`mb-2 h-1.5 rounded-full ${barClass}`} />
             <div class="flex min-h-0 flex-1 flex-col gap-2">{content()}</div>
         </div>
@@ -168,7 +172,9 @@ export const CanvasCard = (props: CanvasCardProps) => {
         paddingClass = "p-2.5",
         railInsetClass = "bottom-0 top-0"
     ) => (
-        <div class={`${sectionPanelClass} flex min-h-0 flex-col ${paddingClass} ${panelClass}`}>
+        <div
+            class={`${sectionPanelClass} flex min-h-0 flex-col ${paddingClass} ${panelClass}`}
+        >
             <div
                 class="relative min-h-0 flex-1"
                 classList={{
@@ -211,18 +217,14 @@ export const CanvasCard = (props: CanvasCardProps) => {
         />
     );
 
-    const renderHorizontalColumn = (
-        pickIndices: number[],
-        barClass: string
-    ) => (
+    const renderHorizontalColumn = (pickIndices: number[], barClass: string) =>
         renderTopRailPanel(barClass, () => (
             <For each={pickIndices}>
                 {(pickIndex) => (
                     <div class="min-h-0 flex-1">{renderFullSlot(pickIndex)}</div>
                 )}
             </For>
-        ))
-    );
+        ));
 
     const renderCompactBanSlot = (pickIndex: number) => (
         <CanvasSelect
@@ -275,7 +277,9 @@ export const CanvasCard = (props: CanvasCardProps) => {
     const renderWideArtColumn = (pickIndices: readonly number[]) => (
         <div class="flex h-full min-h-0 flex-col gap-2.5">
             <For each={[...pickIndices]}>
-                {(pickIndex) => <div class="min-h-0 flex-1">{renderWideArtSlot(pickIndex)}</div>}
+                {(pickIndex) => (
+                    <div class="min-h-0 flex-1">{renderWideArtSlot(pickIndex)}</div>
+                )}
             </For>
         </div>
     );
@@ -286,12 +290,18 @@ export const CanvasCard = (props: CanvasCardProps) => {
         barOnRight: boolean
     ) => (
         <div class="flex h-full min-h-0 flex-col gap-3">
-            {renderSideRailPanel("bg-red-400/80", barOnRight, () => (
-                renderWideArtColumn(banIndices)
-            ), "flex-1")}
-            {renderSideRailPanel("bg-emerald-400/80", barOnRight, () => (
-                renderWideArtColumn(pickIndices)
-            ), "flex-1")}
+            {renderSideRailPanel(
+                "bg-red-400/80",
+                barOnRight,
+                () => renderWideArtColumn(banIndices),
+                "flex-1"
+            )}
+            {renderSideRailPanel(
+                "bg-emerald-400/80",
+                barOnRight,
+                () => renderWideArtColumn(pickIndices),
+                "flex-1"
+            )}
         </div>
     );
 
@@ -303,44 +313,60 @@ export const CanvasCard = (props: CanvasCardProps) => {
         <div class={`flex h-full min-h-0 flex-col ${standardSectionGapClass()}`}>
             <Show
                 when={!isCompact()}
-                fallback={
-                    renderTopRailPanel(
-                        "bg-red-400/80",
-                        () => (
-                            <div class="flex min-h-0 flex-1 items-center justify-center gap-1">
-                                <For each={banIndices}>
-                                    {(pickIndex) => renderCompactBanSlot(pickIndex)}
-                                </For>
-                            </div>
-                        ),
-                        "flex-none",
-                        standardPanelPaddingClass()
-                    )
-                }
+                fallback={renderTopRailPanel(
+                    "bg-red-400/80",
+                    () => (
+                        <div class="flex min-h-0 flex-1 items-center justify-center gap-1">
+                            <For each={banIndices}>
+                                {(pickIndex) => renderCompactBanSlot(pickIndex)}
+                            </For>
+                        </div>
+                    ),
+                    "flex-none",
+                    standardPanelPaddingClass()
+                )}
             >
-                {renderSideRailPanel("bg-red-400/80", barOnRight, () => (
+                {renderSideRailPanel(
+                    "bg-red-400/80",
+                    barOnRight,
+                    () => (
+                        <div
+                            class={`flex h-full min-h-0 flex-col ${standardSlotGapClass()} ${standardSlotInsetClass()}`}
+                        >
+                            <For each={banIndices}>
+                                {(pickIndex) => (
+                                    <div class="min-h-0 flex-1">
+                                        {renderFullSlot(pickIndex)}
+                                    </div>
+                                )}
+                            </For>
+                        </div>
+                    ),
+                    "flex-1",
+                    standardPanelPaddingClass(),
+                    standardRailInsetClass()
+                )}
+            </Show>
+            {renderSideRailPanel(
+                "bg-emerald-400/80",
+                barOnRight,
+                () => (
                     <div
                         class={`flex h-full min-h-0 flex-col ${standardSlotGapClass()} ${standardSlotInsetClass()}`}
                     >
-                        <For each={banIndices}>
+                        <For each={pickIndices}>
                             {(pickIndex) => (
-                                <div class="min-h-0 flex-1">{renderFullSlot(pickIndex)}</div>
+                                <div class="min-h-0 flex-1">
+                                    {renderFullSlot(pickIndex)}
+                                </div>
                             )}
                         </For>
                     </div>
-                ), "flex-1", standardPanelPaddingClass(), standardRailInsetClass())}
-            </Show>
-            {renderSideRailPanel("bg-emerald-400/80", barOnRight, () => (
-                <div
-                    class={`flex h-full min-h-0 flex-col ${standardSlotGapClass()} ${standardSlotInsetClass()}`}
-                >
-                    <For each={pickIndices}>
-                        {(pickIndex) => (
-                            <div class="min-h-0 flex-1">{renderFullSlot(pickIndex)}</div>
-                        )}
-                    </For>
-                </div>
-            ), "flex-1", standardPanelPaddingClass(), standardRailInsetClass())}
+                ),
+                "flex-1",
+                standardPanelPaddingClass(),
+                standardRailInsetClass()
+            )}
         </div>
     );
 
@@ -556,8 +582,10 @@ export const CanvasCard = (props: CanvasCardProps) => {
                                 onClick={handleViewClick}
                                 class="flex size-7 items-center justify-center rounded-lg bg-cyan-400 text-slate-950"
                                 classList={{
-                                    "cursor-not-allowed opacity-50": props.isConnectionMode,
-                                    "cursor-pointer hover:bg-cyan-300": !props.isConnectionMode
+                                    "cursor-not-allowed opacity-50":
+                                        props.isConnectionMode,
+                                    "cursor-pointer hover:bg-cyan-300":
+                                        !props.isConnectionMode
                                 }}
                                 disabled={props.isConnectionMode}
                             >

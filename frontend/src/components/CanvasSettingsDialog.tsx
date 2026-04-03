@@ -274,7 +274,7 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                             <IconDisplay
                                                 icon={icon()}
                                                 size="md"
-                                                className="rounded"
+                                                class="rounded"
                                             />
                                         </Show>
                                         <span class="text-sm text-slate-300">

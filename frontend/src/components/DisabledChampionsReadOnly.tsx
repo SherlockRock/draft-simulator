@@ -6,7 +6,9 @@ interface DisabledChampionsReadOnlyProps {
     label?: string;
 }
 
-export const DisabledChampionsReadOnly: Component<DisabledChampionsReadOnlyProps> = (props) => {
+export const DisabledChampionsReadOnly: Component<DisabledChampionsReadOnlyProps> = (
+    props
+) => {
     return (
         <div>
             <label class="mb-2 block text-sm font-medium text-slate-300">

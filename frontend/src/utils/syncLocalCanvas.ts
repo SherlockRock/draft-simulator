@@ -45,8 +45,7 @@ export const syncLocalCanvasToServer = async (): Promise<string | null> => {
 
         // Sync width/height and metadata if they were customized
         const hasSize = group.width != null || group.height != null;
-        const hasMetadata =
-            group.metadata && Object.keys(group.metadata).length > 0;
+        const hasMetadata = group.metadata && Object.keys(group.metadata).length > 0;
         if (hasSize || hasMetadata) {
             await updateCanvasGroup({
                 canvasId,

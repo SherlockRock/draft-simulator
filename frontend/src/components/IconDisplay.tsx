@@ -5,10 +5,13 @@ interface IconDisplayProps {
     icon?: string | null;
     defaultIcon?: string | JSX.Element;
     size?: "xs" | "sm" | "md" | "lg";
+    class?: string;
     className?: string;
 }
 
 export const IconDisplay: Component<IconDisplayProps> = (props) => {
+    const classes = () => props.class ?? props.className ?? "";
+
     const isChampionIcon = () => {
         if (!props.icon) return false;
         const num = parseInt(props.icon);
@@ -33,7 +36,7 @@ export const IconDisplay: Component<IconDisplayProps> = (props) => {
 
     return (
         <div
-            class={`flex flex-shrink-0 items-center justify-center overflow-hidden ${sizes.container} ${props.className || ""}`}
+            class={`flex flex-shrink-0 items-center justify-center overflow-hidden ${sizes.container} ${classes()}`}
         >
             <Show
                 when={props.icon}

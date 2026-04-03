@@ -213,8 +213,7 @@ export const getNextCanvasSlotIndex = (
     direction: NavigationDirection
 ) => {
     if (cardLayout === "compact" && currentIndex >= 0 && currentIndex <= 9) {
-        const banOrder =
-            currentIndex <= 4 ? compactBanTeam1Order : compactBanTeam2Order;
+        const banOrder = currentIndex <= 4 ? compactBanTeam1Order : compactBanTeam2Order;
         return getCircularIndex(currentIndex, banOrder, direction);
     }
 
@@ -323,8 +322,7 @@ export const getDirectionalCanvasSlotIndex = (
                       Math.abs(a.primaryDelta) - Math.abs(b.primaryDelta);
                   if (primaryDistanceDiff !== 0) return primaryDistanceDiff;
 
-                  const secondaryDistanceDiff =
-                      a.secondaryDelta - b.secondaryDelta;
+                  const secondaryDistanceDiff = a.secondaryDelta - b.secondaryDelta;
                   if (secondaryDistanceDiff !== 0) return secondaryDistanceDiff;
 
                   return a.index - b.index;
@@ -340,8 +338,7 @@ export const getDirectionalCanvasSlotIndex = (
                             : b.coordinate.y - a.coordinate.y;
                   if (primaryCoordinateDiff !== 0) return primaryCoordinateDiff;
 
-                  const secondaryDistanceDiff =
-                      a.secondaryDelta - b.secondaryDelta;
+                  const secondaryDistanceDiff = a.secondaryDelta - b.secondaryDelta;
                   if (secondaryDistanceDiff !== 0) return secondaryDistanceDiff;
 
                   return a.index - b.index;
@@ -366,8 +363,7 @@ export const layoutOptions: Array<{
     {
         value: "wide-draft-order",
         label: "Wide Draft Order",
-        description:
-            "Wide full-art slots ordered by the actual ban and pick sequence"
+        description: "Wide full-art slots ordered by the actual ban and pick sequence"
     },
     {
         value: "draft-order",

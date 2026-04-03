@@ -126,7 +126,7 @@ const VersusSeriesOverview: Component = () => {
                                             <Swords size={44} class="text-orange-400" />
                                         }
                                         size="md"
-                                        className="rounded-xl border border-slate-600/50 bg-slate-800"
+                                        class="rounded-xl border border-slate-600/50 bg-slate-800"
                                     />
                                     <div>
                                         <h1 class="text-2xl font-bold tracking-tight text-slate-50">

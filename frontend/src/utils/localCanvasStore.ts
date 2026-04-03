@@ -45,7 +45,12 @@ export const clearLocalCanvas = (): void => {
     localStorage.removeItem(STORAGE_KEY);
 };
 
-export const createEmptyLocalCanvas = (name: string, description?: string, icon?: string, cardLayout?: CardLayout): LocalCanvas => {
+export const createEmptyLocalCanvas = (
+    name: string,
+    description?: string,
+    icon?: string,
+    cardLayout?: CardLayout
+): LocalCanvas => {
     return {
         name,
         description: description ?? "",

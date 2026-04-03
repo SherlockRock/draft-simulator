@@ -94,8 +94,8 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                             </Show>
                             <Show when={draftMode() === "ironman"}>
                                 <p>
-                                    Champions picked or banned in one draft cannot be
-                                    used in other drafts within this group.
+                                    Champions picked or banned in one draft cannot be used
+                                    in other drafts within this group.
                                 </p>
                             </Show>
                         </div>

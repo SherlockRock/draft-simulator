@@ -4,7 +4,8 @@ import { useVersusContext } from "../contexts/VersusContext";
 import { getSuggestedRole } from "../workflows/VersusWorkflow";
 
 const InlineRolePicker: Component = () => {
-    const { versusContext, selectRole, hideRolePicker, myTeamIdentity } = useVersusContext();
+    const { versusContext, selectRole, hideRolePicker, myTeamIdentity } =
+        useVersusContext();
     const [isJoining, setIsJoining] = createSignal(false);
     const [selectedRole, setSelectedRole] = createSignal<string | null>(null);
 
@@ -40,9 +41,7 @@ const InlineRolePicker: Component = () => {
             <div class="w-full max-w-md rounded-2xl border border-slate-700/50 bg-slate-800 p-6 shadow-2xl">
                 {/* Header */}
                 <div class="mb-5 flex items-center justify-between">
-                    <h2 class="text-lg font-semibold text-slate-50">
-                        Choose Your Role
-                    </h2>
+                    <h2 class="text-lg font-semibold text-slate-50">Choose Your Role</h2>
                     <button
                         onClick={hideRolePicker}
                         class="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200"
@@ -96,7 +95,9 @@ const InlineRolePicker: Component = () => {
                             </div>
                             <div class="flex items-center gap-2">
                                 <Show
-                                    when={selectedRole() === "team1_captain" && isJoining()}
+                                    when={
+                                        selectedRole() === "team1_captain" && isJoining()
+                                    }
                                 >
                                     <div class="h-4 w-4 animate-spin rounded-full border-2 border-orange-400/30 border-t-orange-400" />
                                 </Show>
@@ -162,7 +163,9 @@ const InlineRolePicker: Component = () => {
                             </div>
                             <div class="flex items-center gap-2">
                                 <Show
-                                    when={selectedRole() === "team2_captain" && isJoining()}
+                                    when={
+                                        selectedRole() === "team2_captain" && isJoining()
+                                    }
                                 >
                                     <div class="h-4 w-4 animate-spin rounded-full border-2 border-orange-400/30 border-t-orange-400" />
                                 </Show>
@@ -197,7 +200,9 @@ const InlineRolePicker: Component = () => {
                                     <Eye size={20} class="text-slate-400" />
                                 </div>
                                 <div>
-                                    <div class="font-semibold text-slate-300">Spectator</div>
+                                    <div class="font-semibold text-slate-300">
+                                        Spectator
+                                    </div>
                                 </div>
                             </div>
                             <div class="flex items-center gap-2">

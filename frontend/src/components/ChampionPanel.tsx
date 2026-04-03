@@ -321,7 +321,9 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                             <div class="flex w-10 flex-shrink-0 flex-col items-center justify-center rounded-l bg-red-700">
                                                 <span
                                                     class="text-[10px] font-bold uppercase tracking-widest text-white"
-                                                    style="writing-mode: vertical-lr"
+                                                    style={{
+                                                        "writing-mode": "vertical-lr"
+                                                    }}
                                                 >
                                                     Disabled
                                                 </span>

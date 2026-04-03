@@ -29,10 +29,7 @@ export function resetUser(): void {
     posthog.reset();
 }
 
-export function track(
-    event: string,
-    properties?: Record<string, unknown>
-): void {
+export function track(event: string, properties?: Record<string, unknown>): void {
     if (!initialized) return;
     posthog.capture(event, properties);
 }

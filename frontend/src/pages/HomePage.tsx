@@ -14,7 +14,10 @@ const HomePage: Component = () => {
     return (
         <div class="flex-1 overflow-auto bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
             <Title>First Pick</Title>
-            <Meta name="description" content="Plan, draft, and strategize team compositions for League of Legends. Real-time collaborative drafting, visual canvas planning, and side-by-side analysis." />
+            <Meta
+                name="description"
+                content="Plan, draft, and strategize team compositions for League of Legends. Real-time collaborative drafting, visual canvas planning, and side-by-side analysis."
+            />
             <div class="mx-auto flex min-h-full max-w-7xl flex-col p-8">
                 {/* Flow Navigation Cards */}
                 <div class="mb-12">

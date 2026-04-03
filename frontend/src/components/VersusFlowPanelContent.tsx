@@ -214,7 +214,7 @@ const VersusFlowPanelContent: Component = () => {
                                         <Swords size={22} class="text-orange-400" />
                                     }
                                     size="xs"
-                                    className="rounded-md"
+                                    class="rounded-md"
                                 />
                                 <Show when={versusDraft()?.description}>
                                     <div class="pointer-events-none absolute left-0 top-full z-50 mt-2 w-52 rounded-lg border border-slate-600/80 bg-slate-800 px-3 py-2.5 text-xs leading-relaxed text-slate-300 opacity-0 shadow-xl transition-opacity duration-200 group-hover/icon:opacity-100">

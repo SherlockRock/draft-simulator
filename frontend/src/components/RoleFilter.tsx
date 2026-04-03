@@ -67,7 +67,7 @@ export const RoleFilter: Component<RoleFilterProps> = (props) => {
                                 class={`flex h-7 w-7 items-center justify-center rounded transition-all ${
                                     isActive()
                                         ? `ring-2 ${activeRing[theme()]} bg-slate-600`
-                                        : "opacity-40 hover:opacity-70 bg-slate-700"
+                                        : "bg-slate-700 opacity-40 hover:opacity-70"
                                 }`}
                             >
                                 <img

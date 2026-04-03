@@ -8,7 +8,7 @@ interface FlowBackLinkProps {
 
 const colorMap = {
     canvas: { text: "text-purple-400", hover: "hover:text-purple-300" },
-    versus: { text: "text-orange-400", hover: "hover:text-orange-300" },
+    versus: { text: "text-orange-400", hover: "hover:text-orange-300" }
 };
 
 const FlowBackLink: Component<FlowBackLinkProps> = (props) => {
