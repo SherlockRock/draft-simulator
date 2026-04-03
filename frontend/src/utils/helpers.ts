@@ -1,8 +1,23 @@
 import { CanvasDraft, CanvasGroup, AnchorType, Viewport } from "./schemas";
 import { AnchorPosition } from "./types";
+import { CardLayout } from "./canvasCardLayout";
 
-export const cardHeight = (layoutToggle: boolean) => (layoutToggle ? 297 : 500);
-export const cardWidth = (layoutToggle: boolean) => (layoutToggle ? 700 : 350);
+const CARD_DIMENSIONS: Record<CardLayout, { width: number; height: number }> = {
+    vertical: { width: 380, height: 600 },
+    horizontal: { width: 700, height: 384 },
+    wide: { width: 700, height: 860 },
+    "wide-draft-order": { width: 700, height: 960 },
+    compact: { width: 380, height: 432 },
+    "draft-order": { width: 420, height: 728 }
+};
+
+export const cardHeight = (cardLayout: CardLayout) => {
+    return CARD_DIMENSIONS[cardLayout].height;
+};
+
+export const cardWidth = (cardLayout: CardLayout) => {
+    return CARD_DIMENSIONS[cardLayout].width;
+};
 
 /**
  * Calculates the world coordinates for an anchor point.
@@ -12,7 +27,7 @@ export const cardWidth = (layoutToggle: boolean) => (layoutToggle ? 700 : 350);
 export const getAnchorWorldPosition = (
     draft: CanvasDraft,
     anchorType: AnchorType,
-    layoutToggle: boolean,
+    cardLayout: CardLayout,
     group?: CanvasGroup | null
 ): AnchorPosition => {
     let baseX = draft.positionX;
@@ -23,8 +38,8 @@ export const getAnchorWorldPosition = (
         baseY += group.positionY;
     }
 
-    const currentWidth = cardWidth(layoutToggle);
-    const currentHeight = cardHeight(layoutToggle);
+    const currentWidth = cardWidth(cardLayout);
+    const currentHeight = cardHeight(cardLayout);
 
     switch (anchorType) {
         case "top":
@@ -132,11 +147,11 @@ export const getGroupAnchorScreenPosition = (
 export const getAnchorScreenPosition = (
     draft: CanvasDraft,
     anchorType: AnchorType,
-    layoutToggle: boolean,
+    cardLayout: CardLayout,
     viewport: Viewport,
     group?: CanvasGroup | null
 ): AnchorPosition => {
-    const worldPos = getAnchorWorldPosition(draft, anchorType, layoutToggle, group);
+    const worldPos = getAnchorWorldPosition(draft, anchorType, cardLayout, group);
     return worldToScreen(worldPos.x, worldPos.y, viewport);
 };
 
@@ -151,10 +166,10 @@ export const SERIES_CARD_GAP = 24;
  */
 export const getSeriesGroupDimensions = (
     draftCount: number,
-    layoutToggle: boolean
+    cardLayout: CardLayout
 ): { width: number; height: number } => {
-    const cw = cardWidth(layoutToggle);
-    const ch = cardHeight(layoutToggle);
+    const cw = cardWidth(cardLayout);
+    const ch = cardHeight(cardLayout);
     return {
         width:
             2 * SERIES_PADDING +
@@ -171,9 +186,9 @@ export const getSeriesGroupDimensions = (
 export const getSeriesDraftWorldPosition = (
     group: CanvasGroup,
     draftIndex: number,
-    layoutToggle: boolean
+    cardLayout: CardLayout
 ): { x: number; y: number } => {
-    const cw = cardWidth(layoutToggle);
+    const cw = cardWidth(cardLayout);
     return {
         x: group.positionX + SERIES_PADDING + draftIndex * (cw + SERIES_CARD_GAP),
         y: group.positionY + SERIES_HEADER_HEIGHT + SERIES_PADDING
@@ -188,11 +203,11 @@ export const getSeriesDraftAnchorWorldPosition = (
     group: CanvasGroup,
     draftIndex: number,
     anchorType: AnchorType,
-    layoutToggle: boolean
+    cardLayout: CardLayout
 ): AnchorPosition => {
-    const base = getSeriesDraftWorldPosition(group, draftIndex, layoutToggle);
-    const cw = cardWidth(layoutToggle);
-    const ch = cardHeight(layoutToggle);
+    const base = getSeriesDraftWorldPosition(group, draftIndex, cardLayout);
+    const cw = cardWidth(cardLayout);
+    const ch = cardHeight(cardLayout);
 
     switch (anchorType) {
         case "top":

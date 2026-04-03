@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show } from "solid-js";
+import { createSignal, createEffect, Show, For } from "solid-js";
 import { Dialog } from "./Dialog";
 import { createCanvas } from "../utils/actions";
 import toast from "solid-toast";
@@ -7,6 +7,9 @@ import { IconPicker } from "./IconPicker";
 import { champions } from "../utils/constants";
 import { useUser } from "../userProvider";
 import { createEmptyLocalCanvas, saveLocalCanvas } from "../utils/localCanvasStore";
+import { DEFAULT_CARD_LAYOUT, layoutOptions } from "../utils/canvasCardLayout";
+import type { CardLayout } from "../utils/canvasCardLayout";
+import { layoutIconMap } from "./LayoutIcons";
 
 interface CreateCanvasDialogProps {
     isOpen: () => boolean;
@@ -20,6 +23,7 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
     const [name, setName] = createSignal("");
     const [description, setDescription] = createSignal("");
     const [icon, setIcon] = createSignal("");
+    const [cardLayout, setCardLayout] = createSignal<CardLayout>(DEFAULT_CARD_LAYOUT);
     const [showIconPicker, setShowIconPicker] = createSignal(false);
     const [isSubmitting, setIsSubmitting] = createSignal(false);
     const [errors, setErrors] = createSignal<Record<string, string>>({});
@@ -30,6 +34,7 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
             setName("");
             setDescription("");
             setIcon("");
+            setCardLayout(DEFAULT_CARD_LAYOUT);
             setErrors({});
         }
     });
@@ -76,7 +81,8 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
                 const local = createEmptyLocalCanvas(
                     name().trim(),
                     description().trim() || undefined,
-                    icon()
+                    icon(),
+                    cardLayout()
                 );
                 saveLocalCanvas(local);
                 toast.success("Canvas created!");
@@ -85,7 +91,8 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
                 const result = await createCanvas({
                     name: name().trim(),
                     description: description().trim() || undefined,
-                    icon: icon()
+                    icon: icon(),
+                    cardLayout: cardLayout()
                 });
 
                 toast.success("Canvas created successfully!");
@@ -215,6 +222,38 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
                                     {icon() ? "Change icon" : "Select an icon"}
                                 </span>
                             </button>
+                        </div>
+
+                        <div class="mb-6">
+                            <label class="mb-2 block text-sm font-medium text-slate-300">
+                                Card Layout
+                            </label>
+                            <div class="grid grid-cols-2 gap-1.5">
+                                <For each={layoutOptions}>
+                                    {(option) => (
+                                        <button
+                                            type="button"
+                                            onClick={() => setCardLayout(option.value)}
+                                            class="flex items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors"
+                                            classList={{
+                                                "border-purple-500 bg-purple-600/15":
+                                                    cardLayout() === option.value,
+                                                "border-slate-600 bg-slate-700 hover:border-slate-500 hover:bg-slate-600":
+                                                    cardLayout() !== option.value
+                                            }}
+                                        >
+                                            <div class="flex-none">
+                                                {layoutIconMap[option.value]({
+                                                    size: 32
+                                                })}
+                                            </div>
+                                            <div class="min-w-0 text-xs font-medium text-slate-200">
+                                                {option.label}
+                                            </div>
+                                        </button>
+                                    )}
+                                </For>
+                            </div>
                         </div>
 
                         <div class="flex items-center justify-end gap-2">

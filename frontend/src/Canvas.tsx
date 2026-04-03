@@ -89,6 +89,12 @@ import { useCanvasContext } from "./contexts/CanvasContext";
 import { useCanvasSocket } from "./providers/CanvasSocketProvider";
 import CanvasSidebar from "./components/CanvasSidebar";
 import { getGroupRestrictedChampions } from "./utils/groupRestrictions";
+import type { DraftMode } from "@draft-sim/shared-types";
+import {
+    getDirectionalCanvasSlotIndex,
+    getNextCanvasSlotIndex,
+    type CardLayout
+} from "./utils/canvasCardLayout";
 
 const debounce = <T extends unknown[]>(func: (...args: T) => void, limit: number) => {
     let inDebounce: boolean;
@@ -108,8 +114,8 @@ type CanvasComponentProps = {
     error: Error | null;
     isFetching: boolean;
     refetch: () => void;
-    layoutToggle: () => boolean;
-    setLayoutToggle: (val: boolean) => void;
+    cardLayout: () => CardLayout;
+    setCardLayout: (val: CardLayout) => void;
     viewport: Accessor<Viewport>;
     setViewport: Setter<Viewport>;
     // Settings/share controls (admin only)
@@ -262,6 +268,24 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [editingGroupId, setEditingGroupId] = createSignal<string | null>(null);
     const [editingDraftId, setEditingDraftId] = createSignal<string | null>(null);
 
+    let previousCardLayout: CardLayout | undefined;
+    createEffect(() => {
+        const currentCardLayout = props.cardLayout();
+        if (
+            previousCardLayout !== undefined &&
+            currentCardLayout !== previousCardLayout &&
+            focusedDraftId() !== null
+        ) {
+            if (document.activeElement instanceof HTMLElement) {
+                document.activeElement.blur();
+            }
+            setFocusedDraftId(null);
+            setFocusedSelectIndex(-1);
+        }
+
+        previousCardLayout = currentCardLayout;
+    });
+
     const ungroupedDrafts = createMemo(() => canvasDrafts.filter((cd) => !cd.group_id));
 
     const getDraftsForGroup = (groupId: string) =>
@@ -274,8 +298,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const navigateToDraft = (positionX: number, positionY: number) => {
         if (canvasContainerRef) {
             const container = canvasContainerRef.getBoundingClientRect();
-            const currentWidth = cardWidth(props.layoutToggle());
-            const currentHeight = cardHeight(props.layoutToggle());
+            const currentWidth = cardWidth(props.cardLayout());
+            const currentHeight = cardHeight(props.cardLayout());
             props.setViewport((prev) => ({
                 ...prev,
                 x:
@@ -763,7 +787,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         socket.on(
             "canvasUpdate",
             (data: {
-                canvas: { id: string; name: string };
+                canvas: {
+                    id: string;
+                    name: string;
+                    description?: string | null;
+                    icon?: string | null;
+                    cardLayout?: CardLayout;
+                };
                 drafts: CanvasDraft[];
                 connections: Connection[];
                 groups?: CanvasGroup[];
@@ -776,7 +806,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     return {
                         ...prev,
                         name: data.canvas.name,
+                        description: data.canvas.description ?? prev.description,
+                        icon: data.canvas.icon ?? prev.icon,
+                        cardLayout: data.canvas.cardLayout ?? prev.cardLayout,
                         drafts: data.drafts,
+                        connections: data.connections,
                         groups: data.groups ?? prev.groups
                     };
                 });
@@ -1340,13 +1374,21 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         );
     };
 
+    const isInteractiveCardTarget = (target: EventTarget | null) => {
+        return (
+            target instanceof HTMLElement &&
+            !!target.closest(
+                '[data-canvas-select-root="true"], input, button, select, textarea, [contenteditable="true"]'
+            )
+        );
+    };
+
     const onBoxMouseDown = (draftId: string, e: MouseEvent) => {
         canvasContext.closeSharePopper();
         if (isConnectionMode()) return;
         if (!canEdit()) return;
 
-        const target = e.target as HTMLElement;
-        if (target.closest("select, button, input")) {
+        if (isInteractiveCardTarget(e.target)) {
             return;
         }
         e.preventDefault();
@@ -1503,14 +1545,50 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setFocusedSelectIndex(selectIndex);
     };
 
+    const onSelectBlur = () => {
+        setFocusedDraftId(null);
+        setFocusedSelectIndex(-1);
+    };
+
+    const moveFocusedSelect = (
+        axis: "horizontal" | "vertical",
+        direction: "forward" | "backward"
+    ) => {
+        const currentDraftId = focusedDraftId();
+        const currentIndex = focusedSelectIndex();
+
+        if (currentDraftId === null || currentIndex === -1) return;
+
+        setFocusedSelectIndex(
+            getNextCanvasSlotIndex(props.cardLayout(), currentIndex, axis, direction)
+        );
+    };
+
     const onSelectNext = () => {
-        const holdSelectIndex = focusedSelectIndex();
-        setFocusedSelectIndex(holdSelectIndex === 19 ? -1 : holdSelectIndex + 1);
+        moveFocusedSelect("vertical", "forward");
     };
 
     const onSelectPrevious = () => {
-        const holdSelectIndex = focusedSelectIndex();
-        setFocusedSelectIndex(holdSelectIndex === 0 ? 19 : holdSelectIndex - 1);
+        moveFocusedSelect("vertical", "backward");
+    };
+
+    const onSelectMove = (
+        axis: "horizontal" | "vertical",
+        direction: "forward" | "backward"
+    ) => {
+        const currentDraftId = focusedDraftId();
+        const currentIndex = focusedSelectIndex();
+
+        if (currentDraftId === null || currentIndex === -1) return;
+
+        setFocusedSelectIndex(
+            getDirectionalCanvasSlotIndex(
+                props.cardLayout(),
+                currentIndex,
+                axis,
+                direction
+            )
+        );
     };
 
     const onGroupMouseDown = (groupId: string, e: MouseEvent) => {
@@ -1541,7 +1619,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const handleSaveGroupSettings = (data: {
         name: string;
         disabledChampions: string[];
-        draftMode: import("@draft-sim/shared-types").DraftMode;
+        draftMode: DraftMode;
     }) => {
         const groupId = disabledChampionsGroupId();
         if (!groupId) return;
@@ -1665,8 +1743,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const drafts = getDraftsForGroup(groupId);
         if (drafts.length === 0) return { minWidth: 0, minHeight: 0 };
 
-        const cw = cardWidth(props.layoutToggle());
-        const ch = cardHeight(props.layoutToggle());
+        const cw = cardWidth(props.cardLayout());
+        const ch = cardHeight(props.cardLayout());
 
         let maxRight = 0;
         let maxBottom = 0;
@@ -1683,8 +1761,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         draftRelX: number,
         draftRelY: number
     ) => {
-        const cw = cardWidth(props.layoutToggle());
-        const ch = cardHeight(props.layoutToggle());
+        const cw = cardWidth(props.cardLayout());
+        const ch = cardHeight(props.cardLayout());
         const currentWidth = group.width ?? 400;
         const currentHeight = group.height ?? 200;
 
@@ -1784,7 +1862,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             );
             const PADDING = 20;
             const CARD_GAP = 24;
-            const cw = props.layoutToggle() ? 700 : 350;
+            const cw = cardWidth(props.cardLayout());
             const offsetX = PADDING + draftIndex * (cw + CARD_GAP);
             navigateToDraft(group.positionX + offsetX, group.positionY);
         } else {
@@ -1810,37 +1888,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setIsDeleteDialogOpen(true);
     };
 
-    const tabOrder = [
-        0, 10, 1, 11, 2, 12, 3, 13, 4, 14, 5, 15, 6, 16, 7, 17, 8, 18, 9, 19
-    ];
-
     const moveToNextSelect = () => {
-        const currentDraftId = focusedDraftId();
-        const currentIndex = focusedSelectIndex();
-
-        if (currentDraftId === null || currentIndex === -1) return;
-
-        const currentPosition = tabOrder.indexOf(currentIndex);
-        if (currentPosition === -1) return;
-
-        const nextPosition = (currentPosition + 1) % tabOrder.length;
-        const nextIndex = tabOrder[nextPosition];
-        setFocusedSelectIndex(nextIndex);
+        moveFocusedSelect("horizontal", "forward");
     };
 
     const moveToPreviousSelect = () => {
-        const currentDraftId = focusedDraftId();
-        const currentIndex = focusedSelectIndex();
-
-        if (currentDraftId === null || currentIndex === -1) return;
-
-        const currentPosition = tabOrder.indexOf(currentIndex);
-        if (currentPosition === -1) return;
-
-        const prevPosition = (currentPosition - 1 + tabOrder.length) % tabOrder.length;
-        const prevIndex = tabOrder[prevPosition];
-
-        setFocusedSelectIndex(prevIndex);
+        moveFocusedSelect("horizontal", "backward");
     };
 
     onMount(() => {
@@ -2283,7 +2336,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     description={props.canvasData?.description}
                     onZoomIn={zoomIn}
                     onZoomOut={zoomOut}
-                    onSwapOrientation={() => props.setLayoutToggle(!props.layoutToggle())}
+                    cardLayout={props.cardLayout()}
+                    onSelectCardLayout={props.setCardLayout}
                     onImport={() => setIsImportDialogOpen(true)}
                     isConnectionMode={isConnectionMode()}
                     onToggleConnectionMode={toggleConnectionMode}
@@ -2341,7 +2395,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     selectedVertexId={
                                         selectedVertexForConnection()?.vertexId || null
                                     }
-                                    layoutToggle={props.layoutToggle}
+                                    cardLayout={props.cardLayout}
                                 />
                             )}
                         </For>
@@ -2386,7 +2440,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 sourceAnchor={sourceAnchor()}
                                 mousePos={previewMousePos()}
                                 viewport={props.viewport}
-                                layoutToggle={props.layoutToggle}
+                                cardLayout={props.cardLayout}
                             />
                         </Show>
                         <Show when={groupConnectionSource()}>
@@ -2408,7 +2462,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         (d) => d.group_id === group.id
                                     ).length;
                                 })()}
-                                layoutToggle={props.layoutToggle}
+                                cardLayout={props.cardLayout}
                             />
                         </Show>
                     </svg>
@@ -2458,8 +2512,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 viewport={props.viewport}
                                                 onBoxMouseDown={onBoxMouseDown}
                                                 onContextMenu={handleDraftContextMenu}
-                                                layoutToggle={props.layoutToggle}
-                                                setLayoutToggle={props.setLayoutToggle}
+                                                cardLayout={props.cardLayout}
                                                 isConnectionMode={isConnectionMode()}
                                                 onAnchorClick={onAnchorClick}
                                                 connectionSource={connectionSource}
@@ -2467,8 +2520,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 focusedDraftId={focusedDraftId}
                                                 focusedSelectIndex={focusedSelectIndex}
                                                 onSelectFocus={onSelectFocus}
+                                                onSelectBlur={onSelectBlur}
                                                 onSelectNext={onSelectNext}
                                                 onSelectPrevious={onSelectPrevious}
+                                                onSelectMove={onSelectMove}
                                                 canEdit={canEdit}
                                                 isGrouped={true}
                                                 groupType="custom"
@@ -2476,9 +2531,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 onEditingComplete={() =>
                                                     setEditingDraftId(null)
                                                 }
-                                                restrictedChampions={getRestrictedChampionsForDraft(
-                                                    cd
-                                                )}
+                                                restrictedChampions={() =>
+                                                    getRestrictedChampionsForDraft(cd)
+                                                }
                                                 disabledChampions={
                                                     group.metadata.disabledChampions
                                                 }
@@ -2497,7 +2552,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 onEditDisabledChampions={handleEditDisabledChampions}
                                 canEdit={canEdit}
                                 isConnectionMode={isConnectionMode()}
-                                layoutToggle={props.layoutToggle}
+                                cardLayout={props.cardLayout}
                                 onSelectAnchor={onGroupAnchorClick}
                                 isGroupSelected={groupConnectionSource() === group.id}
                                 sourceAnchor={sourceAnchor()}
@@ -2524,8 +2579,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                             viewport={props.viewport}
                                             onBoxMouseDown={onBoxMouseDown}
                                             onContextMenu={handleDraftContextMenu}
-                                            layoutToggle={props.layoutToggle}
-                                            setLayoutToggle={props.setLayoutToggle}
+                                            cardLayout={props.cardLayout}
                                             isConnectionMode={isConnectionMode()}
                                             onAnchorClick={onAnchorClick}
                                             connectionSource={connectionSource}
@@ -2533,8 +2587,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                             focusedDraftId={focusedDraftId}
                                             focusedSelectIndex={focusedSelectIndex}
                                             onSelectFocus={onSelectFocus}
+                                            onSelectBlur={onSelectBlur}
                                             onSelectNext={onSelectNext}
                                             onSelectPrevious={onSelectPrevious}
+                                            onSelectMove={onSelectMove}
                                             canEdit={canEdit}
                                             isGrouped={true}
                                             groupType="series"
@@ -2544,9 +2600,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                             }
                                             blueTeamName={blueTeamName}
                                             redTeamName={redTeamName}
-                                            restrictedChampions={getRestrictedChampionsForDraft(
-                                                cd
-                                            )}
+                                            restrictedChampions={() =>
+                                                getRestrictedChampionsForDraft(cd)
+                                            }
                                             disabledChampions={
                                                 group.metadata.disabledChampions
                                             }
@@ -2571,8 +2627,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             viewport={props.viewport}
                             onBoxMouseDown={onBoxMouseDown}
                             onContextMenu={handleDraftContextMenu}
-                            layoutToggle={props.layoutToggle}
-                            setLayoutToggle={props.setLayoutToggle}
+                            cardLayout={props.cardLayout}
                             isConnectionMode={isConnectionMode()}
                             onAnchorClick={onAnchorClick}
                             connectionSource={connectionSource}
@@ -2580,12 +2635,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             focusedDraftId={focusedDraftId}
                             focusedSelectIndex={focusedSelectIndex}
                             onSelectFocus={onSelectFocus}
+                            onSelectBlur={onSelectBlur}
                             onSelectNext={onSelectNext}
                             onSelectPrevious={onSelectPrevious}
+                            onSelectMove={onSelectMove}
                             canEdit={canEdit}
                             editingDraftId={editingDraftId}
                             onEditingComplete={() => setEditingDraftId(null)}
-                            restrictedChampions={getRestrictedChampionsForDraft(cd)}
+                            restrictedChampions={() => getRestrictedChampionsForDraft(cd)}
                         />
                     )}
                 </For>

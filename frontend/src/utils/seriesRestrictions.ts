@@ -1,4 +1,7 @@
-import { draft } from "./schemas";
+type SeriesRestrictionDraft = {
+    picks: string[];
+    seriesIndex?: number | null;
+};
 
 /**
  * Get champions restricted from selection based on series type and previous games.
@@ -16,7 +19,7 @@ import { draft } from "./schemas";
  */
 export function getRestrictedChampions(
     seriesType: string,
-    drafts: draft[],
+    drafts: SeriesRestrictionDraft[],
     currentSeriesIndex: number
 ): string[] {
     if (seriesType === "standard") {
@@ -68,7 +71,7 @@ export interface GameRestrictions {
 
 export function getRestrictedChampionsByGame(
     seriesType: string,
-    drafts: draft[],
+    drafts: SeriesRestrictionDraft[],
     currentSeriesIndex: number
 ): GameRestrictions[] {
     if (seriesType === "standard") {

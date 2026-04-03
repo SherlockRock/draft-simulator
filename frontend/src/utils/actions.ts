@@ -19,7 +19,8 @@ import {
     ImportSeriesResponseSchema,
     UpdateCanvasNameResponseSchema,
     ShareCanvasVerifySchema,
-    CanvasGroupMetadata
+    CanvasGroupMetadata,
+    CardLayoutSchema
 } from "./schemas";
 
 // Re-export types for backward compatibility
@@ -107,6 +108,7 @@ export const createCanvas = async (data: {
     name: string;
     description?: string;
     icon?: string;
+    cardLayout?: z.infer<typeof CardLayoutSchema>;
 }) => {
     const result = await apiPost(
         "/canvas/",
@@ -117,6 +119,7 @@ export const createCanvas = async (data: {
                 id: z.string(),
                 name: z.string(),
                 description: z.string().optional(),
+                cardLayout: CardLayoutSchema.optional(),
                 drafts: z.array(z.unknown())
             })
         })
@@ -142,6 +145,24 @@ export const updateCanvasName = async (data: {
     );
     // Return shape expected by callers
     return { name: result.canvas.name, id: result.canvas.id };
+};
+
+export const updateCanvasCardLayout = async (data: {
+    canvasId: string;
+    cardLayout: z.infer<typeof CardLayoutSchema>;
+}) => {
+    return apiPatch(
+        `/canvas/${data.canvasId}/card-layout`,
+        { cardLayout: data.cardLayout },
+        z.object({
+            success: z.boolean(),
+            message: z.string(),
+            canvas: z.object({
+                id: z.string(),
+                cardLayout: CardLayoutSchema
+            })
+        })
+    );
 };
 
 export const fetchCanvasList = async () => {

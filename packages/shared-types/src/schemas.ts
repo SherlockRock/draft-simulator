@@ -15,6 +15,14 @@ export const ViewportSchema = z.object({
 });
 
 export const AnchorTypeSchema = z.enum(["top", "bottom", "left", "right"]);
+export const CardLayoutSchema = z.enum([
+  "vertical",
+  "horizontal",
+  "wide",
+  "wide-draft-order",
+  "compact",
+  "draft-order",
+]);
 
 // =============================================================================
 // Draft Schemas
@@ -259,6 +267,7 @@ export const CanvasResponseSchema = z.object({
   name: z.string(),
   description: z.string().nullable().optional(),
   icon: z.string().nullable().optional(),
+  cardLayout: CardLayoutSchema,
   drafts: z.array(CanvasDraftSchema),
   connections: z.array(ConnectionSchema),
   groups: z.array(CanvasGroupSchema),
@@ -342,6 +351,7 @@ export const CanvasInfoSchema = z.object({
   name: z.string(),
   description: z.string().nullable().optional(),
   icon: z.string().nullable().optional(),
+  cardLayout: CardLayoutSchema.optional(),
 });
 
 export const UpdateCanvasNameResponseSchema = z.object({

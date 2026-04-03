@@ -12,19 +12,30 @@ import {
     overlayBanColor,
     overlayPickColor
 } from "../utils/constants";
-import type { GameRestrictions } from "../utils/seriesRestrictions";
-import type { draft, VersusDraft } from "../utils/schemas";
+import type { draft } from "../utils/schemas";
+
+export interface RestrictionGroup {
+    label: string;
+    colorIndex: number;
+    blueBans: string[];
+    redBans: string[];
+    bluePicks: string[];
+    redPicks: string[];
+}
+
+export interface RestrictionMapEntry {
+    label: string;
+    colorIndex: number;
+    pickIndex: number;
+}
 
 interface ChampionPanelProps {
-    restrictedByGame: () => GameRestrictions[];
+    restrictionGroups: () => RestrictionGroup[];
     restrictedChampions: () => string[];
-    restrictedChampionGameMap: () => Map<
-        string,
-        { gameNumber: number; pickIndex: number }
-    >;
+    restrictedChampionMap: () => Map<string, RestrictionMapEntry>;
     disabledChampions?: () => string[];
     draft: () => draft | undefined;
-    versusDraft: () => VersusDraft | undefined;
+    showBansInRestrictions: () => boolean;
     isMyTurn: () => boolean;
     isPaused: () => boolean;
     getCurrentPendingChampion: () => string | null;
@@ -137,11 +148,18 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
         return `Team 2 Pick ${pickIndex - 14}`;
     };
 
+    const getRestrictionLabelShort = (label: string): string => {
+        const gameMatch = /^Game\s+(\d+)$/i.exec(label.trim());
+        if (gameMatch) {
+            return `G${gameMatch[1]}`;
+        }
+
+        const compactLabel = label.replace(/\s+/g, " ").trim();
+        return compactLabel.slice(0, 4) || "R";
+    };
+
     // Current game number
     const currentGameNumber = () => (props.draft()?.seriesIndex ?? 0) + 1;
-
-    // Check if draft type shows bans in restrictions (ironman only)
-    const showBansInRestrictions = () => props.versusDraft()?.type === "ironman";
 
     // Memoize picks as a Set to avoid per-button .includes() on array
     const pickedSet = createMemo(() => new Set(props.draft()?.picks ?? []));
@@ -157,27 +175,25 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
             .filter(({ index }) => !restricted.has(index) && !disabled.has(index));
     });
 
-    // Inner component for a single game's restricted champions row
-    const GameRestrictedRow: Component<{ game: GameRestrictions }> = (gameProps) => {
+    // Inner component for a single restriction group's champions row
+    const RestrictionGroupRow: Component<{ group: RestrictionGroup }> = (groupProps) => {
         // Combine champions based on mode
         const allChampions = createMemo(() => {
             const champs: { id: string; pickIndex: number }[] = [];
 
-            if (showBansInRestrictions()) {
-                // Ironman: include bans
-                gameProps.game.blueBans.forEach((id, i) => {
+            if (props.showBansInRestrictions()) {
+                groupProps.group.blueBans.forEach((id, i) => {
                     if (id && id !== "") champs.push({ id, pickIndex: i });
                 });
-                gameProps.game.redBans.forEach((id, i) => {
+                groupProps.group.redBans.forEach((id, i) => {
                     if (id && id !== "") champs.push({ id, pickIndex: 5 + i });
                 });
             }
 
-            // Always include picks
-            gameProps.game.bluePicks.forEach((id, i) => {
+            groupProps.group.bluePicks.forEach((id, i) => {
                 if (id && id !== "") champs.push({ id, pickIndex: 10 + i });
             });
-            gameProps.game.redPicks.forEach((id, i) => {
+            groupProps.group.redPicks.forEach((id, i) => {
                 if (id && id !== "") champs.push({ id, pickIndex: 15 + i });
             });
 
@@ -195,7 +211,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                 6: "bg-emerald-600",
                 7: "bg-rose-600"
             };
-            return colorMap[gameProps.game.gameNumber] ?? "bg-slate-600";
+            return colorMap[groupProps.group.colorIndex] ?? "bg-slate-600";
         };
 
         return (
@@ -205,10 +221,11 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                     class={`flex w-10 flex-shrink-0 flex-col items-center justify-center rounded-l ${gameBgColor()}`}
                 >
                     <span
-                        class="text-[10px] font-bold uppercase tracking-widest text-white"
+                        class="max-h-[80px] overflow-hidden text-[10px] font-bold uppercase tracking-widest text-white"
                         style={{ "writing-mode": "vertical-lr" }}
+                        title={groupProps.group.label}
                     >
-                        Game {gameProps.game.gameNumber}
+                        {groupProps.group.label}
                     </span>
                 </div>
 
@@ -220,19 +237,18 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                             if (!champ) return null;
 
                             const parts = getDraftPositionParts(pickIndex);
-                            const gameNum = gameProps.game.gameNumber;
+                            const colorIndex = groupProps.group.colorIndex;
 
                             return (
                                 <div
-                                    class={`relative aspect-square w-full overflow-hidden rounded border-2 ${gameBorderColors[gameNum] ?? "border-slate-600"}`}
+                                    class={`relative aspect-square w-full overflow-hidden rounded border-2 ${gameBorderColors[colorIndex] ?? "border-slate-600"}`}
                                 >
                                     <img
                                         src={champ.img}
                                         alt={champ.name}
                                         class="h-full w-full object-cover opacity-50"
-                                        title={`${champ.name} - Game ${gameNum} ${getDraftPositionText(pickIndex)}`}
+                                        title={`${champ.name} - ${groupProps.group.label} ${getDraftPositionText(pickIndex)}`}
                                     />
-                                    {/* Position badge - T# P# format (no game number since it's in sidebar) */}
                                     <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
                                         <span class={overlayTeamColor}>
                                             T{parts.team}
@@ -344,10 +360,12 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                         </div>
                                     </Show>
 
-                                    {/* Game restricted sections */}
-                                    <Show when={props.restrictedByGame().length > 0}>
-                                        <For each={props.restrictedByGame()}>
-                                            {(game) => <GameRestrictedRow game={game} />}
+                                    {/* Restriction group sections */}
+                                    <Show when={props.restrictionGroups().length > 0}>
+                                        <For each={props.restrictionGroups()}>
+                                            {(group) => (
+                                                <RestrictionGroupRow group={group} />
+                                            )}
                                         </For>
                                     </Show>
 
@@ -478,9 +496,9 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                             const champId = () => String(originalIndex);
                                             const isPicked = () =>
                                                 pickedSet().has(champId());
-                                            const isSeriesRestricted = () =>
+                                            const isRestricted = () =>
                                                 props
-                                                    .restrictedChampionGameMap()
+                                                    .restrictedChampionMap()
                                                     .has(champId());
                                             const isDisabled = () =>
                                                 (
@@ -492,12 +510,12 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                             const canSelect = () =>
                                                 props.isMyTurn() &&
                                                 !isPicked() &&
-                                                !isSeriesRestricted() &&
+                                                !isRestricted() &&
                                                 !isDisabled() &&
                                                 !props.isPaused();
                                             const restrictionInfo = () =>
                                                 props
-                                                    .restrictedChampionGameMap()
+                                                    .restrictedChampionMap()
                                                     .get(champId());
                                             const currentPickIndex = () => {
                                                 const picks = props.draft()?.picks ?? [];
@@ -518,9 +536,9 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                                 ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
                                                                 : isDisabled()
                                                                   ? "cursor-not-allowed border-red-700"
-                                                                  : isSeriesRestricted() &&
+                                                                  : isRestricted() &&
                                                                       !isPendingSelection()
-                                                                    ? `cursor-not-allowed ${gameBorderColors[restrictionInfo()?.gameNumber ?? 1] ?? "border-slate-700"}`
+                                                                    ? `cursor-not-allowed ${gameBorderColors[restrictionInfo()?.colorIndex ?? 1] ?? "border-slate-700"}`
                                                                     : isPicked() &&
                                                                         !isPendingSelection()
                                                                       ? `cursor-not-allowed ${gameBorderColors[currentGameNumber()] ?? "border-slate-700"}`
@@ -531,8 +549,8 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                         title={
                                                             isDisabled()
                                                                 ? `${champ.name} - Disabled For Series`
-                                                                : isSeriesRestricted()
-                                                                  ? `${champ.name} - Game ${restrictionInfo()?.gameNumber ?? 1} ${getDraftPositionText(restrictionInfo()?.pickIndex ?? 0)}`
+                                                                : isRestricted()
+                                                                  ? `${champ.name} - ${restrictionInfo()?.label ?? "Restricted"} ${getDraftPositionText(restrictionInfo()?.pickIndex ?? 0)}`
                                                                   : isPicked()
                                                                     ? `${champ.name} - Game ${currentGameNumber()} ${getDraftPositionText(currentPickIndex())}`
                                                                     : champ.name
@@ -543,7 +561,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                             alt={champ.name}
                                                             class={`h-full w-full object-cover ${
                                                                 (isPicked() ||
-                                                                    isSeriesRestricted() ||
+                                                                    isRestricted() ||
                                                                     isDisabled()) &&
                                                                 !isPendingSelection()
                                                                     ? "opacity-40"
@@ -567,7 +585,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                         {/* Restricted overlay badge */}
                                                         <Show
                                                             when={
-                                                                isSeriesRestricted() &&
+                                                                isRestricted() &&
                                                                 !isPendingSelection()
                                                             }
                                                         >
@@ -579,19 +597,25 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                                         info?.pickIndex ??
                                                                             0
                                                                     );
-                                                                const gameNum =
-                                                                    info?.gameNumber ?? 1;
                                                                 return (
                                                                     <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
                                                                         <span
                                                                             class={
                                                                                 gameTextColorsMuted[
-                                                                                    gameNum
+                                                                                    info?.colorIndex ??
+                                                                                        1
                                                                                 ] ??
                                                                                 "text-slate-300"
                                                                             }
+                                                                            title={
+                                                                                info?.label ??
+                                                                                "Restricted"
+                                                                            }
                                                                         >
-                                                                            G{gameNum}
+                                                                            {getRestrictionLabelShort(
+                                                                                info?.label ??
+                                                                                    ""
+                                                                            )}
                                                                         </span>
                                                                         <span>
                                                                             <span
@@ -625,7 +649,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                         <Show
                                                             when={
                                                                 isPicked() &&
-                                                                !isSeriesRestricted() &&
+                                                                !isRestricted() &&
                                                                 !isPendingSelection()
                                                             }
                                                         >

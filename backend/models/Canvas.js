@@ -23,6 +23,11 @@ const Canvas = sequelize.define("Canvas", {
     allowNull: false,
     defaultValue: "",
   },
+  cardLayout: {
+    type: DataTypes.ENUM("vertical", "horizontal", "wide", "wide-draft-order", "compact", "draft-order"),
+    allowNull: false,
+    defaultValue: "wide",
+  },
 });
 
 const UserCanvas = sequelize.define("UserCanvas", {

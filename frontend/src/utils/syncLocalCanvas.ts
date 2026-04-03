@@ -21,7 +21,8 @@ export const syncLocalCanvasToServer = async (): Promise<string | null> => {
     const canvasResult = await createCanvas({
         name: local.name,
         description: local.description || undefined,
-        icon: local.icon || undefined
+        icon: local.icon || undefined,
+        cardLayout: local.cardLayout
     });
     const canvasId = canvasResult.canvas.id;
 

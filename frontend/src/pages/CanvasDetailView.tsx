@@ -16,8 +16,8 @@ const CanvasDetailView: Component = () => {
     const {
         canvas,
         mutateCanvas,
-        layoutToggle,
-        setLayoutToggle,
+        cardLayout,
+        setCardLayout,
         setCreateDraftCallback,
         openSettings,
         toggleShare,
@@ -54,8 +54,8 @@ const CanvasDetailView: Component = () => {
         if (canvasContainerRef) {
             const vp = viewport();
             const canvasRect = canvasContainerRef.getBoundingClientRect();
-            const currentHeight = cardHeight(layoutToggle());
-            const currentWidth = cardWidth(layoutToggle());
+            const currentHeight = cardHeight(cardLayout());
+            const currentWidth = cardWidth(cardLayout());
             const centerWorldX = vp.x + canvasRect.width / 2 / vp.zoom;
             const centerWorldY = vp.y + canvasRect.height / 2 / vp.zoom;
 
@@ -72,7 +72,11 @@ const CanvasDetailView: Component = () => {
                 const local = getLocalCanvas();
                 if (local) {
                     mutateCanvas({
+                        id: "local",
                         name: local.name,
+                        description: local.description,
+                        icon: local.icon,
+                        cardLayout: local.cardLayout ?? "vertical",
                         drafts: local.drafts,
                         connections: local.connections,
                         groups: local.groups,
@@ -105,7 +109,11 @@ const CanvasDetailView: Component = () => {
 
     return (
         <>
-            <Title>{canvas()?.name ? `${canvas()?.name} - First Pick` : "Canvas - First Pick"}</Title>
+            <Title>
+                {canvas()?.name
+                    ? `${canvas()?.name} - First Pick`
+                    : "Canvas - First Pick"}
+            </Title>
             <div ref={canvasContainerRef} class="flex-1 overflow-hidden">
                 <CanvasComponent
                     canvasData={canvas()}
@@ -114,8 +122,8 @@ const CanvasDetailView: Component = () => {
                     error={canvas.error}
                     refetch={() => {}}
                     isFetching={canvas.loading}
-                    layoutToggle={layoutToggle}
-                    setLayoutToggle={setLayoutToggle}
+                    cardLayout={cardLayout}
+                    setCardLayout={setCardLayout}
                     viewport={viewport}
                     setViewport={setViewport}
                     onSettings={openSettings}

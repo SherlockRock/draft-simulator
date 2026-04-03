@@ -73,6 +73,7 @@ type props = {
     theme?: SelectTheme;
     restrictedChampions?: () => string[];
     disabledChampions?: () => string[];
+    restrictedChampionSourceMap?: () => Map<string, string>;
 };
 
 function Draft(props: props) {
@@ -212,8 +213,11 @@ function Draft(props: props) {
 
     const tableClass = (champ: string) => {
         const champNum = String(champions.findIndex((c) => c.name === champ));
-        if (unavailableSet().has(champNum)) {
-            return "block w-full border-2 border-red-900/50 brightness-[30%] cursor-not-allowed";
+        if ((props.disabledChampions?.() ?? []).includes(champNum)) {
+            return "block w-full border-2 border-black brightness-[30%] cursor-not-allowed";
+        }
+        if ((props.restrictedChampions?.() ?? []).includes(champNum)) {
+            return "block w-full border-2 border-black brightness-[30%] cursor-not-allowed";
         }
         if (selectedChampion() === champNum) {
             return "block w-full border-2 border-blue-700 hover:cursor-move";
@@ -244,6 +248,49 @@ function Draft(props: props) {
         }
     };
 
+    const getDraftPositionText = (pickIndex: number): string => {
+        if (pickIndex < 5) return `T1 B${pickIndex + 1}`;
+        if (pickIndex < 10) return `T2 B${pickIndex - 4}`;
+        if (pickIndex < 15) return `T1 P${pickIndex - 9}`;
+        return `T2 P${pickIndex - 14}`;
+    };
+
+    const getChampionOverlayLabel = (champId: string): string | null => {
+        const currentPickIndex = props.draft()?.picks.indexOf(champId) ?? -1;
+        if (currentPickIndex >= 0) {
+            return getDraftPositionText(currentPickIndex);
+        }
+
+        const restrictedSource = props.restrictedChampionSourceMap?.().get(champId);
+        if (restrictedSource) {
+            return restrictedSource;
+        }
+
+        if ((props.disabledChampions?.() ?? []).includes(champId)) {
+            return "Disabled";
+        }
+
+        return null;
+    };
+
+    const championTileTitle = (champName: string, champId: string): string => {
+        const currentPickIndex = props.draft()?.picks.indexOf(champId) ?? -1;
+        if (currentPickIndex >= 0) {
+            return `${champName} - ${getDraftPositionText(currentPickIndex)}`;
+        }
+
+        const restrictedSource = props.restrictedChampionSourceMap?.().get(champId);
+        if (restrictedSource) {
+            return `${champName} - Restricted by ${restrictedSource}`;
+        }
+
+        if ((props.disabledChampions?.() ?? []).includes(champId)) {
+            return `${champName} - Disabled`;
+        }
+
+        return champName;
+    };
+
     const champNumberToImg = (champ: string) => {
         return champ === "" ? "" : champions[Number(champ)].img;
     };
@@ -255,10 +302,29 @@ function Draft(props: props) {
         return set;
     });
 
-    const availableChampions = createMemo(() =>
-        filteredChampions().filter(
-            ({ originalIndex }) => !unavailableSet().has(String(originalIndex))
-        )
+    const ChampionTile = (tileProps: {
+        champId: string;
+        champName: string;
+        img: string;
+        className: string;
+        onClick: () => void;
+    }) => (
+        <div class="relative">
+            <img
+                class={tileProps.className}
+                src={tileProps.img}
+                onClick={tileProps.onClick}
+                draggable="false"
+                title={championTileTitle(tileProps.champName, tileProps.champId)}
+            />
+            <Show when={getChampionOverlayLabel(tileProps.champId)}>
+                {(label) => (
+                    <div class="pointer-events-none absolute inset-x-0 bottom-0 bg-slate-950/85 px-1 py-0.5 text-center text-[10px] font-semibold leading-tight text-slate-100">
+                        <span class="block truncate">{label()}</span>
+                    </div>
+                )}
+            </Show>
+        </div>
     );
 
     return (
@@ -451,17 +517,21 @@ function Draft(props: props) {
                                                 }}
                                             >
                                                 {/* Table Search Results */}
-                                                <For each={availableChampions()}>
+                                                <For each={filteredChampions()}>
                                                     {({ item: champ, originalIndex }) => (
                                                         <>
                                                             <DraggableWrapper
                                                                 name={`unpicked-${originalIndex}`}
                                                             >
-                                                                <img
-                                                                    class={tableClass(
+                                                                <ChampionTile
+                                                                    champId={String(
+                                                                        originalIndex
+                                                                    )}
+                                                                    champName={champ.name}
+                                                                    img={champ.img}
+                                                                    className={tableClass(
                                                                         String(champ.name)
                                                                     )}
-                                                                    src={champ.img}
                                                                     onClick={() =>
                                                                         handleSelectedChamp(
                                                                             String(
@@ -469,7 +539,6 @@ function Draft(props: props) {
                                                                             )
                                                                         )
                                                                     }
-                                                                    draggable="false"
                                                                 />
                                                             </DraggableWrapper>
                                                         </>

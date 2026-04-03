@@ -1,18 +1,19 @@
 import { AnchorType } from "../utils/schemas";
 import { cardHeight, cardWidth } from "../utils/helpers";
 import { createMemo } from "solid-js";
+import type { CardLayout } from "../utils/canvasCardLayout";
 
 type AnchorPointProps = {
     onSelectAnchor: (anchorType: AnchorType) => void;
-    layoutToggle: () => boolean;
+    cardLayout: () => CardLayout;
     zoom: number;
     selected: () => boolean;
     sourceAnchor: () => { type: AnchorType } | null;
 };
 
 export const AnchorPoints = (props: AnchorPointProps) => {
-    const currentWidth = createMemo(() => cardWidth(props.layoutToggle()));
-    const currentHeight = createMemo(() => cardHeight(props.layoutToggle()));
+    const currentWidth = createMemo(() => cardWidth(props.cardLayout()));
+    const currentHeight = createMemo(() => cardHeight(props.cardLayout()));
 
     const anchorSize = () => Math.max(6, 8 / props.zoom);
 
@@ -20,12 +21,12 @@ export const AnchorPoints = (props: AnchorPointProps) => {
         <div class="pointer-events-none absolute inset-0">
             {/* Top anchor */}
             <div
-                class={`pointer-events-auto absolute -translate-x-1/2 cursor-pointer rounded-full ${props.selected() && props.sourceAnchor()?.type === "top" ? "bg-purple-400 hover:bg-purple-600" : "bg-yellow-400 hover:bg-yellow-500"}`}
+                class={`pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full ${props.selected() && props.sourceAnchor()?.type === "top" ? "bg-purple-400 hover:bg-purple-600" : "bg-yellow-400 hover:bg-yellow-500"}`}
                 style={{
                     width: `${anchorSize()}px`,
                     height: `${anchorSize()}px`,
                     left: `${currentWidth() / 2}px`,
-                    top: "-6px"
+                    top: "0px"
                 }}
                 onMouseDown={(e) => {
                     e.stopPropagation();
@@ -44,7 +45,7 @@ export const AnchorPoints = (props: AnchorPointProps) => {
                     width: `${anchorSize()}px`,
                     height: `${anchorSize()}px`,
                     left: `${currentWidth() / 2}px`,
-                    top: `${currentHeight() + 2}px`
+                    top: `${currentHeight()}px`
                 }}
                 onMouseDown={(e) => {
                     e.stopPropagation();
@@ -58,11 +59,11 @@ export const AnchorPoints = (props: AnchorPointProps) => {
 
             {/* Left anchor */}
             <div
-                class={`pointer-events-auto absolute -translate-x-1/2 cursor-pointer rounded-full ${props.selected() && props.sourceAnchor()?.type === "left" ? "bg-purple-400 hover:bg-purple-600" : "bg-yellow-400 hover:bg-yellow-500"}`}
+                class={`pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full ${props.selected() && props.sourceAnchor()?.type === "left" ? "bg-purple-400 hover:bg-purple-600" : "bg-yellow-400 hover:bg-yellow-500"}`}
                 style={{
                     width: `${anchorSize()}px`,
                     height: `${anchorSize()}px`,
-                    left: "-2px",
+                    left: "0px",
                     top: `${currentHeight() / 2}px`
                 }}
                 onMouseDown={(e) => {
@@ -77,11 +78,11 @@ export const AnchorPoints = (props: AnchorPointProps) => {
 
             {/* Right anchor */}
             <div
-                class={`pointer-events-auto absolute -translate-x-1/2 cursor-pointer rounded-full ${props.selected() && props.sourceAnchor()?.type === "right" ? "bg-purple-400 hover:bg-purple-600" : "bg-yellow-400 hover:bg-yellow-500"}`}
+                class={`pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full ${props.selected() && props.sourceAnchor()?.type === "right" ? "bg-purple-400 hover:bg-purple-600" : "bg-yellow-400 hover:bg-yellow-500"}`}
                 style={{
                     width: `${anchorSize()}px`,
                     height: `${anchorSize()}px`,
-                    left: `${currentWidth() + 2}px`,
+                    left: `${currentWidth()}px`,
                     top: `${currentHeight() / 2}px`
                 }}
                 onMouseDown={(e) => {

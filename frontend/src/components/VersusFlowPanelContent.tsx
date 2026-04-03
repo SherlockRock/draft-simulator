@@ -17,6 +17,7 @@ import { RoleSwitcher } from "./RoleSwitcher";
 import { EditVersusDraftDialog } from "./EditVersusDraftDialog";
 import { useQueryClient } from "@tanstack/solid-query";
 import toast from "solid-toast";
+import type { RestrictionMapEntry } from "./ChampionPanel";
 
 const VersusFlowPanelContent: Component = () => {
     const params = useParams<{ id: string; draftId: string; linkToken: string }>();
@@ -95,14 +96,13 @@ const VersusFlowPanelContent: Component = () => {
     const restrictedChampionGameMap = createMemo(() => {
         const vd = versusDraft();
         const d = draftState()?.draft;
-        if (!vd || !d)
-            return new Map<string, { gameNumber: number; pickIndex: number }>();
+        if (!vd || !d) return new Map<string, RestrictionMapEntry>();
         const byGame = getRestrictedChampionsByGame(
             vd.type || "standard",
             vd.Drafts || [],
             d.seriesIndex ?? 0
         );
-        const map = new Map<string, { gameNumber: number; pickIndex: number }>();
+        const map = new Map<string, RestrictionMapEntry>();
         for (const game of byGame) {
             const entries: [string[], number][] = [
                 [game.blueBans, 0],
@@ -114,7 +114,8 @@ const VersusFlowPanelContent: Component = () => {
                 arr.forEach((id, i) => {
                     if (id && id !== "")
                         map.set(id, {
-                            gameNumber: game.gameNumber,
+                            label: `Game ${game.gameNumber}`,
+                            colorIndex: game.gameNumber,
                             pickIndex: offset + i
                         });
                 });

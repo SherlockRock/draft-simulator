@@ -7,6 +7,7 @@ import {
     AnchorType
 } from "./schemas";
 import { getLocalCanvas, saveLocalCanvas, LocalCanvas } from "./localCanvasStore";
+import type { CardLayout } from "./canvasCardLayout";
 
 // Helper to safely cast anchor type with default
 const toAnchorType = (
@@ -40,6 +41,13 @@ export const localUpdateCanvasName = (data: {
         if (data.description !== undefined) canvas.description = data.description;
         if (data.icon !== undefined) canvas.icon = data.icon;
         return { canvas, result: { name: canvas.name, id: "local" } };
+    });
+};
+
+export const localUpdateCardLayout = (cardLayout: CardLayout) => {
+    return mutateLocal((canvas) => {
+        canvas.cardLayout = cardLayout;
+        return { canvas, result: { success: true, cardLayout } };
     });
 };
 

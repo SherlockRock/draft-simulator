@@ -1,5 +1,6 @@
 import { createContext, useContext, Setter, Resource, Accessor, JSX } from "solid-js";
 import type { CanvasResponse, CanvasListItem } from "@draft-sim/shared-types";
+import type { CardLayout } from "../utils/canvasCardLayout";
 
 // Canvas context type definition - shared between CanvasWorkflow and consumers
 type CanvasContextType = {
@@ -10,8 +11,8 @@ type CanvasContextType = {
     canvasList: Resource<CanvasListItem[] | undefined>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutateCanvasList: Setter<any>;
-    layoutToggle: Accessor<boolean>;
-    setLayoutToggle: Setter<boolean>;
+    cardLayout: Accessor<CardLayout>;
+    setCardLayout: (layout: CardLayout) => void;
     createDraftCallback: Accessor<(() => void) | null>;
     setCreateDraftCallback: Setter<(() => void) | null>;
     navigateToDraftCallback: Accessor<

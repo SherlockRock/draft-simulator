@@ -151,6 +151,7 @@ router.get("/:canvasId", async (req, res) => {
       name: canvas.name,
       description: canvas.description,
       icon: canvas.icon,
+      cardLayout: canvas.cardLayout,
       drafts: canvasDrafts,
       connections: connections,
       groups: groupsWithProgress,
@@ -513,7 +514,7 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    const { draftId, name, description, icon } = req.body;
+    const { draftId, name, description, icon, cardLayout } = req.body;
     const user = await getUserFromRequest(req);
 
     if (!user) {
@@ -526,6 +527,7 @@ router.post("/", async (req, res) => {
         name: name || "New Canvas",
         description: description,
         icon: icon || "",
+        cardLayout: cardLayout || "wide",
       });
 
       await UserCanvas.create({
@@ -540,6 +542,7 @@ router.post("/", async (req, res) => {
           id: canvas.id,
           name: canvas.name,
           description: canvas.description,
+          cardLayout: canvas.cardLayout,
           drafts: [],
         },
       });
@@ -558,6 +561,7 @@ router.post("/", async (req, res) => {
       name: name || draft.name + " Canvas",
       description: description,
       icon: icon || "",
+      cardLayout: cardLayout || "wide",
     });
     const canvasDraft = await CanvasDraft.create({
       canvas_id: canvas.id,
@@ -575,6 +579,7 @@ router.post("/", async (req, res) => {
         id: canvas.id,
         name: canvas.name,
         description: canvas.description,
+        cardLayout: canvas.cardLayout,
         drafts: [draft.toJSON()],
       },
     });
@@ -1419,6 +1424,94 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
   } catch (error) {
     console.error("Failed to update canvas name:", error);
     res.status(500).json({ error: "Failed to update canvas name" });
+  }
+});
+
+router.patch("/:canvasId/card-layout", protect, async (req, res) => {
+  try {
+    const { canvasId } = req.params;
+    const { cardLayout } = req.body;
+
+    if (!["vertical", "horizontal", "wide", "wide-draft-order", "compact", "draft-order"].includes(cardLayout)) {
+      return res.status(400).json({ error: "Invalid card layout" });
+    }
+
+    const userCanvas = await UserCanvas.findOne({
+      where: { canvas_id: canvasId, user_id: req.user.id },
+    });
+
+    if (
+      !userCanvas ||
+      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
+    ) {
+      return res.status(403).json({
+        error: "Forbidden: You don't have permission to edit this canvas",
+      });
+    }
+
+    const canvas = await Canvas.findByPk(canvasId);
+
+    if (!canvas) {
+      return res.status(404).json({ error: "Canvas not found" });
+    }
+
+    canvas.cardLayout = cardLayout;
+    await canvas.save();
+
+    const canvasDrafts = await CanvasDraft.findAll({
+      where: { canvas_id: canvas.id },
+      attributes: [
+        "positionX",
+        "positionY",
+        "is_locked",
+        "group_id",
+        "source_type",
+      ],
+      include: [
+        {
+          model: Draft,
+          attributes: [
+            "name",
+            "id",
+            "picks",
+            "type",
+            "versus_draft_id",
+            "seriesIndex",
+            "completed",
+            "winner",
+            "blueSideTeam",
+            "firstPick",
+          ],
+        },
+      ],
+      raw: true,
+      nest: true,
+    });
+
+    const connections = await CanvasConnection.findAll({
+      where: { canvas_id: canvas.id },
+      raw: true,
+    });
+
+    const groups = await CanvasGroup.findAll({
+      where: { canvas_id: canvas.id },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Canvas card layout updated",
+      canvas: canvas.toJSON(),
+    });
+
+    socketService.emitToRoom(canvasId, "canvasUpdate", {
+      canvas: canvas.toJSON(),
+      drafts: canvasDrafts,
+      connections: connections,
+      groups: groups.map((g) => g.toJSON()),
+    });
+  } catch (error) {
+    console.error("Failed to update canvas card layout:", error);
+    res.status(500).json({ error: "Failed to update canvas card layout" });
   }
 });
 

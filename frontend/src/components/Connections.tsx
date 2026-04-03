@@ -21,6 +21,7 @@ import {
 } from "../utils/helpers";
 import { ContextMenu } from "./ContextMenu";
 import { VertexComponent } from "./Vertex";
+import type { CardLayout } from "../utils/canvasCardLayout";
 
 export const ConnectionComponent = (props: {
     connection: Connection;
@@ -41,7 +42,7 @@ export const ConnectionComponent = (props: {
     onConnectionClick?: (connectionId: string) => void;
     onVertexClick: (connectionId: string, vertexId: string) => void;
     selectedVertexId?: string | null;
-    layoutToggle: () => boolean;
+    cardLayout: () => CardLayout;
 }) => {
     const [isHovered, setIsHovered] = createSignal(false);
     const [contextMenu, setContextMenu] = createSignal<{
@@ -71,7 +72,7 @@ export const ConnectionComponent = (props: {
                 const groupDrafts = props.drafts.filter((d) => d.group_id === group.id);
                 const dims = getSeriesGroupDimensions(
                     groupDrafts.length,
-                    props.layoutToggle()
+                    props.cardLayout()
                 );
                 return getGroupAnchorScreenPosition(
                     { ...group, width: dims.width, height: dims.height },
@@ -98,14 +99,14 @@ export const ConnectionComponent = (props: {
                 group,
                 index,
                 endpoint.anchor_type,
-                props.layoutToggle()
+                props.cardLayout()
             );
             return worldToScreen(worldPos.x, worldPos.y, props.viewport());
         }
         return getAnchorScreenPosition(
             draft,
             endpoint.anchor_type,
-            props.layoutToggle(),
+            props.cardLayout(),
             props.viewport(),
             group
         );
@@ -427,7 +428,7 @@ export const ConnectionPreview = (props: {
     sourceAnchor: { type: AnchorType } | null;
     mousePos: { x: number; y: number } | null;
     viewport: () => Viewport;
-    layoutToggle: () => boolean;
+    cardLayout: () => CardLayout;
     seriesDraftIndex?: number;
 }) => {
     const startPos = () => {
@@ -436,15 +437,15 @@ export const ConnectionPreview = (props: {
 
         if (!props.sourceAnchor) {
             const vp = props.viewport();
-            const currentWidth = cardWidth(props.layoutToggle());
-            const currentHeight = cardHeight(props.layoutToggle());
+            const currentWidth = cardWidth(props.cardLayout());
+            const currentHeight = cardHeight(props.cardLayout());
             let baseX: number;
             let baseY: number;
             if (isSeriesGroup && props.startGroup) {
                 const pos = getSeriesDraftWorldPosition(
                     props.startGroup,
                     seriesIndex,
-                    props.layoutToggle()
+                    props.cardLayout()
                 );
                 baseX = pos.x;
                 baseY = pos.y;
@@ -467,7 +468,7 @@ export const ConnectionPreview = (props: {
                 props.startGroup,
                 seriesIndex,
                 props.sourceAnchor.type,
-                props.layoutToggle()
+                props.cardLayout()
             );
             return worldToScreen(worldPos.x, worldPos.y, props.viewport());
         }
@@ -475,7 +476,7 @@ export const ConnectionPreview = (props: {
         return getAnchorScreenPosition(
             props.startDraft,
             props.sourceAnchor.type,
-            props.layoutToggle(),
+            props.cardLayout(),
             props.viewport(),
             props.startGroup
         );
@@ -503,17 +504,17 @@ export const GroupConnectionPreview = (props: {
     mousePos: { x: number; y: number } | null;
     viewport: () => Viewport;
     seriesDraftCount?: number;
-    layoutToggle?: () => boolean;
+    cardLayout?: () => CardLayout;
 }) => {
     const effectiveGroup = () => {
         if (
             props.startGroup.type === "series" &&
             props.seriesDraftCount !== undefined &&
-            props.layoutToggle
+            props.cardLayout
         ) {
             const dims = getSeriesGroupDimensions(
                 props.seriesDraftCount,
-                props.layoutToggle()
+                props.cardLayout()
             );
             return { ...props.startGroup, width: dims.width, height: dims.height };
         }

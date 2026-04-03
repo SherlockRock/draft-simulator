@@ -1,4 +1,12 @@
-import { Component, Show, For, createSignal, createEffect, onCleanup, onMount } from "solid-js";
+import {
+    Component,
+    Show,
+    For,
+    createSignal,
+    createEffect,
+    onCleanup,
+    onMount
+} from "solid-js";
 import { X } from "lucide-solid";
 import { draft } from "../utils/schemas";
 import { getEffectiveSide } from "@draft-sim/shared-types";
@@ -16,6 +24,7 @@ import { useMultiFilterableItems } from "../hooks/useFilterableItems";
 import { FilterBar } from "./FilterBar";
 import { RoleFilter } from "./RoleFilter";
 import { getEffectivePickOrder, getPicksArrayIndex } from "../utils/versusPickOrder";
+import type { RestrictionMapEntry } from "./ChampionPanel";
 
 interface PickChangeRequest {
     requestId: string;
@@ -36,7 +45,7 @@ interface PickChangeModalProps {
     currentPickIndex: number;
     firstPick: "blue" | "red";
     disabledChampions?: string[];
-    restrictedChampionGameMap?: Map<string, { gameNumber: number; pickIndex: number }>;
+    restrictedChampionGameMap?: Map<string, RestrictionMapEntry>;
     pendingRequest?: PickChangeRequest | null;
     onRequestChange: (pickIndex: number, newChampion: string) => void;
     onApproveChange: (requestId: string) => void;
@@ -453,7 +462,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                                             isDisabled()
                                                                 ? `${champion.name} - Disabled For Series`
                                                                 : isSeriesRestricted()
-                                                                  ? `${champion.name} - Game ${restrictionInfo()?.gameNumber ?? 1} ${getDraftPositionText(restrictionInfo()?.pickIndex ?? 0)}`
+                                                                  ? `${champion.name} - ${restrictionInfo()?.label ?? "Restricted"} ${getDraftPositionText(restrictionInfo()?.pickIndex ?? 0)}`
                                                                   : isAlreadyPicked()
                                                                     ? `${champion.name} - Game ${currentGameNumber()} ${getDraftPositionText(currentPickIndex())}`
                                                                     : champion.name
@@ -464,7 +473,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                                                 : isDisabled()
                                                                   ? "cursor-not-allowed border-red-700"
                                                                   : isSeriesRestricted()
-                                                                    ? `cursor-not-allowed ${gameBorderColors[restrictionInfo()?.gameNumber ?? 1] ?? "border-slate-700"}`
+                                                                    ? `cursor-not-allowed ${gameBorderColors[restrictionInfo()?.colorIndex ?? 1] ?? "border-slate-700"}`
                                                                     : isAlreadyPicked()
                                                                       ? `cursor-not-allowed ${gameBorderColors[currentGameNumber()] ?? "border-slate-700"}`
                                                                       : "border-transparent hover:border-slate-500"

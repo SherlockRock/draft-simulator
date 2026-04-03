@@ -1,9 +1,14 @@
-import type { DraftMode } from "@draft-sim/shared-types";
+import { DraftModeSchema, type DraftMode } from "@draft-sim/shared-types";
 
 interface DraftWithPicks {
     id: string;
     name: string;
     picks: string[];
+}
+
+export function parseDraftMode(value?: string): DraftMode | undefined {
+    const result = DraftModeSchema.safeParse(value);
+    return result.success ? result.data : undefined;
 }
 
 /**
@@ -97,6 +102,7 @@ export function getGroupRestrictedChampionsByDraft(
             draftRestrictions.redPicks.push(picks[i] || "");
         }
 
+        // Fearless only restricts picks, so ban arrays intentionally remain empty.
         // Include bans only for ironman
         if (draftMode === "ironman") {
             for (let i = 0; i < 5; i++) {

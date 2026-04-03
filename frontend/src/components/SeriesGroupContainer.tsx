@@ -2,8 +2,14 @@ import { For, Show, createMemo, Accessor, JSX } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { ExternalLink, Check, Trash2, Settings } from "lucide-solid";
 import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/schemas";
-import { getSeriesGroupDimensions } from "../utils/helpers";
+import {
+    getSeriesGroupDimensions,
+    SERIES_CARD_GAP,
+    SERIES_HEADER_HEIGHT,
+    SERIES_PADDING
+} from "../utils/helpers";
 import { GroupAnchorPoints } from "./CustomGroupContainer";
+import type { CardLayout } from "../utils/canvasCardLayout";
 
 type SeriesGroupContainerProps = {
     group: CanvasGroup;
@@ -14,7 +20,7 @@ type SeriesGroupContainerProps = {
     onEditDisabledChampions: (groupId: string) => void;
     canEdit: () => boolean;
     isConnectionMode: boolean;
-    layoutToggle: () => boolean;
+    cardLayout: () => CardLayout;
     // Pass-through for CanvasCard rendering
     renderDraftCard: (draft: CanvasDraft) => JSX.Element;
     // Connection anchor props
@@ -22,11 +28,6 @@ type SeriesGroupContainerProps = {
     isGroupSelected?: boolean;
     sourceAnchor?: { type: AnchorType } | null;
 };
-
-// Constants for layout
-const HEADER_HEIGHT = 56;
-const PADDING = 20;
-const CARD_GAP = 24;
 
 export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
     const navigate = useNavigate();
@@ -48,7 +49,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
     });
 
     const groupDimensions = createMemo(() =>
-        getSeriesGroupDimensions(props.drafts.length, props.layoutToggle())
+        getSeriesGroupDimensions(props.drafts.length, props.cardLayout())
     );
 
     const teamScore = createMemo(() => {
@@ -97,7 +98,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
             <div
                 class="flex items-center justify-between rounded-t-lg bg-slate-800 px-4"
                 style={{
-                    height: `${HEADER_HEIGHT}px`,
+                    height: `${SERIES_HEADER_HEIGHT}px`,
                     cursor: props.canEdit() ? "move" : "default"
                 }}
                 onMouseDown={(e) => props.onGroupMouseDown(props.group.id, e)}
@@ -230,8 +231,8 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
             <div
                 class="flex items-start"
                 style={{
-                    padding: `${PADDING}px`,
-                    gap: `${CARD_GAP}px`
+                    padding: `${SERIES_PADDING}px`,
+                    gap: `${SERIES_CARD_GAP}px`
                 }}
             >
                 <For each={sortedDrafts()}>{(draft) => props.renderDraftCard(draft)}</For>

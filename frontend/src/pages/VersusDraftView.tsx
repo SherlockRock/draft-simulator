@@ -44,7 +44,11 @@ import { WinnerDeclarationModal } from "../components/WinnerDeclarationModal";
 import { PauseRequestModal } from "../components/PauseRequestModal";
 import { champions, gameTextColors, getSplashUrl } from "../utils/constants";
 import toast from "solid-toast";
-import { ChampionPanel } from "../components/ChampionPanel";
+import {
+    ChampionPanel,
+    type RestrictionGroup,
+    type RestrictionMapEntry
+} from "../components/ChampionPanel";
 import {
     getRestrictedChampions,
     getRestrictedChampionsByGame
@@ -901,12 +905,22 @@ const VersusDraftView: Component = () => {
         );
     });
 
-    // Map champion ID → { gameNumber, pickIndex } for overlay badges
-    const restrictedChampionGameMap = createMemo(() => {
-        const map = new Map<string, { gameNumber: number; pickIndex: number }>();
+    const restrictionGroups = createMemo(() =>
+        restrictedByGame().map(
+            (game): RestrictionGroup => ({
+                label: `Game ${game.gameNumber}`,
+                colorIndex: game.gameNumber,
+                blueBans: game.blueBans,
+                redBans: game.redBans,
+                bluePicks: game.bluePicks,
+                redPicks: game.redPicks
+            })
+        )
+    );
+
+    const restrictedChampionMap = createMemo(() => {
+        const map = new Map<string, RestrictionMapEntry>();
         for (const game of restrictedByGame()) {
-            // blueBans → picks indices 0-4, redBans → 5-9
-            // bluePicks → 10-14, redPicks → 15-19
             const entries: [string[], number][] = [
                 [game.blueBans, 0],
                 [game.redBans, 5],
@@ -917,7 +931,8 @@ const VersusDraftView: Component = () => {
                 arr.forEach((id, i) => {
                     if (id && id !== "")
                         map.set(id, {
-                            gameNumber: game.gameNumber,
+                            label: `Game ${game.gameNumber}`,
+                            colorIndex: game.gameNumber,
                             pickIndex: offset + i
                         });
                 });
@@ -1325,14 +1340,16 @@ const VersusDraftView: Component = () => {
 
                             {/* Champion Panel */}
                             <ChampionPanel
-                                restrictedByGame={restrictedByGame}
+                                restrictionGroups={restrictionGroups}
                                 restrictedChampions={restrictedChampions}
-                                restrictedChampionGameMap={restrictedChampionGameMap}
+                                restrictedChampionMap={restrictedChampionMap}
                                 disabledChampions={() =>
                                     versusDraftQuery.data?.disabledChampions ?? []
                                 }
                                 draft={() => draftQuery.data}
-                                versusDraft={() => versusDraftQuery.data}
+                                showBansInRestrictions={() =>
+                                    versusDraftQuery.data?.type === "ironman"
+                                }
                                 isMyTurn={isMyTurn}
                                 isPaused={() => versusState().isPaused}
                                 getCurrentPendingChampion={getCurrentPendingChampion}

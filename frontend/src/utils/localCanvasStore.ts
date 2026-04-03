@@ -1,4 +1,6 @@
 import { CanvasDraft, Connection, CanvasGroup, Viewport } from "./schemas";
+import { DEFAULT_CARD_LAYOUT } from "./canvasCardLayout";
+import type { CardLayout } from "./canvasCardLayout";
 
 const STORAGE_KEY = "draft-sim:local-canvas";
 
@@ -6,6 +8,7 @@ export type LocalCanvas = {
     name: string;
     description: string;
     icon: string;
+    cardLayout: CardLayout;
     drafts: CanvasDraft[];
     connections: Connection[];
     groups: CanvasGroup[];
@@ -17,7 +20,18 @@ export const getLocalCanvas = (): LocalCanvas | null => {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return null;
-        return JSON.parse(raw) as LocalCanvas;
+        const parsed = JSON.parse(raw) as Partial<LocalCanvas>;
+        return {
+            name: parsed.name ?? "My Canvas",
+            description: parsed.description ?? "",
+            icon: parsed.icon ?? "",
+            cardLayout: parsed.cardLayout ?? "vertical",
+            drafts: parsed.drafts ?? [],
+            connections: parsed.connections ?? [],
+            groups: parsed.groups ?? [],
+            viewport: parsed.viewport ?? { x: 0, y: 0, zoom: 1 },
+            createdAt: parsed.createdAt ?? new Date().toISOString()
+        };
     } catch {
         return null;
     }
@@ -31,11 +45,12 @@ export const clearLocalCanvas = (): void => {
     localStorage.removeItem(STORAGE_KEY);
 };
 
-export const createEmptyLocalCanvas = (name: string, description?: string, icon?: string): LocalCanvas => {
+export const createEmptyLocalCanvas = (name: string, description?: string, icon?: string, cardLayout?: CardLayout): LocalCanvas => {
     return {
         name,
         description: description ?? "",
         icon: icon ?? "",
+        cardLayout: cardLayout ?? DEFAULT_CARD_LAYOUT,
         drafts: [],
         connections: [],
         groups: [],
