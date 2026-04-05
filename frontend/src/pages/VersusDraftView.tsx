@@ -881,15 +881,8 @@ const VersusDraftView: Component = () => {
         return bst === 1 ? vd.redTeamName : vd.blueTeamName;
     };
 
-    const sideTeamTextColor = (side: "blue" | "red") => {
-        const blueSideTeam =
-            versusState().blueSideTeam ?? draftQuery.data?.blueSideTeam ?? 1;
-        if (side === "blue") {
-            return blueSideTeam === 1
-                ? "text-darius-crimson"
-                : "text-darius-purple-bright";
-        }
-        return blueSideTeam === 1 ? "text-darius-purple-bright" : "text-darius-crimson";
+    const sideNameClasses = (side: "blue" | "red") => {
+        return side === "blue" ? "text-blue-400" : "text-red-400";
     };
 
     const sideTeamBorderColor = (side: "blue" | "red") => {
@@ -1060,10 +1053,12 @@ const VersusDraftView: Component = () => {
                                                 </span>
                                             </Show>
                                         </div>
-                                        <div
-                                            class={`text-xl font-bold ${sideTeamTextColor("blue")}`}
-                                        >
-                                            {blueSideTeamName()}
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <div
+                                                class={`text-xl font-bold ${sideNameClasses("blue")}`}
+                                            >
+                                                {blueSideTeamName()}
+                                            </div>
                                         </div>
                                         <Show when={!draftStarted()}>
                                             <div
@@ -1140,10 +1135,12 @@ const VersusDraftView: Component = () => {
                                                 </span>
                                             </Show>
                                         </div>
-                                        <div
-                                            class={`text-xl font-bold ${sideTeamTextColor("red")}`}
-                                        >
-                                            {redSideTeamName()}
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <div
+                                                class={`text-xl font-bold ${sideNameClasses("red")}`}
+                                            >
+                                                {redSideTeamName()}
+                                            </div>
                                         </div>
                                         <Show when={!draftStarted()}>
                                             <div
@@ -1397,8 +1394,8 @@ const VersusDraftView: Component = () => {
                         {/* Modals */}
                         <WinnerDeclarationModal
                             isOpen={showWinnerModal()}
-                            blueTeamName={versusDraftQuery.data?.blueTeamName ?? ""}
-                            redTeamName={versusDraftQuery.data?.redTeamName ?? ""}
+                            blueTeamName={blueSideTeamName()}
+                            redTeamName={redSideTeamName()}
                             onDeclareWinner={handleDeclareWinner}
                             isSpectator={isSpectator()}
                             onClose={() => setShowWinnerModal(false)}
