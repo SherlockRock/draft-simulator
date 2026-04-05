@@ -1,6 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 body {
     margin: 0;
     font-family:
@@ -14,38 +15,36 @@ code {
     font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
+/* Scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
     width: 8px;
 }
-
 .custom-scrollbar::-webkit-scrollbar-track {
-    background: #334155; /* slate-700 */
+    background: #3A3040; /* darius-border */
     border-radius: 4px;
 }
-
 .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #64748b; /* slate-500 */
+    background: #B8A8B0; /* darius-text-secondary */
     border-radius: 4px;
 }
-
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8; /* slate-400 */
+    background: #F0E8E0; /* darius-text-primary */
 }
-
-/* Firefox */
 .custom-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: #64748b #334155;
+    scrollbar-color: #B8A8B0 #3A3040;
 }
 
+/* Selection — canvas flow */
 .selection-purple::selection {
-    background-color: rgb(168 85 247 / 0.3); /* purple-500/30 */
-    color: #e9d5ff; /* purple-200 */
+    background-color: rgba(155, 80, 192, 0.3); /* darius-purple-bright at 30% */
+    color: #9B50C0;
 }
 
-.selection-orange::selection {
-    background-color: rgb(249 115 22 / 0.3); /* orange-500/30 */
-    color: #fed7aa; /* orange-200 */
+/* Selection — versus flow */
+.selection-crimson::selection {
+    background-color: rgba(224, 56, 72, 0.3); /* darius-crimson at 30% */
+    color: #E03848;
 }
 
 @keyframes countdown-unwind {

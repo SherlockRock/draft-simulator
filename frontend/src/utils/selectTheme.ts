@@ -1,47 +1,61 @@
-export type SelectTheme = "teal" | "orange" | "purple";
+export type SelectTheme = "neutral" | "orange" | "crimson" | "purple";
 
 export const themeColors = {
-    teal: {
-        border: "border-teal-700",
-        focusBorder: "focus:border-teal-400",
-        ring: "focus:ring-teal-400",
-        text: "text-teal-400",
-        hoverText: "hover:text-teal-400",
-        hoverBorder: "hover:border-teal-400",
-        dropdownBorder: "border-teal-400",
-        groupHoverText: "group-hover:text-teal-400",
-        groupHoverBorder: "group-hover:border-teal-500",
-        activeBorder: "border-teal-500",
-        ringColor: "ring-teal-400",
-        hoverBorderLight: "hover:border-teal-500"
+    neutral: {
+        border: "border-darius-border/50",
+        focusBorder: "focus:border-darius-border",
+        ring: "focus:ring-darius-border",
+        text: "text-darius-text-primary",
+        hoverText: "hover:text-darius-text-primary",
+        hoverBorder: "hover:border-darius-border",
+        dropdownBorder: "border-darius-border/50",
+        groupHoverText: "group-hover:text-darius-text-primary",
+        groupHoverBorder: "group-hover:border-darius-border",
+        activeBorder: "border-darius-border",
+        ringColor: "ring-darius-border",
+        hoverBorderLight: "hover:border-darius-border"
     },
     orange: {
-        border: "border-orange-500/60",
-        focusBorder: "focus:border-orange-400",
-        ring: "focus:ring-orange-400",
-        text: "text-orange-400",
-        hoverText: "hover:text-orange-400",
-        hoverBorder: "hover:border-orange-400",
-        dropdownBorder: "border-orange-400",
-        groupHoverText: "group-hover:text-orange-400",
-        groupHoverBorder: "group-hover:border-orange-500",
-        activeBorder: "border-orange-500",
-        ringColor: "ring-orange-400",
-        hoverBorderLight: "hover:border-orange-500"
+        border: "border-darius-ember",
+        focusBorder: "focus:border-darius-ember",
+        ring: "focus:ring-darius-ember",
+        text: "text-darius-ember",
+        hoverText: "hover:text-darius-ember",
+        hoverBorder: "hover:border-darius-ember",
+        dropdownBorder: "border-darius-ember",
+        groupHoverText: "group-hover:text-darius-ember",
+        groupHoverBorder: "group-hover:border-darius-ember",
+        activeBorder: "border-darius-ember",
+        ringColor: "ring-darius-ember",
+        hoverBorderLight: "hover:border-darius-ember"
+    },
+    crimson: {
+        border: "border-darius-crimson",
+        focusBorder: "focus:border-darius-crimson",
+        ring: "focus:ring-darius-crimson",
+        text: "text-darius-crimson",
+        hoverText: "hover:text-darius-crimson",
+        hoverBorder: "hover:border-darius-crimson",
+        dropdownBorder: "border-darius-crimson",
+        groupHoverText: "group-hover:text-darius-crimson",
+        groupHoverBorder: "group-hover:border-darius-crimson",
+        activeBorder: "border-darius-crimson",
+        ringColor: "ring-darius-crimson",
+        hoverBorderLight: "hover:border-darius-crimson"
     },
     purple: {
-        border: "border-purple-700",
-        focusBorder: "focus:border-purple-400",
-        ring: "focus:ring-purple-400",
-        text: "text-purple-400",
-        hoverText: "hover:text-purple-400",
-        hoverBorder: "hover:border-purple-400",
-        dropdownBorder: "border-purple-400",
-        groupHoverText: "group-hover:text-purple-400",
-        groupHoverBorder: "group-hover:border-purple-500",
-        activeBorder: "border-purple-500",
-        ringColor: "ring-purple-400",
-        hoverBorderLight: "hover:border-purple-500"
+        border: "border-darius-purple",
+        focusBorder: "focus:border-darius-purple-bright",
+        ring: "focus:ring-darius-purple-bright",
+        text: "text-darius-purple-bright",
+        hoverText: "hover:text-darius-purple-bright",
+        hoverBorder: "hover:border-darius-purple-bright",
+        dropdownBorder: "border-darius-purple-bright",
+        groupHoverText: "group-hover:text-darius-purple-bright",
+        groupHoverBorder: "group-hover:border-darius-purple",
+        activeBorder: "border-darius-purple",
+        ringColor: "ring-darius-purple-bright",
+        hoverBorderLight: "hover:border-darius-purple"
     }
 } as const;
 

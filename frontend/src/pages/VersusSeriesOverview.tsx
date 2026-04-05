@@ -96,7 +96,7 @@ const VersusSeriesOverview: Component = () => {
     };
 
     return (
-        <div class="flex-1 overflow-auto bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
+        <div class="flex-1 overflow-auto bg-darius-bg bg-[radial-gradient(circle,rgba(184,168,176,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
             <Title>
                 {versusDraft()?.blueTeamName && versusDraft()?.redTeamName
                     ? `${versusDraft()?.blueTeamName} vs ${versusDraft()?.redTeamName} - First Pick`
@@ -106,8 +106,8 @@ const VersusSeriesOverview: Component = () => {
                 when={isConnected()}
                 fallback={
                     <div class="flex h-full items-center justify-center">
-                        <div class="flex items-center gap-3 text-slate-400">
-                            <div class="h-5 w-5 animate-spin rounded-full border-2 border-slate-600 border-t-orange-400" />
+                        <div class="flex items-center gap-3 text-darius-text-secondary">
+                            <div class="h-5 w-5 animate-spin rounded-full border-2 border-darius-border border-t-darius-crimson" />
                             <span>Connecting to session...</span>
                         </div>
                     </div>
@@ -116,58 +116,36 @@ const VersusSeriesOverview: Component = () => {
                 <Show when={versusDraft()}>
                     <div class="mx-auto max-w-5xl px-6 py-8">
                         {/* Hero matchup section */}
-                        <div class="mb-10 overflow-hidden rounded-2xl border border-slate-700/50 bg-gradient-to-b from-slate-800/80 to-slate-900/80 shadow-2xl backdrop-blur-sm">
+                        <div class="mb-10 overflow-hidden rounded-2xl border border-darius-border/50 bg-gradient-to-b from-darius-card/90 to-darius-bg/90 shadow-2xl backdrop-blur-sm">
                             {/* Series name + icon header */}
-                            <div class="flex items-center justify-between border-b border-slate-700/50 px-6 py-4">
+                            <div class="flex items-center justify-between border-b border-darius-border/50 px-6 py-4">
                                 <div class="flex items-center gap-4">
                                     <IconDisplay
                                         icon={versusDraft()?.icon}
                                         defaultIcon={
-                                            <Swords size={44} class="text-orange-400" />
+                                            <Swords
+                                                size={44}
+                                                class="text-darius-crimson"
+                                            />
                                         }
                                         size="md"
-                                        class="rounded-xl border border-slate-600/50 bg-slate-800"
+                                        class="rounded-xl border border-darius-border/50 bg-darius-card"
                                     />
                                     <div>
-                                        <h1 class="text-2xl font-bold tracking-tight text-slate-50">
+                                        <h1 class="text-2xl font-bold tracking-tight text-darius-text-primary">
                                             {versusDraft()?.name ?? ""}
                                         </h1>
-                                        <div class="mt-1 flex items-center gap-3 text-sm text-slate-400">
-                                            <span
-                                                class={`rounded-md px-2 py-0.5 ${
-                                                    versusDraft()?.length === 1
-                                                        ? "bg-indigo-500/20 text-indigo-300"
-                                                        : versusDraft()?.length === 3
-                                                          ? "bg-teal-500/20 text-teal-300"
-                                                          : versusDraft()?.length === 5
-                                                            ? "bg-emerald-500/20 text-emerald-300"
-                                                            : "bg-pink-500/20 text-pink-300"
-                                                }`}
-                                            >
+                                        <div class="mt-1 flex items-center gap-3 text-sm text-darius-text-secondary">
+                                            <span class="bg-darius-crimson/12 rounded-md px-2 py-0.5 text-darius-crimson">
                                                 Bo{versusDraft()?.length ?? 1}
                                             </span>
-                                            <span
-                                                class={`rounded-md px-2 py-0.5 ${
-                                                    versusDraft()?.competitive
-                                                        ? "bg-amber-500/20 text-amber-300"
-                                                        : "bg-sky-500/20 text-sky-300"
-                                                }`}
-                                            >
+                                            <span class="bg-darius-crimson/12 rounded-md px-2 py-0.5 text-darius-crimson">
                                                 {versusDraft()?.competitive
                                                     ? "Competitive"
                                                     : "Scrim"}
                                             </span>
                                             <Show when={versusDraft()?.type}>
-                                                <span
-                                                    class={`rounded-md px-2 py-0.5 ${
-                                                        versusDraft()?.type === "fearless"
-                                                            ? "bg-fuchsia-500/20 text-fuchsia-300"
-                                                            : versusDraft()?.type ===
-                                                                "ironman"
-                                                              ? "bg-lime-500/20 text-lime-300"
-                                                              : "bg-cyan-500/20 text-cyan-300"
-                                                    }`}
-                                                >
+                                                <span class="bg-darius-crimson/12 rounded-md px-2 py-0.5 text-darius-crimson">
                                                     {(
                                                         versusDraft()?.type?.charAt(0) ??
                                                         ""
@@ -187,7 +165,7 @@ const VersusSeriesOverview: Component = () => {
                                     {/* Blue team */}
                                     <div class="flex flex-1 items-center justify-end gap-4">
                                         <div class="text-right">
-                                            <div class="text-2xl font-bold text-slate-100">
+                                            <div class="text-2xl font-bold text-darius-text-primary">
                                                 {versusDraft()?.blueTeamName ?? ""}
                                             </div>
                                             <Show
@@ -198,28 +176,28 @@ const VersusSeriesOverview: Component = () => {
                                                         getSeriesScore().redWins
                                                 }
                                             >
-                                                <div class="mt-1 inline-block rounded bg-violet-500/20 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-violet-300">
+                                                <div class="mt-1 inline-block rounded bg-darius-crimson/20 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-darius-crimson">
                                                     Winner
                                                 </div>
                                             </Show>
                                         </div>
-                                        <div class="flex h-14 w-14 items-center justify-center rounded-xl bg-violet-500/20 text-3xl font-black tabular-nums text-violet-400">
+                                        <div class="flex h-14 w-14 items-center justify-center rounded-xl bg-darius-crimson/20 text-3xl font-black tabular-nums text-darius-crimson">
                                             {getSeriesScore().blueWins}
                                         </div>
                                     </div>
 
                                     {/* VS badge */}
-                                    <div class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg border-2 border-slate-600 bg-slate-900 text-sm font-black tracking-tighter text-slate-500">
+                                    <div class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg border-2 border-darius-border bg-darius-bg text-sm font-black tracking-tighter text-darius-text-secondary">
                                         VS
                                     </div>
 
                                     {/* Red team */}
                                     <div class="flex flex-1 items-center justify-start gap-4">
-                                        <div class="flex h-14 w-14 items-center justify-center rounded-xl bg-fuchsia-500/20 text-3xl font-black tabular-nums text-fuchsia-400">
+                                        <div class="flex h-14 w-14 items-center justify-center rounded-xl bg-darius-purple-bright/20 text-3xl font-black tabular-nums text-darius-purple-bright">
                                             {getSeriesScore().redWins}
                                         </div>
                                         <div class="text-left">
-                                            <div class="text-2xl font-bold text-slate-100">
+                                            <div class="text-2xl font-bold text-darius-text-primary">
                                                 {versusDraft()?.redTeamName ?? ""}
                                             </div>
                                             <Show
@@ -230,7 +208,7 @@ const VersusSeriesOverview: Component = () => {
                                                         getSeriesScore().blueWins
                                                 }
                                             >
-                                                <div class="mt-1 inline-block rounded bg-fuchsia-500/20 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-fuchsia-300">
+                                                <div class="mt-1 inline-block rounded bg-darius-purple-bright/20 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-darius-purple-bright">
                                                     Winner
                                                 </div>
                                             </Show>
@@ -241,8 +219,8 @@ const VersusSeriesOverview: Component = () => {
 
                             {/* Description */}
                             <Show when={versusDraft()?.description}>
-                                <div class="border-t border-slate-700/50 px-6 py-4">
-                                    <p class="text-sm leading-relaxed text-slate-400">
+                                <div class="border-t border-darius-border/50 px-6 py-4">
+                                    <p class="text-sm leading-relaxed text-darius-text-secondary">
                                         {versusDraft()?.description ?? ""}
                                     </p>
                                 </div>
@@ -251,7 +229,7 @@ const VersusSeriesOverview: Component = () => {
 
                         {/* Games grid */}
                         <div class="space-y-4">
-                            <h2 class="text-lg font-semibold tracking-tight text-slate-300">
+                            <h2 class="text-lg font-semibold tracking-tight text-darius-text-secondary">
                                 Games
                             </h2>
 
@@ -260,6 +238,10 @@ const VersusSeriesOverview: Component = () => {
                                     {(draft, index) => {
                                         const status = getDraftStatus(draft, index());
                                         const accessible = isDraftAccessible(index());
+                                        const winningTeam = getTeamWinner(
+                                            draft.winner,
+                                            draft.blueSideTeam
+                                        );
 
                                         return (
                                             <div
@@ -270,49 +252,39 @@ const VersusSeriesOverview: Component = () => {
                                                         );
                                                     }
                                                 }}
-                                                class={`group relative overflow-hidden rounded-xl border transition-all duration-200 ${
+                                                class={`group relative overflow-hidden rounded-xl border transition-colors duration-200 ${
                                                     accessible
-                                                        ? "cursor-pointer border-slate-700/50 bg-slate-800 hover:border-slate-600 hover:bg-slate-700"
-                                                        : "border-slate-800 bg-slate-950 opacity-60"
+                                                        ? "cursor-pointer border-darius-border bg-darius-card hover:bg-darius-card-hover"
+                                                        : "border-darius-border/30 bg-darius-card text-darius-disabled"
                                                 }`}
                                             >
-                                                {/* Left accent bar for winner */}
-                                                <Show when={draft.winner}>
-                                                    <div
-                                                        class={`absolute left-0 top-0 h-full w-1 ${
-                                                            getTeamWinner(
-                                                                draft.winner,
-                                                                draft.blueSideTeam
-                                                            ) === "team1"
-                                                                ? "bg-violet-500"
-                                                                : "bg-fuchsia-500"
-                                                        }`}
-                                                    />
-                                                </Show>
-
                                                 <div class="flex items-center justify-between gap-3 p-5">
                                                     {/* Left zone: game identity */}
                                                     <div class="flex min-w-0 items-center gap-4">
                                                         {/* Game number badge */}
                                                         <div
-                                                            class={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm font-bold ${
+                                                            class={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border text-sm font-bold ${
                                                                 status === "complete"
-                                                                    ? getTeamWinner(
-                                                                          draft.winner,
-                                                                          draft.blueSideTeam
-                                                                      ) === "team1"
-                                                                        ? "bg-violet-500/20 text-violet-300"
-                                                                        : "bg-fuchsia-500/20 text-fuchsia-300"
+                                                                    ? winningTeam ===
+                                                                      "team1"
+                                                                        ? "border-darius-crimson/30 bg-darius-crimson/10 text-darius-crimson"
+                                                                        : winningTeam ===
+                                                                            "team2"
+                                                                          ? "border-darius-purple-bright/30 bg-darius-purple-bright/10 text-darius-purple-bright"
+                                                                          : "border-darius-border/50 bg-darius-card-hover text-darius-text-secondary"
                                                                     : status === "active"
-                                                                      ? "bg-orange-500/20 text-orange-300"
-                                                                      : "bg-slate-700/50 text-slate-500"
+                                                                      ? "border-darius-crimson/30 bg-darius-crimson/10 text-darius-crimson"
+                                                                      : status ===
+                                                                          "locked"
+                                                                        ? "border-darius-disabled/30 bg-darius-bg/50 text-darius-disabled"
+                                                                        : "border-darius-border/50 bg-darius-card-hover text-darius-text-secondary"
                                                             }`}
                                                         >
                                                             {index() + 1}
                                                         </div>
 
                                                         <h3
-                                                            class={`whitespace-nowrap font-semibold ${gameTextColors[index() + 1] ?? "text-slate-100"}`}
+                                                            class={`whitespace-nowrap font-semibold ${gameTextColors[index() + 1] ?? "text-darius-text-primary"}`}
                                                         >
                                                             Game {index() + 1}
                                                         </h3>
@@ -321,13 +293,13 @@ const VersusSeriesOverview: Component = () => {
                                                         <span
                                                             class={`hidden rounded px-2.5 py-0.5 text-xs font-medium min-[850px]:inline-flex ${
                                                                 status === "complete"
-                                                                    ? "bg-green-500/20 text-green-300"
+                                                                    ? "bg-darius-crimson/20 text-darius-crimson"
                                                                     : status === "active"
-                                                                      ? "bg-orange-500/20 text-orange-300"
+                                                                      ? "bg-darius-crimson/20 text-darius-crimson"
                                                                       : status ===
                                                                           "locked"
-                                                                        ? "bg-slate-700/50 text-slate-500"
-                                                                        : "bg-slate-700/50 text-slate-400"
+                                                                        ? "bg-darius-card-hover/50 text-darius-text-secondary"
+                                                                        : "bg-darius-card-hover/50 text-darius-text-secondary"
                                                             }`}
                                                         >
                                                             {status === "complete"
@@ -349,13 +321,13 @@ const VersusSeriesOverview: Component = () => {
                                                                 status === "active"
                                                             }
                                                         >
-                                                            <span class="hidden items-center gap-1.5 rounded-md bg-slate-700/50 px-2.5 py-1 text-xs font-medium text-slate-400 min-[800px]:flex">
+                                                            <span class="hidden items-center gap-1.5 rounded-md bg-darius-card-hover/50 px-2.5 py-1 text-xs font-medium text-darius-text-secondary min-[800px]:flex">
                                                                 <Flag
                                                                     size={10}
-                                                                    class="text-orange-400/70"
+                                                                    class="text-darius-crimson/70"
                                                                 />
                                                                 1st:{" "}
-                                                                <span class="text-slate-300">
+                                                                <span class="text-darius-text-secondary">
                                                                     {(() => {
                                                                         const bst =
                                                                             draft.blueSideTeam ||
@@ -389,7 +361,7 @@ const VersusSeriesOverview: Component = () => {
                                                         {/* Winner reporter */}
                                                         <Show when={draft.completed}>
                                                             <div class="relative hidden min-[650px]:inline-flex">
-                                                                <span class="absolute -top-[22px] left-1/2 -translate-x-1/2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                                                                <span class="absolute -top-[22px] left-1/2 -translate-x-1/2 text-[10px] font-semibold uppercase tracking-wider text-darius-text-secondary">
                                                                     Winner
                                                                 </span>
                                                                 <WinnerReporter
@@ -439,12 +411,12 @@ const VersusSeriesOverview: Component = () => {
                                                         <Show
                                                             when={accessible}
                                                             fallback={
-                                                                <div class="text-slate-600">
+                                                                <div class="text-darius-disabled">
                                                                     <Lock size={20} />
                                                                 </div>
                                                             }
                                                         >
-                                                            <div class="text-slate-500 transition-transform duration-200 group-hover:translate-x-1 group-hover:text-slate-300">
+                                                            <div class="text-darius-text-secondary transition-transform duration-200 group-hover:translate-x-1">
                                                                 <ChevronRight size={20} />
                                                             </div>
                                                         </Show>

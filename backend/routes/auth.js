@@ -154,12 +154,21 @@ router.get("/refresh-token", async (req, res) => {
     } else {
       const userTokens = await loggedInUser.getUserTokens();
       let found = false;
-      userTokens.forEach((token) => {
-        const tokenDecrypted = helpers.decrypt(token.refresh);
-        if (refreshToken === tokenDecrypted) {
-          found = true;
+      for (const token of userTokens) {
+        try {
+          const tokenDecrypted = helpers.decrypt(token.refresh);
+          if (refreshToken === tokenDecrypted) {
+            found = true;
+            break;
+          }
+        } catch (decryptError) {
+          console.error("Skipping invalid stored refresh token:", {
+            userId: loggedInUser.id,
+            tokenId: token.id,
+            error: decryptError.message,
+          });
         }
-      });
+      }
       if (!found || new Date(decoded.exp * 1000) < new Date(Date.now())) {
         res.status(403).json({ error: "Expired or invalid token" });
       } else {
@@ -209,12 +218,21 @@ router.get("/revoke", async (req, res) => {
     });
     if (loggedInUser) {
       const userTokens = await loggedInUser.getUserTokens();
-      userTokens.forEach((token) => {
-        const dbTokenDecrypted = helpers.decrypt(token.refresh);
-        if (refreshToken === dbTokenDecrypted) {
-          token.destroy();
+      for (const token of userTokens) {
+        try {
+          const dbTokenDecrypted = helpers.decrypt(token.refresh);
+          if (refreshToken === dbTokenDecrypted) {
+            await token.destroy();
+            break;
+          }
+        } catch (decryptError) {
+          console.error("Skipping invalid stored refresh token during revoke:", {
+            userId: loggedInUser.id,
+            tokenId: token.id,
+            error: decryptError.message,
+          });
         }
-      });
+      }
     }
     res.status(200).json({ message: "Tokens revoked successfully" });
   } catch (e) {

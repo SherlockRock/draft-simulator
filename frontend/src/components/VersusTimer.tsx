@@ -43,7 +43,7 @@ export const VersusTimer: Component<VersusTimerProps> = (props) => {
         <Show
             when={props.timerStartedAt}
             fallback={
-                <div class="flex h-9 items-center justify-center text-2xl font-bold text-slate-400">
+                <div class="flex h-9 items-center justify-center text-2xl font-bold text-darius-text-secondary">
                     --
                 </div>
             }
@@ -60,7 +60,7 @@ export const VersusTimer: Component<VersusTimerProps> = (props) => {
                 >
                     <span
                         class={`text-3xl font-bold transition-colors ${
-                            isLowTime() ? "text-red-500" : "text-orange-400"
+                            isLowTime() ? "text-red-500" : "text-darius-crimson"
                         }`}
                     >
                         {timeRemaining()}s

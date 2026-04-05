@@ -37,36 +37,36 @@ const ShareCanvasPage = () => {
     });
 
     return (
-        <div class="flex h-full w-full flex-col items-center justify-center bg-slate-800">
+        <div class="flex h-full w-full flex-col items-center justify-center bg-darius-card">
             <Title>Shared Canvas - First Pick</Title>
             <Meta name="description" content="View a shared draft canvas." />
             <Show when={needsAuth()}>
-                <div class="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-slate-700/50 ring-1 ring-slate-600/50">
-                    <Lock size={28} class="text-slate-400" />
+                <div class="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-darius-card-hover/50 ring-1 ring-darius-border">
+                    <Lock size={28} class="text-darius-text-secondary" />
                 </div>
-                <h2 class="mb-2 text-lg font-medium text-slate-200">
+                <h2 class="mb-2 text-lg font-medium text-darius-text-primary">
                     Sign in to view this canvas
                 </h2>
-                <p class="mb-6 max-w-xs text-center text-sm text-slate-400">
+                <p class="mb-6 max-w-xs text-center text-sm text-darius-text-secondary">
                     Someone shared a canvas with you. Sign in to access it.
                 </p>
                 <div class="flex flex-col gap-2">
                     <button
                         onClick={() => handleLogin()}
-                        class="rounded-md bg-teal-700 px-5 py-2 text-sm font-medium text-slate-50 transition-colors hover:bg-teal-600"
+                        class="rounded-md bg-darius-ember bg-darius-ember px-5 py-2 text-sm font-medium text-darius-text-primary transition-colors"
                     >
                         Sign in with Google
                     </button>
                     <button
                         onClick={() => navigate("/")}
-                        class="rounded-md px-5 py-2 text-sm text-slate-400 transition-colors hover:text-slate-200"
+                        class="rounded-md px-5 py-2 text-sm text-darius-text-primary text-darius-text-secondary transition-colors"
                     >
                         Go to homepage
                     </button>
                 </div>
             </Show>
             <Show when={mutation.isPending}>
-                <p class="text-sm text-slate-400">Verifying share link...</p>
+                <p class="text-sm text-darius-text-secondary">Verifying share link...</p>
             </Show>
         </div>
     );

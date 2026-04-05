@@ -42,7 +42,7 @@ export const ContextMenu = (props: ContextMenuProps) => {
 
     return (
         <div
-            class="fixed z-50 min-w-48 rounded border border-slate-500 bg-slate-700 py-1 shadow-lg"
+            class="fixed z-50 min-w-48 rounded border border-darius-border bg-darius-card-hover py-1 shadow-lg"
             style={{
                 left: `${props.position.x}px`,
                 top: `${props.position.y}px`
@@ -52,9 +52,10 @@ export const ContextMenu = (props: ContextMenuProps) => {
             <For each={props.actions}>
                 {(action) => (
                     <button
-                        class="w-full px-4 py-2 text-left text-slate-50 transition-colors hover:bg-slate-600"
+                        class="w-full px-4 py-2 text-left text-darius-text-primary transition-colors hover:bg-darius-border"
                         classList={{
-                            "text-red-400 hover:bg-red-900/20": action.destructive
+                            "text-darius-crimson hover:bg-darius-crimson/15":
+                                action.destructive
                         }}
                         onClick={(e) => {
                             e.stopPropagation();

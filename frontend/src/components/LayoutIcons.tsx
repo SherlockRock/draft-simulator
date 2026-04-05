@@ -6,9 +6,9 @@ interface LayoutIconProps {
     class?: string;
 }
 
-const banColor = "#f87171"; // red-400
-const pickColor = "#34d399"; // emerald-400
-const slotColor = "#334155"; // slate-700
+const banColor = "#E03848"; // darius-crimson
+const pickColor = "#F06830"; // darius-ember
+const slotColor = "#3A3040"; // darius-border
 const slotIndexes = (count: number) => Array.from({ length: count }, (_, i) => i);
 
 /** Vertical: 2 columns, 5 bans over 5 picks per team */

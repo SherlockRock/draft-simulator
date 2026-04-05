@@ -133,13 +133,14 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
 
     return (
         <div
-            class="absolute z-20 rounded-lg border-2 bg-slate-700 shadow-xl"
+            class="absolute z-20 rounded-xl border-2 bg-darius-card/90 shadow-xl backdrop-blur-sm"
             classList={{
-                "border-slate-500":
+                "border-darius-border":
                     !props.isDragTarget && !props.isExitingSource && !isResizeClamped(),
                 "border-red-500 ring-2 ring-red-500/30": isResizeClamped(),
-                "border-teal-400 ring-2 ring-teal-400/50": props.isDragTarget,
-                "border-slate-600 opacity-75": props.isExitingSource,
+                "border-darius-purple-bright ring-2 ring-darius-purple-bright/30":
+                    props.isDragTarget,
+                "border-darius-border opacity-75": props.isExitingSource,
                 "border-dashed": draftCount() === 0
             }}
             style={{
@@ -154,7 +155,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         >
             {/* Header */}
             <div
-                class="flex items-center justify-between rounded-t-lg bg-slate-800 px-3"
+                class="flex items-center justify-between rounded-t-xl border-b border-darius-border/80 bg-darius-bg/70 px-3"
                 style={{
                     height: `${HEADER_HEIGHT}px`,
                     cursor: props.canEdit() ? "move" : "default"
@@ -176,7 +177,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                         when={isEditing()}
                         fallback={
                             <span
-                                class="cursor-text truncate font-semibold text-slate-50"
+                                class="cursor-text truncate font-semibold text-darius-text-primary"
                                 onClick={handleNameClick}
                             >
                                 {props.group.name}
@@ -189,11 +190,11 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                             onInput={(e) => setEditName(e.currentTarget.value)}
                             onBlur={handleNameBlur}
                             onKeyDown={handleNameKeyDown}
-                            class="w-full rounded border border-slate-500 bg-slate-700 px-1 font-semibold text-slate-50 outline-none focus:border-teal-400"
+                            class="w-full rounded border border-darius-border bg-darius-card px-1 font-semibold text-darius-text-primary outline-none focus:border-darius-purple-bright"
                             autofocus
                         />
                     </Show>
-                    <span class="flex-shrink-0 text-xs text-slate-400">
+                    <span class="flex-shrink-0 text-xs text-darius-text-secondary">
                         {draftCount()} draft{draftCount() !== 1 ? "s" : ""}
                     </span>
                 </div>
@@ -205,7 +206,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                                 e.stopPropagation();
                                 props.onEditDisabledChampions(props.group.id);
                             }}
-                            class="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-purple-400"
+                            class="rounded p-1 text-darius-purple-bright transition-colors hover:bg-darius-card-hover hover:text-darius-text-primary"
                             title="Disabled champions"
                         >
                             <Settings size={16} />
@@ -215,7 +216,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                                 e.stopPropagation();
                                 props.onDeleteGroup(props.group.id);
                             }}
-                            class="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-red-400"
+                            class="rounded p-1 text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-darius-crimson"
                             title="Delete group"
                         >
                             <Trash2 size={16} />
@@ -235,7 +236,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 <Show
                     when={draftCount() > 0}
                     fallback={
-                        <div class="flex h-full items-center justify-center text-sm text-slate-500">
+                        <div class="flex h-full items-center justify-center text-sm text-darius-text-secondary">
                             Drag drafts here
                         </div>
                     }
@@ -264,7 +265,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                     onMouseDown={handleResizeMouseDown}
                 >
                     <svg
-                        class="absolute bottom-1 right-1 h-3 w-3 text-slate-500"
+                        class="absolute bottom-1 right-1 h-3 w-3 text-darius-text-secondary"
                         fill="currentColor"
                         viewBox="0 0 10 10"
                     >
@@ -293,10 +294,10 @@ export const GroupAnchorPoints = (props: {
     const anchorSize = () => Math.max(8, 10 / props.zoom);
 
     const anchorClass = (type: AnchorType) =>
-        `pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full ${
+        `pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border border-darius-border/70 shadow-[0_0_0_1px_rgba(26,16,24,0.55)] ${
             props.isSelected && props.sourceAnchor?.type === type
-                ? "bg-purple-400 hover:bg-purple-600"
-                : "bg-orange-400 hover:bg-orange-500"
+                ? "bg-darius-purple-bright"
+                : "bg-darius-ember hover:bg-darius-crimson"
         }`;
 
     return (

@@ -105,7 +105,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
         props.isConnectionMode || !props.canEdit() || !!props.canvasDraft.is_locked;
 
     const sectionPanelClass =
-        "rounded-xl border border-slate-700/80 bg-slate-800/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]";
+        "rounded-xl border border-darius-border/80 bg-darius-card/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]";
     const slotLabels = createMemo(() => getIndexToShorthandForLayout(props.cardLayout()));
     const wideSectionClass = "grid h-full min-h-0 grid-cols-2 gap-3";
     const classicHorizontalGridClass = "grid h-full min-h-0 grid-cols-4 gap-3";
@@ -115,8 +115,8 @@ export const CanvasCard = (props: CanvasCardProps) => {
     const inputRowGapClass = createMemo(() => (isCompact() ? "gap-1.5" : "gap-2"));
     const titleInputClass = createMemo(() =>
         isCompact()
-            ? "min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-base font-bold text-slate-50 outline-none transition focus:border-slate-500 focus:bg-slate-800/60 disabled:cursor-not-allowed"
-            : "min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-base font-bold text-slate-50 outline-none transition focus:border-slate-500 focus:bg-slate-800/60 disabled:cursor-not-allowed"
+            ? "min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-base font-bold text-darius-text-primary outline-none transition border-darius-border bg-darius-card/60 disabled:cursor-not-allowed"
+            : "min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-base font-bold text-darius-text-primary outline-none transition border-darius-border bg-darius-card/60 disabled:cursor-not-allowed"
     );
     const teamHeaderGridClass = createMemo(() =>
         isHorizontal() ? "grid grid-cols-4 gap-3" : "grid grid-cols-2 gap-2.5"
@@ -146,9 +146,16 @@ export const CanvasCard = (props: CanvasCardProps) => {
             ? "min-h-0 flex-1 px-3 pb-2.5"
             : "min-h-0 flex-1 px-3 pb-3"
     );
+    const actionButtonBaseClass =
+        "flex size-7 items-center justify-center rounded-lg border border-solid";
+    const actionButtonBorderWidth = createMemo(() => {
+        const zoom = props.viewport().zoom;
+        if (!Number.isFinite(zoom) || zoom <= 0) return "1px";
+        return `${1 / zoom}px`;
+    });
 
     const getPhaseRailClass = (label: string) =>
-        label === "Bans" ? "bg-red-400/80" : "bg-emerald-400/80";
+        label === "Bans" ? "bg-darius-crimson/80" : "bg-darius-ember/80";
 
     const renderTopRailPanel = (
         barClass: string,
@@ -291,13 +298,13 @@ export const CanvasCard = (props: CanvasCardProps) => {
     ) => (
         <div class="flex h-full min-h-0 flex-col gap-3">
             {renderSideRailPanel(
-                "bg-red-400/80",
+                "bg-darius-crimson/80",
                 barOnRight,
                 () => renderWideArtColumn(banIndices),
                 "flex-1"
             )}
             {renderSideRailPanel(
-                "bg-emerald-400/80",
+                "bg-darius-ember/80",
                 barOnRight,
                 () => renderWideArtColumn(pickIndices),
                 "flex-1"
@@ -314,7 +321,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
             <Show
                 when={!isCompact()}
                 fallback={renderTopRailPanel(
-                    "bg-red-400/80",
+                    "bg-darius-crimson/80",
                     () => (
                         <div class="flex min-h-0 flex-1 items-center justify-center gap-1">
                             <For each={banIndices}>
@@ -327,7 +334,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                 )}
             >
                 {renderSideRailPanel(
-                    "bg-red-400/80",
+                    "bg-darius-crimson/80",
                     barOnRight,
                     () => (
                         <div
@@ -348,7 +355,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                 )}
             </Show>
             {renderSideRailPanel(
-                "bg-emerald-400/80",
+                "bg-darius-ember/80",
                 barOnRight,
                 () => (
                     <div
@@ -477,7 +484,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                     "col-span-2": isHorizontal()
                 }}
             >
-                <div class="truncate text-sm font-semibold tracking-[0.02em] text-violet-200/95">
+                <div class="truncate text-sm font-semibold tracking-[0.02em] text-darius-purple-bright">
                     {props.blueTeamName?.trim() || "Team 1"}
                 </div>
             </div>
@@ -487,7 +494,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                     "col-span-2": isHorizontal()
                 }}
             >
-                <div class="truncate text-sm font-semibold tracking-[0.02em] text-fuchsia-200/95">
+                <div class="truncate text-sm font-semibold tracking-[0.02em] text-darius-crimson">
                     {props.redTeamName?.trim() || "Team 2"}
                 </div>
             </div>
@@ -496,11 +503,11 @@ export const CanvasCard = (props: CanvasCardProps) => {
 
     return (
         <div
-            class="canvas-card flex flex-col rounded-xl border border-slate-500/90 bg-slate-700/95 shadow-[0_16px_40px_rgba(15,23,42,0.42)]"
+            class="canvas-card flex flex-col rounded-xl border border-darius-border/90 bg-darius-card-hover/95 shadow-[0_16px_40px_rgba(15,23,42,0.42)]"
             classList={{
                 "absolute z-30": !props.isGrouped || props.groupType === "custom",
-                "ring-4 ring-blue-400": props.isConnectionMode && !selected(),
-                "ring-4 ring-green-400": selected(),
+                "ring-4 ring-darius-purple-bright": props.isConnectionMode && !selected(),
+                "ring-4 ring-darius-ember": selected(),
                 "relative flex-shrink-0": props.isGrouped && props.groupType === "series"
             }}
             style={{
@@ -580,36 +587,38 @@ export const CanvasCard = (props: CanvasCardProps) => {
                         <div class="group relative">
                             <button
                                 onClick={handleViewClick}
-                                class="flex size-7 items-center justify-center rounded-lg bg-cyan-400 text-slate-950"
+                                class={`${actionButtonBaseClass} border-darius-purple-bright/40 bg-darius-purple/15 text-darius-purple-bright`}
+                                style={{ "border-width": actionButtonBorderWidth() }}
                                 classList={{
                                     "cursor-not-allowed opacity-50":
                                         props.isConnectionMode,
-                                    "cursor-pointer hover:bg-cyan-300":
+                                    "cursor-pointer hover:bg-darius-purple hover:text-darius-text-primary":
                                         !props.isConnectionMode
                                 }}
                                 disabled={props.isConnectionMode}
                             >
                                 <Eye size={16} />
                             </button>
-                            <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+                            <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-darius-card px-2 py-1 text-xs text-darius-text-primary opacity-0 transition-opacity group-hover:opacity-100">
                                 View Full Screen
                             </span>
                         </div>
                         <div class="group relative">
                             <button
                                 onClick={() => props.addBox(props.canvasDraft)}
-                                class="flex size-7 items-center justify-center rounded-lg bg-green-400 text-slate-950"
+                                class={`${actionButtonBaseClass} border-darius-ember/40 bg-darius-ember/15 text-darius-ember`}
+                                style={{ "border-width": actionButtonBorderWidth() }}
                                 classList={{
                                     "cursor-not-allowed opacity-50":
                                         props.isConnectionMode || !props.canEdit(),
-                                    "cursor-pointer hover:bg-green-300":
+                                    "cursor-pointer hover:bg-darius-ember hover:text-darius-bg":
                                         !props.isConnectionMode && props.canEdit()
                                 }}
                                 disabled={props.isConnectionMode || !props.canEdit()}
                             >
                                 <Plus size={16} />
                             </button>
-                            <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+                            <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-darius-card px-2 py-1 text-xs text-darius-text-primary opacity-0 transition-opacity group-hover:opacity-100">
                                 Copy Draft
                             </span>
                         </div>
@@ -621,12 +630,15 @@ export const CanvasCard = (props: CanvasCardProps) => {
                                         onClick={() =>
                                             props.deleteBox(props.canvasDraft.Draft.id)
                                         }
-                                        class="flex size-7 items-center justify-center rounded-lg bg-red-400 text-slate-950"
+                                        class={`${actionButtonBaseClass} border-darius-crimson/40 bg-darius-crimson/15 text-darius-crimson`}
+                                        style={{
+                                            "border-width": actionButtonBorderWidth()
+                                        }}
                                         classList={{
                                             "cursor-not-allowed opacity-50":
                                                 props.isConnectionMode ||
                                                 !props.canEdit(),
-                                            "cursor-pointer hover:bg-red-300":
+                                            "cursor-pointer hover:bg-darius-crimson hover:text-darius-text-primary":
                                                 !props.isConnectionMode && props.canEdit()
                                         }}
                                         disabled={
@@ -635,7 +647,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                                     >
                                         <X size={16} />
                                     </button>
-                                    <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+                                    <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-darius-card px-2 py-1 text-xs text-darius-text-primary opacity-0 transition-opacity group-hover:opacity-100">
                                         Delete Draft
                                     </span>
                                 </div>
@@ -643,7 +655,8 @@ export const CanvasCard = (props: CanvasCardProps) => {
                         >
                             <div class="group relative">
                                 <div
-                                    class="flex size-7 cursor-help items-center justify-center rounded-lg bg-slate-500 text-slate-100"
+                                    class={`${actionButtonBaseClass} cursor-help border-darius-border bg-darius-card-hover text-darius-text-secondary`}
+                                    style={{ "border-width": actionButtonBorderWidth() }}
                                     title={
                                         props.canvasDraft.Draft.versus_draft_id
                                             ? `Game ${(props.canvasDraft.Draft.seriesIndex ?? 0) + 1} of imported series. Cannot be edited.`
@@ -652,7 +665,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                                 >
                                     <Lock size={16} />
                                 </div>
-                                <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+                                <span class="pointer-events-none absolute -top-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-darius-card px-2 py-1 text-xs text-darius-text-primary opacity-0 transition-opacity group-hover:opacity-100">
                                     Locked
                                 </span>
                             </div>
@@ -729,10 +742,10 @@ export const CanvasCard = (props: CanvasCardProps) => {
                     }
                 >
                     <div class={classicHorizontalGridClass}>
-                        {renderHorizontalColumn(blueBanIndices, "bg-red-400/80")}
-                        {renderHorizontalColumn(bluePickIndices, "bg-emerald-400/80")}
-                        {renderHorizontalColumn(redPickIndices, "bg-emerald-400/80")}
-                        {renderHorizontalColumn(redBanIndices, "bg-red-400/80")}
+                        {renderHorizontalColumn(blueBanIndices, "bg-darius-crimson/80")}
+                        {renderHorizontalColumn(bluePickIndices, "bg-darius-ember/80")}
+                        {renderHorizontalColumn(redPickIndices, "bg-darius-ember/80")}
+                        {renderHorizontalColumn(redBanIndices, "bg-darius-crimson/80")}
                     </div>
                 </Show>
             </div>

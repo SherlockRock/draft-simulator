@@ -78,8 +78,8 @@ const CanvasEntryRedirect: Component = () => {
 
     // Minimal loading state while resolving
     return (
-        <div class="flex flex-1 items-center justify-center bg-slate-900">
-            <div class="text-slate-400">Loading canvas...</div>
+        <div class="flex flex-1 items-center justify-center bg-darius-bg">
+            <div class="text-darius-text-secondary">Loading canvas...</div>
         </div>
     );
 };

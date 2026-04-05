@@ -1,18 +1,22 @@
-import { Component, Show } from "solid-js";
+import { Component, Show, createSignal } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { Title, Meta } from "@solidjs/meta";
 import { LayoutDashboard, Swords } from "lucide-solid";
 import FlowCard from "../components/FlowCard";
 import ActivityList from "../components/ActivityList";
+import { CreateCanvasDialog } from "../components/CreateCanvasDialog";
+import { CreateVersusDraftDialog } from "../components/CreateVersusDraftDialog";
 import { useUser } from "../userProvider";
 
 const HomePage: Component = () => {
     const navigate = useNavigate();
     const context = useUser();
     const [user] = context();
+    const [showCreateCanvasDialog, setShowCreateCanvasDialog] = createSignal(false);
+    const [showCreateVersusDialog, setShowCreateVersusDialog] = createSignal(false);
 
     return (
-        <div class="flex-1 overflow-auto bg-slate-900 bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
+        <div class="flex-1 overflow-auto bg-darius-bg bg-[radial-gradient(circle,rgba(184,168,176,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
             <Title>First Pick</Title>
             <Meta
                 name="description"
@@ -25,29 +29,25 @@ const HomePage: Component = () => {
                         <FlowCard
                             title="Canvas"
                             description="Visual workspace for organizing drafts"
-                            icon={<LayoutDashboard size={44} class="text-purple-400" />}
+                            icon={
+                                <LayoutDashboard
+                                    size={28}
+                                    class="text-darius-purple-bright"
+                                />
+                            }
                             onClick={() => navigate("/canvas")}
                             flowType="canvas"
-                            bullets={[
-                                "Create and position draft cards anywhere on the canvas",
-                                "Draw connections between related drafts",
-                                "Collaborate with teammates in real-time",
-                                "Organize complex draft scenarios and strategies",
-                                "Directly Import Versus Series and Drafts"
-                            ]}
+                            ctaLabel="Create Canvas"
+                            onCtaClick={() => setShowCreateCanvasDialog(true)}
                         />
                         <FlowCard
                             title="Versus"
                             description="Head-to-head competitive draft series"
-                            icon={<Swords size={44} class="text-orange-400" />}
+                            icon={<Swords size={28} class="text-darius-crimson" />}
                             onClick={() => navigate("/versus")}
                             flowType="versus"
-                            bullets={[
-                                "Create head-to-head competitive draft series (Best of 1, 3, 5, or 7)",
-                                "Share a single link for others to join as Team Captain or Spectator",
-                                "Choose between Fearless, Standard, or Ironman draft styles",
-                                "Utilize pauses and champion swap requests to prevent headaches"
-                            ]}
+                            ctaLabel="Create Versus"
+                            onCtaClick={() => setShowCreateVersusDialog(true)}
                         />
                     </div>
                 </div>
@@ -55,18 +55,31 @@ const HomePage: Component = () => {
                 {/* Recent Activity Feed - Only show for signed-in users */}
                 <Show when={user()}>
                     <section class="flex flex-1 flex-col">
-                        <h2 class="mb-4 text-2xl font-semibold text-slate-200">
+                        <h2 class="mb-4 text-2xl font-semibold text-darius-text-primary">
                             Recent Activity
                         </h2>
                         <ActivityList
                             queryKeyBase={["recentActivity"]}
-                            accentColor="teal"
+                            accentColor="orange"
                             emptyMessage="No recent activity"
                             keyboardControls={user()?.keyboard_controls ?? false}
                         />
                     </section>
                 </Show>
             </div>
+
+            <CreateCanvasDialog
+                isOpen={showCreateCanvasDialog}
+                onClose={() => setShowCreateCanvasDialog(false)}
+                onSuccess={(canvasId) => {
+                    setShowCreateCanvasDialog(false);
+                    navigate(`/canvas/${canvasId}`);
+                }}
+            />
+            <CreateVersusDraftDialog
+                isOpen={showCreateVersusDialog}
+                onClose={() => setShowCreateVersusDialog(false)}
+            />
         </div>
     );
 };

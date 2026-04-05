@@ -80,7 +80,7 @@ const ChampionStrip: Component<{
                                 class={`h-7 w-7 rounded object-cover ${
                                     props.tint === "disabled"
                                         ? "border border-red-700/60 opacity-75"
-                                        : "border border-slate-700"
+                                        : "border border-darius-border"
                                 }`}
                             />
                         );
@@ -92,6 +92,11 @@ const ChampionStrip: Component<{
 };
 
 const TREE_CONNECTOR_WIDTH_CLASS = "w-6";
+const TREE_CONNECTOR_STROKE_CLASS = "bg-darius-purple-bright/35";
+const TREE_CONNECTOR_THICKNESS_CLASS = "w-0.5";
+const TREE_CONNECTOR_BRANCH_THICKNESS_CLASS = "h-0.5";
+const TREE_CONNECTOR_BRANCH_OFFSET_CLASS = "left-[2px]";
+const TREE_CONNECTOR_END_CAP_CLASS = "h-[calc(50%+1px)]";
 
 const RestrictionTreeRow: Component<{
     continueAbove?: boolean;
@@ -104,13 +109,25 @@ const RestrictionTreeRow: Component<{
         <div class="flex items-stretch">
             <div class={`relative ml-[11px] shrink-0 ${TREE_CONNECTOR_WIDTH_CLASS}`}>
                 <Show when={props.continueAbove}>
-                    <div class="absolute left-0 top-0 h-1/2 w-px bg-slate-700" />
+                    <div
+                        class={`absolute left-0 ${TREE_CONNECTOR_THICKNESS_CLASS} ${TREE_CONNECTOR_STROKE_CLASS} ${
+                            props.continueBelow
+                                ? "bottom-0 top-0"
+                                : `top-0 ${TREE_CONNECTOR_END_CAP_CLASS}`
+                        }`}
+                    />
                 </Show>
                 <Show when={props.continueBelow}>
-                    <div class="absolute bottom-0 left-0 h-1/2 w-px bg-slate-700" />
+                    <div
+                        class={`absolute bottom-0 left-0 ${TREE_CONNECTOR_THICKNESS_CLASS} ${TREE_CONNECTOR_STROKE_CLASS} ${
+                            props.continueAbove ? "hidden" : "h-1/2"
+                        }`}
+                    />
                 </Show>
                 <Show when={props.branch}>
-                    <div class="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-slate-700" />
+                    <div
+                        class={`absolute right-0 top-[calc(50%-1px)] ${TREE_CONNECTOR_BRANCH_OFFSET_CLASS} ${TREE_CONNECTOR_BRANCH_THICKNESS_CLASS} ${TREE_CONNECTOR_STROKE_CLASS}`}
+                    />
                 </Show>
             </div>
             <div class={`min-w-0 flex-1 ${props.contentClass ?? ""}`}>
@@ -596,35 +613,35 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                 ref={(el) => {
                                     sharePopperRef = el;
                                 }}
-                                class="absolute left-full top-1/2 z-50 ml-3 w-[220px] -translate-y-1/2 rounded-xl border border-slate-600 bg-slate-800 shadow-lg"
+                                class="absolute left-full top-1/2 z-50 ml-3 w-[220px] -translate-y-1/2 rounded-xl border border-darius-border bg-darius-card shadow-lg"
                             >
                                 <button
                                     onClick={closeSharePopper}
-                                    class="absolute right-0.5 top-0.5 flex h-6 w-6 items-center justify-center text-slate-400 transition-colors hover:text-slate-200"
+                                    class="absolute right-0.5 top-0.5 flex h-6 w-6 items-center justify-center text-darius-text-primary text-darius-text-secondary transition-colors"
                                 >
                                     <X size={12} />
                                 </button>
                                 <div class="relative flex flex-1 flex-col justify-center gap-2 px-4 py-3">
                                     <div class="space-y-2">
                                         <div>
-                                            <p class="mb-0.5 text-xs font-medium text-slate-300">
+                                            <p class="mb-0.5 text-xs font-medium text-darius-text-secondary">
                                                 View Access
                                             </p>
                                             <Show
                                                 when={!viewShareLinkQuery.isPending}
                                                 fallback={
-                                                    <div class="text-xs text-slate-400">
+                                                    <div class="text-xs text-darius-text-secondary">
                                                         Loading...
                                                     </div>
                                                 }
                                             >
                                                 <div class="flex items-center gap-2">
-                                                    <div class="selection-purple h-[26px] w-0 flex-grow cursor-text select-all truncate rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-50">
+                                                    <div class="selection-purple h-[26px] w-0 flex-grow cursor-text select-all truncate rounded-md border border-darius-border bg-darius-bg px-2 py-1 text-xs text-darius-text-primary">
                                                         {viewShareLinkQuery.data || ""}
                                                     </div>
                                                     <button
                                                         onClick={handleCopyViewLink}
-                                                        class="shrink-0 rounded-md bg-purple-500 p-1.5 text-slate-50 hover:bg-purple-400 disabled:opacity-50"
+                                                        class="shrink-0 rounded-md bg-darius-purple p-1.5 text-darius-text-primary transition-colors hover:bg-darius-purple-bright disabled:opacity-50"
                                                         disabled={
                                                             !viewShareLinkQuery.data
                                                         }
@@ -640,24 +657,24 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                             </Show>
                                         </div>
                                         <div>
-                                            <p class="mb-0.5 text-xs font-medium text-slate-300">
+                                            <p class="mb-0.5 text-xs font-medium text-darius-text-secondary">
                                                 Edit Access
                                             </p>
                                             <Show
                                                 when={!editShareLinkQuery.isPending}
                                                 fallback={
-                                                    <div class="text-xs text-slate-400">
+                                                    <div class="text-xs text-darius-text-secondary">
                                                         Loading...
                                                     </div>
                                                 }
                                             >
                                                 <div class="flex items-center gap-2">
-                                                    <div class="selection-purple h-[26px] w-0 flex-grow cursor-text select-all truncate rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-50">
+                                                    <div class="selection-purple h-[26px] w-0 flex-grow cursor-text select-all truncate rounded-md border border-darius-border bg-darius-bg px-2 py-1 text-xs text-darius-text-primary">
                                                         {editShareLinkQuery.data || ""}
                                                     </div>
                                                     <button
                                                         onClick={handleCopyEditLink}
-                                                        class="shrink-0 rounded-md bg-purple-500 p-1.5 text-slate-50 hover:bg-purple-400 disabled:opacity-50"
+                                                        class="shrink-0 rounded-md bg-darius-purple p-1.5 text-darius-text-primary transition-colors hover:bg-darius-purple-bright disabled:opacity-50"
                                                         disabled={
                                                             !editShareLinkQuery.data
                                                         }
@@ -888,16 +905,16 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                         return (
                                             <div class="flex min-h-0 flex-1 flex-col p-3">
                                                 {/* Inset container */}
-                                                <div class="flex min-h-0 flex-1 flex-col border border-purple-500/30 bg-slate-900/40">
+                                                <div class="flex min-h-0 flex-1 flex-col border border-darius-purple-bright/20 bg-darius-bg/40">
                                                     {/* Section header - outside scroll area */}
-                                                    <div class="flex items-center border-b border-purple-500/30 px-3 py-2.5">
-                                                        <span class="text-[11px] font-semibold uppercase leading-none tracking-wider text-slate-200">
+                                                    <div class="flex items-center border-b border-darius-purple-bright/20 px-3 py-2.5">
+                                                        <span class="text-[11px] font-semibold uppercase leading-none tracking-wider text-darius-text-primary">
                                                             Drafts & Groups
                                                         </span>
                                                     </div>
 
                                                     {/* Scrollable content */}
-                                                    <div class="custom-scrollbar flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-2">
+                                                    <div class="custom-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
                                                         {/* Grouped drafts */}
                                                         <For each={groups()}>
                                                             {(group) => (
@@ -907,18 +924,18 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                         group.id ===
                                                                             activeGroup()
                                                                                 ?.id
-                                                                            ? "border border-purple-500/40 bg-purple-600/10 p-1.5"
+                                                                            ? "border border-darius-purple-bright/35 bg-darius-purple/10 p-1.5"
                                                                             : ""
                                                                     }`}
                                                                 >
                                                                     <div
-                                                                        class={`flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs font-medium transition-colors ${
+                                                                        class={`flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors ${
                                                                             isDraftView() &&
                                                                             group.id ===
                                                                                 activeGroup()
                                                                                     ?.id
-                                                                                ? "bg-purple-600/20 text-purple-100"
-                                                                                : "text-slate-300 hover:bg-slate-700/50"
+                                                                                ? "bg-darius-purple/20 text-darius-text-primary hover:bg-darius-purple/25"
+                                                                                : "bg-darius-card-hover/50 text-darius-text-secondary hover:bg-darius-card-hover hover:text-darius-text-primary"
                                                                         }`}
                                                                         onClick={() => {
                                                                             const callback =
@@ -941,17 +958,17 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                             )
                                                                         }
                                                                     >
-                                                                        <span
-                                                                            class={
-                                                                                group.type ===
-                                                                                "series"
-                                                                                    ? "text-orange-400"
-                                                                                    : "text-purple-400"
-                                                                            }
-                                                                        >
-                                                                            ●
+                                                                        <span class="flex h-4 w-4 items-center justify-center">
+                                                                            <span
+                                                                                class={`block h-1.5 w-1.5 rounded-full ${
+                                                                                    group.type ===
+                                                                                    "series"
+                                                                                        ? "bg-darius-crimson"
+                                                                                        : "bg-darius-purple-bright"
+                                                                                }`}
+                                                                            />
                                                                         </span>
-                                                                        <span class="truncate text-slate-200">
+                                                                        <span class="truncate text-darius-text-primary">
                                                                             {group.name}
                                                                         </span>
                                                                         <Show
@@ -962,21 +979,12 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                                 activeRestrictionLabel()
                                                                             }
                                                                         >
-                                                                            <span class="ml-auto rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-purple-200">
+                                                                            <span class="ml-auto rounded bg-darius-purple/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-darius-purple-bright">
                                                                                 {activeRestrictionLabel()}
                                                                             </span>
                                                                         </Show>
                                                                     </div>
-                                                                    <div
-                                                                        class={
-                                                                            isDraftView() &&
-                                                                            group.id ===
-                                                                                activeGroup()
-                                                                                    ?.id
-                                                                                ? "mt-1.5"
-                                                                                : ""
-                                                                        }
-                                                                    >
+                                                                    <div>
                                                                         <For
                                                                             each={getDraftsForGroup(
                                                                                 group.id
@@ -1155,13 +1163,6 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                                                 0
                                                                                     );
 
-                                                                                const rowSpacingClass =
-                                                                                    () =>
-                                                                                        index() >
-                                                                                        0
-                                                                                            ? "pt-1"
-                                                                                            : "";
-
                                                                                 return (
                                                                                     <>
                                                                                         <RestrictionTreeRow
@@ -1172,6 +1173,12 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                                                 showDisabledRow()
                                                                                             }
                                                                                             branch
+                                                                                            contentClass={
+                                                                                                index() ===
+                                                                                                0
+                                                                                                    ? "pt-2"
+                                                                                                    : "pt-2"
+                                                                                            }
                                                                                         >
                                                                                             <div
                                                                                                 class={`cursor-pointer truncate rounded px-2 py-1.5 text-sm transition-colors ${
@@ -1180,9 +1187,9 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                                                         .Draft
                                                                                                         .id ===
                                                                                                         params.draftId
-                                                                                                        ? "bg-purple-600/30 text-purple-200"
-                                                                                                        : "text-slate-300 hover:bg-slate-700/50 hover:text-slate-100"
-                                                                                                } ${rowSpacingClass()}`}
+                                                                                                        ? "bg-darius-purple/30 text-darius-text-primary hover:bg-darius-purple/35"
+                                                                                                        : "bg-darius-card-hover/50 text-darius-text-primary hover:bg-darius-card-hover"
+                                                                                                }`}
                                                                                                 onClick={() => {
                                                                                                     if (
                                                                                                         isDraftView()
@@ -1236,9 +1243,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                                                 }
                                                                                                 contentClass="pb-2 pt-1"
                                                                                             >
-                                                                                                <div
-                                                                                                    class={`px-2 ${rowSpacingClass()}`}
-                                                                                                >
+                                                                                                <div class="px-2">
                                                                                                     <ChampionStrip
                                                                                                         championIds={displayChampionIds()}
                                                                                                     />
@@ -1265,7 +1270,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                                     continueAbove
                                                                                     continueBelow
                                                                                 >
-                                                                                    <div class="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wider text-red-300">
+                                                                                    <div class="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wider text-darius-crimson">
                                                                                         Disabled
                                                                                     </div>
                                                                                 </RestrictionTreeRow>
@@ -1297,8 +1302,8 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                         canvasDraft.Draft
                                                                             .id ===
                                                                             params.draftId
-                                                                            ? "bg-purple-600/30 text-purple-200"
-                                                                            : "text-slate-300 hover:bg-slate-700/50 hover:text-slate-100"
+                                                                            ? "bg-darius-purple/30 text-darius-text-primary hover:bg-darius-purple/35"
+                                                                            : "bg-darius-card-hover/50 text-darius-text-primary hover:bg-darius-card-hover"
                                                                     }`}
                                                                     onClick={() => {
                                                                         if (

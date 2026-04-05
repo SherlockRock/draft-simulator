@@ -4,7 +4,7 @@ import { Toaster } from "solid-toast";
 
 const App: Component<RouteSectionProps<unknown>> = (props) => {
     return (
-        <div class="h-screen overflow-clip bg-slate-700">
+        <div class="h-screen overflow-clip bg-darius-card-hover">
             {props.children}
             <Toaster
                 toastOptions={{

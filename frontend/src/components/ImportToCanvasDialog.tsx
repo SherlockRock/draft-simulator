@@ -103,7 +103,9 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
 
     return (
         <div class="flex w-[500px] flex-col gap-4">
-            <h2 class="text-lg font-bold text-slate-50">Import Versus Series</h2>
+            <h2 class="text-lg font-bold text-darius-text-primary">
+                Import Versus Series
+            </h2>
 
             {/* Search */}
             <input
@@ -111,18 +113,24 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                 placeholder="Search..."
                 value={searchQuery()}
                 onInput={(e) => setSearchQuery(e.currentTarget.value)}
-                class="rounded-md border border-slate-500 bg-slate-700 px-3 py-2 text-slate-50 placeholder-slate-400"
+                class="rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary placeholder:text-darius-text-secondary"
             />
 
             {/* Content */}
-            <div class="max-h-80 min-h-40 overflow-y-auto rounded-md border border-slate-500 bg-slate-800">
+            <div class="max-h-80 min-h-40 overflow-y-auto rounded-md border border-darius-border bg-darius-card">
                 <Show
                     when={!seriesQuery.isPending}
-                    fallback={<div class="p-4 text-slate-400">Loading...</div>}
+                    fallback={
+                        <div class="p-4 text-darius-text-secondary">Loading...</div>
+                    }
                 >
                     <Show
                         when={filteredSeries().length > 0}
-                        fallback={<div class="p-4 text-slate-400">No series found</div>}
+                        fallback={
+                            <div class="p-4 text-darius-text-secondary">
+                                No series found
+                            </div>
+                        }
                     >
                         <For each={filteredSeries()}>
                             {(series: VersusDraftListItem) => {
@@ -130,11 +138,11 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                                 const isExpanded = () => expandedSeriesId() === series.id;
 
                                 return (
-                                    <div class="border-b border-slate-700">
+                                    <div class="border-b border-darius-border">
                                         <div
-                                            class="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-slate-700"
+                                            class="flex cursor-pointer items-center gap-3 bg-darius-card-hover px-4 py-3"
                                             classList={{
-                                                "bg-teal-900/50":
+                                                "bg-darius-purple/15":
                                                     selectedSeriesId() === series.id &&
                                                     !selectedGameId()
                                             }}
@@ -150,20 +158,20 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                                         >
                                             <div class="flex flex-1 flex-col">
                                                 <div class="flex items-center gap-2">
-                                                    <span class="font-medium text-slate-50">
+                                                    <span class="font-medium text-darius-text-primary">
                                                         {series.name}
                                                     </span>
                                                     <span
                                                         class="rounded px-2 py-0.5 text-xs capitalize"
                                                         classList={{
-                                                            "bg-slate-500/30 text-slate-300":
+                                                            "bg-darius-card text-darius-text-secondary":
                                                                 !series.type ||
                                                                 series.type ===
                                                                     "standard",
-                                                            "bg-purple-500/30 text-purple-300":
+                                                            "bg-darius-purple/30 text-darius-purple-bright":
                                                                 series.type ===
                                                                 "fearless",
-                                                            "bg-orange-500/30 text-orange-300":
+                                                            "bg-darius-crimson/30 text-darius-crimson":
                                                                 series.type === "ironman"
                                                         }}
                                                     >
@@ -172,9 +180,9 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                                                     <span
                                                         class="rounded px-2 py-0.5 text-xs"
                                                         classList={{
-                                                            "bg-teal-500/30 text-teal-300":
+                                                            "bg-darius-ember/30 text-darius-ember":
                                                                 series.competitive,
-                                                            "bg-slate-500/30 text-slate-400":
+                                                            "bg-darius-card text-darius-text-secondary":
                                                                 !series.competitive
                                                         }}
                                                     >
@@ -183,14 +191,14 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                                                             : "Scrim"}
                                                     </span>
                                                 </div>
-                                                <span class="text-sm text-slate-400">
+                                                <span class="text-sm text-darius-text-secondary">
                                                     {series.blueTeamName} vs{" "}
                                                     {series.redTeamName} ({score.blue}-
                                                     {score.red})
                                                 </span>
                                             </div>
                                             <button
-                                                class="rounded bg-teal-700 px-3 py-1 text-sm text-slate-50 hover:bg-teal-600"
+                                                class="rounded bg-darius-ember bg-darius-ember px-3 py-1 text-sm text-darius-text-primary"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     setSelectedSeriesId(series.id);
@@ -202,14 +210,14 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                                             >
                                                 Import Series
                                             </button>
-                                            <span class="text-slate-400">
+                                            <span class="text-darius-text-secondary">
                                                 {isExpanded() ? "▲" : "▼"}
                                             </span>
                                         </div>
 
                                         <Show when={isExpanded() && series.Drafts} keyed>
                                             {(drafts) => (
-                                                <div class="bg-slate-900 px-4 py-2">
+                                                <div class="bg-darius-bg px-4 py-2">
                                                     <For
                                                         each={[...drafts].sort(
                                                             (a, b) =>
@@ -219,9 +227,9 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                                                     >
                                                         {(draft) => (
                                                             <div
-                                                                class="flex cursor-pointer items-center gap-2 rounded px-2 py-2 hover:bg-slate-800"
+                                                                class="flex cursor-pointer items-center gap-2 rounded bg-darius-card px-2 py-2"
                                                                 classList={{
-                                                                    "bg-teal-900/50":
+                                                                    "bg-darius-purple/15":
                                                                         selectedGameId() ===
                                                                         draft.id
                                                                 }}
@@ -234,7 +242,7 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                                                                     );
                                                                 }}
                                                             >
-                                                                <span class="text-sm text-slate-300">
+                                                                <span class="text-sm text-darius-text-secondary">
                                                                     Game{" "}
                                                                     {(draft.seriesIndex ??
                                                                         0) + 1}
@@ -248,10 +256,10 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                                                                     <span
                                                                         class="text-xs"
                                                                         classList={{
-                                                                            "text-blue-400":
+                                                                            "text-darius-purple-bright":
                                                                                 draft.winner ===
                                                                                 "blue",
-                                                                            "text-red-400":
+                                                                            "text-darius-crimson":
                                                                                 draft.winner ===
                                                                                 "red"
                                                                         }}
@@ -269,7 +277,7 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                                                                         !draft.winner
                                                                     }
                                                                 >
-                                                                    <span class="text-xs text-yellow-400">
+                                                                    <span class="text-xs text-darius-ember">
                                                                         Complete
                                                                     </span>
                                                                 </Show>
@@ -278,7 +286,7 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                                                                         !draft.completed
                                                                     }
                                                                 >
-                                                                    <span class="text-xs text-slate-500">
+                                                                    <span class="text-xs text-darius-text-secondary">
                                                                         Incomplete
                                                                     </span>
                                                                 </Show>
@@ -299,13 +307,13 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
             {/* Footer */}
             <div class="flex justify-end gap-2">
                 <button
-                    class="rounded-md bg-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-500"
+                    class="rounded-md bg-darius-card px-4 py-2 text-sm text-darius-text-primary transition-colors hover:bg-darius-card-hover"
                     onClick={props.onClose}
                 >
                     Cancel
                 </button>
                 <button
-                    class="rounded-md bg-teal-700 px-4 py-2 text-sm text-slate-50 hover:bg-teal-600 disabled:opacity-50"
+                    class="rounded-md bg-darius-ember bg-darius-ember px-4 py-2 text-sm text-darius-text-primary disabled:opacity-50"
                     disabled={
                         !canImport() ||
                         importDraftMutation.isPending ||

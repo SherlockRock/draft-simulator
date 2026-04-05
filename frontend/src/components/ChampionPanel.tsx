@@ -8,6 +8,7 @@ import {
     championCategories,
     gameTextColorsMuted,
     gameBorderColors,
+    gameBgColors,
     overlayTeamColor,
     overlayBanColor,
     overlayPickColor
@@ -201,17 +202,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
         });
 
         const gameBgColor = () => {
-            // Map text colors to bg colors
-            const colorMap: Record<number, string> = {
-                1: "bg-cyan-600",
-                2: "bg-amber-600",
-                3: "bg-fuchsia-600",
-                4: "bg-violet-600",
-                5: "bg-sky-600",
-                6: "bg-emerald-600",
-                7: "bg-rose-600"
-            };
-            return colorMap[groupProps.group.colorIndex] ?? "bg-slate-600";
+            return gameBgColors[groupProps.group.colorIndex] ?? "bg-darius-border";
         };
 
         return (
@@ -241,7 +232,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
 
                             return (
                                 <div
-                                    class={`relative aspect-square w-full overflow-hidden rounded border-2 ${gameBorderColors[colorIndex] ?? "border-slate-600"}`}
+                                    class={`relative aspect-square w-full overflow-hidden rounded border-2 ${gameBorderColors[colorIndex] ?? "border-darius-border"}`}
                                 >
                                     <img
                                         src={champ.img}
@@ -249,7 +240,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                         class="h-full w-full object-cover opacity-50"
                                         title={`${champ.name} - ${groupProps.group.label} ${getDraftPositionText(pickIndex)}`}
                                     />
-                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
+                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-darius-bg/85 px-1 py-px text-[9px] font-bold leading-tight">
                                         <span class={overlayTeamColor}>
                                             T{parts.team}
                                         </span>
@@ -269,7 +260,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
 
     return (
         <div
-            class={`flex flex-col border-l border-slate-700 bg-slate-800 transition-[width] duration-300 ${
+            class={`flex flex-col border-l border-darius-border bg-darius-card transition-[width] duration-300 ${
                 isExpanded() ? "w-[min(26vw,384px)]" : "w-5"
             }`}
         >
@@ -277,9 +268,9 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                 {/* Toggle button */}
                 <button
                     onClick={() => setIsExpanded(!isExpanded())}
-                    class="group flex w-5 flex-shrink-0 items-center justify-center border-r border-slate-700 bg-slate-800 transition-colors hover:bg-slate-700"
+                    class="group flex w-5 flex-shrink-0 items-center justify-center border-r border-darius-border bg-darius-card bg-darius-card-hover transition-colors"
                 >
-                    <span class="text-[10px] text-slate-500 transition-colors group-hover:text-orange-400">
+                    <span class="text-[10px] text-darius-crimson text-darius-text-secondary transition-colors">
                         {isExpanded() ? "▶" : "◀"}
                     </span>
                 </button>
@@ -288,7 +279,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                 <Show when={isExpanded()}>
                     <div class="flex flex-1 flex-col">
                         {/* Filter bar - fixed at top */}
-                        <div class="border-b border-slate-700 px-4 py-3">
+                        <div class="border-b border-darius-border px-4 py-3">
                             <FilterBar
                                 searchText={searchText}
                                 onSearchChange={setSearchText}
@@ -303,7 +294,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                 selectedCategories={selectedCategories}
                                 onToggle={toggleCategory}
                                 onClearAll={clearCategories}
-                                theme="orange"
+                                theme="crimson"
                             />
                         </div>
 
@@ -373,7 +364,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
 
                                     {/* Available section */}
                                     <div class="mt-4">
-                                        <div class="mb-3 text-center text-sm font-medium text-slate-400">
+                                        <div class="mb-3 text-center text-sm font-medium text-darius-text-secondary">
                                             Available
                                         </div>
                                         <div class="grid grid-cols-5 gap-2">
@@ -404,13 +395,13 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                             }
                                                             class={`relative aspect-square w-full overflow-hidden rounded border-2 transition-[transform,border-color,box-shadow] duration-150 [contain:content] ${
                                                                 isPendingSelection()
-                                                                    ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
+                                                                    ? "scale-110 cursor-pointer border-4 border-darius-ember ring-4 ring-darius-ember/50"
                                                                     : isPicked() &&
                                                                         !isPendingSelection()
-                                                                      ? `cursor-not-allowed ${gameBorderColors[currentGameNumber()] ?? "border-slate-700"}`
+                                                                      ? `cursor-not-allowed ${gameBorderColors[currentGameNumber()] ?? "border-darius-border"}`
                                                                       : canSelect()
-                                                                        ? "cursor-pointer border-slate-500 hover:scale-105 hover:border-slate-300"
-                                                                        : "cursor-default border-slate-600"
+                                                                        ? "cursor-pointer border-darius-border hover:scale-105 hover:border-darius-purple-bright"
+                                                                        : "cursor-default border-darius-border"
                                                             }`}
                                                             title={
                                                                 isPicked()
@@ -443,13 +434,13 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                                     const gameNum =
                                                                         currentGameNumber();
                                                                     return (
-                                                                        <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
+                                                                        <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-darius-bg/85 px-1 py-px text-[9px] font-bold leading-tight">
                                                                             <span
                                                                                 class={
                                                                                     gameTextColorsMuted[
                                                                                         gameNum
                                                                                     ] ??
-                                                                                    "text-slate-300"
+                                                                                    "text-darius-text-secondary"
                                                                                 }
                                                                             >
                                                                                 G{gameNum}
@@ -535,18 +526,18 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                         }
                                                         class={`relative aspect-square w-full overflow-hidden rounded border-2 transition-[transform,border-color,box-shadow] duration-150 [contain:content] ${
                                                             isPendingSelection()
-                                                                ? "scale-110 cursor-pointer border-4 border-orange-400 ring-4 ring-orange-400/50"
+                                                                ? "scale-110 cursor-pointer border-4 border-darius-ember ring-4 ring-darius-ember/50"
                                                                 : isDisabled()
                                                                   ? "cursor-not-allowed border-red-700"
                                                                   : isRestricted() &&
                                                                       !isPendingSelection()
-                                                                    ? `cursor-not-allowed ${gameBorderColors[restrictionInfo()?.colorIndex ?? 1] ?? "border-slate-700"}`
+                                                                    ? `cursor-not-allowed ${gameBorderColors[restrictionInfo()?.colorIndex ?? 1] ?? "border-darius-border"}`
                                                                     : isPicked() &&
                                                                         !isPendingSelection()
-                                                                      ? `cursor-not-allowed ${gameBorderColors[currentGameNumber()] ?? "border-slate-700"}`
+                                                                      ? `cursor-not-allowed ${gameBorderColors[currentGameNumber()] ?? "border-darius-border"}`
                                                                       : canSelect()
-                                                                        ? "cursor-pointer border-slate-500 hover:scale-105 hover:border-slate-300"
-                                                                        : "cursor-default border-slate-600"
+                                                                        ? "cursor-pointer border-darius-border hover:scale-105 hover:border-darius-purple-bright"
+                                                                        : "cursor-default border-darius-border"
                                                         }`}
                                                         title={
                                                             isDisabled()
@@ -600,14 +591,14 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                                             0
                                                                     );
                                                                 return (
-                                                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
+                                                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-darius-bg/85 px-1 py-px text-[9px] font-bold leading-tight">
                                                                         <span
                                                                             class={
                                                                                 gameTextColorsMuted[
                                                                                     info?.colorIndex ??
                                                                                         1
                                                                                 ] ??
-                                                                                "text-slate-300"
+                                                                                "text-darius-text-secondary"
                                                                             }
                                                                             title={
                                                                                 info?.label ??
@@ -663,13 +654,13 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                                 const gameNum =
                                                                     currentGameNumber();
                                                                 return (
-                                                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-1 py-px text-[9px] font-bold leading-tight">
+                                                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-darius-bg/85 px-1 py-px text-[9px] font-bold leading-tight">
                                                                         <span
                                                                             class={
                                                                                 gameTextColorsMuted[
                                                                                     gameNum
                                                                                 ] ??
-                                                                                "text-slate-300"
+                                                                                "text-darius-text-secondary"
                                                                             }
                                                                         >
                                                                             G{gameNum}

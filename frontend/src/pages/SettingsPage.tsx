@@ -103,27 +103,29 @@ const SettingsPage: Component = () => {
     return (
         <AuthGuard requireAuth>
             <Title>Settings - First Pick</Title>
-            <div class="flex-1 overflow-auto bg-slate-900">
+            <div class="flex-1 overflow-auto bg-darius-bg">
                 <Show
                     when={user()}
                     fallback={
                         <div class="flex h-full items-center justify-center">
-                            <p class="text-slate-400">Loading...</p>
+                            <p class="text-darius-text-secondary">Loading...</p>
                         </div>
                     }
                 >
                     <div class="mx-auto max-w-2xl p-8">
-                        <h1 class="mb-8 text-3xl font-bold text-slate-50">Settings</h1>
+                        <h1 class="mb-8 text-3xl font-bold text-darius-text-primary">
+                            Settings
+                        </h1>
 
                         {/* Profile Section */}
-                        <div class="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-6">
+                        <div class="mb-6 rounded-lg border border-darius-border bg-darius-card p-6">
                             <div class="mb-4 flex items-center justify-between">
-                                <h2 class="text-xl font-semibold text-slate-200">
+                                <h2 class="text-xl font-semibold text-darius-text-primary">
                                     Profile
                                 </h2>
                                 <div class="relative">
                                     <button
-                                        class="flex h-6 w-6 items-center justify-center rounded-full text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                                        class="flex h-6 w-6 items-center justify-center rounded-full bg-darius-card-hover text-darius-text-primary text-darius-text-secondary"
                                         onMouseEnter={() => setShowTooltip(true)}
                                         onMouseLeave={() => setShowTooltip(false)}
                                     >
@@ -131,8 +133,8 @@ const SettingsPage: Component = () => {
                                         <Info size={20} />
                                     </button>
                                     <Show when={showTooltip()}>
-                                        <div class="absolute right-0 top-8 z-10 w-64 rounded-lg border border-slate-600 bg-slate-700 p-3 text-sm text-slate-300 shadow-lg">
-                                            <p class="mb-2 font-medium text-slate-200">
+                                        <div class="absolute right-0 top-8 z-10 w-64 rounded-lg border border-darius-border bg-darius-card-hover p-3 text-sm text-darius-text-secondary shadow-lg">
+                                            <p class="mb-2 font-medium text-darius-text-primary">
                                                 Data from Google:
                                             </p>
                                             <ul class="mb-2 list-inside list-disc space-y-1">
@@ -140,7 +142,7 @@ const SettingsPage: Component = () => {
                                                 <li>Email address</li>
                                                 <li>Profile picture</li>
                                             </ul>
-                                            <p class="text-xs text-slate-400">
+                                            <p class="text-xs text-darius-text-secondary">
                                                 We cannot access your Google Drive,
                                                 contacts, or other Google services.
                                             </p>
@@ -157,22 +159,24 @@ const SettingsPage: Component = () => {
                                     />
                                 </Show>
                                 <div>
-                                    <p class="text-lg font-medium text-slate-100">
+                                    <p class="text-lg font-medium text-darius-text-primary">
                                         {user()?.name}
                                     </p>
-                                    <p class="text-slate-400">{user()?.email}</p>
-                                    <p class="mt-1 text-xs text-slate-500">
+                                    <p class="text-darius-text-secondary">
+                                        {user()?.email}
+                                    </p>
+                                    <p class="mt-1 text-xs text-darius-text-secondary">
                                         Managed by Google
                                     </p>
                                 </div>
                             </div>
 
                             {/* Divider */}
-                            <div class="my-4 border-t border-slate-700" />
+                            <div class="my-4 border-t border-darius-border" />
 
                             {/* Display Name */}
                             <div>
-                                <label class="text-xs font-medium uppercase tracking-wide text-slate-400">
+                                <label class="text-xs font-medium uppercase tracking-wide text-darius-text-secondary">
                                     Display Name
                                 </label>
                                 <div class="mt-1.5 flex gap-2">
@@ -185,12 +189,12 @@ const SettingsPage: Component = () => {
                                         }}
                                         placeholder="Enter display name..."
                                         maxLength={16}
-                                        class="flex-1 rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-teal-500 focus:outline-none"
+                                        class="flex-1 rounded-md border border-darius-border bg-darius-bg px-3 py-2 text-sm text-darius-text-primary placeholder-darius-text-secondary focus:border-darius-ember focus:outline-none"
                                     />
                                     <button
                                         onClick={handleSaveDisplayName}
                                         disabled={isSaving()}
-                                        class="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-slate-100 transition-colors hover:bg-teal-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                        class="rounded-md bg-darius-ember bg-darius-ember px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                         {isSaving() ? "Saving..." : "Save"}
                                     </button>
@@ -198,7 +202,7 @@ const SettingsPage: Component = () => {
                                 <Show when={nameError()}>
                                     <p class="mt-1 text-xs text-red-400">{nameError()}</p>
                                 </Show>
-                                <p class="mt-1.5 text-xs text-slate-500">
+                                <p class="mt-1.5 text-xs text-darius-text-secondary">
                                     3-16 characters. Letters, numbers, spaces, and
                                     underscores.
                                     {displayName()
@@ -209,14 +213,16 @@ const SettingsPage: Component = () => {
                         </div>
 
                         {/* Preferences Section */}
-                        <div class="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-6">
-                            <h2 class="mb-4 text-xl font-semibold text-slate-200">
+                        <div class="mb-6 rounded-lg border border-darius-border bg-darius-card p-6">
+                            <h2 class="mb-4 text-xl font-semibold text-darius-text-primary">
                                 Preferences
                             </h2>
                             <div class="flex items-center justify-between">
                                 <div>
-                                    <p class="text-slate-100">Keyboard controls</p>
-                                    <p class="text-sm text-slate-400">
+                                    <p class="text-darius-text-primary">
+                                        Keyboard controls
+                                    </p>
+                                    <p class="text-sm text-darius-text-secondary">
                                         Start typing to filter champions during versus
                                         drafts without clicking the search bar
                                     </p>
@@ -253,12 +259,12 @@ const SettingsPage: Component = () => {
                                     }}
                                     class={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
                                         user()?.keyboard_controls
-                                            ? "bg-teal-500"
-                                            : "bg-slate-600"
+                                            ? "bg-darius-ember"
+                                            : "bg-darius-border"
                                     }`}
                                 >
                                     <span
-                                        class={`inline-block h-5 w-5 rounded-full bg-slate-50 shadow transition-transform duration-200 ${
+                                        class={`inline-block h-5 w-5 rounded-full bg-darius-text-primary shadow transition-transform duration-200 ${
                                             user()?.keyboard_controls
                                                 ? "translate-x-5"
                                                 : "translate-x-0"
@@ -269,26 +275,26 @@ const SettingsPage: Component = () => {
                         </div>
 
                         {/* Data Export Section */}
-                        <div class="mb-6 rounded-lg border border-slate-700 bg-slate-800 p-6">
-                            <h2 class="mb-2 text-xl font-semibold text-slate-200">
+                        <div class="mb-6 rounded-lg border border-darius-border bg-darius-card p-6">
+                            <h2 class="mb-2 text-xl font-semibold text-darius-text-primary">
                                 Your Data
                             </h2>
-                            <p class="mb-4 text-slate-400">
+                            <p class="mb-4 text-darius-text-secondary">
                                 Download a copy of all your data including canvases,
                                 drafts, and versus series.
                             </p>
                             <button
                                 onClick={handleExport}
                                 disabled={isExporting()}
-                                class="rounded-md bg-teal-700 px-4 py-2 font-medium text-slate-100 transition-colors hover:bg-teal-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                class="rounded-md bg-darius-ember bg-darius-ember px-4 py-2 font-medium text-darius-text-primary transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {isExporting() ? "Exporting..." : "Export Data"}
                             </button>
                         </div>
 
                         {/* Delete Account */}
-                        <div class="rounded-lg border-2 border-red-600/50 bg-slate-800 p-6">
-                            <p class="mb-4 text-slate-400">
+                        <div class="rounded-lg border-2 border-red-600/50 bg-darius-card p-6">
+                            <p class="mb-4 text-darius-text-secondary">
                                 Delete your account and all associated data. This action
                                 cannot be undone.
                             </p>

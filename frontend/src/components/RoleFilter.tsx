@@ -21,24 +21,26 @@ const roleIconSlug: Record<string, string> = {
 };
 
 const activeRing: Record<SelectTheme, string> = {
-    orange: "ring-orange-500/60",
-    purple: "ring-purple-500/60",
-    teal: "ring-teal-500/60"
+    neutral: "ring-darius-border",
+    orange: "ring-darius-ember/60",
+    crimson: "ring-darius-crimson/60",
+    purple: "ring-darius-purple-bright/60"
 };
 
 const activeText: Record<SelectTheme, string> = {
-    orange: "text-orange-400",
-    purple: "text-purple-400",
-    teal: "text-teal-400"
+    neutral: "text-darius-text-primary",
+    orange: "text-darius-ember",
+    crimson: "text-darius-crimson",
+    purple: "text-darius-purple-bright"
 };
 
 export const RoleFilter: Component<RoleFilterProps> = (props) => {
-    const theme = () => props.theme ?? "teal";
+    const theme = () => props.theme ?? "orange";
     const hasSelection = () => props.selectedCategories().size > 0;
 
     return (
         <div class="mt-2 flex items-center gap-1.5">
-            <span class="text-[9px] font-semibold uppercase tracking-widest text-slate-500">
+            <span class="text-[9px] font-semibold uppercase tracking-widest text-darius-text-secondary">
                 Role
             </span>
             <div class="flex flex-1 justify-end gap-1">
@@ -48,8 +50,8 @@ export const RoleFilter: Component<RoleFilterProps> = (props) => {
                     title="Show all roles"
                     class={`flex h-7 items-center justify-center rounded px-3 text-[10px] font-semibold transition-all ${
                         !hasSelection()
-                            ? `bg-slate-600 ${activeText[theme()]}`
-                            : "bg-slate-700 text-slate-400 opacity-40 hover:opacity-70"
+                            ? `bg-darius-border ${activeText[theme()]}`
+                            : "bg-darius-card-hover text-darius-text-secondary opacity-40 hover:opacity-70"
                     }`}
                 >
                     All
@@ -66,8 +68,8 @@ export const RoleFilter: Component<RoleFilterProps> = (props) => {
                                 title={category}
                                 class={`flex h-7 w-7 items-center justify-center rounded transition-all ${
                                     isActive()
-                                        ? `ring-2 ${activeRing[theme()]} bg-slate-600`
-                                        : "bg-slate-700 opacity-40 hover:opacity-70"
+                                        ? `ring-2 ${activeRing[theme()]} bg-darius-border`
+                                        : "bg-darius-card-hover opacity-40 hover:opacity-70"
                                 }`}
                             >
                                 <img

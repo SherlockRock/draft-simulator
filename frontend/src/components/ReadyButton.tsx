@@ -55,14 +55,14 @@ export const ReadyButton: Component<ReadyButtonProps> = (props) => {
     };
 
     const stateStyles = {
-        ready: "bg-gradient-to-br from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white shadow-lg shadow-orange-500/40 hover:shadow-orange-400/60 hover:scale-105 border-2 border-orange-400/50",
+        ready: "bg-gradient-to-br from-darius-crimson to-darius-ember text-white shadow-lg shadow-darius-crimson/30 hover:scale-105 border-2 border-darius-crimson/50",
         unready:
-            "bg-orange-500/15 text-orange-400 hover:bg-orange-500/25 hover:scale-105 border-2 border-orange-500/60",
+            "bg-darius-crimson/15 text-darius-crimson hover:bg-darius-crimson/25 hover:scale-105 border-2 border-darius-crimson/60",
         starting:
-            "bg-gradient-to-br from-orange-500/70 to-orange-600/70 text-white shadow-lg shadow-orange-500/30 border-2 border-orange-400/40 cursor-wait",
-        lockin: "bg-gradient-to-br from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white shadow-lg shadow-orange-500/40 hover:shadow-orange-400/60 hover:scale-105 border-2 border-orange-400/50",
+            "bg-gradient-to-br from-darius-crimson/70 to-darius-ember/70 text-white shadow-lg shadow-darius-crimson/30 border-2 border-darius-crimson/40 cursor-wait",
+        lockin: "bg-gradient-to-br from-darius-crimson to-darius-ember text-white shadow-lg shadow-darius-crimson/30 hover:scale-105 border-2 border-darius-crimson/50",
         disabled:
-            "bg-slate-700/50 text-slate-500 cursor-not-allowed border-2 border-slate-600/30 shadow-none"
+            "bg-darius-card-hover/50 text-darius-text-secondary cursor-not-allowed border-2 border-darius-border/30 shadow-none"
     };
 
     return (

@@ -66,29 +66,33 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
             const team1IsBlue = bst === 1;
             switch (role) {
                 case "team1_captain":
-                    return team1IsBlue ? "text-blue-400" : "text-red-400";
+                    return team1IsBlue
+                        ? "text-darius-crimson"
+                        : "text-darius-purple-bright";
                 case "team2_captain":
-                    return team1IsBlue ? "text-red-400" : "text-blue-400";
+                    return team1IsBlue
+                        ? "text-darius-purple-bright"
+                        : "text-darius-crimson";
                 default:
-                    return "text-slate-400";
+                    return "text-darius-text-secondary";
             }
         }
         switch (role) {
             case "team1_captain":
-                return "text-violet-300";
+                return "text-darius-crimson";
             case "team2_captain":
-                return "text-fuchsia-300";
+                return "text-darius-purple-bright";
             default:
-                return "text-slate-400";
+                return "text-darius-text-secondary";
         }
     };
 
     return (
         <div class="flex h-full flex-col">
-            <div class="flex min-h-0 flex-1 flex-col rounded-t-lg border border-orange-500/30 bg-slate-900/40">
+            <div class="flex min-h-0 flex-1 flex-col rounded-t-lg border border-darius-crimson/30 bg-darius-bg/40">
                 {/* Header */}
-                <div class="flex items-center border-b border-orange-500/30 px-3 py-2.5">
-                    <span class="text-[11px] font-semibold uppercase leading-none tracking-wider text-slate-200">
+                <div class="flex items-center border-b border-darius-crimson/30 px-3 py-2.5">
+                    <span class="text-[11px] font-semibold uppercase leading-none tracking-wider text-darius-text-primary">
                         Series Chat
                     </span>
                 </div>
@@ -101,7 +105,7 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
                     <For each={chatMessages()}>
                         {(msg) => (
                             <div class="mb-2 flex flex-wrap items-baseline text-sm">
-                                <span class="shrink-0 text-[10px] text-slate-500">
+                                <span class="shrink-0 text-[10px] text-darius-text-secondary">
                                     {formatTime(msg.timestamp)}
                                 </span>
                                 <span
@@ -109,7 +113,7 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
                                 >
                                     {msg.username}:
                                 </span>
-                                <span class="min-w-0 break-words pl-1 text-slate-100">
+                                <span class="min-w-0 break-words pl-1 text-darius-text-primary">
                                     {msg.message}
                                 </span>
                             </div>
@@ -120,13 +124,13 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
 
                 {/* Input */}
                 <form
-                    class="flex items-center border-t border-orange-500/30 p-2"
+                    class="flex items-center border-t border-darius-crimson/30 p-2"
                     onSubmit={handleSend}
                 >
                     <input
                         type="text"
                         placeholder="Type a message..."
-                        class="min-w-0 flex-1 rounded-l-md border-none bg-slate-800/60 px-3 py-1 text-sm text-slate-50 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-orange-500/50"
+                        class="min-w-0 flex-1 rounded-l-md border-none bg-darius-card/60 px-3 py-1 text-sm text-darius-text-secondary focus:outline-none focus:ring-1 focus:ring-inset focus:ring-darius-crimson/50"
                         value={messageInput()}
                         onInput={(e) => setMessageInput(e.currentTarget.value)}
                         maxLength={500}
@@ -134,7 +138,7 @@ export const VersusChatPanel: Component<VersusChatPanelProps> = (props) => {
                     <button
                         type="submit"
                         disabled={!messageInput().trim()}
-                        class="rounded-r-md bg-orange-700 px-3 py-1 text-sm font-medium text-slate-50 transition-colors hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-40"
+                        class="rounded-r-md bg-darius-crimson px-3 py-1 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-crimson/80 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                         Send
                     </button>

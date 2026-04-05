@@ -37,14 +37,22 @@ const InlineRolePicker: Component = () => {
     };
 
     return (
-        <div class="absolute inset-0 z-20 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm">
-            <div class="w-full max-w-md rounded-2xl border border-slate-700/50 bg-slate-800 p-6 shadow-2xl">
+        <div
+            class="absolute inset-0 z-20 flex items-center justify-center bg-darius-bg/80 backdrop-blur-sm"
+            onClick={hideRolePicker}
+        >
+            <div
+                class="w-full max-w-md rounded-2xl border border-darius-border/50 bg-darius-card p-6 shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+            >
                 {/* Header */}
                 <div class="mb-5 flex items-center justify-between">
-                    <h2 class="text-lg font-semibold text-slate-50">Choose Your Role</h2>
+                    <h2 class="text-lg font-semibold text-darius-text-primary">
+                        Choose Your Role
+                    </h2>
                     <button
                         onClick={hideRolePicker}
-                        class="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200"
+                        class="p-1.5 text-darius-text-secondary transition-colors hover:text-darius-text-primary"
                     >
                         <X size={18} />
                     </button>
@@ -58,36 +66,36 @@ const InlineRolePicker: Component = () => {
                         disabled={isRoleTaken("team1_captain") || isJoining()}
                         class={`group relative w-full overflow-hidden rounded-xl border-2 p-4 text-left transition-all duration-200 ${
                             isRoleTaken("team1_captain")
-                                ? "cursor-not-allowed border-slate-700/50 bg-slate-900/50 opacity-60"
+                                ? "cursor-not-allowed border-darius-border/50 bg-darius-bg/50 opacity-60"
                                 : suggestedRole() === "team1_captain"
-                                  ? "cursor-pointer border-orange-400 bg-slate-800"
-                                  : "cursor-pointer border-orange-500/30 bg-slate-800/80 hover:border-orange-400/60 hover:bg-slate-800"
+                                  ? "cursor-pointer border-darius-crimson bg-darius-card hover:border-darius-ember/60 hover:bg-darius-card-hover"
+                                  : "cursor-pointer border-darius-crimson/30 bg-darius-card bg-darius-card/80 hover:border-darius-crimson/60"
                         }`}
                     >
                         <div
-                            class={`absolute inset-0 bg-gradient-to-r from-orange-600/10 to-transparent transition-opacity ${suggestedRole() === "team1_captain" && !isRoleTaken("team1_captain") ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                            class={`absolute inset-0 bg-gradient-to-r from-darius-crimson/10 to-transparent transition-opacity ${suggestedRole() === "team1_captain" && !isRoleTaken("team1_captain") ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
                         />
                         <div class="relative flex items-center justify-between">
                             <div class="flex items-center gap-3">
                                 <div
                                     class={`flex h-10 w-10 items-center justify-center rounded-lg ${
                                         isRoleTaken("team1_captain")
-                                            ? "bg-slate-700"
-                                            : "bg-orange-500/20"
+                                            ? "bg-darius-card-hover"
+                                            : "bg-darius-crimson/20"
                                     }`}
                                 >
                                     <User
                                         size={20}
                                         class={
                                             isRoleTaken("team1_captain")
-                                                ? "text-slate-500"
-                                                : "text-orange-400"
+                                                ? "text-darius-text-secondary"
+                                                : "text-darius-crimson"
                                         }
                                     />
                                 </div>
                                 <div>
                                     <div
-                                        class={`font-semibold ${isRoleTaken("team1_captain") ? "text-slate-500" : "text-orange-400"}`}
+                                        class={`font-semibold ${isRoleTaken("team1_captain") ? "text-darius-text-secondary" : "text-darius-crimson"}`}
                                     >
                                         {versusDraft()?.blueTeamName ?? ""} Captain
                                     </div>
@@ -99,14 +107,14 @@ const InlineRolePicker: Component = () => {
                                         selectedRole() === "team1_captain" && isJoining()
                                     }
                                 >
-                                    <div class="h-4 w-4 animate-spin rounded-full border-2 border-orange-400/30 border-t-orange-400" />
+                                    <div class="h-4 w-4 animate-spin rounded-full border-2 border-darius-crimson/30 border-t-darius-crimson" />
                                 </Show>
                                 <span
                                     class={`rounded px-2.5 py-1 text-xs font-medium ${
                                         isRoleTaken("team1_captain")
-                                            ? "bg-slate-700 text-slate-500"
+                                            ? "bg-darius-card-hover text-darius-text-secondary"
                                             : suggestedRole() === "team1_captain"
-                                              ? "bg-teal-500/15 text-teal-400"
+                                              ? "bg-darius-ember/15 text-darius-ember"
                                               : "bg-emerald-500/15 text-emerald-400"
                                     }`}
                                 >
@@ -126,36 +134,36 @@ const InlineRolePicker: Component = () => {
                         disabled={isRoleTaken("team2_captain") || isJoining()}
                         class={`group relative w-full overflow-hidden rounded-xl border-2 p-4 text-left transition-all duration-200 ${
                             isRoleTaken("team2_captain")
-                                ? "cursor-not-allowed border-slate-700/50 bg-slate-900/50 opacity-60"
+                                ? "cursor-not-allowed border-darius-border/50 bg-darius-bg/50 opacity-60"
                                 : suggestedRole() === "team2_captain"
-                                  ? "cursor-pointer border-orange-400 bg-slate-800"
-                                  : "cursor-pointer border-orange-500/30 bg-slate-800/80 hover:border-orange-400/60 hover:bg-slate-800"
+                                  ? "cursor-pointer border-darius-crimson bg-darius-card hover:border-darius-ember/60 hover:bg-darius-card-hover"
+                                  : "cursor-pointer border-darius-crimson/30 bg-darius-card bg-darius-card/80 hover:border-darius-crimson/60"
                         }`}
                     >
                         <div
-                            class={`absolute inset-0 bg-gradient-to-r from-orange-600/10 to-transparent transition-opacity ${suggestedRole() === "team2_captain" && !isRoleTaken("team2_captain") ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                            class={`absolute inset-0 bg-gradient-to-r from-darius-crimson/10 to-transparent transition-opacity ${suggestedRole() === "team2_captain" && !isRoleTaken("team2_captain") ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
                         />
                         <div class="relative flex items-center justify-between">
                             <div class="flex items-center gap-3">
                                 <div
                                     class={`flex h-10 w-10 items-center justify-center rounded-lg ${
                                         isRoleTaken("team2_captain")
-                                            ? "bg-slate-700"
-                                            : "bg-orange-500/20"
+                                            ? "bg-darius-card-hover"
+                                            : "bg-darius-crimson/20"
                                     }`}
                                 >
                                     <User
                                         size={20}
                                         class={
                                             isRoleTaken("team2_captain")
-                                                ? "text-slate-500"
-                                                : "text-orange-400"
+                                                ? "text-darius-text-secondary"
+                                                : "text-darius-crimson"
                                         }
                                     />
                                 </div>
                                 <div>
                                     <div
-                                        class={`font-semibold ${isRoleTaken("team2_captain") ? "text-slate-500" : "text-orange-400"}`}
+                                        class={`font-semibold ${isRoleTaken("team2_captain") ? "text-darius-text-secondary" : "text-darius-crimson"}`}
                                     >
                                         {versusDraft()?.redTeamName ?? ""} Captain
                                     </div>
@@ -167,14 +175,14 @@ const InlineRolePicker: Component = () => {
                                         selectedRole() === "team2_captain" && isJoining()
                                     }
                                 >
-                                    <div class="h-4 w-4 animate-spin rounded-full border-2 border-orange-400/30 border-t-orange-400" />
+                                    <div class="h-4 w-4 animate-spin rounded-full border-2 border-darius-crimson/30 border-t-darius-crimson" />
                                 </Show>
                                 <span
                                     class={`rounded px-2.5 py-1 text-xs font-medium ${
                                         isRoleTaken("team2_captain")
-                                            ? "bg-slate-700 text-slate-500"
+                                            ? "bg-darius-card-hover text-darius-text-secondary"
                                             : suggestedRole() === "team2_captain"
-                                              ? "bg-teal-500/15 text-teal-400"
+                                              ? "bg-darius-ember/15 text-darius-ember"
                                               : "bg-emerald-500/15 text-emerald-400"
                                     }`}
                                 >
@@ -192,15 +200,15 @@ const InlineRolePicker: Component = () => {
                     <button
                         onClick={() => handleSelectRole("spectator")}
                         disabled={isJoining()}
-                        class="group relative w-full overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800/50 p-4 text-left transition-all duration-200 hover:border-slate-600 hover:bg-slate-800/80"
+                        class="group relative w-full overflow-hidden rounded-xl border border-darius-border/50 bg-darius-card/80 p-4 text-left transition-all duration-200 hover:border-darius-disabled hover:bg-darius-card-hover"
                     >
                         <div class="relative flex items-center justify-between">
                             <div class="flex items-center gap-3">
-                                <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-700/50">
-                                    <Eye size={20} class="text-slate-400" />
+                                <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-darius-card-hover/50">
+                                    <Eye size={20} class="text-darius-text-secondary" />
                                 </div>
                                 <div>
-                                    <div class="font-semibold text-slate-300">
+                                    <div class="font-semibold text-darius-text-secondary">
                                         Spectator
                                     </div>
                                 </div>
@@ -209,9 +217,9 @@ const InlineRolePicker: Component = () => {
                                 <Show
                                     when={selectedRole() === "spectator" && isJoining()}
                                 >
-                                    <div class="h-4 w-4 animate-spin rounded-full border-2 border-slate-400/30 border-t-slate-400" />
+                                    <div class="h-4 w-4 animate-spin rounded-full border-2 border-darius-disabled/30 border-t-darius-disabled" />
                                 </Show>
-                                <span class="rounded bg-slate-700/50 px-2.5 py-1 text-xs font-medium text-slate-400">
+                                <span class="rounded bg-darius-card-hover/50 px-2.5 py-1 text-xs font-medium text-darius-text-secondary">
                                     Always Open
                                 </span>
                             </div>

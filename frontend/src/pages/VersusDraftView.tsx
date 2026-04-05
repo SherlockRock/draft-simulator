@@ -881,6 +881,30 @@ const VersusDraftView: Component = () => {
         return bst === 1 ? vd.redTeamName : vd.blueTeamName;
     };
 
+    const sideTeamTextColor = (side: "blue" | "red") => {
+        const blueSideTeam =
+            versusState().blueSideTeam ?? draftQuery.data?.blueSideTeam ?? 1;
+        if (side === "blue") {
+            return blueSideTeam === 1
+                ? "text-darius-crimson"
+                : "text-darius-purple-bright";
+        }
+        return blueSideTeam === 1 ? "text-darius-purple-bright" : "text-darius-crimson";
+    };
+
+    const sideTeamBorderColor = (side: "blue" | "red") => {
+        const blueSideTeam =
+            versusState().blueSideTeam ?? draftQuery.data?.blueSideTeam ?? 1;
+        if (side === "blue") {
+            return blueSideTeam === 1
+                ? "border-darius-crimson/30"
+                : "border-darius-purple-bright/30";
+        }
+        return blueSideTeam === 1
+            ? "border-darius-purple-bright/30"
+            : "border-darius-crimson/30";
+    };
+
     // Compute restricted champions for Fearless/Ironman modes (game-based restrictions only)
     const restrictedChampions = createMemo(() => {
         const vd = versusDraftQuery.data;
@@ -1015,7 +1039,7 @@ const VersusDraftView: Component = () => {
                 fallback={<div class="p-8">Loading...</div>}
             >
                 <Show when={versusDraftQuery.data && draftQuery.data}>
-                    <div class="flex h-full min-w-0 flex-1 flex-col bg-slate-900">
+                    <div class="flex h-full min-w-0 flex-1 flex-col bg-darius-bg">
                         {/* Main Content */}
                         <div class="flex flex-1 overflow-hidden">
                             {/* Drafts Display - now takes full remaining width */}
@@ -1036,7 +1060,9 @@ const VersusDraftView: Component = () => {
                                                 </span>
                                             </Show>
                                         </div>
-                                        <div class="text-xl font-bold text-blue-400">
+                                        <div
+                                            class={`text-xl font-bold ${sideTeamTextColor("blue")}`}
+                                        >
                                             {blueSideTeamName()}
                                         </div>
                                         <Show when={!draftStarted()}>
@@ -1044,14 +1070,14 @@ const VersusDraftView: Component = () => {
                                                 class={`flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${
                                                     versusState().readyStatus.blue
                                                         ? "border border-emerald-500/50 bg-emerald-500/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
-                                                        : "border border-slate-600/50 bg-slate-700/50 text-slate-500"
+                                                        : "border border-darius-border/50 bg-darius-card-hover/50 text-darius-text-secondary"
                                                 }`}
                                             >
                                                 <div
                                                     class={`h-2 w-2 rounded-full transition-all duration-300 ${
                                                         versusState().readyStatus.blue
                                                             ? "animate-pulse bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
-                                                            : "bg-slate-500"
+                                                            : "bg-darius-disabled"
                                                     }`}
                                                 />
                                                 <span>
@@ -1064,11 +1090,11 @@ const VersusDraftView: Component = () => {
                                     </div>
                                     <div class="flex flex-col items-center gap-1">
                                         <span
-                                            class={`rounded bg-slate-700 px-2 py-0.5 text-xs font-semibold ${gameTextColors[(draftQuery.data?.seriesIndex ?? 0) + 1] ?? "text-slate-300"}`}
+                                            class={`rounded bg-darius-card-hover px-2 py-0.5 text-xs font-semibold ${gameTextColors[(draftQuery.data?.seriesIndex ?? 0) + 1] ?? "text-darius-text-secondary"}`}
                                         >
                                             Game {(draftQuery.data?.seriesIndex ?? 0) + 1}
                                         </span>
-                                        <span class="text-slate-500">vs</span>
+                                        <span class="text-darius-text-secondary">vs</span>
                                         <Show
                                             when={!versusState().completed}
                                             fallback={
@@ -1079,7 +1105,7 @@ const VersusDraftView: Component = () => {
                                                                 `/versus/${params.id}/draft/${nextGame()?.id ?? ""}`
                                                             )
                                                         }
-                                                        class="group mt-1 flex items-center gap-2 text-orange-400 transition-colors hover:text-orange-300"
+                                                        class="group mt-1 flex items-center gap-2 text-darius-crimson text-darius-crimson transition-colors"
                                                     >
                                                         <span class="text-sm font-medium">
                                                             Next Game
@@ -1114,7 +1140,9 @@ const VersusDraftView: Component = () => {
                                                 </span>
                                             </Show>
                                         </div>
-                                        <div class="text-xl font-bold text-red-400">
+                                        <div
+                                            class={`text-xl font-bold ${sideTeamTextColor("red")}`}
+                                        >
                                             {redSideTeamName()}
                                         </div>
                                         <Show when={!draftStarted()}>
@@ -1122,14 +1150,14 @@ const VersusDraftView: Component = () => {
                                                 class={`flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${
                                                     versusState().readyStatus.red
                                                         ? "border border-emerald-500/50 bg-emerald-500/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
-                                                        : "border border-slate-600/50 bg-slate-700/50 text-slate-500"
+                                                        : "border border-darius-border/50 bg-darius-card-hover/50 text-darius-text-secondary"
                                                 }`}
                                             >
                                                 <div
                                                     class={`h-2 w-2 rounded-full transition-all duration-300 ${
                                                         versusState().readyStatus.red
                                                             ? "animate-pulse bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
-                                                            : "bg-slate-500"
+                                                            : "bg-darius-disabled"
                                                     }`}
                                                 />
                                                 <span>
@@ -1149,10 +1177,12 @@ const VersusDraftView: Component = () => {
                                             <For each={getTeamBans("blue")}>
                                                 {(ban, index) => (
                                                     <div
-                                                        class={`relative aspect-square flex-1 overflow-hidden rounded border-2 bg-slate-800 transition-all ${
+                                                        class={`relative aspect-square flex-1 overflow-hidden rounded border-2 bg-darius-card transition-all ${
                                                             isBanActive("blue", index())
-                                                                ? "animate-pulse border-orange-400 ring-4 ring-orange-400/50"
-                                                                : "border-blue-600/30"
+                                                                ? "animate-pulse border-darius-crimson ring-4 ring-darius-crimson/50"
+                                                                : sideTeamBorderColor(
+                                                                      "blue"
+                                                                  )
                                                         }`}
                                                     >
                                                         <Show when={ban && ban !== ""}>
@@ -1166,7 +1196,7 @@ const VersusDraftView: Component = () => {
                                                                 class="h-full w-full object-cover"
                                                             />
                                                             <div class="absolute inset-0 flex items-center justify-center">
-                                                                <div class="h-[100%] w-1 -rotate-45 bg-slate-200" />
+                                                                <div class="h-[100%] w-1 -rotate-45 bg-darius-text-primary/60" />
                                                             </div>
                                                         </Show>
                                                     </div>
@@ -1177,10 +1207,12 @@ const VersusDraftView: Component = () => {
                                             <For each={getTeamBans("red")}>
                                                 {(ban, index) => (
                                                     <div
-                                                        class={`relative aspect-square flex-1 overflow-hidden rounded border-2 bg-slate-800 transition-all ${
+                                                        class={`relative aspect-square flex-1 overflow-hidden rounded border-2 bg-darius-card transition-all ${
                                                             isBanActive("red", index())
-                                                                ? "animate-pulse border-orange-400 ring-4 ring-orange-400/50"
-                                                                : "border-red-600/30"
+                                                                ? "animate-pulse border-darius-crimson ring-4 ring-darius-crimson/50"
+                                                                : sideTeamBorderColor(
+                                                                      "red"
+                                                                  )
                                                         }`}
                                                     >
                                                         <Show when={ban && ban !== ""}>
@@ -1194,7 +1226,7 @@ const VersusDraftView: Component = () => {
                                                                 class="h-full w-full object-cover"
                                                             />
                                                             <div class="absolute inset-0 flex items-center justify-center">
-                                                                <div class="h-[100%] w-1 -rotate-45 bg-slate-200" />
+                                                                <div class="h-[100%] w-1 -rotate-45 bg-darius-text-primary/60" />
                                                             </div>
                                                         </Show>
                                                     </div>
@@ -1212,10 +1244,12 @@ const VersusDraftView: Component = () => {
                                             <For each={getTeamPicks("blue")}>
                                                 {(pick, index) => (
                                                     <div
-                                                        class={`relative min-h-0 flex-1 overflow-hidden rounded border-2 bg-slate-900 transition-all ${
+                                                        class={`relative min-h-0 flex-1 overflow-hidden rounded border-2 bg-darius-bg transition-all ${
                                                             isPickActive("blue", index())
-                                                                ? "animate-pulse border-orange-400 ring-4 ring-orange-400/50"
-                                                                : "border-blue-600/30"
+                                                                ? "animate-pulse border-darius-crimson ring-4 ring-darius-crimson/50"
+                                                                : sideTeamBorderColor(
+                                                                      "blue"
+                                                                  )
                                                         } ${isSlotAnimating("blue", "pick", index()) ? "animate-pop" : ""}`}
                                                     >
                                                         <Show when={pick && pick !== ""}>
@@ -1233,7 +1267,7 @@ const VersusDraftView: Component = () => {
                                                                 class="h-full w-full -translate-x-[15%] scale-[1.25] object-cover object-[center_25%]"
                                                             />
                                                             <div class="absolute inset-0 bg-gradient-to-r from-transparent via-transparent via-50% to-black" />
-                                                            <span class="absolute bottom-2 right-3 text-lg font-semibold tracking-wide text-slate-100 drop-shadow-lg">
+                                                            <span class="absolute bottom-2 right-3 text-lg font-semibold tracking-wide text-darius-text-primary drop-shadow-lg">
                                                                 {
                                                                     champions[
                                                                         parseInt(pick)
@@ -1253,10 +1287,12 @@ const VersusDraftView: Component = () => {
                                             <For each={getTeamPicks("red")}>
                                                 {(pick, index) => (
                                                     <div
-                                                        class={`relative min-h-0 flex-1 overflow-hidden rounded border-2 bg-slate-900 transition-all ${
+                                                        class={`relative min-h-0 flex-1 overflow-hidden rounded border-2 bg-darius-bg transition-all ${
                                                             isPickActive("red", index())
-                                                                ? "animate-pulse border-orange-400 ring-4 ring-orange-400/50"
-                                                                : "border-red-600/30"
+                                                                ? "animate-pulse border-darius-crimson ring-4 ring-darius-crimson/50"
+                                                                : sideTeamBorderColor(
+                                                                      "red"
+                                                                  )
                                                         } ${isSlotAnimating("red", "pick", index()) ? "animate-pop" : ""}`}
                                                     >
                                                         <Show when={pick && pick !== ""}>
@@ -1274,7 +1310,7 @@ const VersusDraftView: Component = () => {
                                                                 class="h-full w-full translate-x-[15%] scale-[1.25] object-cover object-[center_25%]"
                                                             />
                                                             <div class="absolute inset-0 bg-gradient-to-l from-transparent via-transparent via-50% to-black" />
-                                                            <span class="absolute bottom-2 left-3 text-lg font-semibold tracking-wide text-slate-100 drop-shadow-lg">
+                                                            <span class="absolute bottom-2 left-3 text-lg font-semibold tracking-wide text-darius-text-primary drop-shadow-lg">
                                                                 {
                                                                     champions[
                                                                         parseInt(pick)
@@ -1329,7 +1365,7 @@ const VersusDraftView: Component = () => {
                                         >
                                             <button
                                                 onClick={handlePause}
-                                                class="w-52 rounded-lg border-2 border-orange-500/60 bg-orange-500/15 py-4 text-center text-[0.95rem] font-bold uppercase tracking-wider text-orange-400 transition-all duration-300 ease-out hover:scale-105 hover:bg-orange-500/25 active:scale-95"
+                                                class="w-52 rounded-lg border-2 border-darius-crimson/60 bg-darius-crimson/15 py-4 text-center text-[0.95rem] font-bold uppercase tracking-wider text-darius-crimson transition-all duration-300 ease-out hover:scale-105 hover:bg-darius-crimson/25 active:scale-95"
                                             >
                                                 Resume Draft
                                             </button>
@@ -1388,10 +1424,10 @@ const VersusDraftView: Component = () => {
                         <Show when={isCountingDown()}>
                             <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
                                 <div class="text-center">
-                                    <div class="mb-4 animate-pulse text-9xl font-bold text-orange-400">
+                                    <div class="mb-4 animate-pulse text-9xl font-bold text-darius-crimson">
                                         {countdownValue()}
                                     </div>
-                                    <p class="text-2xl font-semibold text-slate-300">
+                                    <p class="text-2xl font-semibold text-darius-text-secondary">
                                         Resuming...
                                     </p>
                                 </div>

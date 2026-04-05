@@ -16,7 +16,7 @@ type props = {
 export const SearchableSelect = (props: props) => {
     const [isFocused, setIsFocused] = createSignal(false);
     const [dropdownOpen, setDropdownOpen] = createSignal(false);
-    const colors = () => getThemeColors(props.theme ?? "teal");
+    const colors = () => getThemeColors(props.theme ?? "orange");
 
     const openDropdown = () => {
         setDropdownOpen(true);
@@ -95,7 +95,7 @@ export const SearchableSelect = (props: props) => {
             tabIndex={0}
         >
             <div
-                class={`flex h-10 items-center rounded-md border bg-slate-800 ${colors().border}`}
+                class={`flex h-10 items-center rounded-md border bg-darius-card ${colors().border}`}
             >
                 <input
                     value={props.selectText}
@@ -107,19 +107,19 @@ export const SearchableSelect = (props: props) => {
                     placeholder={props.placeholder}
                     name="select"
                     id="select"
-                    class="w-full appearance-none bg-inherit px-4 text-slate-50 outline-none placeholder:text-slate-200"
+                    class="w-full appearance-none bg-inherit px-4 text-darius-text-primary outline-none"
                 />
                 <button
                     onClick={() => {
                         props.setSelectText("");
                     }}
-                    class={`cursor-pointer text-slate-50 outline-none transition-all focus:outline-none ${colors().hoverText}`}
+                    class={`cursor-pointer text-darius-text-primary outline-none transition-all focus:outline-none ${colors().hoverText}`}
                 >
                     <X size={16} class="mx-2" />
                 </button>
                 <label
                     for="show_more"
-                    class={`cursor-pointer border-l border-slate-500 text-slate-50 outline-none transition-all focus:outline-none ${colors().hoverText}`}
+                    class={`cursor-pointer border-l border-darius-border text-darius-text-primary outline-none transition-all focus:outline-none ${colors().hoverText}`}
                 >
                     <button class="flex h-full justify-center">
                         <ChevronUp
@@ -149,10 +149,10 @@ export const SearchableSelect = (props: props) => {
                                     <a
                                         class={`block border-l-4 p-2 transition-colors ${
                                             props.currentlySelected === option
-                                                ? `${colors().activeBorder} bg-slate-700 ${colors().text}`
+                                                ? `${colors().activeBorder} bg-darius-card-hover ${colors().text}`
                                                 : index() === keyboard.highlightedIndex()
-                                                  ? `${colors().activeBorder} bg-slate-700 text-slate-50`
-                                                  : `border-transparent bg-slate-900 text-slate-50 group-hover:bg-slate-700 ${colors().groupHoverText} ${colors().groupHoverBorder}`
+                                                  ? `${colors().activeBorder} bg-darius-card-hover text-darius-text-primary`
+                                                  : `border-transparent bg-darius-bg bg-darius-card-hover text-darius-text-primary ${colors().groupHoverText} ${colors().groupHoverBorder}`
                                         }`}
                                     >
                                         <p class="inline-block w-full overflow-hidden text-ellipsis whitespace-nowrap">
@@ -163,7 +163,7 @@ export const SearchableSelect = (props: props) => {
                             )}
                         </For>
                         <Show when={holdSortOptions().length === 0}>
-                            <a class="block border-l-4 border-transparent bg-slate-900 p-2 text-slate-500">
+                            <a class="block border-l-4 border-transparent bg-darius-bg p-2 text-darius-text-secondary">
                                 None
                             </a>
                         </Show>

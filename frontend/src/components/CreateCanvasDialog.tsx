@@ -112,13 +112,13 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
             onCancel={props.onClose}
             body={
                 <div class="w-96">
-                    <h2 class="mb-4 text-xl font-bold text-slate-50">
+                    <h2 class="mb-4 text-xl font-bold text-darius-text-primary">
                         Create New Canvas
                     </h2>
                     <form onSubmit={handleSubmit}>
                         <div class="mb-4">
                             <label
-                                class="mb-2 block text-sm font-medium text-slate-300"
+                                class="mb-2 block text-sm font-medium text-darius-text-secondary"
                                 for="canvas-name"
                             >
                                 Canvas Name
@@ -140,7 +140,7 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
                                         setErrors({ ...errors(), name: error });
                                     }
                                 }}
-                                class="w-full appearance-none rounded border border-slate-500 bg-slate-600 px-3 py-2 leading-tight text-slate-50 shadow focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                class="w-full appearance-none rounded border border-darius-border bg-darius-card px-3 py-2 leading-tight text-darius-text-primary shadow focus:outline-none focus:ring-2 focus:ring-darius-purple-bright"
                             />
                             {errors().name && (
                                 <p class="mt-1 text-sm text-red-400">{errors().name}</p>
@@ -149,7 +149,7 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
 
                         <div class="mb-6">
                             <label
-                                class="mb-2 block text-sm font-medium text-slate-300"
+                                class="mb-2 block text-sm font-medium text-darius-text-secondary"
                                 for="canvas-description"
                             >
                                 Description (optional)
@@ -171,7 +171,7 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
                                     }
                                 }}
                                 rows={3}
-                                class="w-full appearance-none rounded border border-slate-500 bg-slate-600 px-3 py-2 leading-tight text-slate-50 shadow focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                class="w-full appearance-none rounded border border-darius-border bg-darius-card px-3 py-2 leading-tight text-darius-text-primary shadow focus:outline-none focus:ring-2 focus:ring-darius-purple-bright"
                             />
                             <div class="mt-1 flex items-center justify-between">
                                 {errors().description ? (
@@ -179,7 +179,7 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
                                         {errors().description}
                                     </p>
                                 ) : (
-                                    <p class="text-xs text-slate-400">
+                                    <p class="text-xs text-darius-text-secondary">
                                         {description().length}/1000 characters
                                     </p>
                                 )}
@@ -187,19 +187,22 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
                         </div>
 
                         <div class="mb-6">
-                            <label class="mb-2 block text-sm font-medium text-slate-300">
+                            <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
                                 Icon (optional)
                             </label>
                             <button
                                 type="button"
                                 onClick={() => setShowIconPicker(true)}
-                                class="flex h-16 w-full items-center gap-3 rounded border border-slate-500 bg-slate-600 px-3 py-2 text-slate-50 hover:bg-slate-500"
+                                class="flex h-16 w-full items-center gap-3 rounded border border-darius-border bg-darius-card px-3 py-2 text-darius-text-primary transition-colors hover:bg-darius-card-hover"
                             >
                                 <Show
                                     when={icon()}
                                     fallback={
-                                        <div class="flex h-12 w-12 items-center justify-center rounded bg-slate-700">
-                                            <Plus size={24} class="text-slate-400" />
+                                        <div class="flex h-12 w-12 items-center justify-center rounded bg-darius-card-hover">
+                                            <Plus
+                                                size={24}
+                                                class="text-darius-text-secondary"
+                                            />
                                         </div>
                                     }
                                 >
@@ -218,14 +221,14 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
                                         </Show>
                                     </div>
                                 </Show>
-                                <span class="text-sm text-slate-300">
+                                <span class="text-sm text-darius-text-secondary">
                                     {icon() ? "Change icon" : "Select an icon"}
                                 </span>
                             </button>
                         </div>
 
                         <div class="mb-6">
-                            <label class="mb-2 block text-sm font-medium text-slate-300">
+                            <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
                                 Card Layout
                             </label>
                             <div class="grid grid-cols-2 gap-1.5">
@@ -236,9 +239,9 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
                                             onClick={() => setCardLayout(option.value)}
                                             class="flex items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors"
                                             classList={{
-                                                "border-purple-500 bg-purple-600/15":
+                                                "border-darius-purple-bright bg-darius-purple/15":
                                                     cardLayout() === option.value,
-                                                "border-slate-600 bg-slate-700 hover:border-slate-500 hover:bg-slate-600":
+                                                "border-darius-border bg-darius-card hover:border-darius-purple-bright/40 hover:bg-darius-card-hover":
                                                     cardLayout() !== option.value
                                             }}
                                         >
@@ -247,7 +250,7 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
                                                     size: 32
                                                 })}
                                             </div>
-                                            <div class="min-w-0 text-xs font-medium text-slate-200">
+                                            <div class="min-w-0 text-xs font-medium text-darius-text-primary">
                                                 {option.label}
                                             </div>
                                         </button>
@@ -260,14 +263,14 @@ export const CreateCanvasDialog = (props: CreateCanvasDialogProps) => {
                             <button
                                 type="button"
                                 onClick={props.onClose}
-                                class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-500"
+                                class="rounded-md bg-darius-card px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-card-hover"
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
                                 disabled={isSubmitting()}
-                                class="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-teal-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                class="rounded-md bg-darius-ember bg-darius-ember px-4 py-2 text-sm font-medium text-darius-text-primary disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {isSubmitting() ? "Creating..." : "Create"}
                             </button>

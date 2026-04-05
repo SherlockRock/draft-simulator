@@ -25,7 +25,9 @@ export const PauseRequestModal: Component<PauseRequestModalProps> = (props) => {
     };
 
     const getTeamColor = () => {
-        return props.requestingTeam === "blue" ? "text-blue-400" : "text-red-400";
+        return props.requestingTeam === "blue"
+            ? "text-darius-crimson"
+            : "text-darius-ember";
     };
 
     const getIcon = () => {
@@ -44,12 +46,12 @@ export const PauseRequestModal: Component<PauseRequestModalProps> = (props) => {
     return (
         <Show when={props.isOpen}>
             <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-                <div class="relative w-full max-w-md rounded-lg border border-slate-700 bg-slate-800 p-8 pt-10">
+                <div class="relative w-full max-w-md rounded-lg border border-darius-border bg-darius-card p-8 pt-10">
                     <Show when={props.onClose}>
                         <button
                             type="button"
                             onClick={() => props.onClose?.()}
-                            class="absolute right-4 top-4 text-slate-400 transition-colors hover:text-slate-200"
+                            class="absolute right-4 top-4 text-darius-text-primary text-darius-text-secondary transition-colors"
                             aria-label="Close dialog"
                         >
                             <X size={20} />
@@ -57,10 +59,10 @@ export const PauseRequestModal: Component<PauseRequestModalProps> = (props) => {
                     </Show>
                     <div class="mb-6 text-center">
                         <div class="mb-4 text-6xl">{getIcon()}</div>
-                        <h2 class="mb-2 text-2xl font-bold text-slate-50">
+                        <h2 class="mb-2 text-2xl font-bold text-darius-text-primary">
                             {getTitle()}
                         </h2>
-                        <p class="text-slate-400">
+                        <p class="text-darius-text-secondary">
                             <span class={`font-semibold ${getTeamColor()}`}>
                                 {getTeamName()}
                             </span>{" "}
@@ -77,7 +79,7 @@ export const PauseRequestModal: Component<PauseRequestModalProps> = (props) => {
                         </button>
                         <button
                             onClick={props.onApprove}
-                            class="flex-1 rounded-lg border-2 border-orange-600/50 bg-orange-600/10 px-4 py-3 font-semibold text-orange-400 transition-all hover:border-orange-500 hover:bg-orange-600/20"
+                            class="flex-1 rounded-lg border-2 border-darius-crimson/50 bg-darius-crimson/10 px-4 py-3 font-semibold text-darius-crimson transition-all hover:border-darius-crimson hover:bg-darius-crimson/20"
                         >
                             Approve
                         </button>

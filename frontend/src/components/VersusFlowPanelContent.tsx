@@ -203,22 +203,22 @@ const VersusFlowPanelContent: Component = () => {
             <Show when={isInSeries() && versusDraft()}>
                 <div class="flex flex-col gap-2 px-3">
                     {/* Two-row title card */}
-                    <div class="group/bar overflow-hidden rounded-md border border-orange-700 transition-colors hover:border-orange-400">
+                    <div class="group/bar overflow-hidden rounded-md border border-darius-crimson transition-colors hover:border-darius-crimson">
                         {/* Row 1: icon + name */}
-                        <div class="flex items-center gap-2 bg-slate-800 px-2.5 py-1.5">
+                        <div class="flex items-center gap-2 bg-darius-card px-2.5 py-1.5">
                             {/* Series icon with description tooltip */}
                             <div class="group/icon relative flex-shrink-0">
                                 <IconDisplay
                                     icon={versusDraft()?.icon}
                                     defaultIcon={
-                                        <Swords size={22} class="text-orange-400" />
+                                        <Swords size={22} class="text-darius-crimson" />
                                     }
                                     size="xs"
                                     class="rounded-md"
                                 />
                                 <Show when={versusDraft()?.description}>
-                                    <div class="pointer-events-none absolute left-0 top-full z-50 mt-2 w-52 rounded-lg border border-slate-600/80 bg-slate-800 px-3 py-2.5 text-xs leading-relaxed text-slate-300 opacity-0 shadow-xl transition-opacity duration-200 group-hover/icon:opacity-100">
-                                        <div class="absolute -top-1.5 left-3 h-3 w-3 rotate-45 border-l border-t border-slate-600/80 bg-slate-800" />
+                                    <div class="pointer-events-none absolute left-0 top-full z-50 mt-2 w-52 rounded-lg border border-darius-border/80 bg-darius-card px-3 py-2.5 text-xs leading-relaxed text-darius-text-secondary opacity-0 shadow-xl transition-opacity duration-200 group-hover/icon:opacity-100">
+                                        <div class="absolute -top-1.5 left-3 h-3 w-3 rotate-45 border-l border-t border-darius-border/80 bg-darius-card" />
                                         <p class="relative">
                                             {versusDraft()?.description}
                                         </p>
@@ -226,15 +226,15 @@ const VersusFlowPanelContent: Component = () => {
                                 </Show>
                             </div>
 
-                            <span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-50">
+                            <span class="min-w-0 flex-1 truncate text-sm font-medium text-darius-text-primary">
                                 {versusDraft()?.name ?? ""}
                             </span>
                         </div>
 
                         {/* Row 2: cat mascot + action buttons */}
-                        <div class="flex items-center border-t border-orange-700/50 bg-slate-700 text-slate-400">
+                        <div class="flex items-center border-t border-darius-crimson/50 bg-darius-card-hover text-darius-text-secondary">
                             {/* Cat mascot — reacts to draft state */}
-                            <span class="min-w-0 flex-1 animate-cat-breathe select-none overflow-hidden whitespace-nowrap py-1 text-center text-xs text-orange-400">
+                            <span class="min-w-0 flex-1 animate-cat-breathe select-none overflow-hidden whitespace-nowrap py-1 text-center text-xs text-darius-crimson">
                                 =^<span class="animate-cat-blink">{catFace().eye}</span>
                                 {catFace().mouth}
                                 <span class="animate-cat-blink">{catFace().eye}</span>^=
@@ -253,10 +253,10 @@ const VersusFlowPanelContent: Component = () => {
                                     <button
                                         onClick={() => openPickChangeModal()?.()}
                                         disabled={pickChangeDisabled()}
-                                        class={`flex items-center border-l border-orange-700/50 px-2.5 py-1.5 transition-colors ${
+                                        class={`flex items-center border-l border-darius-crimson/50 px-2.5 py-1.5 transition-colors ${
                                             pickChangeDisabled()
-                                                ? "cursor-not-allowed text-slate-600"
-                                                : "text-orange-400 hover:bg-orange-600 hover:text-slate-200"
+                                                ? "cursor-not-allowed text-darius-disabled"
+                                                : "text-darius-crimson hover:bg-darius-crimson hover:text-darius-text-primary"
                                         }`}
                                         title={pickChangeTooltip()}
                                     >
@@ -274,7 +274,7 @@ const VersusFlowPanelContent: Component = () => {
                                 >
                                     <button
                                         onClick={() => callbacks()?.handlePause()}
-                                        class="flex items-center border-l border-orange-700/50 px-2.5 py-1.5 text-orange-400 transition-colors hover:bg-orange-600 hover:text-slate-200"
+                                        class="flex items-center border-l border-darius-crimson/50 px-2.5 py-1.5 text-darius-crimson transition-colors hover:bg-darius-crimson hover:text-darius-text-primary"
                                         title={
                                             draftState()?.isPaused
                                                 ? "Resume draft"
@@ -291,7 +291,7 @@ const VersusFlowPanelContent: Component = () => {
 
                                 <button
                                     onClick={handleCopyLink}
-                                    class="flex items-center border-l border-orange-700/50 px-2.5 py-1.5 text-orange-400 transition-colors hover:bg-orange-600 hover:text-slate-200"
+                                    class="flex items-center border-l border-darius-crimson/50 px-2.5 py-1.5 text-darius-crimson transition-colors hover:bg-darius-crimson hover:text-darius-text-primary"
                                     title={
                                         copied() ? "Link copied!" : "Share invite link"
                                     }
@@ -306,7 +306,7 @@ const VersusFlowPanelContent: Component = () => {
                                 <Show when={isOwner()}>
                                     <button
                                         onClick={() => setShowEditDialog(true)}
-                                        class="flex items-center border-l border-orange-700/50 px-2.5 py-1.5 text-orange-400 transition-colors hover:bg-orange-600 hover:text-slate-200"
+                                        class="flex items-center border-l border-darius-crimson/50 px-2.5 py-1.5 text-darius-crimson transition-colors hover:bg-darius-crimson hover:text-darius-text-primary"
                                         title="Edit series"
                                     >
                                         <Pencil size={14} />
@@ -332,7 +332,7 @@ const VersusFlowPanelContent: Component = () => {
                 }
             >
                 <div class="flex flex-col gap-2 px-3">
-                    <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <div class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-darius-text-secondary">
                         Game Settings
                     </div>
                     <GameSettingsGrid
@@ -358,7 +358,7 @@ const VersusFlowPanelContent: Component = () => {
             >
                 <div class="flex justify-center px-3 pt-4">
                     <div class="relative">
-                        <span class="absolute -top-[22px] left-1/2 -translate-x-1/2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                        <span class="absolute -top-[22px] left-1/2 -translate-x-1/2 text-[10px] font-semibold uppercase tracking-wider text-darius-text-secondary">
                             Winner
                         </span>
                         <WinnerReporter

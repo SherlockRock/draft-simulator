@@ -8,7 +8,7 @@ import { X } from "lucide-solid";
 interface ChampionToggleGridProps {
     selectedChampions: () => string[];
     onToggle: (champId: string) => void;
-    theme?: "orange" | "purple";
+    theme?: "orange" | "crimson" | "purple";
 }
 
 export const ChampionToggleGrid: Component<ChampionToggleGridProps> = (props) => {
@@ -34,6 +34,7 @@ export const ChampionToggleGrid: Component<ChampionToggleGridProps> = (props) =>
                     searchText={searchText}
                     onSearchChange={setSearchText}
                     searchPlaceholder="Search champions..."
+                    accent={props.theme}
                 />
                 <RoleFilter
                     categories={championCategoryList}
@@ -58,7 +59,7 @@ export const ChampionToggleGrid: Component<ChampionToggleGridProps> = (props) =>
                                     class={`relative aspect-square overflow-hidden rounded border-2 transition-all ${
                                         selected()
                                             ? "border-red-500 opacity-60"
-                                            : "border-slate-600 hover:border-slate-400"
+                                            : "border-darius-border hover:border-darius-purple-bright"
                                     }`}
                                     title={champ.name}
                                 >

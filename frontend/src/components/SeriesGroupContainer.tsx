@@ -85,7 +85,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
 
     return (
         <div
-            class="absolute z-20 rounded-lg border-2 border-slate-500 bg-slate-700 shadow-xl"
+            class="absolute z-20 rounded-xl border-2 border-darius-border bg-darius-card/90 shadow-xl backdrop-blur-sm"
             style={{
                 left: `${screenPos().x}px`,
                 top: `${screenPos().y}px`,
@@ -96,7 +96,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
         >
             {/* Header */}
             <div
-                class="flex items-center justify-between rounded-t-lg bg-slate-800 px-4"
+                class="flex items-center justify-between rounded-t-xl border-b border-darius-border/80 bg-darius-bg/70 px-4"
                 style={{
                     height: `${SERIES_HEADER_HEIGHT}px`,
                     cursor: props.canEdit() ? "move" : "default"
@@ -104,7 +104,9 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                 onMouseDown={(e) => props.onGroupMouseDown(props.group.id, e)}
             >
                 <div class="flex items-center gap-3">
-                    <span class="font-semibold text-slate-50">{props.group.name}</span>
+                    <span class="font-semibold text-darius-text-primary">
+                        {props.group.name}
+                    </span>
 
                     {/* Navigate to Series Overview */}
                     <Show when={props.group.versus_draft_id}>
@@ -113,7 +115,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                                 e.stopPropagation();
                                 navigate(`/versus/${props.group.versus_draft_id}`);
                             }}
-                            class="rounded p-1 text-slate-400 hover:bg-slate-600 hover:text-teal-400"
+                            class="rounded p-1 text-darius-ember transition-colors hover:bg-darius-card-hover hover:text-darius-text-primary"
                             title="Go to series overview"
                         >
                             <ExternalLink size={16} />
@@ -122,13 +124,13 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
 
                     {/* Team Score */}
                     <div class="flex items-center gap-2 text-sm">
-                        <span class="text-blue-400">
+                        <span class="text-darius-purple-bright">
                             {props.group.metadata.blueTeamName ?? "Team 1"}
                         </span>
-                        <span class="font-bold text-slate-50">
+                        <span class="font-bold text-darius-text-primary">
                             {teamScore().blue} - {teamScore().red}
                         </span>
-                        <span class="text-red-400">
+                        <span class="text-darius-crimson">
                             {props.group.metadata.redTeamName ?? "Team 2"}
                         </span>
                     </div>
@@ -139,16 +141,16 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                     <span
                         class="rounded px-2 py-0.5 text-xs"
                         classList={{
-                            "bg-indigo-500/20 text-indigo-300":
+                            "bg-darius-purple/20 text-darius-purple-bright":
                                 (props.group.metadata.length ?? props.drafts.length) ===
                                 1,
-                            "bg-teal-500/20 text-teal-300":
+                            "bg-darius-ember/20 text-darius-ember":
                                 (props.group.metadata.length ?? props.drafts.length) ===
                                 3,
-                            "bg-emerald-500/20 text-emerald-300":
+                            "bg-darius-crimson/20 text-darius-crimson":
                                 (props.group.metadata.length ?? props.drafts.length) ===
                                 5,
-                            "bg-pink-500/20 text-pink-300":
+                            "bg-darius-purple-bright/20 text-darius-purple-bright":
                                 (props.group.metadata.length ?? props.drafts.length) === 7
                         }}
                     >
@@ -160,11 +162,11 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                         <span
                             class="rounded px-2 py-0.5 text-xs"
                             classList={{
-                                "bg-cyan-500/20 text-cyan-300":
+                                "bg-darius-card-hover text-darius-text-secondary":
                                     props.group.metadata.seriesType === "standard",
-                                "bg-fuchsia-500/20 text-fuchsia-300":
+                                "bg-darius-ember/20 text-darius-ember":
                                     props.group.metadata.seriesType === "fearless",
-                                "bg-lime-500/20 text-lime-300":
+                                "bg-darius-crimson/20 text-darius-crimson":
                                     props.group.metadata.seriesType === "ironman"
                             }}
                         >
@@ -174,12 +176,12 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
 
                     {/* Competitive Badge */}
                     <Show when={props.group.metadata.competitive}>
-                        <span class="rounded bg-amber-500/20 px-2 py-0.5 text-xs text-amber-300">
+                        <span class="rounded bg-darius-ember/20 px-2 py-0.5 text-xs text-darius-ember">
                             Competitive
                         </span>
                     </Show>
                     <Show when={!props.group.metadata.competitive}>
-                        <span class="rounded bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
+                        <span class="rounded bg-darius-card-hover px-2 py-0.5 text-xs text-darius-text-secondary">
                             Scrim
                         </span>
                     </Show>
@@ -188,13 +190,13 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                     <Show
                         when={isCompleted()}
                         fallback={
-                            <span class="flex items-center gap-1 text-xs text-yellow-400">
-                                <span class="h-2 w-2 rounded-full bg-yellow-400" />
+                            <span class="flex items-center gap-1 text-xs text-darius-ember">
+                                <span class="h-2 w-2 rounded-full bg-darius-ember" />
                                 In Progress
                             </span>
                         }
                     >
-                        <span class="flex items-center gap-1 text-xs text-green-400">
+                        <span class="flex items-center gap-1 text-xs text-darius-purple-bright">
                             {/* TODO: DRA-40 - Review: was filled icon */}
                             <Check size={12} />
                             Completed
@@ -208,7 +210,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                                 e.stopPropagation();
                                 props.onEditDisabledChampions(props.group.id);
                             }}
-                            class="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-purple-400"
+                            class="rounded p-1 text-darius-purple-bright transition-colors hover:bg-darius-card-hover hover:text-darius-text-primary"
                             title="Disabled champions"
                         >
                             <Settings size={16} />
@@ -218,7 +220,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                                 e.stopPropagation();
                                 props.onDeleteGroup(props.group.id);
                             }}
-                            class="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-red-400"
+                            class="rounded p-1 text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-darius-crimson"
                             title="Remove series from canvas"
                         >
                             <Trash2 size={16} />

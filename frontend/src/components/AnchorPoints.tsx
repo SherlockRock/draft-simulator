@@ -16,12 +16,18 @@ export const AnchorPoints = (props: AnchorPointProps) => {
     const currentHeight = createMemo(() => cardHeight(props.cardLayout()));
 
     const anchorSize = () => Math.max(6, 8 / props.zoom);
+    const anchorClass = (type: AnchorType) =>
+        `pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border border-darius-border/70 shadow-[0_0_0_1px_rgba(26,16,24,0.55)] transition-colors ${
+            props.selected() && props.sourceAnchor()?.type === type
+                ? "bg-darius-purple-bright"
+                : "bg-darius-ember hover:bg-darius-crimson"
+        }`;
 
     return (
         <div class="pointer-events-none absolute inset-0">
             {/* Top anchor */}
             <div
-                class={`pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full ${props.selected() && props.sourceAnchor()?.type === "top" ? "bg-purple-400 hover:bg-purple-600" : "bg-yellow-400 hover:bg-yellow-500"}`}
+                class={anchorClass("top")}
                 style={{
                     width: `${anchorSize()}px`,
                     height: `${anchorSize()}px`,
@@ -40,7 +46,7 @@ export const AnchorPoints = (props: AnchorPointProps) => {
 
             {/* Bottom anchor */}
             <div
-                class={`pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full ${props.selected() && props.sourceAnchor()?.type === "bottom" ? "bg-purple-400 hover:bg-purple-600" : "bg-yellow-400 hover:bg-yellow-500"}`}
+                class={anchorClass("bottom")}
                 style={{
                     width: `${anchorSize()}px`,
                     height: `${anchorSize()}px`,
@@ -59,7 +65,7 @@ export const AnchorPoints = (props: AnchorPointProps) => {
 
             {/* Left anchor */}
             <div
-                class={`pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full ${props.selected() && props.sourceAnchor()?.type === "left" ? "bg-purple-400 hover:bg-purple-600" : "bg-yellow-400 hover:bg-yellow-500"}`}
+                class={anchorClass("left")}
                 style={{
                     width: `${anchorSize()}px`,
                     height: `${anchorSize()}px`,
@@ -78,7 +84,7 @@ export const AnchorPoints = (props: AnchorPointProps) => {
 
             {/* Right anchor */}
             <div
-                class={`pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full ${props.selected() && props.sourceAnchor()?.type === "right" ? "bg-purple-400 hover:bg-purple-600" : "bg-yellow-400 hover:bg-yellow-500"}`}
+                class={anchorClass("right")}
                 style={{
                     width: `${anchorSize()}px`,
                     height: `${anchorSize()}px`,

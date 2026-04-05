@@ -58,16 +58,18 @@ const SidebarButton: Component<SidebarButtonProps> = (props) => {
                 onClick={props.onClick}
                 disabled={props.disabled}
                 aria-label={props.tooltip}
-                class="flex h-9 w-9 items-center justify-center rounded-md border border-slate-600 transition-colors"
+                class="flex h-9 w-9 items-center justify-center rounded-md border border-darius-border transition-colors"
                 classList={{
-                    "border-purple-500 bg-purple-600 hover:bg-purple-500": props.isActive,
-                    "bg-slate-800 hover:bg-slate-700": !props.isActive,
+                    "border-darius-purple-bright bg-darius-purple text-darius-text-primary shadow-[0_0_0_1px_rgba(155,80,192,0.25)]":
+                        props.isActive,
+                    "bg-darius-card hover:border-darius-purple-bright/60 hover:bg-darius-card-hover":
+                        !props.isActive,
                     "cursor-not-allowed opacity-50": props.disabled
                 }}
             >
-                <props.icon size={18} class="text-slate-200" />
+                <props.icon size={18} class="text-darius-text-primary" />
             </button>
-            <div class="pointer-events-none absolute left-full top-1/2 z-[60] ml-2 -translate-y-1/2 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+            <div class="pointer-events-none absolute left-full top-1/2 z-[60] ml-2 -translate-y-1/2 whitespace-nowrap rounded bg-darius-bg px-2 py-1 text-xs text-darius-text-primary opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
                 {props.tooltip}
             </div>
         </div>
@@ -75,7 +77,7 @@ const SidebarButton: Component<SidebarButtonProps> = (props) => {
 };
 
 const SidebarGroup: Component<{ children: JSX.Element }> = (props) => (
-    <div class="flex flex-col gap-1 rounded-lg border border-slate-600 bg-slate-800 p-1.5">
+    <div class="flex flex-col gap-1 rounded-lg border border-darius-border bg-darius-card p-1.5">
         {props.children}
     </div>
 );
@@ -116,13 +118,16 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
                     <div
                         class="flex h-9 w-9 items-center justify-center overflow-hidden rounded-md"
                         classList={{
-                            "border border-slate-600 bg-slate-800": isChampionIcon()
+                            "border border-darius-border bg-darius-card": isChampionIcon()
                         }}
                     >
                         <Show
                             when={props.icon}
                             fallback={
-                                <LayoutDashboard size={32} class="text-purple-400" />
+                                <LayoutDashboard
+                                    size={32}
+                                    class="text-darius-purple-bright"
+                                />
                             }
                         >
                             <IconDisplay
@@ -133,12 +138,12 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
                         </Show>
                     </div>
                     <Show when={props.name}>
-                        <div class="pointer-events-none absolute left-full top-0 z-[60] ml-2 w-max max-w-xs rounded bg-slate-900 px-3 py-2 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                            <div class="text-sm font-medium text-slate-100">
+                        <div class="pointer-events-none absolute left-full top-0 z-[60] ml-2 w-max max-w-xs rounded bg-darius-bg px-3 py-2 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                            <div class="text-sm font-medium text-darius-text-primary">
                                 {props.name}
                             </div>
                             <Show when={props.description}>
-                                <div class="mt-1 text-xs text-slate-400">
+                                <div class="mt-1 text-xs text-darius-text-secondary">
                                     {props.description}
                                 </div>
                             </Show>
@@ -167,16 +172,16 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
                     <Show when={isLayoutPopoverOpen()}>
                         <div
                             ref={layoutPopoverRef}
-                            class="absolute left-full top-[400%] z-50 ml-3 mt-1 w-64 -translate-y-1/2 rounded-xl border border-slate-600 bg-slate-900 p-2 shadow-xl"
+                            class="absolute left-full top-[400%] z-50 ml-3 mt-1 w-64 -translate-y-1/2 rounded-xl border border-darius-border bg-darius-bg p-2 shadow-xl"
                         >
                             <button
                                 type="button"
                                 onClick={() => setIsLayoutPopoverOpen(false)}
-                                class="absolute right-0.5 top-0.5 flex h-6 w-6 items-center justify-center text-slate-400 transition-colors hover:text-slate-200"
+                                class="absolute right-0.5 top-0.5 flex h-6 w-6 items-center justify-center text-darius-text-primary text-darius-text-secondary transition-colors"
                             >
                                 <X size={12} />
                             </button>
-                            <div class="mb-2 pl-2 pr-8 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                            <div class="mb-2 pl-2 pr-8 text-[11px] font-semibold uppercase tracking-wider text-darius-text-secondary">
                                 Card Layout
                             </div>
                             <div class="space-y-1">
@@ -190,9 +195,9 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
                                             }}
                                             class="flex w-full items-center gap-2.5 rounded-md border px-2 py-2 text-left transition-colors"
                                             classList={{
-                                                "border-purple-500 bg-purple-600/15":
+                                                "border-darius-purple-bright bg-darius-purple/15":
                                                     props.cardLayout === option.value,
-                                                "border-slate-700 bg-slate-800 hover:border-slate-500 hover:bg-slate-700":
+                                                "border-darius-border bg-darius-card hover:border-darius-purple-bright/40 hover:bg-darius-card-hover":
                                                     props.cardLayout !== option.value
                                             }}
                                         >
@@ -202,10 +207,10 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
                                                 })}
                                             </div>
                                             <div class="min-w-0">
-                                                <div class="text-sm font-medium text-slate-100">
+                                                <div class="text-sm font-medium text-darius-text-primary">
                                                     {option.label}
                                                 </div>
-                                                <div class="mt-0.5 text-xs text-slate-400">
+                                                <div class="mt-0.5 text-xs text-darius-text-secondary">
                                                     {option.description}
                                                 </div>
                                             </div>

@@ -227,7 +227,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
     };
 
     const getTeamColor = (team: "blue" | "red") => {
-        return team === "blue" ? "text-blue-400" : "text-red-400";
+        return team === "blue" ? "text-darius-crimson" : "text-darius-ember";
     };
 
     const handleOpenModal = () => {
@@ -285,7 +285,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                 <Show when={!isSpectator() && !isLocked() && hasChangeableSlots()}>
                     <button
                         onClick={handleOpenModal}
-                        class="w-full rounded border border-orange-600/40 bg-orange-600/10 px-3 py-1.5 text-sm font-medium text-orange-400 transition-all hover:border-orange-500/60 hover:bg-orange-600/15"
+                        class="w-full rounded border border-darius-crimson/40 bg-darius-crimson/10 px-3 py-1.5 text-sm font-medium text-darius-crimson transition-all hover:border-darius-crimson/60 hover:bg-darius-crimson/15"
                     >
                         <Show
                             when={timeRemaining() !== null && timeRemaining()! > 0}
@@ -296,7 +296,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                     </button>
                 </Show>
                 <Show when={!isSpectator() && isLocked()}>
-                    <div class="w-full rounded border border-slate-600/40 bg-slate-700/30 px-3 py-1.5 text-center text-sm font-medium text-slate-500">
+                    <div class="w-full rounded border border-darius-border/40 bg-darius-card-hover/30 px-3 py-1.5 text-center text-sm font-medium text-darius-text-secondary">
                         Picks Locked
                     </div>
                 </Show>
@@ -305,16 +305,16 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
             {/* Request Change Modal */}
             <Show when={isOpen()}>
                 <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-                    <div class="relative w-full max-w-4xl rounded-lg border border-slate-700 bg-slate-800 p-8 pt-10">
+                    <div class="relative w-full max-w-4xl rounded-lg border border-darius-border bg-darius-card p-8 pt-10">
                         <button
                             type="button"
                             onClick={() => setIsOpen(false)}
-                            class="absolute right-4 top-4 text-slate-400 transition-colors hover:text-slate-200"
+                            class="absolute right-4 top-4 text-darius-text-secondary transition-colors"
                             aria-label="Close dialog"
                         >
                             <X size={20} />
                         </button>
-                        <h2 class="mb-4 text-2xl font-bold text-slate-50">
+                        <h2 class="mb-4 text-2xl font-bold text-darius-text-primary">
                             Request Pick Change
                         </h2>
                         <Show when={props.isCompetitive}>
@@ -323,20 +323,20 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                             </p>
                         </Show>
                         <Show when={!props.isCompetitive}>
-                            <p class="mb-4 text-sm text-orange-400">
+                            <p class="mb-4 text-sm text-darius-crimson">
                                 Scrim Mode: Change will be applied immediately
                             </p>
                         </Show>
 
                         {/* Step 1: Select which ban or pick to change */}
                         <div class="mb-6">
-                            <h3 class="mb-2 text-lg font-semibold text-slate-200">
+                            <h3 class="mb-2 text-lg font-semibold text-darius-text-primary">
                                 Step 1: Select ban or pick to change
                             </h3>
 
                             {/* Bans Section */}
                             <div class="mb-4">
-                                <div class="mb-2 text-sm font-medium text-slate-400">
+                                <div class="mb-2 text-sm font-medium text-darius-text-secondary">
                                     Bans
                                 </div>
                                 <div class="grid grid-cols-5 gap-2">
@@ -348,14 +348,14 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                                 }
                                                 class={`rounded-lg border-2 p-3 text-center transition-all ${
                                                     selectedPickIndex() === ban.pickIndex
-                                                        ? "border-orange-500 bg-orange-600/20"
-                                                        : "border-slate-600 bg-slate-700 hover:border-slate-500"
+                                                        ? "border-darius-crimson bg-darius-crimson/20"
+                                                        : "border-darius-border bg-darius-card-hover"
                                                 }`}
                                             >
-                                                <div class="text-xs text-slate-400">
+                                                <div class="text-xs text-darius-text-secondary">
                                                     Ban {idx() + 1}
                                                 </div>
-                                                <div class="mt-1 text-sm font-semibold text-slate-200">
+                                                <div class="mt-1 text-sm font-semibold text-darius-text-primary">
                                                     {getChampionName(ban.champion)}
                                                 </div>
                                             </button>
@@ -366,7 +366,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
 
                             {/* Picks Section */}
                             <div>
-                                <div class="mb-2 text-sm font-medium text-slate-400">
+                                <div class="mb-2 text-sm font-medium text-darius-text-secondary">
                                     Picks
                                 </div>
                                 <div class="grid grid-cols-5 gap-2">
@@ -378,14 +378,14 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                                 }
                                                 class={`rounded-lg border-2 p-3 text-center transition-all ${
                                                     selectedPickIndex() === pick.pickIndex
-                                                        ? "border-orange-500 bg-orange-600/20"
-                                                        : "border-slate-600 bg-slate-700 hover:border-slate-500"
+                                                        ? "border-darius-crimson bg-darius-crimson/20"
+                                                        : "border-darius-border bg-darius-card-hover"
                                                 }`}
                                             >
-                                                <div class="text-xs text-slate-400">
+                                                <div class="text-xs text-darius-text-secondary">
                                                     Pick {idx() + 1}
                                                 </div>
-                                                <div class="mt-1 text-sm font-semibold text-slate-200">
+                                                <div class="mt-1 text-sm font-semibold text-darius-text-primary">
                                                     {getChampionName(pick.champion)}
                                                 </div>
                                             </button>
@@ -398,7 +398,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                         {/* Step 2: Select new champion */}
                         <Show when={selectedPickIndex() !== null}>
                             <div class="mb-6">
-                                <h3 class="mb-2 text-lg font-semibold text-slate-200">
+                                <h3 class="mb-2 text-lg font-semibold text-darius-text-primary">
                                     Step 2: Select new champion
                                 </h3>
                                 <div class="mb-2">
@@ -412,10 +412,10 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                         selectedCategories={selectedCategories}
                                         onToggle={toggleCategory}
                                         onClearAll={clearCategories}
-                                        theme="orange"
+                                        theme="crimson"
                                     />
                                 </div>
-                                <div class="max-h-72 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-4">
+                                <div class="max-h-72 overflow-y-auto rounded-lg border border-darius-border bg-darius-bg p-4">
                                     <div class="grid grid-cols-10 gap-1">
                                         <For each={filteredChampions()}>
                                             {({ item: champion, originalIndex }) => {
@@ -469,14 +469,14 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                                         }
                                                         class={`relative h-12 w-12 flex-shrink-0 overflow-hidden rounded border-2 transition-all ${
                                                             isSelected()
-                                                                ? "border-orange-500"
+                                                                ? "border-darius-crimson"
                                                                 : isDisabled()
                                                                   ? "cursor-not-allowed border-red-700"
                                                                   : isSeriesRestricted()
-                                                                    ? `cursor-not-allowed ${gameBorderColors[restrictionInfo()?.colorIndex ?? 1] ?? "border-slate-700"}`
+                                                                    ? `cursor-not-allowed ${gameBorderColors[restrictionInfo()?.colorIndex ?? 1] ?? "border-darius-border"}`
                                                                     : isAlreadyPicked()
-                                                                      ? `cursor-not-allowed ${gameBorderColors[currentGameNumber()] ?? "border-slate-700"}`
-                                                                      : "border-transparent hover:border-slate-500"
+                                                                      ? `cursor-not-allowed ${gameBorderColors[currentGameNumber()] ?? "border-darius-border"}`
+                                                                      : "border-darius-border border-transparent"
                                                         }`}
                                                     >
                                                         <img
@@ -507,13 +507,13 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                                                         currentPickIndex()
                                                                     );
                                                                 return (
-                                                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-0.5 py-px text-[7px] font-bold leading-tight">
+                                                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-darius-bg/85 px-0.5 py-px text-[7px] font-bold leading-tight">
                                                                         <span
                                                                             class={
                                                                                 gameTextColorsMuted[
                                                                                     currentGameNumber()
                                                                                 ] ??
-                                                                                "text-slate-300"
+                                                                                "text-darius-text-secondary"
                                                                             }
                                                                         >
                                                                             G
@@ -560,13 +560,13 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                                                 const gameNum =
                                                                     info?.gameNumber ?? 1;
                                                                 return (
-                                                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-slate-900/85 px-0.5 py-px text-[7px] font-bold leading-tight">
+                                                                    <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-darius-bg/85 px-0.5 py-px text-[7px] font-bold leading-tight">
                                                                         <span
                                                                             class={
                                                                                 gameTextColorsMuted[
                                                                                     gameNum
                                                                                 ] ??
-                                                                                "text-slate-300"
+                                                                                "text-darius-text-secondary"
                                                                             }
                                                                         >
                                                                             G{gameNum}
@@ -612,7 +612,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                         <div class="flex gap-3">
                             <button
                                 onClick={() => setIsOpen(false)}
-                                class="flex-1 rounded-lg border-2 border-slate-600 bg-slate-700 px-4 py-3 font-semibold text-slate-300 transition-all hover:border-slate-500"
+                                class="flex-1 rounded-lg border-2 border-darius-border bg-darius-card-hover px-4 py-3 font-semibold text-darius-text-secondary transition-all"
                             >
                                 Cancel
                             </button>
@@ -621,7 +621,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                 disabled={
                                     selectedPickIndex() === null || !selectedChampion()
                                 }
-                                class="flex-1 rounded-lg border-2 border-orange-600/50 bg-orange-600/10 px-4 py-3 font-semibold text-orange-400 transition-all hover:border-orange-500 hover:bg-orange-600/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                class="flex-1 rounded-lg border-2 border-darius-crimson/50 bg-darius-crimson/10 px-4 py-3 font-semibold text-darius-crimson transition-all hover:border-darius-crimson hover:bg-darius-crimson/20 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 Submit Request
                             </button>
@@ -633,21 +633,21 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
             {/* Pending Request Approval Modal */}
             <Show when={props.pendingRequest}>
                 <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-                    <div class="relative w-full max-w-md rounded-lg border border-slate-700 bg-slate-800 p-8 pt-10">
+                    <div class="relative w-full max-w-md rounded-lg border border-darius-border bg-darius-card p-8 pt-10">
                         <button
                             type="button"
                             onClick={handleReject}
-                            class="absolute right-4 top-4 text-slate-400 transition-colors hover:text-slate-200"
+                            class="absolute right-4 top-4 text-darius-text-secondary transition-colors"
                             aria-label="Close dialog"
                         >
                             <X size={20} />
                         </button>
                         <div class="mb-6 text-center">
                             <div class="mb-4 text-6xl">🔄</div>
-                            <h2 class="mb-2 text-2xl font-bold text-slate-50">
+                            <h2 class="mb-2 text-2xl font-bold text-darius-text-primary">
                                 Pick Change Request
                             </h2>
-                            <p class="text-slate-400">
+                            <p class="text-darius-text-secondary">
                                 <span
                                     class={`font-semibold ${getTeamColor(props.pendingRequest?.team ?? "blue")}`}
                                 >
@@ -662,23 +662,27 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                             </p>
                         </div>
 
-                        <div class="mb-6 rounded-lg border border-slate-700 bg-slate-900 p-4">
-                            <div class="mb-2 text-center text-sm text-slate-400">
+                        <div class="mb-6 rounded-lg border border-darius-border bg-darius-bg p-4">
+                            <div class="mb-2 text-center text-sm text-darius-text-secondary">
                                 Requested Change:
                             </div>
                             <div class="flex items-center justify-center gap-3">
                                 <div class="text-center">
-                                    <div class="text-xs text-slate-500">Old</div>
+                                    <div class="text-xs text-darius-text-secondary">
+                                        Old
+                                    </div>
                                     <div class="font-semibold text-red-400">
                                         {getChampionName(
                                             props.pendingRequest?.oldChampion ?? ""
                                         )}
                                     </div>
                                 </div>
-                                <div class="text-2xl text-slate-500">→</div>
+                                <div class="text-2xl text-darius-text-secondary">→</div>
                                 <div class="text-center">
-                                    <div class="text-xs text-slate-500">New</div>
-                                    <div class="font-semibold text-orange-400">
+                                    <div class="text-xs text-darius-text-secondary">
+                                        New
+                                    </div>
+                                    <div class="font-semibold text-darius-crimson">
                                         {getChampionName(
                                             props.pendingRequest?.newChampion ?? ""
                                         )}
@@ -696,7 +700,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                             </button>
                             <button
                                 onClick={handleApprove}
-                                class="flex-1 rounded-lg border-2 border-orange-600/50 bg-orange-600/10 px-4 py-3 font-semibold text-orange-400 transition-all hover:border-orange-500 hover:bg-orange-600/20"
+                                class="flex-1 rounded-lg border-2 border-darius-crimson/50 bg-darius-crimson/10 px-4 py-3 font-semibold text-darius-crimson transition-all hover:border-darius-crimson hover:bg-darius-crimson/20"
                             >
                                 Approve
                             </button>

@@ -5,6 +5,7 @@ interface IconDisplayProps {
     icon?: string | null;
     defaultIcon?: string | JSX.Element;
     size?: "xs" | "sm" | "md" | "lg";
+    championImgClass?: string;
     class?: string;
     className?: string;
 }
@@ -61,7 +62,9 @@ export const IconDisplay: Component<IconDisplayProps> = (props) => {
                     <img
                         src={champions[parseInt(props.icon!)].img}
                         alt={champions[parseInt(props.icon!)].name}
-                        class={`rounded object-cover ${sizes.img}`}
+                        class={
+                            props.championImgClass ?? `rounded object-cover ${sizes.img}`
+                        }
                     />
                 </Show>
             </Show>

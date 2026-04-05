@@ -23,7 +23,7 @@ const ConnectionBanner = (props: Props) => {
     return (
         <Show when={shouldShow()}>
             <div
-                class="flex items-center justify-center gap-4 p-3 text-center font-bold text-slate-50"
+                class="flex items-center justify-center gap-4 p-3 text-center font-bold text-darius-text-primary"
                 classList={{
                     "bg-yellow-600": props.connectionStatus() === "connecting",
                     "bg-red-600":

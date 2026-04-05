@@ -220,7 +220,7 @@ function Draft(props: props) {
             return "block w-full border-2 border-black brightness-[30%] cursor-not-allowed";
         }
         if (selectedChampion() === champNum) {
-            return "block w-full border-2 border-blue-700 hover:cursor-move";
+            return "block w-full border-2 border-darius-purple-bright hover:cursor-move";
         } else if (props.draft()?.picks.includes(champNum)) {
             return "block w-full border-2 border-gray-950 brightness-[30%]";
         }
@@ -228,13 +228,15 @@ function Draft(props: props) {
     };
 
     const picksClasses = (champ: string, side: "team1" | "team2") => {
-        const borderColor = side === "team1" ? "border-violet-400" : "border-fuchsia-400";
+        const borderColor =
+            side === "team1" ? "border-darius-crimson" : "border-darius-ember";
         return champ === "" && selectedChampion() === ""
             ? `aspect-square w-[min(8vw,120px)] border-2 ${borderColor}`
             : `aspect-square w-[min(8vw,120px)] border-2 ${borderColor} hover:cursor-pointer`;
     };
     const bansClasses = (champ: string, side: "team1" | "team2") => {
-        const borderColor = side === "team1" ? "border-violet-400" : "border-fuchsia-400";
+        const borderColor =
+            side === "team1" ? "border-darius-crimson" : "border-darius-ember";
         return champ === "" && selectedChampion() === ""
             ? `aspect-square w-[min(6vw,120px)] border-2 ${borderColor}`
             : `aspect-square w-[min(6vw,120px)] border-2 ${borderColor} hover:cursor-pointer`;
@@ -320,7 +322,7 @@ function Draft(props: props) {
             />
             <Show when={getChampionOverlayLabel(tileProps.champId)}>
                 {(label) => (
-                    <div class="pointer-events-none absolute inset-x-0 bottom-0 bg-slate-950/85 px-1 py-0.5 text-center text-[10px] font-semibold leading-tight text-slate-100">
+                    <div class="pointer-events-none absolute inset-x-0 bottom-0 bg-darius-bg/85 px-1 py-0.5 text-center text-[10px] font-semibold leading-tight text-darius-text-primary">
                         <span class="block truncate">{label()}</span>
                     </div>
                 )}
@@ -350,19 +352,19 @@ function Draft(props: props) {
                             <span>Error: {props.draft.error.message}</span>
                         </Match>
                         <Match when={props.draft()}>
-                            <div class="mb-2 flex items-center justify-between rounded bg-slate-700/50 px-4 py-2">
-                                <span class="text-lg font-semibold text-violet-300">
+                            <div class="mb-2 flex items-center justify-between rounded bg-darius-card-hover/50 px-4 py-2">
+                                <span class="text-lg font-semibold text-darius-crimson">
                                     {props.blueTeamName ?? "Team 1"}
                                 </span>
                                 <Show when={props.isLocked}>
                                     <span
-                                        class="cursor-help rounded bg-slate-500/30 px-2 py-1 text-sm text-slate-400"
+                                        class="cursor-help rounded bg-darius-border/30 px-2 py-1 text-sm text-darius-text-secondary"
                                         title="Imported from versus series. Cannot be edited."
                                     >
                                         Locked
                                     </span>
                                 </Show>
-                                <span class="text-lg font-semibold text-fuchsia-300">
+                                <span class="text-lg font-semibold text-darius-ember">
                                     {props.redTeamName ?? "Team 2"}
                                 </span>
                             </div>
@@ -379,8 +381,8 @@ function Draft(props: props) {
                                             const side = index < 5 ? "team1" : "team2";
                                             const borderColor =
                                                 side === "team1"
-                                                    ? "border-violet-400"
-                                                    : "border-fuchsia-400";
+                                                    ? "border-darius-crimson"
+                                                    : "border-darius-ember";
                                             return (
                                                 <>
                                                     <Droppable id={index}>
@@ -428,7 +430,7 @@ function Draft(props: props) {
                                                         </Show>
                                                     </Droppable>
                                                     {index === 4 && (
-                                                        <div class="inline-block min-h-max w-0.5 self-stretch bg-neutral-100 opacity-100 dark:opacity-50" />
+                                                        <div class="inline-block min-h-max w-0.5 self-stretch bg-darius-border" />
                                                     )}
                                                 </>
                                             );
@@ -451,7 +453,7 @@ function Draft(props: props) {
                                                     when={each()}
                                                     keyed
                                                     fallback={
-                                                        <div class="aspect-square w-[min(8vw,120px)] border-2 border-violet-400">
+                                                        <div class="aspect-square w-[min(8vw,120px)] border-2 border-darius-crimson">
                                                             <img
                                                                 src={BlankSquare}
                                                                 draggable="false"
@@ -490,7 +492,7 @@ function Draft(props: props) {
                                     </Index>
                                 </div>
                                 <div class="flex min-h-0 w-[min(40vw,600px)] flex-col">
-                                    <div class="rounded-t-md border-b border-slate-700 bg-slate-700 px-4 py-3">
+                                    <div class="rounded-t-md border-b border-darius-border bg-darius-card-hover px-4 py-3">
                                         <FilterBar
                                             searchText={searchText}
                                             onSearchChange={handleSearchInput}
@@ -563,7 +565,7 @@ function Draft(props: props) {
                                                     when={each()}
                                                     keyed
                                                     fallback={
-                                                        <div class="aspect-square w-[min(8vw,120px)] border-2 border-fuchsia-400">
+                                                        <div class="aspect-square w-[min(8vw,120px)] border-2 border-darius-ember">
                                                             <img
                                                                 src={BlankSquare}
                                                                 draggable="false"

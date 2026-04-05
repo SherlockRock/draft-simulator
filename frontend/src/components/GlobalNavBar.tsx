@@ -35,12 +35,12 @@ const GlobalNavBar: Component = () => {
     };
 
     return (
-        <div class="global-navbar flex items-center justify-between border-b border-slate-700 bg-slate-900 px-6 py-3">
+        <div class="global-navbar flex items-center justify-between border-b border-darius-border bg-darius-card px-6 py-3">
             {/* Brand + Flow Navigation */}
             <div class="flex items-center gap-6">
                 <span
                     onClick={() => navigate("/")}
-                    class="cursor-pointer text-xl font-bold text-slate-50"
+                    class="cursor-pointer text-xl font-bold text-darius-text-primary"
                 >
                     First Pick
                 </span>
@@ -49,13 +49,13 @@ const GlobalNavBar: Component = () => {
                         onClick={() => navigate("/")}
                         class={`flex items-center gap-2 rounded-md px-4 py-2 font-medium transition-colors ${
                             activeFlow() === null
-                                ? "bg-teal-700 text-slate-50"
-                                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                                ? "bg-darius-ember text-white"
+                                : "bg-darius-card-hover text-darius-text-secondary hover:bg-darius-border"
                         }`}
                     >
                         <Pickaxe
                             size={18}
-                            class={activeFlow() === null ? "" : "text-teal-400"}
+                            class={activeFlow() === null ? "" : "text-darius-ember"}
                         />
                         <span>Home</span>
                     </button>
@@ -63,13 +63,17 @@ const GlobalNavBar: Component = () => {
                         onClick={() => navigate("/canvas")}
                         class={`flex items-center gap-2 rounded-md px-4 py-2 font-medium transition-colors ${
                             activeFlow() === "canvas"
-                                ? "bg-purple-600 text-white"
-                                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                                ? "bg-darius-purple text-white"
+                                : "bg-darius-card-hover text-darius-text-secondary hover:bg-darius-border"
                         }`}
                     >
                         <LayoutDashboard
                             size={18}
-                            class={activeFlow() === "canvas" ? "" : "text-purple-400"}
+                            class={
+                                activeFlow() === "canvas"
+                                    ? ""
+                                    : "text-darius-purple-bright"
+                            }
                         />
                         <span>Canvas</span>
                     </button>
@@ -77,13 +81,13 @@ const GlobalNavBar: Component = () => {
                         onClick={() => navigate("/versus")}
                         class={`flex items-center gap-2 rounded-md px-4 py-2 font-medium transition-colors ${
                             activeFlow() === "versus"
-                                ? "bg-orange-500 text-white"
-                                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                                ? "bg-darius-crimson text-white"
+                                : "bg-darius-card-hover text-darius-text-secondary hover:bg-darius-border"
                         }`}
                     >
                         <Swords
                             size={18}
-                            class={activeFlow() === "versus" ? "" : "text-orange-400"}
+                            class={activeFlow() === "versus" ? "" : "text-darius-crimson"}
                         />
                         <span>Versus</span>
                     </button>
@@ -101,18 +105,18 @@ const GlobalNavBar: Component = () => {
                                 class="h-8 w-8 rounded-full"
                             />
                         </Show>
-                        <span class="font-medium text-slate-200">
+                        <span class="font-medium text-darius-text-primary">
                             {getDisplayName(user())}
                         </span>
                         <button
                             onClick={() => navigate("/settings")}
-                            class="rounded-md bg-slate-800 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-700"
+                            class="rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-sm text-darius-text-secondary transition-colors hover:bg-darius-border"
                         >
                             Settings
                         </button>
                         <button
                             onClick={handleLogOut}
-                            class="rounded-md bg-slate-800 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-700"
+                            class="rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-sm text-darius-text-secondary transition-colors hover:bg-darius-border"
                         >
                             Logout
                         </button>
@@ -121,7 +125,7 @@ const GlobalNavBar: Component = () => {
                 <Show when={!getDisplayName(user())}>
                     <button
                         onClick={handleLogin}
-                        class="rounded-md bg-teal-700 px-4 py-2 font-medium text-slate-100 transition-colors hover:bg-teal-600"
+                        class="rounded-md bg-darius-ember px-4 py-2 font-medium text-white transition-colors hover:opacity-90"
                     >
                         Login with Google
                     </button>

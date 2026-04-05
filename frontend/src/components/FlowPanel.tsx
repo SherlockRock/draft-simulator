@@ -7,24 +7,34 @@ interface FlowPanelProps {
 
 const flowColors = {
     canvas: {
-        arrowHover: "group-hover:text-purple-400"
+        arrowHover: "group-hover:text-darius-purple-bright",
+        borderAccent: "before:bg-darius-purple-bright"
     },
     versus: {
-        arrowHover: "group-hover:text-orange-400"
+        arrowHover: "group-hover:text-darius-crimson",
+        borderAccent: "before:bg-darius-crimson"
     },
     draft: {
-        arrowHover: "group-hover:text-slate-300"
+        arrowHover: "group-hover:text-darius-text-secondary",
+        borderAccent: "before:bg-darius-text-secondary"
     }
 };
 
 const FlowPanel: Component<FlowPanelProps> = (props) => {
     const [isExpanded, setIsExpanded] = createSignal(true);
+    const [transitioning, setTransitioning] = createSignal(false);
 
     const colors = () => (props.flow ? flowColors[props.flow] : null);
 
+    const toggle = () => {
+        setTransitioning(true);
+        setIsExpanded(!isExpanded());
+        setTimeout(() => setTransitioning(false), 300);
+    };
+
     return (
         <div
-            class={`flex flex-col border-r border-slate-700 bg-slate-800 transition-[width] duration-300 ${
+            class={`flex flex-col border-r border-darius-border bg-darius-card transition-[width] duration-300 ${
                 isExpanded() ? "w-[max(18vw,260px)]" : "w-5"
             }`}
         >
@@ -39,11 +49,13 @@ const FlowPanel: Component<FlowPanelProps> = (props) => {
                     </Show>
                 </div>
                 <button
-                    onClick={() => setIsExpanded(!isExpanded())}
-                    class="group flex w-5 items-center justify-center border-l border-slate-700 bg-slate-800 transition-colors hover:bg-slate-700"
+                    onClick={toggle}
+                    class={`group relative flex w-5 items-center justify-center border-l border-darius-border bg-darius-card transition-[background-color] duration-200 before:absolute before:left-[-1px] before:top-1/2 before:z-10 before:h-0 before:w-0.5 before:transition-[height,top] before:duration-200 hover:bg-darius-card-hover hover:before:top-0 hover:before:h-full ${
+                        !transitioning() ? (colors()?.borderAccent ?? "") : ""
+                    }`}
                 >
                     <span
-                        class={`text-[10px] text-slate-500 transition-colors ${
+                        class={`text-[10px] text-darius-text-secondary transition-colors ${
                             colors()?.arrowHover ?? ""
                         }`}
                     >

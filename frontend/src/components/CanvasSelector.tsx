@@ -27,11 +27,15 @@ const CanvasSelector: Component<CanvasSelectorProps> = (props) => {
         <div class="canvas-selector">
             <Show
                 when={!canvases.loading}
-                fallback={<div class="text-sm text-slate-400">Loading canvases...</div>}
+                fallback={
+                    <div class="text-sm text-darius-text-secondary">
+                        Loading canvases...
+                    </div>
+                }
             >
                 <div ref={containerRef} class="group relative flex">
                     <StyledSelect
-                        class="!static flex-1 [&>button]:rounded-r-none [&>button]:border-r-0 [&>button]:transition-colors [&>button]:group-hover:border-purple-400"
+                        class="!static flex-1 [&>button]:rounded-r-none [&>button]:border-r-0 [&>button]:transition-colors [&>button]:group-hover:border-darius-purple-bright"
                         dropdownWidthRef={containerRef}
                         value={props.selectedId || ""}
                         onChange={(value) => {
@@ -50,7 +54,7 @@ const CanvasSelector: Component<CanvasSelectorProps> = (props) => {
                     />
                     <button
                         onClick={handleCreateNew}
-                        class="flex h-10 items-center justify-center rounded-r-md border border-l-0 border-purple-700 bg-slate-700 px-3 text-slate-400 transition-colors hover:bg-purple-600 hover:text-slate-200 group-hover:border-purple-400"
+                        class="flex h-10 items-center justify-center rounded-r-md border border-l-0 border-darius-purple-bright bg-darius-purple px-3 text-darius-text-primary transition-colors hover:bg-darius-purple-bright group-hover:border-darius-purple-bright"
                         title="Create New Canvas"
                     >
                         <Plus size={16} />

@@ -23,6 +23,11 @@ type VertexComponentProps = {
 export const VertexComponent = (props: VertexComponentProps) => {
     const VERTEX_RADIUS = 6; // Base size in px
     const HOVER_RADIUS = 10;
+    const colors = {
+        idle: "#E03848",
+        hover: "#F06830",
+        selected: "#9B50C0"
+    };
 
     const screenPos = () => {
         const vp = props.viewport();
@@ -69,7 +74,11 @@ export const VertexComponent = (props: VertexComponentProps) => {
                 cy={screenPos().y}
                 r={props.isHovered || props.isSelected ? HOVER_RADIUS : VERTEX_RADIUS}
                 fill={
-                    props.isSelected ? "#c084fc" : props.isHovered ? "#0f766e" : "#2dd4bf"
+                    props.isSelected
+                        ? colors.selected
+                        : props.isHovered
+                          ? colors.hover
+                          : colors.idle
                 }
                 stroke="white"
                 stroke-width="2"

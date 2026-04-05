@@ -2,17 +2,21 @@ import { Accessor, Component, JSX } from "solid-js";
 import { X } from "lucide-solid";
 
 const accentStyles = {
+    neutral: {
+        active: "border-darius-border",
+        idle: "border-transparent focus-within:border-darius-border"
+    },
     orange: {
-        active: "border-orange-500",
-        idle: "border-transparent focus-within:border-orange-400"
+        active: "border-darius-ember",
+        idle: "border-transparent focus-within:border-darius-ember"
+    },
+    crimson: {
+        active: "border-darius-crimson",
+        idle: "border-transparent focus-within:border-darius-crimson"
     },
     purple: {
-        active: "border-purple-500",
-        idle: "border-transparent focus-within:border-purple-400"
-    },
-    teal: {
-        active: "border-teal-500",
-        idle: "border-transparent focus-within:border-teal-400"
+        active: "border-darius-purple-bright",
+        idle: "border-transparent focus-within:border-darius-purple-bright"
     }
 } as const;
 
@@ -42,14 +46,14 @@ export const FilterBar: Component<FilterBarProps> = (props) => {
                 value={props.searchText()}
                 onInput={(e) => props.onSearchChange(e.currentTarget.value)}
                 placeholder={props.searchPlaceholder || "Search..."}
-                class="min-w-0 flex-1 bg-inherit p-2 text-slate-50 placeholder:text-slate-400 focus:outline-none"
+                class="min-w-0 flex-1 bg-inherit p-2 text-darius-text-primary text-darius-text-secondary focus:outline-none"
             />
             <button
                 type="button"
                 onClick={() => props.onSearchChange("")}
                 class={`flex items-center px-2 transition-colors ${
                     props.searchText() !== ""
-                        ? "text-slate-400 hover:text-slate-200"
+                        ? "text-darius-text-primary text-darius-text-secondary"
                         : "pointer-events-none invisible"
                 }`}
                 title="Clear search"

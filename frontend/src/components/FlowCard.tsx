@@ -1,97 +1,86 @@
-import { Component, For, Show, JSX } from "solid-js";
+import { Component, JSX } from "solid-js";
 
 interface FlowCardProps {
     title: string;
     description: string;
     icon: JSX.Element;
     onClick: () => void;
+    onCtaClick: () => void;
+    ctaLabel: string;
     disabled?: boolean;
     flowType?: "draft" | "canvas" | "versus";
-    bullets?: string[];
 }
 
 const FlowCard: Component<FlowCardProps> = (props) => {
-    const getAccentColor = () => {
-        if (props.disabled) return "bg-slate-700";
-        switch (props.flowType) {
-            case "draft":
-                return "bg-blue-500";
-            case "canvas":
-                return "bg-purple-500";
-            case "versus":
-                return "bg-orange-500";
-            default:
-                return "bg-teal-500";
-        }
-    };
-
-    const getBulletColor = () => {
-        switch (props.flowType) {
-            case "draft":
-                return "bg-blue-400";
-            case "canvas":
-                return "bg-purple-400";
-            case "versus":
-                return "bg-orange-400";
-            default:
-                return "bg-teal-400";
-        }
-    };
-
     const baseClasses = props.disabled
-        ? "cursor-not-allowed bg-slate-800 text-slate-500"
-        : "bg-slate-800 text-slate-200 hover:bg-slate-700/80";
+        ? "cursor-not-allowed bg-darius-card text-darius-text-secondary"
+        : "bg-darius-card text-darius-text-primary hover:bg-darius-card-hover";
 
     const getGradient = () => {
         switch (props.flowType) {
-            case "draft":
-                return "from-blue-500/5 to-transparent";
             case "canvas":
-                return "from-purple-500/5 to-transparent";
+                return "from-darius-purple/[0.08] to-transparent group-hover:from-darius-purple/[0.12]";
             case "versus":
-                return "from-orange-500/5 to-transparent";
+                return "from-darius-crimson/[0.08] to-transparent group-hover:from-darius-crimson/[0.12]";
             default:
-                return "from-teal-500/5 to-transparent";
+                return "from-darius-purple/[0.08] to-transparent group-hover:from-darius-purple/[0.12]";
+        }
+    };
+
+    const getCtaClasses = () => {
+        switch (props.flowType) {
+            case "versus":
+                return "bg-darius-crimson shadow-[0_4px_12px_rgba(224,56,72,0.15)] hover:shadow-[0_6px_16px_rgba(224,56,72,0.22)]";
+            case "canvas":
+            default:
+                return "bg-darius-purple shadow-[0_4px_12px_rgba(122,56,128,0.15)] hover:shadow-[0_6px_16px_rgba(122,56,128,0.22)]";
         }
     };
 
     return (
-        <button
-            onClick={props.onClick}
-            disabled={props.disabled}
-            class={`relative flex overflow-hidden rounded-xl border border-slate-700/50 transition-all ${baseClasses}`}
+        <div
+            role="button"
+            tabIndex={props.disabled ? -1 : 0}
+            aria-disabled={props.disabled}
+            onClick={() => {
+                if (!props.disabled) {
+                    props.onClick();
+                }
+            }}
+            onKeyDown={(event) => {
+                if (props.disabled) return;
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    props.onClick();
+                }
+            }}
+            class={`group relative flex overflow-hidden rounded-xl border border-darius-border/50 transition-all ${baseClasses}`}
         >
             {/* Subtle gradient overlay */}
             <div
-                class={`pointer-events-none absolute inset-0 bg-gradient-to-r ${getGradient()}`}
+                class={`pointer-events-none absolute inset-0 bg-gradient-to-br transition-all ${getGradient()}`}
             />
 
-            {/* Side accent stripe */}
-            <div class={`w-2 flex-shrink-0 ${getAccentColor()}`} />
-
             {/* Content */}
-            <div class="relative flex flex-col items-start gap-4 p-8">
+            <div class="relative flex flex-col items-start gap-4 p-6">
                 <div class="flex items-center gap-3">
                     {props.icon}
-                    <h3 class="text-3xl font-bold">{props.title}</h3>
+                    <h3 class="text-xl font-bold">{props.title}</h3>
                 </div>
-                <p class="text-base text-slate-400">{props.description}</p>
-                <Show when={props.bullets && props.bullets.length > 0}>
-                    <ul class="space-y-2 text-left text-sm text-slate-300">
-                        <For each={props.bullets}>
-                            {(bullet) => (
-                                <li class="flex items-start gap-2">
-                                    <span
-                                        class={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${getBulletColor()}`}
-                                    />
-                                    {bullet}
-                                </li>
-                            )}
-                        </For>
-                    </ul>
-                </Show>
+                <p class="text-base text-darius-text-secondary">{props.description}</p>
+                <button
+                    type="button"
+                    disabled={props.disabled}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        props.onCtaClick();
+                    }}
+                    class={`rounded-lg px-5 py-2.5 text-sm font-semibold text-darius-text-primary transition-all hover:brightness-125 ${getCtaClasses()}`}
+                >
+                    {props.ctaLabel}
+                </button>
             </div>
-        </button>
+        </div>
     );
 };
 

@@ -2317,7 +2317,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         </div>
                         <button
                             onClick={() => props.refetch()}
-                            class="rounded bg-purple-500 px-4 py-2 text-slate-50 hover:bg-purple-400"
+                            class="rounded bg-darius-purple px-4 py-2 text-darius-text-primary transition-colors hover:bg-darius-purple-bright"
                         >
                             Retry
                         </button>
@@ -2361,12 +2361,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     </div>
                 </Show>
                 <Show when={props.isFetching}>
-                    <div class="rounded border bg-blue-100 px-3 py-1 text-sm text-blue-800 shadow">
+                    <div class="absolute right-4 top-16 z-40 rounded border border-darius-purple-bright/40 bg-darius-card px-3 py-1 text-sm text-darius-purple-bright shadow">
                         Syncing...
                     </div>
                 </Show>
                 <div
-                    class="canvas-background absolute inset-0 cursor-move bg-slate-700 bg-[radial-gradient(circle,rgba(148,163,184,0.15)_1px,transparent_1px)]"
+                    class="canvas-background absolute inset-0 cursor-move bg-darius-card-hover bg-[radial-gradient(circle,rgba(184,168,176,0.08)_1px,transparent_1px)]"
                     style={{
                         "background-size": `${32 * props.viewport().zoom}px ${32 * props.viewport().zoom}px`,
                         "background-position": `${-props.viewport().x * props.viewport().zoom}px ${-props.viewport().y * props.viewport().zoom}px`
@@ -2651,10 +2651,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     onCancel={onCancel}
                     body={
                         <>
-                            <h3 class="mb-4 text-lg font-bold text-slate-50">
+                            <h3 class="mb-4 text-lg font-bold text-darius-text-primary">
                                 Confirm Deletion
                             </h3>
-                            <p class="mb-6 text-slate-200">
+                            <p class="mb-6 text-darius-text-primary">
                                 Are you sure you want to delete the draft "
                                 {draftToDelete()?.Draft.name}
                                 "?
@@ -2662,13 +2662,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             <div class="flex justify-end gap-4">
                                 <button
                                     onClick={onCancel}
-                                    class="rounded bg-purple-600 px-4 py-2 text-slate-50 hover:bg-purple-500"
+                                    class="rounded bg-darius-purple px-4 py-2 text-darius-text-primary transition-colors hover:bg-darius-purple-bright"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     onClick={onDelete}
-                                    class="rounded bg-red-400 px-4 py-2 text-slate-50 hover:bg-red-600"
+                                    class="rounded bg-darius-crimson px-4 py-2 text-darius-text-primary transition-colors hover:bg-darius-ember"
                                 >
                                     Delete
                                 </button>
@@ -2701,21 +2701,21 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     when={group().type === "custom"}
                                     fallback={
                                         <>
-                                            <h3 class="mb-4 text-lg font-bold text-slate-50">
+                                            <h3 class="mb-4 text-lg font-bold text-darius-text-primary">
                                                 Remove Series from Canvas?
                                             </h3>
-                                            <p class="mb-4 text-slate-200">
+                                            <p class="mb-4 text-darius-text-primary">
                                                 This will remove "{group().name}" and all
                                                 its games from this canvas.
                                             </p>
-                                            <p class="mb-6 text-sm text-slate-400">
+                                            <p class="mb-6 text-sm text-darius-text-secondary">
                                                 The original series data will not be
                                                 deleted - you can re-import it later.
                                             </p>
                                             <div class="flex justify-end gap-4">
                                                 <button
                                                     onClick={onDeleteGroupCancel}
-                                                    class="rounded bg-purple-600 px-4 py-2 text-slate-50 hover:bg-purple-500"
+                                                    class="rounded bg-darius-purple px-4 py-2 text-darius-text-primary transition-colors hover:bg-darius-purple-bright"
                                                 >
                                                     Cancel
                                                 </button>
@@ -2723,7 +2723,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                     onClick={() =>
                                                         handleDeleteGroupWithChoice(false)
                                                     }
-                                                    class="rounded bg-red-400 px-4 py-2 text-slate-50 hover:bg-red-600"
+                                                    class="rounded bg-darius-crimson px-4 py-2 text-darius-text-primary transition-colors hover:bg-darius-ember"
                                                 >
                                                     Remove
                                                 </button>
@@ -2768,14 +2768,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 {/* Context Menu */}
                 <Show when={contextMenuPosition()}>
                     <div
-                        class="canvas-context-menu fixed z-50 rounded-md border border-slate-500 bg-slate-700 py-1 shadow-lg"
+                        class="canvas-context-menu fixed z-50 rounded-md border border-darius-border bg-darius-card-hover py-1 shadow-lg"
                         style={{
                             left: `${contextMenuPosition()?.x ?? 0}px`,
                             top: `${contextMenuPosition()?.y ?? 0}px`
                         }}
                     >
                         <button
-                            class="w-full px-4 py-2 text-left text-sm text-slate-200 hover:bg-slate-600"
+                            class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-card"
                             onClick={() => {
                                 const pos = contextMenuWorldPosition();
                                 const group = findGroupAtPosition(pos.x, pos.y);
@@ -2808,7 +2808,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             Create Draft
                         </button>
                         <button
-                            class="w-full px-4 py-2 text-left text-sm text-slate-200 hover:bg-slate-600"
+                            class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-card"
                             onClick={() => {
                                 const pos = contextMenuWorldPosition();
                                 setCreateGroupPosition(pos);

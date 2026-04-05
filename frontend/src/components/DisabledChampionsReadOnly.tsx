@@ -11,10 +11,10 @@ export const DisabledChampionsReadOnly: Component<DisabledChampionsReadOnlyProps
 ) => {
     return (
         <div>
-            <label class="mb-2 block text-sm font-medium text-slate-300">
+            <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
                 {props.label ?? "Disabled Champions (locked)"}
             </label>
-            <div class="grid grid-cols-8 gap-1.5 rounded-md border border-slate-600 bg-slate-700/50 p-2">
+            <div class="grid grid-cols-8 gap-1.5 rounded-md border border-darius-border bg-darius-card-hover/50 p-2">
                 <For each={props.championIds}>
                     {(id) => {
                         const champ = champions[parseInt(id)];

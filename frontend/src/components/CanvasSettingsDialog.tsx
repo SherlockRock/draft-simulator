@@ -131,9 +131,9 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
     const tabClasses = (tab: TabType) => {
         const base = "px-4 py-2 text-sm font-medium transition-colors";
         if (activeTab() === tab) {
-            return `${base} border-b-2 border-purple-500 text-purple-400`;
+            return `${base} border-b-2 border-darius-purple-bright text-darius-purple-bright`;
         }
-        return `${base} text-slate-400 hover:text-slate-200`;
+        return `${base} text-darius-text-secondary hover:text-darius-text-primary`;
     };
 
     return (
@@ -141,11 +141,13 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
             isOpen={props.isOpen}
             onCancel={props.onClose}
             body={
-                <div class="flex h-[490px] w-[500px] flex-col text-slate-200">
-                    <h2 class="mb-4 text-xl font-bold text-slate-50">Canvas Settings</h2>
+                <div class="flex h-[490px] w-[500px] flex-col text-darius-text-primary">
+                    <h2 class="mb-4 text-xl font-bold text-darius-text-primary">
+                        Canvas Settings
+                    </h2>
 
                     {/* Tab Bar */}
-                    <div class="flex gap-2 border-b border-slate-600">
+                    <div class="flex gap-2 border-b border-darius-border">
                         <button
                             type="button"
                             class={tabClasses("details")}
@@ -176,7 +178,7 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                             <div class="flex flex-1 flex-col space-y-4">
                                 <div>
                                     <label
-                                        class="mb-2 block text-sm font-medium text-slate-300"
+                                        class="mb-2 block text-sm font-medium text-darius-text-secondary"
                                         for="settings-canvas-name"
                                     >
                                         Canvas Name
@@ -197,7 +199,7 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                                 setErrors({ ...errors(), name: error });
                                             }
                                         }}
-                                        class="w-full appearance-none rounded border border-slate-500 bg-slate-600 px-3 py-2 leading-tight text-slate-50 shadow focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                        class="w-full appearance-none rounded border border-darius-border bg-darius-card px-3 py-2 leading-tight text-darius-text-primary shadow focus:outline-none focus:ring-2 focus:ring-darius-purple-bright"
                                     />
                                     {errors().name && (
                                         <p class="mt-1 text-sm text-red-400">
@@ -208,7 +210,7 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
 
                                 <div>
                                     <label
-                                        class="mb-2 block text-sm font-medium text-slate-300"
+                                        class="mb-2 block text-sm font-medium text-darius-text-secondary"
                                         for="settings-canvas-description"
                                     >
                                         Description (optional)
@@ -236,7 +238,7 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                             }
                                         }}
                                         rows={3}
-                                        class="w-full appearance-none rounded border border-slate-500 bg-slate-600 px-3 py-2 leading-tight text-slate-50 shadow focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                        class="w-full appearance-none rounded border border-darius-border bg-darius-card px-3 py-2 leading-tight text-darius-text-primary shadow focus:outline-none focus:ring-2 focus:ring-darius-purple-bright"
                                     />
                                     <div class="mt-1 flex items-center justify-between">
                                         {errors().description ? (
@@ -244,7 +246,7 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                                 {errors().description}
                                             </p>
                                         ) : (
-                                            <p class="text-xs text-slate-400">
+                                            <p class="text-xs text-darius-text-secondary">
                                                 {description().length}/1000 characters
                                             </p>
                                         )}
@@ -252,21 +254,21 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                 </div>
 
                                 <div>
-                                    <label class="mb-2 block text-sm font-medium text-slate-300">
+                                    <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
                                         Icon (optional)
                                     </label>
                                     <button
                                         type="button"
                                         onClick={() => setShowIconPicker(true)}
-                                        class="flex h-16 w-full items-center gap-3 rounded border border-slate-500 bg-slate-600 px-3 py-2 text-slate-50 hover:bg-slate-500"
+                                        class="flex h-16 w-full items-center gap-3 rounded border border-darius-border bg-darius-card px-3 py-2 text-darius-text-primary transition-colors hover:bg-darius-card-hover"
                                     >
                                         <Show
                                             when={icon()}
                                             fallback={
-                                                <div class="flex h-12 w-12 items-center justify-center rounded bg-slate-700">
+                                                <div class="flex h-12 w-12 items-center justify-center rounded bg-darius-card-hover">
                                                     <Plus
                                                         size={24}
-                                                        class="text-slate-400"
+                                                        class="text-darius-text-secondary"
                                                     />
                                                 </div>
                                             }
@@ -277,17 +279,17 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                                 class="rounded"
                                             />
                                         </Show>
-                                        <span class="text-sm text-slate-300">
+                                        <span class="text-sm text-darius-text-secondary">
                                             {icon() ? "Change icon" : "Select an icon"}
                                         </span>
                                     </button>
                                 </div>
 
-                                <div class="mt-auto flex items-center justify-end gap-2 border-t border-slate-600 pt-4">
+                                <div class="mt-auto flex items-center justify-end gap-2 border-t border-darius-border pt-4">
                                     <button
                                         type="button"
                                         onClick={props.onClose}
-                                        class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-500"
+                                        class="rounded-md bg-darius-card px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-card-hover"
                                     >
                                         Cancel
                                     </button>
@@ -295,7 +297,7 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                         type="button"
                                         onClick={handleSave}
                                         disabled={isSaving() || !hasChanges()}
-                                        class="rounded-md bg-purple-500 px-4 py-2 text-sm font-medium text-slate-50 hover:bg-purple-400 disabled:cursor-not-allowed disabled:opacity-50"
+                                        class="rounded-md bg-darius-purple px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-purple-bright disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                         {isSaving() ? "Saving..." : "Save Changes"}
                                     </button>
@@ -316,7 +318,7 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                             <div class="flex min-h-0 flex-1 flex-col">
                                 <div class="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto pr-2">
                                     <Show when={props.usersQuery.isLoading}>
-                                        <div class="text-center text-slate-400">
+                                        <div class="text-center text-darius-text-secondary">
                                             Loading users...
                                         </div>
                                     </Show>
@@ -335,8 +337,9 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                                 <div
                                                     class="rounded p-2 transition-colors"
                                                     classList={{
-                                                        "bg-slate-700": !isConfirming(),
-                                                        "bg-gradient-to-r from-red-500/10 to-slate-700 border border-red-500/30":
+                                                        "bg-darius-card-hover":
+                                                            !isConfirming(),
+                                                        "bg-gradient-to-r from-darius-crimson/10 to-darius-card border border-darius-crimson/30":
                                                             isConfirming()
                                                     }}
                                                 >
@@ -363,12 +366,12 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                                                         <Show
                                                                             when={isOwner()}
                                                                         >
-                                                                            <span class="rounded bg-purple-500/20 px-1.5 py-0.5 text-xs text-purple-300">
+                                                                            <span class="rounded bg-darius-purple/20 px-1.5 py-0.5 text-xs text-darius-purple-bright">
                                                                                 Owner
                                                                             </span>
                                                                         </Show>
                                                                     </div>
-                                                                    <div class="text-xs text-slate-400">
+                                                                    <div class="text-xs text-darius-text-secondary">
                                                                         {user.email}
                                                                     </div>
                                                                 </div>
@@ -442,7 +445,7 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                                                             user.name}
                                                                         ?
                                                                     </span>
-                                                                    <div class="text-xs text-slate-400">
+                                                                    <div class="text-xs text-darius-text-secondary">
                                                                         They will lose
                                                                         access to this
                                                                         canvas
@@ -456,7 +459,7 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                                                             null
                                                                         )
                                                                     }
-                                                                    class="rounded bg-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-500"
+                                                                    class="rounded bg-darius-card px-3 py-1.5 text-sm text-darius-text-primary transition-colors hover:bg-darius-card-hover"
                                                                 >
                                                                     Cancel
                                                                 </button>
@@ -481,16 +484,16 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                         }}
                                     </For>
                                     <Show when={props.usersQuery.data?.length === 0}>
-                                        <p class="text-center text-slate-400">
+                                        <p class="text-center text-darius-text-secondary">
                                             No users found.
                                         </p>
                                     </Show>
                                 </div>
-                                <div class="mt-4 flex justify-end border-t border-slate-600 pt-4">
+                                <div class="mt-4 flex justify-end border-t border-darius-border pt-4">
                                     <button
                                         type="button"
                                         onClick={props.onClose}
-                                        class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-500"
+                                        class="rounded-md bg-darius-card px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-card-hover"
                                     >
                                         Close
                                     </button>
@@ -505,7 +508,7 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                     <h3 class="mb-2 text-lg font-semibold text-red-400">
                                         Danger Zone
                                     </h3>
-                                    <p class="mb-4 text-sm text-slate-300">
+                                    <p class="mb-4 text-sm text-darius-text-secondary">
                                         Deleting this canvas is permanent and cannot be
                                         undone. All drafts, connections, and shared access
                                         will be removed.
@@ -535,7 +538,7 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                                         setShowDeleteConfirm(false)
                                                     }
                                                     disabled={isDeleting()}
-                                                    class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+                                                    class="rounded-md bg-darius-card px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-card-hover disabled:cursor-not-allowed disabled:opacity-50"
                                                 >
                                                     Cancel
                                                 </button>
@@ -554,11 +557,11 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                     </Show>
                                 </div>
 
-                                <div class="mt-auto flex justify-end border-t border-slate-600 pt-4">
+                                <div class="mt-auto flex justify-end border-t border-darius-border pt-4">
                                     <button
                                         type="button"
                                         onClick={props.onClose}
-                                        class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-500"
+                                        class="rounded-md bg-darius-card px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-card-hover"
                                     >
                                         Close
                                     </button>

@@ -2,7 +2,6 @@ import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "so
 import { X } from "lucide-solid";
 import { champions, getSplashUrl } from "../utils/constants";
 import BlankSquare from "/src/assets/BlankSquare.webp";
-import { getThemeColors } from "../utils/selectTheme";
 import { CardLayout, getPickOrderForLayout } from "../utils/canvasCardLayout";
 
 type props = {
@@ -33,8 +32,6 @@ type props = {
     disabledChampions?: string[];
     displayMode?: "full" | "compact" | "wide-art";
 };
-
-const colors = getThemeColors("purple");
 
 export const CanvasSelect = (props: props) => {
     const [dropdownOpen, setDropdownOpen] = createSignal(false);
@@ -370,18 +367,18 @@ export const CanvasSelect = (props: props) => {
 
     const dropdownClasses = (championName: string, champNotAvailable: boolean) => {
         if (selectedChampion()?.name === championName) {
-            return "border-green-600 text-green-600 bg-slate-800 cursor-not-allowed";
+            return "border-darius-ember/70 text-darius-ember bg-darius-card-hover cursor-not-allowed";
         }
         if (champNotAvailable) {
-            return "border-slate-400 text-red-500 bg-slate-500 cursor-not-allowed";
+            return "border-darius-border text-darius-text-secondary bg-darius-card cursor-not-allowed";
         }
         if (
             holdSortOptions().findIndex((value) => value.name === championName) ===
             dropdownIndex()
         ) {
-            return `${colors.dropdownBorder} ${colors.text} bg-slate-800 ${colors.hoverBorder} hover:bg-slate-600 ${colors.hoverText}`;
+            return "border-darius-purple-bright text-darius-text-primary bg-darius-card-hover hover:bg-darius-card-hover";
         }
-        return `border-black text-slate-50 bg-slate-800 ${colors.hoverBorder} hover:bg-slate-600 ${colors.hoverText}`;
+        return "border-darius-border text-darius-text-primary bg-darius-card hover:border-darius-purple-bright/50 hover:bg-darius-card-hover";
     };
 
     return (
@@ -407,23 +404,13 @@ export const CanvasSelect = (props: props) => {
                             when={isWideArt()}
                             fallback={
                                 <div
-                                    class="flex h-full min-h-0 w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg border bg-slate-900 px-2 py-1 text-left text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+                                    class="flex h-full min-h-0 w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg border bg-darius-bg px-2 py-1 text-left text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
                                     onClick={activateSelect}
                                     classList={{
-                                        "border-slate-700/80": !isActiveSelection(),
-                                        "hover:border-slate-600": !props.disabled,
-                                        "border-violet-300/60 ring-2 ring-violet-400/70":
-                                            isActiveSelection() &&
-                                            !props.disabled &&
-                                            props.side === "team1",
-                                        "border-fuchsia-300/60 ring-2 ring-fuchsia-400/70":
-                                            isActiveSelection() &&
-                                            !props.disabled &&
-                                            props.side === "team2",
-                                        "border-sky-300/60 ring-2 ring-sky-400/70":
-                                            isActiveSelection() &&
-                                            !props.disabled &&
-                                            !props.side
+                                        "border-darius-border/80": !isActiveSelection(),
+                                        "border-darius-border": !props.disabled,
+                                        "border-darius-purple-bright ring-2 ring-darius-purple-bright/35":
+                                            isActiveSelection() && !props.disabled
                                     }}
                                 >
                                     <div
@@ -462,12 +449,11 @@ export const CanvasSelect = (props: props) => {
                                             id={`${props.draft.id}-${props.index()}-select`}
                                             class="h-6 min-w-0 flex-1 appearance-none bg-inherit px-1 outline-none"
                                             classList={{
-                                                "text-violet-300 placeholder:text-violet-300":
+                                                "text-darius-crimson":
                                                     props.side === "team1",
-                                                "text-fuchsia-300 placeholder:text-fuchsia-300":
+                                                "text-darius-ember":
                                                     props.side === "team2",
-                                                "text-slate-50 placeholder:text-slate-200":
-                                                    !props.side,
+                                                "text-darius-text-primary": !props.side,
                                                 "text-right": props.side === "team2"
                                             }}
                                             disabled={props.disabled}
@@ -485,10 +471,10 @@ export const CanvasSelect = (props: props) => {
                                             }}
                                             class={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full outline-none transition-all focus:outline-none ${
                                                 props.side === "team1"
-                                                    ? "text-violet-300 hover:text-violet-200"
+                                                    ? "text-darius-crimson hover:text-darius-text-primary"
                                                     : props.side === "team2"
-                                                      ? "text-fuchsia-300 hover:text-fuchsia-200"
-                                                      : `text-slate-200 ${colors.hoverText}`
+                                                      ? "text-darius-ember hover:text-darius-text-primary"
+                                                      : "text-darius-text-primary hover:text-darius-purple-bright"
                                             }`}
                                             disabled={props.disabled}
                                         >
@@ -500,31 +486,21 @@ export const CanvasSelect = (props: props) => {
                         >
                             <div class="relative flex h-full min-h-0 w-full flex-1">
                                 <div
-                                    class="relative flex h-full min-h-0 w-full flex-1 items-end overflow-hidden rounded-xl border-2 bg-slate-950 text-left transition-all"
+                                    class="relative flex h-full min-h-0 w-full flex-1 items-end overflow-hidden rounded-xl border-2 bg-darius-bg text-left transition-all"
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onClick={activateSelect}
                                     classList={{
-                                        "border-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]":
+                                        "border-darius-border shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]":
                                             !props.disabled && !isActiveSelection(),
-                                        "hover:border-slate-500 hover:shadow-[0_10px_24px_rgba(15,23,42,0.26)]":
+                                        "border-darius-border hover:shadow-[0_12px_30px_rgba(0,0,0,0.3)]":
                                             !props.disabled,
-                                        "border-violet-300/60 ring-2 ring-violet-400/70":
-                                            isActiveSelection() &&
-                                            !props.disabled &&
-                                            props.side === "team1",
-                                        "border-fuchsia-300/60 ring-2 ring-fuchsia-400/70":
-                                            isActiveSelection() &&
-                                            !props.disabled &&
-                                            props.side === "team2",
-                                        "border-sky-300/60 ring-2 ring-sky-400/70":
-                                            isActiveSelection() &&
-                                            !props.disabled &&
-                                            !props.side,
-                                        "border-slate-700": props.disabled,
+                                        "border-darius-purple-bright ring-2 ring-darius-purple-bright/35":
+                                            isActiveSelection() && !props.disabled,
+                                        "border-darius-border": props.disabled,
                                         "cursor-not-allowed opacity-60": props.disabled
                                     }}
                                 >
-                                    <div class="absolute inset-0 bg-slate-950" />
+                                    <div class="absolute inset-0 bg-darius-bg" />
                                     <Show when={selectedChampion() !== null}>
                                         <img
                                             src={getSplashUrl(selectedChampion()!.name)}
@@ -538,7 +514,7 @@ export const CanvasSelect = (props: props) => {
                                             }}
                                         />
                                     </Show>
-                                    <div class="absolute inset-0 bg-slate-950/35" />
+                                    <div class="absolute inset-0 bg-darius-bg/35" />
                                     <Show
                                         when={
                                             selectedChampion() !== null &&
@@ -560,9 +536,9 @@ export const CanvasSelect = (props: props) => {
                                                 class="relative z-[3] w-full cursor-text appearance-none border-0 bg-transparent px-3 py-2 outline-none"
                                                 classList={{
                                                     "text-right": props.side === "team2",
-                                                    "text-sm font-semibold uppercase tracking-[0.2em] text-slate-300 caret-slate-300 drop-shadow placeholder:font-semibold placeholder:uppercase placeholder:tracking-[0.2em] placeholder:text-slate-300":
+                                                    "text-sm font-semibold uppercase tracking-[0.2em] text-darius-text-secondary caret-darius-text-secondary drop-shadow placeholder:font-semibold placeholder:uppercase placeholder:tracking-[0.2em] text-darius-text-secondary":
                                                         selectedChampion() === null,
-                                                    "text-base font-semibold tracking-wide text-slate-100 caret-slate-100 drop-shadow-lg":
+                                                    "text-base font-semibold tracking-wide text-darius-text-primary caret-darius-text-primary drop-shadow-lg":
                                                         selectedChampion() !== null
                                                 }}
                                                 aria-label={
@@ -580,7 +556,7 @@ export const CanvasSelect = (props: props) => {
                                             }}
                                         >
                                             <div
-                                                class="min-w-0 truncate text-base font-semibold tracking-wide text-slate-100 drop-shadow-lg"
+                                                class="min-w-0 truncate text-base font-semibold tracking-wide text-darius-text-primary drop-shadow-lg"
                                                 classList={{
                                                     "text-right": props.side === "team2"
                                                 }}
@@ -603,7 +579,7 @@ export const CanvasSelect = (props: props) => {
                                             e.stopPropagation();
                                             clearSelection();
                                         }}
-                                        class="absolute right-2 top-2 z-[4] flex h-5 w-5 items-center justify-center rounded-full border border-slate-700/80 bg-slate-950/85 text-slate-200 hover:bg-slate-800"
+                                        class="absolute right-2 top-2 z-[4] flex h-5 w-5 items-center justify-center rounded-full border border-darius-border/80 bg-darius-bg/85 bg-darius-card text-darius-text-primary"
                                         aria-label={`Clear ${placeholderLabel()}`}
                                     >
                                         <X size={12} />
@@ -615,20 +591,12 @@ export const CanvasSelect = (props: props) => {
                 >
                     <div class="relative">
                         <div
-                            class="relative flex h-[30px] w-[30px] items-center justify-center overflow-hidden rounded-lg border bg-slate-900 p-[2px]"
+                            class="relative flex h-[30px] w-[30px] items-center justify-center overflow-hidden rounded-lg border bg-darius-bg p-[2px]"
                             onClick={activateSelect}
                             classList={{
-                                "border-slate-700/80": !isActiveSelection(),
-                                "border-violet-300/60 ring-2 ring-violet-400/70":
-                                    isActiveSelection() &&
-                                    !props.disabled &&
-                                    props.side === "team1",
-                                "border-fuchsia-300/60 ring-2 ring-fuchsia-400/70":
-                                    isActiveSelection() &&
-                                    !props.disabled &&
-                                    props.side === "team2",
-                                "border-sky-300/60 ring-2 ring-sky-400/70":
-                                    isActiveSelection() && !props.disabled && !props.side,
+                                "border-darius-border/80": !isActiveSelection(),
+                                "border-darius-purple-bright ring-2 ring-darius-purple-bright/35":
+                                    isActiveSelection() && !props.disabled,
                                 "cursor-not-allowed opacity-60": props.disabled
                             }}
                         >
@@ -675,7 +643,7 @@ export const CanvasSelect = (props: props) => {
                                     e.stopPropagation();
                                     clearSelection();
                                 }}
-                                class="absolute -right-1 -top-1 z-[3] flex h-3.5 w-3.5 items-center justify-center rounded-full border border-slate-700/80 bg-slate-950 text-slate-200 shadow-sm hover:bg-slate-700"
+                                class="absolute -right-1 -top-1 z-[3] flex h-3.5 w-3.5 items-center justify-center rounded-full border border-darius-border/80 bg-darius-bg bg-darius-card-hover text-darius-text-primary shadow-sm"
                                 aria-label={`Clear ${placeholderLabel()}`}
                             >
                                 <X size={10} />
@@ -689,8 +657,8 @@ export const CanvasSelect = (props: props) => {
                         ref={dropdownRef}
                         class={`absolute z-10 overflow-auto rounded-xl border shadow-[0_18px_40px_rgba(15,23,42,0.55)] ${dropdownWidthClass()}`}
                         classList={{
-                            "max-h-60 border-slate-700 bg-slate-950": !isWideArt(),
-                            "top-full mt-1 custom-scrollbar max-h-[28rem] border-slate-700/90 bg-slate-950/98":
+                            "max-h-60 border-darius-border bg-darius-bg": !isWideArt(),
+                            "top-full mt-1 custom-scrollbar max-h-[28rem] border-darius-border/90 bg-darius-bg/98":
                                 isWideArt()
                         }}
                         onWheel={(e) => e.stopPropagation()}
@@ -703,8 +671,8 @@ export const CanvasSelect = (props: props) => {
                         >
                             <Show when={isWideArt()}>
                                 <div class="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
-                                    <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(148,163,184,0.16),_transparent_48%),linear-gradient(180deg,rgba(15,23,42,0.94),rgba(2,6,23,0.98))]" />
-                                    <div class="absolute inset-2 rounded-lg border border-slate-700/70 bg-slate-900/45 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]" />
+                                    <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(155,80,192,0.16),_transparent_48%),linear-gradient(180deg,rgba(26,16,24,0.96),rgba(42,26,40,0.98))]" />
+                                    <div class="absolute inset-2 rounded-lg border border-darius-border/70 bg-darius-bg/45 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]" />
                                 </div>
                             </Show>
                             <Show
@@ -715,7 +683,7 @@ export const CanvasSelect = (props: props) => {
                                             "px-2 py-2": !isWideArt()
                                         }}
                                     >
-                                        <div class="relative px-3 py-2 text-sm text-slate-400">
+                                        <div class="relative px-3 py-2 text-sm text-darius-text-secondary">
                                             No champions match "{selectText().trim()}"
                                         </div>
                                     </div>
@@ -779,22 +747,22 @@ export const CanvasSelect = (props: props) => {
                                                         type="button"
                                                         class="relative mb-1.5 flex h-24 w-full overflow-hidden rounded-lg border text-left transition-[border-color,box-shadow] last:mb-0"
                                                         classList={{
-                                                            "cursor-not-allowed border-emerald-400/70 ring-1 ring-emerald-400/40":
+                                                            "cursor-not-allowed border-darius-ember/70 ring-1 ring-darius-ember/30":
                                                                 selectedChampion()
                                                                     ?.name ===
                                                                 champion.name,
-                                                            "cursor-not-allowed border-slate-700/90":
+                                                            "cursor-not-allowed border-darius-border/90":
                                                                 selectedChampion()
                                                                     ?.name !==
                                                                     champion.name &&
                                                                 champNotAvailable(),
-                                                            "border-violet-400/70 ring-2 ring-violet-400/40":
+                                                            "border-darius-purple-bright ring-2 ring-darius-purple-bright/35":
                                                                 selectedChampion()
                                                                     ?.name !==
                                                                     champion.name &&
                                                                 !champNotAvailable() &&
                                                                 isHighlighted(),
-                                                            "border-slate-700/80 hover:border-slate-400/60":
+                                                            "border-darius-border/80 hover:border-darius-purple-bright/50":
                                                                 selectedChampion()
                                                                     ?.name !==
                                                                     champion.name &&
@@ -838,31 +806,31 @@ export const CanvasSelect = (props: props) => {
                                                         <div
                                                             class="absolute inset-0 bg-gradient-to-r"
                                                             classList={{
-                                                                "from-slate-950/92 via-slate-950/58 to-slate-950/38":
+                                                                "from-darius-bg/95 via-darius-bg/60 to-darius-bg/35":
                                                                     props.side !==
                                                                     "team2",
-                                                                "from-slate-950/38 via-slate-950/58 to-slate-950/92":
+                                                                "from-darius-bg/35 via-darius-bg/60 to-darius-bg/95":
                                                                     props.side === "team2"
                                                             }}
                                                         />
-                                                        <div class="via-slate-950/72 absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-slate-950/95 to-transparent" />
+                                                        <div class="via-darius-bg/72 absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-darius-bg/95 to-transparent" />
                                                         <div
                                                             class="absolute inset-0"
                                                             classList={{
-                                                                "bg-slate-950/55":
+                                                                "bg-darius-bg/55":
                                                                     champNotAvailable(),
-                                                                "bg-emerald-950/30":
+                                                                "bg-darius-ember/15":
                                                                     !champNotAvailable() &&
                                                                     selectedChampion()
                                                                         ?.name ===
                                                                         champion.name,
-                                                                "bg-slate-950/38":
+                                                                "bg-darius-bg/38":
                                                                     !champNotAvailable() &&
                                                                     selectedChampion()
                                                                         ?.name !==
                                                                         champion.name &&
                                                                     !isHighlighted(),
-                                                                "bg-slate-950/10":
+                                                                "bg-darius-bg/10":
                                                                     !champNotAvailable() &&
                                                                     isHighlighted() &&
                                                                     selectedChampion()
@@ -881,10 +849,10 @@ export const CanvasSelect = (props: props) => {
                                                             }}
                                                         >
                                                             <div class="min-w-0">
-                                                                <div class="truncate text-base font-semibold text-slate-50 drop-shadow-lg">
+                                                                <div class="truncate text-base font-semibold text-darius-text-primary drop-shadow-lg">
                                                                     {champion.name}
                                                                 </div>
-                                                                <div class="mt-1 text-[11px] font-medium uppercase tracking-[0.16em] text-slate-300/95">
+                                                                <div class="mt-1 text-[11px] font-medium uppercase tracking-[0.16em] text-darius-text-secondary/95">
                                                                     {selectedChampion()
                                                                         ?.name ===
                                                                     champion.name

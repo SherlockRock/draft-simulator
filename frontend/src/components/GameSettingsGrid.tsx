@@ -61,17 +61,17 @@ const GameSettingsGrid: Component<GameSettingsGridProps> = (props) => {
             props.canEdit ? "cursor-pointer" : "cursor-default"
         } ${
             selected
-                ? "bg-orange-500/[0.08]"
+                ? "bg-darius-crimson/[0.08]"
                 : props.canEdit
-                  ? "hover:bg-slate-600/30"
+                  ? "hover:bg-darius-disabled/30"
                   : ""
         }`;
 
     const dotClass = (selected: boolean) =>
         `h-2 w-2 rounded-full transition-all ${
             selected
-                ? "border-[1.5px] border-orange-400 bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.4)]"
-                : "border-[1.5px] border-slate-500"
+                ? "border-[1.5px] border-darius-crimson bg-darius-crimson shadow-[0_0_8px_rgba(224,56,72,0.4)]"
+                : "border-[1.5px] border-darius-border"
         }`;
 
     return (
@@ -80,33 +80,33 @@ const GameSettingsGrid: Component<GameSettingsGridProps> = (props) => {
             style={{
                 "grid-template-columns": "auto 1fr 1fr",
                 gap: "2px",
-                background: "rgba(51, 65, 85, 0.3)"
+                background: "rgba(58, 48, 64, 0.3)"
             }}
             onClick={(e) => e.stopPropagation()}
         >
             {/* Header row */}
-            <div class="bg-slate-800/60 px-3 py-1.5" />
+            <div class="bg-darius-card/60 px-3 py-1.5" />
             <div
-                class={`bg-slate-800/60 px-3 py-1.5 text-center text-[11px] font-semibold ${blueSideIsTeamOne() ? "text-blue-400" : "text-red-400"}`}
+                class={`bg-darius-card/60 px-3 py-1.5 text-center text-[11px] font-semibold ${blueSideIsTeamOne() ? "text-blue-400" : "text-red-400"}`}
             >
                 {props.teamOneName}
             </div>
             <div
-                class={`bg-slate-800/60 px-3 py-1.5 text-center text-[11px] font-semibold ${blueSideIsTeamOne() ? "text-red-400" : "text-blue-400"}`}
+                class={`bg-darius-card/60 px-3 py-1.5 text-center text-[11px] font-semibold ${blueSideIsTeamOne() ? "text-red-400" : "text-blue-400"}`}
             >
                 {props.teamTwoName}
             </div>
 
             {/* Blue Side row */}
-            <div class="flex items-center bg-slate-800/60 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            <div class="flex items-center bg-darius-card/60 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-darius-text-secondary">
                 Blue Side
             </div>
             <div
                 class={cellClass(blueSideIsTeamOne())}
                 style={{
                     background: blueSideIsTeamOne()
-                        ? "rgba(251, 146, 60, 0.08)"
-                        : "rgba(30, 41, 59, 0.6)"
+                        ? "rgba(224, 56, 72, 0.08)"
+                        : "rgba(42, 26, 40, 0.6)"
                 }}
                 onClick={() => handleBlueSide(true)}
             >
@@ -116,8 +116,8 @@ const GameSettingsGrid: Component<GameSettingsGridProps> = (props) => {
                 class={cellClass(!blueSideIsTeamOne())}
                 style={{
                     background: !blueSideIsTeamOne()
-                        ? "rgba(251, 146, 60, 0.08)"
-                        : "rgba(30, 41, 59, 0.6)"
+                        ? "rgba(224, 56, 72, 0.08)"
+                        : "rgba(42, 26, 40, 0.6)"
                 }}
                 onClick={() => handleBlueSide(false)}
             >
@@ -125,15 +125,15 @@ const GameSettingsGrid: Component<GameSettingsGridProps> = (props) => {
             </div>
 
             {/* 1st Pick row */}
-            <div class="flex items-center bg-slate-800/60 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            <div class="flex items-center bg-darius-card/60 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-darius-text-secondary">
                 1st Pick
             </div>
             <div
                 class={cellClass(firstPickIsTeamOne())}
                 style={{
                     background: firstPickIsTeamOne()
-                        ? "rgba(251, 146, 60, 0.08)"
-                        : "rgba(30, 41, 59, 0.6)"
+                        ? "rgba(224, 56, 72, 0.08)"
+                        : "rgba(42, 26, 40, 0.6)"
                 }}
                 onClick={() => handleFirstPick(true)}
             >
@@ -143,8 +143,8 @@ const GameSettingsGrid: Component<GameSettingsGridProps> = (props) => {
                 class={cellClass(!firstPickIsTeamOne())}
                 style={{
                     background: !firstPickIsTeamOne()
-                        ? "rgba(251, 146, 60, 0.08)"
-                        : "rgba(30, 41, 59, 0.6)"
+                        ? "rgba(224, 56, 72, 0.08)"
+                        : "rgba(42, 26, 40, 0.6)"
                 }}
                 onClick={() => handleFirstPick(false)}
             >

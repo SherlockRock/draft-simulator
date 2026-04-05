@@ -542,53 +542,52 @@ export const emojiCategories: Record<string, number[]> = {
     Nature: [95, 96, 97, 98, 99, 100, 101, 102]
 };
 
-// Game number color system - unique colors per game (up to 7)
-// Full opacity versions for headers and badges
+// Game number color system - 4-color cycle across games 1-7
 export const gameTextColors: Record<number, string> = {
-    1: "text-cyan-500",
-    2: "text-amber-500",
-    3: "text-fuchsia-500",
-    4: "text-violet-500",
-    5: "text-sky-500",
-    6: "text-emerald-500",
-    7: "text-rose-500"
+    1: "text-darius-game-ember",
+    2: "text-darius-game-coral",
+    3: "text-darius-game-magenta",
+    4: "text-darius-game-indigo",
+    5: "text-darius-game-ember",
+    6: "text-darius-game-coral",
+    7: "text-darius-game-magenta"
 };
 
 // Muted versions with 70% opacity for champion overlays
 export const gameTextColorsMuted: Record<number, string> = {
-    1: "text-cyan-600/70",
-    2: "text-amber-600/70",
-    3: "text-fuchsia-600/70",
-    4: "text-violet-600/70",
-    5: "text-sky-600/70",
-    6: "text-emerald-600/70",
-    7: "text-rose-600/70"
+    1: "text-darius-game-ember/70",
+    2: "text-darius-game-coral/70",
+    3: "text-darius-game-magenta/70",
+    4: "text-darius-game-indigo/70",
+    5: "text-darius-game-ember/70",
+    6: "text-darius-game-coral/70",
+    7: "text-darius-game-magenta/70"
 };
 
 export const gameBorderColors: Record<number, string> = {
-    1: "border-cyan-600/70",
-    2: "border-amber-600/70",
-    3: "border-fuchsia-600/70",
-    4: "border-violet-600/70",
-    5: "border-sky-600/70",
-    6: "border-emerald-600/70",
-    7: "border-rose-600/70"
+    1: "border-darius-game-ember/70",
+    2: "border-darius-game-coral/70",
+    3: "border-darius-game-magenta/70",
+    4: "border-darius-game-indigo/70",
+    5: "border-darius-game-ember/70",
+    6: "border-darius-game-coral/70",
+    7: "border-darius-game-magenta/70"
 };
 
 export const gameBgColors: Record<number, string> = {
-    1: "bg-cyan-600/70",
-    2: "bg-amber-600/70",
-    3: "bg-fuchsia-600/70",
-    4: "bg-violet-600/70",
-    5: "bg-sky-600/70",
-    6: "bg-emerald-600/70",
-    7: "bg-rose-600/70"
+    1: "bg-darius-game-ember/70",
+    2: "bg-darius-game-coral/70",
+    3: "bg-darius-game-magenta/70",
+    4: "bg-darius-game-indigo/70",
+    5: "bg-darius-game-ember/70",
+    6: "bg-darius-game-coral/70",
+    7: "bg-darius-game-magenta/70"
 };
 
 // Subtle slate colors for team/ban/pick indicators in overlay
-export const overlayTeamColor = "text-slate-400";
-export const overlayBanColor = "text-slate-500";
-export const overlayPickColor = "text-slate-500";
+export const overlayTeamColor = "text-darius-text-secondary";
+export const overlayBanColor = "text-darius-text-secondary";
+export const overlayPickColor = "text-darius-text-secondary";
 
 // Community Dragon CDN splash image helper
 const CD_BASE =

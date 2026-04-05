@@ -1,0 +1,78 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="topBar" x1="0" y1="0" x2="1200" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E03848"/>
+      <stop offset="1" stop-color="#9B50C0"/>
+    </linearGradient>
+    <linearGradient id="underline" x1="0" y1="0" x2="122" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E03848"/>
+      <stop offset="1" stop-color="#9B50C0"/>
+    </linearGradient>
+    <pattern id="dots" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.1" fill="#B8A8B0" fill-opacity="0.12"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="630" fill="#1A1018"/>
+  <rect width="1200" height="630" fill="url(#dots)"/>
+  <rect width="1200" height="6" fill="url(#topBar)"/>
+
+  <g opacity="0.9">
+    <g transform="translate(80 130)">
+      <rect x="0" y="0" width="32" height="32" rx="5" fill="#3A3040"/>
+      <rect x="38" y="0" width="32" height="32" rx="5" fill="#3A3040"/>
+      <rect x="76" y="0" width="32" height="32" rx="5" fill="#3A3040"/>
+      <rect x="114" y="0" width="32" height="32" rx="5" fill="#3A3040"/>
+      <rect x="152" y="0" width="32" height="32" rx="5" fill="#3A3040"/>
+
+      <rect x="198" y="0" width="32" height="32" rx="5" fill="#3A3040"/>
+      <rect x="236" y="0" width="32" height="32" rx="5" fill="#3A3040"/>
+      <rect x="274" y="0" width="32" height="32" rx="5" fill="#3A3040"/>
+      <rect x="312" y="0" width="32" height="32" rx="5" fill="#3A3040"/>
+      <rect x="350" y="0" width="32" height="32" rx="5" fill="#3A3040"/>
+    </g>
+
+    <g transform="translate(80 180)">
+      <rect x="0" y="0" width="164" height="40" rx="8" fill="#1A1018"/>
+      <rect x="0" y="0" width="164" height="40" rx="8" fill="#E03848" fill-opacity="0.44"/>
+      <rect x="0" y="50" width="164" height="40" rx="8" fill="#1A1018"/>
+      <rect x="0" y="50" width="164" height="40" rx="8" fill="#E03848" fill-opacity="0.44"/>
+      <rect x="0" y="100" width="164" height="40" rx="8" fill="#1A1018"/>
+      <rect x="0" y="100" width="164" height="40" rx="8" fill="#E03848" fill-opacity="0.44"/>
+      <rect x="0" y="150" width="164" height="40" rx="8" fill="#1A1018"/>
+      <rect x="0" y="150" width="164" height="40" rx="8" fill="#E03848" fill-opacity="0.44"/>
+      <rect x="0" y="200" width="164" height="40" rx="8" fill="#1A1018"/>
+      <rect x="0" y="200" width="164" height="40" rx="8" fill="#E03848" fill-opacity="0.44"/>
+
+      <rect x="216" y="0" width="164" height="40" rx="8" fill="#1A1018"/>
+      <rect x="216" y="0" width="164" height="40" rx="8" fill="#9B50C0" fill-opacity="0.46"/>
+      <rect x="216" y="50" width="164" height="40" rx="8" fill="#1A1018"/>
+      <rect x="216" y="50" width="164" height="40" rx="8" fill="#9B50C0" fill-opacity="0.46"/>
+      <rect x="216" y="100" width="164" height="40" rx="8" fill="#1A1018"/>
+      <rect x="216" y="100" width="164" height="40" rx="8" fill="#9B50C0" fill-opacity="0.46"/>
+      <rect x="216" y="150" width="164" height="40" rx="8" fill="#1A1018"/>
+      <rect x="216" y="150" width="164" height="40" rx="8" fill="#9B50C0" fill-opacity="0.46"/>
+      <rect x="216" y="200" width="164" height="40" rx="8" fill="#1A1018"/>
+      <rect x="216" y="200" width="164" height="40" rx="8" fill="#9B50C0" fill-opacity="0.46"/>
+
+      <text x="190" y="128" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#B8A8B0">VS</text>
+    </g>
+  </g>
+
+  <g transform="translate(620 170)">
+    <text x="0" y="66" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="72" font-weight="800" fill="#F0E8E0">First Pick</text>
+    <rect x="0" y="90" width="122" height="4" rx="2" fill="url(#underline)"/>
+
+    <text x="0" y="170" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="32" font-weight="500" fill="#B8A8B0">League of Legends Draft Simulator</text>
+
+    <g transform="translate(0 230)">
+      <rect x="0" y="0" width="160" height="36" rx="18" fill="#1A1018"/>
+      <rect x="0" y="0" width="160" height="36" rx="18" fill="#E03848" fill-opacity="0.46"/>
+      <text x="80" y="24" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="16" font-weight="600" fill="#F0E8E0">Versus Drafting</text>
+
+      <rect x="176" y="0" width="150" height="36" rx="18" fill="#1A1018"/>
+      <rect x="176" y="0" width="150" height="36" rx="18" fill="#9B50C0" fill-opacity="0.5"/>
+      <text x="251" y="24" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="16" font-weight="600" fill="#F0E8E0">Visual Canvas</text>
+    </g>
+  </g>
+</svg>

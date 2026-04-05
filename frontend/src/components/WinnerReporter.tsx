@@ -37,15 +37,15 @@ export const WinnerReporter: Component<WinnerReporterProps> = (props) => {
                         blueSelected()
                             ? "bg-blue-500/25 text-blue-300 ring-1 ring-blue-500/40"
                             : noneSelected() && props.canEdit
-                              ? "bg-slate-700/40 text-slate-400 hover:bg-blue-500/15 hover:text-blue-400"
-                              : "bg-slate-700/30 text-slate-500"
+                              ? "bg-darius-card-hover/40 text-darius-text-secondary hover:bg-blue-500/15 hover:text-blue-400"
+                              : "bg-darius-card-hover/30 text-darius-text-secondary"
                     } ${props.canEdit ? "cursor-pointer" : "cursor-default"}`}
                 >
                     <span
                         class={`h-2 w-2 rounded-full transition-all ${
                             blueSelected()
                                 ? "bg-blue-400 shadow-[0_0_6px_rgba(96,165,250,0.5)]"
-                                : "border border-slate-500"
+                                : "border border-darius-border"
                         }`}
                     />
                     <span class="truncate">{props.blueTeamName}</span>
@@ -59,8 +59,8 @@ export const WinnerReporter: Component<WinnerReporterProps> = (props) => {
                         redSelected()
                             ? "bg-red-500/25 text-red-300 ring-1 ring-red-500/40"
                             : noneSelected() && props.canEdit
-                              ? "bg-slate-700/40 text-slate-400 hover:bg-red-500/15 hover:text-red-400"
-                              : "bg-slate-700/30 text-slate-500"
+                              ? "bg-darius-card-hover/40 text-darius-text-secondary hover:bg-red-500/15 hover:text-red-400"
+                              : "bg-darius-card-hover/30 text-darius-text-secondary"
                     } ${props.canEdit ? "cursor-pointer" : "cursor-default"}`}
                 >
                     <span class="truncate">{props.redTeamName}</span>
@@ -68,7 +68,7 @@ export const WinnerReporter: Component<WinnerReporterProps> = (props) => {
                         class={`h-2 w-2 rounded-full transition-all ${
                             redSelected()
                                 ? "bg-red-400 shadow-[0_0_6px_rgba(248,113,113,0.5)]"
-                                : "border border-slate-500"
+                                : "border border-darius-border"
                         }`}
                     />
                 </button>

@@ -113,19 +113,19 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
             onCancel={props.onClose}
             body={
                 <div class="w-[500px]">
-                    <h2 class="mb-4 text-xl font-bold text-slate-50">
+                    <h2 class="mb-4 text-xl font-bold text-darius-text-primary">
                         Create Versus Draft
                     </h2>
                     <form onSubmit={handleSubmit} class="space-y-4">
                         <div>
-                            <label class="mb-2 block text-sm font-medium text-slate-300">
+                            <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
                                 Series Name
                             </label>
                             <input
                                 type="text"
                                 value={name()}
                                 onInput={(e) => setName(e.currentTarget.value)}
-                                class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-orange-500 focus:outline-none"
+                                class="w-full rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary focus:border-darius-crimson focus:outline-none"
                                 placeholder="Enter series name"
                             />
                             {errors().name && (
@@ -135,7 +135,7 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
 
                         <div class="grid grid-cols-2 gap-4">
                             <div>
-                                <label class="mb-2 block text-sm font-medium text-slate-300">
+                                <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
                                     Team 1 Name
                                 </label>
                                 <input
@@ -144,7 +144,7 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                                     onInput={(e) =>
                                         setBlueTeamName(e.currentTarget.value)
                                     }
-                                    class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-violet-500 focus:outline-none"
+                                    class="w-full rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary focus:border-darius-crimson focus:outline-none"
                                 />
                                 {errors().blueTeamName && (
                                     <p class="mt-1 text-sm text-red-400">
@@ -154,14 +154,14 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                             </div>
 
                             <div>
-                                <label class="mb-2 block text-sm font-medium text-slate-300">
+                                <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
                                     Team 2 Name
                                 </label>
                                 <input
                                     type="text"
                                     value={redTeamName()}
                                     onInput={(e) => setRedTeamName(e.currentTarget.value)}
-                                    class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-fuchsia-500 focus:outline-none"
+                                    class="w-full rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary focus:border-darius-purple-bright focus:outline-none"
                                 />
                                 {errors().redTeamName && (
                                     <p class="mt-1 text-sm text-red-400">
@@ -172,7 +172,7 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                         </div>
 
                         <div>
-                            <label class="mb-2 block text-sm font-medium text-slate-300">
+                            <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
                                 Game 1 Side Selection
                             </label>
                             <GameSettingsGrid
@@ -189,39 +189,42 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                                         setFirstPick(settings.firstPick);
                                 }}
                             />
-                            <p class="mt-2 text-xs text-slate-400">
+                            <p class="mt-2 text-xs text-darius-text-secondary">
                                 These settings apply to game 1 only. Later games alternate
                                 automatically.
                             </p>
                         </div>
 
                         <div>
-                            <label class="mb-2 block text-sm font-medium text-slate-300">
+                            <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
                                 Description (Optional)
                             </label>
                             <textarea
                                 value={description()}
                                 onInput={(e) => setDescription(e.currentTarget.value)}
-                                class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-orange-500 focus:outline-none"
+                                class="w-full rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary focus:border-darius-crimson focus:outline-none"
                                 rows="3"
                                 placeholder="Add a description..."
                             />
                         </div>
 
                         <div>
-                            <label class="mb-2 block text-sm font-medium text-slate-300">
+                            <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
                                 Icon (Optional)
                             </label>
                             <button
                                 type="button"
                                 onClick={() => setShowIconPicker(true)}
-                                class="flex h-16 w-full items-center gap-3 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 hover:bg-slate-600"
+                                class="flex h-16 w-full items-center gap-3 rounded border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary hover:bg-darius-card"
                             >
                                 <Show
                                     when={icon()}
                                     fallback={
-                                        <div class="flex h-12 w-12 items-center justify-center rounded bg-slate-600">
-                                            <Plus size={24} class="text-slate-400" />
+                                        <div class="flex h-12 w-12 items-center justify-center rounded bg-darius-card">
+                                            <Plus
+                                                size={24}
+                                                class="text-darius-text-secondary"
+                                            />
                                         </div>
                                     }
                                 >
@@ -240,20 +243,20 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                                         </Show>
                                     </div>
                                 </Show>
-                                <span class="text-sm text-slate-300">
+                                <span class="text-sm text-darius-text-secondary">
                                     {icon() ? "Change icon" : "Select an icon"}
                                 </span>
                             </button>
                         </div>
 
                         <div>
-                            <label class="mb-2 block text-sm font-medium text-slate-300">
+                            <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
                                 Draft Type
                             </label>
                             <StyledSelect
                                 value={type()}
                                 onChange={setType}
-                                theme="orange"
+                                theme="crimson"
                                 options={[
                                     { value: "standard", label: "Standard" },
                                     { value: "fearless", label: "Fearless" },
@@ -263,13 +266,13 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                         </div>
 
                         <div>
-                            <label class="mb-2 block text-sm font-medium text-slate-300">
+                            <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
                                 Series Length
                             </label>
                             <StyledSelect
                                 value={String(length())}
                                 onChange={(val) => setLength(parseInt(val))}
-                                theme="orange"
+                                theme="crimson"
                                 options={[
                                     { value: "1", label: "Best of 1" },
                                     { value: "3", label: "Best of 3" },
@@ -287,28 +290,28 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                                     onChange={(e) =>
                                         setCompetitive(e.currentTarget.checked)
                                     }
-                                    class="h-4 w-4 rounded border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500"
+                                    class="h-4 w-4 rounded border-darius-border bg-darius-card-hover text-darius-crimson focus:ring-darius-crimson"
                                 />
-                                <span class="text-sm text-slate-300">
+                                <span class="text-sm text-darius-text-secondary">
                                     Competitive Mode
                                 </span>
                             </label>
-                            <p class="mt-1 text-xs text-slate-400">
+                            <p class="mt-1 text-xs text-darius-text-secondary">
                                 In competitive mode, pauses and pick changes require
                                 approval from both teams
                             </p>
                         </div>
 
                         {/* Disabled Champions */}
-                        <div class="rounded-md border border-slate-600 bg-slate-700/50">
+                        <div class="rounded-md border border-darius-border bg-darius-card-hover/50">
                             <button
                                 type="button"
                                 onClick={() => setDisabledExpanded(!disabledExpanded())}
-                                class="flex w-full items-center justify-between px-3 py-2 text-sm text-slate-300 hover:text-slate-100"
+                                class="flex w-full items-center justify-between px-3 py-2 text-sm text-darius-text-secondary hover:text-darius-text-primary"
                             >
                                 <span>
                                     Disabled Champions{" "}
-                                    <span class="text-slate-400">
+                                    <span class="text-darius-text-secondary">
                                         (
                                         {disabledChampions().length > 0
                                             ? `${disabledChampions().length} disabled`
@@ -324,7 +327,7 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                                 </Show>
                             </button>
                             <Show when={disabledExpanded()}>
-                                <div class="border-t border-slate-600 px-3 pb-3 pt-2">
+                                <div class="border-t border-darius-border px-3 pb-3 pt-2">
                                     <ChampionToggleGrid
                                         selectedChampions={disabledChampions}
                                         onToggle={(champId) => {
@@ -334,7 +337,7 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                                                     : [...prev, champId]
                                             );
                                         }}
-                                        theme="orange"
+                                        theme="crimson"
                                     />
                                 </div>
                             </Show>
@@ -344,14 +347,14 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                             <button
                                 type="button"
                                 onClick={props.onClose}
-                                class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-50 hover:bg-slate-500"
+                                class="rounded-md bg-darius-card-hover px-4 py-2 text-sm font-medium text-darius-text-primary hover:bg-darius-border"
                                 disabled={mutation.isPending}
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
-                                class="rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-500 disabled:opacity-50"
+                                class="rounded-md bg-darius-crimson px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
                                 disabled={mutation.isPending}
                             >
                                 {mutation.isPending ? "Creating..." : "Create Series"}
@@ -364,7 +367,7 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                         onClose={() => setShowIconPicker(false)}
                         onSelect={(selectedIcon) => setIcon(selectedIcon)}
                         currentIcon={icon()}
-                        theme="orange"
+                        theme="crimson"
                     />
                 </div>
             }

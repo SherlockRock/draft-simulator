@@ -300,11 +300,14 @@ export const ConnectionComponent = (props: {
                 {/* Connection path */}
                 <path
                     d={path()}
-                    stroke={isHovered() ? "#0f766e" : "#2dd4bf"}
                     stroke-width={isHovered() ? "3" : "2"}
                     fill="none"
                     stroke-dasharray={strokeDasharray()}
                     class="cursor-pointer"
+                    classList={{
+                        "stroke-darius-ember": !isHovered(),
+                        "stroke-darius-crimson": isHovered()
+                    }}
                     onDblClick={(e) => {
                         handlePathDoubleClick(e);
                     }}
@@ -329,9 +332,11 @@ export const ConnectionComponent = (props: {
                     {(arrowhead) => (
                         <path
                             d={arrowhead}
-                            stroke={isHovered() ? "#0f766e" : "#2dd4bf"}
-                            fill={isHovered() ? "#0f766e" : "#2dd4bf"}
                             class="pointer-events-none"
+                            classList={{
+                                "stroke-darius-ember fill-darius-ember": !isHovered(),
+                                "stroke-darius-crimson fill-darius-crimson": isHovered()
+                            }}
                         />
                     )}
                 </For>
@@ -489,10 +494,9 @@ export const ConnectionPreview = (props: {
                 y1={startPos().y}
                 x2={props.mousePos?.x ?? 0}
                 y2={props.mousePos?.y ?? 0}
-                stroke="#3b82f6"
                 stroke-width="2"
                 stroke-dasharray="4,4"
-                class="pointer-events-none"
+                class="pointer-events-none stroke-darius-purple-bright"
             />
         </Show>
     );
@@ -547,10 +551,9 @@ export const GroupConnectionPreview = (props: {
                 y1={startPos().y}
                 x2={props.mousePos?.x ?? 0}
                 y2={props.mousePos?.y ?? 0}
-                stroke="#3b82f6"
                 stroke-width="2"
                 stroke-dasharray="4,4"
-                class="pointer-events-none"
+                class="pointer-events-none stroke-darius-purple-bright"
             />
         </Show>
     );

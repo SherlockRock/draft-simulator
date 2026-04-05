@@ -17,7 +17,7 @@ import { StyledSelect } from "./StyledSelect";
 import { SelectTheme } from "../utils/selectTheme";
 
 type SortOption = "recent" | "oldest" | "name_asc" | "name_desc";
-type AccentColor = "teal" | "purple" | "orange";
+type AccentColor = "neutral" | "orange" | "crimson" | "purple";
 
 interface ActivityListProps {
     queryKeyBase: string[];
@@ -144,12 +144,16 @@ const ActivityList: Component<ActivityListProps> = (props) => {
 
     const selectTheme = (): SelectTheme => {
         switch (props.accentColor) {
+            case "neutral":
+                return "neutral";
             case "purple":
                 return "purple";
+            case "crimson":
+                return "crimson";
             case "orange":
                 return "orange";
             default:
-                return "teal";
+                return "orange";
         }
     };
 
@@ -177,7 +181,7 @@ const ActivityList: Component<ActivityListProps> = (props) => {
             {/* Activity Grid */}
             <Switch>
                 <Match when={activitiesQuery.isLoading}>
-                    <div class="text-slate-400">Loading activity...</div>
+                    <div class="text-darius-text-secondary">Loading activity...</div>
                 </Match>
                 <Match when={activitiesQuery.isError}>
                     <div class="text-red-400">Failed to load activity</div>
@@ -189,7 +193,7 @@ const ActivityList: Component<ActivityListProps> = (props) => {
                         )}
                         fallback={
                             <div class="flex flex-1 items-center justify-center">
-                                <div class="rounded-lg border border-slate-700/50 bg-slate-800/50 p-8 text-center text-slate-400">
+                                <div class="rounded-lg border border-darius-border/50 border-darius-border/50 bg-darius-card/50 bg-darius-card/50 p-8 text-center text-darius-text-secondary">
                                     {currentSearch()
                                         ? `No activities matching "${currentSearch()}"`
                                         : props.emptyMessage || "No recent activity"}
@@ -212,12 +216,14 @@ const ActivityList: Component<ActivityListProps> = (props) => {
                                 <Show
                                     when={activitiesQuery.isFetchingNextPage}
                                     fallback={
-                                        <div class="text-slate-500">
+                                        <div class="text-darius-text-secondary">
                                             Scroll for more...
                                         </div>
                                     }
                                 >
-                                    <div class="text-slate-400">Loading more...</div>
+                                    <div class="text-darius-text-secondary">
+                                        Loading more...
+                                    </div>
                                 </Show>
                             </div>
                         </Show>

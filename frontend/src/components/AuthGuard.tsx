@@ -30,10 +30,12 @@ export const AuthGuard = (props: AuthGuardProps) => {
         <Show
             when={!props.requireAuth || !user.isLoading}
             fallback={
-                <div class="flex h-full w-full items-center justify-center bg-slate-700">
+                <div class="flex h-full w-full items-center justify-center bg-darius-card-hover">
                     <div class="align-center flex flex-col items-center">
-                        <div class="h-12 w-12 animate-spin rounded-full border-4 border-teal-400 border-t-transparent" />
-                        <p class="pt-4 text-slate-200">Checking authentication...</p>
+                        <div class="h-12 w-12 animate-spin rounded-full border-4 border-darius-crimson border-t-transparent" />
+                        <p class="pt-4 text-darius-text-primary">
+                            Checking authentication...
+                        </p>
                     </div>
                 </div>
             }

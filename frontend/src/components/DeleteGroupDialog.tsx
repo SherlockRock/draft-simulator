@@ -11,29 +11,29 @@ type DeleteGroupDialogProps = {
 export const DeleteGroupDialog = (props: DeleteGroupDialogProps) => {
     return (
         <div>
-            <h3 class="mb-4 text-lg font-bold text-slate-50">
+            <h3 class="mb-4 text-lg font-bold text-darius-text-primary">
                 Delete group "{props.group.name}"?
             </h3>
-            <p class="mb-6 text-slate-200">
+            <p class="mb-6 text-darius-text-primary">
                 This group contains {props.draftCount} draft
                 {props.draftCount !== 1 ? "s" : ""}.
             </p>
             <div class="flex justify-end gap-3">
                 <button
                     onClick={props.onCancel}
-                    class="rounded-md bg-slate-600 px-4 py-2 text-slate-200 hover:bg-slate-500"
+                    class="rounded-md bg-darius-card-hover px-4 py-2 text-darius-text-primary transition-colors hover:bg-darius-border"
                 >
                     Cancel
                 </button>
                 <button
                     onClick={props.onKeepDrafts}
-                    class="rounded-md bg-teal-700 px-4 py-2 text-slate-50 hover:bg-teal-400"
+                    class="rounded-md bg-darius-ember px-4 py-2 text-darius-text-primary transition-[filter] hover:brightness-110"
                 >
                     Keep Drafts
                 </button>
                 <button
                     onClick={props.onDeleteAll}
-                    class="rounded-md bg-red-500 px-4 py-2 text-slate-50 hover:bg-red-600"
+                    class="rounded-md bg-darius-crimson px-4 py-2 text-darius-text-primary transition-[filter] hover:brightness-110"
                 >
                     Delete All
                 </button>

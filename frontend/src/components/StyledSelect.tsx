@@ -30,7 +30,7 @@ export const StyledSelect: Component<StyledSelectProps> = (props) => {
     });
     let buttonRef: HTMLButtonElement | undefined;
     let dropdownRef: HTMLDivElement | undefined;
-    const colors = () => getThemeColors(props.theme ?? "teal");
+    const colors = () => getThemeColors(props.theme ?? "orange");
 
     const selectedOption = () => props.options.find((opt) => opt.value === props.value);
 
@@ -119,20 +119,20 @@ export const StyledSelect: Component<StyledSelectProps> = (props) => {
                 onClick={toggleDropdown}
                 onKeyDown={handleKeyDown}
                 disabled={props.disabled}
-                class={`flex h-10 w-full items-center justify-between rounded-md border bg-slate-800 px-3 py-2 text-left ${colors().border} ${
+                class={`flex h-10 w-full items-center justify-between rounded-md border bg-darius-card px-3 py-2 text-left ${colors().border} ${
                     props.disabled
                         ? "cursor-not-allowed opacity-50"
                         : `cursor-pointer ${colors().hoverBorder}`
                 }`}
             >
                 <span
-                    class={`truncate ${selectedOption() ? "text-slate-50" : "text-slate-400"}`}
+                    class={`truncate ${selectedOption() ? "text-darius-text-primary" : "text-darius-text-secondary"}`}
                 >
                     {selectedOption()?.label ?? props.placeholder ?? "Select..."}
                 </span>
                 <ChevronDown
                     size={16}
-                    class={`text-slate-400 transition-transform ${
+                    class={`text-darius-text-secondary transition-transform ${
                         dropdownOpen() ? "rotate-180" : ""
                     }`}
                 />
@@ -142,7 +142,7 @@ export const StyledSelect: Component<StyledSelectProps> = (props) => {
                 <Portal>
                     <div
                         ref={dropdownRef}
-                        class={`custom-scrollbar fixed z-[100] max-h-60 overflow-auto rounded-md border bg-slate-800 shadow-lg ${colors().dropdownBorder}`}
+                        class={`custom-scrollbar fixed z-[100] max-h-60 overflow-auto rounded-md border bg-darius-card shadow-lg ${colors().dropdownBorder}`}
                         style={{
                             top: `${dropdownPosition().top}px`,
                             left: `${dropdownPosition().left}px`,
@@ -156,10 +156,10 @@ export const StyledSelect: Component<StyledSelectProps> = (props) => {
                                     type="button"
                                     class={`w-full truncate px-3 py-2 text-left transition-colors ${
                                         props.value === option.value
-                                            ? `${colors().text} bg-slate-700`
+                                            ? `${colors().text} bg-darius-card-hover`
                                             : index() === keyboard.highlightedIndex()
-                                              ? "bg-slate-700 text-slate-50"
-                                              : `text-slate-50 hover:bg-slate-700 ${colors().hoverText}`
+                                              ? "bg-darius-card-hover text-darius-text-primary"
+                                              : `bg-darius-card-hover text-darius-text-primary ${colors().hoverText}`
                                     }`}
                                     onClick={() => handleSelect(option.value)}
                                     onMouseEnter={() =>

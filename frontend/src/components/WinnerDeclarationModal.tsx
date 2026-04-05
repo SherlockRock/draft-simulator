@@ -14,12 +14,12 @@ export const WinnerDeclarationModal: Component<WinnerDeclarationModalProps> = (p
     return (
         <Show when={props.isOpen}>
             <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-                <div class="relative w-full max-w-md rounded-lg border border-slate-700 bg-slate-800 p-8 pt-10">
+                <div class="relative w-full max-w-md rounded-lg border border-darius-border bg-darius-card p-8 pt-10">
                     <Show when={props.onClose}>
                         <button
                             type="button"
                             onClick={() => props.onClose?.()}
-                            class="absolute right-4 top-4 text-slate-400 transition-colors hover:text-slate-200"
+                            class="absolute right-4 top-4 text-darius-text-primary text-darius-text-secondary transition-colors"
                             aria-label="Close dialog"
                         >
                             <X size={20} />
@@ -27,10 +27,10 @@ export const WinnerDeclarationModal: Component<WinnerDeclarationModalProps> = (p
                     </Show>
                     <div class="mb-6 text-center">
                         <div class="mb-4 text-6xl">🏆</div>
-                        <h2 class="mb-2 text-2xl font-bold text-slate-50">
+                        <h2 class="mb-2 text-2xl font-bold text-darius-text-primary">
                             Draft Complete!
                         </h2>
-                        <p class="text-slate-400">
+                        <p class="text-darius-text-secondary">
                             {props.isSpectator
                                 ? "Waiting for captains to declare the winner..."
                                 : "Who won this game?"}
@@ -41,21 +41,21 @@ export const WinnerDeclarationModal: Component<WinnerDeclarationModalProps> = (p
                         <div class="space-y-3">
                             <button
                                 onClick={() => props.onDeclareWinner("blue")}
-                                class="w-full rounded-lg border-2 border-blue-600/50 bg-blue-600/10 p-4 font-semibold text-blue-400 transition-all hover:border-blue-500 hover:bg-blue-600/20"
+                                class="w-full rounded-lg border-2 border-darius-crimson/50 bg-darius-crimson/10 p-4 font-semibold text-darius-crimson transition-all hover:border-darius-crimson hover:bg-darius-crimson/20"
                             >
                                 {props.blueTeamName} Won
                             </button>
 
                             <button
                                 onClick={() => props.onDeclareWinner("red")}
-                                class="w-full rounded-lg border-2 border-red-600/50 bg-red-600/10 p-4 font-semibold text-red-400 transition-all hover:border-red-500 hover:bg-red-600/20"
+                                class="w-full rounded-lg border-2 border-darius-purple-bright/50 bg-darius-purple-bright/10 p-4 font-semibold text-darius-purple-bright transition-all hover:border-darius-purple-bright hover:bg-darius-purple-bright/20"
                             >
                                 {props.redTeamName} Won
                             </button>
 
                             <button
                                 onClick={() => props.onDeclareWinner(null)}
-                                class="w-full rounded-lg border-2 border-slate-600/50 bg-slate-600/10 p-4 font-semibold text-slate-400 transition-all hover:border-slate-500 hover:bg-slate-600/20"
+                                class="w-full rounded-lg border-2 border-darius-border bg-darius-disabled/20 p-4 font-semibold text-darius-text-secondary transition-all hover:bg-darius-disabled/30"
                             >
                                 Skip (No Winner)
                             </button>

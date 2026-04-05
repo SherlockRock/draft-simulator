@@ -53,22 +53,24 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
             onCancel={props.onClose}
             body={
                 <div class="w-[520px]">
-                    <h2 class="mb-4 text-xl font-bold text-slate-50">Group Settings</h2>
+                    <h2 class="mb-4 text-xl font-bold text-darius-text-primary">
+                        Group Settings
+                    </h2>
 
                     <div class="mb-4">
-                        <label class="mb-2 block text-sm font-medium text-slate-300">
+                        <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
                             Group Name
                         </label>
                         <input
                             type="text"
                             value={name()}
                             onInput={(e) => setName(e.currentTarget.value)}
-                            class="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-2 text-slate-50 focus:border-purple-500 focus:outline-none"
+                            class="w-full rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary focus:border-darius-purple-bright focus:outline-none"
                         />
                     </div>
 
                     <div class="mb-4">
-                        <label class="mb-2 block text-sm font-medium text-slate-300">
+                        <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
                             Draft Mode
                         </label>
                         <StyledSelect
@@ -85,7 +87,7 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                             options={DRAFT_MODE_OPTIONS}
                             theme="purple"
                         />
-                        <div class="mt-1.5 min-h-[2.5rem] text-xs text-slate-400">
+                        <div class="mt-1.5 min-h-[2.5rem] text-xs text-darius-text-secondary">
                             <Show when={draftMode() === "fearless"}>
                                 <p>
                                     Champions picked in one draft cannot be picked in
@@ -101,15 +103,15 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                         </div>
                     </div>
 
-                    <div class="rounded-md border border-slate-600 bg-slate-700/50">
+                    <div class="rounded-md border border-darius-border bg-darius-card-hover/50">
                         <button
                             type="button"
                             onClick={() => setDisabledExpanded(!disabledExpanded())}
-                            class="flex w-full items-center justify-between px-3 py-2 text-sm text-slate-300 hover:text-slate-100"
+                            class="flex w-full items-center justify-between px-3 py-2 text-sm text-darius-text-primary text-darius-text-secondary"
                         >
                             <span>
                                 Disabled Champions{" "}
-                                <span class="text-slate-400">
+                                <span class="text-darius-text-secondary">
                                     (
                                     {selected().length > 0
                                         ? `${selected().length} disabled`
@@ -125,7 +127,7 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                             </Show>
                         </button>
                         <Show when={disabledExpanded()}>
-                            <div class="border-t border-slate-600 px-3 pb-3 pt-2">
+                            <div class="border-t border-darius-border px-3 pb-3 pt-2">
                                 <ChampionToggleGrid
                                     selectedChampions={selected}
                                     onToggle={handleToggle}
@@ -142,7 +144,7 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                                 (document.activeElement as HTMLElement)?.blur();
                                 props.onClose();
                             }}
-                            class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-50 hover:bg-slate-500"
+                            class="rounded-md bg-darius-card-hover px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-border"
                         >
                             Cancel
                         </button>
@@ -157,7 +159,7 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                                 });
                                 props.onClose();
                             }}
-                            class="rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-500"
+                            class="rounded-md bg-darius-purple bg-darius-purple px-4 py-2 text-sm font-medium text-white"
                         >
                             Save
                         </button>

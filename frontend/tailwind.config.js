@@ -3,6 +3,25 @@ export default {
     content: ["./src/**/*.{js,jsx,ts,tsx}"],
     theme: {
         extend: {
+            colors: {
+                darius: {
+                    bg: "#1A1018",
+                    card: "#2A1A28",
+                    "card-hover": "#352030",
+                    border: "#3A3040",
+                    disabled: "#4A4050",
+                    crimson: "#E03848",
+                    ember: "#F06830",
+                    "game-ember": "#E87040",
+                    "game-coral": "#D85878",
+                    "game-magenta": "#C04888",
+                    "game-indigo": "#7858D0",
+                    purple: "#7A3880",
+                    "purple-bright": "#9B50C0",
+                    "text-primary": "#F0E8E0",
+                    "text-secondary": "#B8A8B0"
+                }
+            },
             dropShadow: {
                 glow: [
                     "0 0px 20px rgba(255,255, 255, 0.35)",

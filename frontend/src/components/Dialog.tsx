@@ -21,7 +21,7 @@ export const Dialog = (props: {
             }}
         >
             <div
-                class="relative max-h-[90vh] overflow-y-auto rounded-lg bg-slate-800 p-6 pr-14 shadow-lg"
+                class="relative max-h-[90vh] overflow-y-auto rounded-lg bg-darius-card p-6 pr-14 shadow-lg"
                 onContextMenu={(e: MouseEvent) => {
                     e.stopPropagation();
                 }}
@@ -29,7 +29,7 @@ export const Dialog = (props: {
                 <button
                     type="button"
                     onClick={props.onCancel}
-                    class="absolute right-4 top-4 text-slate-400 transition-colors hover:text-slate-200"
+                    class="absolute right-4 top-4 text-darius-text-primary text-darius-text-secondary transition-colors"
                     aria-label="Close dialog"
                 >
                     <X size={20} />

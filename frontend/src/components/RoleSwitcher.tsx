@@ -37,14 +37,14 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
             props.currentRole === "team2_captain"
         )
             return {
-                pill: "bg-orange-500/20 text-orange-300 border-orange-500/60 hover:bg-orange-500/30",
-                dot: "bg-orange-400",
-                text: "text-orange-400"
+                pill: "bg-darius-crimson/20 text-darius-crimson border-darius-crimson/60 hover:bg-darius-crimson/30",
+                dot: "bg-darius-crimson",
+                text: "text-darius-crimson"
             };
         return {
-            pill: "bg-slate-600/30 text-slate-300 border-orange-500/60 hover:bg-slate-600/50",
-            dot: "bg-slate-400",
-            text: "text-slate-400"
+            pill: "bg-darius-disabled/30 text-darius-text-secondary border-darius-crimson/60 hover:bg-darius-disabled/50",
+            dot: "bg-darius-disabled",
+            text: "text-darius-text-secondary"
         };
     };
 
@@ -63,9 +63,9 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
             </button>
 
             <Show when={isOpen()}>
-                <div class="absolute left-0 top-12 z-50 w-full overflow-hidden rounded-xl border border-orange-500/60 bg-slate-800 shadow-xl">
-                    <div class="border-b border-slate-700/50 bg-slate-800/80 px-4 py-3">
-                        <div class="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <div class="absolute left-0 top-12 z-50 w-full overflow-hidden rounded-xl border border-darius-crimson/60 bg-darius-card shadow-xl">
+                    <div class="border-b border-darius-border/50 bg-darius-card/80 px-4 py-3">
+                        <div class="text-xs font-semibold uppercase tracking-wider text-darius-text-secondary">
                             Your Role
                         </div>
                         <div class={`mt-1 text-lg font-bold ${getRoleStyles().text}`}>
@@ -76,13 +76,13 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
                     <div class="p-3">
                         <button
                             onClick={handleSwitchRole}
-                            class="flex w-full items-center justify-center gap-2 rounded-lg border border-orange-500/60 bg-slate-700 px-4 py-2.5 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-600"
+                            class="flex w-full items-center justify-center gap-2 rounded-lg border border-darius-crimson/60 bg-darius-card-hover px-4 py-2.5 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-disabled"
                         >
                             <ArrowLeftRight size={16} />
                             Switch Role
                         </button>
 
-                        <p class="mt-2.5 text-center text-xs text-slate-500">
+                        <p class="mt-2.5 text-center text-xs text-darius-text-secondary">
                             Release your current role to choose a new one
                         </p>
                     </div>

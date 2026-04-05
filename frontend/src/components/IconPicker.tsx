@@ -21,7 +21,7 @@ interface IconPickerProps {
 
 export const IconPicker = (props: IconPickerProps) => {
     const [activeTab, setActiveTab] = createSignal<"champions" | "emojis">("champions");
-    const colors = () => getThemeColors(props.theme ?? "teal");
+    const colors = () => getThemeColors(props.theme ?? "orange");
 
     // Champion filtering
     const championFilter = useFilterableItems({
@@ -63,23 +63,25 @@ export const IconPicker = (props: IconPickerProps) => {
             body={
                 <div class="h-[65vh] w-[90vw] max-w-4xl">
                     <div class="mb-4 flex items-center justify-between">
-                        <h2 class="text-xl font-bold text-slate-50">Select Icon</h2>
+                        <h2 class="text-xl font-bold text-darius-text-primary">
+                            Select Icon
+                        </h2>
                         <button
                             onClick={handleClearIcon}
-                            class="rounded-md bg-slate-600 px-3 py-1 text-sm font-medium text-slate-200 hover:bg-slate-500"
+                            class="rounded-md bg-darius-card-hover px-3 py-1 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-border"
                         >
                             Clear Icon
                         </button>
                     </div>
 
                     {/* Tabs */}
-                    <div class="mb-4 flex gap-2 border-b border-slate-600">
+                    <div class="mb-4 flex gap-2 border-b border-darius-border">
                         <button
                             onClick={() => setActiveTab("champions")}
                             class={`px-4 py-2 text-sm font-medium transition-colors ${
                                 activeTab() === "champions"
                                     ? `border-b-2 ${colors().activeBorder} ${colors().text}`
-                                    : "text-slate-400 hover:text-slate-300"
+                                    : "text-darius-text-secondary text-darius-text-secondary"
                             }`}
                         >
                             Champions
@@ -89,7 +91,7 @@ export const IconPicker = (props: IconPickerProps) => {
                             class={`px-4 py-2 text-sm font-medium transition-colors ${
                                 activeTab() === "emojis"
                                     ? `border-b-2 ${colors().activeBorder} ${colors().text}`
-                                    : "text-slate-400 hover:text-slate-300"
+                                    : "text-darius-text-secondary text-darius-text-secondary"
                             }`}
                         >
                             Emojis
@@ -127,7 +129,7 @@ export const IconPicker = (props: IconPickerProps) => {
                                                 props.currentIcon ===
                                                 originalIndex.toString()
                                                     ? `${colors().dropdownBorder} ring-2 ${colors().ringColor}`
-                                                    : `border-slate-600 ${colors().hoverBorderLight}`
+                                                    : `border-darius-border ${colors().hoverBorderLight}`
                                             }`}
                                             title={champion.name}
                                         >
@@ -174,8 +176,8 @@ export const IconPicker = (props: IconPickerProps) => {
                                             }
                                             class={`flex aspect-square items-center justify-center rounded border-2 text-3xl transition-all hover:scale-105 ${
                                                 props.currentIcon === emojiItem.emoji
-                                                    ? `${colors().dropdownBorder} bg-slate-700 ring-2 ${colors().ringColor}`
-                                                    : `border-slate-600 bg-slate-800 ${colors().hoverBorderLight} hover:bg-slate-700`
+                                                    ? `${colors().dropdownBorder} bg-darius-card-hover ring-2 ${colors().ringColor}`
+                                                    : `border-darius-border bg-darius-card ${colors().hoverBorderLight} bg-darius-card-hover`
                                             }`}
                                             title={emojiItem.name}
                                         >
@@ -191,7 +193,7 @@ export const IconPicker = (props: IconPickerProps) => {
                         <button
                             type="button"
                             onClick={props.onClose}
-                            class="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-500"
+                            class="rounded-md bg-darius-card-hover px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-border"
                         >
                             Cancel
                         </button>
