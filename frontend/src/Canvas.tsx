@@ -1807,6 +1807,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         if (!canEdit()) return;
 
         const worldPos = screenToWorld(e.clientX, e.clientY);
+        closeAllContextMenus();
         setContextMenuWorldPosition(worldPos);
         setContextMenuPosition({ x: e.clientX, y: e.clientY });
     };
@@ -1816,7 +1817,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setContextMenuPosition(null);
     };
 
+    const closeAllContextMenus = () => {
+        setContextMenuPosition(null);
+        setDraftContextMenu(null);
+        setGroupContextMenu(null);
+    };
+
     const handleDraftContextMenu = (draft: CanvasDraft, e: MouseEvent) => {
+        e.preventDefault();
+        closeAllContextMenus();
         setDraftContextMenu({
             draft,
             position: { x: e.clientX, y: e.clientY }
@@ -1830,6 +1839,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const handleGroupContextMenu = (group: CanvasGroup, e: MouseEvent) => {
         if (!canEdit()) return;
         e.preventDefault();
+        closeAllContextMenus();
         setGroupContextMenu({
             group,
             position: { x: e.clientX, y: e.clientY }
