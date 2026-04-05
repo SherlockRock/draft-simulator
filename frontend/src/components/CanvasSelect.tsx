@@ -367,7 +367,7 @@ export const CanvasSelect = (props: props) => {
 
     const dropdownClasses = (championName: string, champNotAvailable: boolean) => {
         if (selectedChampion()?.name === championName) {
-            return "border-darius-ember/70 text-darius-ember bg-darius-card-hover cursor-not-allowed";
+            return "border-darius-ember/70 text-darius-text-primary bg-darius-card-hover cursor-not-allowed";
         }
         if (champNotAvailable) {
             return "border-darius-border text-darius-text-secondary bg-darius-card cursor-not-allowed";
@@ -449,11 +449,7 @@ export const CanvasSelect = (props: props) => {
                                             id={`${props.draft.id}-${props.index()}-select`}
                                             class="h-6 min-w-0 flex-1 appearance-none bg-inherit px-1 outline-none"
                                             classList={{
-                                                "text-darius-crimson":
-                                                    props.side === "team1",
-                                                "text-darius-ember":
-                                                    props.side === "team2",
-                                                "text-darius-text-primary": !props.side,
+                                                "text-darius-text-primary": true,
                                                 "text-right": props.side === "team2"
                                             }}
                                             disabled={props.disabled}
@@ -469,13 +465,10 @@ export const CanvasSelect = (props: props) => {
                                                 e.stopPropagation();
                                                 clearSelection();
                                             }}
-                                            class={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full outline-none transition-all focus:outline-none ${
-                                                props.side === "team1"
-                                                    ? "text-darius-crimson hover:text-darius-text-primary"
-                                                    : props.side === "team2"
-                                                      ? "text-darius-ember hover:text-darius-text-primary"
-                                                      : "text-darius-text-primary hover:text-darius-purple-bright"
-                                            }`}
+                                            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-darius-text-primary outline-none transition-all hover:text-darius-purple-bright focus:outline-none"
+                                            classList={{
+                                                "order-first": props.side === "team2"
+                                            }}
                                             disabled={props.disabled}
                                         >
                                             <X size={16} />

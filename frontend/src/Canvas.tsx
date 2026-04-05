@@ -1051,6 +1051,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const handleNameChange = (draftId: string, newName: string) => {
         if (!canEdit()) return;
+        const currentDraft = canvasDrafts.find((cd) => cd.Draft.id === draftId);
+        if (!currentDraft) return;
+        if (currentDraft.Draft.name === newName) return;
         if (isLocalMode()) {
             localEditDraft(draftId, { name: newName });
             refreshFromLocal();

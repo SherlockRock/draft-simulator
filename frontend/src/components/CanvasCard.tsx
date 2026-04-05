@@ -67,6 +67,7 @@ const getTeamSide = (pickIndex: number): "team1" | "team2" =>
 export const CanvasCard = (props: CanvasCardProps) => {
     const navigate = useNavigate();
     const [nameSignal, setNameSignal] = createSignal(props.canvasDraft.Draft.name);
+    const [isNameFocused, setIsNameFocused] = createSignal(false);
     let nameInputRef: HTMLInputElement | undefined;
 
     createEffect(() => {
@@ -115,8 +116,8 @@ export const CanvasCard = (props: CanvasCardProps) => {
     const inputRowGapClass = createMemo(() => (isCompact() ? "gap-1.5" : "gap-2"));
     const titleInputClass = createMemo(() =>
         isCompact()
-            ? "min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-base font-bold text-darius-text-primary outline-none transition border-darius-border bg-darius-card/60 disabled:cursor-not-allowed"
-            : "min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-base font-bold text-darius-text-primary outline-none transition border-darius-border bg-darius-card/60 disabled:cursor-not-allowed"
+            ? "w-full bg-transparent px-2 py-1 text-base font-bold text-darius-text-primary outline-none disabled:cursor-not-allowed"
+            : "w-full bg-transparent px-2 py-1.5 text-base font-bold text-darius-text-primary outline-none disabled:cursor-not-allowed"
     );
     const teamHeaderGridClass = createMemo(() =>
         isHorizontal() ? "grid grid-cols-4 gap-3" : "grid grid-cols-2 gap-2.5"
@@ -561,29 +562,43 @@ export const CanvasCard = (props: CanvasCardProps) => {
                 />
             </Show>
             <div class={headerPaddingClass()}>
-                <div class={`flex items-start ${inputRowGapClass()}`}>
-                    <input
-                        ref={nameInputRef}
-                        type="text"
-                        placeholder="Enter Draft Name"
-                        value={nameSignal()}
-                        onInput={(e) => setNameSignal(e.currentTarget.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === "Escape") {
-                                e.currentTarget.blur();
-                            }
+                <div class={`flex items-start justify-between ${inputRowGapClass()}`}>
+                    <div
+                        class={`overflow-hidden rounded-b-sm rounded-t-md border-b-2 transition-all duration-200 ${
+                            isNameFocused()
+                                ? "border-darius-purple-bright bg-darius-card/60"
+                                : "border-transparent bg-transparent focus-within:border-darius-purple-bright focus-within:bg-darius-card/60"
+                        }`}
+                        style={{
+                            width: `${Math.max(nameSignal().length || 0, 16)}ch`,
+                            "max-width": "calc(100% - 4.5rem)"
                         }}
-                        onBlur={() => {
-                            props.handleNameChange(
-                                props.canvasDraft.Draft.id,
-                                nameSignal()
-                            );
-                            props.onEditingComplete?.();
-                        }}
-                        class={titleInputClass()}
-                        disabled={slotDisabled()}
-                    />
-                    <div class="flex shrink-0 gap-1">
+                    >
+                        <input
+                            ref={nameInputRef}
+                            type="text"
+                            placeholder="Enter Draft Name"
+                            value={nameSignal()}
+                            onFocus={() => setIsNameFocused(true)}
+                            onInput={(e) => setNameSignal(e.currentTarget.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === "Escape") {
+                                    e.currentTarget.blur();
+                                }
+                            }}
+                            onBlur={() => {
+                                setIsNameFocused(false);
+                                props.handleNameChange(
+                                    props.canvasDraft.Draft.id,
+                                    nameSignal()
+                                );
+                                props.onEditingComplete?.();
+                            }}
+                            class={titleInputClass()}
+                            disabled={slotDisabled()}
+                        />
+                    </div>
+                    <div class="ml-auto flex shrink-0 gap-1">
                         <div class="group relative">
                             <button
                                 onClick={handleViewClick}
