@@ -32,6 +32,7 @@ type CustomGroupContainerProps = {
     isExitingSource: boolean;
     contentMinWidth: number;
     contentMinHeight: number;
+    maxLeftEdgeDelta: number;
     onSelectAnchor?: (groupId: string, anchorType: AnchorType) => void;
     isGroupSelected?: boolean;
     sourceAnchor?: { type: AnchorType } | null;
@@ -112,6 +113,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         const startWidth = groupWidth();
         const startHeight = groupHeight();
         const startPositionX = props.group.positionX;
+        const startMaxLeftEdgeDelta = props.maxLeftEdgeDelta;
         const zoom = props.viewport().zoom;
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
@@ -119,7 +121,10 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
             const deltaY = (moveEvent.clientY - startY) / zoom;
             const rawWidth = edge === "left" ? startWidth - deltaX : startWidth + deltaX;
             const rawHeight = startHeight + deltaY;
-            const minW = effectiveMinWidth();
+            const minW =
+                edge === "left"
+                    ? Math.max(MIN_WIDTH, startWidth - startMaxLeftEdgeDelta)
+                    : effectiveMinWidth();
             const minH = effectiveMinHeight();
             const newWidth = Math.max(minW, rawWidth);
             const newHeight = Math.max(minH, rawHeight);

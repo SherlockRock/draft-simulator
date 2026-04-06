@@ -539,6 +539,7 @@ export const GroupResizedSchema = z.object({
   groupId: z.string(),
   width: z.number(),
   height: z.number(),
+  positionX: z.number().optional(),
 });
 
 // =============================================================================

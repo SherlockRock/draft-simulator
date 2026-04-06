@@ -107,21 +107,6 @@ const debounce = <T extends unknown[]>(func: (...args: T) => void, limit: number
     };
 };
 
-const debounceByKey = <K, T extends unknown[]>(
-    func: (...args: T) => void,
-    getKey: (...args: T) => K,
-    limit: number
-) => {
-    const inDebounce = new Map<K, boolean>();
-    return function (...args: T) {
-        const key = getKey(...args);
-        if (inDebounce.get(key)) return;
-        func(...args);
-        inDebounce.set(key, true);
-        setTimeout(() => inDebounce.delete(key), limit);
-    };
-};
-
 type CanvasComponentProps = {
     canvasData: CanvasResposnse | undefined;
     isLoading: boolean;
@@ -687,11 +672,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     };
 
-    const debouncedEmitMove = debounceByKey(
-        emitMove,
-        (draftId: string) => draftId,
-        25
-    );
+    const debouncedEmitMove = debounce(emitMove, 25);
 
     const emitVertexMove = (
         connectionId: string,
@@ -727,7 +708,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const debouncedEmitGroupMove = debounce(emitGroupMove, 25);
 
-    const emitGroupResize = (groupId: string, width: number, height: number) => {
+    const emitGroupResize = (
+        groupId: string,
+        width: number,
+        height: number,
+        positionX?: number
+    ) => {
         if (isLocalMode()) return;
         const socket = socketAccessor();
         if (!socket) return;
@@ -735,7 +721,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             canvasId: canvasId(),
             groupId,
             width,
-            height
+            height,
+            positionX
         });
     };
 
@@ -953,10 +940,26 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         socket.on("groupResized", (rawData: unknown) => {
             const data = validateSocketEvent("groupResized", rawData, GroupResizedSchema);
             if (!data) return;
+            const group = canvasGroups.find((g) => g.id === data.groupId);
+            const draftPositionDelta =
+                group?.type === "custom" && data.positionX !== undefined
+                    ? data.positionX - group.positionX
+                    : undefined;
+
             setCanvasGroups((g) => g.id === data.groupId, {
+                ...(data.positionX === undefined ? {} : { positionX: data.positionX }),
                 width: data.width,
                 height: data.height
             });
+            if (draftPositionDelta !== undefined && draftPositionDelta !== 0) {
+                setCanvasDrafts(
+                    (draft) => draft.group_id === data.groupId,
+                    (draft) => ({
+                        ...draft,
+                        positionX: draft.positionX - draftPositionDelta
+                    })
+                );
+            }
         });
         onCleanup(() => {
             socket.off("canvasUpdate");
@@ -1396,6 +1399,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         );
     };
 
+    const getCardCenterPoint = (worldX: number, worldY: number) => {
+        const cw = cardWidth(props.cardLayout());
+        const ch = cardHeight(props.cardLayout());
+        return {
+            x: worldX + cw / 2,
+            y: worldY + ch / 2
+        };
+    };
+
     const isInteractiveCardTarget = (target: EventTarget | null) => {
         return (
             target instanceof HTMLElement &&
@@ -1753,40 +1765,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             leftEdgeDelta !== undefined
                 ? positionX - group.positionX
                 : undefined;
-        const resizedDrafts =
-            draftPositionDelta !== undefined && draftPositionDelta !== 0
-                ? canvasDrafts
-                      .filter((draft) => draft.group_id === groupId)
-                      .map((draft) => ({
-                          id: draft.Draft.id,
-                          positionX: draft.positionX - draftPositionDelta,
-                          positionY: draft.positionY
-                      }))
-                : [];
 
         setCanvasGroups((g) => g.id === groupId, {
             width,
             height,
             ...(positionX === undefined ? {} : { positionX })
         });
-        if (resizedDrafts.length > 0) {
+        if (draftPositionDelta !== undefined && draftPositionDelta !== 0) {
             setCanvasDrafts(
                 (draft) => draft.group_id === groupId,
                 (draft) => ({
                     ...draft,
-                    positionX:
-                        resizedDrafts.find((resizedDraft) => resizedDraft.id === draft.Draft.id)
-                            ?.positionX ?? draft.positionX
+                    positionX: draft.positionX - draftPositionDelta
                 })
             );
-            for (const draft of resizedDrafts) {
-                debouncedEmitMove(draft.id, draft.positionX, draft.positionY);
-            }
         }
-        if (positionX !== undefined && group) {
+        if (positionX !== undefined && group && leftEdgeDelta === undefined) {
             debouncedEmitGroupMove(groupId, positionX, group.positionY);
         }
-        debouncedEmitGroupResize(groupId, width, height);
+        debouncedEmitGroupResize(groupId, width, height, positionX);
     };
 
     const handleResizeEnd = (
@@ -1840,19 +1837,27 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const computeMinGroupSize = (groupId: string) => {
         const drafts = getDraftsForGroup(groupId);
-        if (drafts.length === 0) return { minWidth: 0, minHeight: 0 };
+        if (drafts.length === 0) {
+            return { minWidth: 0, minHeight: 0, maxLeftEdgeDelta: Infinity };
+        }
 
         const cw = cardWidth(props.cardLayout());
         const ch = cardHeight(props.cardLayout());
 
         let maxRight = 0;
         let maxBottom = 0;
+        let minLeft = Infinity;
         for (const d of drafts) {
+            minLeft = Math.min(minLeft, d.positionX);
             maxRight = Math.max(maxRight, d.positionX + cw + GROUP_PADDING);
             maxBottom = Math.max(maxBottom, d.positionY + ch + GROUP_PADDING);
         }
 
-        return { minWidth: maxRight, minHeight: maxBottom };
+        return {
+            minWidth: maxRight,
+            minHeight: maxBottom,
+            maxLeftEdgeDelta: Math.max(0, minLeft - GROUP_PADDING)
+        };
     };
 
     const maybeExpandGroup = (
@@ -1862,32 +1867,70 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     ) => {
         const cw = cardWidth(props.cardLayout());
         const ch = cardHeight(props.cardLayout());
+        const expandLeft = Math.max(0, GROUP_PADDING - draftRelX);
         const currentWidth = group.width ?? 400;
         const currentHeight = group.height ?? 200;
 
-        const neededWidth = draftRelX + cw + GROUP_PADDING;
+        const neededWidth = draftRelX + cw + GROUP_PADDING + expandLeft;
         const neededHeight = draftRelY + ch + GROUP_PADDING;
 
-        if (neededWidth > currentWidth || neededHeight > currentHeight) {
+        if (
+            expandLeft > 0 ||
+            neededWidth > currentWidth ||
+            neededHeight > currentHeight
+        ) {
             const newWidth = Math.max(currentWidth, neededWidth);
             const newHeight = Math.max(currentHeight, neededHeight);
+            const newPositionX = group.positionX - expandLeft;
+            const groupedDrafts =
+                expandLeft > 0
+                    ? canvasDrafts.filter((draft) => draft.group_id === group.id)
+                    : [];
+
             setCanvasGroups((g) => g.id === group.id, {
+                positionX: newPositionX,
                 width: newWidth,
                 height: newHeight
             });
+            if (groupedDrafts.length > 0) {
+                setCanvasDrafts(
+                    (draft) => draft.group_id === group.id,
+                    (draft) => ({
+                        ...draft,
+                        positionX: draft.positionX + expandLeft
+                    })
+                );
+            }
             if (isLocalMode()) {
                 localUpdateGroup({
                     groupId: group.id,
+                    positionX: newPositionX,
                     width: newWidth,
                     height: newHeight
                 });
+                for (const draft of groupedDrafts) {
+                    localUpdateDraftPosition({
+                        draftId: draft.Draft.id,
+                        positionX: draft.positionX + expandLeft,
+                        positionY: draft.positionY
+                    });
+                }
             } else {
                 updateGroupMutation.mutate({
                     canvasId: canvasId(),
                     groupId: group.id,
+                    positionX: newPositionX,
                     width: newWidth,
                     height: newHeight
                 });
+                for (const draft of groupedDrafts) {
+                    updatePositionMutation.mutate({
+                        canvasId: canvasId(),
+                        draftId: draft.Draft.id,
+                        positionX: draft.positionX + expandLeft,
+                        positionY: draft.positionY
+                    });
+                }
             }
         }
     };
@@ -2123,7 +2166,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 }
 
                 // Check for group hover during draft drag (always in world coords)
-                const hoverGroup = findGroupAtPosition(newWorldX, newWorldY);
+                const hoverPoint = getCardCenterPoint(newWorldX, newWorldY);
+                const hoverGroup = findGroupAtPosition(hoverPoint.x, hoverPoint.y);
                 const currentGroupId =
                     state.dragGroupId ||
                     canvasDrafts.find((cd) => cd.Draft.id === state.activeBoxId)
@@ -2233,7 +2277,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         worldY = finalDraft.positionY;
                     }
 
-                    const dropGroup = findGroupAtPosition(worldX, worldY);
+                    const dropPoint = getCardCenterPoint(worldX, worldY);
+                    const dropGroup = findGroupAtPosition(dropPoint.x, dropPoint.y);
 
                     if (dropGroup && dropGroup.id !== finalDraft.group_id) {
                         // Moving to a different group
@@ -2607,6 +2652,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     }
                                     contentMinHeight={
                                         computeMinGroupSize(group.id).minHeight
+                                    }
+                                    maxLeftEdgeDelta={
+                                        computeMinGroupSize(group.id).maxLeftEdgeDelta
                                     }
                                     onSelectAnchor={onGroupAnchorClick}
                                     isGroupSelected={groupConnectionSource() === group.id}

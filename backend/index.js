@@ -415,6 +415,7 @@ async function main() {
           groupId: data.groupId,
           width: data.width,
           height: data.height,
+          positionX: data.positionX,
         });
       }
     });
