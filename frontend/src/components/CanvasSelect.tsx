@@ -37,6 +37,9 @@ export const CanvasSelect = (props: props) => {
     const [dropdownOpen, setDropdownOpen] = createSignal(false);
     const [dropdownIndex, setDropdownIndex] = createSignal(0);
     const [selectText, setSelectText] = createSignal("");
+    const [activationMode, setActivationMode] = createSignal<
+        "keyboard" | "pointer" | null
+    >(null);
     let dropdownRef: HTMLDivElement | undefined;
     const buttonRefs: Map<number, HTMLButtonElement> = new Map();
     let inputRef: HTMLInputElement | undefined;
@@ -90,8 +93,14 @@ export const CanvasSelect = (props: props) => {
 
     createEffect(() => {
         const isActive = isActiveSelection();
+        const pendingActivationMode = activationMode();
 
         if (isActive && !wasActiveSelection) {
+            if (pendingActivationMode === "pointer") {
+                setSelectText("");
+                setDropdownIndex(0);
+                setDropdownOpen(true);
+            }
             syncInputWithActiveState();
         } else if (!isActive) {
             cancelPendingSelectionNormalization();
@@ -99,6 +108,10 @@ export const CanvasSelect = (props: props) => {
             setDropdownIndex(0);
             setSelectText(restingInputValue());
             skipBlurNormalization = false;
+        }
+
+        if (isActive && pendingActivationMode !== null) {
+            setActivationMode(null);
         }
 
         wasActiveSelection = isActive;
@@ -139,15 +152,28 @@ export const CanvasSelect = (props: props) => {
     const activateSelect = () => {
         if (props.disabled) return;
 
+        const nextActivationMode =
+            activationMode() === "pointer" ? "pointer" : "keyboard";
+        setActivationMode(nextActivationMode);
         props.onFocus?.();
 
         if (isActiveSelection()) {
-            if (!isCompact() && !isFilteringOptions()) {
+            if (nextActivationMode === "pointer") {
+                setSelectText("");
+                setDropdownIndex(0);
+                setDropdownOpen(true);
+            } else if (!isCompact() && !isFilteringOptions()) {
                 setSelectText("");
                 setDropdownIndex(0);
             }
             syncInputWithActiveState();
+            setActivationMode(null);
         }
+    };
+
+    const markPointerActivation = (e: MouseEvent) => {
+        if (e.button !== 0) return;
+        setActivationMode("pointer");
     };
 
     const handleSortOptions = (sortInput: string) => {
@@ -186,7 +212,7 @@ export const CanvasSelect = (props: props) => {
     const restingInputValue = () => selectedChampion()?.name || "";
     const placeholderLabel = () => props.indexToShorthand[props.index()];
     const wideArtInputPlaceholder = () =>
-        selectedChampion() !== null
+        isActiveSelection()
             ? `Type to filter ${placeholderLabel()}`
             : placeholderLabel();
     const isFilteringOptions = () =>
@@ -404,7 +430,9 @@ export const CanvasSelect = (props: props) => {
                             when={isWideArt()}
                             fallback={
                                 <div
+                                    data-canvas-select-activator="true"
                                     class="flex h-full min-h-0 w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg border bg-darius-bg px-2 py-1 text-left text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+                                    onMouseDown={markPointerActivation}
                                     onClick={activateSelect}
                                     classList={{
                                         "border-darius-border/80": !isActiveSelection(),
@@ -438,6 +466,7 @@ export const CanvasSelect = (props: props) => {
                                         <input
                                             ref={inputRef}
                                             value={selectText()}
+                                            onMouseDown={markPointerActivation}
                                             onFocus={activateSelect}
                                             onInput={(e) =>
                                                 handleInputChange(e.target.value)
@@ -479,8 +508,12 @@ export const CanvasSelect = (props: props) => {
                         >
                             <div class="relative flex h-full min-h-0 w-full flex-1">
                                 <div
+                                    data-canvas-select-activator="true"
                                     class="relative flex h-full min-h-0 w-full flex-1 items-end overflow-hidden rounded-xl border-2 bg-darius-bg text-left transition-all"
-                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onMouseDown={(e) => {
+                                        e.stopPropagation();
+                                        markPointerActivation(e);
+                                    }}
                                     onClick={activateSelect}
                                     classList={{
                                         "border-darius-border shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]":
@@ -517,6 +550,7 @@ export const CanvasSelect = (props: props) => {
                                             <input
                                                 ref={inputRef}
                                                 value={selectText()}
+                                                onMouseDown={markPointerActivation}
                                                 onFocus={activateSelect}
                                                 onInput={(e) => {
                                                     handleInputChange(e.target.value);
@@ -584,7 +618,9 @@ export const CanvasSelect = (props: props) => {
                 >
                     <div class="relative">
                         <div
+                            data-canvas-select-activator="true"
                             class="relative flex h-[30px] w-[30px] items-center justify-center overflow-hidden rounded-lg border bg-darius-bg p-[2px]"
+                            onMouseDown={markPointerActivation}
                             onClick={activateSelect}
                             classList={{
                                 "border-darius-border/80": !isActiveSelection(),
@@ -596,6 +632,7 @@ export const CanvasSelect = (props: props) => {
                             <input
                                 ref={inputRef}
                                 value={selectText()}
+                                onMouseDown={markPointerActivation}
                                 onFocus={activateSelect}
                                 onInput={(e) => {
                                     handleInputChange(e.target.value);
@@ -691,6 +728,8 @@ export const CanvasSelect = (props: props) => {
                                                 );
                                             const isHighlighted = () =>
                                                 i() === dropdownIndex();
+                                            const isSelectedOption = () =>
+                                                selectedChampion()?.name === champion.name;
                                             return (
                                                 <Show
                                                     when={isWideArt()}
@@ -740,25 +779,17 @@ export const CanvasSelect = (props: props) => {
                                                         type="button"
                                                         class="relative mb-1.5 flex h-24 w-full overflow-hidden rounded-lg border text-left transition-[border-color,box-shadow] last:mb-0"
                                                         classList={{
-                                                            "cursor-not-allowed border-darius-ember/70 ring-1 ring-darius-ember/30":
-                                                                selectedChampion()
-                                                                    ?.name ===
-                                                                champion.name,
-                                                            "cursor-not-allowed border-darius-border/90":
-                                                                selectedChampion()
-                                                                    ?.name !==
-                                                                    champion.name &&
+                                                            "cursor-not-allowed border-darius-ember/80 ring-2 ring-darius-ember/35":
+                                                                isSelectedOption(),
+                                                            "cursor-not-allowed border-darius-border/70 opacity-70":
+                                                                !isSelectedOption() &&
                                                                 champNotAvailable(),
                                                             "border-darius-purple-bright ring-2 ring-darius-purple-bright/35":
-                                                                selectedChampion()
-                                                                    ?.name !==
-                                                                    champion.name &&
+                                                                !isSelectedOption() &&
                                                                 !champNotAvailable() &&
                                                                 isHighlighted(),
-                                                            "border-darius-border/80 hover:border-darius-purple-bright/50":
-                                                                selectedChampion()
-                                                                    ?.name !==
-                                                                    champion.name &&
+                                                            "border-darius-border/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] hover:border-darius-purple-bright/55":
+                                                                !isSelectedOption() &&
                                                                 !champNotAvailable() &&
                                                                 !isHighlighted()
                                                         }}
@@ -792,43 +823,48 @@ export const CanvasSelect = (props: props) => {
                                                                 "translate-x-[12%] scale-[1.12]":
                                                                     props.side ===
                                                                     "team2",
-                                                                "saturate-[0.55]":
+                                                                "saturate-[0.45] brightness-[0.78]":
                                                                     champNotAvailable()
                                                             }}
                                                         />
                                                         <div
                                                             class="absolute inset-0 bg-gradient-to-r"
                                                             classList={{
-                                                                "from-darius-bg/95 via-darius-bg/60 to-darius-bg/35":
+                                                                "from-darius-bg/88 via-darius-bg/48 to-darius-bg/18":
                                                                     props.side !==
                                                                     "team2",
-                                                                "from-darius-bg/35 via-darius-bg/60 to-darius-bg/95":
+                                                                "from-darius-bg/18 via-darius-bg/48 to-darius-bg/88":
                                                                     props.side === "team2"
                                                             }}
                                                         />
-                                                        <div class="via-darius-bg/72 absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-darius-bg/95 to-transparent" />
+                                                        <div class="via-darius-bg/45 absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-darius-bg/88 to-transparent" />
                                                         <div
                                                             class="absolute inset-0"
                                                             classList={{
-                                                                "bg-darius-bg/55":
+                                                                "bg-darius-bg/62":
+                                                                    !isSelectedOption() &&
                                                                     champNotAvailable(),
-                                                                "bg-darius-ember/15":
+                                                                "bg-darius-ember/18":
+                                                                    isSelectedOption(),
+                                                                "bg-darius-bg/18":
+                                                                    !isSelectedOption() &&
                                                                     !champNotAvailable() &&
-                                                                    selectedChampion()
-                                                                        ?.name ===
-                                                                        champion.name,
-                                                                "bg-darius-bg/38":
-                                                                    !champNotAvailable() &&
-                                                                    selectedChampion()
-                                                                        ?.name !==
-                                                                        champion.name &&
                                                                     !isHighlighted(),
-                                                                "bg-darius-bg/10":
+                                                                "bg-darius-purple-bright/12":
+                                                                    !isSelectedOption() &&
                                                                     !champNotAvailable() &&
-                                                                    isHighlighted() &&
-                                                                    selectedChampion()
-                                                                        ?.name !==
-                                                                        champion.name
+                                                                    isHighlighted()
+                                                            }}
+                                                        />
+                                                        <div
+                                                            class="absolute inset-0 rounded-[inherit]"
+                                                            classList={{
+                                                                "bg-[linear-gradient(135deg,rgba(255,183,77,0.18),transparent_45%)]":
+                                                                    isSelectedOption(),
+                                                                "bg-[linear-gradient(135deg,rgba(155,80,192,0.2),transparent_45%)]":
+                                                                    !isSelectedOption() &&
+                                                                    !champNotAvailable() &&
+                                                                    isHighlighted()
                                                             }}
                                                         />
                                                         <div
@@ -837,18 +873,53 @@ export const CanvasSelect = (props: props) => {
                                                                 "flex-row-reverse":
                                                                     props.side ===
                                                                     "team2",
-                                                                "opacity-50":
-                                                                    champNotAvailable()
                                                             }}
                                                         >
-                                                            <div class="min-w-0">
-                                                                <div class="truncate text-base font-semibold text-darius-text-primary drop-shadow-lg">
+                                                            <div
+                                                                class="min-w-0 rounded-md px-2 py-1.5"
+                                                                classList={{
+                                                                    "bg-darius-bg/72":
+                                                                        !isSelectedOption() &&
+                                                                        !champNotAvailable(),
+                                                                    "bg-darius-bg/82":
+                                                                        isSelectedOption(),
+                                                                    "bg-darius-bg/88":
+                                                                        !isSelectedOption() &&
+                                                                        champNotAvailable()
+                                                                }}
+                                                            >
+                                                                <div
+                                                                    class="truncate text-base font-semibold"
+                                                                    classList={{
+                                                                        "text-darius-text-primary":
+                                                                            isSelectedOption() ||
+                                                                            !champNotAvailable(),
+                                                                        "text-darius-text-secondary":
+                                                                            !isSelectedOption() &&
+                                                                            champNotAvailable()
+                                                                    }}
+                                                                >
                                                                     {champion.name}
                                                                 </div>
-                                                                <div class="mt-1 text-[11px] font-medium uppercase tracking-[0.16em] text-darius-text-secondary/95">
-                                                                    {selectedChampion()
-                                                                        ?.name ===
-                                                                    champion.name
+                                                                <div
+                                                                    class="mt-1 text-[11px] font-medium uppercase tracking-[0.16em]"
+                                                                    classList={{
+                                                                        "text-darius-ember":
+                                                                            isSelectedOption(),
+                                                                        "text-darius-text-secondary/80":
+                                                                            !isSelectedOption() &&
+                                                                            champNotAvailable(),
+                                                                        "text-darius-purple-bright/90":
+                                                                            !isSelectedOption() &&
+                                                                            !champNotAvailable() &&
+                                                                            isHighlighted(),
+                                                                        "text-darius-text-secondary/95":
+                                                                            !isSelectedOption() &&
+                                                                            !champNotAvailable() &&
+                                                                            !isHighlighted()
+                                                                    }}
+                                                                >
+                                                                    {isSelectedOption()
                                                                         ? "Selected"
                                                                         : champNotAvailable()
                                                                           ? "Unavailable"
