@@ -42,6 +42,7 @@ interface PickChangeModalProps {
     redTeamName: string;
     completedAt?: string | null;
     changeWindowSeconds: number;
+    lockedBySeriesProgress?: boolean;
     currentPickIndex: number;
     firstPick: "blue" | "red";
     disabledChampions?: string[];
@@ -71,7 +72,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
 
     createEffect(() => {
         const completedAt = props.completedAt;
-        if (!completedAt) {
+        if (!completedAt || props.lockedBySeriesProgress) {
             setTimeRemaining(null);
             return;
         }
@@ -90,6 +91,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
     });
 
     const isLocked = () => {
+        if (props.lockedBySeriesProgress) return true;
         const remaining = timeRemaining();
         return remaining !== null && remaining <= 0;
     };
@@ -297,7 +299,9 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                 </Show>
                 <Show when={!isSpectator() && isLocked()}>
                     <div class="w-full rounded border border-darius-border/40 bg-darius-card-hover/30 px-3 py-1.5 text-center text-sm font-medium text-darius-text-secondary">
-                        Picks Locked
+                        {props.lockedBySeriesProgress
+                            ? "Picks Locked After Next Game Start"
+                            : "Picks Locked"}
                     </div>
                 </Show>
             </Show>
@@ -558,7 +562,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                                                             0
                                                                     );
                                                                 const gameNum =
-                                                                    info?.gameNumber ?? 1;
+                                                                    info?.colorIndex ?? 1;
                                                                 return (
                                                                     <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-darius-bg/85 px-0.5 py-px text-[7px] font-bold leading-tight">
                                                                         <span
