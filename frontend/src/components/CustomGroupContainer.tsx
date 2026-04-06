@@ -16,13 +16,15 @@ type CustomGroupContainerProps = {
         groupId: string,
         width: number,
         height: number,
-        positionX?: number
+        positionX?: number,
+        leftEdgeDelta?: number
     ) => void;
     onResizeEnd: (
         groupId: string,
         width: number,
         height: number,
-        positionX?: number
+        positionX?: number,
+        leftEdgeDelta?: number
     ) => void;
     canEdit: () => boolean;
     isConnectionMode: boolean;
@@ -115,8 +117,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         const handleMouseMove = (moveEvent: MouseEvent) => {
             const deltaX = (moveEvent.clientX - startX) / zoom;
             const deltaY = (moveEvent.clientY - startY) / zoom;
-            const rawWidth =
-                edge === "left" ? startWidth - deltaX : startWidth + deltaX;
+            const rawWidth = edge === "left" ? startWidth - deltaX : startWidth + deltaX;
             const rawHeight = startHeight + deltaY;
             const minW = effectiveMinWidth();
             const minH = effectiveMinHeight();
@@ -125,10 +126,17 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
             const widthDelta = startWidth - newWidth;
             const newPositionX =
                 edge === "left" ? startPositionX + widthDelta : undefined;
+            const leftEdgeDelta = edge === "left" ? widthDelta : undefined;
             setIsResizeClamped(rawWidth < minW || rawHeight < minH);
             setLocalWidth(newWidth);
             setLocalHeight(newHeight);
-            props.onResizeGroup(props.group.id, newWidth, newHeight, newPositionX);
+            props.onResizeGroup(
+                props.group.id,
+                newWidth,
+                newHeight,
+                newPositionX,
+                leftEdgeDelta
+            );
         };
 
         const handleMouseUp = () => {
@@ -136,6 +144,8 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
             const finalHeight = groupHeight();
             const finalPositionX =
                 edge === "left" ? startPositionX + (startWidth - finalWidth) : undefined;
+            const finalLeftEdgeDelta =
+                edge === "left" ? startWidth - finalWidth : undefined;
             setIsResizeClamped(false);
             setLocalWidth(null);
             setLocalHeight(null);
@@ -143,7 +153,8 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 props.group.id,
                 finalWidth,
                 finalHeight,
-                finalPositionX
+                finalPositionX,
+                finalLeftEdgeDelta
             );
             window.removeEventListener("mousemove", handleMouseMove);
             window.removeEventListener("mouseup", handleMouseUp);

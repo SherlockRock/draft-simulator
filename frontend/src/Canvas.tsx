@@ -1723,15 +1723,32 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         groupId: string,
         width: number,
         height: number,
-        positionX?: number
+        positionX?: number,
+        leftEdgeDelta?: number
     ) => {
         if (!canEdit()) return;
         const group = canvasGroups.find((g) => g.id === groupId);
+        const draftPositionDelta =
+            group?.type === "custom" &&
+            positionX !== undefined &&
+            leftEdgeDelta !== undefined
+                ? positionX - group.positionX
+                : undefined;
+
         setCanvasGroups((g) => g.id === groupId, {
             width,
             height,
             ...(positionX === undefined ? {} : { positionX })
         });
+        if (draftPositionDelta !== undefined && draftPositionDelta !== 0) {
+            setCanvasDrafts(
+                (draft) => draft.group_id === groupId,
+                (draft) => ({
+                    ...draft,
+                    positionX: draft.positionX - draftPositionDelta
+                })
+            );
+        }
         if (positionX !== undefined && group) {
             debouncedEmitGroupMove(groupId, positionX, group.positionY);
         }
@@ -1742,11 +1759,29 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         groupId: string,
         width: number,
         height: number,
-        positionX?: number
+        positionX?: number,
+        leftEdgeDelta?: number
     ) => {
         if (!canEdit()) return;
+        const group = canvasGroups.find((g) => g.id === groupId);
+        const shouldPersistDraftPositions =
+            group?.type === "custom" &&
+            positionX !== undefined &&
+            leftEdgeDelta !== undefined &&
+            leftEdgeDelta !== 0;
+        const groupedDrafts = shouldPersistDraftPositions
+            ? canvasDrafts.filter((draft) => draft.group_id === groupId)
+            : [];
+
         if (isLocalMode()) {
             localUpdateGroup({ groupId, width, height, positionX });
+            for (const draft of groupedDrafts) {
+                localUpdateDraftPosition({
+                    draftId: draft.Draft.id,
+                    positionX: draft.positionX,
+                    positionY: draft.positionY
+                });
+            }
             refreshFromLocal();
         } else {
             updateGroupMutation.mutate({
@@ -1756,6 +1791,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 width,
                 height
             });
+            for (const draft of groupedDrafts) {
+                updateDraftGroupMutation.mutate({
+                    canvasId: canvasId(),
+                    draftId: draft.Draft.id,
+                    positionX: draft.positionX,
+                    positionY: draft.positionY
+                });
+            }
         }
     };
 
