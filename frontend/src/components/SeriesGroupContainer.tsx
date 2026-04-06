@@ -15,7 +15,9 @@ type SeriesGroupContainerProps = {
     group: CanvasGroup;
     drafts: CanvasDraft[];
     viewport: Accessor<Viewport>;
+    isPanning: boolean;
     onGroupMouseDown: (groupId: string, e: MouseEvent) => void;
+    onBodyMouseDown: (e: MouseEvent) => void;
     onDeleteGroup: (groupId: string) => void;
     onEditDisabledChampions: (groupId: string) => void;
     canEdit: () => boolean;
@@ -92,7 +94,6 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                 transform: `scale(${props.viewport().zoom})`,
                 "transform-origin": "top left"
             }}
-            onMouseDown={(e) => e.stopPropagation()}
         >
             {/* Header */}
             <div
@@ -232,9 +233,24 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
             {/* Draft Cards Container - uses flexbox for layout */}
             <div
                 class="flex items-start"
+                classList={{
+                    "cursor-grab": !props.isPanning,
+                    "cursor-grabbing": props.isPanning
+                }}
                 style={{
                     padding: `${SERIES_PADDING}px`,
                     gap: `${SERIES_CARD_GAP}px`
+                }}
+                onMouseDown={(e) => {
+                    const target = e.target;
+                    if (
+                        !(target instanceof Element) ||
+                        !target.closest(
+                            '[data-canvas-select-root="true"], [data-canvas-drag-root="true"], input, button, select, textarea'
+                        )
+                    ) {
+                        props.onBodyMouseDown(e);
+                    }
                 }}
             >
                 <For each={sortedDrafts()}>{(draft) => props.renderDraftCard(draft)}</For>

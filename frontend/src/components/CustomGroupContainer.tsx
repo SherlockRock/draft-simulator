@@ -6,12 +6,24 @@ type CustomGroupContainerProps = {
     group: CanvasGroup;
     drafts: CanvasDraft[];
     viewport: Accessor<Viewport>;
+    isPanning: boolean;
     onGroupMouseDown: (groupId: string, e: MouseEvent) => void;
+    onBodyMouseDown: (e: MouseEvent) => void;
     onDeleteGroup: (groupId: string) => void;
     onEditDisabledChampions: (groupId: string) => void;
     onRenameGroup: (groupId: string, newName: string) => void;
-    onResizeGroup: (groupId: string, width: number, height: number) => void;
-    onResizeEnd: (groupId: string, width: number, height: number) => void;
+    onResizeGroup: (
+        groupId: string,
+        width: number,
+        height: number,
+        positionX?: number
+    ) => void;
+    onResizeEnd: (
+        groupId: string,
+        width: number,
+        height: number,
+        positionX?: number
+    ) => void;
     canEdit: () => boolean;
     isConnectionMode: boolean;
     isDragTarget: boolean;
@@ -88,7 +100,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
     const effectiveMinWidth = () => Math.max(MIN_WIDTH, props.contentMinWidth);
     const effectiveMinHeight = () => Math.max(MIN_HEIGHT, props.contentMinHeight);
 
-    const handleResizeMouseDown = (e: MouseEvent) => {
+    const handleResizeMouseDown = (e: MouseEvent, edge: "left" | "right") => {
         if (!props.canEdit()) return;
         e.preventDefault();
         e.stopPropagation();
@@ -97,30 +109,42 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         const startY = e.clientY;
         const startWidth = groupWidth();
         const startHeight = groupHeight();
+        const startPositionX = props.group.positionX;
         const zoom = props.viewport().zoom;
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
             const deltaX = (moveEvent.clientX - startX) / zoom;
             const deltaY = (moveEvent.clientY - startY) / zoom;
-            const rawWidth = startWidth + deltaX;
+            const rawWidth =
+                edge === "left" ? startWidth - deltaX : startWidth + deltaX;
             const rawHeight = startHeight + deltaY;
             const minW = effectiveMinWidth();
             const minH = effectiveMinHeight();
             const newWidth = Math.max(minW, rawWidth);
             const newHeight = Math.max(minH, rawHeight);
+            const widthDelta = startWidth - newWidth;
+            const newPositionX =
+                edge === "left" ? startPositionX + widthDelta : undefined;
             setIsResizeClamped(rawWidth < minW || rawHeight < minH);
             setLocalWidth(newWidth);
             setLocalHeight(newHeight);
-            props.onResizeGroup(props.group.id, newWidth, newHeight);
+            props.onResizeGroup(props.group.id, newWidth, newHeight, newPositionX);
         };
 
         const handleMouseUp = () => {
             const finalWidth = groupWidth();
             const finalHeight = groupHeight();
+            const finalPositionX =
+                edge === "left" ? startPositionX + (startWidth - finalWidth) : undefined;
             setIsResizeClamped(false);
             setLocalWidth(null);
             setLocalHeight(null);
-            props.onResizeEnd(props.group.id, finalWidth, finalHeight);
+            props.onResizeEnd(
+                props.group.id,
+                finalWidth,
+                finalHeight,
+                finalPositionX
+            );
             window.removeEventListener("mousemove", handleMouseMove);
             window.removeEventListener("mouseup", handleMouseUp);
         };
@@ -151,7 +175,6 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 transform: `scale(${props.viewport().zoom})`,
                 "transform-origin": "top left"
             }}
-            onMouseDown={(e) => e.stopPropagation()}
         >
             {/* Header */}
             <div
@@ -228,9 +251,24 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
             {/* Content area */}
             <div
                 class="relative"
+                classList={{
+                    "cursor-grab": !props.isPanning,
+                    "cursor-grabbing": props.isPanning
+                }}
                 style={{
                     height: `${groupHeight() - HEADER_HEIGHT}px`,
                     padding: `${PADDING}px`
+                }}
+                onMouseDown={(e) => {
+                    const target = e.target;
+                    if (
+                        !(target instanceof Element) ||
+                        !target.closest(
+                            '[data-canvas-select-root="true"], [data-canvas-drag-root="true"], input, button, select, textarea'
+                        )
+                    ) {
+                        props.onBodyMouseDown(e);
+                    }
                 }}
             >
                 <Show
@@ -261,8 +299,25 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
             {/* Resize handle */}
             <Show when={props.canEdit()}>
                 <div
+                    class="absolute bottom-0 left-0 h-4 w-4 cursor-sw-resize"
+                    onMouseDown={(e) => handleResizeMouseDown(e, "left")}
+                >
+                    <svg
+                        class="absolute bottom-1 left-1 h-3 w-3 text-darius-text-secondary"
+                        fill="currentColor"
+                        viewBox="0 0 10 10"
+                    >
+                        <path
+                            d="M1 1L9 9M1 5L5 9M1 9L1 9"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            fill="none"
+                        />
+                    </svg>
+                </div>
+                <div
                     class="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize"
-                    onMouseDown={handleResizeMouseDown}
+                    onMouseDown={(e) => handleResizeMouseDown(e, "right")}
                 >
                     <svg
                         class="absolute bottom-1 right-1 h-3 w-3 text-darius-text-secondary"

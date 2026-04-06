@@ -504,6 +504,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
 
     return (
         <div
+            data-canvas-drag-root="true"
             class="canvas-card flex flex-col rounded-xl border border-darius-border/90 bg-darius-card-hover/95 shadow-[0_16px_40px_rgba(15,23,42,0.42)]"
             classList={{
                 "absolute z-30": !props.isGrouped || props.groupType === "custom",

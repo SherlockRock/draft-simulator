@@ -1719,21 +1719,40 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
-    const handleResizeGroup = (groupId: string, width: number, height: number) => {
+    const handleResizeGroup = (
+        groupId: string,
+        width: number,
+        height: number,
+        positionX?: number
+    ) => {
         if (!canEdit()) return;
-        setCanvasGroups((g) => g.id === groupId, { width, height });
+        const group = canvasGroups.find((g) => g.id === groupId);
+        setCanvasGroups((g) => g.id === groupId, {
+            width,
+            height,
+            ...(positionX === undefined ? {} : { positionX })
+        });
+        if (positionX !== undefined && group) {
+            debouncedEmitGroupMove(groupId, positionX, group.positionY);
+        }
         debouncedEmitGroupResize(groupId, width, height);
     };
 
-    const handleResizeEnd = (groupId: string, width: number, height: number) => {
+    const handleResizeEnd = (
+        groupId: string,
+        width: number,
+        height: number,
+        positionX?: number
+    ) => {
         if (!canEdit()) return;
         if (isLocalMode()) {
-            localUpdateGroup({ groupId, width, height });
+            localUpdateGroup({ groupId, width, height, positionX });
             refreshFromLocal();
         } else {
             updateGroupMutation.mutate({
                 canvasId: canvasId(),
                 groupId,
+                positionX,
                 width,
                 height
             });
@@ -2379,7 +2398,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     </div>
                 </Show>
                 <div
-                    class="canvas-background absolute inset-0 cursor-move bg-darius-card-hover bg-[radial-gradient(circle,rgba(184,168,176,0.08)_1px,transparent_1px)]"
+                    class="canvas-background absolute inset-0 bg-darius-card-hover bg-[radial-gradient(circle,rgba(184,168,176,0.08)_1px,transparent_1px)]"
+                    classList={{
+                        "cursor-grab": !dragState.isPanning,
+                        "cursor-grabbing": dragState.isPanning
+                    }}
                     style={{
                         "background-size": `${32 * props.viewport().zoom}px ${32 * props.viewport().zoom}px`,
                         "background-position": `${-props.viewport().x * props.viewport().zoom}px ${-props.viewport().y * props.viewport().zoom}px`
@@ -2490,7 +2513,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     group={group}
                                     drafts={getDraftsForGroup(group.id)}
                                     viewport={props.viewport}
+                                    isPanning={dragState.isPanning}
                                     onGroupMouseDown={onGroupMouseDown}
+                                    onBodyMouseDown={onBackgroundMouseDown}
                                     onDeleteGroup={handleDeleteGroup}
                                     onEditDisabledChampions={handleEditDisabledChampions}
                                     onRenameGroup={handleRenameGroup}
@@ -2560,7 +2585,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 group={group}
                                 drafts={getDraftsForGroup(group.id)}
                                 viewport={props.viewport}
+                                isPanning={dragState.isPanning}
                                 onGroupMouseDown={onGroupMouseDown}
+                                onBodyMouseDown={onBackgroundMouseDown}
                                 onDeleteGroup={handleDeleteGroup}
                                 onEditDisabledChampions={handleEditDisabledChampions}
                                 canEdit={canEdit}
