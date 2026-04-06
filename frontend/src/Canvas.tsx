@@ -107,6 +107,21 @@ const debounce = <T extends unknown[]>(func: (...args: T) => void, limit: number
     };
 };
 
+const debounceByKey = <K, T extends unknown[]>(
+    func: (...args: T) => void,
+    getKey: (...args: T) => K,
+    limit: number
+) => {
+    const inDebounce = new Map<K, boolean>();
+    return function (...args: T) {
+        const key = getKey(...args);
+        if (inDebounce.get(key)) return;
+        func(...args);
+        inDebounce.set(key, true);
+        setTimeout(() => inDebounce.delete(key), limit);
+    };
+};
+
 type CanvasComponentProps = {
     canvasData: CanvasResposnse | undefined;
     isLoading: boolean;
@@ -672,7 +687,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     };
 
-    const debouncedEmitMove = debounce(emitMove, 25);
+    const debouncedEmitMove = debounceByKey(
+        emitMove,
+        (draftId: string) => draftId,
+        25
+    );
 
     const emitVertexMove = (
         connectionId: string,
@@ -1734,20 +1753,35 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             leftEdgeDelta !== undefined
                 ? positionX - group.positionX
                 : undefined;
+        const resizedDrafts =
+            draftPositionDelta !== undefined && draftPositionDelta !== 0
+                ? canvasDrafts
+                      .filter((draft) => draft.group_id === groupId)
+                      .map((draft) => ({
+                          id: draft.Draft.id,
+                          positionX: draft.positionX - draftPositionDelta,
+                          positionY: draft.positionY
+                      }))
+                : [];
 
         setCanvasGroups((g) => g.id === groupId, {
             width,
             height,
             ...(positionX === undefined ? {} : { positionX })
         });
-        if (draftPositionDelta !== undefined && draftPositionDelta !== 0) {
+        if (resizedDrafts.length > 0) {
             setCanvasDrafts(
                 (draft) => draft.group_id === groupId,
                 (draft) => ({
                     ...draft,
-                    positionX: draft.positionX - draftPositionDelta
+                    positionX:
+                        resizedDrafts.find((resizedDraft) => resizedDraft.id === draft.Draft.id)
+                            ?.positionX ?? draft.positionX
                 })
             );
+            for (const draft of resizedDrafts) {
+                debouncedEmitMove(draft.id, draft.positionX, draft.positionY);
+            }
         }
         if (positionX !== undefined && group) {
             debouncedEmitGroupMove(groupId, positionX, group.positionY);
@@ -2443,8 +2477,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 <div
                     class="canvas-background absolute inset-0 bg-darius-card-hover bg-[radial-gradient(circle,rgba(184,168,176,0.08)_1px,transparent_1px)]"
                     classList={{
-                        "cursor-grab": !dragState.isPanning,
-                        "cursor-grabbing": dragState.isPanning
+                        "cursor-grab": !dragState().isPanning,
+                        "cursor-grabbing": dragState().isPanning
                     }}
                     style={{
                         "background-size": `${32 * props.viewport().zoom}px ${32 * props.viewport().zoom}px`,
@@ -2556,7 +2590,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     group={group}
                                     drafts={getDraftsForGroup(group.id)}
                                     viewport={props.viewport}
-                                    isPanning={dragState.isPanning}
+                                    isPanning={dragState().isPanning}
                                     onGroupMouseDown={onGroupMouseDown}
                                     onBodyMouseDown={onBackgroundMouseDown}
                                     onDeleteGroup={handleDeleteGroup}
@@ -2628,7 +2662,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 group={group}
                                 drafts={getDraftsForGroup(group.id)}
                                 viewport={props.viewport}
-                                isPanning={dragState.isPanning}
+                                isPanning={dragState().isPanning}
                                 onGroupMouseDown={onGroupMouseDown}
                                 onBodyMouseDown={onBackgroundMouseDown}
                                 onDeleteGroup={handleDeleteGroup}
