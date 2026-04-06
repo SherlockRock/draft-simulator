@@ -18,6 +18,11 @@ import { EditVersusDraftDialog } from "./EditVersusDraftDialog";
 import { useQueryClient } from "@tanstack/solid-query";
 import toast from "solid-toast";
 import type { RestrictionMapEntry } from "./ChampionPanel";
+import {
+    getVersusPostCompletionEditWindowSeconds,
+    isCaptainRoleReselectLocked,
+    hasNewerStartedDraft
+} from "../utils/versusCompletionWindow";
 
 const VersusFlowPanelContent: Component = () => {
     const params = useParams<{ id: string; draftId: string; linkToken: string }>();
@@ -75,6 +80,9 @@ const VersusFlowPanelContent: Component = () => {
         const uid = userId();
         return !!(vd && uid && vd.owner_id === uid);
     });
+    const captainRoleReselectLocked = createMemo(() =>
+        isCaptainRoleReselectLocked(versusDraft())
+    );
 
     const canEditGameSettings = createMemo(() => {
         const role = myRole();
@@ -316,7 +324,9 @@ const VersusFlowPanelContent: Component = () => {
                         </div>
                     </div>
 
-                    <RoleSwitcher currentRole={myRole() || "spectator"} />
+                    <Show when={!captainRoleReselectLocked()}>
+                        <RoleSwitcher currentRole={myRole() || "spectator"} />
+                    </Show>
                 </div>
             </Show>
 
@@ -390,9 +400,13 @@ const VersusFlowPanelContent: Component = () => {
                     blueTeamName={versusDraft()?.blueTeamName ?? ""}
                     redTeamName={versusDraft()?.redTeamName ?? ""}
                     completedAt={draftState()?.completedAt}
-                    changeWindowSeconds={
-                        (versusDraft()?.competitive ?? false) ? 120 : 600
-                    }
+                    changeWindowSeconds={getVersusPostCompletionEditWindowSeconds(
+                        versusDraft()?.competitive ?? false
+                    )}
+                    lockedBySeriesProgress={hasNewerStartedDraft(
+                        versusDraft(),
+                        draftState()?.draft?.id
+                    )}
                     currentPickIndex={draftState()?.currentPickIndex ?? 0}
                     firstPick={draftState()?.draft?.firstPick ?? "blue"}
                     disabledChampions={versusDraft()?.disabledChampions ?? []}

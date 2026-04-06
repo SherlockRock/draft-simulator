@@ -7,11 +7,20 @@ const {
   getPicksArrayIndex,
 } = require("../utils/versusPickOrder");
 const { getRestrictedChampions } = require("../utils/seriesRestrictions");
+const {
+  getCaptainRoleLockState,
+  getDraftEditLockState,
+  getWinnerReportingLockState,
+} = require("../utils/versusCompletionWindow");
 const { getEffectiveSide } = require("@draft-sim/shared-types");
 const crypto = require("crypto");
 
 function uuidv4() {
   return crypto.randomUUID();
+}
+
+function isCaptainRole(role) {
+  return role === "team1_captain" || role === "team2_captain";
 }
 
 function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler) {
@@ -67,9 +76,12 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
       console.log(`Socket ${socket.id} joined versus:${versusDraft.id}`);
 
       // Get current participants from session manager (who's connected now)
-      const availableRoles = versusSessionManager.getAvailableRoles(
-        versusDraft.id,
-      );
+      const availableRoles = versusSessionManager.getAvailableRoles(versusDraft.id);
+      const captainRoleLock = getCaptainRoleLockState(versusDraft);
+      if (captainRoleLock.isLocked) {
+        availableRoles.team1_captain = false;
+        availableRoles.team2_captain = false;
+      }
 
       // Attempt to auto-join with stored role if provided
       let myParticipant = null;
@@ -85,13 +97,20 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
         });
 
         if (dbParticipant) {
+          const captainClaimBlocked =
+            isCaptainRole(dbParticipant.role) && captainRoleLock.isLocked;
+
           // Verify role matches and role is available (no one connected with it)
           const roleAvailable = versusSessionManager.isRoleAvailable(
             versusDraft.id,
             dbParticipant.role,
           );
 
-          if (roleAvailable) {
+          if (captainClaimBlocked) {
+            console.log(
+              `Reclaim blocked for ${dbParticipant.role} in concluded versus:${versusDraft.id} after completion window`,
+            );
+          } else if (roleAvailable) {
             // Successfully reclaimed role - add to memory session
             const visitorId = socket.user?.id || socket.id;
             myParticipant = versusSessionManager.addParticipant(
@@ -208,6 +227,32 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
           error: "Invalid role",
         });
         return;
+      }
+
+      if (isCaptainRole(role)) {
+        const versusDraft = await VersusDraft.findByPk(versusDraftId, {
+          include: [{ model: Draft, as: "Drafts" }],
+          order: [[{ model: Draft, as: "Drafts" }, "seriesIndex", "ASC"]],
+        });
+
+        if (!versusDraft) {
+          socket.emit("versusRoleSelectResponse", {
+            success: false,
+            error: "Versus draft not found",
+          });
+          return;
+        }
+
+        if (getCaptainRoleLockState(versusDraft).isLocked) {
+          socket.emit("versusError", {
+            error: "Captain role selection window has expired",
+          });
+          socket.emit("versusRoleSelectResponse", {
+            success: false,
+            error: "Captain role selection window has expired",
+          });
+          return;
+        }
       }
 
       // Check if role is available (no one currently connected with this role)
@@ -411,13 +456,22 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
           },
         });
 
+        const captainRoleLock = getCaptainRoleLockState(versusDraft);
+
         if (dbParticipant) {
+          const captainClaimBlocked =
+            isCaptainRole(dbParticipant.role) && captainRoleLock.isLocked;
+
           const roleAvailable = versusSessionManager.isRoleAvailable(
             versusDraftId,
             dbParticipant.role,
           );
 
-          if (roleAvailable) {
+          if (captainClaimBlocked) {
+            console.log(
+              `Reconnect reclaim blocked for ${dbParticipant.role} in concluded versus:${versusDraftId} after completion window`,
+            );
+          } else if (roleAvailable) {
             const visitorId = socket.user?.id || socket.id;
             myParticipant = versusSessionManager.addParticipant(
               versusDraftId,
@@ -1097,12 +1151,12 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
 
       // If draft is completed, enforce the pick change time window
       if (draft.completed && draft.completedAt) {
-        const windowSeconds = versusDraft.competitive ? 120 : 600;
-        const expiresAt =
-          new Date(draft.completedAt).getTime() + windowSeconds * 1000;
-        if (Date.now() > expiresAt) {
+        const draftEditLock = getDraftEditLockState(draft, versusDraft);
+        if (draftEditLock.isLocked) {
           return socket.emit("error", {
-            message: "Pick change window has expired",
+            message: draftEditLock.blockedByNewerDraft
+              ? "Pick changes are locked because a newer game has started"
+              : "Pick change window has expired",
           });
         }
       }
@@ -1226,10 +1280,8 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
 
       // Sweep expired pending requests if draft is completed and window has passed
       if (draft.completed && draft.completedAt) {
-        const windowSeconds = versusDraft?.competitive ? 120 : 600;
-        const expiresAt =
-          new Date(draft.completedAt).getTime() + windowSeconds * 1000;
-        if (Date.now() > expiresAt) {
+        const draftEditLock = getDraftEditLockState(draft, versusDraft);
+        if (draftEditLock.isLocked) {
           const pendingRequests = state.pickChangeRequests.filter(
             (r) => r.status === "pending",
           );
@@ -1240,7 +1292,9 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
             });
           }
           return socket.emit("error", {
-            message: "Pick change window has expired",
+            message: draftEditLock.blockedByNewerDraft
+              ? "Pick changes are locked because a newer game has started"
+              : "Pick change window has expired",
           });
         }
       }
@@ -1340,6 +1394,15 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
       if (!versusDraft) {
         ack({ error: "Versus draft not found" });
         return socket.emit("versusError", { error: "Versus draft not found" });
+      }
+
+      const winnerReportingLock = getWinnerReportingLockState(draft, versusDraft);
+      if (winnerReportingLock.isLocked) {
+        const error = winnerReportingLock.blockedByNewerDraft
+          ? "Winner reporting is locked because a newer game has started"
+          : "Winner reporting window has expired";
+        ack({ error });
+        return socket.emit("versusError", { error });
       }
 
       // Get participant info for this socket

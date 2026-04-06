@@ -2,6 +2,7 @@ import { Component, Show, createSignal, createMemo } from "solid-js";
 import { User, Eye, X } from "lucide-solid";
 import { useVersusContext } from "../contexts/VersusContext";
 import { getSuggestedRole } from "../workflows/VersusWorkflow";
+import { isCaptainRoleReselectLocked } from "../utils/versusCompletionWindow";
 
 const InlineRolePicker: Component = () => {
     const { versusContext, selectRole, hideRolePicker, myTeamIdentity } =
@@ -11,6 +12,9 @@ const InlineRolePicker: Component = () => {
 
     const versusDraft = createMemo(() => versusContext().versusDraft);
     const participants = createMemo(() => versusContext().participants);
+    const captainRolesLocked = createMemo(() =>
+        isCaptainRoleReselectLocked(versusDraft())
+    );
 
     const suggestedRole = createMemo(() => {
         const vd = versusDraft();
@@ -63,9 +67,13 @@ const InlineRolePicker: Component = () => {
                     {/* Team 1 Captain */}
                     <button
                         onClick={() => handleSelectRole("team1_captain")}
-                        disabled={isRoleTaken("team1_captain") || isJoining()}
+                        disabled={
+                            captainRolesLocked() ||
+                            isRoleTaken("team1_captain") ||
+                            isJoining()
+                        }
                         class={`group relative w-full overflow-hidden rounded-xl border-2 p-4 text-left transition-all duration-200 ${
-                            isRoleTaken("team1_captain")
+                            captainRolesLocked() || isRoleTaken("team1_captain")
                                 ? "cursor-not-allowed border-darius-border/50 bg-darius-bg/50 opacity-60"
                                 : suggestedRole() === "team1_captain"
                                   ? "cursor-pointer border-darius-crimson bg-darius-card hover:border-darius-ember/60 hover:bg-darius-card-hover"
@@ -79,6 +87,7 @@ const InlineRolePicker: Component = () => {
                             <div class="flex items-center gap-3">
                                 <div
                                     class={`flex h-10 w-10 items-center justify-center rounded-lg ${
+                                        captainRolesLocked() ||
                                         isRoleTaken("team1_captain")
                                             ? "bg-darius-card-hover"
                                             : "bg-darius-crimson/20"
@@ -87,6 +96,7 @@ const InlineRolePicker: Component = () => {
                                     <User
                                         size={20}
                                         class={
+                                            captainRolesLocked() ||
                                             isRoleTaken("team1_captain")
                                                 ? "text-darius-text-secondary"
                                                 : "text-darius-crimson"
@@ -95,7 +105,12 @@ const InlineRolePicker: Component = () => {
                                 </div>
                                 <div>
                                     <div
-                                        class={`font-semibold ${isRoleTaken("team1_captain") ? "text-darius-text-secondary" : "text-darius-crimson"}`}
+                                        class={`font-semibold ${
+                                            captainRolesLocked() ||
+                                            isRoleTaken("team1_captain")
+                                                ? "text-darius-text-secondary"
+                                                : "text-darius-crimson"
+                                        }`}
                                     >
                                         {versusDraft()?.blueTeamName ?? ""} Captain
                                     </div>
@@ -113,16 +128,20 @@ const InlineRolePicker: Component = () => {
                                     class={`rounded px-2.5 py-1 text-xs font-medium ${
                                         isRoleTaken("team1_captain")
                                             ? "bg-darius-card-hover text-darius-text-secondary"
-                                            : suggestedRole() === "team1_captain"
-                                              ? "bg-darius-ember/15 text-darius-ember"
-                                              : "bg-emerald-500/15 text-emerald-400"
+                                            : captainRolesLocked()
+                                              ? "bg-darius-card-hover text-darius-text-secondary"
+                                              : suggestedRole() === "team1_captain"
+                                                ? "bg-darius-ember/15 text-darius-ember"
+                                                : "bg-emerald-500/15 text-emerald-400"
                                     }`}
                                 >
-                                    {isRoleTaken("team1_captain")
-                                        ? "Taken"
-                                        : suggestedRole() === "team1_captain"
-                                          ? "Previously Selected Role"
-                                          : "Open"}
+                                    {captainRolesLocked()
+                                        ? "Locked"
+                                        : isRoleTaken("team1_captain")
+                                          ? "Taken"
+                                          : suggestedRole() === "team1_captain"
+                                            ? "Previously Selected Role"
+                                            : "Open"}
                                 </span>
                             </div>
                         </div>
@@ -131,9 +150,13 @@ const InlineRolePicker: Component = () => {
                     {/* Team 2 Captain */}
                     <button
                         onClick={() => handleSelectRole("team2_captain")}
-                        disabled={isRoleTaken("team2_captain") || isJoining()}
+                        disabled={
+                            captainRolesLocked() ||
+                            isRoleTaken("team2_captain") ||
+                            isJoining()
+                        }
                         class={`group relative w-full overflow-hidden rounded-xl border-2 p-4 text-left transition-all duration-200 ${
-                            isRoleTaken("team2_captain")
+                            captainRolesLocked() || isRoleTaken("team2_captain")
                                 ? "cursor-not-allowed border-darius-border/50 bg-darius-bg/50 opacity-60"
                                 : suggestedRole() === "team2_captain"
                                   ? "cursor-pointer border-darius-crimson bg-darius-card hover:border-darius-ember/60 hover:bg-darius-card-hover"
@@ -147,6 +170,7 @@ const InlineRolePicker: Component = () => {
                             <div class="flex items-center gap-3">
                                 <div
                                     class={`flex h-10 w-10 items-center justify-center rounded-lg ${
+                                        captainRolesLocked() ||
                                         isRoleTaken("team2_captain")
                                             ? "bg-darius-card-hover"
                                             : "bg-darius-crimson/20"
@@ -155,6 +179,7 @@ const InlineRolePicker: Component = () => {
                                     <User
                                         size={20}
                                         class={
+                                            captainRolesLocked() ||
                                             isRoleTaken("team2_captain")
                                                 ? "text-darius-text-secondary"
                                                 : "text-darius-crimson"
@@ -163,7 +188,12 @@ const InlineRolePicker: Component = () => {
                                 </div>
                                 <div>
                                     <div
-                                        class={`font-semibold ${isRoleTaken("team2_captain") ? "text-darius-text-secondary" : "text-darius-crimson"}`}
+                                        class={`font-semibold ${
+                                            captainRolesLocked() ||
+                                            isRoleTaken("team2_captain")
+                                                ? "text-darius-text-secondary"
+                                                : "text-darius-crimson"
+                                        }`}
                                     >
                                         {versusDraft()?.redTeamName ?? ""} Captain
                                     </div>
@@ -181,16 +211,20 @@ const InlineRolePicker: Component = () => {
                                     class={`rounded px-2.5 py-1 text-xs font-medium ${
                                         isRoleTaken("team2_captain")
                                             ? "bg-darius-card-hover text-darius-text-secondary"
-                                            : suggestedRole() === "team2_captain"
-                                              ? "bg-darius-ember/15 text-darius-ember"
-                                              : "bg-emerald-500/15 text-emerald-400"
+                                            : captainRolesLocked()
+                                              ? "bg-darius-card-hover text-darius-text-secondary"
+                                              : suggestedRole() === "team2_captain"
+                                                ? "bg-darius-ember/15 text-darius-ember"
+                                                : "bg-emerald-500/15 text-emerald-400"
                                     }`}
                                 >
-                                    {isRoleTaken("team2_captain")
-                                        ? "Taken"
-                                        : suggestedRole() === "team2_captain"
-                                          ? "Previously Selected Role"
-                                          : "Open"}
+                                    {captainRolesLocked()
+                                        ? "Locked"
+                                        : isRoleTaken("team2_captain")
+                                          ? "Taken"
+                                          : suggestedRole() === "team2_captain"
+                                            ? "Previously Selected Role"
+                                            : "Open"}
                                 </span>
                             </div>
                         </div>
@@ -226,6 +260,13 @@ const InlineRolePicker: Component = () => {
                         </div>
                     </button>
                 </div>
+
+                <Show when={captainRolesLocked()}>
+                    <p class="mt-4 text-center text-xs text-darius-text-secondary">
+                        Captain roles are locked because the completed series window has
+                        expired.
+                    </p>
+                </Show>
             </div>
         </div>
     );

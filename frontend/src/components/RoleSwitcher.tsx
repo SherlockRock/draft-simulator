@@ -6,13 +6,18 @@ import toast from "solid-toast";
 
 interface RoleSwitcherProps {
     currentRole: "team1_captain" | "team2_captain" | "spectator";
+    canSwitchRoles?: boolean;
+    disabledMessage?: string;
 }
 
 export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
     const { releaseRole, versusContext } = useVersusContext();
     const [isOpen, setIsOpen] = createSignal(false);
+    const canSwitchRoles = () => props.canSwitchRoles ?? true;
 
     const handleSwitchRole = () => {
+        if (!canSwitchRoles()) return;
+
         const vd = versusContext().versusDraft;
         if (!vd) return;
 
@@ -51,18 +56,31 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
     return (
         <div class="relative">
             <button
-                onClick={() => setIsOpen(!isOpen())}
-                class={`flex w-full items-center justify-between rounded border px-4 py-2 text-sm font-medium shadow-lg transition-colors ${getRoleStyles().pill}`}
+                onClick={() => {
+                    if (canSwitchRoles()) {
+                        setIsOpen(!isOpen());
+                    }
+                }}
+                disabled={!canSwitchRoles()}
+                class={`flex w-full items-center justify-between rounded border px-4 py-2 text-sm font-medium shadow-lg transition-colors ${getRoleStyles().pill} ${
+                    canSwitchRoles() ? "" : "cursor-not-allowed opacity-70"
+                }`}
             >
                 <div class={`h-2 w-2 rounded-full ${getRoleStyles().dot}`} />
                 <span>{getRoleDisplay()}</span>
                 <ChevronDown
                     size={12}
-                    class={`transition-transform ${isOpen() ? "rotate-180" : ""}`}
+                    class={`transition-transform ${canSwitchRoles() && isOpen() ? "rotate-180" : ""}`}
                 />
             </button>
 
-            <Show when={isOpen()}>
+            <Show when={!canSwitchRoles() && props.disabledMessage}>
+                <p class="mt-2 text-center text-xs text-darius-text-secondary">
+                    {props.disabledMessage}
+                </p>
+            </Show>
+
+            <Show when={isOpen() && canSwitchRoles()}>
                 <div class="absolute left-0 top-12 z-50 w-full overflow-hidden rounded-xl border border-darius-crimson/60 bg-darius-card shadow-xl">
                     <div class="border-b border-darius-border/50 bg-darius-card/80 px-4 py-3">
                         <div class="text-xs font-semibold uppercase tracking-wider text-darius-text-secondary">
@@ -89,7 +107,7 @@ export const RoleSwitcher: Component<RoleSwitcherProps> = (props) => {
                 </div>
             </Show>
 
-            <Show when={isOpen()}>
+            <Show when={isOpen() && canSwitchRoles()}>
                 <div class="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
             </Show>
         </div>

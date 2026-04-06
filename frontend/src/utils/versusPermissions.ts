@@ -1,4 +1,5 @@
 import { draft, VersusDraft } from "./schemas";
+import { isWinnerReportingLocked } from "./versusCompletionWindow";
 
 /**
  * Resolves a side ("blue"/"red") to the correct team name for the current game,
@@ -22,6 +23,8 @@ export function canReportWinner(
 ): boolean {
     // Must be completed to report winner
     if (!targetDraft.completed) return false;
+
+    if (isWinnerReportingLocked(targetDraft, versusDraft)) return false;
 
     const drafts = versusDraft.Drafts || [];
     const draftIndex = drafts.findIndex((d) => d.id === targetDraft.id);

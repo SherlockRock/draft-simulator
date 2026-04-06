@@ -1002,6 +1002,13 @@ const VersusDraftView: Component = () => {
         return picks[picksIndex] || null;
     };
 
+    const showReadyIndicators = createMemo(() => {
+        const completed = hasSynced()
+            ? versusState().completed
+            : (draftQuery.data?.completed ?? false);
+        return !draftStarted() && !completed;
+    });
+
     // Register draft callbacks with workflow context for FlowPanel controls
     createEffect(() => {
         const callbacks: DraftCallbacks = {
@@ -1060,7 +1067,7 @@ const VersusDraftView: Component = () => {
                                                 {blueSideTeamName()}
                                             </div>
                                         </div>
-                                        <Show when={!draftStarted()}>
+                                        <Show when={showReadyIndicators()}>
                                             <div
                                                 class={`flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${
                                                     versusState().readyStatus.blue
@@ -1142,7 +1149,7 @@ const VersusDraftView: Component = () => {
                                                 {redSideTeamName()}
                                             </div>
                                         </div>
-                                        <Show when={!draftStarted()}>
+                                        <Show when={showReadyIndicators()}>
                                             <div
                                                 class={`flex items-center gap-2 rounded px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all duration-300 ${
                                                     versusState().readyStatus.red
