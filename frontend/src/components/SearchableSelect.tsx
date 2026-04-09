@@ -152,7 +152,7 @@ export const SearchableSelect = (props: props) => {
                                                 ? `${colors().activeBorder} bg-darius-card-hover ${colors().text}`
                                                 : index() === keyboard.highlightedIndex()
                                                   ? `${colors().activeBorder} bg-darius-card-hover text-darius-text-primary`
-                                                  : `border-transparent bg-darius-bg bg-darius-card-hover text-darius-text-primary ${colors().groupHoverText} ${colors().groupHoverBorder}`
+                                                  : `border-transparent bg-darius-bg text-darius-text-primary group-hover:bg-darius-card-hover ${colors().groupHoverText} ${colors().groupHoverBorder}`
                                         }`}
                                     >
                                         <p class="inline-block w-full overflow-hidden text-ellipsis whitespace-nowrap">

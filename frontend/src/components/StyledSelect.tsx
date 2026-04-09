@@ -34,6 +34,21 @@ export const StyledSelect: Component<StyledSelectProps> = (props) => {
 
     const selectedOption = () => props.options.find((opt) => opt.value === props.value);
 
+    const optionClass = (option: StyledSelectOption, index: number) => {
+        const isSelected = props.value === option.value;
+        const isHighlighted = index === keyboard.highlightedIndex();
+
+        if (isSelected) {
+            return `${colors().activeBorder} ${colors().text} bg-darius-card-hover`;
+        }
+
+        if (isHighlighted) {
+            return `${colors().activeBorder} bg-darius-card-hover text-darius-text-primary`;
+        }
+
+        return `border-transparent bg-darius-card text-darius-text-primary ${colors().hoverText} ${colors().hoverBorderLight}`;
+    };
+
     const updateDropdownPosition = () => {
         if (buttonRef) {
             const rect = buttonRef.getBoundingClientRect();
@@ -119,7 +134,9 @@ export const StyledSelect: Component<StyledSelectProps> = (props) => {
                 onClick={toggleDropdown}
                 onKeyDown={handleKeyDown}
                 disabled={props.disabled}
-                class={`flex h-10 w-full items-center justify-between rounded-md border bg-darius-card px-3 py-2 text-left ${colors().border} ${
+                aria-haspopup="listbox"
+                aria-expanded={dropdownOpen()}
+                class={`flex h-10 w-full items-center justify-between rounded-md border bg-darius-card px-3 py-2 text-left focus:outline-none focus:ring-2 ${colors().border} ${colors().focusBorder} ${colors().ring} ${
                     props.disabled
                         ? "cursor-not-allowed opacity-50"
                         : `cursor-pointer ${colors().hoverBorder}`
@@ -142,6 +159,7 @@ export const StyledSelect: Component<StyledSelectProps> = (props) => {
                 <Portal>
                     <div
                         ref={dropdownRef}
+                        role="listbox"
                         class={`custom-scrollbar fixed z-[100] max-h-60 overflow-auto rounded-md border bg-darius-card shadow-lg ${colors().dropdownBorder}`}
                         style={{
                             top: `${dropdownPosition().top}px`,
@@ -154,17 +172,17 @@ export const StyledSelect: Component<StyledSelectProps> = (props) => {
                                 <button
                                     ref={(el) => keyboard.setItemRef(index(), el)}
                                     type="button"
-                                    class={`w-full truncate px-3 py-2 text-left transition-colors ${
-                                        props.value === option.value
-                                            ? `${colors().text} bg-darius-card-hover`
-                                            : index() === keyboard.highlightedIndex()
-                                              ? "bg-darius-card-hover text-darius-text-primary"
-                                              : `bg-darius-card-hover text-darius-text-primary ${colors().hoverText}`
-                                    }`}
+                                    role="option"
+                                    aria-selected={props.value === option.value}
+                                    class={`w-full truncate border-l-4 px-3 py-2 text-left transition-colors hover:bg-darius-card-hover focus:bg-darius-card-hover focus:outline-none ${optionClass(
+                                        option,
+                                        index()
+                                    )}`}
                                     onClick={() => handleSelect(option.value)}
                                     onMouseEnter={() =>
                                         keyboard.setHighlightedIndex(index())
                                     }
+                                    onFocus={() => keyboard.setHighlightedIndex(index())}
                                 >
                                     {option.label}
                                 </button>
