@@ -49,6 +49,11 @@ export function resetAuthExpired() {
     authIsExpired = false;
 }
 
+export function markAuthExpired() {
+    authIsExpired = true;
+    onAuthExpired?.();
+}
+
 async function refreshAccessToken(): Promise<boolean> {
     try {
         const res = await fetch(`${BASE_URL}/auth/refresh-token`, {
@@ -78,8 +83,7 @@ async function fetchWithRefresh(url: string, options: RequestInit): Promise<Resp
 
     const refreshed = await refreshPromise;
     if (!refreshed) {
-        authIsExpired = true;
-        onAuthExpired?.();
+        markAuthExpired();
         return res;
     }
 

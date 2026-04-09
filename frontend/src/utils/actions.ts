@@ -1,5 +1,13 @@
 import { z } from "zod";
-import { apiGet, apiPost, apiPut, apiDelete, apiPatch } from "./apiClient";
+import {
+    ApiError,
+    apiGet,
+    apiPost,
+    apiPut,
+    apiDelete,
+    apiPatch,
+    markAuthExpired
+} from "./apiClient";
 import { track } from "./analytics";
 import {
     DraftSchema,
@@ -16,6 +24,9 @@ import {
     CanvasListItemSchema,
     ActivityResponseSchema,
     SuccessSchema,
+    UserExportSchema,
+    CanvasJsonImportDataSchema,
+    CanvasJsonImportResponseSchema,
     ImportSeriesResponseSchema,
     UpdateCanvasNameResponseSchema,
     ShareCanvasVerifySchema,
@@ -522,17 +533,34 @@ export const fetchUserVersusSeries = async () => {
 // =============================================================================
 
 export const fetchUserDetails = async () => {
-    const result = await apiGet(
-        "/auth/refresh-token",
-        z.object({ user: UserDetailsSchema })
-    );
-    return result.user;
+    const timeoutMs = 8000;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+        window.setTimeout(() => {
+            reject(new Error(`Auth bootstrap timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+    });
+
+    try {
+        const result = await Promise.race([
+            apiGet("/auth/refresh-token", z.object({ user: UserDetailsSchema })),
+            timeoutPromise
+        ]);
+        return result.user;
+    } catch (error) {
+        // Real auth failure — mark expired so refresh isn't retried
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+            markAuthExpired();
+            return null;
+        }
+        // Network errors and timeouts are transient — let TanStack Query
+        // surface them as isError instead of permanently marking auth expired
+        throw error;
+    }
 };
 
 export const handleRevoke = async () => {
-    // Fire and forget - no response validation needed
-    fetch(`${BASE_URL}/auth/revoke/`, {
-        method: "GET",
+    return fetch(`${BASE_URL}/auth/revoke`, {
+        method: "POST",
         credentials: "include"
     });
 };
@@ -566,19 +594,25 @@ export const handleGoogleLogin = async (code: string, state: string) => {
 };
 
 export const exportUserData = async () => {
-    return apiGet(
-        "/users/me/export",
-        z.object({
-            exportedAt: z.string(),
-            user: z.object({
-                name: z.string(),
-                email: z.string(),
-                picture: z.string(),
-                createdAt: z.string()
-            }),
-            canvases: z.array(z.unknown()),
-            versusSeries: z.array(z.unknown())
-        })
+    return apiGet("/users/me/export", UserExportSchema);
+};
+
+export const importJsonToCanvas = async (data: {
+    canvasId: string;
+    data: z.infer<typeof CanvasJsonImportDataSchema>;
+    options: {
+        dedupeStrategy: "skip" | "rename" | "overwrite";
+        basePositionX?: number;
+        basePositionY?: number;
+    };
+}) => {
+    return apiPost(
+        `/users/me/import/canvas/${data.canvasId}`,
+        {
+            data: data.data,
+            options: data.options
+        },
+        CanvasJsonImportResponseSchema
     );
 };
 

@@ -8,6 +8,15 @@ require("dotenv").config();
 
 const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET;
 const JWT_SECRET = process.env.JWT_SECRET;
+const accessTokenCookieOptions = {
+  httpOnly: true,
+  secure: true,
+  sameSite: "none",
+};
+const refreshTokenCookieOptions = {
+  ...accessTokenCookieOptions,
+  path: "/api/auth",
+};
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -89,18 +98,6 @@ router.post("/google/callback", async (req, res) => {
       },
     );
 
-    res.cookie("accessToken", accessToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "none",
-    });
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "none",
-      path: "/api/auth",
-    });
-
     try {
       const encodedRefreshToken = helpers.encrypt(refreshToken);
       await loggedInUser.createUserToken({
@@ -109,7 +106,11 @@ router.post("/google/callback", async (req, res) => {
       });
     } catch (error) {
       console.error("Error creating new token:", error);
+      return res.status(500).json({ error: "Failed to create session" });
     }
+
+    res.cookie("accessToken", accessToken, accessTokenCookieOptions);
+    res.cookie("refreshToken", refreshToken, refreshTokenCookieOptions);
 
     // Decode and validate state
     let returnTo = "/";
@@ -167,6 +168,7 @@ router.get("/refresh-token", async (req, res) => {
             tokenId: token.id,
             error: decryptError.message,
           });
+          await token.destroy();
         }
       }
       if (!found || new Date(decoded.exp * 1000) < new Date(Date.now())) {
@@ -183,11 +185,7 @@ router.get("/refresh-token", async (req, res) => {
         const newToken = jwt.sign(user, JWT_SECRET, {
           expiresIn: "1d",
         });
-        res.cookie("accessToken", newToken, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "none",
-        });
+        res.cookie("accessToken", newToken, accessTokenCookieOptions);
         res.status(200).json({ user });
       }
     }
@@ -197,30 +195,42 @@ router.get("/refresh-token", async (req, res) => {
   }
 });
 
-// Example on revoking a token
-router.get("/revoke", async (req, res) => {
+router.post("/revoke", async (req, res) => {
   const refreshToken = req.cookies.refreshToken;
-  res.clearCookie("refreshToken", {
-    httpOnly: true,
-    secure: true,
-    sameSite: "none",
-  });
-  res.clearCookie("accessToken", {
-    httpOnly: true,
-    secure: true,
-    sameSite: "none",
-  });
+  res.clearCookie("refreshToken", refreshTokenCookieOptions);
+  res.clearCookie("accessToken", accessTokenCookieOptions);
+
   try {
-    console.log("Revoking token:", refreshToken);
-    const reqDecoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET);
+    if (!refreshToken) {
+      return res.status(200).json({ message: "No refresh token to revoke" });
+    }
+
+    console.log("Revoking refresh token for user");
+    let userId = null;
+    try {
+      const reqDecoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET, {
+        ignoreExpiration: true,
+      });
+      userId = reqDecoded.user_id ?? null;
+    } catch {
+      return res.status(200).json({ message: "Tokens revoked successfully" });
+    }
+
+    if (!userId) {
+      return res.status(200).json({ message: "Tokens revoked successfully" });
+    }
+
     const loggedInUser = await User.findOne({
-      where: { id: reqDecoded.user_id },
+      where: { id: userId },
     });
+
     if (loggedInUser) {
       const userTokens = await loggedInUser.getUserTokens();
+
       for (const token of userTokens) {
         try {
           const dbTokenDecrypted = helpers.decrypt(token.refresh);
+
           if (refreshToken === dbTokenDecrypted) {
             await token.destroy();
             break;
@@ -231,13 +241,15 @@ router.get("/revoke", async (req, res) => {
             tokenId: token.id,
             error: decryptError.message,
           });
+          await token.destroy();
         }
       }
     }
+
     res.status(200).json({ message: "Tokens revoked successfully" });
   } catch (e) {
-    console.log("Error decoding JWT:", e);
-    res.status(403).json({ error: "User not found" });
+    console.log("Error revoking refresh token:", e);
+    res.status(200).json({ message: "Tokens revoked successfully" });
   }
 });
 

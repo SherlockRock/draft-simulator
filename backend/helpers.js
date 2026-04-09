@@ -49,7 +49,8 @@ const draftHasSharedWithUser = async (draft, user) => {
 async function generateUniqueCanvasDraftName(
   baseName,
   canvasId,
-  excludeDraftId = null
+  excludeDraftId = null,
+  transaction = null
 ) {
   const { CanvasDraft } = require("./models/Canvas");
   const Draft = require("./models/Draft");
@@ -70,6 +71,7 @@ async function generateUniqueCanvasDraftName(
         attributes: ["id", "name", "type"],
       },
     ],
+    transaction,
   });
 
   // Build set of existing names (excluding the draft being renamed)
@@ -118,12 +120,13 @@ async function generateUniqueCanvasDraftName(
  * @param {string} canvasId - The canvas ID to check uniqueness within
  * @returns {Promise<string>} - A unique name for the group
  */
-async function generateUniqueCanvasGroupName(baseName, canvasId) {
+async function generateUniqueCanvasGroupName(baseName, canvasId, transaction = null) {
   const { CanvasGroup } = require("./models/Canvas");
 
   const groups = await CanvasGroup.findAll({
     where: { canvas_id: canvasId },
     attributes: ["name"],
+    transaction,
   });
 
   const existingNames = new Set(groups.map((g) => g.name));

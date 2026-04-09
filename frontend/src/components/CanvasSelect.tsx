@@ -84,11 +84,7 @@ export const CanvasSelect = (props: props) => {
     });
 
     createEffect(() => {
-        if (props.pick !== "") {
-            setSelectText(champions[Number(props.pick)].name);
-        } else {
-            setSelectText("");
-        }
+        setSelectText(selectedChampion()?.name || "");
     });
 
     createEffect(() => {
@@ -205,9 +201,8 @@ export const CanvasSelect = (props: props) => {
         inputRef?.focus();
     };
 
-    const selectedChampion = () => {
-        return props.pick !== "" ? champions[Number(props.pick)] : null;
-    };
+    const selectedChampion = () =>
+        props.pick !== "" ? champions[Number(props.pick)] ?? null : null;
 
     const restingInputValue = () => selectedChampion()?.name || "";
     const placeholderLabel = () => props.indexToShorthand[props.index()];

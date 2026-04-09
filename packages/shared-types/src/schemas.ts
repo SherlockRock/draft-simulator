@@ -8,6 +8,8 @@ export const SuccessSchema = z.object({
   success: z.boolean(),
 });
 
+export const DedupeStrategySchema = z.enum(["skip", "rename", "overwrite"]);
+
 export const ViewportSchema = z.object({
   x: z.number(),
   y: z.number(),
@@ -155,6 +157,159 @@ export const CanvasUserSchema = z.object({
   permissions: z.enum(["view", "edit", "admin"]),
   lastAccessedAt: z.string(),
   isOwner: z.boolean(),
+});
+
+// =============================================================================
+// User Export / Import Schemas
+// =============================================================================
+
+export const ExportedUserSchema = z.object({
+  name: z.string().optional(),
+  email: z.string().optional(),
+  picture: z.string().optional(),
+  display_name: z.string().nullable().optional(),
+  createdAt: z.string().optional(),
+});
+
+export const ExportedCanvasDraftSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  picks: z.array(z.string()),
+  positionX: z.number(),
+  positionY: z.number(),
+});
+
+export const ExportedCanvasGroupSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.enum(["series", "custom"]),
+  positionX: z.number(),
+  positionY: z.number(),
+});
+
+export const ExportedCanvasSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  icon: z.string().optional(),
+  createdAt: z.string().optional(),
+  drafts: z.array(ExportedCanvasDraftSchema).default([]),
+  groups: z.array(ExportedCanvasGroupSchema).default([]),
+});
+
+export const ExportedVersusSeriesDraftSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  picks: z.array(z.string()),
+  gameNumber: z.number().nullable().optional(),
+  winner: z.enum(["blue", "red"]).nullable().optional(),
+});
+
+export const ExportedVersusSeriesSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  seriesLength: z.number(),
+  draftType: z.string().optional(),
+  blueTeamName: z.string(),
+  redTeamName: z.string(),
+  status: z.string().optional(),
+  createdAt: z.string().optional(),
+  drafts: z.array(ExportedVersusSeriesDraftSchema).default([]),
+});
+
+export const UserExportSchema = z.object({
+  exportedAt: z.string(),
+  user: ExportedUserSchema.optional(),
+  canvases: z.array(ExportedCanvasSchema).default([]),
+  versusSeries: z.array(ExportedVersusSeriesSchema).default([]),
+});
+
+export const CanvasImportModeSchema = z.enum(["new_canvases", "target_canvas"]);
+
+export const ImportUserDataRequestSchema = z.object({
+  exportData: UserExportSchema,
+  options: z.object({
+    canvasIds: z.array(z.string()).default([]),
+    versusSeriesIds: z.array(z.string()).default([]),
+    dedupeStrategy: DedupeStrategySchema,
+    canvasImportMode: CanvasImportModeSchema,
+    targetCanvasId: z.string().nullable().optional(),
+  }),
+});
+
+export const ImportUserDataResponseSchema = z.object({
+  success: z.boolean(),
+  summary: z.object({
+    canvasesCreated: z.number(),
+    canvasesUpdated: z.number(),
+    draftsCreated: z.number(),
+    draftsUpdated: z.number(),
+    draftsSkipped: z.number(),
+    seriesCreated: z.number(),
+    seriesUpdated: z.number(),
+    seriesSkipped: z.number(),
+  }),
+  warnings: z.array(z.string()),
+});
+
+export const ExternalCanvasImportDraftSchema = z.object({
+  name: z.string().min(1),
+  picks: z.array(z.string()).length(20),
+  positionX: z.number().optional(),
+  positionY: z.number().optional(),
+  firstPick: z.enum(["blue", "red"]).optional(),
+  blueSideTeam: z.union([z.literal(1), z.literal(2)]).optional(),
+});
+
+export const ExternalVersusImportDraftSchema = z.object({
+  name: z.string().min(1).optional(),
+  picks: z.array(z.string()).length(20),
+  gameNumber: z.number().int().positive().optional(),
+  winner: z.enum(["blue", "red"]).nullable().optional(),
+  firstPick: z.enum(["blue", "red"]).optional(),
+  blueSideTeam: z.union([z.literal(1), z.literal(2)]).optional(),
+});
+
+export const ExternalVersusSeriesImportSchema = z.object({
+  name: z.string().min(1).optional(),
+  seriesLength: z.union([z.literal(1), z.literal(3), z.literal(5), z.literal(7)]),
+  draftType: DraftModeSchema.optional(),
+  blueTeamName: z.string().min(1).optional(),
+  redTeamName: z.string().min(1).optional(),
+  competitive: z.boolean().optional(),
+  disabledChampions: z.array(z.string()).optional(),
+  positionX: z.number().optional(),
+  positionY: z.number().optional(),
+  drafts: z.array(ExternalVersusImportDraftSchema).min(1),
+});
+
+export const CanvasJsonImportDataSchema = z.object({
+  drafts: z.array(ExternalCanvasImportDraftSchema).default([]),
+  versusSeries: z.array(ExternalVersusSeriesImportSchema).default([]),
+}).refine((value) => value.drafts.length > 0 || value.versusSeries.length > 0, {
+  message: "Provide at least one draft or versus series to import",
+});
+
+export const CanvasJsonImportRequestSchema = z.object({
+  data: CanvasJsonImportDataSchema,
+  options: z.object({
+    dedupeStrategy: DedupeStrategySchema,
+    basePositionX: z.number().optional(),
+    basePositionY: z.number().optional(),
+  }),
+});
+
+export const CanvasJsonImportResponseSchema = z.object({
+  success: z.boolean(),
+  summary: z.object({
+    draftsCreated: z.number(),
+    draftsUpdated: z.number(),
+    draftsSkipped: z.number(),
+    seriesCreated: z.number(),
+    seriesUpdated: z.number(),
+    seriesSkipped: z.number(),
+  }),
+  warnings: z.array(z.string()),
 });
 
 // =============================================================================

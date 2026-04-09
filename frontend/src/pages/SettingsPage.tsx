@@ -194,7 +194,7 @@ const SettingsPage: Component = () => {
                                     <button
                                         onClick={handleSaveDisplayName}
                                         disabled={isSaving()}
-                                        class="rounded-md bg-darius-ember bg-darius-ember px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                        class="rounded-md bg-darius-ember px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                         {isSaving() ? "Saving..." : "Save"}
                                     </button>
@@ -283,13 +283,15 @@ const SettingsPage: Component = () => {
                                 Download a copy of all your data including canvases,
                                 drafts, and versus series.
                             </p>
-                            <button
-                                onClick={handleExport}
-                                disabled={isExporting()}
-                                class="rounded-md bg-darius-ember bg-darius-ember px-4 py-2 font-medium text-darius-text-primary transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                {isExporting() ? "Exporting..." : "Export Data"}
-                            </button>
+                            <div class="flex flex-wrap gap-3">
+                                <button
+                                    onClick={handleExport}
+                                    disabled={isExporting()}
+                                    class="rounded-md bg-darius-ember px-4 py-2 font-medium text-darius-text-primary transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {isExporting() ? "Exporting..." : "Export Data"}
+                                </button>
+                            </div>
                         </div>
 
                         {/* Delete Account */}

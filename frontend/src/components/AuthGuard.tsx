@@ -19,16 +19,18 @@ export const AuthGuard = (props: AuthGuardProps) => {
     // so early-returning before user() would leave the effect with no dependencies.
     createEffect(() => {
         if (!props.requireAuth) return;
-        const userData = user();
-        if (user.isLoading) return;
-        if (!userData || user.authExpired) {
+        if (user.authExpired) {
             navigate(props.fallbackPath ?? "/", { replace: true });
+            return;
         }
+        if (user()) return;
+        if (user.isLoading) return;
+        navigate(props.fallbackPath ?? "/", { replace: true });
     });
 
     return (
         <Show
-            when={!props.requireAuth || !user.isLoading}
+            when={!props.requireAuth || user() != null || !user.isLoading}
             fallback={
                 <div class="flex h-full w-full items-center justify-center bg-darius-card-hover">
                     <div class="align-center flex flex-col items-center">
