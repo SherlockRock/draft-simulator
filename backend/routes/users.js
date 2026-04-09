@@ -3,7 +3,13 @@ const router = express.Router();
 const championData = require("../../frontend/src/data/champions.json");
 const User = require("../models/User");
 const { protect } = require("../middleware/auth");
-const { Canvas, UserCanvas, CanvasDraft, CanvasGroup, CanvasConnection } = require("../models/Canvas");
+const {
+  Canvas,
+  UserCanvas,
+  CanvasDraft,
+  CanvasGroup,
+  CanvasConnection,
+} = require("../models/Canvas");
 const Draft = require("../models/Draft");
 const VersusDraft = require("../models/VersusDraft");
 const VersusParticipant = require("../models/VersusParticipant");
@@ -15,22 +21,24 @@ const {
   generateUniqueCanvasGroupName,
 } = require("../helpers");
 
-const VALID_CHAMPION_IDS = new Set(championData.champions.map((champion) => champion.id));
-const CHAMPION_ID_TO_INDEX = new Map(
-  championData.champions.map((champion, index) => [champion.id, String(index)]),
+const VALID_CHAMPION_IDS = new Set(
+  championData.champions.map((champion) => champion.id),
 );
 let importUserDataRequestSchemaPromise;
 let canvasJsonImportRequestSchemaPromise;
 
 async function getImportUserDataRequestSchema() {
-  importUserDataRequestSchemaPromise ??= import("@draft-sim/shared-types")
-    .then((module) => module.ImportUserDataRequestSchema);
+  importUserDataRequestSchemaPromise ??= import("@draft-sim/shared-types").then(
+    (module) => module.ImportUserDataRequestSchema,
+  );
   return importUserDataRequestSchemaPromise;
 }
 
 async function getCanvasJsonImportRequestSchema() {
-  canvasJsonImportRequestSchemaPromise ??= import("@draft-sim/shared-types")
-    .then((module) => module.CanvasJsonImportRequestSchema);
+  canvasJsonImportRequestSchemaPromise ??=
+    import("@draft-sim/shared-types").then(
+      (module) => module.CanvasJsonImportRequestSchema,
+    );
   return canvasJsonImportRequestSchemaPromise;
 }
 
@@ -66,25 +74,6 @@ function validateChampionIds(ids, label) {
   }
 
   return { success: true };
-}
-
-function normalizeChampionReference(championRef) {
-  if (championRef === "") return "";
-  return CHAMPION_ID_TO_INDEX.get(championRef) ?? null;
-}
-
-function normalizeChampionRefs(championRefs, label) {
-  const normalized = [];
-
-  for (const championRef of championRefs) {
-    const value = normalizeChampionReference(championRef);
-    if (value === null) {
-      throw new Error(`Invalid champion ID "${championRef}" in ${label}`);
-    }
-    normalized.push(value);
-  }
-
-  return normalized;
 }
 
 async function validateImportPayload(body) {
@@ -128,7 +117,8 @@ async function validateImportPayload(body) {
 }
 
 async function validateCanvasJsonImportPayload(body) {
-  const CanvasJsonImportRequestSchema = await getCanvasJsonImportRequestSchema();
+  const CanvasJsonImportRequestSchema =
+    await getCanvasJsonImportRequestSchema();
   const parsed = CanvasJsonImportRequestSchema.safeParse(body);
 
   if (!parsed.success) {
@@ -366,17 +356,26 @@ router.patch("/me", protect, async (req, res) => {
 
     if (displayName !== null) {
       if (typeof displayName !== "string") {
-        return res.status(400).json({ error: "Display name must be a string or null" });
+        return res
+          .status(400)
+          .json({ error: "Display name must be a string or null" });
       }
 
       const trimmed = displayName.trim();
 
       if (trimmed.length < 3 || trimmed.length > 16) {
-        return res.status(400).json({ error: "Display name must be 3-16 characters" });
+        return res
+          .status(400)
+          .json({ error: "Display name must be 3-16 characters" });
       }
 
       if (!/^[a-zA-Z0-9 _]{3,16}$/.test(trimmed)) {
-        return res.status(400).json({ error: "Display name can only contain letters, numbers, spaces, and underscores" });
+        return res
+          .status(400)
+          .json({
+            error:
+              "Display name can only contain letters, numbers, spaces, and underscores",
+          });
       }
 
       req.user.display_name = trimmed;
@@ -418,13 +417,15 @@ router.get("/me/export", protect, async (req, res) => {
     // Get canvases where user has admin permissions (owner)
     const userCanvases = await UserCanvas.findAll({
       where: { user_id: userId, permissions: "admin" },
-      include: [{
-        model: Canvas,
-        include: [
-          { model: CanvasDraft, include: [{ model: Draft }] },
-          { model: CanvasGroup },
-        ],
-      }],
+      include: [
+        {
+          model: Canvas,
+          include: [
+            { model: CanvasDraft, include: [{ model: Draft }] },
+            { model: CanvasGroup },
+          ],
+        },
+      ],
     });
 
     const canvases = userCanvases.map((uc) => ({
@@ -452,10 +453,7 @@ router.get("/me/export", protect, async (req, res) => {
     // Get versus series owned by user
     const versusSeries = await VersusDraft.findAll({
       where: { owner_id: userId },
-      include: [
-        { model: Draft, as: "Drafts" },
-        { model: VersusParticipant },
-      ],
+      include: [{ model: Draft, as: "Drafts" }, { model: VersusParticipant }],
     });
 
     const series = versusSeries.map((vs) => ({
@@ -515,12 +513,22 @@ router.post("/me/import", protect, async (req, res) => {
 
     if (canvasIds.length === 0 && versusSeriesIds.length === 0) {
       await transaction.rollback();
-      return res.status(400).json({ error: "Select at least one canvas or series to import" });
+      return res
+        .status(400)
+        .json({ error: "Select at least one canvas or series to import" });
     }
 
-    if (canvasImportMode === "target_canvas" && canvasIds.length > 0 && !targetCanvasId) {
+    if (
+      canvasImportMode === "target_canvas" &&
+      canvasIds.length > 0 &&
+      !targetCanvasId
+    ) {
       await transaction.rollback();
-      return res.status(400).json({ error: "targetCanvasId is required for target canvas imports" });
+      return res
+        .status(400)
+        .json({
+          error: "targetCanvasId is required for target canvas imports",
+        });
     }
 
     let targetCanvas = null;
@@ -533,11 +541,13 @@ router.post("/me/import", protect, async (req, res) => {
 
       if (
         !userCanvas ||
-        (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
+        (userCanvas.permissions !== "edit" &&
+          userCanvas.permissions !== "admin")
       ) {
         await transaction.rollback();
         return res.status(403).json({
-          error: "Forbidden: You don't have permission to import into this canvas",
+          error:
+            "Forbidden: You don't have permission to import into this canvas",
         });
       }
 
@@ -580,7 +590,11 @@ router.post("/me/import", protect, async (req, res) => {
         );
 
         if (!existingCanvas) {
-          destinationCanvas = await createOwnedCanvas(req.user.id, importedCanvas, transaction);
+          destinationCanvas = await createOwnedCanvas(
+            req.user.id,
+            importedCanvas,
+            transaction,
+          );
           summary.canvasesCreated += 1;
         } else if (dedupeStrategy === "skip") {
           summary.draftsSkipped += importedCanvas.drafts.length;
@@ -589,7 +603,9 @@ router.post("/me/import", protect, async (req, res) => {
           let candidateName = importedCanvas.name || "Imported Canvas";
           let counter = 1;
 
-          while (await findOwnedCanvasByName(req.user.id, candidateName, transaction)) {
+          while (
+            await findOwnedCanvasByName(req.user.id, candidateName, transaction)
+          ) {
             candidateName = `${importedCanvas.name} ${counter}`;
             counter += 1;
           }
@@ -865,7 +881,8 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
     ) {
       await transaction.rollback();
       return res.status(403).json({
-        error: "Forbidden: You don't have permission to import into this canvas",
+        error:
+          "Forbidden: You don't have permission to import into this canvas",
       });
     }
 
@@ -892,16 +909,6 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
 
     for (let i = 0; i < drafts.length; i += 1) {
       const importedDraft = drafts[i];
-      let normalizedPicks;
-      try {
-        normalizedPicks = normalizeChampionRefs(
-          importedDraft.picks,
-          `draft "${importedDraft.name}"`,
-        );
-      } catch (e) {
-        await transaction.rollback();
-        return res.status(400).json({ error: e.message });
-      }
       const existingCanvasDraft = await findCanvasDraftByName(
         canvasId,
         importedDraft.name,
@@ -916,7 +923,7 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
             owner_id: req.user.id,
             name: importedDraft.name,
             public: false,
-            picks: normalizedPicks,
+            picks: importedDraft.picks,
             type: "canvas",
             firstPick: importedDraft.firstPick || "blue",
             blueSideTeam: importedDraft.blueSideTeam || 1,
@@ -955,7 +962,7 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
               transaction,
             ),
             public: false,
-            picks: normalizedPicks,
+            picks: importedDraft.picks,
             type: "canvas",
             firstPick: importedDraft.firstPick || "blue",
             blueSideTeam: importedDraft.blueSideTeam || 1,
@@ -980,10 +987,12 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
 
       await existingCanvasDraft.Draft.update(
         {
-          picks: normalizedPicks,
-          firstPick: importedDraft.firstPick || existingCanvasDraft.Draft.firstPick,
+          picks: importedDraft.picks,
+          firstPick:
+            importedDraft.firstPick || existingCanvasDraft.Draft.firstPick,
           blueSideTeam:
-            importedDraft.blueSideTeam || existingCanvasDraft.Draft.blueSideTeam,
+            importedDraft.blueSideTeam ||
+            existingCanvasDraft.Draft.blueSideTeam,
         },
         { transaction },
       );
@@ -994,16 +1003,7 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
     for (let i = 0; i < versusSeries.length; i += 1) {
       const importedSeries = versusSeries[i];
       const baseSeriesName = getImportedSeriesName(importedSeries);
-      let normalizedDisabledChampions;
-      try {
-        normalizedDisabledChampions = normalizeChampionRefs(
-          importedSeries.disabledChampions || [],
-          `disabledChampions for series "${baseSeriesName}"`,
-        );
-      } catch (e) {
-        await transaction.rollback();
-        return res.status(400).json({ error: e.message });
-      }
+      const disabledChampions = importedSeries.disabledChampions || [];
       const existingSeries = await findOwnedVersusSeriesByName(
         req.user.id,
         baseSeriesName,
@@ -1023,7 +1023,11 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
         if (existingSeries || dedupeStrategy === "rename") {
           let counter = 1;
           while (
-            await findOwnedVersusSeriesByName(req.user.id, seriesName, transaction)
+            await findOwnedVersusSeriesByName(
+              req.user.id,
+              seriesName,
+              transaction,
+            )
           ) {
             seriesName = `${baseSeriesName} ${counter}`;
             counter += 1;
@@ -1039,7 +1043,7 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
             blueTeamName: importedSeries.blueTeamName || "Team 1",
             redTeamName: importedSeries.redTeamName || "Team 2",
             competitive: importedSeries.competitive || false,
-            disabledChampions: normalizedDisabledChampions,
+            disabledChampions,
           },
           { transaction },
         );
@@ -1052,7 +1056,7 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
             blueTeamName: importedSeries.blueTeamName || "Team 1",
             redTeamName: importedSeries.redTeamName || "Team 2",
             competitive: importedSeries.competitive || false,
-            disabledChampions: normalizedDisabledChampions,
+            disabledChampions,
           },
           { transaction },
         );
@@ -1060,23 +1064,19 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
       }
 
       const existingDraftsByIndex = new Map(
-        ((series.Drafts || [])).map((draft) => [draft.seriesIndex ?? 0, draft]),
+        (series.Drafts || []).map((draft) => [draft.seriesIndex ?? 0, draft]),
       );
 
-      for (let draftIndex = 0; draftIndex < importedSeries.drafts.length; draftIndex += 1) {
+      for (
+        let draftIndex = 0;
+        draftIndex < importedSeries.drafts.length;
+        draftIndex += 1
+      ) {
         const importedDraft = importedSeries.drafts[draftIndex];
-        let normalizedPicks;
-        try {
-          normalizedPicks = normalizeChampionRefs(
-            importedDraft.picks,
-            `versus draft "${importedDraft.name || `Game ${draftIndex + 1}`}"`,
-          );
-        } catch (e) {
-          await transaction.rollback();
-          return res.status(400).json({ error: e.message });
-        }
         const seriesIndex =
-          importedDraft.gameNumber != null ? importedDraft.gameNumber - 1 : draftIndex;
+          importedDraft.gameNumber != null
+            ? importedDraft.gameNumber - 1
+            : draftIndex;
         const existingDraft = existingDraftsByIndex.get(seriesIndex);
         const completed = importedDraft.winner != null;
         const completedAt = completed ? new Date() : null;
@@ -1087,7 +1087,7 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
               owner_id: req.user.id,
               name: importedDraft.name || `Game ${seriesIndex + 1}`,
               public: false,
-              picks: normalizedPicks,
+              picks: importedDraft.picks,
               type: "versus",
               versus_draft_id: series.id,
               seriesIndex,
@@ -1105,12 +1105,13 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
         await existingDraft.update(
           {
             name: importedDraft.name || existingDraft.name,
-            picks: normalizedPicks,
+            picks: importedDraft.picks,
             winner: importedDraft.winner ?? null,
             completed,
             completedAt,
             firstPick: importedDraft.firstPick || existingDraft.firstPick,
-            blueSideTeam: importedDraft.blueSideTeam || existingDraft.blueSideTeam,
+            blueSideTeam:
+              importedDraft.blueSideTeam || existingDraft.blueSideTeam,
           },
           { transaction },
         );
@@ -1139,7 +1140,8 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
       });
 
       const groupPositionX = importedSeries.positionX ?? basePositionX;
-      const groupPositionY = importedSeries.positionY ?? basePositionY + i * 120;
+      const groupPositionY =
+        importedSeries.positionY ?? basePositionY + i * 120;
       const metadata = {
         blueTeamName: series.blueTeamName,
         redTeamName: series.redTeamName,
@@ -1183,7 +1185,11 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
         existingGroup = await CanvasGroup.create(
           {
             canvas_id: canvasId,
-            name: await generateUniqueCanvasGroupName(series.name, canvasId, transaction),
+            name: await generateUniqueCanvasGroupName(
+              series.name,
+              canvasId,
+              transaction,
+            ),
             type: "series",
             positionX: groupPositionX,
             positionY: groupPositionY,
@@ -1194,7 +1200,11 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
         );
       }
 
-      for (let draftIndex = 0; draftIndex < syncedDrafts.length; draftIndex += 1) {
+      for (
+        let draftIndex = 0;
+        draftIndex < syncedDrafts.length;
+        draftIndex += 1
+      ) {
         const draft = syncedDrafts[draftIndex];
         await CanvasDraft.create(
           {
@@ -1234,7 +1244,9 @@ router.delete("/me", protect, async (req, res) => {
 
     // Validate email confirmation
     if (!confirmEmail || confirmEmail !== req.user.email) {
-      return res.status(400).json({ error: "Email confirmation does not match" });
+      return res
+        .status(400)
+        .json({ error: "Email confirmation does not match" });
     }
 
     // 1. Get canvases where user is admin (owner)
@@ -1256,7 +1268,7 @@ router.delete("/me", protect, async (req, res) => {
         });
 
         const isSharedElsewhere = otherCanvasLinks.some(
-          (link) => !ownedCanvasIds.includes(link.canvas_id)
+          (link) => !ownedCanvasIds.includes(link.canvas_id),
         );
 
         if (!isSharedElsewhere) {
@@ -1278,7 +1290,7 @@ router.delete("/me", protect, async (req, res) => {
     // 3. Anonymize versus series (set owner_id to null)
     await VersusDraft.update(
       { owner_id: null },
-      { where: { owner_id: userId } }
+      { where: { owner_id: userId } },
     );
 
     // 4. Delete user tokens
@@ -1315,7 +1327,9 @@ router.patch("/me/preferences", protect, async (req, res) => {
     const { keyboard_controls } = req.body;
 
     if (typeof keyboard_controls !== "boolean") {
-      return res.status(400).json({ error: "keyboard_controls must be a boolean" });
+      return res
+        .status(400)
+        .json({ error: "keyboard_controls must be a boolean" });
     }
 
     await req.user.update({ keyboard_controls });

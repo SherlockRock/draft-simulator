@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { X } from "lucide-solid";
-import { champions, getSplashUrl } from "../utils/constants";
+import { champions, getSplashUrl, resolveChampion } from "../utils/constants";
 import BlankSquare from "/src/assets/BlankSquare.webp";
 import { CardLayout, getPickOrderForLayout } from "../utils/canvasCardLayout";
 
@@ -69,15 +69,15 @@ export const CanvasSelect = (props: props) => {
         const names: string[] = [];
         for (const value of props.draft.picks) {
             if (value === "") continue;
-            const champion = champions[Number(value)];
+            const champion = resolveChampion(value);
             if (champion) names.push(champion.name);
         }
         for (const id of props.restrictedChampions?.() ?? []) {
-            const champion = champions[Number(id)];
+            const champion = resolveChampion(id);
             if (champion) names.push(champion.name);
         }
         for (const id of props.disabledChampions ?? []) {
-            const champion = champions[Number(id)];
+            const champion = resolveChampion(id);
             if (champion) names.push(champion.name);
         }
         return [...new Set(names)];
@@ -202,14 +202,12 @@ export const CanvasSelect = (props: props) => {
     };
 
     const selectedChampion = () =>
-        props.pick !== "" ? champions[Number(props.pick)] ?? null : null;
+        props.pick !== "" ? (resolveChampion(props.pick) ?? null) : null;
 
     const restingInputValue = () => selectedChampion()?.name || "";
     const placeholderLabel = () => props.indexToShorthand[props.index()];
     const wideArtInputPlaceholder = () =>
-        isActiveSelection()
-            ? `Type to filter ${placeholderLabel()}`
-            : placeholderLabel();
+        isActiveSelection() ? `Type to filter ${placeholderLabel()}` : placeholderLabel();
     const isFilteringOptions = () =>
         selectText().trim().toLowerCase() !== restingInputValue().trim().toLowerCase();
 
@@ -724,7 +722,8 @@ export const CanvasSelect = (props: props) => {
                                             const isHighlighted = () =>
                                                 i() === dropdownIndex();
                                             const isSelectedOption = () =>
-                                                selectedChampion()?.name === champion.name;
+                                                selectedChampion()?.name ===
+                                                champion.name;
                                             return (
                                                 <Show
                                                     when={isWideArt()}
@@ -832,7 +831,7 @@ export const CanvasSelect = (props: props) => {
                                                                     props.side === "team2"
                                                             }}
                                                         />
-                                                        <div class="via-darius-bg/45 absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-darius-bg/88 to-transparent" />
+                                                        <div class="from-darius-bg/88 absolute inset-y-0 left-0 w-24 bg-gradient-to-r via-darius-bg/45 to-transparent" />
                                                         <div
                                                             class="absolute inset-0"
                                                             classList={{
@@ -866,8 +865,7 @@ export const CanvasSelect = (props: props) => {
                                                             class="relative z-[1] flex h-full w-full items-end px-3 py-2.5"
                                                             classList={{
                                                                 "flex-row-reverse":
-                                                                    props.side ===
-                                                                    "team2",
+                                                                    props.side === "team2"
                                                             }}
                                                         >
                                                             <div

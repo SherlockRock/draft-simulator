@@ -2,7 +2,7 @@ import { Component, For, Show } from "solid-js";
 import { FilterBar } from "./FilterBar";
 import { RoleFilter } from "./RoleFilter";
 import { useMultiFilterableItems } from "../hooks/useFilterableItems";
-import { champions, championCategories } from "../utils/constants";
+import { champions, championCategories, resolveChampionId } from "../utils/constants";
 import { X } from "lucide-solid";
 
 interface ChampionToggleGridProps {
@@ -25,7 +25,8 @@ export const ChampionToggleGrid: Component<ChampionToggleGridProps> = (props) =>
         categoryMap: championCategories
     });
 
-    const isSelected = (champId: string) => props.selectedChampions().includes(champId);
+    const isSelected = (champId: string) =>
+        props.selectedChampions().map(resolveChampionId).includes(champId);
 
     return (
         <div class="flex flex-col gap-3">
@@ -48,8 +49,8 @@ export const ChampionToggleGrid: Component<ChampionToggleGridProps> = (props) =>
             <div class="custom-scrollbar max-h-[320px] overflow-y-auto pr-1">
                 <div class="grid grid-cols-6 gap-1.5">
                     <For each={filteredChampions()}>
-                        {({ item: champ, originalIndex }) => {
-                            const champId = String(originalIndex);
+                        {({ item: champ }) => {
+                            const champId = champ.id;
                             const selected = () => isSelected(champId);
 
                             return (

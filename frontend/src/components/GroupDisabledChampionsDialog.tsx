@@ -4,6 +4,7 @@ import type { DraftMode } from "@draft-sim/shared-types";
 import { Dialog } from "./Dialog";
 import { ChampionToggleGrid } from "./ChampionToggleGrid";
 import { StyledSelect } from "./StyledSelect";
+import { resolveChampionId } from "../utils/constants";
 
 interface GroupSettingsDialogProps {
     isOpen: () => boolean;
@@ -33,7 +34,7 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
     createEffect(() => {
         if (props.isOpen()) {
             setName(props.initialName);
-            setSelected([...props.initialChampions]);
+            setSelected(props.initialChampions.map(resolveChampionId));
             setDraftMode(props.initialDraftMode);
             setDisabledExpanded(false);
         }

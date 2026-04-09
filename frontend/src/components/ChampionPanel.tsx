@@ -11,7 +11,9 @@ import {
     gameBgColors,
     overlayTeamColor,
     overlayBanColor,
-    overlayPickColor
+    overlayPickColor,
+    resolveChampion,
+    resolveChampionId
 } from "../utils/constants";
 import type { draft } from "../utils/schemas";
 
@@ -163,16 +165,20 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
     const currentGameNumber = () => (props.draft()?.seriesIndex ?? 0) + 1;
 
     // Memoize picks as a Set to avoid per-button .includes() on array
-    const pickedSet = createMemo(() => new Set(props.draft()?.picks ?? []));
+    const pickedSet = createMemo(
+        () => new Set((props.draft()?.picks ?? []).map(resolveChampionId))
+    );
 
     // Champions not in restricted or disabled list (for Available section)
     // Current game picks stay visible but are rendered as disabled
     const availableChampions = createMemo(() => {
-        const restricted = new Set(props.restrictedChampions());
-        const disabled = new Set(props.disabledChampions?.() ?? []);
+        const restricted = new Set(props.restrictedChampions().map(resolveChampionId));
+        const disabled = new Set(
+            (props.disabledChampions?.() ?? []).map(resolveChampionId)
+        );
 
         return champions
-            .map((champ, index) => ({ champ, index: String(index) }))
+            .map((champ) => ({ champ, index: champ.id }))
             .filter(({ index }) => !restricted.has(index) && !disabled.has(index));
     });
 
@@ -224,7 +230,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                 <div class="grid flex-1 grid-cols-5 gap-1 px-2">
                     <For each={allChampions()}>
                         {({ id, pickIndex }) => {
-                            const champ = champions[parseInt(id)];
+                            const champ = resolveChampion(id);
                             if (!champ) return null;
 
                             const parts = getDraftPositionParts(pickIndex);
@@ -326,8 +332,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                     }
                                                 >
                                                     {(id) => {
-                                                        const champ =
-                                                            champions[parseInt(id)];
+                                                        const champ = resolveChampion(id);
                                                         if (!champ) return null;
                                                         return (
                                                             <div
@@ -382,7 +387,9 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                     const currentPickIndex = () => {
                                                         const picks =
                                                             props.draft()?.picks ?? [];
-                                                        return picks.indexOf(index);
+                                                        return picks
+                                                            .map(resolveChampionId)
+                                                            .indexOf(index);
                                                     };
 
                                                     return (
@@ -485,8 +492,8 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                             <Show when={isFiltering()}>
                                 <div class="grid grid-cols-5 content-start gap-2 p-4">
                                     <For each={filteredChampions()}>
-                                        {({ item: champ, originalIndex }) => {
-                                            const champId = () => String(originalIndex);
+                                        {({ item: champ }) => {
+                                            const champId = () => champ.id;
                                             const isPicked = () =>
                                                 pickedSet().has(champId());
                                             const isRestricted = () =>
@@ -494,9 +501,9 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                     .restrictedChampionMap()
                                                     .has(champId());
                                             const isDisabled = () =>
-                                                (
-                                                    props.disabledChampions?.() ?? []
-                                                ).includes(champId());
+                                                (props.disabledChampions?.() ?? [])
+                                                    .map(resolveChampionId)
+                                                    .includes(champId());
                                             const isPendingSelection = () =>
                                                 props.getCurrentPendingChampion() ===
                                                     champId() && props.isMyTurn();
@@ -512,7 +519,9 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                     .get(champId());
                                             const currentPickIndex = () => {
                                                 const picks = props.draft()?.picks ?? [];
-                                                return picks.indexOf(champId());
+                                                return picks
+                                                    .map(resolveChampionId)
+                                                    .indexOf(champId());
                                             };
 
                                             return (

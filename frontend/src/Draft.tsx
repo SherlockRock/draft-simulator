@@ -13,7 +13,12 @@ import {
     JSX,
     Show
 } from "solid-js";
-import { championCategories, champions } from "./utils/constants";
+import {
+    championCategories,
+    champions,
+    resolveChampion,
+    resolveChampionId
+} from "./utils/constants";
 import { useNavigate, useParams } from "@solidjs/router";
 import { useCanvasSocket } from "./providers/CanvasSocketProvider";
 import { FilterBar } from "./components/FilterBar";
@@ -171,7 +176,9 @@ function Draft(props: props) {
         const currentDraft = props.draft();
         if (!currentDraft) return;
         const holdPicks = [
-            ...currentDraft.picks.map((pick: string) => (pick === championId ? "" : pick))
+            ...currentDraft.picks.map((pick: string) =>
+                resolveChampionId(pick) === championId ? "" : pick
+            )
         ];
         if (index !== -1) {
             holdPicks[index] = championId;
@@ -211,17 +218,20 @@ function Draft(props: props) {
         }
     };
 
-    const tableClass = (champ: string) => {
-        const champNum = String(champions.findIndex((c) => c.name === champ));
-        if ((props.disabledChampions?.() ?? []).includes(champNum)) {
+    const tableClass = (champId: string) => {
+        if (
+            (props.disabledChampions?.() ?? []).map(resolveChampionId).includes(champId)
+        ) {
             return "block w-full border-2 border-black brightness-[30%] cursor-not-allowed";
         }
-        if ((props.restrictedChampions?.() ?? []).includes(champNum)) {
+        if (
+            (props.restrictedChampions?.() ?? []).map(resolveChampionId).includes(champId)
+        ) {
             return "block w-full border-2 border-black brightness-[30%] cursor-not-allowed";
         }
-        if (selectedChampion() === champNum) {
+        if (selectedChampion() === champId) {
             return "block w-full border-2 border-darius-purple-bright hover:cursor-move";
-        } else if (props.draft()?.picks.includes(champNum)) {
+        } else if (props.draft()?.picks.map(resolveChampionId).includes(champId)) {
             return "block w-full border-2 border-gray-950 brightness-[30%]";
         }
         return "block w-full border-2 border-black hover:cursor-move";
@@ -245,7 +255,7 @@ function Draft(props: props) {
     const handleSelectedChamp = (champ: string) => {
         if (props.isLocked) return;
         if (unavailableSet().has(champ)) return;
-        if (!props.draft()?.picks.includes(champ)) {
+        if (!props.draft()?.picks.map(resolveChampionId).includes(champ)) {
             setSelectedChampion(champ);
         }
     };
@@ -258,7 +268,8 @@ function Draft(props: props) {
     };
 
     const getChampionOverlayLabel = (champId: string): string | null => {
-        const currentPickIndex = props.draft()?.picks.indexOf(champId) ?? -1;
+        const currentPickIndex =
+            props.draft()?.picks.map(resolveChampionId).indexOf(champId) ?? -1;
         if (currentPickIndex >= 0) {
             return getDraftPositionText(currentPickIndex);
         }
@@ -276,7 +287,8 @@ function Draft(props: props) {
     };
 
     const championTileTitle = (champName: string, champId: string): string => {
-        const currentPickIndex = props.draft()?.picks.indexOf(champId) ?? -1;
+        const currentPickIndex =
+            props.draft()?.picks.map(resolveChampionId).indexOf(champId) ?? -1;
         if (currentPickIndex >= 0) {
             return `${champName} - ${getDraftPositionText(currentPickIndex)}`;
         }
@@ -294,13 +306,15 @@ function Draft(props: props) {
     };
 
     const champNumberToImg = (champ: string) => {
-        return champ === "" ? "" : champions[Number(champ)].img;
+        return champ === "" ? "" : (resolveChampion(champ)?.img ?? "");
     };
 
     const unavailableSet = createMemo(() => {
         const set = new Set<string>();
-        for (const id of props.restrictedChampions?.() ?? []) set.add(id);
-        for (const id of props.disabledChampions?.() ?? []) set.add(id);
+        for (const id of props.restrictedChampions?.() ?? [])
+            set.add(resolveChampionId(id));
+        for (const id of props.disabledChampions?.() ?? [])
+            set.add(resolveChampionId(id));
         return set;
     });
 
@@ -521,25 +535,21 @@ function Draft(props: props) {
                                             >
                                                 {/* Table Search Results */}
                                                 <For each={filteredChampions()}>
-                                                    {({ item: champ, originalIndex }) => (
+                                                    {({ item: champ }) => (
                                                         <>
                                                             <DraggableWrapper
-                                                                name={`unpicked-${originalIndex}`}
+                                                                name={`unpicked-${champ.id}`}
                                                             >
                                                                 <ChampionTile
-                                                                    champId={String(
-                                                                        originalIndex
-                                                                    )}
+                                                                    champId={champ.id}
                                                                     champName={champ.name}
                                                                     img={champ.img}
                                                                     class={tableClass(
-                                                                        String(champ.name)
+                                                                        champ.id
                                                                     )}
                                                                     onClick={() =>
                                                                         handleSelectedChamp(
-                                                                            String(
-                                                                                originalIndex
-                                                                            )
+                                                                            champ.id
                                                                         )
                                                                     }
                                                                 />

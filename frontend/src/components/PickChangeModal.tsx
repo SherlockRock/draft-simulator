@@ -18,7 +18,9 @@ import {
     gameTextColorsMuted,
     overlayTeamColor,
     overlayBanColor,
-    overlayPickColor
+    overlayPickColor,
+    resolveChampion,
+    resolveChampionId
 } from "../utils/constants";
 import { useMultiFilterableItems } from "../hooks/useFilterableItems";
 import { FilterBar } from "./FilterBar";
@@ -224,8 +226,7 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
 
     const getChampionName = (championIndex: string) => {
         if (!championIndex || championIndex === "") return "Empty";
-        const index = parseInt(championIndex);
-        return champions[index]?.name || "Unknown";
+        return resolveChampion(championIndex)?.name || "Unknown";
     };
 
     const getTeamColor = (team: "blue" | "red") => {
@@ -422,17 +423,16 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                 <div class="max-h-72 overflow-y-auto rounded-lg border border-darius-border bg-darius-bg p-4">
                                     <div class="grid grid-cols-10 gap-1">
                                         <For each={filteredChampions()}>
-                                            {({ item: champion, originalIndex }) => {
-                                                const champIndex = () =>
-                                                    String(originalIndex);
+                                            {({ item: champion }) => {
+                                                const champIndex = () => champion.id;
                                                 const isAlreadyPicked = () =>
-                                                    props.draft?.picks?.includes(
-                                                        champIndex()
-                                                    ) || false;
+                                                    props.draft?.picks
+                                                        ?.map(resolveChampionId)
+                                                        .includes(champIndex()) || false;
                                                 const isDisabled = () =>
-                                                    (
-                                                        props.disabledChampions ?? []
-                                                    ).includes(champIndex());
+                                                    (props.disabledChampions ?? [])
+                                                        .map(resolveChampionId)
+                                                        .includes(champIndex());
                                                 const isSeriesRestricted = () =>
                                                     (
                                                         props.restrictedChampionGameMap ??
@@ -444,9 +444,9 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                                                         new Map()
                                                     ).get(champIndex());
                                                 const currentPickIndex = () =>
-                                                    (props.draft?.picks ?? []).indexOf(
-                                                        champIndex()
-                                                    );
+                                                    (props.draft?.picks ?? [])
+                                                        .map(resolveChampionId)
+                                                        .indexOf(champIndex());
                                                 const isUnavailable = () =>
                                                     isAlreadyPicked() ||
                                                     isDisabled() ||

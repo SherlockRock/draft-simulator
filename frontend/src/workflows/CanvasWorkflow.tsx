@@ -46,7 +46,7 @@ import {
 import { CanvasContext } from "../contexts/CanvasContext";
 import { CanvasSocketProvider } from "../providers/CanvasSocketProvider";
 import type { CardLayout } from "../utils/canvasCardLayout";
-import { champions } from "../utils/constants";
+import { resolveChampion } from "../utils/constants";
 import { getRestrictedChampionsByGame } from "../utils/seriesRestrictions";
 import {
     getGroupRestrictedChampionsByDraft,
@@ -68,7 +68,7 @@ const ChampionStrip: Component<{
             <div class="flex flex-wrap gap-1">
                 <For each={visibleChampionIds()}>
                     {(championId) => {
-                        const champion = champions[parseInt(championId)];
+                        const champion = resolveChampion(championId);
                         if (!champion) {
                             return null;
                         }

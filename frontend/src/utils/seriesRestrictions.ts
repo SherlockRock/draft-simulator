@@ -1,3 +1,5 @@
+import { resolveChampionId } from "./constants";
+
 type SeriesRestrictionDraft = {
     picks: string[];
     seriesIndex?: number | null;
@@ -37,14 +39,14 @@ export function getRestrictedChampions(
             // Picks only: indices 10-19
             for (let i = 10; i < 20; i++) {
                 if (picks[i] && picks[i] !== "") {
-                    restricted.push(picks[i]);
+                    restricted.push(resolveChampionId(picks[i]));
                 }
             }
         } else if (seriesType === "ironman") {
             // Picks and bans: indices 0-19
             for (let i = 0; i < 20; i++) {
                 if (picks[i] && picks[i] !== "") {
-                    restricted.push(picks[i]);
+                    restricted.push(resolveChampionId(picks[i]));
                 }
             }
         }
@@ -96,19 +98,23 @@ export function getRestrictedChampionsByGame(
 
         // Always include picks
         for (let i = 10; i < 15; i++) {
-            gameRestrictions.bluePicks.push(picks[i] || "");
+            gameRestrictions.bluePicks.push(picks[i] ? resolveChampionId(picks[i]) : "");
         }
         for (let i = 15; i < 20; i++) {
-            gameRestrictions.redPicks.push(picks[i] || "");
+            gameRestrictions.redPicks.push(picks[i] ? resolveChampionId(picks[i]) : "");
         }
 
         // Include bans only for ironman
         if (seriesType === "ironman") {
             for (let i = 0; i < 5; i++) {
-                gameRestrictions.blueBans.push(picks[i] || "");
+                gameRestrictions.blueBans.push(
+                    picks[i] ? resolveChampionId(picks[i]) : ""
+                );
             }
             for (let i = 5; i < 10; i++) {
-                gameRestrictions.redBans.push(picks[i] || "");
+                gameRestrictions.redBans.push(
+                    picks[i] ? resolveChampionId(picks[i]) : ""
+                );
             }
         }
 

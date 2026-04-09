@@ -1015,13 +1015,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         championName: string
     ) => {
         if (!canEdit()) return;
-        const champIndex = champions.findIndex((value) => value.name === championName);
+        const champion = champions.find((value) => value.name === championName);
+        const championId = champion?.id ?? "";
         setCanvasDrafts(
             (cd) => cd.Draft.id === draftId,
             "Draft",
             (Draft) => {
                 const holdPicks = [...Draft.picks];
-                holdPicks[pickIndex] = champIndex !== -1 ? String(champIndex) : "";
+                holdPicks[pickIndex] = championId;
                 if (!isLocalMode()) {
                     socketAccessor()?.emit("newDraft", {
                         picks: holdPicks,
@@ -1039,7 +1040,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 const draft = local.drafts.find((d) => d.Draft.id === draftId);
                 if (draft) {
                     const holdPicks = [...draft.Draft.picks];
-                    holdPicks[pickIndex] = champIndex !== -1 ? String(champIndex) : "";
+                    holdPicks[pickIndex] = championId;
                     draft.Draft.picks = holdPicks;
                     saveLocalCanvas(local);
                 }

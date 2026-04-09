@@ -1,4 +1,5 @@
 import { DraftModeSchema, type DraftMode } from "@draft-sim/shared-types";
+import { resolveChampionId } from "./constants";
 
 interface DraftWithPicks {
     id: string;
@@ -44,13 +45,13 @@ export function getGroupRestrictedChampions(
         if (draftMode === "fearless") {
             for (let i = 10; i < 20; i++) {
                 if (picks[i] && picks[i] !== "") {
-                    restricted.push(picks[i]);
+                    restricted.push(resolveChampionId(picks[i]));
                 }
             }
         } else if (draftMode === "ironman") {
             for (let i = 0; i < 20; i++) {
                 if (picks[i] && picks[i] !== "") {
-                    restricted.push(picks[i]);
+                    restricted.push(resolveChampionId(picks[i]));
                 }
             }
         }
@@ -96,20 +97,24 @@ export function getGroupRestrictedChampionsByDraft(
 
         // Always include picks
         for (let i = 10; i < 15; i++) {
-            draftRestrictions.bluePicks.push(picks[i] || "");
+            draftRestrictions.bluePicks.push(picks[i] ? resolveChampionId(picks[i]) : "");
         }
         for (let i = 15; i < 20; i++) {
-            draftRestrictions.redPicks.push(picks[i] || "");
+            draftRestrictions.redPicks.push(picks[i] ? resolveChampionId(picks[i]) : "");
         }
 
         // Fearless only restricts picks, so ban arrays intentionally remain empty.
         // Include bans only for ironman
         if (draftMode === "ironman") {
             for (let i = 0; i < 5; i++) {
-                draftRestrictions.blueBans.push(picks[i] || "");
+                draftRestrictions.blueBans.push(
+                    picks[i] ? resolveChampionId(picks[i]) : ""
+                );
             }
             for (let i = 5; i < 10; i++) {
-                draftRestrictions.redBans.push(picks[i] || "");
+                draftRestrictions.redBans.push(
+                    picks[i] ? resolveChampionId(picks[i]) : ""
+                );
             }
         }
 

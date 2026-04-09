@@ -177,6 +177,9 @@ import championData from "../data/champions.json";
 const positionsByName = new Map<string, string[]>(
     championData.champions.map((c) => [c.name, c.positions])
 );
+const idsByName = new Map<string, string>(
+    championData.champions.map((c) => [c.name, c.id])
+);
 
 export const champions = [
     { name: "Aatrox", img: Aatrox },
@@ -351,9 +354,37 @@ export const champions = [
     { name: "Zilean", img: Zilean },
     { name: "Zoe", img: Zoe },
     { name: "Zyra", img: Zyra }
-].map((c) => ({ ...c, positions: positionsByName.get(c.name) ?? [] }));
+].map((c) => ({
+    ...c,
+    id: idsByName.get(c.name) ?? c.name,
+    positions: positionsByName.get(c.name) ?? []
+}));
 
 // --- GENERATED ABOVE / MANUAL BELOW ---
+
+export type Champion = (typeof champions)[number];
+export const championById = new Map<string, Champion>(
+    champions.map((champion) => [champion.id, champion])
+);
+export const championIdToIndex = new Map<string, string>(
+    champions.map((champion, index) => [champion.id, String(index)])
+);
+export const indexToChampionId = champions.map((champion) => champion.id);
+
+export function resolveChampion(pickValue: string): Champion | undefined {
+    if (pickValue === "" || !/^(0|[1-9]\d*)$/.test(pickValue)) {
+        return championById.get(pickValue);
+    }
+
+    return (
+        championById.get(pickValue) ??
+        (Number.isInteger(Number(pickValue)) ? champions[Number(pickValue)] : undefined)
+    );
+}
+
+export function resolveChampionId(pickValue: string): string {
+    return resolveChampion(pickValue)?.id ?? pickValue;
+}
 
 export const sortOptions = ["Top", "Jungle", "Mid", "Bot", "Support"];
 

@@ -42,7 +42,7 @@ import { VersusTimer } from "../components/VersusTimer";
 import { ReadyButton } from "../components/ReadyButton";
 import { WinnerDeclarationModal } from "../components/WinnerDeclarationModal";
 import { PauseRequestModal } from "../components/PauseRequestModal";
-import { champions, gameTextColors, getSplashUrl } from "../utils/constants";
+import { gameTextColors, getSplashUrl, resolveChampion } from "../utils/constants";
 import toast from "solid-toast";
 import {
     ChampionPanel,
@@ -1189,16 +1189,16 @@ const VersusDraftView: Component = () => {
                                                                   )
                                                         }`}
                                                     >
+                                                        <Show when={resolveChampion(ban)}>
+                                                            {(champion) => (
+                                                                <img
+                                                                    src={champion().img}
+                                                                    alt=""
+                                                                    class="h-full w-full object-cover"
+                                                                />
+                                                            )}
+                                                        </Show>
                                                         <Show when={ban && ban !== ""}>
-                                                            <img
-                                                                src={
-                                                                    champions[
-                                                                        parseInt(ban)
-                                                                    ].img
-                                                                }
-                                                                alt=""
-                                                                class="h-full w-full object-cover"
-                                                            />
                                                             <div class="absolute inset-0 flex items-center justify-center">
                                                                 <div class="h-[100%] w-1 -rotate-45 bg-darius-text-primary/60" />
                                                             </div>
@@ -1219,16 +1219,16 @@ const VersusDraftView: Component = () => {
                                                                   )
                                                         }`}
                                                     >
+                                                        <Show when={resolveChampion(ban)}>
+                                                            {(champion) => (
+                                                                <img
+                                                                    src={champion().img}
+                                                                    alt=""
+                                                                    class="h-full w-full object-cover"
+                                                                />
+                                                            )}
+                                                        </Show>
                                                         <Show when={ban && ban !== ""}>
-                                                            <img
-                                                                src={
-                                                                    champions[
-                                                                        parseInt(ban)
-                                                                    ].img
-                                                                }
-                                                                alt=""
-                                                                class="h-full w-full object-cover"
-                                                            />
                                                             <div class="absolute inset-0 flex items-center justify-center">
                                                                 <div class="h-[100%] w-1 -rotate-45 bg-darius-text-primary/60" />
                                                             </div>
@@ -1256,28 +1256,28 @@ const VersusDraftView: Component = () => {
                                                                   )
                                                         } ${isSlotAnimating("blue", "pick", index()) ? "animate-pop" : ""}`}
                                                     >
-                                                        <Show when={pick && pick !== ""}>
-                                                            <img
-                                                                src={getSplashUrl(
-                                                                    champions[
-                                                                        parseInt(pick)
-                                                                    ].name
-                                                                )}
-                                                                alt={
-                                                                    champions[
-                                                                        parseInt(pick)
-                                                                    ].name
-                                                                }
-                                                                class="h-full w-full -translate-x-[15%] scale-[1.25] object-cover object-[center_25%]"
-                                                            />
-                                                            <div class="absolute inset-0 bg-gradient-to-r from-transparent via-transparent via-50% to-black" />
-                                                            <span class="absolute bottom-2 right-3 text-lg font-semibold tracking-wide text-darius-text-primary drop-shadow-lg">
-                                                                {
-                                                                    champions[
-                                                                        parseInt(pick)
-                                                                    ].name
-                                                                }
-                                                            </span>
+                                                        <Show
+                                                            when={resolveChampion(pick)}
+                                                        >
+                                                            {(champion) => (
+                                                                <>
+                                                                    <img
+                                                                        src={getSplashUrl(
+                                                                            champion()
+                                                                                .name
+                                                                        )}
+                                                                        alt={
+                                                                            champion()
+                                                                                .name
+                                                                        }
+                                                                        class="h-full w-full -translate-x-[15%] scale-[1.25] object-cover object-[center_25%]"
+                                                                    />
+                                                                    <div class="absolute inset-0 bg-gradient-to-r from-transparent via-transparent via-50% to-black" />
+                                                                    <span class="absolute bottom-2 right-3 text-lg font-semibold tracking-wide text-darius-text-primary drop-shadow-lg">
+                                                                        {champion().name}
+                                                                    </span>
+                                                                </>
+                                                            )}
                                                         </Show>
                                                     </div>
                                                 )}
@@ -1299,28 +1299,28 @@ const VersusDraftView: Component = () => {
                                                                   )
                                                         } ${isSlotAnimating("red", "pick", index()) ? "animate-pop" : ""}`}
                                                     >
-                                                        <Show when={pick && pick !== ""}>
-                                                            <img
-                                                                src={getSplashUrl(
-                                                                    champions[
-                                                                        parseInt(pick)
-                                                                    ].name
-                                                                )}
-                                                                alt={
-                                                                    champions[
-                                                                        parseInt(pick)
-                                                                    ].name
-                                                                }
-                                                                class="h-full w-full translate-x-[15%] scale-[1.25] object-cover object-[center_25%]"
-                                                            />
-                                                            <div class="absolute inset-0 bg-gradient-to-l from-transparent via-transparent via-50% to-black" />
-                                                            <span class="absolute bottom-2 left-3 text-lg font-semibold tracking-wide text-darius-text-primary drop-shadow-lg">
-                                                                {
-                                                                    champions[
-                                                                        parseInt(pick)
-                                                                    ].name
-                                                                }
-                                                            </span>
+                                                        <Show
+                                                            when={resolveChampion(pick)}
+                                                        >
+                                                            {(champion) => (
+                                                                <>
+                                                                    <img
+                                                                        src={getSplashUrl(
+                                                                            champion()
+                                                                                .name
+                                                                        )}
+                                                                        alt={
+                                                                            champion()
+                                                                                .name
+                                                                        }
+                                                                        class="h-full w-full translate-x-[15%] scale-[1.25] object-cover object-[center_25%]"
+                                                                    />
+                                                                    <div class="absolute inset-0 bg-gradient-to-l from-transparent via-transparent via-50% to-black" />
+                                                                    <span class="absolute bottom-2 left-3 text-lg font-semibold tracking-wide text-darius-text-primary drop-shadow-lg">
+                                                                        {champion().name}
+                                                                    </span>
+                                                                </>
+                                                            )}
                                                         </Show>
                                                     </div>
                                                 )}

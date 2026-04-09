@@ -1,5 +1,5 @@
 import { Component, For } from "solid-js";
-import { champions } from "../utils/constants";
+import { resolveChampion } from "../utils/constants";
 
 interface DisabledChampionsReadOnlyProps {
     championIds: string[];
@@ -17,7 +17,7 @@ export const DisabledChampionsReadOnly: Component<DisabledChampionsReadOnlyProps
             <div class="grid grid-cols-8 gap-1.5 rounded-md border border-darius-border bg-darius-card-hover/50 p-2">
                 <For each={props.championIds}>
                     {(id) => {
-                        const champ = champions[parseInt(id)];
+                        const champ = resolveChampion(id);
                         if (!champ) return null;
                         return (
                             <div
