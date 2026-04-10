@@ -63,18 +63,32 @@ const bluePickIndices = [10, 11, 12, 13, 14];
 const redPickIndices = [15, 16, 17, 18, 19];
 const getTeamSide = (pickIndex: number): "team1" | "team2" =>
     pickIndex < 5 || (pickIndex >= 10 && pickIndex < 15) ? "team1" : "team2";
+const DRAFT_NAME_PLACEHOLDER = "Enter Draft Name";
+const DRAFT_NAME_INPUT_HORIZONTAL_PADDING = 10;
 
 export const CanvasCard = (props: CanvasCardProps) => {
     const navigate = useNavigate();
     const [nameSignal, setNameSignal] = createSignal(props.canvasDraft.Draft.name);
     const [isNameFocused, setIsNameFocused] = createSignal(false);
+    const [nameInputWidth, setNameInputWidth] = createSignal(0);
     let nameInputRef: HTMLInputElement | undefined;
+    let nameMeasureRef: HTMLSpanElement | undefined;
 
     createEffect(() => {
         if (props.editingDraftId?.() === props.canvasDraft.Draft.id) {
             nameInputRef?.focus();
             nameInputRef?.select();
         }
+    });
+
+    createEffect(() => {
+        nameSignal();
+        if (!nameMeasureRef) return;
+
+        setNameInputWidth(
+            Math.ceil(nameMeasureRef.getBoundingClientRect().width) +
+                DRAFT_NAME_INPUT_HORIZONTAL_PADDING
+        );
     });
 
     const handleViewClick = () => {
@@ -116,8 +130,8 @@ export const CanvasCard = (props: CanvasCardProps) => {
     const inputRowGapClass = createMemo(() => (isCompact() ? "gap-1.5" : "gap-2"));
     const titleInputClass = createMemo(() =>
         isCompact()
-            ? "w-full bg-transparent px-2 py-1 text-base font-bold text-darius-text-primary outline-none disabled:cursor-not-allowed"
-            : "w-full bg-transparent px-2 py-1.5 text-base font-bold text-darius-text-primary outline-none disabled:cursor-not-allowed"
+            ? "w-full bg-transparent px-1 py-1 text-base font-bold text-darius-text-primary outline-none disabled:cursor-not-allowed"
+            : "w-full bg-transparent px-1 py-1.5 text-base font-bold text-darius-text-primary outline-none disabled:cursor-not-allowed"
     );
     const teamHeaderGridClass = createMemo(() =>
         isHorizontal() ? "grid grid-cols-4 gap-3" : "grid grid-cols-2 gap-2.5"
@@ -571,14 +585,21 @@ export const CanvasCard = (props: CanvasCardProps) => {
                                 : "border-transparent bg-transparent focus-within:border-darius-purple-bright focus-within:bg-darius-card/60"
                         }`}
                         style={{
-                            width: `${Math.max(nameSignal().length || 0, 16)}ch`,
+                            width: `${nameInputWidth()}px`,
                             "max-width": "calc(100% - 4.5rem)"
                         }}
                     >
+                        <span
+                            ref={nameMeasureRef}
+                            aria-hidden="true"
+                            class="pointer-events-none invisible absolute whitespace-pre px-0 text-base font-bold"
+                        >
+                            {nameSignal() || DRAFT_NAME_PLACEHOLDER}
+                        </span>
                         <input
                             ref={nameInputRef}
                             type="text"
-                            placeholder="Enter Draft Name"
+                            placeholder={DRAFT_NAME_PLACEHOLDER}
                             value={nameSignal()}
                             onFocus={() => setIsNameFocused(true)}
                             onInput={(e) => setNameSignal(e.currentTarget.value)}
