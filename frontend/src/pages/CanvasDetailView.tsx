@@ -20,8 +20,9 @@ const CanvasDetailView: Component = () => {
         setCardLayout,
         setCreateDraftCallback,
         openSettings,
-        toggleShare,
-        setShareButtonRef,
+        isShareOpen,
+        openShare,
+        closeSharePopper,
         sharePopperContent
     } = useCanvasContext();
     const [viewport, setViewport] = createSignal<Viewport>({ x: 0, y: 0, zoom: 1 });
@@ -127,8 +128,9 @@ const CanvasDetailView: Component = () => {
                     viewport={viewport}
                     setViewport={setViewport}
                     onSettings={openSettings}
-                    onShare={toggleShare}
-                    setShareButtonRef={setShareButtonRef}
+                    isShareOpen={isShareOpen()}
+                    onOpenShare={openShare}
+                    onCloseShare={closeSharePopper}
                     sharePopperContent={sharePopperContent()}
                 />
             </div>

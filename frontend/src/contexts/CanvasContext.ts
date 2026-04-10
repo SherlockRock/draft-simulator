@@ -38,10 +38,9 @@ type CanvasContextType = {
     setSetEditingDraftIdCallback: Setter<((id: string | null) => void) | null>;
     // Settings/share controls (managed by workflow, used by canvas sidebar)
     openSettings: () => void;
-    toggleShare: () => void;
+    isShareOpen: Accessor<boolean>;
+    openShare: () => void;
     closeSharePopper: () => void;
-    setSharePopperRef: (el: HTMLDivElement) => void;
-    setShareButtonRef: (el: HTMLDivElement) => void;
     sharePopperContent: Accessor<JSX.Element | null>;
 };
 

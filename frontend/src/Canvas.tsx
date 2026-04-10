@@ -120,8 +120,9 @@ type CanvasComponentProps = {
     setViewport: Setter<Viewport>;
     // Settings/share controls (admin only)
     onSettings?: () => void;
-    onShare?: () => void;
-    setShareButtonRef?: (el: HTMLDivElement) => void;
+    isShareOpen?: boolean;
+    onOpenShare?: () => void;
+    onCloseShare?: () => void;
     sharePopperContent?: JSX.Element;
 };
 
@@ -2499,8 +2500,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     hasEditPermissions={canEdit()}
                     hasAdminPermissions={hasAdminPermissions() && !isLocalMode()}
                     onSettings={props.onSettings}
-                    onShare={props.onShare}
-                    setShareButtonRef={props.setShareButtonRef}
+                    isShareOpen={props.isShareOpen}
+                    onOpenShare={props.onOpenShare}
+                    onCloseShare={props.onCloseShare}
                     sharePopperContent={props.sharePopperContent}
                 />
                 <Show when={isLocalMode()}>
@@ -2850,6 +2852,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             canvasId={canvasId()}
                             positionX={importPosition().x}
                             positionY={importPosition().y}
+                            existingDraftNames={canvasDrafts.map((cd) => cd.Draft.name)}
+                            existingGroupNames={canvasGroups.map((g) => g.name)}
                             onClose={() => setIsImportDialogOpen(false)}
                             onSuccess={() => {
                                 canvasContext.refetchCanvas();

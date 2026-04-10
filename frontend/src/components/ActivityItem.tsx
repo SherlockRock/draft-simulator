@@ -558,11 +558,18 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                 >
                     {/* Close button with countdown ring */}
                     <button
-                        onClick={(e) => {
+                        type="button"
+                        onPointerDown={(e) => {
+                            e.preventDefault();
                             e.stopPropagation();
                             closeShare();
                         }}
-                        class="absolute right-0.5 top-0.5 flex h-6 w-6 items-center justify-center text-darius-text-secondary transition-colors hover:text-darius-text-primary"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }}
+                        class="absolute right-0.5 top-0.5 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded text-darius-text-secondary transition-colors hover:text-darius-text-primary"
+                        aria-label="Close share view"
                     >
                         <svg class="absolute inset-0 -rotate-90" viewBox="0 0 24 24">
                             <circle
@@ -603,7 +610,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                         </div>
                                         <button
                                             onClick={handleCopyViewLink}
-                                            class="shrink-0 rounded-md bg-darius-purple p-1.5 text-white hover:bg-darius-purple-bright disabled:opacity-50"
+                                            class="shrink-0 cursor-pointer rounded-md bg-darius-purple p-1.5 text-white hover:bg-darius-purple-bright disabled:cursor-not-allowed disabled:opacity-50"
                                             disabled={!viewShareLinkQuery.data}
                                         >
                                             <Show
@@ -634,7 +641,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                         </div>
                                         <button
                                             onClick={handleCopyEditLink}
-                                            class="shrink-0 rounded-md bg-darius-purple p-1.5 text-white hover:bg-darius-purple-bright disabled:opacity-50"
+                                            class="shrink-0 cursor-pointer rounded-md bg-darius-purple p-1.5 text-white hover:bg-darius-purple-bright disabled:cursor-not-allowed disabled:opacity-50"
                                             disabled={!editShareLinkQuery.data}
                                         >
                                             <Show
@@ -675,7 +682,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                 </div>
                                 <button
                                     onClick={handleCopy}
-                                    class="shrink-0 rounded-md bg-darius-crimson p-1.5 text-white hover:opacity-90"
+                                    class="shrink-0 cursor-pointer rounded-md bg-darius-crimson p-1.5 text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                     disabled={!shareLinkQuery.data}
                                 >
                                     <Show

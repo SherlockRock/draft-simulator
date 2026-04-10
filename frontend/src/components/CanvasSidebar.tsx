@@ -38,8 +38,9 @@ interface CanvasSidebarProps {
     hasEditPermissions: boolean;
     hasAdminPermissions: boolean;
     onSettings?: () => void;
-    onShare?: () => void;
-    setShareButtonRef?: (el: HTMLDivElement) => void;
+    isShareOpen?: boolean;
+    onOpenShare?: () => void;
+    onCloseShare?: () => void;
     sharePopperContent?: JSX.Element;
 }
 
@@ -58,7 +59,7 @@ const SidebarButton: Component<SidebarButtonProps> = (props) => {
                 onClick={props.onClick}
                 disabled={props.disabled}
                 aria-label={props.tooltip}
-                class="flex h-9 w-9 items-center justify-center rounded-md border border-darius-border transition-colors"
+                class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-darius-border transition-colors"
                 classList={{
                     "border-darius-purple-bright bg-darius-purple text-darius-text-primary shadow-[0_0_0_1px_rgba(155,80,192,0.25)]":
                         props.isActive,
@@ -69,7 +70,12 @@ const SidebarButton: Component<SidebarButtonProps> = (props) => {
             >
                 <props.icon size={18} class="text-darius-text-primary" />
             </button>
-            <div class="pointer-events-none absolute left-full top-1/2 z-[60] ml-2 -translate-y-1/2 whitespace-nowrap rounded bg-darius-bg px-2 py-1 text-xs text-darius-text-primary opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+            <div
+                class="pointer-events-none absolute left-full top-1/2 z-[60] ml-2 -translate-y-1/2 whitespace-nowrap rounded bg-darius-bg px-2 py-1 text-xs text-darius-text-primary opacity-0 shadow-lg transition-opacity"
+                classList={{
+                    "group-hover:opacity-100": !props.isActive
+                }}
+            >
                 {props.tooltip}
             </div>
         </div>
@@ -86,6 +92,8 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
     const [isLayoutPopoverOpen, setIsLayoutPopoverOpen] = createSignal(false);
     let layoutButtonRef: HTMLDivElement | undefined;
     let layoutPopoverRef: HTMLDivElement | undefined;
+    let shareButtonRef: HTMLDivElement | undefined;
+    let sharePopoverRef: HTMLDivElement | undefined;
 
     createEffect(() => {
         if (!isLayoutPopoverOpen()) return;
@@ -99,6 +107,28 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
             }
 
             setIsLayoutPopoverOpen(false);
+        };
+
+        document.addEventListener("mousedown", handlePointerDown);
+        onCleanup(() => document.removeEventListener("mousedown", handlePointerDown));
+    });
+
+    createEffect(() => {
+        if (!props.isShareOpen) return;
+
+        const handlePointerDown = (event: MouseEvent) => {
+            const target = event.target;
+            if (!(target instanceof Node)) return;
+
+            if (
+                !sharePopoverRef ||
+                shareButtonRef?.contains(target) ||
+                sharePopoverRef.contains(target)
+            ) {
+                return;
+            }
+
+            props.onCloseShare?.();
         };
 
         document.addEventListener("mousedown", handlePointerDown);
@@ -177,7 +207,8 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
                             <button
                                 type="button"
                                 onClick={() => setIsLayoutPopoverOpen(false)}
-                                class="absolute right-0.5 top-0.5 flex h-6 w-6 items-center justify-center text-darius-text-primary text-darius-text-secondary transition-colors"
+                                class="absolute right-0.5 top-0.5 flex h-6 w-6 cursor-pointer items-center justify-center rounded text-darius-text-secondary transition-colors hover:bg-darius-bg hover:text-darius-text-primary"
+                                aria-label="Close layout popover"
                             >
                                 <X size={12} />
                             </button>
@@ -254,15 +285,44 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
                             onClick={props.onImport}
                         />
                     </Show>
-                    <Show when={props.hasAdminPermissions && props.onShare}>
-                        <div class="relative" ref={(el) => props.setShareButtonRef?.(el)}>
+                    <Show
+                        when={
+                            props.hasAdminPermissions &&
+                            props.onOpenShare &&
+                            props.onCloseShare
+                        }
+                    >
+                        <div class="relative" ref={shareButtonRef}>
                             <SidebarButton
                                 icon={Share2}
                                 tooltip="Share canvas"
-                                onClick={() => props.onShare?.()}
-                                isActive={!!props.sharePopperContent}
+                                onClick={() => {
+                                    if (props.isShareOpen) {
+                                        props.onCloseShare?.();
+                                    } else {
+                                        props.onOpenShare?.();
+                                    }
+                                }}
+                                isActive={props.isShareOpen}
                             />
-                            {props.sharePopperContent}
+                            <Show when={props.isShareOpen && props.sharePopperContent}>
+                                <div
+                                    ref={sharePopoverRef}
+                                    class="absolute left-full top-1/2 z-50 ml-3 w-[220px] -translate-y-1/2 rounded-xl border border-darius-border bg-darius-card shadow-lg"
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => props.onCloseShare?.()}
+                                        class="absolute right-0.5 top-0.5 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded text-darius-text-secondary transition-colors hover:text-darius-text-primary"
+                                        aria-label="Close share popover"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                    <div class="flex flex-1 flex-col justify-center gap-2 px-4 py-3">
+                                        {props.sharePopperContent}
+                                    </div>
+                                </div>
+                            </Show>
                         </div>
                     </Show>
                 </SidebarGroup>
