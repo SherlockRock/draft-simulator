@@ -47,6 +47,7 @@ export const RoleFilter: Component<RoleFilterProps> = (props) => {
                 <button
                     type="button"
                     onClick={() => props.onClearAll()}
+                    aria-pressed={!hasSelection()}
                     title="Show all roles"
                     class={`flex h-7 items-center justify-center rounded px-3 text-[10px] font-semibold transition-all ${
                         !hasSelection()
@@ -65,6 +66,8 @@ export const RoleFilter: Component<RoleFilterProps> = (props) => {
                             <button
                                 type="button"
                                 onClick={() => props.onToggle(category)}
+                                aria-label={`Toggle ${category} role filter`}
+                                aria-pressed={isActive()}
                                 title={category}
                                 class={`flex h-7 w-7 items-center justify-center rounded transition-all ${
                                     isActive()

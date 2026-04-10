@@ -6,10 +6,11 @@ import {
     championCategories,
     emojiCategories
 } from "../utils/constants";
-import { useFilterableItems } from "../hooks/useFilterableItems";
+import { useFilterableItems, useMultiFilterableItems } from "../hooks/useFilterableItems";
 import { FilterBar } from "./FilterBar";
 import { SearchableSelect } from "./SearchableSelect";
 import { SelectTheme, getThemeColors } from "../utils/selectTheme";
+import { RoleFilter } from "./RoleFilter";
 
 interface IconPickerProps {
     isOpen: () => boolean;
@@ -24,7 +25,7 @@ export const IconPicker = (props: IconPickerProps) => {
     const colors = () => getThemeColors(props.theme ?? "orange");
 
     // Champion filtering
-    const championFilter = useFilterableItems({
+    const championFilter = useMultiFilterableItems({
         items: champions,
         categoryMap: championCategories
     });
@@ -37,6 +38,7 @@ export const IconPicker = (props: IconPickerProps) => {
 
     // Clear filters when switching tabs
     createEffect(() => {
+        activeTab();
         championFilter.clearFilters();
         emojiFilter.clearFilters();
     });
@@ -106,17 +108,15 @@ export const IconPicker = (props: IconPickerProps) => {
                                     searchText={championFilter.searchText}
                                     onSearchChange={championFilter.setSearchText}
                                     searchPlaceholder="Search champions..."
-                                >
-                                    <SearchableSelect
-                                        placeholder="Role"
-                                        currentlySelected={championFilter.selectedCategory()}
-                                        sortOptions={championFilter.categories}
-                                        selectText={championFilter.selectedCategory()}
-                                        setSelectText={championFilter.setSelectedCategory}
-                                        onValidSelect={championFilter.setSelectedCategory}
-                                        theme={props.theme}
-                                    />
-                                </FilterBar>
+                                    accent={props.theme ?? "orange"}
+                                />
+                                <RoleFilter
+                                    categories={championFilter.categories}
+                                    selectedCategories={championFilter.selectedCategories}
+                                    onToggle={championFilter.toggleCategory}
+                                    onClearAll={championFilter.clearCategories}
+                                    theme={props.theme ?? "orange"}
+                                />
                             </div>
                             <div class="grid grid-cols-8 gap-2 p-2 sm:grid-cols-10 md:grid-cols-12">
                                 <For each={championFilter.filteredItems()}>
@@ -125,7 +125,7 @@ export const IconPicker = (props: IconPickerProps) => {
                                             onClick={() =>
                                                 handleChampionSelect(originalIndex)
                                             }
-                                            class={`group relative aspect-square overflow-hidden rounded border-2 transition-all hover:scale-105 ${
+                                            class={`group relative aspect-square overflow-hidden rounded border-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-darius-bg ${colors().ringColor} ${
                                                 props.currentIcon ===
                                                 originalIndex.toString()
                                                     ? `${colors().dropdownBorder} ring-2 ${colors().ringColor}`
@@ -136,9 +136,9 @@ export const IconPicker = (props: IconPickerProps) => {
                                             <img
                                                 src={champion.img}
                                                 alt={champion.name}
-                                                class="h-full w-full object-cover"
+                                                class="h-full w-full object-cover transition-[filter] group-hover:brightness-110 group-focus-visible:brightness-110"
                                             />
-                                            <div class="absolute inset-0 flex items-center justify-center bg-black/70 opacity-0 transition-opacity group-hover:opacity-100">
+                                            <div class="absolute inset-0 flex items-center justify-center bg-black/65 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                                                 <span class="text-xs text-white">
                                                     {champion.name}
                                                 </span>

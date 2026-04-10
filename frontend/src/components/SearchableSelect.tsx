@@ -1,4 +1,5 @@
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import { Portal } from "solid-js/web";
 import { X, ChevronUp } from "lucide-solid";
 import { SelectTheme, getThemeColors } from "../utils/selectTheme";
 import { createDropdownKeyboard } from "../utils/useDropdownKeyboard";
@@ -16,9 +17,27 @@ type props = {
 export const SearchableSelect = (props: props) => {
     const [isFocused, setIsFocused] = createSignal(false);
     const [dropdownOpen, setDropdownOpen] = createSignal(false);
+    const [dropdownPosition, setDropdownPosition] = createSignal({
+        top: 0,
+        left: 0,
+        width: 0
+    });
+    let selectRef: HTMLDivElement | undefined;
     const colors = () => getThemeColors(props.theme ?? "orange");
 
+    const updateDropdownPosition = () => {
+        if (!selectRef) return;
+
+        const rect = selectRef.getBoundingClientRect();
+        setDropdownPosition({
+            top: rect.bottom,
+            left: rect.left,
+            width: rect.width
+        });
+    };
+
     const openDropdown = () => {
+        updateDropdownPosition();
         setDropdownOpen(true);
     };
 
@@ -35,6 +54,19 @@ export const SearchableSelect = (props: props) => {
         setIsFocused(true);
         openDropdown();
     };
+
+    createEffect(() => {
+        if (!dropdownOpen()) return;
+
+        updateDropdownPosition();
+        window.addEventListener("resize", updateDropdownPosition);
+        window.addEventListener("scroll", updateDropdownPosition, true);
+
+        onCleanup(() => {
+            window.removeEventListener("resize", updateDropdownPosition);
+            window.removeEventListener("scroll", updateDropdownPosition, true);
+        });
+    });
 
     const handleSortOptions = (sortInput: string) => {
         if (sortInput === "" || sortInput === props.currentlySelected) {
@@ -88,6 +120,7 @@ export const SearchableSelect = (props: props) => {
 
     return (
         <div
+            ref={selectRef}
             class="relative min-w-20 shrink"
             onKeyDown={handleKeyDown}
             onFocusIn={onFocusIn}
@@ -132,43 +165,54 @@ export const SearchableSelect = (props: props) => {
                 </label>
             </div>
             {dropdownOpen() && (
-                <div
-                    class={`custom-scrollbar absolute z-10 w-full flex-col overflow-y-auto rounded-md border border-t-0 ${colors().dropdownBorder}`}
-                >
-                    <div class="max-h-80">
-                        <For each={holdSortOptions()}>
-                            {(option, index) => (
-                                <div
-                                    ref={(el) => keyboard.setItemRef(index(), el)}
-                                    class="group cursor-pointer"
-                                    onMouseDown={() => handleSelect(index())}
-                                    onMouseEnter={() =>
-                                        keyboard.setHighlightedIndex(index())
-                                    }
-                                >
-                                    <a
-                                        class={`block border-l-4 p-2 transition-colors ${
-                                            props.currentlySelected === option
-                                                ? `${colors().activeBorder} bg-darius-card-hover ${colors().text}`
-                                                : index() === keyboard.highlightedIndex()
-                                                  ? `${colors().activeBorder} bg-darius-card-hover text-darius-text-primary`
-                                                  : `border-transparent bg-darius-bg text-darius-text-primary group-hover:bg-darius-card-hover ${colors().groupHoverText} ${colors().groupHoverBorder}`
-                                        }`}
+                <Portal>
+                    <div
+                        class={`custom-scrollbar fixed z-[100] flex-col overflow-y-auto rounded-md border border-t-0 ${colors().dropdownBorder}`}
+                        style={{
+                            top: `${dropdownPosition().top}px`,
+                            left: `${dropdownPosition().left}px`,
+                            width: `${dropdownPosition().width}px`
+                        }}
+                    >
+                        <div class="max-h-80">
+                            <For each={holdSortOptions()}>
+                                {(option, index) => (
+                                    <div
+                                        ref={(el) => keyboard.setItemRef(index(), el)}
+                                        class="group cursor-pointer"
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            handleSelect(index());
+                                        }}
+                                        onMouseEnter={() =>
+                                            keyboard.setHighlightedIndex(index())
+                                        }
                                     >
-                                        <p class="inline-block w-full overflow-hidden text-ellipsis whitespace-nowrap">
-                                            {option}
-                                        </p>
-                                    </a>
-                                </div>
-                            )}
-                        </For>
-                        <Show when={holdSortOptions().length === 0}>
-                            <a class="block border-l-4 border-transparent bg-darius-bg p-2 text-darius-text-secondary">
-                                None
-                            </a>
-                        </Show>
+                                        <a
+                                            class={`block border-l-4 p-2 transition-colors ${
+                                                props.currentlySelected === option
+                                                    ? `${colors().activeBorder} bg-darius-card-hover ${colors().text}`
+                                                    : index() ===
+                                                        keyboard.highlightedIndex()
+                                                      ? `${colors().activeBorder} bg-darius-card-hover text-darius-text-primary`
+                                                      : `border-transparent bg-darius-bg text-darius-text-primary group-hover:bg-darius-card-hover ${colors().groupHoverText} ${colors().groupHoverBorder}`
+                                            }`}
+                                        >
+                                            <p class="inline-block w-full overflow-hidden text-ellipsis whitespace-nowrap">
+                                                {option}
+                                            </p>
+                                        </a>
+                                    </div>
+                                )}
+                            </For>
+                            <Show when={holdSortOptions().length === 0}>
+                                <a class="block border-l-4 border-transparent bg-darius-bg p-2 text-darius-text-secondary">
+                                    None
+                                </a>
+                            </Show>
+                        </div>
                     </div>
-                </div>
+                </Portal>
             )}
         </div>
     );
