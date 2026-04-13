@@ -42,9 +42,24 @@ export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
             <div class="truncate border-b border-darius-border px-4 py-1.5 text-xs text-darius-text-secondary">
                 {props.group.name}
             </div>
+            <Show when={props.group.type === "custom"}>
+                <button
+                    class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-border"
+                    onClick={() => {
+                        props.onRename?.();
+                        props.onClose();
+                    }}
+                >
+                    Rename
+                </button>
+            </Show>
             <Show
-                when={props.group.type === "custom"}
-                fallback={
+                when={
+                    props.group.type === "series" &&
+                    props.group.metadata.origin !== "manual"
+                }
+            >
+                {
                     <button
                         class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-border"
                         onClick={() => {
@@ -55,16 +70,6 @@ export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
                         View series
                     </button>
                 }
-            >
-                <button
-                    class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-border"
-                    onClick={() => {
-                        props.onRename?.();
-                        props.onClose();
-                    }}
-                >
-                    Rename
-                </button>
             </Show>
             <button
                 class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-border"

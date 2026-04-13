@@ -46,7 +46,15 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
 
     const sortedDrafts = createMemo(() => {
         return [...props.drafts].sort(
-            (a, b) => (a.Draft.seriesIndex ?? 0) - (b.Draft.seriesIndex ?? 0)
+            (a, b) => {
+                const aIndex = a.Draft.seriesIndex;
+                const bIndex = b.Draft.seriesIndex;
+                if (aIndex === null || aIndex === undefined) {
+                    return bIndex === null || bIndex === undefined ? 0 : 1;
+                }
+                if (bIndex === null || bIndex === undefined) return -1;
+                return aIndex - bIndex;
+            }
         );
     });
 
@@ -54,10 +62,16 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
         getSeriesGroupDimensions(props.drafts.length, props.cardLayout())
     );
 
+    const seriesDrafts = createMemo(() =>
+        props.drafts.filter(
+            (d) => d.Draft.seriesIndex !== undefined && d.Draft.seriesIndex !== null
+        )
+    );
+
     const teamScore = createMemo(() => {
         let team1Wins = 0;
         let team2Wins = 0;
-        props.drafts.forEach((d) => {
+        seriesDrafts().forEach((d) => {
             if (!d.Draft.winner) return;
             const bst = d.Draft.blueSideTeam || 1;
             const team1Won =
@@ -70,7 +84,8 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
     });
 
     const isCompleted = createMemo(() => {
-        return props.drafts.length > 0 && props.drafts.every((d) => d.Draft.completed);
+        const drafts = seriesDrafts();
+        return drafts.length > 0 && drafts.every((d) => d.Draft.completed);
     });
 
     const seriesLengthLabel = createMemo(() => {
@@ -84,6 +99,13 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
         // Capitalize first letter
         return type.charAt(0).toUpperCase() + type.slice(1);
     });
+
+    const supportsLiveSeries = createMemo(
+        () =>
+            props.group.versus_draft_id &&
+            props.group.metadata.origin !== "manual"
+    );
+    const isManualSeries = createMemo(() => props.group.metadata.origin === "manual");
 
     return (
         <div
@@ -110,7 +132,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                     </span>
 
                     {/* Navigate to Series Overview */}
-                    <Show when={props.group.versus_draft_id}>
+                    <Show when={supportsLiveSeries()}>
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -176,15 +198,19 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                     </Show>
 
                     {/* Competitive Badge */}
-                    <Show when={props.group.metadata.competitive}>
-                        <span class="rounded bg-darius-ember/20 px-2 py-0.5 text-xs text-darius-ember">
-                            Competitive
-                        </span>
-                    </Show>
-                    <Show when={!props.group.metadata.competitive}>
-                        <span class="rounded bg-darius-card-hover px-2 py-0.5 text-xs text-darius-text-secondary">
-                            Scrim
-                        </span>
+                    <Show when={!isManualSeries()}>
+                        <Show
+                            when={props.group.metadata.competitive}
+                            fallback={
+                                <span class="rounded bg-darius-card-hover px-2 py-0.5 text-xs text-darius-text-secondary">
+                                    Scrim
+                                </span>
+                            }
+                        >
+                            <span class="rounded bg-darius-ember/20 px-2 py-0.5 text-xs text-darius-ember">
+                                Competitive
+                            </span>
+                        </Show>
                     </Show>
 
                     {/* Status Indicator */}

@@ -51,6 +51,14 @@ const VersusDraft = sequelize.define("VersusDraft", {
       isIn: [["standard", "fearless", "ironman"]],
     },
   },
+  origin: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: "live",
+    validate: {
+      isIn: [["live", "manual"]],
+    },
+  },
   shareLink: {
     type: DataTypes.STRING,
     unique: true,

@@ -16,6 +16,171 @@ const {
   draftHasSharedWithUser,
   generateUniqueCanvasGroupName,
 } = require("../helpers.js");
+const { Op } = require("sequelize");
+
+const VALID_SERIES_LENGTHS = new Set([1, 3, 5, 7]);
+const VALID_DRAFT_MODES = new Set(["standard", "fearless", "ironman"]);
+
+function normalizeSeriesData(body) {
+  const length = Number(body.length);
+  return {
+    name:
+      typeof body.name === "string" && body.name.trim()
+        ? body.name.trim()
+        : "Custom Series",
+    blueTeamName:
+      typeof body.blueTeamName === "string" && body.blueTeamName.trim()
+        ? body.blueTeamName.trim()
+        : "Team 1",
+    redTeamName:
+      typeof body.redTeamName === "string" && body.redTeamName.trim()
+        ? body.redTeamName.trim()
+        : "Team 2",
+    length: VALID_SERIES_LENGTHS.has(length) ? length : 3,
+    type: VALID_DRAFT_MODES.has(body.type) ? body.type : "standard",
+    disabledChampions: Array.isArray(body.disabledChampions)
+      ? body.disabledChampions
+      : [],
+  };
+}
+
+function getSeriesMetadata(versusDraft) {
+  return {
+    blueTeamName: versusDraft.blueTeamName,
+    redTeamName: versusDraft.redTeamName,
+    length: versusDraft.length,
+    competitive: versusDraft.competitive,
+    seriesType: versusDraft.type,
+    origin: versusDraft.origin || "live",
+    disabledChampions: versusDraft.disabledChampions || [],
+    draftMode: versusDraft.type,
+  };
+}
+
+async function getCanvasBroadcastPayload(canvasId) {
+  const groups = await CanvasGroup.findAll({ where: { canvas_id: canvasId } });
+  const canvasDrafts = await CanvasDraft.findAll({
+    where: { canvas_id: canvasId },
+    attributes: [
+      "positionX",
+      "positionY",
+      "is_locked",
+      "group_id",
+      "source_type",
+    ],
+    include: [
+      {
+        model: Draft,
+        attributes: [
+          "name",
+          "id",
+          "picks",
+          "type",
+          "versus_draft_id",
+          "seriesIndex",
+          "completed",
+          "winner",
+          "blueSideTeam",
+          "firstPick",
+        ],
+      },
+    ],
+    raw: true,
+    nest: true,
+  });
+  const connections = await CanvasConnection.findAll({
+    where: { canvas_id: canvasId },
+    raw: true,
+  });
+  const canvas = await Canvas.findByPk(canvasId);
+
+  return {
+    canvas,
+    drafts: canvasDrafts,
+    connections,
+    groups: groups.map((g) => g.toJSON()),
+  };
+}
+
+async function syncManualSeriesLength({
+  canvasId,
+  group,
+  versusDraft,
+  targetLength,
+  transaction,
+}) {
+  const drafts = await Draft.findAll({
+    where: { versus_draft_id: versusDraft.id },
+    order: [["seriesIndex", "ASC"]],
+    transaction,
+  });
+  const currentLength = drafts.length;
+
+  if (targetLength > currentLength) {
+    const groupDrafts = await CanvasDraft.findAll({
+      where: { canvas_id: canvasId, group_id: group.id },
+      order: [
+        ["positionX", "ASC"],
+        ["positionY", "ASC"],
+        ["createdAt", "ASC"],
+      ],
+      transaction,
+    });
+    const lastDraft = groupDrafts[groupDrafts.length - 1];
+    const startX = lastDraft ? lastDraft.positionX + 380 : group.positionX + 24;
+    const startY = lastDraft ? lastDraft.positionY : group.positionY + 64;
+
+    for (let i = currentLength; i < targetLength; i += 1) {
+      const draft = await Draft.create(
+        {
+          name: `${versusDraft.name} - Game ${i + 1}`,
+          type: "versus",
+          versus_draft_id: versusDraft.id,
+          seriesIndex: i,
+          owner_id: versusDraft.owner_id,
+          public: false,
+          description: "",
+          picks: Array(20).fill(""),
+        },
+        { transaction },
+      );
+      await CanvasDraft.create(
+        {
+          canvas_id: canvasId,
+          draft_id: draft.id,
+          positionX: startX + (i - currentLength) * 380,
+          positionY: startY,
+          is_locked: false,
+          group_id: group.id,
+          source_type: "versus",
+        },
+        { transaction },
+      );
+    }
+  } else if (targetLength < currentLength) {
+    const draftsToDelete = drafts.filter((d) => d.seriesIndex >= targetLength);
+    const draftIdsToDelete = draftsToDelete.map((d) => d.id);
+    for (const draft of draftsToDelete) {
+      const hasPicks = draft.picks && draft.picks.some((p) => p && p !== "");
+      if (hasPicks) {
+        throw new Error(
+          `Cannot reduce series length - Game ${draft.seriesIndex + 1} has already started`,
+        );
+      }
+    }
+    await CanvasDraft.destroy({
+      where: { canvas_id: canvasId, draft_id: draftIdsToDelete },
+      transaction,
+    });
+    await Draft.destroy({
+      where: {
+        versus_draft_id: versusDraft.id,
+        seriesIndex: { [Op.gte]: targetLength },
+      },
+      transaction,
+    });
+  }
+}
 
 // Helper function to touch canvas updatedAt timestamp
 async function touchCanvasTimestamp(canvasId) {
@@ -753,7 +918,9 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
           length: versusDraft.length,
           competitive: versusDraft.competitive,
           seriesType: versusDraft.type,
+          origin: versusDraft.origin || "live",
           disabledChampions: versusDraft.disabledChampions || [],
+          draftMode: versusDraft.type,
         },
       },
       { transaction: t },
@@ -852,6 +1019,176 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
     res.status(500).json({ error: "Failed to import series" });
   }
 });
+
+router.post(
+  "/:canvasId/group/:groupId/convert-to-series",
+  protect,
+  async (req, res) => {
+    const t = await Canvas.sequelize.transaction();
+    let committed = false;
+    try {
+      const { canvasId, groupId } = req.params;
+      const data = normalizeSeriesData(req.body);
+
+      const userCanvas = await UserCanvas.findOne({
+        where: { canvas_id: canvasId, user_id: req.user.id },
+        transaction: t,
+      });
+
+      if (
+        !userCanvas ||
+        (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
+      ) {
+        await t.rollback();
+        return res.status(403).json({
+          error: "Forbidden: You don't have permission to edit this canvas",
+        });
+      }
+
+      const group = await CanvasGroup.findOne({
+        where: { id: groupId, canvas_id: canvasId },
+        transaction: t,
+      });
+
+      if (!group) {
+        await t.rollback();
+        return res.status(404).json({ error: "Group not found" });
+      }
+
+      if (group.type !== "custom") {
+        await t.rollback();
+        return res.status(400).json({ error: "Only custom groups can be converted" });
+      }
+
+      const versusDraft = await VersusDraft.create(
+        {
+          ...data,
+          origin: "manual",
+          owner_id: req.user.id,
+        },
+        { transaction: t },
+      );
+
+      const groupCanvasDrafts = await CanvasDraft.findAll({
+        where: { canvas_id: canvasId, group_id: groupId },
+        include: [{ model: Draft }],
+        order: [
+          ["positionX", "ASC"],
+          ["positionY", "ASC"],
+          ["createdAt", "ASC"],
+        ],
+        transaction: t,
+      });
+
+      const convertedCanvasDrafts = [];
+      const existingToConvert = groupCanvasDrafts.slice(0, data.length);
+      const extrasToLeave = groupCanvasDrafts.slice(data.length);
+      for (let i = 0; i < existingToConvert.length; i += 1) {
+        const canvasDraft = existingToConvert[i];
+        await canvasDraft.Draft.update(
+          {
+            type: "versus",
+            versus_draft_id: versusDraft.id,
+            seriesIndex: i,
+            owner_id: canvasDraft.Draft.owner_id || req.user.id,
+          },
+          { transaction: t },
+        );
+        await canvasDraft.update(
+          { source_type: "versus", is_locked: false },
+          { transaction: t },
+        );
+        convertedCanvasDrafts.push(canvasDraft);
+      }
+      for (const canvasDraft of extrasToLeave) {
+        await canvasDraft.Draft.update(
+          { versus_draft_id: null, seriesIndex: null },
+          { transaction: t },
+        );
+        await canvasDraft.update(
+          { source_type: "canvas", is_locked: false },
+          { transaction: t },
+        );
+      }
+
+      const lastCanvasDraft = existingToConvert[existingToConvert.length - 1];
+      const startX = lastCanvasDraft
+        ? lastCanvasDraft.positionX + 380
+        : group.positionX + 24;
+      const startY = lastCanvasDraft
+        ? lastCanvasDraft.positionY
+        : group.positionY + 64;
+
+      for (let i = existingToConvert.length; i < data.length; i += 1) {
+        const draft = await Draft.create(
+          {
+            name: `${data.name} - Game ${i + 1}`,
+            type: "versus",
+            versus_draft_id: versusDraft.id,
+            seriesIndex: i,
+            owner_id: req.user.id,
+            public: false,
+            description: "",
+            picks: Array(20).fill(""),
+          },
+          { transaction: t },
+        );
+        const canvasDraft = await CanvasDraft.create(
+          {
+            canvas_id: canvasId,
+            draft_id: draft.id,
+            positionX: startX + (i - existingToConvert.length) * 380,
+            positionY: startY,
+            is_locked: false,
+            group_id: groupId,
+            source_type: "versus",
+          },
+          { transaction: t },
+        );
+        canvasDraft.Draft = draft;
+        convertedCanvasDrafts.push(canvasDraft);
+      }
+
+      await group.update(
+        {
+          name: data.name,
+          type: "series",
+          versus_draft_id: versusDraft.id,
+          metadata: getSeriesMetadata(versusDraft),
+        },
+        { transaction: t },
+      );
+
+      await t.commit();
+      committed = true;
+      await touchCanvasTimestamp(canvasId);
+
+      const payload = await getCanvasBroadcastPayload(canvasId);
+
+      res.status(201).json({
+        success: true,
+        group: {
+          ...group.toJSON(),
+          CanvasDrafts: convertedCanvasDrafts.map((cd) => ({
+            ...cd.toJSON(),
+            Draft: cd.Draft.toJSON(),
+          })),
+        },
+      });
+
+      socketService.emitToRoom(canvasId, "canvasUpdate", {
+        canvas: payload.canvas.toJSON(),
+        drafts: payload.drafts,
+        connections: payload.connections,
+        groups: payload.groups,
+      });
+    } catch (error) {
+      if (!committed) await t.rollback();
+      console.error("Failed to convert group to series:", error);
+      res.status(500).json({ error: error.message || "Failed to convert group" });
+    }
+  },
+);
 
 // Create a custom group
 router.post("/:canvasId/group", protect, async (req, res) => {
@@ -1125,18 +1462,22 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
 
 // Update group (name, position, size)
 router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
+  const t = await Canvas.sequelize.transaction();
+  let committed = false;
   try {
     const { canvasId, groupId } = req.params;
     const { name, positionX, positionY, width, height, metadata } = req.body;
 
     const userCanvas = await UserCanvas.findOne({
       where: { canvas_id: canvasId, user_id: req.user.id },
+      transaction: t,
     });
 
     if (
       !userCanvas ||
       (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
     ) {
+      await t.rollback();
       return res.status(403).json({
         error: "Forbidden: You don't have permission to edit this canvas",
       });
@@ -1144,9 +1485,11 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
 
     const group = await CanvasGroup.findOne({
       where: { id: groupId, canvas_id: canvasId },
+      transaction: t,
     });
 
     if (!group) {
+      await t.rollback();
       return res.status(404).json({ error: "Group not found" });
     }
 
@@ -1168,10 +1511,66 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
     }
 
     if (Object.keys(updates).length === 0) {
+      await t.rollback();
       return res.status(400).json({ error: "No valid fields to update" });
     }
 
-    await group.update(updates);
+    let versusDraft = null;
+    if (
+      group.versus_draft_id &&
+      ((metadata && typeof metadata === "object") || updates.name)
+    ) {
+      versusDraft = await VersusDraft.findByPk(group.versus_draft_id, {
+        transaction: t,
+      });
+
+      if (versusDraft && versusDraft.origin === "manual") {
+        const seriesMetadata =
+          metadata && typeof metadata === "object" ? metadata : {};
+        const seriesUpdates = {};
+        if (updates.name) seriesUpdates.name = updates.name;
+        if (seriesMetadata.blueTeamName !== undefined) {
+          seriesUpdates.blueTeamName = seriesMetadata.blueTeamName;
+        }
+        if (seriesMetadata.redTeamName !== undefined) {
+          seriesUpdates.redTeamName = seriesMetadata.redTeamName;
+        }
+        const nextType = seriesMetadata.seriesType || seriesMetadata.draftMode;
+        if (nextType !== undefined && VALID_DRAFT_MODES.has(nextType)) {
+          seriesUpdates.type = nextType;
+        }
+        if (Array.isArray(seriesMetadata.disabledChampions)) {
+          seriesUpdates.disabledChampions = seriesMetadata.disabledChampions;
+        }
+
+        const nextLength = Number(seriesMetadata.length);
+        if (
+          VALID_SERIES_LENGTHS.has(nextLength) &&
+          nextLength !== versusDraft.length
+        ) {
+          await syncManualSeriesLength({
+            canvasId,
+            group,
+            versusDraft,
+            targetLength: nextLength,
+            transaction: t,
+          });
+          seriesUpdates.length = nextLength;
+        }
+
+        if (Object.keys(seriesUpdates).length > 0) {
+          await versusDraft.update(seriesUpdates, { transaction: t });
+          updates.metadata = {
+            ...updates.metadata,
+            ...getSeriesMetadata({ ...versusDraft.toJSON(), ...seriesUpdates }),
+          };
+        }
+      }
+    }
+
+    await group.update(updates, { transaction: t });
+    await t.commit();
+    committed = true;
     await touchCanvasTimestamp(canvasId);
 
     res.status(200).json({ success: true, group: group.toJSON() });
@@ -1187,50 +1586,17 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
       });
     } else {
       // For name/size changes, emit full canvas update
-      const groups = await CanvasGroup.findAll({
-        where: { canvas_id: canvasId },
-      });
-      const canvasDrafts = await CanvasDraft.findAll({
-        where: { canvas_id: canvasId },
-        attributes: [
-          "positionX",
-          "positionY",
-          "is_locked",
-          "group_id",
-          "source_type",
-        ],
-        include: [
-          {
-            model: Draft,
-            attributes: [
-              "name",
-              "id",
-              "picks",
-              "type",
-              "versus_draft_id",
-              "seriesIndex",
-              "completed",
-              "winner",
-            ],
-          },
-        ],
-        raw: true,
-        nest: true,
-      });
-      const connections = await CanvasConnection.findAll({
-        where: { canvas_id: canvasId },
-        raw: true,
-      });
-      const canvas = await Canvas.findByPk(canvasId);
+      const payload = await getCanvasBroadcastPayload(canvasId);
 
       socketService.emitToRoom(canvasId, "canvasUpdate", {
-        canvas: canvas.toJSON(),
-        drafts: canvasDrafts,
-        connections: connections,
-        groups: groups.map((g) => g.toJSON()),
+        canvas: payload.canvas.toJSON(),
+        drafts: payload.drafts,
+        connections: payload.connections,
+        groups: payload.groups,
       });
     }
   } catch (error) {
+    if (!committed) await t.rollback();
     console.error("Failed to update group:", error);
     res.status(500).json({ error: "Failed to update group" });
   }

@@ -71,6 +71,14 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
         return;
       }
 
+      if (versusDraft.origin === "manual") {
+        socket.emit("versusJoinResponse", {
+          success: false,
+          error: "This series does not support live sessions",
+        });
+        return;
+      }
+
       // Join the versus draft room
       socket.join(`versus:${versusDraft.id}`);
       console.log(`Socket ${socket.id} joined versus:${versusDraft.id}`);

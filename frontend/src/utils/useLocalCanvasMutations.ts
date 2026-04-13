@@ -356,6 +356,75 @@ export const localUpdateGroup = (data: {
     });
 };
 
+export const localConvertGroupToSeries = (data: {
+    groupId: string;
+    name: string;
+    blueTeamName: string;
+    redTeamName: string;
+    length: number;
+    draftMode: "standard" | "fearless" | "ironman";
+    disabledChampions: string[];
+}) => {
+    return mutateLocal((canvas) => {
+        const group = canvas.groups.find((g) => g.id === data.groupId);
+        if (!group) {
+            throw new Error("Group not found");
+        }
+
+        group.name = data.name || group.name;
+        group.type = "series";
+        group.metadata = {
+            ...group.metadata,
+            blueTeamName: data.blueTeamName,
+            redTeamName: data.redTeamName,
+            length: data.length,
+            seriesType: data.draftMode,
+            origin: "manual",
+            disabledChampions: data.disabledChampions,
+            draftMode: data.draftMode
+        } as CanvasGroupMetadata & { origin: "manual" };
+
+        const groupDrafts = canvas.drafts
+            .filter((d) => d.group_id === data.groupId)
+            .sort(
+                (a, b) =>
+                    a.positionX - b.positionX ||
+                    a.positionY - b.positionY ||
+                    a.Draft.id.localeCompare(b.Draft.id)
+            );
+
+        for (let i = 0; i < Math.min(groupDrafts.length, data.length); i += 1) {
+            groupDrafts[i].Draft.seriesIndex = i;
+        }
+        for (let i = data.length; i < groupDrafts.length; i += 1) {
+            groupDrafts[i].Draft.seriesIndex = null;
+        }
+
+        const lastDraft = groupDrafts[Math.min(groupDrafts.length, data.length) - 1];
+        const startX = lastDraft ? lastDraft.positionX + 380 : group.positionX + 24;
+        const startY = lastDraft ? lastDraft.positionY : group.positionY + 64;
+
+        for (let i = groupDrafts.length; i < data.length; i += 1) {
+            const draftId = crypto.randomUUID();
+            canvas.drafts.push({
+                positionX: startX + (i - groupDrafts.length) * 380,
+                positionY: startY,
+                group_id: data.groupId,
+                source_type: "canvas",
+                Draft: {
+                    id: draftId,
+                    name: `${group.name} - Game ${i + 1}`,
+                    picks: Array(20).fill(""),
+                    type: "canvas",
+                    seriesIndex: i
+                }
+            });
+        }
+
+        return { canvas, result: { success: true, group } };
+    });
+};
+
 export const localDeleteGroup = (groupId: string, keepDrafts?: boolean) => {
     return mutateLocal((canvas) => {
         if (!keepDrafts) {

@@ -259,6 +259,32 @@ export const importSeriesToCanvas = async (data: {
     return result;
 };
 
+export const convertGroupToSeries = async (data: {
+    canvasId: string;
+    groupId: string;
+    name: string;
+    blueTeamName: string;
+    redTeamName: string;
+    length: number;
+    type: "standard" | "fearless" | "ironman";
+    disabledChampions: string[];
+}) => {
+    const result = await apiPost(
+        `/canvas/${data.canvasId}/group/${data.groupId}/convert-to-series`,
+        {
+            name: data.name,
+            blueTeamName: data.blueTeamName,
+            redTeamName: data.redTeamName,
+            length: data.length,
+            type: data.type,
+            disabledChampions: data.disabledChampions
+        },
+        z.object({ success: z.boolean(), group: CanvasGroupSchema })
+    );
+    track("group_converted_to_series");
+    return result;
+};
+
 // =============================================================================
 // Canvas Sharing/Users
 // =============================================================================

@@ -31,7 +31,8 @@ import {
     updateCanvasGroupPosition,
     createCanvasGroup,
     updateCanvasGroup,
-    updateCanvasDraft
+    updateCanvasDraft,
+    convertGroupToSeries
 } from "./utils/actions";
 import { useNavigate, useParams } from "@solidjs/router";
 import { toast } from "solid-toast";
@@ -74,6 +75,7 @@ import {
     localCreateGroup,
     localUpdateGroupPosition,
     localUpdateGroup,
+    localConvertGroupToSeries,
     localDeleteGroup,
     localUpdateDraftGroup
 } from "./utils/useLocalCanvasMutations";
@@ -245,6 +247,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [disabledChampionsGroupId, setDisabledChampionsGroupId] = createSignal<
         string | null
     >(null);
+    const settingsGroup = createMemo(() =>
+        canvasGroups.find((g) => g.id === disabledChampionsGroupId())
+    );
+    const toDraftMode = (value: unknown): DraftMode => {
+        return value === "fearless" || value === "ironman" || value === "standard"
+            ? value
+            : "standard";
+    };
     const [createGroupPosition, setCreateGroupPosition] = createSignal({ x: 0, y: 0 });
     const [dragOverGroupId, setDragOverGroupId] = createSignal<string | null>(null);
     const [exitingGroupId, setExitingGroupId] = createSignal<string | null>(null);
@@ -621,6 +631,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         mutationFn: updateCanvasGroup,
         onSuccess: (data, variables) => {
             setCanvasGroups((g) => g.id === variables.groupId, data.group);
+            if (data.group.type === "series") {
+                canvasContext.refetchCanvas();
+            }
             canvasContext.mutateCanvas((prev: CanvasResposnse | undefined) => {
                 if (!prev) return prev;
                 return {
@@ -633,6 +646,45 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         },
         onError: (error: Error) => {
             toast.error(`Failed to update group: ${error.message}`);
+        }
+    }));
+
+    const convertGroupToSeriesMutation = useMutation(() => ({
+        mutationFn: convertGroupToSeries,
+        onSuccess: (data, variables) => {
+            setCanvasGroups((g) => g.id === variables.groupId, data.group);
+            if (data.group.CanvasDrafts?.length) {
+                const returnedDrafts = data.group.CanvasDrafts;
+                const returnedIds = new Set(returnedDrafts.map((d) => d.Draft.id));
+                setCanvasDrafts([
+                    ...canvasDrafts.filter((d) => !returnedIds.has(d.Draft.id)),
+                    ...returnedDrafts
+                ]);
+            }
+            canvasContext.mutateCanvas((prev: CanvasResposnse | undefined) => {
+                if (!prev) return prev;
+                const returnedDrafts = data.group.CanvasDrafts ?? [];
+                const returnedIds = new Set(returnedDrafts.map((d) => d.Draft.id));
+                return {
+                    ...prev,
+                    groups: prev.groups.map((group) =>
+                        group.id === variables.groupId ? data.group : group
+                    ),
+                    drafts:
+                        returnedDrafts.length > 0
+                            ? [
+                                  ...prev.drafts.filter(
+                                      (d) => !returnedIds.has(d.Draft.id)
+                                  ),
+                                  ...returnedDrafts
+                              ]
+                            : prev.drafts
+                };
+            });
+            toast.success("Series enabled");
+        },
+        onError: (error: Error) => {
+            toast.error(`Failed to enable series: ${error.message}`);
         }
     }));
 
@@ -1656,6 +1708,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         name: string;
         disabledChampions: string[];
         draftMode: DraftMode;
+        convertToSeries: boolean;
+        blueTeamName: string;
+        redTeamName: string;
+        length: number;
     }) => {
         const groupId = disabledChampionsGroupId();
         if (!groupId) return;
@@ -1663,25 +1719,57 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         if (isLocalMode()) {
             const group = canvasGroups.find((g) => g.id === groupId);
             if (group) {
-                localUpdateGroup({
-                    groupId,
-                    name: data.name || undefined,
-                    metadata: {
-                        ...group.metadata,
-                        disabledChampions: data.disabledChampions,
-                        draftMode: data.draftMode
-                    }
-                });
+                if (data.convertToSeries || group.type === "series") {
+                    localConvertGroupToSeries({
+                        groupId,
+                        name: data.name || group.name,
+                        blueTeamName: data.blueTeamName,
+                        redTeamName: data.redTeamName,
+                        length: data.length,
+                        draftMode: data.draftMode,
+                        disabledChampions: data.disabledChampions
+                    });
+                } else {
+                    localUpdateGroup({
+                        groupId,
+                        name: data.name || undefined,
+                        metadata: {
+                            ...group.metadata,
+                            disabledChampions: data.disabledChampions,
+                            draftMode: data.draftMode
+                        }
+                    });
+                }
                 refreshFromLocal();
             }
+        } else if (data.convertToSeries) {
+            convertGroupToSeriesMutation.mutate({
+                canvasId: canvasId(),
+                groupId,
+                name: data.name || "Custom Series",
+                blueTeamName: data.blueTeamName,
+                redTeamName: data.redTeamName,
+                length: data.length,
+                type: data.draftMode,
+                disabledChampions: data.disabledChampions
+            });
         } else {
+            const group = canvasGroups.find((g) => g.id === groupId);
             updateGroupMutation.mutate({
                 canvasId: canvasId(),
                 groupId,
                 name: data.name || undefined,
                 metadata: {
                     disabledChampions: data.disabledChampions,
-                    draftMode: data.draftMode
+                    draftMode: data.draftMode,
+                    ...(group?.type === "series" && group.metadata.origin === "manual"
+                        ? {
+                              blueTeamName: data.blueTeamName,
+                              redTeamName: data.redTeamName,
+                              length: data.length,
+                              seriesType: data.draftMode
+                          }
+                        : {})
                 }
             });
         }
@@ -2619,9 +2707,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         (g) => g.id === groupConnectionSource()!
                                     );
                                     if (group?.type !== "series") return undefined;
-                                    return canvasDrafts.filter(
-                                        (d) => d.group_id === group.id
-                                    ).length;
+                                    return getDraftsForGroup(group.id).length;
                                 })()}
                                 cardLayout={props.cardLayout}
                             />
@@ -2921,18 +3007,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 <GroupSettingsDialog
                     isOpen={() => disabledChampionsGroupId() !== null}
                     onClose={() => setDisabledChampionsGroupId(null)}
-                    initialName={
-                        canvasGroups.find((g) => g.id === disabledChampionsGroupId())
-                            ?.name ?? ""
+                    initialName={settingsGroup()?.name ?? ""}
+                    initialChampions={settingsGroup()?.metadata.disabledChampions ?? []}
+                    initialDraftMode={toDraftMode(
+                        settingsGroup()?.metadata.draftMode ??
+                            settingsGroup()?.metadata.seriesType
+                    )}
+                    isSeries={settingsGroup()?.type === "series"}
+                    canEditSeriesSettings={
+                        settingsGroup()?.type !== "series" ||
+                        settingsGroup()?.metadata.origin === "manual"
                     }
-                    initialChampions={
-                        canvasGroups.find((g) => g.id === disabledChampionsGroupId())
-                            ?.metadata.disabledChampions ?? []
+                    initialBlueTeamName={
+                        settingsGroup()?.metadata.blueTeamName ?? "Team 1"
                     }
-                    initialDraftMode={
-                        canvasGroups.find((g) => g.id === disabledChampionsGroupId())
-                            ?.metadata.draftMode ?? "standard"
-                    }
+                    initialRedTeamName={settingsGroup()?.metadata.redTeamName ?? "Team 2"}
+                    initialLength={settingsGroup()?.metadata.length ?? 3}
                     onSave={handleSaveGroupSettings}
                 />
                 {/* Context Menu */}
@@ -3032,7 +3122,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             }}
                             onViewSeries={() => {
                                 const group = menu().group;
-                                if (group.versus_draft_id) {
+                                if (
+                                    group.versus_draft_id &&
+                                    group.metadata.origin !== "manual"
+                                ) {
                                     navigate(`/versus/${group.versus_draft_id}`);
                                 }
                                 closeGroupContextMenu();

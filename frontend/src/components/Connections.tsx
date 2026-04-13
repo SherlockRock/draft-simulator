@@ -93,7 +93,15 @@ export const ConnectionComponent = (props: {
         if (group?.type === "series") {
             const groupDrafts = props.drafts
                 .filter((d) => d.group_id === group.id)
-                .sort((a, b) => (a.Draft.seriesIndex ?? 0) - (b.Draft.seriesIndex ?? 0));
+                .sort((a, b) => {
+                    const aIndex = a.Draft.seriesIndex;
+                    const bIndex = b.Draft.seriesIndex;
+                    if (aIndex === null || aIndex === undefined) {
+                        return bIndex === null || bIndex === undefined ? 0 : 1;
+                    }
+                    if (bIndex === null || bIndex === undefined) return -1;
+                    return aIndex - bIndex;
+                });
             const index = groupDrafts.findIndex((d) => d.Draft.id === draft.Draft.id);
             const worldPos = getSeriesDraftAnchorWorldPosition(
                 group,

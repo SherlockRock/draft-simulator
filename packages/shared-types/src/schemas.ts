@@ -89,6 +89,7 @@ export const CanvasGroupMetadataSchema = z.object({
   length: z.number().optional(),
   competitive: z.boolean().optional(),
   seriesType: z.string().optional(),
+  origin: z.enum(["live", "manual"]).optional(),
   disabledChampions: z.array(z.string()).optional(),
   draftMode: DraftModeSchema.optional(),
 });
@@ -326,6 +327,7 @@ export const VersusDraftSchema = z.object({
   competitive: z.boolean(),
   icon: z.string().nullable().optional(),
   type: z.string().nullable().optional(),
+  origin: z.enum(["live", "manual"]).default("live"),
   disabledChampions: z.array(z.string()).optional(),
   shareLink: z.string(),
   owner_id: z.string().nullable(),
@@ -356,6 +358,7 @@ export const VersusDraftListItemSchema = z.object({
   competitive: z.boolean(),
   icon: z.string().nullable().optional(),
   type: z.string().nullable().optional(),
+  origin: z.enum(["live", "manual"]).default("live"),
   shareLink: z.string(),
   owner_id: z.string().nullable(),
   createdAt: z.string(),
@@ -480,6 +483,7 @@ const VersusActivitySchema = ActivityBaseSchema.extend({
   length: z.number(),
   competitive: z.boolean(),
   type: z.string().nullable(),
+  origin: z.enum(["live", "manual"]).default("live"),
   disabledChampions: z.array(z.string()),
   hasStarted: z.boolean(),
 });

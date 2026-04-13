@@ -774,6 +774,7 @@ router.post("/me/import", protect, async (req, res) => {
             name: seriesName,
             length: importedSeries.seriesLength,
             type: importedSeries.draftType || "standard",
+            origin: "manual",
             blueTeamName: importedSeries.blueTeamName || "Team 1",
             redTeamName: importedSeries.redTeamName || "Team 2",
           },
@@ -785,6 +786,7 @@ router.post("/me/import", protect, async (req, res) => {
           {
             length: importedSeries.seriesLength,
             type: importedSeries.draftType || "standard",
+            origin: "manual",
             blueTeamName: importedSeries.blueTeamName || "Team 1",
             redTeamName: importedSeries.redTeamName || "Team 2",
           },
@@ -1040,6 +1042,7 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
             name: seriesName,
             length: importedSeries.seriesLength,
             type: importedSeries.draftType || "standard",
+            origin: "manual",
             blueTeamName: importedSeries.blueTeamName || "Team 1",
             redTeamName: importedSeries.redTeamName || "Team 2",
             competitive: importedSeries.competitive || false,
@@ -1053,6 +1056,7 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
           {
             length: importedSeries.seriesLength,
             type: importedSeries.draftType || "standard",
+            origin: "manual",
             blueTeamName: importedSeries.blueTeamName || "Team 1",
             redTeamName: importedSeries.redTeamName || "Team 2",
             competitive: importedSeries.competitive || false,
