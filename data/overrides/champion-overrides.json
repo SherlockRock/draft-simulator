@@ -1,0 +1,11 @@
+{
+  "_comment": "Per-champion field overrides. Keys match champion IDs. Values are partial — only specified fields are overridden. Applied last in the compile step.",
+  "Yone": {
+    "positions": ["MIDDLE", "TOP"],
+    "_reason": "Yone's TOP flex not always reflected in Meraki position data"
+  },
+  "Corki": {
+    "damageProfile": { "physical": 0.15, "magic": 0.80, "true": 0.05 },
+    "_reason": "Corki's auto-attacks deal 80% magic damage despite PHYSICAL_DAMAGE adaptiveType"
+  }
+}
