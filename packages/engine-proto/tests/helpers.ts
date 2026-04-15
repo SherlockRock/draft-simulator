@@ -11,7 +11,7 @@ export function makeChampion(
     name: id,
     positions,
     damageProfile: { physical: 0.5, magic: 0.4, true: 0.1 },
-    scalingProfile: { early: 0.5, mid: 0.5, late: 0.5 },
+    scalingProfile: { early: 0.3, mid: 0.6, late: 0.4 },
     ccProfile: { hasCc: false, ccTypes: [], engageQuality: 0, peelQuality: 0 },
     tags: { archetype: [], synergy: [] },
     blindability: 0.5,
