@@ -10,3 +10,9 @@ docs/
 .desloppify
 .superpowers
 .codex
+
+# Champion data pipeline
+data/raw/*
+!data/raw/.gitkeep
+data/compiled/*
+!data/compiled/.gitkeep

@@ -10,6 +10,7 @@
     "build": "pnpm --filter @draft-sim/shared-types build && pnpm --filter draft-simulator-frontend build",
     "build:types": "pnpm --filter @draft-sim/shared-types build",
     "typecheck": "pnpm --filter draft-simulator-frontend exec tsc --noEmit",
+    "update-champion-meta": "node scripts/scrape-meraki.mjs && node scripts/scrape-cdragon.mjs && node scripts/compile-champion-meta.mjs && node scripts/compile-matchup-data.mjs && node scripts/validate-compiled-data.mjs",
     "update-champions": "node scripts/update-champions.mjs",
     "update-images": "node scripts/update-champion-images.mjs"
   },
