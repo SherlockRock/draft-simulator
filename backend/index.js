@@ -17,6 +17,7 @@ const authRoutes = require("./routes/auth");
 const canvasRoutes = require("./routes/canvas");
 const activityRoutes = require("./routes/activity");
 const versusRoutes = require("./routes/versus");
+const navigatorRoutes = require("./routes/navigator");
 const Draft = require("./models/Draft");
 const User = require("./models/User");
 const setupAssociations = require("./models/associations");
@@ -24,6 +25,7 @@ const socketService = require("./middleware/socketService");
 const { UserCanvas, CanvasDraft, CanvasGroup } = require("./models/Canvas");
 const { getGroupRestrictedChampions } = require("./utils/groupRestrictions");
 const { setupVersusHandlers } = require("./socketHandlers/versusHandlers");
+const { setupNavigatorHandlers } = require("./socketHandlers/navigatorHandlers");
 const { initializeTimerService } = require("./services/versusTimerService");
 const VersusSessionManager = require("./services/versusSessionManager");
 require("dotenv").config();
@@ -100,6 +102,7 @@ async function main() {
   app.use("/api/canvas", canvasRoutes);
   app.use("/api/activity", activityRoutes);
   app.use("/api/versus-drafts", versusRoutes);
+  app.use("/api/navigator", navigatorRoutes);
 
   let server;
   const certPath =
@@ -168,6 +171,7 @@ async function main() {
 
     // Set up versus-specific handlers
     setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler);
+    setupNavigatorHandlers(io, socket, wrapSocketHandler);
 
     wrapSocketHandler(socket, "newDraft", async (data) => {
       try {

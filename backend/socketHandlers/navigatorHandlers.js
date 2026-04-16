@@ -227,7 +227,7 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       slot,
       side: currentTurn.side,
       champion_id: championId,
-      user_injected: true,
+      user_injected: false,
     });
 
     const events = await listDraftEvents(draft.id);
