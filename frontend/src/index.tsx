@@ -13,6 +13,7 @@ import CanvasEntryRedirect from "./components/CanvasEntryRedirect";
 import DraftWorkflow from "./workflows/DraftWorkflow";
 import CanvasWorkflow from "./workflows/CanvasWorkflow";
 import VersusWorkflow from "./workflows/VersusWorkflow";
+import NavigatorWorkflow from "./workflows/NavigatorWorkflow";
 import { initAnalytics } from "./utils/analytics";
 
 // Lazy-loaded page components for code splitting
@@ -26,6 +27,8 @@ const CanvasDetailView = lazy(() => import("./pages/CanvasDetailView"));
 const VersusSeriesOverview = lazy(() => import("./pages/VersusSeriesOverview"));
 const VersusRoleSelection = lazy(() => import("./pages/VersusRoleSelection"));
 const VersusDraftView = lazy(() => import("./pages/VersusDraftView"));
+const NavigatorDashboard = lazy(() => import("./pages/NavigatorDashboard"));
+const NavigatorSessionView = lazy(() => import("./pages/NavigatorSessionView"));
 
 initAnalytics();
 
@@ -67,6 +70,13 @@ render(
                             <Route
                                 path="/:id/draft/:draftId"
                                 component={VersusDraftView}
+                            />
+                        </Route>
+                        <Route path="/navigator" component={NavigatorWorkflow}>
+                            <Route path="/" component={NavigatorDashboard} />
+                            <Route
+                                path="/:sessionId"
+                                component={NavigatorSessionView}
                             />
                         </Route>
                         <Route path="*" component={HomePage} />
