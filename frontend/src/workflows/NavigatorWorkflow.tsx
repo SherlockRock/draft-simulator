@@ -3,7 +3,9 @@ import { RouteSectionProps, useLocation, useParams } from "@solidjs/router";
 import { z } from "zod";
 import toast from "solid-toast";
 import {
+    NavigatorScenario,
     NavigatorSessionState,
+    NavigatorTreeNode,
     NavigatorWorkflowContext,
     NavigatorWorkflowContextValue
 } from "../contexts/NavigatorContext";
@@ -54,12 +56,61 @@ const NavigatorEventDataSchema = z.object({
     createdAt: z.string()
 });
 
+const NavigatorScoreSetSchema = z.object({
+    composite: z.number(),
+    compStrength: z.number(),
+    informationValue: z.number(),
+    flexRetention: z.number(),
+    revealCost: z.number()
+});
+
+const NavigatorRoleAssignmentSchema = z.object({
+    TOP: z.string(),
+    JUNGLE: z.string(),
+    MIDDLE: z.string(),
+    ADC: z.string(),
+    SUPPORT: z.string()
+});
+
+const NavigatorWeightedAssignmentSchema = z.object({
+    assignment: NavigatorRoleAssignmentSchema,
+    weight: z.number()
+});
+
+const NavigatorTreeNodeSchema: z.ZodType<NavigatorTreeNode> = z.lazy(() =>
+    z.object({
+        championId: z.string().nullable(),
+        scores: NavigatorScoreSetSchema,
+        assignmentDistribution: z.array(NavigatorWeightedAssignmentSchema),
+        side: z.enum(["blue", "red"]).nullable(),
+        slot: z.number().nullable(),
+        userInjected: z.boolean(),
+        children: z.array(NavigatorTreeNodeSchema)
+    })
+);
+
+const NavigatorScenarioSchema: z.ZodType<NavigatorScenario> = z.object({
+    name: z.string(),
+    scores: z.object({
+        composite: z.number(),
+        compStrength: z.number(),
+        informationValue: z.number()
+    }),
+    description: z.string(),
+    bluePicks: z.array(z.string()),
+    likelyAssignments: z.array(NavigatorWeightedAssignmentSchema),
+    redPicks: z.array(z.string()),
+    treePath: z.array(z.number()),
+    perspective: z.enum(["robust", "likely", "off_profile"]),
+    indicators: z.array(z.string())
+});
+
 const NavigatorSnapshotDataSchema = z.object({
     id: z.string(),
     navigator_draft_id: z.string(),
     after_event_id: z.string().nullable(),
-    tree: z.unknown(),
-    scenarios: z.array(z.unknown()),
+    tree: NavigatorTreeNodeSchema,
+    scenarios: z.array(NavigatorScenarioSchema),
     meta: z
         .object({
             nodesEvaluated: z.number(),

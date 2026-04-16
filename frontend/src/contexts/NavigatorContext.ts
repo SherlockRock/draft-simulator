@@ -1,5 +1,51 @@
 import { createContext, useContext, Accessor } from "solid-js";
 
+export interface NavigatorScoreSet {
+    composite: number;
+    compStrength: number;
+    informationValue: number;
+    flexRetention: number;
+    revealCost: number;
+}
+
+export interface NavigatorRoleAssignment {
+    TOP: string;
+    JUNGLE: string;
+    MIDDLE: string;
+    ADC: string;
+    SUPPORT: string;
+}
+
+export interface NavigatorWeightedAssignment {
+    assignment: NavigatorRoleAssignment;
+    weight: number;
+}
+
+export interface NavigatorTreeNode {
+    championId: string | null;
+    scores: NavigatorScoreSet;
+    assignmentDistribution: NavigatorWeightedAssignment[];
+    side: "blue" | "red" | null;
+    slot: number | null;
+    userInjected: boolean;
+    children: NavigatorTreeNode[];
+}
+
+export interface NavigatorScenario {
+    name: string;
+    scores: Pick<
+        NavigatorScoreSet,
+        "composite" | "compStrength" | "informationValue"
+    >;
+    description: string;
+    bluePicks: string[];
+    likelyAssignments: NavigatorWeightedAssignment[];
+    redPicks: string[];
+    treePath: number[];
+    perspective: "robust" | "likely" | "off_profile";
+    indicators: string[];
+}
+
 export interface NavigatorSessionState {
     session: NavigatorSessionData | null;
     draft: NavigatorDraftData | null;
@@ -47,8 +93,8 @@ export interface NavigatorSnapshotData {
     id: string;
     navigator_draft_id: string;
     after_event_id: string | null;
-    tree: unknown;
-    scenarios: unknown[];
+    tree: NavigatorTreeNode;
+    scenarios: NavigatorScenario[];
     meta: {
         nodesEvaluated: number;
         computeTimeMs: number;
