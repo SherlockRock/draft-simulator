@@ -1,7 +1,7 @@
 import { Component, Show, createSignal } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { Title, Meta } from "@solidjs/meta";
-import { LayoutDashboard, Swords } from "lucide-solid";
+import { LayoutDashboard, Swords, Compass } from "lucide-solid";
 import FlowCard from "../components/FlowCard";
 import ActivityList from "../components/ActivityList";
 import { CreateCanvasDialog } from "../components/CreateCanvasDialog";
@@ -25,7 +25,7 @@ const HomePage: Component = () => {
             <div class="mx-auto flex min-h-full max-w-7xl flex-col p-8">
                 {/* Flow Navigation Cards */}
                 <div class="mb-12">
-                    <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                    <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
                         <FlowCard
                             title="Canvas"
                             description="Visual workspace for organizing drafts"
@@ -48,6 +48,15 @@ const HomePage: Component = () => {
                             flowType="versus"
                             ctaLabel="Create Versus"
                             onCtaClick={() => setShowCreateVersusDialog(true)}
+                        />
+                        <FlowCard
+                            title="Navigator"
+                            description="Live draft analysis powered by minimax search"
+                            icon={<Compass size={28} class="text-blue-400" />}
+                            onClick={() => navigate("/navigator")}
+                            flowType="navigator"
+                            ctaLabel="New Session"
+                            onCtaClick={() => navigate("/navigator")}
                         />
                     </div>
                 </div>

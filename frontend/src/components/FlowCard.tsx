@@ -8,7 +8,7 @@ interface FlowCardProps {
     onCtaClick: () => void;
     ctaLabel: string;
     disabled?: boolean;
-    flowType?: "draft" | "canvas" | "versus";
+    flowType?: "draft" | "canvas" | "versus" | "navigator";
 }
 
 const FlowCard: Component<FlowCardProps> = (props) => {
@@ -22,6 +22,8 @@ const FlowCard: Component<FlowCardProps> = (props) => {
                 return "from-darius-purple/[0.08] to-transparent group-hover:from-darius-purple/[0.12]";
             case "versus":
                 return "from-darius-crimson/[0.08] to-transparent group-hover:from-darius-crimson/[0.12]";
+            case "navigator":
+                return "from-blue-500/[0.08] to-transparent group-hover:from-blue-500/[0.12]";
             default:
                 return "from-darius-purple/[0.08] to-transparent group-hover:from-darius-purple/[0.12]";
         }
@@ -31,6 +33,8 @@ const FlowCard: Component<FlowCardProps> = (props) => {
         switch (props.flowType) {
             case "versus":
                 return "bg-darius-crimson shadow-[0_4px_12px_rgba(224,56,72,0.15)] hover:shadow-[0_6px_16px_rgba(224,56,72,0.22)]";
+            case "navigator":
+                return "bg-blue-500 shadow-[0_4px_12px_rgba(59,130,246,0.15)] hover:shadow-[0_6px_16px_rgba(59,130,246,0.22)]";
             case "canvas":
             default:
                 return "bg-darius-purple shadow-[0_4px_12px_rgba(122,56,128,0.15)] hover:shadow-[0_6px_16px_rgba(122,56,128,0.22)]";
