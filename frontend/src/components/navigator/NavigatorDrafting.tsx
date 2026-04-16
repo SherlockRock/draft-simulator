@@ -1,18 +1,64 @@
-import { Component, createMemo, createSignal } from "solid-js";
+import { Component, Show, createEffect, createMemo, createSignal } from "solid-js";
 import { useNavigatorContext } from "../../contexts/NavigatorContext";
 import DraftInputPanel from "./DraftInputPanel";
 import DecisionTree from "./DecisionTree";
+import ScenarioLanes from "./ScenarioLanes";
 
 const NavigatorDrafting: Component = () => {
-    const { navigatorContext } = useNavigatorContext();
-    const [highlightedPath, setHighlightedPath] = createSignal<number[] | null>(null);
+    const { joinSession, navigatorContext } = useNavigatorContext();
+    const [selectedScenarioIdx, setSelectedScenarioIdx] = createSignal<number | null>(
+        null
+    );
+    const [highlightedTreePath, setHighlightedTreePath] = createSignal<number[] | null>(
+        null
+    );
 
     const treeData = createMemo(() => navigatorContext().snapshot?.tree ?? null);
+    const scenarios = createMemo(() => navigatorContext().snapshot?.scenarios ?? []);
     const isComputing = createMemo(
-        () =>
-            navigatorContext().events.length > 0 &&
-            navigatorContext().snapshot === null
+        () => navigatorContext().events.length > 0 && navigatorContext().snapshot === null
     );
+    const isStale = createMemo(
+        () => navigatorContext().snapshot === null && navigatorContext().events.length > 0
+    );
+    const activeSessionId = createMemo(() => navigatorContext().session?.id ?? null);
+
+    createEffect(() => {
+        const nextScenarios = scenarios();
+        const selectedIndex = selectedScenarioIdx();
+
+        if (nextScenarios.length === 0) {
+            setSelectedScenarioIdx(null);
+            setHighlightedTreePath(null);
+        } else if (selectedIndex !== null && selectedIndex >= nextScenarios.length) {
+            setSelectedScenarioIdx(null);
+        }
+    });
+
+    const handleScenarioSelect = (index: number) => {
+        const selected = scenarios()[index];
+        setSelectedScenarioIdx(index);
+        if (selected?.treePath) {
+            setHighlightedTreePath(selected.treePath);
+        }
+    };
+
+    const handleNodeClick = (nodePath: number[]) => {
+        const matchIdx = scenarios().findIndex((scenario) =>
+            nodePath.every((value, index) => scenario.treePath[index] === value)
+        );
+
+        setHighlightedTreePath(nodePath);
+        setSelectedScenarioIdx(matchIdx >= 0 ? matchIdx : null);
+    };
+
+    const handleRetry = () => {
+        const sessionId = activeSessionId();
+
+        if (sessionId) {
+            joinSession(sessionId);
+        }
+    };
 
     return (
         <div
@@ -26,18 +72,36 @@ const NavigatorDrafting: Component = () => {
                 <DraftInputPanel />
             </div>
 
-            <div class="min-h-0 bg-slate-900/20">
+            <div class="relative min-h-0 bg-slate-900/20">
                 <DecisionTree
                     treeData={treeData()}
                     isComputing={isComputing()}
-                    highlightedPath={highlightedPath()}
-                    onNodeClick={(path) => setHighlightedPath(path)}
+                    highlightedPath={highlightedTreePath()}
+                    onNodeClick={handleNodeClick}
                 />
+
+                <Show when={isStale()}>
+                    <div class="pointer-events-none absolute right-4 top-4 flex items-center gap-2">
+                        <span class="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-amber-300">
+                            Stale
+                        </span>
+                        <button
+                            type="button"
+                            class="pointer-events-auto rounded-full border border-slate-600 bg-slate-900/90 px-3 py-1 text-xs font-medium text-slate-200 transition-colors hover:border-slate-500 hover:bg-slate-800"
+                            onClick={handleRetry}
+                        >
+                            Retry
+                        </button>
+                    </div>
+                </Show>
             </div>
 
-            <div class="flex items-center justify-center border-t border-slate-700/50 bg-slate-900/50 text-slate-500">
-                Scenario lanes will render here
-            </div>
+            <ScenarioLanes
+                scenarios={scenarios()}
+                isComputing={isComputing()}
+                selectedIndex={selectedScenarioIdx()}
+                onSelectScenario={handleScenarioSelect}
+            />
         </div>
     );
 };
