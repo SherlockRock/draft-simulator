@@ -68,7 +68,10 @@ async function refreshAccessToken(): Promise<boolean> {
 /**
  * Fetch wrapper that retries once on 401 by refreshing the access token.
  */
-async function fetchWithRefresh(url: string, options: RequestInit): Promise<Response> {
+export async function fetchWithRefresh(
+    url: string,
+    options: RequestInit
+): Promise<Response> {
     const res = await fetch(url, options);
     if (res.status !== 401) return res;
 
