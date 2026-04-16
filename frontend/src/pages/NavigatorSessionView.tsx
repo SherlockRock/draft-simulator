@@ -3,6 +3,7 @@ import { Title, Meta } from "@solidjs/meta";
 import { useParams } from "@solidjs/router";
 import { useNavigatorContext } from "../contexts/NavigatorContext";
 import NavigatorSetup from "../components/navigator/NavigatorSetup";
+import NavigatorDrafting from "../components/navigator/NavigatorDrafting";
 
 const NavigatorSessionView: Component = () => {
     const params = useParams();
@@ -33,11 +34,7 @@ const NavigatorSessionView: Component = () => {
             >
                 <Show
                     when={navigatorContext().session?.status === "setup"}
-                    fallback={
-                        <div class="flex flex-1 items-center justify-center text-slate-400">
-                            Draft view coming soon...
-                        </div>
-                    }
+                    fallback={<NavigatorDrafting />}
                 >
                     <NavigatorSetup />
                 </Show>
