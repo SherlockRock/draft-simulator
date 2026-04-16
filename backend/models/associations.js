@@ -5,6 +5,10 @@ const DraftShare = require("./DraftShare");
 const { Canvas, UserCanvas, CanvasDraft, CanvasShare, CanvasGroup } = require("./Canvas");
 const VersusDraft = require("./VersusDraft");
 const VersusParticipant = require("./VersusParticipant");
+const NavigatorSession = require("./NavigatorSession");
+const NavigatorDraft = require("./NavigatorDraft");
+const NavigatorEvent = require("./NavigatorEvent");
+const NavigatorSnapshot = require("./NavigatorSnapshot");
 
 const setupAssociations = () => {
   User.hasMany(UserToken);
@@ -97,6 +101,21 @@ const setupAssociations = () => {
 
   User.hasMany(VersusParticipant, { foreignKey: "user_id" });
   VersusParticipant.belongsTo(User, { foreignKey: "user_id" });
+
+  // Navigator associations
+  User.hasMany(NavigatorSession, { foreignKey: "user_id" });
+  NavigatorSession.belongsTo(User, { as: "owner", foreignKey: "user_id" });
+
+  NavigatorSession.hasMany(NavigatorDraft, { foreignKey: "session_id", onDelete: "CASCADE" });
+  NavigatorDraft.belongsTo(NavigatorSession, { foreignKey: "session_id", onDelete: "CASCADE" });
+
+  NavigatorDraft.hasMany(NavigatorEvent, { foreignKey: "navigator_draft_id", onDelete: "CASCADE" });
+  NavigatorEvent.belongsTo(NavigatorDraft, { foreignKey: "navigator_draft_id", onDelete: "CASCADE" });
+
+  NavigatorDraft.hasMany(NavigatorSnapshot, { foreignKey: "navigator_draft_id", onDelete: "CASCADE" });
+  NavigatorSnapshot.belongsTo(NavigatorDraft, { foreignKey: "navigator_draft_id", onDelete: "CASCADE" });
+
+  NavigatorDraft.belongsTo(Draft, { foreignKey: "draft_id" });
 };
 
 module.exports = setupAssociations;
