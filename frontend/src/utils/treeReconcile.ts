@@ -235,3 +235,35 @@ function trimChildren(
 
     return scored.slice(0, branchWidth).map((entry) => entry.child);
 }
+
+/**
+ * Translate a scenario from the fresh engine tree to the merged tree.
+ *
+ * Strategy: compute the node-key path of the scenario's treePath in `freshTree`,
+ * then resolve that node-key path against `mergedTree`. If the path doesn't
+ * exist in the merged tree (e.g., trimmed by branch-width cap), returns null.
+ */
+export function remapScenarioPath(
+    scenario: NavigatorScenario,
+    freshTree: NavigatorTreeNode,
+    mergedTree: NavigatorTreeNode
+): NavigatorScenario | null {
+    const keyPath = pathIndicesToNodeKeyPath(freshTree, scenario.treePath);
+    if (keyPath === null) return null;
+    const newIndices = nodeKeyPathToIndices(mergedTree, keyPath);
+    if (newIndices === null) return null;
+    return { ...scenario, treePath: newIndices };
+}
+
+export function remapScenarios(
+    scenarios: NavigatorScenario[],
+    freshTree: NavigatorTreeNode,
+    mergedTree: NavigatorTreeNode
+): NavigatorScenario[] {
+    const remapped: NavigatorScenario[] = [];
+    for (const scenario of scenarios) {
+        const next = remapScenarioPath(scenario, freshTree, mergedTree);
+        if (next) remapped.push(next);
+    }
+    return remapped;
+}
