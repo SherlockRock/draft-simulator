@@ -182,7 +182,9 @@ async function buildEngineRequest(session, events) {
     metaData: cachedMetaData,
     config: {
       branchWidth: 5,
-      maxDepth: 6,
+      maxDepth: 8,
+      broadDepth: 8,
+      extensionTurnThreshold: 8,
       latencyBudgetMs: 2000,
       forcedMoves: [],
     },
