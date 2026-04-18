@@ -26,6 +26,7 @@ interface DecisionTreeProps {
     highlightedPath: number[] | null;
     rootChampionId: string | null;
     scenarioPaths: TieredScenarioPath[];
+    panRequest: { path: number[] } | null;
     onNodeClick: (nodeIndex: number[]) => void;
 }
 
@@ -228,6 +229,14 @@ function getFitTransform(
 
 function isElementWithinNode(target: EventTarget | null): boolean {
     return target instanceof Element && target.closest("[data-tree-node='true']") !== null;
+}
+
+function isPrefix(shorter: number[], longer: number[]): boolean {
+    if (shorter.length > longer.length) return false;
+    for (let i = 0; i < shorter.length; i++) {
+        if (shorter[i] !== longer[i]) return false;
+    }
+    return true;
 }
 
 const TreeLink: Component<{
@@ -823,6 +832,11 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         });
     });
 
+    let hasPerformedInitialFit = false;
+
+    // Keep zoom bounds fresh as the tree grows, but only auto-fit the viewport
+    // on the initial tree load. After that, user navigation is preserved —
+    // node expand, scenario select, etc. don't reset the view.
     createEffect(() => {
         const transform = fitTransform();
 
@@ -832,7 +846,37 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
 
         panzoomInstance.setMinZoom(Math.max(roundScale(transform.scale * 0.6), 0.05));
         panzoomInstance.setMaxZoom(Math.max(roundScale(transform.scale * 16), 8));
-        applyTransform(transform);
+
+        if (!hasPerformedInitialFit) {
+            applyTransform(transform);
+            hasPerformedInitialFit = true;
+        }
+    });
+
+    // Pan (no zoom change) to bring a requested path into view. Fires on every
+    // new panRequest object, even when the target path is the same as before.
+    createEffect(() => {
+        const request = props.panRequest;
+        if (!request || !panzoomInstance) return;
+
+        const currentLayout = layout();
+        const viewport = viewportSize();
+        if (!currentLayout || viewport.width <= 0 || viewport.height <= 0) return;
+
+        const targetNodes = currentLayout.nodes.filter((node) =>
+            isPrefix(node.data.path, request.path)
+        );
+        if (targetNodes.length === 0) return;
+
+        const xs = targetNodes.map((n) => n.x);
+        const ys = targetNodes.map((n) => n.y);
+        const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+        const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+
+        const currentTransform = panzoomInstance.getTransform();
+        const nextX = viewport.width / 2 - cx * currentTransform.scale;
+        const nextY = viewport.height / 2 - cy * currentTransform.scale;
+        panzoomInstance.moveTo(nextX, nextY);
     });
 
     return (

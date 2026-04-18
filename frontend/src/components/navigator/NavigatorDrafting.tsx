@@ -12,6 +12,7 @@ const NavigatorDrafting: Component = () => {
     const [highlightedTreePath, setHighlightedTreePath] = createSignal<number[] | null>(
         null
     );
+    const [panRequest, setPanRequest] = createSignal<{ path: number[] } | null>(null);
 
     const treeData = createMemo(() => navigatorContext().snapshot?.tree ?? null);
     const scenarios = createMemo(() => navigatorContext().snapshot?.scenarios ?? []);
@@ -50,6 +51,7 @@ const NavigatorDrafting: Component = () => {
         setSelectedScenarioIdx(index);
         if (selected?.treePath) {
             setHighlightedTreePath(selected.treePath);
+            setPanRequest({ path: selected.treePath });
         }
     };
 
@@ -92,6 +94,7 @@ const NavigatorDrafting: Component = () => {
                         path: scenario.treePath,
                         tier: selectedScenarioIdx() === index ? "selected" : "unselected"
                     }))}
+                    panRequest={panRequest()}
                     onNodeClick={handleNodeClick}
                 />
 
