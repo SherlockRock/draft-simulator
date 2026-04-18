@@ -313,6 +313,7 @@ const TreeLink: Component<{
 
     return (
         <path
+            class="transition-[d] duration-200 ease-out"
             d={radialLinkPath(
                 props.link.source.x,
                 props.link.source.y,
@@ -418,6 +419,7 @@ const TreeNodeComponent: Component<{
     return (
         <g
             data-tree-node="true"
+            class="transition-transform duration-200 ease-out"
             transform={`translate(${props.node.x} ${props.node.y})`}
             opacity={props.ghosted ? 0.4 : isBan() ? 0.7 : 1}
         >
