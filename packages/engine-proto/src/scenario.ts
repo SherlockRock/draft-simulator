@@ -1,4 +1,5 @@
-import type { TreeNode, Scenario, ChampionMeta, Perspective } from "./types.js";
+import { applyMove, applyPairMove } from "./draft-state.js";
+import type { TreeNode, Scenario, ChampionMeta, Perspective, DraftState } from "./types.js";
 
 interface LeafInfo {
   node: TreeNode;
@@ -164,4 +165,31 @@ export function extractScenarios(
       indicators: [],
     };
   });
+}
+
+export function replayPath(
+  initialState: DraftState,
+  tree: TreeNode,
+  path: number[],
+): DraftState {
+  let state = initialState;
+  let node = tree;
+  for (const childIndex of path) {
+    const child = node.children[childIndex];
+    if (!child) {
+      throw new Error(`replayPath: no child at index ${childIndex}`);
+    }
+    if (child.championIds.length === 2) {
+      const [a, b] = child.championIds;
+      state = applyPairMove(state, a, b);
+    } else if (child.championIds.length === 1) {
+      state = applyMove(state, child.championIds[0]);
+    } else if (child.championIds.length === 0) {
+      // Placeholder / leaf - no state advance
+    } else {
+      throw new Error(`replayPath: unexpected championIds length ${child.championIds.length}`);
+    }
+    node = child;
+  }
+  return state;
 }

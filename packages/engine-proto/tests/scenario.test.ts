@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { extractScenarios, collectLeaves, computeFeatureVector, labelScenario } from "../src/scenario.js";
-import { TEST_CHAMPIONS } from "./helpers.js";
+import {
+  extractScenarios,
+  collectLeaves,
+  computeFeatureVector,
+  labelScenario,
+  replayPath,
+} from "../src/scenario.js";
+import { TEST_CHAMPIONS, emptyDraft } from "./helpers.js";
 import type { TreeNode, ScoreSet } from "../src/types.js";
 
 const ZERO_SCORES: ScoreSet = {
@@ -168,5 +174,68 @@ describe("extractScenarios", () => {
     const scenarios = extractScenarios(tree, TEST_CHAMPIONS, 5);
     const withBans = scenarios.find((s) => s.blueBans.length > 0 || s.redBans.length > 0);
     expect(withBans).toBeDefined();
+  });
+});
+
+describe("replayPath", () => {
+  it("reconstructs the DraftState at the node identified by a path", () => {
+    const state0 = emptyDraft();
+    const tree: TreeNode = {
+      championIds: [],
+      scores: ZERO_SCORES,
+      assignmentDistribution: [],
+      side: null,
+      slots: [],
+      actionType: "ban",
+      phase: "ban1",
+      userInjected: false,
+      children: [
+        {
+          championIds: ["Aatrox"],
+          scores: { ...ZERO_SCORES, composite: 0.8 },
+          assignmentDistribution: [],
+          side: "blue",
+          slots: [0],
+          actionType: "ban",
+          phase: "ban1",
+          userInjected: false,
+          children: [
+            {
+              championIds: ["LeeSin"],
+              scores: { ...ZERO_SCORES, composite: 0.7 },
+              assignmentDistribution: [],
+              side: "red",
+              slots: [1],
+              actionType: "ban",
+              phase: "ban1",
+              userInjected: false,
+              children: [],
+            },
+          ],
+        },
+      ],
+    };
+
+    const state = replayPath(state0, tree, [0, 0]);
+    expect(state.blueBans).toEqual(["Aatrox"]);
+    expect(state.redBans).toEqual(["LeeSin"]);
+    expect(state.turnIndex).toBe(2);
+  });
+
+  it("returns the initial state for an empty path", () => {
+    const state0 = emptyDraft();
+    const tree: TreeNode = {
+      championIds: [],
+      scores: ZERO_SCORES,
+      assignmentDistribution: [],
+      side: null,
+      slots: [],
+      actionType: "ban",
+      phase: "ban1",
+      userInjected: false,
+      children: [],
+    };
+    const state = replayPath(state0, tree, []);
+    expect(state).toEqual(state0);
   });
 });
