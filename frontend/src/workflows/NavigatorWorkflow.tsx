@@ -3,6 +3,7 @@ import { RouteSectionProps, useLocation, useParams } from "@solidjs/router";
 import { z } from "zod";
 import toast from "solid-toast";
 import {
+    NavigatorEventData,
     NavigatorPanRequest,
     NavigatorScenario,
     NavigatorSessionState,
@@ -14,6 +15,12 @@ import {
     NavigatorSocketProvider,
     useNavigatorSocket
 } from "../providers/NavigatorSocketProvider";
+import { draftEventsToState } from "../utils/draftEventsToState";
+import {
+    pathIndicesToNodeKeyPath,
+    reconcileTree,
+    remapScenarios
+} from "../utils/treeReconcile";
 import { validateSocketEvent } from "../utils/socketValidation";
 import { Socket } from "socket.io-client";
 
@@ -203,6 +210,39 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     };
     let socketWithListeners: Socket | undefined = undefined;
 
+    function derivePickFromEvents(
+        oldEvents: NavigatorEventData[],
+        newEvents: NavigatorEventData[]
+    ): { side: "blue" | "red"; actionType: "ban" | "pick"; championIds: string[] } | null {
+        const oldIds = new Set(oldEvents.map((e) => e.id));
+        const added = newEvents.filter(
+            (e) =>
+                !oldIds.has(e.id) &&
+                (e.event_type === "ban" || e.event_type === "pick")
+        );
+        if (added.length === 0) return null;
+        const sorted = [...added].sort((a, b) => a.slot - b.slot);
+        const first = sorted[0];
+        if (sorted.length === 2) {
+            const second = sorted[1];
+            if (
+                first.event_type === second.event_type &&
+                first.side === second.side
+            ) {
+                return {
+                    side: first.side,
+                    actionType: first.event_type,
+                    championIds: [first.champion_id, second.champion_id]
+                };
+            }
+        }
+        return {
+            side: first.side,
+            actionType: first.event_type,
+            championIds: [first.champion_id]
+        };
+    }
+
     const getActiveSessionId = () =>
         navigatorContext().session?.id ?? params.sessionId ?? null;
 
@@ -278,11 +318,64 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             return;
         }
 
-        setNavigatorContext((prev) => ({
-            session: data.session ?? prev.session,
-            draft: data.draft === undefined ? prev.draft : data.draft,
-            events: data.events ?? prev.events,
-            snapshot: data.snapshot === undefined ? prev.snapshot : data.snapshot,
+        const prev = untrack(navigatorContext);
+        const oldEvents = prev.events;
+        const oldTree = prev.snapshot?.tree ?? null;
+
+        let nextSnapshot = data.snapshot === undefined ? prev.snapshot : data.snapshot;
+        const nextEvents = data.events ?? oldEvents;
+
+        if (nextSnapshot && oldTree && nextSnapshot !== prev.snapshot) {
+            const pick = derivePickFromEvents(oldEvents, nextEvents);
+            if (pick) {
+                const newState = draftEventsToState(nextEvents);
+                const selectedIdx = untrack(selectedScenarioIndex);
+                const selectedScenario =
+                    selectedIdx !== null && prev.snapshot
+                        ? prev.snapshot.scenarios[selectedIdx]
+                        : null;
+                const selectedKeyPath =
+                    selectedScenario && oldTree
+                        ? pathIndicesToNodeKeyPath(oldTree, selectedScenario.treePath)
+                        : null;
+
+                const merged = reconcileTree(
+                    oldTree,
+                    nextSnapshot.tree,
+                    pick,
+                    newState,
+                    {
+                        selectedScenarioKeyPath: selectedKeyPath,
+                        manualExpansionKeyPaths: untrack(manualExpansionKeys)
+                    },
+                    5
+                );
+                const remappedScenarios = remapScenarios(
+                    nextSnapshot.scenarios,
+                    nextSnapshot.tree,
+                    merged
+                );
+
+                nextSnapshot = {
+                    ...nextSnapshot,
+                    tree: merged,
+                    scenarios: remappedScenarios
+                };
+
+                if (selectedScenario) {
+                    const newIdx = remappedScenarios.findIndex(
+                        (s) => s.name === selectedScenario.name
+                    );
+                    setSelectedScenarioIndex(newIdx >= 0 ? newIdx : null);
+                }
+            }
+        }
+
+        setNavigatorContext((p) => ({
+            session: data.session ?? p.session,
+            draft: data.draft === undefined ? p.draft : data.draft,
+            events: nextEvents,
+            snapshot: nextSnapshot,
             connected: true,
             error: null
         }));
