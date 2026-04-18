@@ -29,14 +29,6 @@ export default defineConfig(({ mode }) => {
         resolve: {
             dedupe: ["solid-js", "solid-js/web", "solid-js/store"]
         },
-        build: {
-            rollupOptions: {
-                input: {
-                    main: path.resolve(__dirname, "index.html"),
-                    "test-trees": path.resolve(__dirname, "test-trees.html")
-                }
-            }
-        },
         server: {
             https: certPath
                 ? {
