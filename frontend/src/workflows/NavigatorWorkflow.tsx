@@ -102,6 +102,8 @@ const NavigatorScenarioSchema: z.ZodType<NavigatorScenario> = z.object({
     bluePicks: z.array(z.string()),
     likelyAssignments: z.array(NavigatorWeightedAssignmentSchema),
     redPicks: z.array(z.string()),
+    blueBans: z.array(z.string()),
+    redBans: z.array(z.string()),
     treePath: z.array(z.number()),
     perspective: z.enum(["robust", "likely", "off_profile"]),
     indicators: z.array(z.string())

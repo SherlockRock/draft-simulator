@@ -35,14 +35,13 @@ export interface NavigatorTreeNode {
 
 export interface NavigatorScenario {
     name: string;
-    scores: Pick<
-        NavigatorScoreSet,
-        "composite" | "compStrength" | "informationValue"
-    >;
+    scores: Pick<NavigatorScoreSet, "composite" | "compStrength" | "informationValue">;
     description: string;
     bluePicks: string[];
     likelyAssignments: NavigatorWeightedAssignment[];
     redPicks: string[];
+    blueBans: string[];
+    redBans: string[];
     treePath: number[];
     perspective: "robust" | "likely" | "off_profile";
     indicators: string[];
@@ -118,8 +117,7 @@ export interface NavigatorWorkflowContextValue {
     nextGame: () => void;
 }
 
-export const NavigatorWorkflowContext =
-    createContext<NavigatorWorkflowContextValue>();
+export const NavigatorWorkflowContext = createContext<NavigatorWorkflowContextValue>();
 
 export function useNavigatorContext() {
     const ctx = useContext(NavigatorWorkflowContext);
