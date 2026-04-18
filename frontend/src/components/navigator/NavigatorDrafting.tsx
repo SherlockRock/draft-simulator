@@ -5,14 +5,16 @@ import DecisionTree from "./DecisionTree";
 import ScenarioLanes from "./ScenarioLanes";
 
 const NavigatorDrafting: Component = () => {
-    const { joinSession, navigatorContext } = useNavigatorContext();
-    const [selectedScenarioIdx, setSelectedScenarioIdx] = createSignal<number | null>(
-        null
-    );
+    const {
+        joinSession,
+        navigatorContext,
+        selectedScenarioIndex,
+        setSelectedScenarioIndex,
+        panRequest
+    } = useNavigatorContext();
     const [highlightedTreePath, setHighlightedTreePath] = createSignal<number[] | null>(
         null
     );
-    const [panRequest, setPanRequest] = createSignal<{ path: number[] } | null>(null);
 
     const treeData = createMemo(() => navigatorContext().snapshot?.tree ?? null);
     const scenarios = createMemo(() => navigatorContext().snapshot?.scenarios ?? []);
@@ -36,24 +38,20 @@ const NavigatorDrafting: Component = () => {
 
     createEffect(() => {
         const nextScenarios = scenarios();
-        const selectedIndex = selectedScenarioIdx();
+        const selectedIndex = selectedScenarioIndex();
 
         if (nextScenarios.length === 0) {
-            setSelectedScenarioIdx(null);
+            setSelectedScenarioIndex(null);
             setHighlightedTreePath(null);
         } else if (selectedIndex !== null && selectedIndex >= nextScenarios.length) {
-            setSelectedScenarioIdx(null);
+            setSelectedScenarioIndex(null);
+        } else if (selectedIndex !== null) {
+            const selected = nextScenarios[selectedIndex];
+            if (selected?.treePath) {
+                setHighlightedTreePath(selected.treePath);
+            }
         }
     });
-
-    const handleScenarioSelect = (index: number) => {
-        const selected = scenarios()[index];
-        setSelectedScenarioIdx(index);
-        if (selected?.treePath) {
-            setHighlightedTreePath(selected.treePath);
-            setPanRequest({ path: selected.treePath });
-        }
-    };
 
     const handleNodeClick = (nodePath: number[]) => {
         const matchIdx = scenarios().findIndex((scenario) =>
@@ -61,7 +59,7 @@ const NavigatorDrafting: Component = () => {
         );
 
         setHighlightedTreePath(nodePath);
-        setSelectedScenarioIdx(matchIdx >= 0 ? matchIdx : null);
+        setSelectedScenarioIndex(matchIdx >= 0 ? matchIdx : null);
     };
 
     const handleRetry = () => {
@@ -92,7 +90,7 @@ const NavigatorDrafting: Component = () => {
                     rootChampionId={lastConfirmedChampionId()}
                     scenarioPaths={scenarios().map((scenario, index) => ({
                         path: scenario.treePath,
-                        tier: selectedScenarioIdx() === index ? "selected" : "unselected"
+                        tier: selectedScenarioIndex() === index ? "selected" : "unselected"
                     }))}
                     panRequest={panRequest()}
                     onNodeClick={handleNodeClick}
@@ -117,8 +115,6 @@ const NavigatorDrafting: Component = () => {
             <ScenarioLanes
                 scenarios={scenarios()}
                 isComputing={isComputing()}
-                selectedIndex={selectedScenarioIdx()}
-                onSelectScenario={handleScenarioSelect}
             />
         </div>
     );

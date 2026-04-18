@@ -3,6 +3,7 @@ import { RouteSectionProps, useLocation, useParams } from "@solidjs/router";
 import { z } from "zod";
 import toast from "solid-toast";
 import {
+    NavigatorPanRequest,
     NavigatorScenario,
     NavigatorSessionState,
     NavigatorTreeNode,
@@ -183,6 +184,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     const [selectedScenarioIndex, setSelectedScenarioIndex] = createSignal<number | null>(
         null
     );
+    const [panRequest, setPanRequest] = createSignal<NavigatorPanRequest | null>(null);
     const [manualExpansionKeys, setManualExpansionKeysSignal] = createSignal<
         ReadonlySet<string>
     >(new Set<string>());
@@ -196,6 +198,9 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     const setManualCollapseKeys = (
         updater: (prev: ReadonlySet<string>) => ReadonlySet<string>
     ) => setManualCollapseKeysSignal((prev) => updater(prev));
+    const requestScenarioPan = (treePath: number[]) => {
+        setPanRequest({ path: treePath });
+    };
     let socketWithListeners: Socket | undefined = undefined;
 
     const getActiveSessionId = () =>
@@ -460,6 +465,9 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         nextGame,
         selectedScenarioIndex,
         setSelectedScenarioIndex,
+        panRequest,
+        setPanRequest,
+        requestScenarioPan,
         manualExpansionKeys,
         manualCollapseKeys,
         setManualExpansionKeys,

@@ -106,6 +106,10 @@ export interface NavigatorSnapshotData {
     createdAt: string;
 }
 
+export interface NavigatorPanRequest {
+    path: number[];
+}
+
 export interface NavigatorWorkflowContextValue {
     navigatorContext: Accessor<NavigatorSessionState>;
     joinSession: (sessionId: string) => void;
@@ -117,6 +121,9 @@ export interface NavigatorWorkflowContextValue {
     nextGame: () => void;
     selectedScenarioIndex: Accessor<number | null>;
     setSelectedScenarioIndex: (index: number | null) => void;
+    panRequest: Accessor<NavigatorPanRequest | null>;
+    setPanRequest: (request: NavigatorPanRequest | null) => void;
+    requestScenarioPan: (treePath: number[]) => void;
     manualExpansionKeys: Accessor<ReadonlySet<string>>;
     manualCollapseKeys: Accessor<ReadonlySet<string>>;
     setManualExpansionKeys: (

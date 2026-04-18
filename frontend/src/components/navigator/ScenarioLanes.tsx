@@ -1,5 +1,5 @@
 import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
-import { NavigatorScenario } from "../../contexts/NavigatorContext";
+import { NavigatorScenario, useNavigatorContext } from "../../contexts/NavigatorContext";
 import ScenarioCard from "./ScenarioCard";
 
 const CARD_WIDTH = 300;
@@ -9,11 +9,11 @@ const SCROLL_STEP = CARD_WIDTH + CARD_GAP;
 interface ScenarioLanesProps {
     scenarios: NavigatorScenario[];
     isComputing: boolean;
-    selectedIndex: number | null;
-    onSelectScenario: (index: number) => void;
 }
 
 const ScenarioLanes: Component<ScenarioLanesProps> = (props) => {
+    const { selectedScenarioIndex, setSelectedScenarioIndex, requestScenarioPan } =
+        useNavigatorContext();
     let scrollRef: HTMLDivElement | undefined;
     const [canScrollLeft, setCanScrollLeft] = createSignal(false);
     const [canScrollRight, setCanScrollRight] = createSignal(false);
@@ -101,8 +101,11 @@ const ScenarioLanes: Component<ScenarioLanesProps> = (props) => {
                                 <div style={{ "scroll-snap-align": "start" }}>
                                     <ScenarioCard
                                         scenario={scenario}
-                                        isSelected={props.selectedIndex === index()}
-                                        onClick={() => props.onSelectScenario(index())}
+                                        isSelected={selectedScenarioIndex() === index()}
+                                        onClick={() => {
+                                            setSelectedScenarioIndex(index());
+                                            requestScenarioPan(scenario.treePath);
+                                        }}
                                     />
                                 </div>
                             )}
