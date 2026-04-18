@@ -13,12 +13,19 @@ import createPanZoom, { type PanZoom } from "panzoom";
 import { resolveChampion } from "../../utils/constants";
 import { LayoutNode, radialTreeLayout } from "../../utils/treeLayout";
 
+export type ScenarioPathTier = "selected" | "unselected";
+
+export interface TieredScenarioPath {
+    path: number[];
+    tier: ScenarioPathTier;
+}
+
 interface DecisionTreeProps {
     treeData: LayoutNode | null;
     isComputing: boolean;
     highlightedPath: number[] | null;
     rootChampionId: string | null;
-    scenarioPaths: number[][];
+    scenarioPaths: TieredScenarioPath[];
     onNodeClick: (nodeIndex: number[]) => void;
 }
 
@@ -97,15 +104,15 @@ function pruneTree(
     };
 }
 
-function expandForPaths(scenarioPaths: number[][]): Set<string> {
+function expandForPaths(scenarioPaths: TieredScenarioPath[]): Set<string> {
     const expanded = new Set<string>();
     // Root is always expanded
     expanded.add("root");
 
-    for (const scenarioPath of scenarioPaths) {
+    for (const { path } of scenarioPaths) {
         // Expand every node along this path so the full lane is visible
-        for (let i = 1; i <= scenarioPath.length; i++) {
-            expanded.add(pathKey(scenarioPath.slice(0, i)));
+        for (let i = 1; i <= path.length; i++) {
+            expanded.add(pathKey(path.slice(0, i)));
         }
     }
 

@@ -84,7 +84,10 @@ const NavigatorDrafting: Component = () => {
                     isComputing={isComputing()}
                     highlightedPath={highlightedTreePath()}
                     rootChampionId={firstPickedChampionId()}
-                    scenarioPaths={scenarios().map((s) => s.treePath)}
+                    scenarioPaths={scenarios().map((scenario, index) => ({
+                        path: scenario.treePath,
+                        tier: selectedScenarioIdx() === index ? "selected" : "unselected"
+                    }))}
                     onNodeClick={handleNodeClick}
                 />
 
