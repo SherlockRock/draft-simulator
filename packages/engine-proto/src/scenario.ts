@@ -5,25 +5,48 @@ interface LeafInfo {
   path: number[];
   bluePicks: string[];
   redPicks: string[];
+  blueBans: string[];
+  redBans: string[];
 }
 
 export function collectLeaves(tree: TreeNode): LeafInfo[] {
   const leaves: LeafInfo[] = [];
 
-  function walk(node: TreeNode, path: number[], bluePicks: string[], redPicks: string[]): void {
-    const bp = node.side === "blue" && node.actionType === "pick" ? [...bluePicks, ...node.championIds] : bluePicks;
-    const rp = node.side === "red" && node.actionType === "pick" ? [...redPicks, ...node.championIds] : redPicks;
+  function walk(
+    node: TreeNode,
+    path: number[],
+    bluePicks: string[],
+    redPicks: string[],
+    blueBans: string[],
+    redBans: string[],
+  ): void {
+    const bp =
+      node.side === "blue" && node.actionType === "pick"
+        ? [...bluePicks, ...node.championIds]
+        : bluePicks;
+    const rp =
+      node.side === "red" && node.actionType === "pick"
+        ? [...redPicks, ...node.championIds]
+        : redPicks;
+    const bb =
+      node.side === "blue" && node.actionType === "ban"
+        ? [...blueBans, ...node.championIds]
+        : blueBans;
+    const rb =
+      node.side === "red" && node.actionType === "ban"
+        ? [...redBans, ...node.championIds]
+        : redBans;
 
     if (node.children.length === 0) {
-      leaves.push({ node, path, bluePicks: bp, redPicks: rp });
+      leaves.push({ node, path, bluePicks: bp, redPicks: rp, blueBans: bb, redBans: rb });
       return;
     }
     for (let i = 0; i < node.children.length; i++) {
-      walk(node.children[i], [...path, i], bp, rp);
+      walk(node.children[i], [...path, i], bp, rp, bb, rb);
     }
   }
 
-  walk(tree, [], [], []);
+  walk(tree, [], [], [], [], []);
   return leaves;
 }
 

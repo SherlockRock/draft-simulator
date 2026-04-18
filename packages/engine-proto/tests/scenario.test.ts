@@ -9,32 +9,69 @@ const ZERO_SCORES: ScoreSet = {
 
 function makeTree(): TreeNode {
   return {
-    championId: null, scores: ZERO_SCORES, assignmentDistribution: [],
-    side: null, slot: null, userInjected: false,
+    championIds: [],
+    scores: ZERO_SCORES,
+    assignmentDistribution: [],
+    side: null,
+    slots: [],
+    actionType: "ban",
+    phase: "ban1",
+    userInjected: false,
     children: [
       {
-        championId: "Aatrox", scores: { ...ZERO_SCORES, composite: 0.8 },
-        assignmentDistribution: [], side: "blue", slot: 0, userInjected: false,
+        championIds: ["Aatrox"],
+        scores: { ...ZERO_SCORES, composite: 0.8 },
+        assignmentDistribution: [],
+        side: "blue",
+        slots: [0],
+        actionType: "ban",
+        phase: "ban1",
+        userInjected: false,
         children: [
           {
-            championId: "LeeSin", scores: { ...ZERO_SCORES, composite: 0.7 },
-            assignmentDistribution: [], side: "red", slot: 1, userInjected: false,
-            children: [],
-          },
-          {
-            championId: "Ahri", scores: { ...ZERO_SCORES, composite: 0.6 },
-            assignmentDistribution: [], side: "red", slot: 1, userInjected: false,
-            children: [],
+            championIds: ["LeeSin"],
+            scores: { ...ZERO_SCORES, composite: 0.7 },
+            assignmentDistribution: [],
+            side: "red",
+            slots: [1],
+            actionType: "ban",
+            phase: "ban1",
+            userInjected: false,
+            children: [
+              {
+                championIds: ["Ahri"],
+                scores: { ...ZERO_SCORES, composite: 0.6 },
+                assignmentDistribution: [],
+                side: "blue",
+                slots: [6],
+                actionType: "pick",
+                phase: "pick1",
+                userInjected: false,
+                children: [],
+              },
+            ],
           },
         ],
       },
       {
-        championId: "Jinx", scores: { ...ZERO_SCORES, composite: 0.5 },
-        assignmentDistribution: [], side: "blue", slot: 0, userInjected: false,
+        championIds: ["Jinx"],
+        scores: { ...ZERO_SCORES, composite: 0.5 },
+        assignmentDistribution: [],
+        side: "blue",
+        slots: [0],
+        actionType: "ban",
+        phase: "ban1",
+        userInjected: false,
         children: [
           {
-            championId: "Leona", scores: { ...ZERO_SCORES, composite: 0.4 },
-            assignmentDistribution: [], side: "red", slot: 1, userInjected: false,
+            championIds: ["Leona"],
+            scores: { ...ZERO_SCORES, composite: 0.4 },
+            assignmentDistribution: [],
+            side: "red",
+            slots: [1],
+            actionType: "ban",
+            phase: "ban1",
+            userInjected: false,
             children: [],
           },
         ],
@@ -44,13 +81,48 @@ function makeTree(): TreeNode {
 }
 
 describe("collectLeaves", () => {
-  it("collects all leaf nodes with their tree paths", () => {
+  it("collects all leaf nodes with tree paths", () => {
     const tree = makeTree();
     const leaves = collectLeaves(tree);
-    expect(leaves).toHaveLength(3);
+    expect(leaves).toHaveLength(2);
     for (const leaf of leaves) {
       expect(leaf.path.length).toBeGreaterThan(0);
     }
+  });
+
+  it("accumulates blue bans from ban nodes on the blue side", () => {
+    const tree = makeTree();
+    const leaves = collectLeaves(tree);
+    const deepLeaf = leaves.find((leaf) => leaf.path.length === 3);
+    expect(deepLeaf).toBeDefined();
+    expect(deepLeaf!.blueBans).toEqual(["Aatrox"]);
+  });
+
+  it("accumulates red bans from ban nodes on the red side", () => {
+    const tree = makeTree();
+    const leaves = collectLeaves(tree);
+    const deepLeaf = leaves.find((leaf) => leaf.path.length === 3);
+    expect(deepLeaf).toBeDefined();
+    expect(deepLeaf!.redBans).toEqual(["LeeSin"]);
+  });
+
+  it("accumulates blue picks from pick nodes on the blue side", () => {
+    const tree = makeTree();
+    const leaves = collectLeaves(tree);
+    const deepLeaf = leaves.find((leaf) => leaf.path.length === 3);
+    expect(deepLeaf).toBeDefined();
+    expect(deepLeaf!.bluePicks).toEqual(["Ahri"]);
+  });
+
+  it("does not add picks to ban arrays or vice versa", () => {
+    const tree = makeTree();
+    const leaves = collectLeaves(tree);
+    const shallowLeaf = leaves.find((leaf) => leaf.path.length === 2);
+    expect(shallowLeaf).toBeDefined();
+    expect(shallowLeaf!.blueBans).toEqual(["Jinx"]);
+    expect(shallowLeaf!.redBans).toEqual(["Leona"]);
+    expect(shallowLeaf!.bluePicks).toEqual([]);
+    expect(shallowLeaf!.redPicks).toEqual([]);
   });
 });
 
@@ -78,7 +150,7 @@ describe("extractScenarios", () => {
     expect(scenarios.length).toBeLessThanOrEqual(5);
   });
 
-  it("each scenario has required fields", () => {
+  it("each scenario has required fields including ban arrays", () => {
     const tree = makeTree();
     const scenarios = extractScenarios(tree, TEST_CHAMPIONS, 5);
     for (const s of scenarios) {
@@ -86,6 +158,15 @@ describe("extractScenarios", () => {
       expect(s.treePath).toBeDefined();
       expect(s.perspective).toBeDefined();
       expect(["robust", "likely", "off_profile"]).toContain(s.perspective);
+      expect(Array.isArray(s.blueBans)).toBe(true);
+      expect(Array.isArray(s.redBans)).toBe(true);
     }
+  });
+
+  it("populates ban arrays from the leaf's path", () => {
+    const tree = makeTree();
+    const scenarios = extractScenarios(tree, TEST_CHAMPIONS, 5);
+    const withBans = scenarios.find((s) => s.blueBans.length > 0 || s.redBans.length > 0);
+    expect(withBans).toBeDefined();
   });
 });
