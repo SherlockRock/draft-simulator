@@ -195,10 +195,21 @@ function isElementWithinNode(target: EventTarget | null): boolean {
 const TreeLink: Component<{
     link: PositionedLink;
     highlightedPath: number[] | null;
+    ghosted: boolean;
 }> = (props) => {
     const highlighted = createMemo(() =>
         isPathHighlighted(props.link.target.data.path, props.highlightedPath)
     );
+    const strokeOpacity = createMemo(() => {
+        if (highlighted()) return 0.95;
+        if (props.ghosted) return 0.3;
+        return 0.8;
+    });
+    const strokeWidth = createMemo(() => {
+        if (highlighted()) return 3;
+        if (props.ghosted) return 1;
+        return 1.75;
+    });
 
     return (
         <path
@@ -210,9 +221,9 @@ const TreeLink: Component<{
             )}
             fill="none"
             stroke={highlighted() ? "#60a5fa" : "#334155"}
-            stroke-width={highlighted() ? 3 : 1.75}
+            stroke-width={strokeWidth()}
             stroke-linecap="round"
-            opacity={highlighted() ? 0.95 : 0.8}
+            opacity={strokeOpacity()}
         />
     );
 };
@@ -224,6 +235,7 @@ const TreeNodeComponent: Component<{
     rootChampionId: string | null;
     onClick: (path: number[]) => void;
     onToggleExpand: (path: number[]) => void;
+    ghosted: boolean;
 }> = (props) => {
     const clipSeed = createUniqueId();
     const championIds = createMemo(() => {
@@ -310,7 +322,7 @@ const TreeNodeComponent: Component<{
         <g
             data-tree-node="true"
             transform={`translate(${props.node.x} ${props.node.y})`}
-            opacity={isBan() ? 0.7 : 1}
+            opacity={props.ghosted ? 0.4 : isBan() ? 0.7 : 1}
         >
             <title>{championLabel()}</title>
             <defs>
@@ -569,6 +581,23 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         }
 
         return expanded;
+    });
+    const ghostedPathKeys = createMemo<ReadonlySet<string>>(() => {
+        const selectedKeys = new Set<string>();
+        const unselectedKeys = new Set<string>();
+
+        for (const entry of props.scenarioPaths) {
+            const target = entry.tier === "selected" ? selectedKeys : unselectedKeys;
+            for (let i = 1; i <= entry.path.length; i++) {
+                target.add(pathKey(entry.path.slice(0, i)));
+            }
+        }
+
+        const result = new Set<string>();
+        for (const key of unselectedKeys) {
+            if (!selectedKeys.has(key)) result.add(key);
+        }
+        return result;
     });
 
     const toggleExpand = (path: number[]) => {
@@ -840,6 +869,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                             <TreeLink
                                 link={link}
                                 highlightedPath={props.highlightedPath}
+                                ghosted={ghostedPathKeys().has(pathKey(link.target.data.path))}
                             />
                         )}
                     </For>
@@ -852,6 +882,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                                 rootChampionId={props.rootChampionId}
                                 onClick={props.onNodeClick}
                                 onToggleExpand={toggleExpand}
+                                ghosted={ghostedPathKeys().has(pathKey(node.data.path))}
                             />
                         )}
                     </For>
