@@ -2,7 +2,10 @@ import { defineConfig, loadEnv } from "vite";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { fileURLToPath } from "url";
 import solidPlugin from "vite-plugin-solid";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function findCertPath(): string | null {
     const localPath = ".";
@@ -25,6 +28,14 @@ export default defineConfig(({ mode }) => {
         plugins: [solidPlugin()],
         resolve: {
             dedupe: ["solid-js", "solid-js/web", "solid-js/store"]
+        },
+        build: {
+            rollupOptions: {
+                input: {
+                    main: path.resolve(__dirname, "index.html"),
+                    "test-trees": path.resolve(__dirname, "test-trees.html")
+                }
+            }
         },
         server: {
             https: certPath

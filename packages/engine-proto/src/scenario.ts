@@ -11,8 +11,8 @@ export function collectLeaves(tree: TreeNode): LeafInfo[] {
   const leaves: LeafInfo[] = [];
 
   function walk(node: TreeNode, path: number[], bluePicks: string[], redPicks: string[]): void {
-    const bp = node.championId && node.side === "blue" ? [...bluePicks, node.championId] : bluePicks;
-    const rp = node.championId && node.side === "red" ? [...redPicks, node.championId] : redPicks;
+    const bp = node.side === "blue" && node.actionType === "pick" ? [...bluePicks, ...node.championIds] : bluePicks;
+    const rp = node.side === "red" && node.actionType === "pick" ? [...redPicks, ...node.championIds] : redPicks;
 
     if (node.children.length === 0) {
       leaves.push({ node, path, bluePicks: bp, redPicks: rp });

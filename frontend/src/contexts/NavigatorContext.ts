@@ -22,11 +22,13 @@ export interface NavigatorWeightedAssignment {
 }
 
 export interface NavigatorTreeNode {
-    championId: string | null;
+    championIds: string[];
+    actionType: "ban" | "pick";
+    phase: "ban1" | "pick1" | "ban2" | "pick2";
     scores: NavigatorScoreSet;
     assignmentDistribution: NavigatorWeightedAssignment[];
     side: "blue" | "red" | null;
-    slot: number | null;
+    slots: number[];
     userInjected: boolean;
     children: NavigatorTreeNode[];
 }

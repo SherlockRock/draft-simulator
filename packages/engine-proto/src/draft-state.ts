@@ -65,6 +65,35 @@ export function applyMove(state: DraftState, championId: string): DraftState {
   return next;
 }
 
+export function applyPairMove(state: DraftState, champA: string, champB: string): DraftState {
+  const firstTurn = getCurrentTurn(state);
+  if (!firstTurn) throw new Error("Cannot apply pair move: draft is complete");
+  if (!firstTurn.pairStart) throw new Error("Cannot apply pair move: current turn is not a pair start");
+  if (firstTurn.type !== "pick") throw new Error("Cannot apply pair move: pair turns must be picks");
+
+  const secondTurn = TURN_SEQUENCE[state.turnIndex + 1];
+  if (!secondTurn || secondTurn.side !== firstTurn.side || secondTurn.type !== "pick" || !secondTurn.pairEnd) {
+    throw new Error("Cannot apply pair move: invalid pair turn sequence");
+  }
+
+  const next: DraftState = {
+    blueBans: [...state.blueBans],
+    redBans: [...state.redBans],
+    bluePicks: [...state.bluePicks],
+    redPicks: [...state.redPicks],
+    turnIndex: state.turnIndex + 2,
+  };
+
+  if (firstTurn.side === "blue") next.bluePicks.push(champA, champB);
+  else next.redPicks.push(champA, champB);
+
+  return next;
+}
+
+export function isPairTurn(state: DraftState): boolean {
+  return getCurrentTurn(state)?.pairStart === true;
+}
+
 export function isTerminal(state: DraftState): boolean {
   return state.turnIndex >= TURN_SEQUENCE.length;
 }

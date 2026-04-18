@@ -56,11 +56,13 @@ export interface WeightedAssignment {
 // === Tree ===
 
 export interface TreeNode {
-  championId: string | null;
+  championIds: string[];
   scores: ScoreSet;
   assignmentDistribution: WeightedAssignment[];
   side: Side | null;
-  slot: number | null;
+  slots: number[];
+  actionType: ActionType;
+  phase: Phase;
   userInjected: boolean;
   children: TreeNode[];
 }
@@ -112,6 +114,7 @@ export interface ForcedMove {
 
 export interface EngineConfig {
   branchWidth: number;
+  pairBranchWidth?: number;
   maxDepth: number;
   latencyBudgetMs: number;
   forcedMoves: ForcedMove[];

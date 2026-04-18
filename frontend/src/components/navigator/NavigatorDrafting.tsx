@@ -15,6 +15,12 @@ const NavigatorDrafting: Component = () => {
 
     const treeData = createMemo(() => navigatorContext().snapshot?.tree ?? null);
     const scenarios = createMemo(() => navigatorContext().snapshot?.scenarios ?? []);
+    const firstPickedChampionId = createMemo(() => {
+        const firstPickEvent = navigatorContext().events.find(
+            (event) => event.event_type === "pick"
+        );
+        return firstPickEvent?.champion_id ?? null;
+    });
     const isComputing = createMemo(
         () => navigatorContext().events.length > 0 && navigatorContext().snapshot === null
     );
@@ -65,7 +71,7 @@ const NavigatorDrafting: Component = () => {
             class="grid h-full w-full"
             style={{
                 "grid-template-columns": "300px 1fr",
-                "grid-template-rows": "1fr 220px"
+                "grid-template-rows": "1fr 280px"
             }}
         >
             <div class="row-span-2 overflow-y-auto border-r border-slate-700/50">
@@ -77,6 +83,8 @@ const NavigatorDrafting: Component = () => {
                     treeData={treeData()}
                     isComputing={isComputing()}
                     highlightedPath={highlightedTreePath()}
+                    rootChampionId={firstPickedChampionId()}
+                    scenarioPaths={scenarios().map((s) => s.treePath)}
                     onNodeClick={handleNodeClick}
                 />
 

@@ -79,11 +79,13 @@ const NavigatorWeightedAssignmentSchema = z.object({
 
 const NavigatorTreeNodeSchema: z.ZodType<NavigatorTreeNode> = z.lazy(() =>
     z.object({
-        championId: z.string().nullable(),
+        championIds: z.array(z.string()),
+        actionType: z.enum(["ban", "pick"]),
+        phase: z.enum(["ban1", "pick1", "ban2", "pick2"]),
         scores: NavigatorScoreSetSchema,
         assignmentDistribution: z.array(NavigatorWeightedAssignmentSchema),
         side: z.enum(["blue", "red"]).nullable(),
-        slot: z.number().nullable(),
+        slots: z.array(z.number()),
         userInjected: z.boolean(),
         children: z.array(NavigatorTreeNodeSchema)
     })

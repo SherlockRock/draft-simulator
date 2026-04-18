@@ -20,46 +20,78 @@ const perspectiveLabels: Record<NavigatorScenario["perspective"], string> = {
     off_profile: "Off profile"
 };
 
-function padTeamComp(picks: string[]): Array<string | null> {
-    return Array.from({ length: 5 }, (_, index) => picks[index] ?? null);
+// Standard League draft pick turns per side
+// Blue: [P1] | [P2, P3] | [P4, P5]
+// Red: [R1, R2] | [R3] | [R4] | [R5]
+const BLUE_PICK_GROUPS: number[][] = [[0], [1, 2], [3, 4]];
+const RED_PICK_GROUPS: number[][] = [[0, 1], [2], [3], [4]];
+
+function padPicks(picks: string[], size: number): Array<string | null> {
+    return Array.from({ length: size }, (_, index) => picks[index] ?? null);
 }
 
-const TeamCompRow: Component<{
-    picks: string[];
+const ChampionCircle: Component<{
+    championId: string | null;
     borderClass: string;
-    opacityClass?: string;
 }> = (props) => {
-    const paddedPicks = createMemo(() => padTeamComp(props.picks));
+    const champion = createMemo(() =>
+        props.championId ? resolveChampion(props.championId) : undefined
+    );
 
     return (
-        <div class={`flex gap-1 ${props.opacityClass ?? ""}`}>
-            <For each={paddedPicks()}>
-                {(championId) => {
-                    const champion = createMemo(() =>
-                        championId ? resolveChampion(championId) : undefined
-                    );
+        <div
+            class={`flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border bg-slate-900 ${props.borderClass}`}
+        >
+            <Show
+                when={champion()}
+                fallback={
+                    <div class="h-full w-full rounded-full bg-slate-700/40" />
+                }
+            >
+                {(resolvedChampion) => (
+                    <img
+                        src={resolvedChampion().img}
+                        alt={resolvedChampion().name}
+                        class="h-full w-full object-cover"
+                    />
+                )}
+            </Show>
+        </div>
+    );
+};
 
-                    return (
-                        <div
-                            class={`flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border bg-slate-900 ${props.borderClass}`}
-                        >
-                            <Show
-                                when={champion()}
-                                fallback={
-                                    <div class="h-full w-full rounded-full bg-slate-700/40" />
-                                }
-                            >
-                                {(resolvedChampion) => (
-                                    <img
-                                        src={resolvedChampion().img}
-                                        alt={resolvedChampion().name}
-                                        class="h-full w-full object-cover"
+const GroupedCompRow: Component<{
+    picks: string[];
+    groups: number[][];
+    bgClass: string;
+    dividerClass: string;
+}> = (props) => {
+    const paddedPicks = createMemo(() => padPicks(props.picks, 5));
+
+    return (
+        <div
+            class={`flex items-center rounded-md px-2 py-1.5 ${props.bgClass}`}
+        >
+            <For each={props.groups}>
+                {(group, groupIndex) => (
+                    <div class="flex items-center">
+                        <Show when={groupIndex() > 0}>
+                            <div
+                                class={`mx-2 h-6 w-px ${props.dividerClass}`}
+                            />
+                        </Show>
+                        <div class="flex gap-1">
+                            <For each={group}>
+                                {(slotIndex) => (
+                                    <ChampionCircle
+                                        championId={paddedPicks()[slotIndex]}
+                                        borderClass="border-slate-600/50"
                                     />
                                 )}
-                            </Show>
+                            </For>
                         </div>
-                    );
-                }}
+                    </div>
+                )}
             </For>
         </div>
     );
@@ -74,7 +106,7 @@ const ScenarioCard: Component<ScenarioCardProps> = (props) => {
     return (
         <button
             type="button"
-            class={`flex h-[190px] w-[280px] flex-shrink-0 flex-col rounded-lg border p-4 text-left transition-colors ${
+            class={`flex w-[300px] flex-shrink-0 flex-col rounded-lg border p-4 text-left transition-colors ${
                 props.isSelected
                     ? "border-blue-400 bg-slate-800/90 shadow-lg shadow-blue-500/10"
                     : "border-slate-700/50 bg-slate-800"
@@ -92,7 +124,7 @@ const ScenarioCard: Component<ScenarioCardProps> = (props) => {
                 </div>
             </div>
 
-            <div class="mt-3 flex min-h-6 flex-wrap gap-2">
+            <div class="mt-2 flex min-h-6 flex-wrap gap-1.5">
                 <For each={visibleIndicators()}>
                     {(indicator) => (
                         <span class="rounded-full bg-slate-700/50 px-2 py-0.5 text-xs text-slate-300">
@@ -107,19 +139,22 @@ const ScenarioCard: Component<ScenarioCardProps> = (props) => {
                 </Show>
             </div>
 
-            <div class="mt-4 space-y-2">
-                <TeamCompRow
+            <div class="mt-3 space-y-1.5">
+                <GroupedCompRow
                     picks={props.scenario.bluePicks}
-                    borderClass="border-blue-500/50"
+                    groups={BLUE_PICK_GROUPS}
+                    bgClass="bg-blue-500/10"
+                    dividerClass="bg-blue-400/25"
                 />
-                <TeamCompRow
+                <GroupedCompRow
                     picks={props.scenario.redPicks}
-                    borderClass="border-red-500/50"
-                    opacityClass="opacity-70"
+                    groups={RED_PICK_GROUPS}
+                    bgClass="bg-red-500/10"
+                    dividerClass="bg-red-400/25"
                 />
             </div>
 
-            <p class="mt-auto line-clamp-2 text-xs text-slate-400">
+            <p class="mt-3 line-clamp-2 text-xs text-slate-400">
                 {props.scenario.description}
             </p>
         </button>

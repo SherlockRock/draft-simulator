@@ -36,11 +36,13 @@ export function iterativeDeepeningSearch(
 
   return {
     tree: bestTree ?? {
-      championId: null,
+      championIds: [],
       scores: { composite: 0, compStrength: 0, informationValue: 0, flexRetention: 0, revealCost: 0 },
       assignmentDistribution: [],
       side: null,
-      slot: null,
+      slots: [],
+      actionType: "pick",
+      phase: "pick1",
       userInjected: false,
       children: [],
     },
