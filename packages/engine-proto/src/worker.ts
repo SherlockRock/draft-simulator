@@ -1,14 +1,7 @@
 import { parentPort } from "worker_threads";
-import type {
-  EngineRequest,
-  EngineOutput,
-  DraftState,
-  DraftStateInput,
-  SearchContext,
-} from "./types.js";
+import type { EngineRequest, EngineOutput, DraftState, DraftStateInput, SearchContext } from "./types.js";
 import { loadChampionMeta, loadMatchupData } from "./data-loader.js";
-import { iterativeDeepeningSearch } from "./iterative-deepening.js";
-import { extractScenarios } from "./scenario.js";
+import { twoPhaseSearch } from "./two-phase-search.js";
 
 const championMetaFile = loadChampionMeta();
 const _matchupDataFile = loadMatchupData();
@@ -50,9 +43,7 @@ export function handleRequest(request: EngineRequest): EngineOutput {
   };
 
   const pool = request.searchPool;
-  const { tree, meta } = iterativeDeepeningSearch(draftState, pool, ctx);
-  const scenarios = extractScenarios(tree, championMetaFile.champions, 5);
-
+  const { tree, scenarios, meta } = twoPhaseSearch(draftState, pool, ctx, 5);
   return { tree, scenarios, meta };
 }
 

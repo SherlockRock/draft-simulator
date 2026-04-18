@@ -5,6 +5,7 @@ import type { EngineRequest, EngineOutput } from "./types.js";
 
 export const ENGINE_VERSION = "0.1.0";
 export type * from "./types.js";
+export { twoPhaseSearch } from "./two-phase-search.js";
 
 interface Engine {
   compute(request: EngineRequest): Promise<EngineOutput>;
