@@ -15,11 +15,15 @@ const NavigatorDrafting: Component = () => {
 
     const treeData = createMemo(() => navigatorContext().snapshot?.tree ?? null);
     const scenarios = createMemo(() => navigatorContext().snapshot?.scenarios ?? []);
-    const firstPickedChampionId = createMemo(() => {
-        const firstPickEvent = navigatorContext().events.find(
-            (event) => event.event_type === "pick"
-        );
-        return firstPickEvent?.champion_id ?? null;
+    const lastConfirmedChampionId = createMemo(() => {
+        const events = navigatorContext().events;
+        for (let i = events.length - 1; i >= 0; i--) {
+            const event = events[i];
+            if (event.event_type === "ban" || event.event_type === "pick") {
+                return event.champion_id;
+            }
+        }
+        return null;
     });
     const isComputing = createMemo(
         () => navigatorContext().events.length > 0 && navigatorContext().snapshot === null
@@ -83,7 +87,7 @@ const NavigatorDrafting: Component = () => {
                     treeData={treeData()}
                     isComputing={isComputing()}
                     highlightedPath={highlightedTreePath()}
-                    rootChampionId={firstPickedChampionId()}
+                    rootChampionId={lastConfirmedChampionId()}
                     scenarioPaths={scenarios().map((scenario, index) => ({
                         path: scenario.treePath,
                         tier: selectedScenarioIdx() === index ? "selected" : "unselected"
