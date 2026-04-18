@@ -157,6 +157,8 @@ export function extractScenarios(
       bluePicks: leaf.bluePicks,
       likelyAssignments: leaf.node.assignmentDistribution,
       redPicks: leaf.redPicks,
+      blueBans: leaf.blueBans,
+      redBans: leaf.redBans,
       treePath: leaf.path,
       perspective,
       indicators: [],
