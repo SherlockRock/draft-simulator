@@ -60,10 +60,48 @@ interface FitTransform {
 }
 
 const NODE_RADIUS = 20;
-const PAIR_NODE_WIDTH = NODE_RADIUS * 2.5;
-const PAIR_NODE_HEIGHT = NODE_RADIUS * 2;
+const PAIR_NODE_WIDTH = NODE_RADIUS * 2.9;
+const PAIR_NODE_HEIGHT = NODE_RADIUS * 2.2;
+const PAIR_SLASH_OFFSET = 7;
 const BAN_RADIUS = NODE_RADIUS * 0.8;
 const TREE_PADDING = 56;
+
+function getPairClipRadius() {
+    return PAIR_NODE_HEIGHT / 2;
+}
+
+function getPairLeftClipPath() {
+    const halfWidth = PAIR_NODE_WIDTH / 2;
+    const halfHeight = PAIR_NODE_HEIGHT / 2;
+    const radius = getPairClipRadius();
+
+    return [
+        `M ${-halfWidth + radius} ${-halfHeight}`,
+        `L ${PAIR_SLASH_OFFSET} ${-halfHeight}`,
+        `L ${-PAIR_SLASH_OFFSET} ${halfHeight}`,
+        `L ${-halfWidth + radius} ${halfHeight}`,
+        `Q ${-halfWidth} ${halfHeight} ${-halfWidth} ${halfHeight - radius}`,
+        `L ${-halfWidth} ${-halfHeight + radius}`,
+        `Q ${-halfWidth} ${-halfHeight} ${-halfWidth + radius} ${-halfHeight}`,
+        "Z"
+    ].join(" ");
+}
+
+function getPairRightClipPath() {
+    const halfWidth = PAIR_NODE_WIDTH / 2;
+    const halfHeight = PAIR_NODE_HEIGHT / 2;
+    const radius = getPairClipRadius();
+
+    return [
+        `M ${PAIR_SLASH_OFFSET} ${-halfHeight}`,
+        `L ${halfWidth - radius} ${-halfHeight}`,
+        `Q ${halfWidth} ${-halfHeight} ${halfWidth} ${-halfHeight + radius}`,
+        `L ${halfWidth} ${halfHeight - radius}`,
+        `Q ${halfWidth} ${halfHeight} ${halfWidth - radius} ${halfHeight}`,
+        `L ${-PAIR_SLASH_OFFSET} ${halfHeight}`,
+        "Z"
+    ].join(" ");
+}
 
 function withPaths(node: LayoutNode, path: number[] = []): TreeNodeWithPath {
     return {
@@ -259,9 +297,6 @@ const TreeNodeComponent: Component<{
     const isPair = createMemo(() => championIds().length === 2);
     const isBan = createMemo(() => props.node.data.actionType === "ban");
     const nodeRadius = createMemo(() => (isBan() ? BAN_RADIUS : NODE_RADIUS));
-    const pairImageRadius = createMemo(() => nodeRadius() - 3);
-    const pairLeftCenter = createMemo(() => -PAIR_NODE_WIDTH * 0.22);
-    const pairRightCenter = createMemo(() => PAIR_NODE_WIDTH * 0.22);
     const pairClipLeftId = createMemo(
         () => `node-clip-left-${clipSeed}-${pathKey(props.node.data.path)}`
     );
@@ -332,18 +367,10 @@ const TreeNodeComponent: Component<{
                 <Show when={isPair()}>
                     <>
                         <clipPath id={pairClipLeftId()}>
-                            <circle
-                                cx={pairLeftCenter()}
-                                cy="0"
-                                r={pairImageRadius()}
-                            />
+                            <path d={getPairLeftClipPath()} />
                         </clipPath>
                         <clipPath id={pairClipRightId()}>
-                            <circle
-                                cx={pairRightCenter()}
-                                cy="0"
-                                r={pairImageRadius()}
-                            />
+                            <path d={getPairRightClipPath()} />
                         </clipPath>
                     </>
                 </Show>
@@ -446,10 +473,10 @@ const TreeNodeComponent: Component<{
                             {(resolvedChampion) => (
                                 <image
                                     href={resolvedChampion().img}
-                                    x={pairLeftCenter() - pairImageRadius()}
-                                    y={-pairImageRadius()}
-                                    width={pairImageRadius() * 2}
-                                    height={pairImageRadius() * 2}
+                                    x={-PAIR_NODE_WIDTH / 2}
+                                    y={-PAIR_NODE_HEIGHT / 2}
+                                    width={PAIR_NODE_WIDTH / 2 + PAIR_SLASH_OFFSET}
+                                    height={PAIR_NODE_HEIGHT}
                                     preserveAspectRatio="xMidYMid slice"
                                     clip-path={`url(#${pairClipLeftId()})`}
                                     class="pointer-events-none"
@@ -460,16 +487,25 @@ const TreeNodeComponent: Component<{
                             {(resolvedChampion) => (
                                 <image
                                     href={resolvedChampion().img}
-                                    x={pairRightCenter() - pairImageRadius()}
-                                    y={-pairImageRadius()}
-                                    width={pairImageRadius() * 2}
-                                    height={pairImageRadius() * 2}
+                                    x={-PAIR_SLASH_OFFSET}
+                                    y={-PAIR_NODE_HEIGHT / 2}
+                                    width={PAIR_NODE_WIDTH / 2 + PAIR_SLASH_OFFSET}
+                                    height={PAIR_NODE_HEIGHT}
                                     preserveAspectRatio="xMidYMid slice"
                                     clip-path={`url(#${pairClipRightId()})`}
                                     class="pointer-events-none"
                                 />
                             )}
                         </Show>
+                        <line
+                            x1={PAIR_SLASH_OFFSET}
+                            y1={-PAIR_NODE_HEIGHT / 2}
+                            x2={-PAIR_SLASH_OFFSET}
+                            y2={PAIR_NODE_HEIGHT / 2}
+                            stroke="#0f172a"
+                            stroke-width="2"
+                            class="pointer-events-none"
+                        />
                     </>
                 </Show>
                 <Show when={isBan() && !isRoot()}>
