@@ -180,6 +180,22 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         undefined
     );
     const [currentSessionId, setCurrentSessionId] = createSignal<string | null>(null);
+    const [selectedScenarioIndex, setSelectedScenarioIndex] = createSignal<number | null>(
+        null
+    );
+    const [manualExpansionKeys, setManualExpansionKeysSignal] = createSignal<
+        ReadonlySet<string>
+    >(new Set<string>());
+    const [manualCollapseKeys, setManualCollapseKeysSignal] = createSignal<
+        ReadonlySet<string>
+    >(new Set<string>());
+
+    const setManualExpansionKeys = (
+        updater: (prev: ReadonlySet<string>) => ReadonlySet<string>
+    ) => setManualExpansionKeysSignal((prev) => updater(prev));
+    const setManualCollapseKeys = (
+        updater: (prev: ReadonlySet<string>) => ReadonlySet<string>
+    ) => setManualCollapseKeysSignal((prev) => updater(prev));
     let socketWithListeners: Socket | undefined = undefined;
 
     const getActiveSessionId = () =>
@@ -441,7 +457,13 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         emitBan,
         emitUndo,
         startDraft,
-        nextGame
+        nextGame,
+        selectedScenarioIndex,
+        setSelectedScenarioIndex,
+        manualExpansionKeys,
+        manualCollapseKeys,
+        setManualExpansionKeys,
+        setManualCollapseKeys
     };
 
     return (

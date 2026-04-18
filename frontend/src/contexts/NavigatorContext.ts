@@ -115,6 +115,16 @@ export interface NavigatorWorkflowContextValue {
     emitUndo: (draftId: string) => void;
     startDraft: () => void;
     nextGame: () => void;
+    selectedScenarioIndex: Accessor<number | null>;
+    setSelectedScenarioIndex: (index: number | null) => void;
+    manualExpansionKeys: Accessor<ReadonlySet<string>>;
+    manualCollapseKeys: Accessor<ReadonlySet<string>>;
+    setManualExpansionKeys: (
+        updater: (prev: ReadonlySet<string>) => ReadonlySet<string>
+    ) => void;
+    setManualCollapseKeys: (
+        updater: (prev: ReadonlySet<string>) => ReadonlySet<string>
+    ) => void;
 }
 
 export const NavigatorWorkflowContext = createContext<NavigatorWorkflowContextValue>();
