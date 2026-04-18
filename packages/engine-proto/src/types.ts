@@ -78,6 +78,8 @@ export interface Scenario {
   bluePicks: string[];
   likelyAssignments: WeightedAssignment[];
   redPicks: string[];
+  blueBans: string[];
+  redBans: string[];
   treePath: number[];
   perspective: Perspective;
   indicators: string[];
@@ -116,6 +118,8 @@ export interface EngineConfig {
   branchWidth: number;
   pairBranchWidth?: number;
   maxDepth: number;
+  broadDepth: number;
+  extensionTurnThreshold: number;
   latencyBudgetMs: number;
   forcedMoves: ForcedMove[];
 }
