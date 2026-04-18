@@ -20,27 +20,31 @@ const perspectiveLabels: Record<NavigatorScenario["perspective"], string> = {
     off_profile: "Off profile"
 };
 
-// Standard League draft pick turns per side
-// Blue: [P1] | [P2, P3] | [P4, P5]
-// Red: [R1, R2] | [R3] | [R4] | [R5]
+// Standard League draft turn groupings
 const BLUE_PICK_GROUPS: number[][] = [[0], [1, 2], [3, 4]];
 const RED_PICK_GROUPS: number[][] = [[0, 1], [2], [3], [4]];
+// Bans: 3 in ban1 + 2 in ban2 = 5 total per side
+const BLUE_BAN_GROUPS: number[][] = [[0, 1, 2], [3, 4]];
+const RED_BAN_GROUPS: number[][] = [[0, 1, 2], [3, 4]];
 
-function padPicks(picks: string[], size: number): Array<string | null> {
-    return Array.from({ length: size }, (_, index) => picks[index] ?? null);
+function padSlots(values: string[], size: number): Array<string | null> {
+    return Array.from({ length: size }, (_, index) => values[index] ?? null);
 }
 
 const ChampionCircle: Component<{
     championId: string | null;
     borderClass: string;
+    sizeClass?: string;
+    banned?: boolean;
 }> = (props) => {
     const champion = createMemo(() =>
         props.championId ? resolveChampion(props.championId) : undefined
     );
+    const sizeClass = () => props.sizeClass ?? "h-7 w-7";
 
     return (
         <div
-            class={`flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border bg-slate-900 ${props.borderClass}`}
+            class={`relative flex items-center justify-center overflow-hidden rounded-full border bg-slate-900 ${sizeClass()} ${props.borderClass}`}
         >
             <Show
                 when={champion()}
@@ -49,43 +53,62 @@ const ChampionCircle: Component<{
                 }
             >
                 {(resolvedChampion) => (
-                    <img
-                        src={resolvedChampion().img}
-                        alt={resolvedChampion().name}
-                        class="h-full w-full object-cover"
-                    />
+                    <>
+                        <img
+                            src={resolvedChampion().img}
+                            alt={resolvedChampion().name}
+                            class={
+                                props.banned
+                                    ? "h-full w-full object-cover opacity-50 grayscale"
+                                    : "h-full w-full object-cover"
+                            }
+                        />
+                        <Show when={props.banned}>
+                            <svg
+                                viewBox="0 0 24 24"
+                                class="pointer-events-none absolute inset-0 h-full w-full text-red-500"
+                                stroke="currentColor"
+                                stroke-width="2.5"
+                                fill="none"
+                            >
+                                <line x1="4" y1="4" x2="20" y2="20" />
+                                <line x1="20" y1="4" x2="4" y2="20" />
+                            </svg>
+                        </Show>
+                    </>
                 )}
             </Show>
         </div>
     );
 };
 
-const GroupedCompRow: Component<{
-    picks: string[];
+const GroupedRow: Component<{
+    values: string[];
     groups: number[][];
+    totalSlots: number;
     bgClass: string;
     dividerClass: string;
+    circleSize?: string;
+    banned?: boolean;
 }> = (props) => {
-    const paddedPicks = createMemo(() => padPicks(props.picks, 5));
+    const padded = createMemo(() => padSlots(props.values, props.totalSlots));
 
     return (
-        <div
-            class={`flex items-center rounded-md px-2 py-1.5 ${props.bgClass}`}
-        >
+        <div class={`flex items-center rounded-md px-2 py-1.5 ${props.bgClass}`}>
             <For each={props.groups}>
                 {(group, groupIndex) => (
                     <div class="flex items-center">
                         <Show when={groupIndex() > 0}>
-                            <div
-                                class={`mx-2 h-6 w-px ${props.dividerClass}`}
-                            />
+                            <div class={`mx-2 h-5 w-px ${props.dividerClass}`} />
                         </Show>
                         <div class="flex gap-1">
                             <For each={group}>
                                 {(slotIndex) => (
                                     <ChampionCircle
-                                        championId={paddedPicks()[slotIndex]}
+                                        championId={padded()[slotIndex]}
                                         borderClass="border-slate-600/50"
+                                        sizeClass={props.circleSize}
+                                        banned={props.banned}
                                     />
                                 )}
                             </For>
@@ -139,16 +162,36 @@ const ScenarioCard: Component<ScenarioCardProps> = (props) => {
                 </Show>
             </div>
 
-            <div class="mt-3 space-y-1.5">
-                <GroupedCompRow
-                    picks={props.scenario.bluePicks}
+            <div class="mt-3 space-y-1">
+                <GroupedRow
+                    values={props.scenario.blueBans}
+                    groups={BLUE_BAN_GROUPS}
+                    totalSlots={5}
+                    bgClass="bg-blue-500/5"
+                    dividerClass="bg-blue-400/20"
+                    circleSize="h-5 w-5"
+                    banned
+                />
+                <GroupedRow
+                    values={props.scenario.bluePicks}
                     groups={BLUE_PICK_GROUPS}
+                    totalSlots={5}
                     bgClass="bg-blue-500/10"
                     dividerClass="bg-blue-400/25"
                 />
-                <GroupedCompRow
-                    picks={props.scenario.redPicks}
+                <GroupedRow
+                    values={props.scenario.redBans}
+                    groups={RED_BAN_GROUPS}
+                    totalSlots={5}
+                    bgClass="bg-red-500/5"
+                    dividerClass="bg-red-400/20"
+                    circleSize="h-5 w-5"
+                    banned
+                />
+                <GroupedRow
+                    values={props.scenario.redPicks}
                     groups={RED_PICK_GROUPS}
+                    totalSlots={5}
                     bgClass="bg-red-500/10"
                     dividerClass="bg-red-400/25"
                 />
