@@ -25,6 +25,8 @@ function makeSearchCtx(overrides: Partial<SearchContext> = {}): SearchContext {
     config: {
       branchWidth: 3,
       maxDepth: 2,
+      broadDepth: 2,
+      extensionTurnThreshold: 8,
       latencyBudgetMs: 5000,
       forcedMoves: [],
     },
@@ -38,7 +40,7 @@ describe("search", () => {
     const state = createEmptyDraft();
     const ctx = makeSearchCtx();
     const tree = search(state, TEST_CHAMPION_IDS, ctx);
-    expect(tree.championId).toBeNull();
+    expect(tree.championIds).toEqual([]);
     expect(tree.children.length).toBeGreaterThan(0);
     expect(tree.children.length).toBeLessThanOrEqual(ctx.config.branchWidth);
   });
@@ -48,7 +50,9 @@ describe("search", () => {
     const ctx = makeSearchCtx();
     const tree = search(state, TEST_CHAMPION_IDS, ctx);
     for (const child of tree.children) {
-      expect(TEST_CHAMPION_IDS).toContain(child.championId);
+      for (const championId of child.championIds) {
+        expect(TEST_CHAMPION_IDS).toContain(championId);
+      }
     }
   });
 
@@ -69,9 +73,9 @@ describe("search", () => {
     let node: TreeNode = tree;
     while (node.children.length > 0) {
       node = node.children[0];
-      if (node.championId) {
-        expect(championsInBranch).not.toContain(node.championId);
-        championsInBranch.push(node.championId);
+      for (const championId of node.championIds) {
+        expect(championsInBranch).not.toContain(championId);
+        championsInBranch.push(championId);
       }
     }
   });

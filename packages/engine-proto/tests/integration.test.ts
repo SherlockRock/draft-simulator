@@ -34,6 +34,8 @@ function makeRequest(overrides: Partial<EngineRequest> = {}): EngineRequest {
     config: {
       branchWidth: 3,
       maxDepth: 2,
+      broadDepth: 2,
+      extensionTurnThreshold: 8,
       latencyBudgetMs: 3000,
       forcedMoves: [],
     },

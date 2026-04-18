@@ -19,6 +19,8 @@ function makeCtx(overrides: Partial<SearchContext["config"]> = {}): SearchContex
     config: {
       branchWidth: 3,
       maxDepth: 4,
+      broadDepth: 4,
+      extensionTurnThreshold: 8,
       latencyBudgetMs: 5000,
       forcedMoves: [],
       ...overrides,
@@ -39,7 +41,7 @@ describe("iterativeDeepeningSearch", () => {
 
   it("respects latency budget", () => {
     const state = createEmptyDraft();
-    const ctx = makeCtx({ latencyBudgetMs: 100, maxDepth: 10 });
+    const ctx = makeCtx({ latencyBudgetMs: 100, maxDepth: 10, broadDepth: 10 });
     const start = performance.now();
     const { meta } = iterativeDeepeningSearch(state, TEST_CHAMPION_IDS, ctx);
     const elapsed = performance.now() - start;
@@ -49,8 +51,8 @@ describe("iterativeDeepeningSearch", () => {
 
   it("deeper search evaluates more nodes", () => {
     const state = createEmptyDraft();
-    const shallow = makeCtx({ maxDepth: 1, latencyBudgetMs: 5000 });
-    const deep = makeCtx({ maxDepth: 3, latencyBudgetMs: 5000 });
+    const shallow = makeCtx({ maxDepth: 1, broadDepth: 1, latencyBudgetMs: 5000 });
+    const deep = makeCtx({ maxDepth: 3, broadDepth: 3, latencyBudgetMs: 5000 });
     const shallowResult = iterativeDeepeningSearch(state, TEST_CHAMPION_IDS, shallow);
     const deepResult = iterativeDeepeningSearch(state, TEST_CHAMPION_IDS, deep);
     expect(deepResult.meta.nodesEvaluated).toBeGreaterThanOrEqual(shallowResult.meta.nodesEvaluated);
