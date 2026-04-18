@@ -6,11 +6,20 @@ import {
     createMemo,
     createSignal,
     createUniqueId,
+    on,
     onCleanup,
-    onMount
+    onMount,
+    untrack
 } from "solid-js";
 import createPanZoom, { type PanZoom } from "panzoom";
+import { useNavigatorContext } from "../../contexts/NavigatorContext";
 import { resolveChampion } from "../../utils/constants";
+import {
+    collectNodeKeyPaths,
+    nodeKey,
+    nodeKeyPath,
+    pathIndicesToNodeKeyPath
+} from "../../utils/treeReconcile";
 import { LayoutNode, radialTreeLayout } from "../../utils/treeLayout";
 
 export type ScenarioPathTier = "selected" | "unselected";
@@ -238,6 +247,49 @@ function isPrefix(shorter: number[], longer: number[]): boolean {
         if (shorter[i] !== longer[i]) return false;
     }
     return true;
+}
+
+function applyEngagementOverrides(
+    tree: LayoutNode,
+    expanded: Set<string>,
+    expansionKeys: ReadonlySet<string>,
+    collapseKeys: ReadonlySet<string>
+): void {
+    for (let i = 0; i < tree.children.length; i++) {
+        walkEngagement(
+            tree.children[i],
+            [i],
+            [nodeKey(tree.children[i])],
+            expanded,
+            expansionKeys,
+            collapseKeys
+        );
+    }
+}
+
+function walkEngagement(
+    node: LayoutNode,
+    indexPath: number[],
+    keyArray: string[],
+    expanded: Set<string>,
+    expansionKeys: ReadonlySet<string>,
+    collapseKeys: ReadonlySet<string>
+): void {
+    const indexKey = pathKey(indexPath);
+    const keyPathString = nodeKeyPath(keyArray);
+    if (expansionKeys.has(keyPathString)) expanded.add(indexKey);
+    if (collapseKeys.has(keyPathString)) expanded.delete(indexKey);
+    for (let i = 0; i < node.children.length; i++) {
+        const child = node.children[i];
+        walkEngagement(
+            child,
+            [...indexPath, i],
+            [...keyArray, nodeKey(child)],
+            expanded,
+            expansionKeys,
+            collapseKeys
+        );
+    }
 }
 
 const TreeLink: Component<{
@@ -585,6 +637,12 @@ const TreeNodeComponent: Component<{
 };
 
 const DecisionTree: Component<DecisionTreeProps> = (props) => {
+    const {
+        manualExpansionKeys,
+        manualCollapseKeys,
+        setManualExpansionKeys,
+        setManualCollapseKeys
+    } = useNavigatorContext();
     const svgId = createUniqueId();
     let containerRef: HTMLDivElement | undefined;
     let svgRef: SVGSVGElement | undefined;
@@ -596,19 +654,14 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         height: 0
     });
     const [zoomPercent, setZoomPercent] = createSignal(100);
-    const [manualExpansions, setManualExpansions] = createSignal<ReadonlySet<string>>(
-        new Set<string>()
-    );
-    const [manualCollapses, setManualCollapses] = createSignal<ReadonlySet<string>>(
-        new Set<string>()
-    );
 
-    // Reset manual overrides when tree data changes
+    // Drop manual overrides whose node-key paths no longer exist in the tree.
     createEffect(() => {
-        // Track treeData to reset on new engine output
-        void props.treeData;
-        setManualExpansions(new Set<string>());
-        setManualCollapses(new Set<string>());
+        const tree = props.treeData;
+        if (!tree) return;
+        const valid = collectNodeKeyPaths(tree);
+        setManualExpansionKeys((prev) => new Set([...prev].filter((k) => valid.has(k))));
+        setManualCollapseKeys((prev) => new Set([...prev].filter((k) => valid.has(k))));
     });
 
     // Scenario paths drive default expansion; manual toggles override
@@ -616,14 +669,14 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         const base = expandForPaths(props.scenarioPaths);
         const expanded = new Set(base);
 
-        // Apply manual expansions (user clicked + on a collapsed node)
-        for (const key of manualExpansions()) {
-            expanded.add(key);
-        }
-
-        // Apply manual collapses (user collapsed a previously-open node)
-        for (const key of manualCollapses()) {
-            expanded.delete(key);
+        const tree = props.treeData;
+        if (tree) {
+            applyEngagementOverrides(
+                tree,
+                expanded,
+                manualExpansionKeys(),
+                manualCollapseKeys()
+            );
         }
 
         return expanded;
@@ -647,37 +700,41 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
     });
 
     const toggleExpand = (path: number[]) => {
-        const key = pathKey(path);
-        const tree = annotatedTree();
-        const node = tree ? getNodeAtPath(tree, path) : null;
+        const tree = props.treeData;
+        if (!tree) return;
+
+        const indexKey = pathKey(path);
+        const keyPathString = pathIndicesToNodeKeyPath(tree, path);
+        if (!keyPathString) return;
+
+        const annotated = annotatedTree();
+        const node = annotated ? getNodeAtPath(annotated, path) : null;
         const currentlyExpanded =
-            expandedPaths().has(key) &&
+            expandedPaths().has(indexKey) &&
             (node === null ||
                 node.actionType !== "ban" ||
-                manualExpansions().has(key));
+                manualExpansionKeys().has(keyPathString));
 
         if (currentlyExpanded) {
-            // Collapse: add to manual collapses, remove from manual expansions
-            setManualCollapses((prev) => {
+            setManualCollapseKeys((prev) => {
                 const next = new Set(prev);
-                next.add(key);
+                next.add(keyPathString);
                 return next;
             });
-            setManualExpansions((prev) => {
+            setManualExpansionKeys((prev) => {
                 const next = new Set(prev);
-                next.delete(key);
+                next.delete(keyPathString);
                 return next;
             });
         } else {
-            // Expand: add to manual expansions, remove from manual collapses
-            setManualExpansions((prev) => {
+            setManualExpansionKeys((prev) => {
                 const next = new Set(prev);
-                next.add(key);
+                next.add(keyPathString);
                 return next;
             });
-            setManualCollapses((prev) => {
+            setManualCollapseKeys((prev) => {
                 const next = new Set(prev);
-                next.delete(key);
+                next.delete(keyPathString);
                 return next;
             });
         }
@@ -689,10 +746,36 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         return withPaths(treeData);
     });
 
+    const manualExpansionIndexKeys = createMemo<ReadonlySet<string>>(() => {
+        const result = new Set<string>();
+        const tree = props.treeData;
+        if (!tree) return result;
+
+        const collected: Array<{ indexPath: number[]; keyArray: string[] }> = [];
+        function walk(node: LayoutNode, indexPath: number[], keyArray: string[]) {
+            for (let i = 0; i < node.children.length; i++) {
+                const child = node.children[i];
+                const nextIndex = [...indexPath, i];
+                const nextKeys = [...keyArray, nodeKey(child)];
+                collected.push({ indexPath: nextIndex, keyArray: nextKeys });
+                walk(child, nextIndex, nextKeys);
+            }
+        }
+        walk(tree, [], []);
+
+        const expansionKeys = manualExpansionKeys();
+        for (const { indexPath, keyArray } of collected) {
+            if (expansionKeys.has(nodeKeyPath(keyArray))) {
+                result.add(pathKey(indexPath));
+            }
+        }
+        return result;
+    });
+
     const prunedTree = createMemo(() => {
         const tree = annotatedTree();
         if (!tree) return null;
-        return pruneTree(tree, expandedPaths(), manualExpansions());
+        return pruneTree(tree, expandedPaths(), manualExpansionIndexKeys());
     });
 
     const layout = createMemo(() => {
@@ -854,31 +937,37 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         }
     });
 
-    // Pan (no zoom change) to bring a requested path into view. Fires on every
-    // new panRequest object, even when the target path is the same as before.
-    createEffect(() => {
-        const request = props.panRequest;
-        if (!request || !panzoomInstance) return;
+    // Pan (no zoom change) to bring a requested path into view. This should
+    // only run when a new panRequest object arrives; later layout changes from
+    // local expand/collapse should not re-center the viewport.
+    createEffect(
+        on(
+            () => props.panRequest,
+            (request) => {
+                if (!request || !panzoomInstance) return;
 
-        const currentLayout = layout();
-        const viewport = viewportSize();
-        if (!currentLayout || viewport.width <= 0 || viewport.height <= 0) return;
+                const currentLayout = untrack(layout);
+                const viewport = untrack(viewportSize);
+                if (!currentLayout || viewport.width <= 0 || viewport.height <= 0) return;
 
-        const targetNodes = currentLayout.nodes.filter((node) =>
-            isPrefix(node.data.path, request.path)
-        );
-        if (targetNodes.length === 0) return;
+                const targetNodes = currentLayout.nodes.filter((node) =>
+                    isPrefix(node.data.path, request.path)
+                );
+                if (targetNodes.length === 0) return;
 
-        const xs = targetNodes.map((n) => n.x);
-        const ys = targetNodes.map((n) => n.y);
-        const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-        const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+                const xs = targetNodes.map((n) => n.x);
+                const ys = targetNodes.map((n) => n.y);
+                const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+                const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
 
-        const currentTransform = panzoomInstance.getTransform();
-        const nextX = viewport.width / 2 - cx * currentTransform.scale;
-        const nextY = viewport.height / 2 - cy * currentTransform.scale;
-        panzoomInstance.moveTo(nextX, nextY);
-    });
+                const currentTransform = panzoomInstance.getTransform();
+                const nextX = viewport.width / 2 - cx * currentTransform.scale;
+                const nextY = viewport.height / 2 - cy * currentTransform.scale;
+                panzoomInstance.moveTo(nextX, nextY);
+            },
+            { defer: true }
+        )
+    );
 
     return (
         <div ref={containerRef} class="relative h-full w-full overflow-hidden">
