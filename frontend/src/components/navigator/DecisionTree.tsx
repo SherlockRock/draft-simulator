@@ -64,16 +64,17 @@ const NODE_RADIUS = 20;
 const PAIR_NODE_WIDTH = NODE_RADIUS * 2.9;
 const PAIR_NODE_HEIGHT = NODE_RADIUS * 2.2;
 const PAIR_SLASH_OFFSET = 7;
+const PAIR_IMAGE_INSET = 2;
 const BAN_RADIUS = NODE_RADIUS * 0.8;
 const TREE_PADDING = 56;
 
 function getPairClipRadius() {
-    return PAIR_NODE_HEIGHT / 2;
+    return PAIR_NODE_HEIGHT / 2 - PAIR_IMAGE_INSET;
 }
 
 function getPairLeftClipPath() {
-    const halfWidth = PAIR_NODE_WIDTH / 2;
-    const halfHeight = PAIR_NODE_HEIGHT / 2;
+    const halfWidth = PAIR_NODE_WIDTH / 2 - PAIR_IMAGE_INSET;
+    const halfHeight = PAIR_NODE_HEIGHT / 2 - PAIR_IMAGE_INSET;
     const radius = getPairClipRadius();
 
     return [
@@ -89,8 +90,8 @@ function getPairLeftClipPath() {
 }
 
 function getPairRightClipPath() {
-    const halfWidth = PAIR_NODE_WIDTH / 2;
-    const halfHeight = PAIR_NODE_HEIGHT / 2;
+    const halfWidth = PAIR_NODE_WIDTH / 2 - PAIR_IMAGE_INSET;
+    const halfHeight = PAIR_NODE_HEIGHT / 2 - PAIR_IMAGE_INSET;
     const radius = getPairClipRadius();
 
     return [
@@ -508,9 +509,9 @@ const TreeNodeComponent: Component<{
                         </Show>
                         <line
                             x1={PAIR_SLASH_OFFSET}
-                            y1={-PAIR_NODE_HEIGHT / 2}
+                            y1={-PAIR_NODE_HEIGHT / 2 + PAIR_IMAGE_INSET}
                             x2={-PAIR_SLASH_OFFSET}
-                            y2={PAIR_NODE_HEIGHT / 2}
+                            y2={PAIR_NODE_HEIGHT / 2 - PAIR_IMAGE_INSET}
                             stroke="#0f172a"
                             stroke-width="2"
                             class="pointer-events-none"
