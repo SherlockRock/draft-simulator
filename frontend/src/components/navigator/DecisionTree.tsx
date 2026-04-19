@@ -348,10 +348,12 @@ const TreeNodeComponent: Component<{
     node: PositionedNode;
     highlightedPath: number[] | null;
     glowFilterId: string;
+    latestGlowFilterId: string;
     onClick: (path: number[]) => void;
     onToggleExpand: (path: number[]) => void;
     ghosted: boolean;
     isConfirmed: boolean;
+    isLatestConfirmed: boolean;
 }> = (props) => {
     const clipSeed = createUniqueId();
     const championIds = createMemo(() => props.node.data.championIds);
@@ -447,6 +449,28 @@ const TreeNodeComponent: Component<{
                 </Show>
             </defs>
             <g class="cursor-pointer" onClick={handleNodeClick}>
+                <Show when={props.isLatestConfirmed}>
+                    <circle
+                        cx="0"
+                        cy="0"
+                        r={nodeRadius() + 8}
+                        fill="none"
+                        stroke="#7dd3fc"
+                        stroke-width="2"
+                        opacity="0.65"
+                        class="transition-[r,opacity] duration-200 ease-out"
+                    />
+                    <circle
+                        cx="0"
+                        cy="0"
+                        r={nodeRadius() + 4}
+                        fill="none"
+                        stroke="#7dd3fc"
+                        stroke-width="1"
+                        opacity="0.35"
+                        filter={`url(#${props.latestGlowFilterId})`}
+                    />
+                </Show>
                 <Show
                     when={isPair()}
                     fallback={
@@ -790,6 +814,9 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
 
     const nodes = createMemo<PositionedNode[]>(() => layout()?.nodes ?? []);
     const links = createMemo<PositionedLink[]>(() => layout()?.links ?? []);
+    const latestConfirmedPath = createMemo<number[]>(() =>
+        Array.from({ length: props.confirmedDepth - 1 }, () => 0)
+    );
 
     // Compute concentric ring data from positioned nodes
     const depthRings = createMemo(() => {
@@ -828,7 +855,8 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                 radius: ring.radius,
                 label: ring.label,
                 cx,
-                cy
+                cy,
+                isLatestConfirmed: depth === props.confirmedDepth - 1
             }));
     });
     const fitTransform = createMemo<FitTransform | null>(() => {
@@ -1009,6 +1037,9 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                     <filter id={`tree-glow-${svgId}`} x="-50%" y="-50%" width="200%" height="200%">
                         <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#60a5fa" flood-opacity="0.75" />
                     </filter>
+                    <filter id={`latest-glow-${svgId}`} x="-50%" y="-50%" width="200%" height="200%">
+                        <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#7dd3fc" flood-opacity="0.8" />
+                    </filter>
                 </defs>
                 <g ref={svgGroupRef}>
                     {/* Depth rings — concentric circles indicating pick order */}
@@ -1020,10 +1051,11 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                                     cy={ring.cy}
                                     r={ring.radius}
                                     fill="none"
-                                    stroke="#475569"
-                                    stroke-width={1}
+                                    stroke={ring.isLatestConfirmed ? "#7dd3fc" : "#475569"}
+                                    stroke-width={ring.isLatestConfirmed ? 1.25 : 1}
                                     stroke-dasharray="6 4"
-                                    opacity={0.5}
+                                    opacity={ring.isLatestConfirmed ? 0.8 : 0.5}
+                                    class="transition-[stroke,opacity] duration-200 ease-out"
                                 />
                                 <text
                                     x={ring.cx}
@@ -1053,10 +1085,15 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                                 node={node}
                                 highlightedPath={props.highlightedPath}
                                 glowFilterId={`tree-glow-${svgId}`}
+                                latestGlowFilterId={`latest-glow-${svgId}`}
                                 onClick={props.onNodeClick}
                                 onToggleExpand={toggleExpand}
                                 ghosted={ghostedPathKeys().has(pathKey(node.data.path))}
                                 isConfirmed={node.data.path.length < props.confirmedDepth}
+                                isLatestConfirmed={
+                                    pathKey(node.data.path) ===
+                                    pathKey(latestConfirmedPath())
+                                }
                             />
                         )}
                     </For>
