@@ -3,8 +3,15 @@ import type {
     NavigatorTreeNode
 } from "../contexts/NavigatorContext";
 
+type NodeKeyTreeNode = {
+    side: "blue" | "red" | null;
+    actionType: "ban" | "pick";
+    championIds: string[];
+    children: NodeKeyTreeNode[];
+};
+
 /** Stable identity for a tree node — side:actionType:sortedChampionIds */
-export function nodeKey(node: NavigatorTreeNode): string {
+export function nodeKey(node: NodeKeyTreeNode): string {
     const champs = [...node.championIds].sort().join("|");
     return `${node.side ?? "none"}:${node.actionType}:${champs}`;
 }
@@ -20,9 +27,9 @@ export function nodeKeyPath(keys: string[]): NodeKeyPath {
  * Walk the tree and return the set of every reachable node-key path.
  * Used to filter stale manualExpansions / manualCollapses entries.
  */
-export function collectNodeKeyPaths(root: NavigatorTreeNode): Set<NodeKeyPath> {
+export function collectNodeKeyPaths(root: NodeKeyTreeNode): Set<NodeKeyPath> {
     const result = new Set<NodeKeyPath>();
-    function walk(node: NavigatorTreeNode, keys: string[]): void {
+    function walk(node: NodeKeyTreeNode, keys: string[]): void {
         for (const child of node.children) {
             const nextKeys = [...keys, nodeKey(child)];
             result.add(nodeKeyPath(nextKeys));
@@ -38,7 +45,7 @@ export function collectNodeKeyPaths(root: NavigatorTreeNode): Set<NodeKeyPath> {
  * Returns null if any index is out of bounds.
  */
 export function pathIndicesToNodeKeyPath(
-    root: NavigatorTreeNode,
+    root: NodeKeyTreeNode,
     indexPath: number[]
 ): NodeKeyPath | null {
     const keys: string[] = [];
@@ -57,7 +64,7 @@ export function pathIndicesToNodeKeyPath(
  * child step) that identifies the same node in `root`, or null if absent.
  */
 export function nodeKeyPathToIndices(
-    root: NavigatorTreeNode,
+    root: NodeKeyTreeNode,
     keyPath: NodeKeyPath
 ): number[] | null {
     if (keyPath === "") return [];

@@ -1,5 +1,6 @@
 import { Component, Show, createEffect, createMemo, createSignal } from "solid-js";
 import { useNavigatorContext } from "../../contexts/NavigatorContext";
+import { eventsToConfirmedTurns } from "../../utils/treeReconcile";
 import DraftInputPanel from "./DraftInputPanel";
 import DecisionTree from "./DecisionTree";
 import ScenarioLanes from "./ScenarioLanes";
@@ -20,6 +21,9 @@ const NavigatorDrafting: Component = () => {
 
     const treeData = syntheticTree;
     const scenarios = createMemo(() => navigatorContext().snapshot?.scenarios ?? []);
+    const confirmedDepth = createMemo(
+        () => eventsToConfirmedTurns(navigatorContext().events).length + 1
+    );
     const isStale = createMemo(
         () =>
             navigatorContext().snapshot === null &&
@@ -79,7 +83,7 @@ const NavigatorDrafting: Component = () => {
                     treeData={treeData()}
                     isComputing={isComputingFromContext()}
                     highlightedPath={highlightedTreePath()}
-                    rootChampionId={null}
+                    confirmedDepth={confirmedDepth()}
                     scenarioPaths={scenarios().map((scenario, index) => ({
                         path: scenario.treePath,
                         tier: selectedScenarioIndex() === index ? "selected" : "unselected"

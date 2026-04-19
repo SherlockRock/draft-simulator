@@ -33,10 +33,10 @@ interface DecisionTreeProps {
     treeData: LayoutNode | null;
     isComputing: boolean;
     highlightedPath: number[] | null;
-    rootChampionId: string | null;
     scenarioPaths: TieredScenarioPath[];
     panRequest: { path: number[] } | null;
     onNodeClick: (nodeIndex: number[]) => void;
+    confirmedDepth: number;
 }
 
 interface TreeNodeWithPath extends LayoutNode {
@@ -76,6 +76,21 @@ const PAIR_SLASH_OFFSET = 7;
 const PAIR_IMAGE_INSET = 2;
 const BAN_RADIUS = NODE_RADIUS * 0.8;
 const TREE_PADDING = 56;
+const BLUE_HEX = "#3b82f6";
+const RED_HEX = "#ef4444";
+const MUTED_OPACITY = 0.6;
+
+function sideColor(side: "blue" | "red" | null, muted: boolean): string {
+    if (side === "blue") {
+        return muted ? `rgba(59, 130, 246, ${MUTED_OPACITY})` : BLUE_HEX;
+    }
+
+    if (side === "red") {
+        return muted ? `rgba(239, 68, 68, ${MUTED_OPACITY})` : RED_HEX;
+    }
+
+    return "#94a3b8";
+}
 
 function getPairClipRadius() {
     return PAIR_NODE_HEIGHT / 2 - PAIR_IMAGE_INSET;
@@ -333,19 +348,13 @@ const TreeNodeComponent: Component<{
     node: PositionedNode;
     highlightedPath: number[] | null;
     glowFilterId: string;
-    rootChampionId: string | null;
     onClick: (path: number[]) => void;
     onToggleExpand: (path: number[]) => void;
     ghosted: boolean;
+    isConfirmed: boolean;
 }> = (props) => {
     const clipSeed = createUniqueId();
-    const championIds = createMemo(() => {
-        if (props.node.data.path.length === 0) {
-            return props.rootChampionId ? [props.rootChampionId] : props.node.data.championIds;
-        }
-
-        return props.node.data.championIds;
-    });
+    const championIds = createMemo(() => props.node.data.championIds);
     const champions = createMemo(() =>
         championIds()
             .map((championId) => resolveChampion(championId))
@@ -386,25 +395,23 @@ const TreeNodeComponent: Component<{
     const highlighted = createMemo(() =>
         isPathHighlighted(props.node.data.path, props.highlightedPath)
     );
-    const sideStroke = createMemo(() => {
+    const isBanAction = createMemo(() => props.node.data.actionType === "ban" && !isRoot());
+    const effectiveStroke = createMemo(() => {
         if (isRoot()) {
             return "#94a3b8";
         }
 
-        if (isBan()) {
-            return "#64748b";
-        }
-
-        if (props.node.data.side === "blue") {
-            return "#3b82f6";
-        }
-
-        if (props.node.data.side === "red") {
-            return "#ef4444";
-        }
-
-        return "#94a3b8";
+        return sideColor(props.node.data.side, isBanAction());
     });
+    const strokeWidth = createMemo(() => {
+        if (highlighted()) {
+            return 3;
+        }
+
+        return props.isConfirmed ? 3 : 1.75;
+    });
+    const strokeOpacity = createMemo(() => (props.isConfirmed ? 1 : 0.8));
+    const fillColor = createMemo(() => (props.isConfirmed ? "#0f172a" : "#0b1220"));
     const isCollapsed = createMemo(() => props.node.data.collapsedChildCount > 0);
 
     const handleNodeClick = () => {
@@ -421,7 +428,7 @@ const TreeNodeComponent: Component<{
             data-tree-node="true"
             class="transition-transform duration-200 ease-out"
             transform={`translate(${props.node.x} ${props.node.y})`}
-            opacity={props.ghosted ? 0.4 : isBan() ? 0.7 : 1}
+            opacity={props.ghosted ? 0.4 : strokeOpacity()}
         >
             <title>{championLabel()}</title>
             <defs>
@@ -458,9 +465,9 @@ const TreeNodeComponent: Component<{
                                 cx="0"
                                 cy="0"
                                 r={nodeRadius()}
-                                fill="#0f172a"
-                                stroke={highlighted() ? "#93c5fd" : sideStroke()}
-                                stroke-width={highlighted() ? 3 : 2}
+                                fill={fillColor()}
+                                stroke={highlighted() ? "#93c5fd" : effectiveStroke()}
+                                stroke-width={strokeWidth()}
                                 stroke-dasharray={
                                     props.node.data.userInjected ? "4 3" : undefined
                                 }
@@ -521,9 +528,9 @@ const TreeNodeComponent: Component<{
                             width={PAIR_NODE_WIDTH}
                             height={PAIR_NODE_HEIGHT}
                             rx={PAIR_NODE_HEIGHT / 2}
-                            fill="#0f172a"
-                            stroke={highlighted() ? "#93c5fd" : sideStroke()}
-                            stroke-width={highlighted() ? 3 : 2}
+                            fill={fillColor()}
+                            stroke={highlighted() ? "#93c5fd" : effectiveStroke()}
+                            stroke-width={strokeWidth()}
                             stroke-dasharray={
                                 props.node.data.userInjected ? "4 3" : undefined
                             }
@@ -579,12 +586,7 @@ const TreeNodeComponent: Component<{
                             stroke="#e2e8f0"
                             stroke-width="2"
                             stroke-linecap="round"
-                        />
-                        <path
-                            d={`M ${nodeWidth() / 2 - 4} ${-nodeHeight() / 2 + 4} L ${-nodeWidth() / 2 + 4} ${nodeHeight() / 2 - 4}`}
-                            stroke="#e2e8f0"
-                            stroke-width="2"
-                            stroke-linecap="round"
+                            opacity={props.isConfirmed ? 0.9 : 0.65}
                         />
                     </g>
                 </Show>
@@ -1051,10 +1053,10 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                                 node={node}
                                 highlightedPath={props.highlightedPath}
                                 glowFilterId={`tree-glow-${svgId}`}
-                                rootChampionId={props.rootChampionId}
                                 onClick={props.onNodeClick}
                                 onToggleExpand={toggleExpand}
                                 ghosted={ghostedPathKeys().has(pathKey(node.data.path))}
+                                isConfirmed={node.data.path.length < props.confirmedDepth}
                             />
                         )}
                     </For>
