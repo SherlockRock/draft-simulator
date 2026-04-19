@@ -948,14 +948,8 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         });
     });
 
-    let hasPerformedInitialFit = false;
-
-    // Keep zoom bounds fresh as the tree grows, but only auto-fit the viewport
-    // on the initial tree load. After that, user navigation is preserved —
-    // node expand, scenario select, etc. don't reset the view.
     createEffect(() => {
         const transform = fitTransform();
-
         if (!transform || !panzoomInstance) {
             return;
         }
@@ -963,9 +957,12 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         panzoomInstance.setMinZoom(Math.max(roundScale(transform.scale * 0.6), 0.05));
         panzoomInstance.setMaxZoom(Math.max(roundScale(transform.scale * 16), 8));
 
-        if (!hasPerformedInitialFit) {
-            applyTransform(transform);
-            hasPerformedInitialFit = true;
+        const current = panzoomInstance.getTransform();
+        const requiredScale = transform.scale;
+
+        if (current.scale > requiredScale + 1e-4) {
+            panzoomInstance.smoothMoveTo(transform.x, transform.y);
+            panzoomInstance.smoothZoom(0, 0, transform.scale / current.scale);
         }
     });
 
