@@ -354,6 +354,7 @@ const TreeNodeComponent: Component<{
     ghosted: boolean;
     isConfirmed: boolean;
     isLatestConfirmed: boolean;
+    isComputing: boolean;
 }> = (props) => {
     const clipSeed = createUniqueId();
     const championIds = createMemo(() => props.node.data.championIds);
@@ -469,6 +470,20 @@ const TreeNodeComponent: Component<{
                         stroke-width="1"
                         opacity="0.35"
                         filter={`url(#${props.latestGlowFilterId})`}
+                    />
+                </Show>
+                <Show when={props.isLatestConfirmed && props.isComputing}>
+                    <circle
+                        cx="0"
+                        cy="0"
+                        r={nodeRadius() + 12}
+                        fill="none"
+                        stroke="#7dd3fc"
+                        stroke-width="2"
+                        stroke-dasharray="14 6"
+                        opacity="0.85"
+                        class="animate-spin-slow"
+                        style={{ "transform-origin": "center" }}
                     />
                 </Show>
                 <Show
@@ -1091,24 +1106,11 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                                     pathKey(node.data.path) ===
                                     pathKey(latestConfirmedPath())
                                 }
+                                isComputing={props.isComputing}
                             />
                         )}
                     </For>
                 </g>
-                <Show when={props.isComputing}>
-                    <>
-                        <rect width="100%" height="100%" fill="rgba(15, 23, 42, 0.6)" />
-                        <text
-                            x="50%"
-                            y="50%"
-                            text-anchor="middle"
-                            fill="#94a3b8"
-                            font-size="16"
-                        >
-                            Recomputing...
-                        </text>
-                    </>
-                </Show>
                 <Show when={!props.treeData}>
                     <text
                         x="50%"
