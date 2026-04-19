@@ -1,4 +1,12 @@
-import { Component, createSignal, createEffect, onCleanup, untrack, JSX } from "solid-js";
+import {
+    Component,
+    createSignal,
+    createEffect,
+    createMemo,
+    onCleanup,
+    untrack,
+    JSX
+} from "solid-js";
 import { RouteSectionProps, useLocation, useParams } from "@solidjs/router";
 import { z } from "zod";
 import toast from "solid-toast";
@@ -18,9 +26,14 @@ import {
 import { draftEventsToState } from "../utils/draftEventsToState";
 import {
     pathIndicesToNodeKeyPath,
-    reconcileTree,
-    remapScenarios
+    eventsToConfirmedTurns,
+    extendSpineOptimistic,
+    mergeEngineTree,
+    pruneInvalidProjection,
+    remapScenariosSpine,
+    synthesizeFullTree
 } from "../utils/treeReconcile";
+import type { ConfirmedTurn, ReconcilePriority } from "../utils/treeReconcile";
 import { validateSocketEvent } from "../utils/socketValidation";
 import { Socket } from "socket.io-client";
 
@@ -198,6 +211,18 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     const [manualCollapseKeys, setManualCollapseKeysSignal] = createSignal<
         ReadonlySet<string>
     >(new Set<string>());
+    const [syntheticTreeSignal, setSyntheticTreeSignal] =
+        createSignal<NavigatorTreeNode | null>(null);
+    const [lastEventIdSeen, setLastEventIdSeen] = createSignal<string | null>(null);
+    const isComputing = createMemo(() => {
+        const ctx = navigatorContext();
+        const snapshot = ctx.snapshot;
+        const events = ctx.events;
+        if (events.length === 0) return false;
+        const latestEventId = lastEventIdSeen() ?? events[events.length - 1].id;
+        if (!snapshot) return true;
+        return snapshot.after_event_id !== latestEventId;
+    });
 
     const setManualExpansionKeys = (
         updater: (prev: ReadonlySet<string>) => ReadonlySet<string>
@@ -210,43 +235,12 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     };
     let socketWithListeners: Socket | undefined = undefined;
 
-    function derivePickFromEvents(
-        oldEvents: NavigatorEventData[],
-        newEvents: NavigatorEventData[]
-    ): { side: "blue" | "red"; actionType: "ban" | "pick"; championIds: string[] } | null {
-        const oldIds = new Set(oldEvents.map((e) => e.id));
-        const added = newEvents.filter(
-            (e) =>
-                !oldIds.has(e.id) &&
-                (e.event_type === "ban" || e.event_type === "pick")
-        );
-        if (added.length === 0) return null;
-        const sorted = [...added].sort((a, b) => a.slot - b.slot);
-        const first = sorted[0];
-        if (sorted.length === 2) {
-            const second = sorted[1];
-            if (
-                first.event_type === second.event_type &&
-                first.side === second.side
-            ) {
-                return {
-                    side: first.side,
-                    actionType: first.event_type,
-                    championIds: [first.champion_id, second.champion_id]
-                };
-            }
-        }
-        return {
-            side: first.side,
-            actionType: first.event_type,
-            championIds: [first.champion_id]
-        };
-    }
-
     const getActiveSessionId = () =>
         navigatorContext().session?.id ?? params.sessionId ?? null;
 
     const resetNavigatorContext = () => {
+        setSyntheticTreeSignal(null);
+        setLastEventIdSeen(null);
         setNavigatorContext(initialNavigatorState());
     };
 
@@ -291,14 +285,31 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             return;
         }
 
+        const confirmedTurns = eventsToConfirmedTurns(response.events ?? []);
+        const scenarios = response.snapshot
+            ? remapScenariosSpine(response.snapshot.scenarios, confirmedTurns.length)
+            : [];
+
         setNavigatorContext({
             session: response.session,
             draft: response.draft ?? null,
             events: response.events ?? [],
-            snapshot: response.snapshot ?? null,
+            snapshot: response.snapshot
+                ? { ...response.snapshot, scenarios }
+                : null,
             connected: true,
             error: null
         });
+        setSyntheticTreeSignal(
+            response.snapshot
+                ? synthesizeFullTree(response.snapshot.tree, confirmedTurns)
+                : null
+        );
+        setLastEventIdSeen(
+            response.events && response.events.length > 0
+                ? response.events[response.events.length - 1].id
+                : null
+        );
         setCurrentSessionId(response.session.id);
         setPendingJoin(null);
     };
@@ -319,67 +330,126 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         }
 
         const prev = untrack(navigatorContext);
-        const oldEvents = prev.events;
-        const oldTree = prev.snapshot?.tree ?? null;
+        const prevEvents = prev.events;
+        const prevSynthetic = untrack(syntheticTreeSignal);
+        const prevSnapshot = prev.snapshot;
 
-        let nextSnapshot = data.snapshot === undefined ? prev.snapshot : data.snapshot;
-        const nextEvents = data.events ?? oldEvents;
+        const nextEvents = data.events ?? prevEvents;
+        const nextSnapshot = data.snapshot === undefined ? prevSnapshot : data.snapshot;
 
-        if (nextSnapshot && oldTree && nextSnapshot !== prev.snapshot) {
-            const pick = derivePickFromEvents(oldEvents, nextEvents);
-            if (pick) {
-                const newState = draftEventsToState(nextEvents);
-                const selectedIdx = untrack(selectedScenarioIndex);
-                const selectedScenario =
-                    selectedIdx !== null && prev.snapshot
-                        ? prev.snapshot.scenarios[selectedIdx]
-                        : null;
-                const selectedKeyPath =
-                    selectedScenario && oldTree
-                        ? pathIndicesToNodeKeyPath(oldTree, selectedScenario.treePath)
-                        : null;
+        const eventsChanged = nextEvents !== prevEvents;
+        const snapshotChanged = nextSnapshot !== prevSnapshot && nextSnapshot !== undefined;
 
-                const merged = reconcileTree(
-                    oldTree,
+        let nextSynthetic = prevSynthetic;
+        if (eventsChanged && prevSynthetic) {
+            const newTurns = diffTurns(prevEvents, nextEvents);
+            const prevSpineLength = eventsToConfirmedTurns(prevEvents).length;
+            let working = prevSynthetic;
+            let spineLength = prevSpineLength;
+            for (const turn of newTurns) {
+                working = extendSpineOptimistic(working, turn, spineLength);
+                spineLength += 1;
+            }
+            nextSynthetic = working;
+        }
+
+        let nextScenarios = nextSnapshot?.scenarios ?? [];
+        if (snapshotChanged && nextSnapshot) {
+            const confirmedTurns = eventsToConfirmedTurns(nextEvents);
+            const spineLength = confirmedTurns.length;
+            const draftState = draftEventsToState(nextEvents);
+            const priority = buildPriority(nextSynthetic, prevSnapshot);
+
+            if (nextSynthetic) {
+                const merged = mergeEngineTree(
+                    nextSynthetic,
                     nextSnapshot.tree,
-                    pick,
-                    newState,
-                    {
-                        selectedScenarioKeyPath: selectedKeyPath,
-                        manualExpansionKeyPaths: untrack(manualExpansionKeys)
-                    },
+                    spineLength,
+                    draftState,
+                    priority,
                     5
                 );
-                const remappedScenarios = remapScenarios(
-                    nextSnapshot.scenarios,
-                    nextSnapshot.tree,
-                    merged
-                );
-
-                nextSnapshot = {
-                    ...nextSnapshot,
-                    tree: merged,
-                    scenarios: remappedScenarios
-                };
-
-                if (selectedScenario) {
-                    const newIdx = remappedScenarios.findIndex(
-                        (s) => s.name === selectedScenario.name
-                    );
-                    setSelectedScenarioIndex(newIdx >= 0 ? newIdx : null);
-                }
+                nextSynthetic = pruneInvalidProjection(merged, draftState, spineLength);
+            } else {
+                nextSynthetic = synthesizeFullTree(nextSnapshot.tree, confirmedTurns);
             }
+
+            nextScenarios = remapScenariosSpine(nextSnapshot.scenarios, spineLength);
+        } else if (!prevSynthetic && nextSnapshot) {
+            const confirmedTurns = eventsToConfirmedTurns(nextEvents);
+            nextSynthetic = synthesizeFullTree(nextSnapshot.tree, confirmedTurns);
+            nextScenarios = remapScenariosSpine(
+                nextSnapshot.scenarios,
+                confirmedTurns.length
+            );
         }
+
+        if (nextSynthetic !== prevSynthetic) {
+            setSyntheticTreeSignal(nextSynthetic);
+        }
+
+        const finalSnapshot = nextSnapshot
+            ? { ...nextSnapshot, scenarios: nextScenarios }
+            : prevSnapshot;
 
         setNavigatorContext((p) => ({
             session: data.session ?? p.session,
             draft: data.draft === undefined ? p.draft : data.draft,
             events: nextEvents,
-            snapshot: nextSnapshot,
+            snapshot: finalSnapshot ?? null,
             connected: true,
             error: null
         }));
+
+        setLastEventIdSeen(
+            nextEvents.length > 0 ? nextEvents[nextEvents.length - 1].id : null
+        );
+
+        if (snapshotChanged && prevSnapshot && finalSnapshot) {
+            remapSelectedScenarioIndex(prevSnapshot.scenarios, finalSnapshot.scenarios);
+        }
     };
+
+    function diffTurns(
+        prevEvents: NavigatorEventData[],
+        nextEvents: NavigatorEventData[]
+    ): ConfirmedTurn[] {
+        const prevTurns = eventsToConfirmedTurns(prevEvents);
+        const nextTurns = eventsToConfirmedTurns(nextEvents);
+        return nextTurns.slice(prevTurns.length);
+    }
+
+    function buildPriority(
+        currentSynthetic: NavigatorTreeNode | null,
+        snapshot: NavigatorSessionState["snapshot"]
+    ): ReconcilePriority {
+        const idx = untrack(selectedScenarioIndex);
+        const selectedScenario =
+            idx !== null && snapshot ? snapshot.scenarios[idx] ?? null : null;
+        const selectedKeyPath =
+            selectedScenario && currentSynthetic
+                ? pathIndicesToNodeKeyPath(currentSynthetic, selectedScenario.treePath)
+                : null;
+        return {
+            selectedScenarioKeyPath: selectedKeyPath,
+            manualExpansionKeyPaths: untrack(manualExpansionKeys)
+        };
+    }
+
+    function remapSelectedScenarioIndex(
+        prevScenarios: NavigatorScenario[],
+        nextScenarios: NavigatorScenario[]
+    ) {
+        const idx = untrack(selectedScenarioIndex);
+        if (idx === null) return;
+        const prevName = prevScenarios[idx]?.name ?? null;
+        if (!prevName) {
+            setSelectedScenarioIndex(null);
+            return;
+        }
+        const newIdx = nextScenarios.findIndex((scenario) => scenario.name === prevName);
+        setSelectedScenarioIndex(newIdx >= 0 ? newIdx : null);
+    }
 
     const handleError = (rawData: unknown) => {
         const data = validateSocketEvent(
@@ -549,6 +619,8 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
 
     const contextValue: NavigatorWorkflowContextValue = {
         navigatorContext,
+        syntheticTree: syntheticTreeSignal,
+        isComputing,
         joinSession,
         leaveSession,
         emitPick,

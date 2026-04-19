@@ -112,6 +112,8 @@ export interface NavigatorPanRequest {
 
 export interface NavigatorWorkflowContextValue {
     navigatorContext: Accessor<NavigatorSessionState>;
+    syntheticTree: Accessor<NavigatorTreeNode | null>;
+    isComputing: Accessor<boolean>;
     joinSession: (sessionId: string) => void;
     leaveSession: () => void;
     emitPick: (draftId: string, championId: string, slot: number) => void;

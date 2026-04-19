@@ -8,6 +8,8 @@ const NavigatorDrafting: Component = () => {
     const {
         joinSession,
         navigatorContext,
+        syntheticTree,
+        isComputing: isComputingFromContext,
         selectedScenarioIndex,
         setSelectedScenarioIndex,
         panRequest
@@ -16,23 +18,13 @@ const NavigatorDrafting: Component = () => {
         null
     );
 
-    const treeData = createMemo(() => navigatorContext().snapshot?.tree ?? null);
+    const treeData = syntheticTree;
     const scenarios = createMemo(() => navigatorContext().snapshot?.scenarios ?? []);
-    const lastConfirmedChampionId = createMemo(() => {
-        const events = navigatorContext().events;
-        for (let i = events.length - 1; i >= 0; i--) {
-            const event = events[i];
-            if (event.event_type === "ban" || event.event_type === "pick") {
-                return event.champion_id;
-            }
-        }
-        return null;
-    });
-    const isComputing = createMemo(
-        () => navigatorContext().events.length > 0 && navigatorContext().snapshot === null
-    );
     const isStale = createMemo(
-        () => navigatorContext().snapshot === null && navigatorContext().events.length > 0
+        () =>
+            navigatorContext().snapshot === null &&
+            navigatorContext().events.length > 0 &&
+            !isComputingFromContext()
     );
     const activeSessionId = createMemo(() => navigatorContext().session?.id ?? null);
 
@@ -85,9 +77,9 @@ const NavigatorDrafting: Component = () => {
             <div class="relative min-h-0 bg-slate-900/20">
                 <DecisionTree
                     treeData={treeData()}
-                    isComputing={isComputing()}
+                    isComputing={isComputingFromContext()}
                     highlightedPath={highlightedTreePath()}
-                    rootChampionId={lastConfirmedChampionId()}
+                    rootChampionId={null}
                     scenarioPaths={scenarios().map((scenario, index) => ({
                         path: scenario.treePath,
                         tier: selectedScenarioIndex() === index ? "selected" : "unselected"
@@ -114,7 +106,7 @@ const NavigatorDrafting: Component = () => {
 
             <ScenarioLanes
                 scenarios={scenarios()}
-                isComputing={isComputing()}
+                isComputing={isComputingFromContext()}
             />
         </div>
     );
