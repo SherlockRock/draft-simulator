@@ -267,3 +267,15 @@ export function remapScenarios(
     }
     return remapped;
 }
+
+export {
+    synthesizeFullTree,
+    extendSpineOptimistic,
+    mergeEngineTree,
+    remapScenarioPath as remapScenarioSpinePath,
+    remapScenarios as remapScenariosSpine,
+    eventsToConfirmedTurns,
+    pruneInvalid as pruneInvalidProjection
+} from "./treeSynthesis";
+
+export type { ConfirmedTurn } from "./treeSynthesis";
