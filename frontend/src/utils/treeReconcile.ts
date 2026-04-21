@@ -1,8 +1,3 @@
-import type {
-    NavigatorScenario,
-    NavigatorTreeNode
-} from "../contexts/NavigatorContext";
-
 type NodeKeyTreeNode = {
     side: "blue" | "red" | null;
     actionType: "ban" | "pick";
@@ -97,6 +92,7 @@ export {
     synthesizeFullTree,
     extendSpineOptimistic,
     mergeEngineTree,
+    includeConfirmedDraftStateForScenarios,
     remapScenarioPath as remapScenarioSpinePath,
     remapScenarios as remapScenariosSpine,
     eventsToConfirmedTurns,

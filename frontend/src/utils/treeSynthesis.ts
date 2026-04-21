@@ -20,9 +20,7 @@ export interface ConfirmedTurn {
     userInjected: boolean;
 }
 
-export function eventsToConfirmedTurns(
-    events: NavigatorEventData[]
-): ConfirmedTurn[] {
+export function eventsToConfirmedTurns(events: NavigatorEventData[]): ConfirmedTurn[] {
     const actionable = events.filter(isConfirmedActionEvent);
     const ordered = [...actionable].sort((a, b) => {
         const aTime = new Date(a.createdAt).getTime();
@@ -36,12 +34,16 @@ export function eventsToConfirmedTurns(
     while (i < ordered.length) {
         const first = ordered[i];
         const second = ordered[i + 1];
+        // Pair-picks (red pick 2+3, blue pick 4+5) lock in together, so a
+        // same-side same-timestamp pair of *pick* events should merge into one
+        // turn. Bans never pair — two same-side bans at the same timestamp are
+        // just two bans, not a pair-ban.
         const isPair =
             second !== undefined &&
-            second.event_type === first.event_type &&
+            first.event_type === "pick" &&
+            second.event_type === "pick" &&
             second.side === first.side &&
-            new Date(second.createdAt).getTime() ===
-                new Date(first.createdAt).getTime();
+            new Date(second.createdAt).getTime() === new Date(first.createdAt).getTime();
 
         const picks = isPair ? [first, second] : [first];
         turns.push({
@@ -54,6 +56,7 @@ export function eventsToConfirmedTurns(
         });
         i += picks.length;
     }
+
     return turns;
 }
 
@@ -94,22 +97,40 @@ export function synthesizeFullTree(
 ): NavigatorTreeNode {
     const tail = engineTree ?? emptyNodeChildren();
 
-    let current: NavigatorTreeNode = {
-        championIds: [...tail.championIds],
-        actionType: tail.actionType,
-        phase: tail.phase,
-        scores: tail.scores,
-        assignmentDistribution: tail.assignmentDistribution,
-        side: tail.side,
-        slots: [...tail.slots],
-        userInjected: tail.userInjected,
-        children: tail.children
-    };
+    let current: NavigatorTreeNode;
+    if (confirmedTurns.length === 0) {
+        // No confirmed picks yet — the engine root sits directly under the
+        // overall root as the placeholder anchor for the projected fanout.
+        current = {
+            championIds: [...tail.championIds],
+            actionType: tail.actionType,
+            phase: tail.phase,
+            scores: tail.scores,
+            assignmentDistribution: tail.assignmentDistribution,
+            side: tail.side,
+            slots: [...tail.slots],
+            userInjected: tail.userInjected,
+            children: tail.children
+        };
+    } else {
+        // Fold the engine root into the latest confirmed turn so the projected
+        // fanout hangs directly off the most recent pick (no empty intermediary).
+        const latestTurn = confirmedTurns[confirmedTurns.length - 1];
+        current = {
+            championIds: [...latestTurn.championIds],
+            actionType: latestTurn.actionType,
+            phase: latestTurn.phase,
+            scores: tail.scores,
+            assignmentDistribution: [],
+            side: latestTurn.side,
+            slots: [...latestTurn.slots],
+            userInjected: latestTurn.userInjected,
+            children: tail.children
+        };
 
-    for (let i = confirmedTurns.length - 1; i >= 0; i--) {
-        const turn = confirmedTurns[i];
-        const spineNode = turnToSpineNode(turn, current);
-        current = spineNode;
+        for (let i = confirmedTurns.length - 2; i >= 0; i--) {
+            current = turnToSpineNode(confirmedTurns[i], current);
+        }
     }
 
     return {
@@ -165,17 +186,21 @@ function emptyNodeChildren(): NavigatorTreeNode {
 /**
  * Translate an engine-tree scenario path into the synthetic-tree index path.
  *
- * The synthetic tree prepends N spine indices (all zero) where N is the number
- * of confirmed turns. Each spine node has exactly one child, so each spine
- * step is always `0`. The engine's `treePath` indexes *from the engine root*;
- * the engine root in the synthetic tree is the node at
- * `[0, 0, ..., 0]` (N zeros).
+ * The synthetic tree prepends one zero per spine step from the overall root
+ * down to the fanout-parent. When there are N>0 confirmed turns that's N zeros
+ * (root → turn[0] → ... → turn[N-1], each via `children[0]`). When N=0 it's
+ * one zero (root → engine-root placeholder). The engine's `treePath` indexes
+ * from the fanout-parent's children outward, so the full synthetic path is
+ * `[...spinePrefix, ...scenario.treePath]`.
  */
 export function remapScenarioPath(
     scenario: NavigatorScenario,
     spineLength: number
 ): NavigatorScenario {
-    const spinePrefix = Array.from({ length: spineLength + 1 }, () => 0);
+    // Path length from the overall root to the fanout-parent (one link when
+    // no turns are confirmed, otherwise one link per confirmed turn).
+    const prefixLength = Math.max(spineLength, 1);
+    const spinePrefix = Array.from({ length: prefixLength }, () => 0);
     return {
         ...scenario,
         treePath: [...spinePrefix, ...scenario.treePath]
@@ -187,6 +212,39 @@ export function remapScenarios(
     spineLength: number
 ): NavigatorScenario[] {
     return scenarios.map((scenario) => remapScenarioPath(scenario, spineLength));
+}
+
+function prependConfirmedValues(projected: string[], confirmed: string[]): string[] {
+    const seen = new Set<string>();
+    const combined: string[] = [];
+
+    for (const championId of [...confirmed, ...projected]) {
+        if (seen.has(championId)) continue;
+        seen.add(championId);
+        combined.push(championId);
+    }
+
+    return combined;
+}
+
+export function includeConfirmedDraftState(
+    scenario: NavigatorScenario,
+    state: DraftStateSummary
+): NavigatorScenario {
+    return {
+        ...scenario,
+        bluePicks: prependConfirmedValues(scenario.bluePicks, state.bluePicks),
+        redPicks: prependConfirmedValues(scenario.redPicks, state.redPicks),
+        blueBans: prependConfirmedValues(scenario.blueBans, state.blueBans),
+        redBans: prependConfirmedValues(scenario.redBans, state.redBans)
+    };
+}
+
+export function includeConfirmedDraftStateForScenarios(
+    scenarios: NavigatorScenario[],
+    state: DraftStateSummary
+): NavigatorScenario[] {
+    return scenarios.map((scenario) => includeConfirmedDraftState(scenario, state));
 }
 
 /**
@@ -205,29 +263,31 @@ export function extendSpineOptimistic(
     newTurn: ConfirmedTurn,
     prevSpineLength: number
 ): NavigatorTreeNode {
-    const tailParent = walkSpine(prevSynthetic, prevSpineLength);
-    const tail = tailParent.children[0];
-    if (!tail) {
-        return prevSynthetic;
-    }
-
-    const matchingChild = tail.children.find(
+    // The node whose children currently hold the projected fanout: the
+    // engine-root placeholder when no turns are confirmed, otherwise the
+    // most recent confirmed turn.
+    const fanoutParent = walkSpine(prevSynthetic, Math.max(prevSpineLength, 1));
+    const matchingChild = fanoutParent.children.find(
         (child) => nodeKey(child) === nodeKeyForTurn(newTurn)
     );
 
-    const newSpineNode = turnToSpineNode(newTurn, {
-        championIds: SYNTHETIC_ROOT_CHAMPIONS,
-        actionType: tail.actionType,
-        phase: tail.phase,
-        scores: tail.scores,
+    const newTurnNode: NavigatorTreeNode = {
+        championIds: [...newTurn.championIds],
+        actionType: newTurn.actionType,
+        phase: newTurn.phase,
+        scores: matchingChild?.scores ?? fanoutParent.scores,
         assignmentDistribution: [],
-        side: null,
-        slots: [],
-        userInjected: false,
+        side: newTurn.side,
+        slots: [...newTurn.slots],
+        userInjected: newTurn.userInjected,
         children: matchingChild ? matchingChild.children : []
-    });
+    };
 
-    return replaceSpineTail(prevSynthetic, prevSpineLength, newSpineNode);
+    // replaceSpineTail at depth `prevSpineLength` swaps the children of that
+    // depth's node to [newTurnNode]. When prevSpineLength === 0 that's the
+    // overall root (replacing the engine-root placeholder); otherwise it's the
+    // previous latest-confirmed turn (replacing the projected fanout).
+    return replaceSpineTail(prevSynthetic, prevSpineLength, newTurnNode);
 }
 
 function nodeKeyForTurn(turn: ConfirmedTurn): string {
@@ -235,10 +295,7 @@ function nodeKeyForTurn(turn: ConfirmedTurn): string {
     return `${turn.side}:${turn.actionType}:${champs}`;
 }
 
-function walkSpine(
-    root: NavigatorTreeNode,
-    spineLength: number
-): NavigatorTreeNode {
+function walkSpine(root: NavigatorTreeNode, spineLength: number): NavigatorTreeNode {
     let node = root;
     for (let i = 0; i < spineLength; i++) {
         const next = node.children[0];
@@ -251,17 +308,11 @@ function walkSpine(
 function replaceSpineTail(
     root: NavigatorTreeNode,
     prevSpineLength: number,
-    newTailChild: NavigatorTreeNode
+    newTailNode: NavigatorTreeNode
 ): NavigatorTreeNode {
     function rebuild(node: NavigatorTreeNode, depth: number): NavigatorTreeNode {
         if (depth === prevSpineLength) {
-            const currentTail = node.children[0];
-            if (!currentTail) return node;
-            const newTailWithChild: NavigatorTreeNode = {
-                ...currentTail,
-                children: [newTailChild]
-            };
-            return { ...node, children: [newTailWithChild] };
+            return { ...node, children: [newTailNode] };
         }
         const child = node.children[0];
         if (!child) return node;
@@ -284,27 +335,38 @@ export function mergeEngineTree(
     branchWidth = 5
 ): NavigatorTreeNode {
     void state;
-    const prevTail = walkSpine(prevSynthetic, spineLength + 1);
-    const engineRoot = engineTree;
+    // Depth of the node whose children are the projected fanout — either the
+    // engine-root placeholder (when no confirmed turns) or the latest confirmed
+    // turn (otherwise).
+    const fanoutParentDepth = Math.max(spineLength, 1);
+    const fanoutParent = walkSpine(prevSynthetic, fanoutParentDepth);
 
-    const mergedTail: NavigatorTreeNode = {
-        ...engineRoot,
-        championIds: [...prevTail.championIds],
-        side: prevTail.side,
-        slots: [...prevTail.slots],
-        userInjected: prevTail.userInjected,
-        phase: prevTail.phase,
-        actionType: prevTail.actionType,
+    const updatedFanoutParent: NavigatorTreeNode = {
+        ...fanoutParent,
         children: mergeChildren(
-            prevTail.children,
-            engineRoot.children,
+            fanoutParent.children,
+            engineTree.children,
             priority,
             branchWidth,
             []
         )
     };
 
-    return replaceSpineTailNode(prevSynthetic, spineLength, mergedTail);
+    return replaceNodeAtDepth(prevSynthetic, fanoutParentDepth, updatedFanoutParent);
+}
+
+function replaceNodeAtDepth(
+    root: NavigatorTreeNode,
+    targetDepth: number,
+    newNode: NavigatorTreeNode
+): NavigatorTreeNode {
+    function rebuild(node: NavigatorTreeNode, depth: number): NavigatorTreeNode {
+        if (depth === targetDepth) return newNode;
+        const child = node.children[0];
+        if (!child) return node;
+        return { ...node, children: [rebuild(child, depth + 1)] };
+    }
+    return rebuild(root, 0);
 }
 
 function mergeChildren(
@@ -369,24 +431,8 @@ function trimChildrenByPriority(
         else if (priority.manualExpansionKeyPaths.has(thisPath)) rank = 1;
         return { child, rank, score: child.scores.composite };
     });
-    ranked.sort((a, b) =>
-        a.rank !== b.rank ? a.rank - b.rank : b.score - a.score
-    );
+    ranked.sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : b.score - a.score));
     return ranked.slice(0, branchWidth).map((entry) => entry.child);
-}
-
-function replaceSpineTailNode(
-    root: NavigatorTreeNode,
-    spineLength: number,
-    newTailNode: NavigatorTreeNode
-): NavigatorTreeNode {
-    function rebuild(node: NavigatorTreeNode, depth: number): NavigatorTreeNode {
-        if (depth === spineLength + 1) return newTailNode;
-        const child = node.children[0];
-        if (!child) return node;
-        return { ...node, children: [rebuild(child, depth + 1)] };
-    }
-    return rebuild(root, 0);
 }
 
 /**
@@ -399,6 +445,8 @@ export function pruneInvalid(
     state: DraftStateSummary,
     spineLength: number
 ): NavigatorTreeNode {
+    const fanoutParentDepth = Math.max(spineLength, 1);
+
     function pruneSubtree(node: NavigatorTreeNode): NavigatorTreeNode | null {
         for (const id of node.championIds) {
             if (!isChampionAvailable(id, state)) return null;
@@ -412,9 +460,15 @@ export function pruneInvalid(
     }
 
     function rebuild(node: NavigatorTreeNode, depth: number): NavigatorTreeNode {
-        if (depth > spineLength) {
-            const pruned = pruneSubtree(node);
-            return pruned ?? { ...node, children: [] };
+        if (depth === fanoutParentDepth) {
+            // At the fanout-parent: keep this spine node as-is (its champions
+            // are confirmed/used-by-design) and prune only its children.
+            const kept: NavigatorTreeNode[] = [];
+            for (const child of node.children) {
+                const next = pruneSubtree(child);
+                if (next) kept.push(next);
+            }
+            return { ...node, children: kept };
         }
         const child = node.children[0];
         if (!child) return node;

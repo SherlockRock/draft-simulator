@@ -28,6 +28,7 @@ import {
     pathIndicesToNodeKeyPath,
     eventsToConfirmedTurns,
     extendSpineOptimistic,
+    includeConfirmedDraftStateForScenarios,
     mergeEngineTree,
     pruneInvalidProjection,
     remapScenariosSpine,
@@ -63,13 +64,7 @@ const NavigatorSessionDataSchema = z.object({
 const NavigatorEventDataSchema = z.object({
     id: z.string(),
     navigator_draft_id: z.string(),
-    event_type: z.enum([
-        "ban",
-        "pick",
-        "what_if_pick",
-        "what_if_ban",
-        "engine_result"
-    ]),
+    event_type: z.enum(["ban", "pick", "what_if_pick", "what_if_ban", "engine_result"]),
     slot: z.number(),
     side: z.enum(["blue", "red"]),
     champion_id: z.string(),
@@ -194,12 +189,11 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         clearReconnected
     } = useNavigatorSocket();
 
-    const [navigatorContext, setNavigatorContext] =
-        createSignal<NavigatorSessionState>(initialNavigatorState());
-    const [pendingJoin, setPendingJoin] = createSignal<string | null>(null);
-    const [currentSocket, setCurrentSocket] = createSignal<Socket | undefined>(
-        undefined
+    const [navigatorContext, setNavigatorContext] = createSignal<NavigatorSessionState>(
+        initialNavigatorState()
     );
+    const [pendingJoin, setPendingJoin] = createSignal<string | null>(null);
+    const [currentSocket, setCurrentSocket] = createSignal<Socket | undefined>(undefined);
     const [currentSessionId, setCurrentSessionId] = createSignal<string | null>(null);
     const [selectedScenarioIndex, setSelectedScenarioIndex] = createSignal<number | null>(
         null
@@ -286,17 +280,21 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         }
 
         const confirmedTurns = eventsToConfirmedTurns(response.events ?? []);
+        const draftState = draftEventsToState(response.events ?? []);
         const scenarios = response.snapshot
-            ? remapScenariosSpine(response.snapshot.scenarios, confirmedTurns.length)
+            ? remapScenariosSpine(
+                  includeConfirmedDraftStateForScenarios(
+                      response.snapshot.scenarios,
+                      draftState
+                  ),
+                  confirmedTurns.length
+              )
             : [];
-
         setNavigatorContext({
             session: response.session,
             draft: response.draft ?? null,
             events: response.events ?? [],
-            snapshot: response.snapshot
-                ? { ...response.snapshot, scenarios }
-                : null,
+            snapshot: response.snapshot ? { ...response.snapshot, scenarios } : null,
             connected: true,
             error: null
         });
@@ -338,7 +336,8 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         const nextSnapshot = data.snapshot === undefined ? prevSnapshot : data.snapshot;
 
         const eventsChanged = nextEvents !== prevEvents;
-        const snapshotChanged = nextSnapshot !== prevSnapshot && nextSnapshot !== undefined;
+        const snapshotChanged =
+            nextSnapshot !== prevSnapshot && nextSnapshot !== undefined;
 
         let nextSynthetic = prevSynthetic;
         if (eventsChanged && prevSynthetic) {
@@ -374,12 +373,22 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                 nextSynthetic = synthesizeFullTree(nextSnapshot.tree, confirmedTurns);
             }
 
-            nextScenarios = remapScenariosSpine(nextSnapshot.scenarios, spineLength);
+            nextScenarios = remapScenariosSpine(
+                includeConfirmedDraftStateForScenarios(
+                    nextSnapshot.scenarios,
+                    draftState
+                ),
+                spineLength
+            );
         } else if (!prevSynthetic && nextSnapshot) {
             const confirmedTurns = eventsToConfirmedTurns(nextEvents);
+            const draftState = draftEventsToState(nextEvents);
             nextSynthetic = synthesizeFullTree(nextSnapshot.tree, confirmedTurns);
             nextScenarios = remapScenariosSpine(
-                nextSnapshot.scenarios,
+                includeConfirmedDraftStateForScenarios(
+                    nextSnapshot.scenarios,
+                    draftState
+                ),
                 confirmedTurns.length
             );
         }
@@ -425,7 +434,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     ): ReconcilePriority {
         const idx = untrack(selectedScenarioIndex);
         const selectedScenario =
-            idx !== null && snapshot ? snapshot.scenarios[idx] ?? null : null;
+            idx !== null && snapshot ? (snapshot.scenarios[idx] ?? null) : null;
         const selectedKeyPath =
             selectedScenario && currentSynthetic
                 ? pathIndicesToNodeKeyPath(currentSynthetic, selectedScenario.treePath)
@@ -452,11 +461,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     }
 
     const handleError = (rawData: unknown) => {
-        const data = validateSocketEvent(
-            "navigatorError",
-            rawData,
-            NavigatorErrorSchema
-        );
+        const data = validateSocketEvent("navigatorError", rawData, NavigatorErrorSchema);
         if (!data) return;
 
         setPendingJoin(null);

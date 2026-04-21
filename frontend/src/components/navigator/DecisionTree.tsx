@@ -20,7 +20,14 @@ import {
     nodeKeyPath,
     pathIndicesToNodeKeyPath
 } from "../../utils/treeReconcile";
-import { LayoutNode, radialTreeLayout } from "../../utils/treeLayout";
+import {
+    DEFAULT_RADIAL_CONFIG,
+    LayoutNode,
+    RadialLayoutConfig,
+    layoutVariants,
+    makeRadialTreeLayout
+} from "../../utils/treeLayout";
+import LayoutKnobPanel, { loadStoredState } from "./LayoutKnobPanel";
 
 export type ScenarioPathTier = "selected" | "unselected";
 
@@ -134,9 +141,7 @@ function withPaths(node: LayoutNode, path: number[] = []): TreeNodeWithPath {
         ...node,
         path,
         collapsedChildCount: 0,
-        children: node.children.map((child, index) =>
-            withPaths(child, [...path, index])
-        )
+        children: node.children.map((child, index) => withPaths(child, [...path, index]))
     };
 }
 
@@ -145,11 +150,9 @@ function pruneTree(
     expandedPaths: ReadonlySet<string>,
     manualExpansions: ReadonlySet<string>
 ): TreeNodeWithPath {
+    void manualExpansions;
     const key = pathKey(node.path);
-    const isExpanded =
-        node.path.length === 0 ||
-        (expandedPaths.has(key) &&
-            (node.actionType !== "ban" || manualExpansions.has(key)));
+    const isExpanded = node.path.length === 0 || expandedPaths.has(key);
 
     if (!isExpanded || node.children.length === 0) {
         return {
@@ -195,7 +198,12 @@ function isPathHighlighted(path: number[], highlightedPath: number[] | null): bo
     return path.every((segment, index) => highlightedPath[index] === segment);
 }
 
-function radialLinkPath(sourceX: number, sourceY: number, targetX: number, targetY: number) {
+function radialLinkPath(
+    sourceX: number,
+    sourceY: number,
+    targetX: number,
+    targetY: number
+) {
     return `M ${sourceX},${sourceY} L ${targetX},${targetY}`;
 }
 
@@ -253,7 +261,9 @@ function getFitTransform(
 }
 
 function isElementWithinNode(target: EventTarget | null): boolean {
-    return target instanceof Element && target.closest("[data-tree-node='true']") !== null;
+    return (
+        target instanceof Element && target.closest("[data-tree-node='true']") !== null
+    );
 }
 
 function isPrefix(shorter: number[], longer: number[]): boolean {
@@ -310,21 +320,12 @@ function walkEngagement(
 const TreeLink: Component<{
     link: PositionedLink;
     highlightedPath: number[] | null;
-    ghosted: boolean;
 }> = (props) => {
     const highlighted = createMemo(() =>
         isPathHighlighted(props.link.target.data.path, props.highlightedPath)
     );
-    const strokeOpacity = createMemo(() => {
-        if (highlighted()) return 0.95;
-        if (props.ghosted) return 0.3;
-        return 0.8;
-    });
-    const strokeWidth = createMemo(() => {
-        if (highlighted()) return 3;
-        if (props.ghosted) return 1;
-        return 1.75;
-    });
+    const strokeOpacity = createMemo(() => (highlighted() ? 0.95 : 0.8));
+    const strokeWidth = createMemo(() => (highlighted() ? 3 : 1.75));
 
     return (
         <path
@@ -351,7 +352,6 @@ const TreeNodeComponent: Component<{
     latestGlowFilterId: string;
     onClick: (path: number[]) => void;
     onToggleExpand: (path: number[]) => void;
-    ghosted: boolean;
     isConfirmed: boolean;
     isLatestConfirmed: boolean;
     isComputing: boolean;
@@ -362,9 +362,7 @@ const TreeNodeComponent: Component<{
         championIds()
             .map((championId) => resolveChampion(championId))
             .filter(
-                (
-                    champion
-                ): champion is NonNullable<ReturnType<typeof resolveChampion>> =>
+                (champion): champion is NonNullable<ReturnType<typeof resolveChampion>> =>
                     champion !== undefined
             )
     );
@@ -382,12 +380,8 @@ const TreeNodeComponent: Component<{
         () => `node-clip-${clipSeed}-${pathKey(props.node.data.path)}`
     );
     const imageDiameter = createMemo(() => (nodeRadius() - 2) * 2);
-    const nodeWidth = createMemo(() =>
-        isPair() ? PAIR_NODE_WIDTH : nodeRadius() * 2
-    );
-    const nodeHeight = createMemo(() =>
-        isPair() ? PAIR_NODE_HEIGHT : nodeRadius() * 2
-    );
+    const nodeWidth = createMemo(() => (isPair() ? PAIR_NODE_WIDTH : nodeRadius() * 2));
+    const nodeHeight = createMemo(() => (isPair() ? PAIR_NODE_HEIGHT : nodeRadius() * 2));
     const badgeOffsetY = createMemo(() => nodeHeight() / 2 + 12);
     const badgeOffsetX = createMemo(() => nodeWidth() / 2 - 5);
     const userBadgeX = createMemo(() => nodeWidth() / 2 - 5);
@@ -398,7 +392,9 @@ const TreeNodeComponent: Component<{
     const highlighted = createMemo(() =>
         isPathHighlighted(props.node.data.path, props.highlightedPath)
     );
-    const isBanAction = createMemo(() => props.node.data.actionType === "ban" && !isRoot());
+    const isBanAction = createMemo(
+        () => props.node.data.actionType === "ban" && !isRoot()
+    );
     const effectiveStroke = createMemo(() => {
         if (isRoot()) {
             return "#94a3b8";
@@ -431,7 +427,7 @@ const TreeNodeComponent: Component<{
             data-tree-node="true"
             class="transition-transform duration-200 ease-out"
             transform={`translate(${props.node.x} ${props.node.y})`}
-            opacity={props.ghosted ? 0.4 : strokeOpacity()}
+            opacity={strokeOpacity()}
         >
             <title>{championLabel()}</title>
             <defs>
@@ -454,21 +450,12 @@ const TreeNodeComponent: Component<{
                     <circle
                         cx="0"
                         cy="0"
-                        r={nodeRadius() + 8}
+                        r={nodeRadius() + 3}
                         fill="none"
                         stroke="#7dd3fc"
-                        stroke-width="2"
-                        opacity="0.65"
+                        stroke-width="1.5"
+                        opacity="0.75"
                         class="transition-[r,opacity] duration-200 ease-out"
-                    />
-                    <circle
-                        cx="0"
-                        cy="0"
-                        r={nodeRadius() + 4}
-                        fill="none"
-                        stroke="#7dd3fc"
-                        stroke-width="1"
-                        opacity="0.35"
                         filter={`url(#${props.latestGlowFilterId})`}
                     />
                 </Show>
@@ -476,11 +463,11 @@ const TreeNodeComponent: Component<{
                     <circle
                         cx="0"
                         cy="0"
-                        r={nodeRadius() + 12}
+                        r={nodeRadius() + 7}
                         fill="none"
                         stroke="#7dd3fc"
-                        stroke-width="2"
-                        stroke-dasharray="14 6"
+                        stroke-width="1.5"
+                        stroke-dasharray="10 5"
                         opacity="0.85"
                         class="animate-spin-slow"
                         style={{ "transform-origin": "center" }}
@@ -556,9 +543,7 @@ const TreeNodeComponent: Component<{
                             height={PAIR_NODE_HEIGHT + 12}
                             rx={PAIR_NODE_HEIGHT / 2 + 6}
                             fill={
-                                highlighted()
-                                    ? "rgba(96, 165, 250, 0.16)"
-                                    : "transparent"
+                                highlighted() ? "rgba(96, 165, 250, 0.16)" : "transparent"
                             }
                         />
                         <rect
@@ -574,9 +559,7 @@ const TreeNodeComponent: Component<{
                                 props.node.data.userInjected ? "4 3" : undefined
                             }
                             filter={
-                                highlighted()
-                                    ? `url(#${props.glowFilterId})`
-                                    : undefined
+                                highlighted() ? `url(#${props.glowFilterId})` : undefined
                             }
                         />
                         <Show when={champions()[0]}>
@@ -635,7 +618,14 @@ const TreeNodeComponent: Component<{
                     transform={`translate(${userBadgeX()} -15)`}
                     class="pointer-events-none"
                 >
-                    <circle cx="0" cy="0" r="6" fill="#0f172a" stroke="#f8fafc" stroke-width="1" />
+                    <circle
+                        cx="0"
+                        cy="0"
+                        r="6"
+                        fill="#0f172a"
+                        stroke="#f8fafc"
+                        stroke-width="1"
+                    />
                     <circle cx="0" cy="-2" r="1.5" fill="#f8fafc" />
                     <path
                         d="M 0 -0.5 L 0 3.5 M -1.5 1.5 L 1.5 1.5"
@@ -698,9 +688,27 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
     });
     const [zoomPercent, setZoomPercent] = createSignal(100);
 
+    const storedDevState = import.meta.env.DEV ? loadStoredState() : null;
+    const [layoutConfig, setLayoutConfig] = createSignal<RadialLayoutConfig>(
+        storedDevState?.config ?? DEFAULT_RADIAL_CONFIG
+    );
+    const [layoutVariantId, setLayoutVariantId] = createSignal<string>(
+        storedDevState?.variantId ?? "radial"
+    );
+    const [treeFrozen, setTreeFrozen] = createSignal(false);
+    const [frozenTree, setFrozenTree] = createSignal<LayoutNode | null>(null);
+    const [viewportLocked, setViewportLocked] = createSignal(import.meta.env.DEV);
+
+    const effectiveTreeData = createMemo<LayoutNode | null>(() => {
+        if (import.meta.env.DEV && treeFrozen()) {
+            return frozenTree();
+        }
+        return props.treeData;
+    });
+
     // Drop manual overrides whose node-key paths no longer exist in the tree.
     createEffect(() => {
-        const tree = props.treeData;
+        const tree = effectiveTreeData();
         if (!tree) return;
         const valid = collectNodeKeyPaths(tree);
         setManualExpansionKeys((prev) => new Set([...prev].filter((k) => valid.has(k))));
@@ -712,7 +720,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         const base = expandForPaths(props.scenarioPaths);
         const expanded = new Set(base);
 
-        const tree = props.treeData;
+        const tree = effectiveTreeData();
         if (tree) {
             applyEngagementOverrides(
                 tree,
@@ -724,26 +732,8 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
 
         return expanded;
     });
-    const ghostedPathKeys = createMemo<ReadonlySet<string>>(() => {
-        const selectedKeys = new Set<string>();
-        const unselectedKeys = new Set<string>();
-
-        for (const entry of props.scenarioPaths) {
-            const target = entry.tier === "selected" ? selectedKeys : unselectedKeys;
-            for (let i = 1; i <= entry.path.length; i++) {
-                target.add(pathKey(entry.path.slice(0, i)));
-            }
-        }
-
-        const result = new Set<string>();
-        for (const key of unselectedKeys) {
-            if (!selectedKeys.has(key)) result.add(key);
-        }
-        return result;
-    });
-
     const toggleExpand = (path: number[]) => {
-        const tree = props.treeData;
+        const tree = effectiveTreeData();
         if (!tree) return;
 
         const indexKey = pathKey(path);
@@ -784,14 +774,14 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
     };
 
     const annotatedTree = createMemo(() => {
-        const treeData = props.treeData;
+        const treeData = effectiveTreeData();
         if (!treeData) return null;
         return withPaths(treeData);
     });
 
     const manualExpansionIndexKeys = createMemo<ReadonlySet<string>>(() => {
         const result = new Set<string>();
-        const tree = props.treeData;
+        const tree = effectiveTreeData();
         if (!tree) return result;
 
         const collected: Array<{ indexPath: number[]; keyArray: string[] }> = [];
@@ -821,10 +811,19 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         return pruneTree(tree, expandedPaths(), manualExpansionIndexKeys());
     });
 
+    const layoutFn = createMemo(() => {
+        const variantId = layoutVariantId();
+        if (variantId === "radial") {
+            return makeRadialTreeLayout(layoutConfig());
+        }
+        const variant = layoutVariants.find((v) => v.id === variantId);
+        return variant?.fn ?? makeRadialTreeLayout(layoutConfig());
+    });
+
     const layout = createMemo(() => {
         const tree = prunedTree();
         if (!tree) return null;
-        return radialTreeLayout(tree, 40, 40);
+        return layoutFn()(tree, 20, 20);
     });
 
     const nodes = createMemo<PositionedNode[]>(() => layout()?.nodes ?? []);
@@ -972,6 +971,10 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         panzoomInstance.setMinZoom(Math.max(roundScale(transform.scale * 0.6), 0.05));
         panzoomInstance.setMaxZoom(Math.max(roundScale(transform.scale * 16), 8));
 
+        if (viewportLocked()) {
+            return;
+        }
+
         const current = panzoomInstance.getTransform();
         const requiredScale = transform.scale;
 
@@ -1015,6 +1018,21 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
 
     return (
         <div ref={containerRef} class="relative h-full w-full overflow-hidden">
+            <Show when={import.meta.env.DEV}>
+                <LayoutKnobPanel
+                    config={layoutConfig()}
+                    onConfigChange={setLayoutConfig}
+                    variantId={layoutVariantId()}
+                    onVariantChange={setLayoutVariantId}
+                    frozen={treeFrozen()}
+                    onFreezeChange={setTreeFrozen}
+                    viewportLocked={viewportLocked()}
+                    onViewportLockChange={setViewportLocked}
+                    liveTree={props.treeData}
+                    frozenTree={frozenTree()}
+                    onFrozenTreeChange={setFrozenTree}
+                />
+            </Show>
             <div class="absolute left-4 top-4 z-10 flex items-center gap-2">
                 <div class="rounded-full border border-slate-700/80 bg-slate-950/85 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-300 shadow-lg shadow-slate-950/30">
                     {zoomPercent()}%
@@ -1046,11 +1064,35 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
 
             <svg ref={svgRef} class="h-full w-full" style={{ background: "transparent" }}>
                 <defs>
-                    <filter id={`tree-glow-${svgId}`} x="-50%" y="-50%" width="200%" height="200%">
-                        <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#60a5fa" flood-opacity="0.75" />
+                    <filter
+                        id={`tree-glow-${svgId}`}
+                        x="-50%"
+                        y="-50%"
+                        width="200%"
+                        height="200%"
+                    >
+                        <feDropShadow
+                            dx="0"
+                            dy="0"
+                            stdDeviation="3"
+                            flood-color="#60a5fa"
+                            flood-opacity="0.75"
+                        />
                     </filter>
-                    <filter id={`latest-glow-${svgId}`} x="-50%" y="-50%" width="200%" height="200%">
-                        <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#7dd3fc" flood-opacity="0.8" />
+                    <filter
+                        id={`latest-glow-${svgId}`}
+                        x="-50%"
+                        y="-50%"
+                        width="200%"
+                        height="200%"
+                    >
+                        <feDropShadow
+                            dx="0"
+                            dy="0"
+                            stdDeviation="4"
+                            flood-color="#7dd3fc"
+                            flood-opacity="0.8"
+                        />
                     </filter>
                 </defs>
                 <g ref={svgGroupRef}>
@@ -1063,7 +1105,9 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                                     cy={ring.cy}
                                     r={ring.radius}
                                     fill="none"
-                                    stroke={ring.isLatestConfirmed ? "#7dd3fc" : "#475569"}
+                                    stroke={
+                                        ring.isLatestConfirmed ? "#7dd3fc" : "#475569"
+                                    }
                                     stroke-width={ring.isLatestConfirmed ? 1.25 : 1}
                                     stroke-dasharray="6 4"
                                     opacity={ring.isLatestConfirmed ? 0.8 : 0.5}
@@ -1087,7 +1131,6 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                             <TreeLink
                                 link={link}
                                 highlightedPath={props.highlightedPath}
-                                ghosted={ghostedPathKeys().has(pathKey(link.target.data.path))}
                             />
                         )}
                     </For>
@@ -1100,7 +1143,6 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                                 latestGlowFilterId={`latest-glow-${svgId}`}
                                 onClick={props.onNodeClick}
                                 onToggleExpand={toggleExpand}
-                                ghosted={ghostedPathKeys().has(pathKey(node.data.path))}
                                 isConfirmed={node.data.path.length < props.confirmedDepth}
                                 isLatestConfirmed={
                                     pathKey(node.data.path) ===
