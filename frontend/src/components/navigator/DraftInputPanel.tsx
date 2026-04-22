@@ -5,6 +5,7 @@ import { RoleFilter } from "../RoleFilter";
 import { useMultiFilterableItems } from "../../hooks/useFilterableItems";
 import { NavigatorEventData, useNavigatorContext } from "../../contexts/NavigatorContext";
 import { championCategories, champions, resolveChampion } from "../../utils/constants";
+import { getPickerState, type PickerState } from "../../utils/navigatorPool";
 import { TURN_SEQUENCE, TurnInfo as BaseTurnInfo } from "../../utils/turnSequence";
 
 type DraftSide = "blue" | "red";
@@ -100,21 +101,12 @@ const SlotCircle: Component<{
 const DraftInputPanel: Component = () => {
     const { navigatorContext, emitBan, emitPick, emitUndo } = useNavigatorContext();
 
-    const displayPoolChampionIds = createMemo(() => {
-        const displayPool = navigatorContext().session?.display_pool ?? [];
-        return new Set(displayPool);
-    });
-
     const filterState = useMultiFilterableItems({
         items: champions,
         categoryMap: championCategories
     });
 
-    const filteredDisplayPoolChampions = createMemo(() =>
-        filterState
-            .filteredItems()
-            .filter(({ item }) => displayPoolChampionIds().has(item.id))
-    );
+    const filteredChampions = createMemo(() => filterState.filteredItems());
 
     const draftEvents = createMemo(() =>
         navigatorContext().events.filter(
@@ -133,6 +125,18 @@ const DraftInputPanel: Component = () => {
 
         return usedIds;
     });
+
+    const pickerStateFor = (championId: string): PickerState => {
+        const session = navigatorContext().session;
+        if (!session) return "neutral";
+        return getPickerState(
+            championId,
+            currentTurn()?.side ?? null,
+            session.blue_pool,
+            session.red_pool,
+            usedChampionIds()
+        );
+    };
 
     const slotStates = createMemo<DraftSlotState[]>(() =>
         PANEL_TURN_SEQUENCE.map((turn, index) => ({
@@ -337,7 +341,7 @@ const DraftInputPanel: Component = () => {
                         <FilterBar
                             searchText={filterState.searchText}
                             onSearchChange={filterState.setSearchText}
-                            searchPlaceholder="Search display pool..."
+                            searchPlaceholder="Search champions..."
                         />
                         <RoleFilter
                             categories={filterState.categories}
@@ -350,12 +354,11 @@ const DraftInputPanel: Component = () => {
 
                     <div class="mt-4 flex-1 overflow-y-auto">
                         <div class="grid grid-cols-6 gap-2">
-                            <For each={filteredDisplayPoolChampions()}>
+                            <For each={filteredChampions()}>
                                 {({ item: champion }) => {
-                                    const isUsed = () =>
-                                        usedChampionIds().has(champion.id);
+                                    const state = () => pickerStateFor(champion.id);
                                     const isDisabled = () =>
-                                        isUsed() ||
+                                        state() === "picked" ||
                                         !currentTurn() ||
                                         !navigatorContext().draft?.id;
 
@@ -368,14 +371,25 @@ const DraftInputPanel: Component = () => {
                                             disabled={isDisabled()}
                                             title={champion.name}
                                             class={`relative overflow-hidden rounded-full border-2 bg-slate-800 transition-all ${
-                                                isDisabled()
+                                                state() === "picked"
                                                     ? "cursor-not-allowed border-slate-700 opacity-30"
-                                                    : "border-slate-600 hover:-translate-y-0.5 hover:border-slate-400"
+                                                    : state() === "own-team"
+                                                      ? currentTurn()?.side === "blue"
+                                                          ? "border-blue-400 hover:-translate-y-0.5"
+                                                          : "border-red-400 hover:-translate-y-0.5"
+                                                      : state() === "other-team"
+                                                        ? currentTurn()?.side === "blue"
+                                                            ? "border-red-400/60 hover:-translate-y-0.5"
+                                                            : "border-blue-400/60 hover:-translate-y-0.5"
+                                                        : state() === "shared"
+                                                          ? "border-purple-400 hover:-translate-y-0.5"
+                                                          : "border-slate-600 hover:border-slate-400 hover:-translate-y-0.5"
                                             }`}
                                         >
                                             <img
                                                 src={champion.img}
                                                 alt={champion.name}
+                                                draggable={false}
                                                 class="h-10 w-10 object-cover"
                                             />
                                         </button>
