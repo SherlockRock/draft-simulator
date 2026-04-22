@@ -1,4 +1,5 @@
 import { createContext, useContext, Accessor } from "solid-js";
+import type { TeamPool } from "@draft-sim/shared-types";
 
 export interface NavigatorScoreSet {
     composite: number;
@@ -67,10 +68,10 @@ export interface NavigatorSessionData {
     name: string | null;
     user_id: string;
     our_side: "blue" | "red";
-    display_pool: string[];
-    search_pool: string[];
+    blue_pool: TeamPool;
+    red_pool: TeamPool;
     opponent_pool: string[] | null;
-    fearless: boolean;
+    draft_mode: "standard" | "fearless" | "ironman";
     status: "setup" | "active" | "completed";
     NavigatorDrafts?: NavigatorDraftData[];
     createdAt: string;
