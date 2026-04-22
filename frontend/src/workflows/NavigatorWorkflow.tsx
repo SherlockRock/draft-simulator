@@ -103,7 +103,8 @@ const NavigatorTreeNodeSchema: z.ZodType<NavigatorTreeNode> = z.lazy(() =>
         side: z.enum(["blue", "red"]).nullable(),
         slots: z.array(z.number()),
         userInjected: z.boolean(),
-        children: z.array(NavigatorTreeNodeSchema)
+        children: z.array(NavigatorTreeNodeSchema),
+        confirmedChampionIds: z.array(z.string()).optional()
     })
 );
 

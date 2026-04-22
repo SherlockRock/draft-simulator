@@ -10,7 +10,8 @@ import type { ReconcilePriority } from "./treeReconcile";
 
 export const SYNTHETIC_ROOT_CHAMPIONS: string[] = [];
 
-/** A single confirmed turn's worth of event(s). One entry = one spine node. */
+/** A single confirmed turn's worth of event(s). One entry = one spine node,
+ *  except for `pair-pending` which does not advance the spine. */
 export interface ConfirmedTurn {
     side: "blue" | "red";
     actionType: "ban" | "pick";
@@ -18,6 +19,7 @@ export interface ConfirmedTurn {
     championIds: string[];
     slots: number[];
     userInjected: boolean;
+    pairState: "solo" | "pair-complete" | "pair-pending";
 }
 
 export function eventsToConfirmedTurns(events: NavigatorEventData[]): ConfirmedTurn[] {
@@ -52,7 +54,8 @@ export function eventsToConfirmedTurns(events: NavigatorEventData[]): ConfirmedT
             phase: inferPhase(turns.length, first.event_type, picks.length),
             championIds: picks.map((event) => event.champion_id),
             slots: picks.map((event) => event.slot),
-            userInjected: picks.some((event) => event.user_injected)
+            userInjected: picks.some((event) => event.user_injected),
+            pairState: isPair ? "pair-complete" : "solo"
         });
         i += picks.length;
     }

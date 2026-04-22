@@ -15,6 +15,7 @@ export interface LayoutNode {
         revealCost: number;
     };
     children: LayoutNode[];
+    confirmedChampionIds?: string[];
     x?: number;
     y?: number;
     depth?: number;

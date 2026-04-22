@@ -31,6 +31,12 @@ export interface NavigatorTreeNode {
     slots: number[];
     userInjected: boolean;
     children: NavigatorTreeNode[];
+    /** Subset of championIds locked in by a confirmed event.
+     *  Used for pair-pending rendering: one of the pair's champions is confirmed,
+     *  the other is still projected. Undefined or empty means all champions are
+     *  projected (or the node is on the spine where everything is confirmed by
+     *  position). */
+    confirmedChampionIds?: string[];
 }
 
 export interface NavigatorScenario {
