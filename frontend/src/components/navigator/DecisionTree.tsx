@@ -1028,7 +1028,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         <div ref={containerRef} class="relative h-full w-full overflow-hidden">
             <Show when={props.isComputing}>
                 <div
-                    class="pointer-events-none absolute left-3 top-3 z-10 flex items-center gap-2 rounded-full border border-slate-700/50 bg-slate-900/80 px-3 py-1 text-xs text-slate-300 backdrop-blur"
+                    class="pointer-events-none absolute right-3 top-3 z-10 flex items-center gap-2 rounded-full border border-slate-700/50 bg-slate-900/80 px-3 py-1 text-xs text-slate-300 backdrop-blur"
                     role="status"
                     aria-live="polite"
                 >
