@@ -71,6 +71,29 @@ function loadMetaData() {
   };
 }
 
+function loadPickRates() {
+  const championMeta = loadJsonOnce(CHAMPION_META_PATH);
+  const champions = championMeta.champions || {};
+  return Object.values(champions).reduce((acc, champion) => {
+    acc[champion.id] = champion.pickRate ?? 0;
+    return acc;
+  }, {});
+}
+
+// Pre-Rust engine has O(n^2) pair generation in filterPairs. Pools over ~60
+// champions exceed the 2s latencyBudget. Cap the search pool by pickRate —
+// the engine already selects top-branchWidth moves via orderMoves, so this
+// just moves the cap earlier. Remove when Rust engine lands.
+const MAX_ENGINE_SEARCH_POOL = 60;
+const cachedPickRates = loadPickRates();
+
+function capSearchPool(ids) {
+  if (ids.length <= MAX_ENGINE_SEARCH_POOL) return ids;
+  return [...ids]
+    .sort((a, b) => (cachedPickRates[b] ?? 0) - (cachedPickRates[a] ?? 0))
+    .slice(0, MAX_ENGINE_SEARCH_POOL);
+}
+
 async function loadEngineModule() {
   if (!engineModulePromise) {
     engineModulePromise = import(pathToFileURL(ENGINE_INDEX_PATH).href);
@@ -171,6 +194,12 @@ async function buildEngineRequest(session, events) {
   ];
   const ourPool = session.our_side === "red" ? redPool : bluePool;
 
+  const rawSearchPool = Array.from(
+    new Set([...(bluePool.search || []), ...(redPool.search || [])])
+  );
+  const searchPool = capSearchPool(rawSearchPool);
+  const coreTier = flattenDisplay(ourPool.display || {});
+
   return {
     draftState: {
       format: "standard",
@@ -180,9 +209,7 @@ async function buildEngineRequest(session, events) {
       currentSlot: turnIndex,
       currentSide: currentTurn.side,
     },
-    searchPool: Array.from(
-      new Set([...(bluePool.search || []), ...(redPool.search || [])])
-    ),
+    searchPool,
     opponentModel: {
       type: "meta",
       weights: {},
@@ -190,7 +217,7 @@ async function buildEngineRequest(session, events) {
     },
     playerModel: {
       championTiers: {
-        core: flattenDisplay(ourPool.display || {}),
+        core: coreTier,
         playable: [],
         emergency: [],
       },
