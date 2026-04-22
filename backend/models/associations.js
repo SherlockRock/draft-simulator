@@ -9,6 +9,7 @@ const NavigatorSession = require("./NavigatorSession");
 const NavigatorDraft = require("./NavigatorDraft");
 const NavigatorEvent = require("./NavigatorEvent");
 const NavigatorSnapshot = require("./NavigatorSnapshot");
+const SavedPool = require("./SavedPool");
 
 const setupAssociations = () => {
   User.hasMany(UserToken);
@@ -116,6 +117,10 @@ const setupAssociations = () => {
   NavigatorSnapshot.belongsTo(NavigatorDraft, { foreignKey: "navigator_draft_id", onDelete: "CASCADE" });
 
   NavigatorDraft.belongsTo(Draft, { foreignKey: "draft_id" });
+
+  // SavedPool associations (user-scoped Navigator pool presets)
+  User.hasMany(SavedPool, { foreignKey: "owner_id", onDelete: "CASCADE" });
+  SavedPool.belongsTo(User, { as: "owner", foreignKey: "owner_id" });
 };
 
 module.exports = setupAssociations;
