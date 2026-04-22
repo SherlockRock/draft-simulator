@@ -1,60 +1,67 @@
-import { Component, createEffect, createMemo, createSignal } from "solid-js";
+import { Component, createEffect, createSignal } from "solid-js";
 import toast from "solid-toast";
-import { ChampionToggleGrid } from "../ChampionToggleGrid";
+import {
+    EMPTY_TEAM_POOL,
+    type RolePoolMap,
+    type TeamPool
+} from "@draft-sim/shared-types";
 import { useNavigatorContext } from "../../contexts/NavigatorContext";
 import { updateNavigatorSession } from "../../utils/navigatorApi";
-import { champions } from "../../utils/constants";
+import { flattenDisplayPool } from "../../utils/navigatorPool";
+import { getDefaultRolePoolMap } from "../../utils/defaultRolePools";
+import { StyledSelect } from "../StyledSelect";
+import { TeamPoolEditor } from "./TeamPoolEditor";
+
+type DraftMode = "standard" | "fearless" | "ironman";
 
 const NavigatorSetup: Component = () => {
     const { navigatorContext, startDraft } = useNavigatorContext();
     const [name, setName] = createSignal("");
     const [ourSide, setOurSide] = createSignal<"blue" | "red">("blue");
-    const [fearless, setFearless] = createSignal(false);
-    const [displayPool, setDisplayPool] = createSignal<string[]>([]);
+    const [draftMode, setDraftMode] = createSignal<DraftMode>("standard");
+    const [bluePool, setBluePool] = createSignal<TeamPool>(EMPTY_TEAM_POOL);
+    const [redPool, setRedPool] = createSignal<TeamPool>(EMPTY_TEAM_POOL);
     const [isStarting, setIsStarting] = createSignal(false);
 
     createEffect(() => {
         const session = navigatorContext().session;
+        if (!session) return;
 
-        if (session) {
-            setName(session.name ?? "");
-            setOurSide(session.our_side);
-            setFearless(session.fearless);
-            setDisplayPool(session.display_pool);
-        }
+        setName(session.name ?? "");
+        setOurSide(session.our_side);
+        setDraftMode(session.draft_mode);
+        setBluePool(session.blue_pool);
+        setRedPool(session.red_pool);
     });
 
-    const searchPool = createMemo(() => {
-        const sessionSearchPool = navigatorContext().session?.search_pool ?? [];
-        const combinedPool = [...sessionSearchPool, ...displayPool()];
-        return Array.from(new Set(combinedPool));
-    });
+    const updateBlueDisplay = (next: RolePoolMap) => {
+        setBluePool((prev) => ({ ...prev, display: next }));
+    };
 
-    const toggleChampion = (championId: string) => {
-        setDisplayPool((currentPool) =>
-            currentPool.includes(championId)
-                ? currentPool.filter((id) => id !== championId)
-                : [...currentPool, championId]
-        );
+    const updateRedDisplay = (next: RolePoolMap) => {
+        setRedPool((prev) => ({ ...prev, display: next }));
     };
 
     const handleStartDraft = async () => {
         const sessionId = navigatorContext().session?.id;
-
         if (!sessionId) {
             toast.error("Session not loaded");
             return;
         }
 
         setIsStarting(true);
-
         try {
+            const derive = (pool: TeamPool): TeamPool => ({
+                display: pool.display,
+                search: Array.from(new Set(flattenDisplayPool(pool.display)))
+            });
+
             await updateNavigatorSession(sessionId, {
                 name: name().trim() || null,
                 our_side: ourSide(),
-                fearless: fearless(),
-                display_pool: displayPool(),
-                search_pool: searchPool()
+                draft_mode: draftMode(),
+                blue_pool: derive(bluePool()),
+                red_pool: derive(redPool())
             });
             startDraft();
         } catch {
@@ -64,41 +71,39 @@ const NavigatorSetup: Component = () => {
         }
     };
 
+    const loadDefaultsForBoth = () => {
+        const defaults = getDefaultRolePoolMap();
+        setBluePool((prev) => ({ ...prev, display: defaults }));
+        setRedPool((prev) => ({ ...prev, display: defaults }));
+    };
+
     return (
         <div class="flex-1 overflow-y-auto bg-darius-bg bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
-            <div class="mx-auto flex min-h-full w-full max-w-[1200px] flex-col p-6 sm:p-8">
+            <div class="mx-auto flex min-h-full w-full max-w-[1400px] flex-col p-6 sm:p-8">
                 <div class="rounded-xl border border-slate-700/50 bg-slate-800/95 shadow-[0_20px_60px_rgba(15,23,42,0.35)]">
                     <div class="flex flex-col gap-8 p-6 sm:p-8">
                         <section class="flex flex-col gap-5">
                             <div>
-                                <h1 class="text-2xl font-bold text-slate-100">
-                                    Session Config
-                                </h1>
+                                <h1 class="text-2xl font-bold text-slate-100">Session Config</h1>
                                 <p class="mt-1 text-sm text-slate-400">
-                                    Configure the series before the draft room opens.
+                                    Configure the session before the draft room opens.
                                 </p>
                             </div>
 
-                            <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                            <div class="grid gap-4 lg:grid-cols-3 lg:items-end">
                                 <label class="block">
-                                    <span class="mb-2 block text-sm font-medium text-slate-300">
-                                        Session Name
-                                    </span>
+                                    <span class="mb-2 block text-sm font-medium text-slate-300">Session Name</span>
                                     <input
                                         type="text"
                                         value={name()}
-                                        onInput={(e) =>
-                                            setName(e.currentTarget.value)
-                                        }
+                                        onInput={(e) => setName(e.currentTarget.value)}
                                         placeholder="Session name (optional)"
                                         class="w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-500 focus:border-blue-400"
                                     />
                                 </label>
 
                                 <div class="flex flex-col gap-2">
-                                    <span class="text-sm font-medium text-slate-300">
-                                        Our Side
-                                    </span>
+                                    <span class="text-sm font-medium text-slate-300">Our Side</span>
                                     <div class="flex flex-wrap gap-2">
                                         <button
                                             type="button"
@@ -124,81 +129,52 @@ const NavigatorSetup: Component = () => {
                                         </button>
                                     </div>
                                 </div>
-                            </div>
 
-                            <label class="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-4 transition-colors hover:border-blue-400/40">
-                                <div class="min-w-0">
-                                    <div class="text-sm font-medium text-slate-100">
-                                        Fearless Mode
-                                    </div>
-                                    <p class="mt-1 text-xs text-slate-400">
-                                        Champions can only be picked once per series.
-                                    </p>
-                                </div>
-                                <div class="relative mt-0.5 shrink-0">
-                                    <input
-                                        type="checkbox"
-                                        checked={fearless()}
-                                        onChange={(e) =>
-                                            setFearless(e.currentTarget.checked)
-                                        }
-                                        class="peer sr-only"
+                                <label class="block">
+                                    <span class="mb-2 block text-sm font-medium text-slate-300">Draft Mode</span>
+                                    <StyledSelect
+                                        value={draftMode()}
+                                        onChange={(val) => setDraftMode(val as DraftMode)}
+                                        options={[
+                                            { value: "standard", label: "Standard" },
+                                            { value: "fearless", label: "Fearless" },
+                                            { value: "ironman", label: "Ironman" }
+                                        ]}
                                     />
-                                    <span class="block h-6 w-11 rounded-full bg-slate-700 transition-colors peer-checked:bg-blue-500" />
-                                    <span class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform peer-checked:translate-x-5" />
-                                </div>
-                            </label>
+                                </label>
+                            </div>
                         </section>
 
                         <section class="flex flex-col gap-4 border-t border-slate-700/60 pt-8">
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex items-center justify-between">
                                 <div>
-                                    <div class="flex items-center gap-3">
-                                        <h2 class="text-xl font-semibold text-slate-100">
-                                            Display Pool
-                                        </h2>
-                                        <span class="rounded-full border border-slate-600 bg-slate-900 px-2.5 py-1 text-xs font-medium text-slate-300">
-                                            {displayPool().length} / {champions.length}
-                                        </span>
-                                    </div>
+                                    <h2 class="text-xl font-semibold text-slate-100">Team Pools</h2>
                                     <p class="mt-1 text-sm text-slate-400">
-                                        Champions shown in the draft input panel for quick
-                                        selection.
+                                        Role-structured champion pools per team. Engine biases toward these.
                                     </p>
                                 </div>
+                                <button
+                                    type="button"
+                                    onClick={loadDefaultsForBoth}
+                                    class="text-xs text-slate-400 underline hover:text-slate-200"
+                                >
+                                    Load defaults for both
+                                </button>
                             </div>
 
-                            <div class="rounded-lg border border-slate-700 bg-slate-900/50 p-4">
-                                <ChampionToggleGrid
-                                    selectedChampions={displayPool}
-                                    onToggle={toggleChampion}
+                            <div class="grid gap-6 lg:grid-cols-2">
+                                <TeamPoolEditor
+                                    teamColor="blue"
+                                    teamLabel="Blue Team"
+                                    displayPool={() => bluePool().display}
+                                    onDisplayPoolChange={updateBlueDisplay}
                                 />
-                            </div>
-                        </section>
-
-                        <section class="flex flex-col gap-4 border-t border-slate-700/60 pt-8">
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                    <div class="flex items-center gap-3">
-                                        <h2 class="text-xl font-semibold text-slate-100">
-                                            Search Pool
-                                        </h2>
-                                        <span class="rounded-full border border-slate-600 bg-slate-900 px-2.5 py-1 text-xs font-medium text-slate-300">
-                                            {searchPool().length} / {champions.length}
-                                        </span>
-                                    </div>
-                                    <p class="mt-1 text-sm text-slate-400">
-                                        Broader set the engine considers. Auto-populated
-                                        from meta data.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div class="rounded-lg border border-dashed border-slate-600 bg-slate-900/40 p-4 text-sm text-slate-300">
-                                <p>Auto-populated from meta champions + your display pool.</p>
-                                <p class="mt-2 text-slate-400">
-                                    Search pool = display pool union meta-viable champions.
-                                </p>
+                                <TeamPoolEditor
+                                    teamColor="red"
+                                    teamLabel="Red Team"
+                                    displayPool={() => redPool().display}
+                                    onDisplayPoolChange={updateRedDisplay}
+                                />
                             </div>
                         </section>
 
