@@ -502,7 +502,9 @@ export function pruneInvalid(
     const fanoutParentDepth = Math.max(spineLength, 1);
 
     function pruneSubtree(node: NavigatorTreeNode): NavigatorTreeNode | null {
+        const confirmed = new Set(node.confirmedChampionIds ?? []);
         for (const id of node.championIds) {
+            if (confirmed.has(id)) continue;
             if (!isChampionAvailable(id, state)) return null;
         }
         const kept: NavigatorTreeNode[] = [];
