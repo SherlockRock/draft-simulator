@@ -11,7 +11,6 @@ import { RouteSectionProps, useLocation, useParams } from "@solidjs/router";
 import { z } from "zod";
 import toast from "solid-toast";
 import {
-    NavigatorEventData,
     NavigatorPanRequest,
     NavigatorScenario,
     NavigatorSessionState,
@@ -32,9 +31,10 @@ import {
     mergeEngineTree,
     pruneInvalidProjection,
     remapScenariosSpine,
+    spineNodeCount,
     synthesizeFullTree
 } from "../utils/treeReconcile";
-import type { ConfirmedTurn, ReconcilePriority } from "../utils/treeReconcile";
+import type { ReconcilePriority } from "../utils/treeReconcile";
 import { validateSocketEvent } from "../utils/socketValidation";
 import { Socket } from "socket.io-client";
 
@@ -288,7 +288,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                       response.snapshot.scenarios,
                       draftState
                   ),
-                  confirmedTurns.length
+                  spineNodeCount(confirmedTurns)
               )
             : [];
         setNavigatorContext({
@@ -341,35 +341,71 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             nextSnapshot !== prevSnapshot && nextSnapshot !== undefined;
 
         let nextSynthetic = prevSynthetic;
+
+        const prevTurns = eventsToConfirmedTurns(prevEvents);
+        const nextTurns = eventsToConfirmedTurns(nextEvents);
+
         if (eventsChanged && prevSynthetic) {
-            const newTurns = diffTurns(prevEvents, nextEvents);
-            const prevSpineLength = eventsToConfirmedTurns(prevEvents).length;
-            let working = prevSynthetic;
-            let spineLength = prevSpineLength;
-            for (const turn of newTurns) {
-                working = extendSpineOptimistic(working, turn, spineLength);
-                spineLength += 1;
+            const isPromote =
+                prevTurns.length === nextTurns.length &&
+                prevTurns.length > 0 &&
+                prevTurns[prevTurns.length - 1].pairState === "pair-pending" &&
+                nextTurns[nextTurns.length - 1].pairState === "pair-complete";
+
+            if (isPromote && prevSnapshot) {
+                // Pair-pending -> pair-complete transition. Rebuild the whole
+                // synthetic tree from scratch using the last snapshot's engine
+                // tree - simpler and less error-prone than threading a "promote"
+                // code path through extendSpineOptimistic.
+                nextSynthetic = synthesizeFullTree(prevSnapshot.tree, nextTurns);
+            } else {
+                const newTurns = nextTurns.slice(prevTurns.length);
+                let working = prevSynthetic;
+                let spineLength = spineNodeCount(prevTurns);
+                for (const turn of newTurns) {
+                    working = extendSpineOptimistic(working, turn, spineLength);
+                    if (turn.pairState !== "pair-pending") spineLength += 1;
+                }
+                nextSynthetic = working;
             }
-            nextSynthetic = working;
         }
 
         let nextScenarios = nextSnapshot?.scenarios ?? [];
         if (snapshotChanged && nextSnapshot) {
             const confirmedTurns = eventsToConfirmedTurns(nextEvents);
-            const spineLength = confirmedTurns.length;
+            const spineLength = spineNodeCount(confirmedTurns);
             const draftState = draftEventsToState(nextEvents);
             const priority = buildPriority(nextSynthetic, prevSnapshot);
+            const tailTurn = confirmedTurns.at(-1);
+            const isPairPending = tailTurn?.pairState === "pair-pending";
 
             if (nextSynthetic) {
-                const merged = mergeEngineTree(
-                    nextSynthetic,
-                    nextSnapshot.tree,
-                    spineLength,
-                    draftState,
-                    priority,
-                    5
-                );
-                nextSynthetic = pruneInvalidProjection(merged, draftState, spineLength);
+                if (isPairPending) {
+                    // Skip mergeEngineTree: the engine's fresh tree is rooted
+                    // at post-half-pair state with solo completion children
+                    // that do not share identity with the filtered pair
+                    // fanout. Still prune to remove any nodes referencing
+                    // newly-used champions elsewhere in the draft.
+                    nextSynthetic = pruneInvalidProjection(
+                        nextSynthetic,
+                        draftState,
+                        spineLength
+                    );
+                } else {
+                    const merged = mergeEngineTree(
+                        nextSynthetic,
+                        nextSnapshot.tree,
+                        spineLength,
+                        draftState,
+                        priority,
+                        5
+                    );
+                    nextSynthetic = pruneInvalidProjection(
+                        merged,
+                        draftState,
+                        spineLength
+                    );
+                }
             } else {
                 nextSynthetic = synthesizeFullTree(nextSnapshot.tree, confirmedTurns);
             }
@@ -390,7 +426,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                     nextSnapshot.scenarios,
                     draftState
                 ),
-                confirmedTurns.length
+                spineNodeCount(confirmedTurns)
             );
         }
 
@@ -419,15 +455,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             remapSelectedScenarioIndex(prevSnapshot.scenarios, finalSnapshot.scenarios);
         }
     };
-
-    function diffTurns(
-        prevEvents: NavigatorEventData[],
-        nextEvents: NavigatorEventData[]
-    ): ConfirmedTurn[] {
-        const prevTurns = eventsToConfirmedTurns(prevEvents);
-        const nextTurns = eventsToConfirmedTurns(nextEvents);
-        return nextTurns.slice(prevTurns.length);
-    }
 
     function buildPriority(
         currentSynthetic: NavigatorTreeNode | null,
