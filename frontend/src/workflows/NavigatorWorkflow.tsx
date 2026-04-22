@@ -10,6 +10,7 @@ import {
 import { RouteSectionProps, useLocation, useParams } from "@solidjs/router";
 import { z } from "zod";
 import toast from "solid-toast";
+import { TeamPoolSchema } from "@draft-sim/shared-types";
 import {
     NavigatorPanRequest,
     NavigatorScenario,
@@ -52,10 +53,10 @@ const NavigatorSessionDataSchema = z.object({
     name: z.string().nullable(),
     user_id: z.string(),
     our_side: z.enum(["blue", "red"]),
-    display_pool: z.array(z.string()),
-    search_pool: z.array(z.string()),
+    blue_pool: TeamPoolSchema,
+    red_pool: TeamPoolSchema,
     opponent_pool: z.array(z.string()).nullable(),
-    fearless: z.boolean(),
+    draft_mode: z.enum(["standard", "fearless", "ironman"]),
     status: z.enum(["setup", "active", "completed"]),
     NavigatorDrafts: z.array(NavigatorDraftDataSchema).optional(),
     createdAt: z.string(),

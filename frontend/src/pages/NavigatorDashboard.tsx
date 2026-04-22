@@ -4,6 +4,7 @@ import { useNavigate } from "@solidjs/router";
 import { Compass, Trash2 } from "lucide-solid";
 import toast from "solid-toast";
 import { createMutation, useQuery, useQueryClient } from "@tanstack/solid-query";
+import { EMPTY_TEAM_POOL } from "@draft-sim/shared-types";
 import type { NavigatorSessionData } from "../contexts/NavigatorContext";
 import {
     createNavigatorSession,
@@ -50,8 +51,9 @@ const NavigatorDashboard: Component = () => {
         mutationFn: () =>
             createNavigatorSession({
                 our_side: "blue",
-                display_pool: [],
-                search_pool: []
+                blue_pool: EMPTY_TEAM_POOL,
+                red_pool: EMPTY_TEAM_POOL,
+                draft_mode: "standard"
             }),
         onSuccess: (session) => {
             queryClient.invalidateQueries({ queryKey: ["navigatorSessions"] });
