@@ -1,6 +1,11 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
 
+const EMPTY_TEAM_POOL = {
+  display: { top: [], jungle: [], mid: [], adc: [], support: [] },
+  search: [],
+};
+
 const NavigatorSession = sequelize.define("NavigatorSession", {
   id: {
     type: DataTypes.UUID,
@@ -14,43 +19,38 @@ const NavigatorSession = sequelize.define("NavigatorSession", {
   user_id: {
     type: DataTypes.UUID,
     allowNull: true,
-    references: {
-      model: "Users",
-      key: "id",
-    },
+    references: { model: "Users", key: "id" },
   },
   our_side: {
     type: DataTypes.STRING,
     allowNull: false,
-    validate: {
-      isIn: [["blue", "red"]],
-    },
+    validate: { isIn: [["blue", "red"]] },
   },
-  display_pool: {
+  blue_pool: {
     type: DataTypes.JSONB,
     allowNull: false,
-    defaultValue: [],
+    defaultValue: EMPTY_TEAM_POOL,
   },
-  search_pool: {
+  red_pool: {
     type: DataTypes.JSONB,
     allowNull: false,
-    defaultValue: [],
+    defaultValue: EMPTY_TEAM_POOL,
   },
   opponent_pool: {
     type: DataTypes.JSONB,
     allowNull: true,
   },
-  fearless: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
+  draft_mode: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: "standard",
+    validate: { isIn: [["standard", "fearless", "ironman"]] },
   },
   status: {
     type: DataTypes.STRING,
     allowNull: false,
     defaultValue: "setup",
-    validate: {
-      isIn: [["setup", "active", "completed"]],
-    },
+    validate: { isIn: [["setup", "active", "completed"]] },
   },
 });
 
