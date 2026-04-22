@@ -45,20 +45,20 @@ router.post("/", protect, async (req, res) => {
     const {
       name,
       our_side,
-      display_pool,
-      search_pool,
+      blue_pool,
+      red_pool,
       opponent_pool,
-      fearless,
+      draft_mode,
     } = req.body;
 
     const session = await NavigatorSession.create({
       name,
       user_id: req.user.id,
       our_side,
-      display_pool,
-      search_pool: search_pool ?? display_pool,
+      blue_pool,
+      red_pool,
       opponent_pool,
-      fearless,
+      draft_mode,
     });
 
     await NavigatorDraft.create({
@@ -120,10 +120,11 @@ router.patch("/:id", protect, async (req, res) => {
 
     const allowedFields = [
       "name",
-      "display_pool",
-      "search_pool",
+      "our_side",
+      "blue_pool",
+      "red_pool",
       "opponent_pool",
-      "fearless",
+      "draft_mode",
       "status",
     ];
 
