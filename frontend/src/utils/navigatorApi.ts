@@ -1,4 +1,5 @@
 import type { NavigatorSessionData } from "../contexts/NavigatorContext";
+import type { TeamPool } from "@draft-sim/shared-types";
 import { fetchWithRefresh } from "./apiClient";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -13,8 +14,10 @@ export async function fetchNavigatorSessions(): Promise<NavigatorSessionData[]> 
 
 export async function createNavigatorSession(data: {
     our_side: "blue" | "red";
-    display_pool: string[];
-    search_pool?: string[];
+    blue_pool: TeamPool;
+    red_pool: TeamPool;
+    draft_mode: "standard" | "fearless" | "ironman";
+    name?: string | null;
 }): Promise<NavigatorSessionData> {
     const response = await fetchWithRefresh(`${API_BASE}/api/navigator`, {
         method: "POST",
@@ -36,9 +39,19 @@ export async function fetchNavigatorSession(
     return response.json();
 }
 
+export interface UpdateNavigatorSessionPayload {
+    name?: string | null;
+    our_side?: "blue" | "red";
+    blue_pool?: TeamPool;
+    red_pool?: TeamPool;
+    opponent_pool?: string[] | null;
+    draft_mode?: "standard" | "fearless" | "ironman";
+    status?: "setup" | "active" | "completed";
+}
+
 export async function updateNavigatorSession(
     id: string,
-    data: Record<string, string | string[] | boolean | null>
+    data: UpdateNavigatorSessionPayload
 ): Promise<NavigatorSessionData> {
     const response = await fetchWithRefresh(`${API_BASE}/api/navigator/${id}`, {
         method: "PATCH",
