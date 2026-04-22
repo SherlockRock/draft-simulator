@@ -96,7 +96,8 @@ export {
     remapScenarioPath as remapScenarioSpinePath,
     remapScenarios as remapScenariosSpine,
     eventsToConfirmedTurns,
-    pruneInvalid as pruneInvalidProjection
+    pruneInvalid as pruneInvalidProjection,
+    spineNodeCount
 } from "./treeSynthesis";
 
 export type { ConfirmedTurn } from "./treeSynthesis";

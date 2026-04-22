@@ -7,6 +7,7 @@ import type { DraftStateSummary } from "./draftEventsToState";
 import { isChampionAvailable } from "./draftEventsToState";
 import { nodeKey } from "./treeReconcile";
 import type { ReconcilePriority } from "./treeReconcile";
+import { TURN_SEQUENCE, phaseForSlot } from "./turnSequence";
 
 export const SYNTHETIC_ROOT_CHAMPIONS: string[] = [];
 
@@ -25,62 +26,87 @@ export interface ConfirmedTurn {
 export function eventsToConfirmedTurns(events: NavigatorEventData[]): ConfirmedTurn[] {
     const actionable = events.filter(isConfirmedActionEvent);
     const ordered = [...actionable].sort((a, b) => {
+        if (a.slot !== b.slot) return a.slot - b.slot;
         const aTime = new Date(a.createdAt).getTime();
         const bTime = new Date(b.createdAt).getTime();
         if (aTime !== bTime) return aTime - bTime;
-        return a.slot - b.slot;
+        return a.id.localeCompare(b.id);
     });
 
     const turns: ConfirmedTurn[] = [];
     let i = 0;
     while (i < ordered.length) {
         const first = ordered[i];
-        const second = ordered[i + 1];
-        // Pair-picks (red pick 2+3, blue pick 4+5) lock in together, so a
-        // same-side same-timestamp pair of *pick* events should merge into one
-        // turn. Bans never pair — two same-side bans at the same timestamp are
-        // just two bans, not a pair-ban.
-        const isPair =
-            second !== undefined &&
-            first.event_type === "pick" &&
-            second.event_type === "pick" &&
-            second.side === first.side &&
-            new Date(second.createdAt).getTime() === new Date(first.createdAt).getTime();
+        const turnInfo = TURN_SEQUENCE[first.slot];
+        if (!turnInfo) {
+            // Unknown slot — skip defensively.
+            i += 1;
+            continue;
+        }
 
-        const picks = isPair ? [first, second] : [first];
+        if (first.event_type === "pick" && turnInfo.pairStart) {
+            const second = ordered[i + 1];
+            const isCompletePair =
+                second !== undefined &&
+                second.event_type === "pick" &&
+                second.side === first.side &&
+                second.slot === first.slot + 1 &&
+                TURN_SEQUENCE[second.slot]?.pairEnd === true;
+
+            if (isCompletePair) {
+                turns.push({
+                    side: first.side,
+                    actionType: "pick",
+                    phase: phaseForSlot(first.slot),
+                    championIds: [first.champion_id, second.champion_id],
+                    slots: [first.slot, second.slot],
+                    userInjected: first.user_injected || second.user_injected,
+                    pairState: "pair-complete"
+                });
+                i += 2;
+            } else {
+                turns.push({
+                    side: first.side,
+                    actionType: "pick",
+                    phase: phaseForSlot(first.slot),
+                    championIds: [first.champion_id],
+                    slots: [first.slot],
+                    userInjected: first.user_injected,
+                    pairState: "pair-pending"
+                });
+                i += 1;
+            }
+            continue;
+        }
+
         turns.push({
             side: first.side,
             actionType: first.event_type,
-            phase: inferPhase(turns.length, first.event_type, picks.length),
-            championIds: picks.map((event) => event.champion_id),
-            slots: picks.map((event) => event.slot),
-            userInjected: picks.some((event) => event.user_injected),
-            pairState: isPair ? "pair-complete" : "solo"
+            phase: phaseForSlot(first.slot),
+            championIds: [first.champion_id],
+            slots: [first.slot],
+            userInjected: first.user_injected,
+            pairState: "solo"
         });
-        i += picks.length;
+        i += 1;
     }
 
     return turns;
+}
+
+/** Count of synthetic-tree spine nodes implied by a list of confirmed turns.
+ *  Pair-pending turns do NOT add a spine node (the spine stays at the pre-pair
+ *  node while the half-entered pair is filtered into the fanout). */
+export function spineNodeCount(turns: ConfirmedTurn[]): number {
+    const last = turns[turns.length - 1];
+    if (last?.pairState === "pair-pending") return turns.length - 1;
+    return turns.length;
 }
 
 function isConfirmedActionEvent(
     event: NavigatorEventData
 ): event is NavigatorEventData & { event_type: "ban" | "pick" } {
     return event.event_type === "ban" || event.event_type === "pick";
-}
-
-function inferPhase(
-    turnIndexBeforeAdding: number,
-    actionType: "ban" | "pick",
-    pickSize: number
-): "ban1" | "pick1" | "ban2" | "pick2" {
-    void actionType;
-    void pickSize;
-    const turnIndex = turnIndexBeforeAdding;
-    if (turnIndex < 6) return "ban1";
-    if (turnIndex < 11) return "pick1";
-    if (turnIndex < 15) return "ban2";
-    return "pick2";
 }
 
 /**
