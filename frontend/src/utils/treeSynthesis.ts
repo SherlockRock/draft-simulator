@@ -277,25 +277,54 @@ export function includeConfirmedDraftStateForScenarios(
 }
 
 /**
- * Extend the previous synthetic tree by one confirmed pick — no engine input.
+ * Extend the previous synthetic tree by one confirmed turn — no engine input.
  * Used when events arrive before a fresh snapshot.
  *
- * Finds the child of the current spine-tail whose nodeKey matches the pick;
- * that branch survives, its siblings are dropped, and its children become the
- * new projection fanout under a fresh spine node.
+ * Behaviour by `newTurn.pairState`:
  *
- * If no child matches (surprise pick), the spine tail is extended with no
- * children.
+ * - `solo` or `pair-complete`: finds the child of the current spine tail whose
+ *   nodeKey matches the turn; that branch survives, its siblings are dropped,
+ *   and its children become the new projection fanout under a fresh spine node.
+ *   If no child matches (surprise pick), the spine tail is extended with no
+ *   children.
+ *
+ * - `pair-pending`: does NOT advance the spine. Instead, filters the fanout
+ *   parent's children to pair candidates containing the entered champion and
+ *   tags each survivor with `confirmedChampionIds: [enteredChamp]` so the
+ *   renderer can show the confirmed half differently from the projected half.
  */
 export function extendSpineOptimistic(
     prevSynthetic: NavigatorTreeNode,
     newTurn: ConfirmedTurn,
     prevSpineLength: number
 ): NavigatorTreeNode {
-    // The node whose children currently hold the projected fanout: the
-    // engine-root placeholder when no turns are confirmed, otherwise the
-    // most recent confirmed turn.
     const fanoutParent = walkSpine(prevSynthetic, Math.max(prevSpineLength, 1));
+
+    if (newTurn.pairState === "pair-pending") {
+        const enteredChamp = newTurn.championIds[0];
+        const filteredChildren = fanoutParent.children
+            .filter(
+                (child) =>
+                    child.championIds.length === 2 &&
+                    child.championIds.includes(enteredChamp)
+            )
+            .map((child) => ({
+                ...child,
+                confirmedChampionIds: [enteredChamp]
+            }));
+
+        const updatedParent: NavigatorTreeNode = {
+            ...fanoutParent,
+            children: filteredChildren
+        };
+
+        return replaceNodeAtDepth(
+            prevSynthetic,
+            Math.max(prevSpineLength, 1),
+            updatedParent
+        );
+    }
+
     const matchingChild = fanoutParent.children.find(
         (child) => nodeKey(child) === nodeKeyForTurn(newTurn)
     );
@@ -312,10 +341,6 @@ export function extendSpineOptimistic(
         children: matchingChild ? matchingChild.children : []
     };
 
-    // replaceSpineTail at depth `prevSpineLength` swaps the children of that
-    // depth's node to [newTurnNode]. When prevSpineLength === 0 that's the
-    // overall root (replacing the engine-root placeholder); otherwise it's the
-    // previous latest-confirmed turn (replacing the projected fanout).
     return replaceSpineTail(prevSynthetic, prevSpineLength, newTurnNode);
 }
 
