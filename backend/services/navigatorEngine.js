@@ -156,6 +156,21 @@ async function buildEngineRequest(session, events) {
     throw new Error("Cannot compute navigator snapshot: draft is complete");
   }
 
+  const EMPTY_TEAM_POOL = {
+    display: { top: [], jungle: [], mid: [], adc: [], support: [] },
+    search: [],
+  };
+  const bluePool = session.blue_pool || EMPTY_TEAM_POOL;
+  const redPool = session.red_pool || EMPTY_TEAM_POOL;
+  const flattenDisplay = (d) => [
+    ...(d.top || []),
+    ...(d.jungle || []),
+    ...(d.mid || []),
+    ...(d.adc || []),
+    ...(d.support || []),
+  ];
+  const ourPool = session.our_side === "red" ? redPool : bluePool;
+
   return {
     draftState: {
       format: "standard",
@@ -165,7 +180,9 @@ async function buildEngineRequest(session, events) {
       currentSlot: turnIndex,
       currentSide: currentTurn.side,
     },
-    searchPool: Array.isArray(session.search_pool) ? session.search_pool : [],
+    searchPool: Array.from(
+      new Set([...(bluePool.search || []), ...(redPool.search || [])])
+    ),
     opponentModel: {
       type: "meta",
       weights: {},
@@ -173,7 +190,7 @@ async function buildEngineRequest(session, events) {
     },
     playerModel: {
       championTiers: {
-        core: Array.isArray(session.display_pool) ? session.display_pool : [],
+        core: flattenDisplay(ourPool.display || {}),
         playable: [],
         emergency: [],
       },
