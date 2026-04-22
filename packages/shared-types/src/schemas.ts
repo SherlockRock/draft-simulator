@@ -792,3 +792,38 @@ export function getEffectiveSide(
   if (role === "team2_captain") return blueSideTeam === 1 ? "red" : "blue";
   return "blue"; // fallback (spectators don't call this)
 }
+
+// =============================================================================
+// Navigator Pool Schemas
+// =============================================================================
+
+export const RoleSchema = z.enum(["top", "jungle", "mid", "adc", "support"]);
+export type Role = z.infer<typeof RoleSchema>;
+
+export const RolePoolMapSchema = z.object({
+  top: z.array(z.string()),
+  jungle: z.array(z.string()),
+  mid: z.array(z.string()),
+  adc: z.array(z.string()),
+  support: z.array(z.string()),
+});
+export type RolePoolMap = z.infer<typeof RolePoolMapSchema>;
+
+export const TeamPoolSchema = z.object({
+  display: RolePoolMapSchema,
+  search: z.array(z.string()),
+});
+export type TeamPool = z.infer<typeof TeamPoolSchema>;
+
+export const EMPTY_ROLE_POOL_MAP: RolePoolMap = {
+  top: [],
+  jungle: [],
+  mid: [],
+  adc: [],
+  support: [],
+};
+
+export const EMPTY_TEAM_POOL: TeamPool = {
+  display: EMPTY_ROLE_POOL_MAP,
+  search: [],
+};
