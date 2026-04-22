@@ -827,3 +827,54 @@ export const EMPTY_TEAM_POOL: TeamPool = {
   display: EMPTY_ROLE_POOL_MAP,
   search: [],
 };
+
+// =============================================================================
+// SavedPool Schemas (Navigator)
+// =============================================================================
+
+export const SavedPoolSchema = z.object({
+  id: z.string().uuid(),
+  owner_id: z.string().uuid(),
+  name: z.string().min(1).max(120),
+  champions: RolePoolMapSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type SavedPool = z.infer<typeof SavedPoolSchema>;
+
+export const CreateSavedPoolPayloadSchema = z.object({
+  name: z.string().min(1).max(120),
+  champions: RolePoolMapSchema,
+});
+export type CreateSavedPoolPayload = z.infer<
+  typeof CreateSavedPoolPayloadSchema
+>;
+
+export const UpdateSavedPoolPayloadSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  champions: RolePoolMapSchema.optional(),
+});
+export type UpdateSavedPoolPayload = z.infer<
+  typeof UpdateSavedPoolPayloadSchema
+>;
+
+// =============================================================================
+// Pool JSON Import Schema
+// =============================================================================
+//
+// Shape accepted by the "Import JSON" modal. `name` is optional and used as
+// the default when the user chooses "Save as SavedPool". All 5 role keys are
+// required; empty arrays allowed. Champion names are resolved downstream by a
+// case-insensitive / variant-tolerant matcher — this schema only checks shape.
+
+export const PoolJsonImportSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  champions: z.object({
+    top: z.array(z.string()),
+    jungle: z.array(z.string()),
+    mid: z.array(z.string()),
+    adc: z.array(z.string()),
+    support: z.array(z.string()),
+  }),
+});
+export type PoolJsonImport = z.infer<typeof PoolJsonImportSchema>;
