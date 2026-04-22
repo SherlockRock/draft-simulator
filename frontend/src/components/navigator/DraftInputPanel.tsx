@@ -5,15 +5,13 @@ import { RoleFilter } from "../RoleFilter";
 import { useMultiFilterableItems } from "../../hooks/useFilterableItems";
 import { NavigatorEventData, useNavigatorContext } from "../../contexts/NavigatorContext";
 import { championCategories, champions, resolveChampion } from "../../utils/constants";
+import { TURN_SEQUENCE, TurnInfo as BaseTurnInfo } from "../../utils/turnSequence";
 
 type DraftSide = "blue" | "red";
 type DraftTurnType = "ban" | "pick";
 type DraftPhase = "ban1" | "pick1" | "ban2" | "pick2";
 
-interface TurnInfo {
-    side: DraftSide;
-    type: DraftTurnType;
-    phase: DraftPhase;
+interface TurnInfo extends BaseTurnInfo {
     label: string;
 }
 
@@ -23,28 +21,15 @@ interface DraftSlotState {
     event: NavigatorEventData | undefined;
 }
 
-const TURN_SEQUENCE: TurnInfo[] = [
-    { side: "blue", type: "ban", phase: "ban1", label: "Blue Ban 1" },
-    { side: "red", type: "ban", phase: "ban1", label: "Red Ban 1" },
-    { side: "blue", type: "ban", phase: "ban1", label: "Blue Ban 2" },
-    { side: "red", type: "ban", phase: "ban1", label: "Red Ban 2" },
-    { side: "blue", type: "ban", phase: "ban1", label: "Blue Ban 3" },
-    { side: "red", type: "ban", phase: "ban1", label: "Red Ban 3" },
-    { side: "blue", type: "pick", phase: "pick1", label: "Blue Pick 1" },
-    { side: "red", type: "pick", phase: "pick1", label: "Red Pick 1" },
-    { side: "red", type: "pick", phase: "pick1", label: "Red Pick 2" },
-    { side: "blue", type: "pick", phase: "pick1", label: "Blue Pick 2" },
-    { side: "blue", type: "pick", phase: "pick1", label: "Blue Pick 3" },
-    { side: "red", type: "pick", phase: "pick1", label: "Red Pick 3" },
-    { side: "red", type: "ban", phase: "ban2", label: "Red Ban 4" },
-    { side: "blue", type: "ban", phase: "ban2", label: "Blue Ban 4" },
-    { side: "red", type: "ban", phase: "ban2", label: "Red Ban 5" },
-    { side: "blue", type: "ban", phase: "ban2", label: "Blue Ban 5" },
-    { side: "red", type: "pick", phase: "pick2", label: "Red Pick 4" },
-    { side: "blue", type: "pick", phase: "pick2", label: "Blue Pick 4" },
-    { side: "blue", type: "pick", phase: "pick2", label: "Blue Pick 5" },
-    { side: "red", type: "pick", phase: "pick2", label: "Red Pick 5" }
-];
+const PANEL_TURN_SEQUENCE: TurnInfo[] = TURN_SEQUENCE.map((turn, index) => {
+    const sideLabel = turn.side === "blue" ? "Blue" : "Red";
+    const turnType: DraftTurnType = turn.type;
+    const typeLabel = turnType === "ban" ? "Ban" : "Pick";
+    const countOnSide = TURN_SEQUENCE.slice(0, index + 1).filter(
+        (t) => t.side === turn.side && t.type === turn.type
+    ).length;
+    return { ...turn, label: `${sideLabel} ${typeLabel} ${countOnSide}` };
+});
 
 const PHASE_LABELS: Record<DraftPhase, string> = {
     ban1: "Ban Phase 1",
@@ -138,7 +123,7 @@ const DraftInputPanel: Component = () => {
     );
 
     const turnIndex = createMemo(() => draftEvents().length);
-    const currentTurn = createMemo(() => TURN_SEQUENCE[turnIndex()] ?? null);
+    const currentTurn = createMemo(() => PANEL_TURN_SEQUENCE[turnIndex()] ?? null);
     const usedChampionIds = createMemo(() => {
         const usedIds = new Set<string>();
 
@@ -150,7 +135,7 @@ const DraftInputPanel: Component = () => {
     });
 
     const slotStates = createMemo<DraftSlotState[]>(() =>
-        TURN_SEQUENCE.map((turn, index) => ({
+        PANEL_TURN_SEQUENCE.map((turn, index) => ({
             turn,
             turnIndex: index,
             event: draftEvents()[index]
@@ -241,7 +226,7 @@ const DraftInputPanel: Component = () => {
                     <div class="flex items-center justify-between">
                         <h2 class="text-sm font-semibold text-slate-300">Draft State</h2>
                         <div class="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                            {draftEvents().length} / {TURN_SEQUENCE.length}
+                            {draftEvents().length} / {PANEL_TURN_SEQUENCE.length}
                         </div>
                     </div>
 
