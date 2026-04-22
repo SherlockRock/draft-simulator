@@ -354,7 +354,6 @@ const TreeNodeComponent: Component<{
     onToggleExpand: (path: number[]) => void;
     isConfirmed: boolean;
     isLatestConfirmed: boolean;
-    isComputing: boolean;
 }> = (props) => {
     const clipSeed = createUniqueId();
     const championIds = createMemo(() => props.node.data.championIds);
@@ -466,20 +465,6 @@ const TreeNodeComponent: Component<{
                         opacity="0.75"
                         class="transition-[r,opacity] duration-200 ease-out"
                         filter={`url(#${props.latestGlowFilterId})`}
-                    />
-                </Show>
-                <Show when={props.isLatestConfirmed && props.isComputing}>
-                    <circle
-                        cx="0"
-                        cy="0"
-                        r={nodeRadius() + 7}
-                        fill="none"
-                        stroke="#7dd3fc"
-                        stroke-width="1.5"
-                        stroke-dasharray="10 5"
-                        opacity="0.85"
-                        class="animate-spin-slow"
-                        style={{ "transform-origin": "center" }}
                     />
                 </Show>
                 <Show
@@ -1041,6 +1026,19 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
 
     return (
         <div ref={containerRef} class="relative h-full w-full overflow-hidden">
+            <Show when={props.isComputing}>
+                <div
+                    class="pointer-events-none absolute left-3 top-3 z-10 flex items-center gap-2 rounded-full border border-slate-700/50 bg-slate-900/80 px-3 py-1 text-xs text-slate-300 backdrop-blur"
+                    role="status"
+                    aria-live="polite"
+                >
+                    <span
+                        class="h-3 w-3 animate-spin rounded-full border-2 border-slate-600 border-t-sky-300"
+                        aria-hidden="true"
+                    />
+                    <span>Computing…</span>
+                </div>
+            </Show>
             <Show when={import.meta.env.DEV}>
                 <LayoutKnobPanel
                     config={layoutConfig()}
@@ -1171,7 +1169,6 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                                     pathKey(node.data.path) ===
                                     pathKey(latestConfirmedPath())
                                 }
-                                isComputing={props.isComputing}
                             />
                         )}
                     </For>
