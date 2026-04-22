@@ -24,6 +24,7 @@ import {
 } from "../providers/NavigatorSocketProvider";
 import { draftEventsToState } from "../utils/draftEventsToState";
 import {
+    nodeKey,
     pathIndicesToNodeKeyPath,
     eventsToConfirmedTurns,
     extendSpineOptimistic,
@@ -410,13 +411,76 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                 nextSynthetic = synthesizeFullTree(nextSnapshot.tree, confirmedTurns);
             }
 
-            nextScenarios = remapScenariosSpine(
-                includeConfirmedDraftStateForScenarios(
-                    nextSnapshot.scenarios,
-                    draftState
-                ),
-                spineLength
-            );
+            if (isPairPending && tailTurn && prevSnapshot && nextSynthetic) {
+                // Engine currently returns a degenerate tree for pair-pending
+                // root states (search.ts bails on turn.pairEnd), which makes
+                // extractScenarios emit a single empty scenario. Until that
+                // is fixed engine-side, preserve the previous snapshot's
+                // scenarios filtered to those whose pair side includes the
+                // just-clicked champion — same spirit as the filtered pair
+                // fanout in extendSpineOptimistic.
+                //
+                // Also remap each preserved scenario's treePath: the spine
+                // prefix still lands on the same fanout parent, but the
+                // fanout-layer index must move to wherever the matching pair
+                // node lives in the now-filtered children list. Deeper path
+                // indices stay untouched — subtrees survive the filter.
+                const enteredChamp = tailTurn.championIds[0];
+                const side = tailTurn.side;
+                const preTurnPicks =
+                    (side === "blue"
+                        ? draftState.bluePicks.length
+                        : draftState.redPicks.length) - 1;
+                const prefixLength = Math.max(spineLength, 1);
+
+                let fanoutParent: NavigatorTreeNode | null = nextSynthetic;
+                for (let i = 0; i < prefixLength; i++) {
+                    const next: NavigatorTreeNode | undefined =
+                        fanoutParent?.children[0];
+                    if (!next) {
+                        fanoutParent = null;
+                        break;
+                    }
+                    fanoutParent = next;
+                }
+
+                const newIdxByKey = new Map<string, number>();
+                if (fanoutParent) {
+                    fanoutParent.children.forEach((child, idx) => {
+                        newIdxByKey.set(nodeKey(child), idx);
+                    });
+                }
+
+                const preserved: NavigatorScenario[] = [];
+                for (const s of prevSnapshot.scenarios) {
+                    const picks = side === "blue" ? s.bluePicks : s.redPicks;
+                    const pairA = picks[preTurnPicks];
+                    const pairB = picks[preTurnPicks + 1];
+                    if (pairA === undefined || pairB === undefined) continue;
+                    if (pairA !== enteredChamp && pairB !== enteredChamp) continue;
+
+                    const pairKey = `${side}:pick:${[pairA, pairB].sort().join("|")}`;
+                    const newIdx = newIdxByKey.get(pairKey);
+                    if (newIdx === undefined) continue;
+
+                    const newTreePath = [
+                        ...s.treePath.slice(0, prefixLength),
+                        newIdx,
+                        ...s.treePath.slice(prefixLength + 1)
+                    ];
+                    preserved.push({ ...s, treePath: newTreePath });
+                }
+
+                nextScenarios = preserved;
+            } else {
+                nextScenarios = remapScenariosSpine(
+                    includeConfirmedDraftStateForScenarios(
+                        nextSnapshot.scenarios,
+                        draftState
+                    ),
+                    spineLength
+                );
+            }
         } else if (!prevSynthetic && nextSnapshot) {
             const confirmedTurns = eventsToConfirmedTurns(nextEvents);
             const draftState = draftEventsToState(nextEvents);
