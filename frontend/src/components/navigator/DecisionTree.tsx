@@ -366,6 +366,15 @@ const TreeNodeComponent: Component<{
                     champion !== undefined
             )
     );
+    const confirmedChampionIds = createMemo(
+        () => props.node.data.confirmedChampionIds ?? []
+    );
+
+    const isChampionConfirmed = (championId: string | undefined): boolean => {
+        if (!championId) return false;
+        return confirmedChampionIds().includes(championId);
+    };
+
     const isRoot = createMemo(() => props.node.data.path.length === 0);
     const isPair = createMemo(() => championIds().length === 2);
     const isBan = createMemo(() => props.node.data.actionType === "ban");
@@ -563,32 +572,46 @@ const TreeNodeComponent: Component<{
                             }
                         />
                         <Show when={champions()[0]}>
-                            {(resolvedChampion) => (
-                                <image
-                                    href={resolvedChampion().img}
-                                    x={-PAIR_NODE_WIDTH / 2}
-                                    y={-PAIR_NODE_HEIGHT / 2}
-                                    width={PAIR_NODE_WIDTH / 2 + PAIR_SLASH_OFFSET}
-                                    height={PAIR_NODE_HEIGHT}
-                                    preserveAspectRatio="xMidYMid slice"
-                                    clip-path={`url(#${pairClipLeftId()})`}
-                                    class="pointer-events-none"
-                                />
-                            )}
+                            {(resolvedChampion) => {
+                                const confirmed = isChampionConfirmed(championIds()[0]);
+                                const hasAnyConfirmed = confirmedChampionIds().length > 0;
+                                const halfOpacity =
+                                    !hasAnyConfirmed || confirmed ? 1 : 0.55;
+                                return (
+                                    <image
+                                        href={resolvedChampion().img}
+                                        x={-PAIR_NODE_WIDTH / 2}
+                                        y={-PAIR_NODE_HEIGHT / 2}
+                                        width={PAIR_NODE_WIDTH / 2 + PAIR_SLASH_OFFSET}
+                                        height={PAIR_NODE_HEIGHT}
+                                        preserveAspectRatio="xMidYMid slice"
+                                        clip-path={`url(#${pairClipLeftId()})`}
+                                        opacity={halfOpacity}
+                                        class="pointer-events-none transition-opacity duration-150"
+                                    />
+                                );
+                            }}
                         </Show>
                         <Show when={champions()[1]}>
-                            {(resolvedChampion) => (
-                                <image
-                                    href={resolvedChampion().img}
-                                    x={-PAIR_SLASH_OFFSET}
-                                    y={-PAIR_NODE_HEIGHT / 2}
-                                    width={PAIR_NODE_WIDTH / 2 + PAIR_SLASH_OFFSET}
-                                    height={PAIR_NODE_HEIGHT}
-                                    preserveAspectRatio="xMidYMid slice"
-                                    clip-path={`url(#${pairClipRightId()})`}
-                                    class="pointer-events-none"
-                                />
-                            )}
+                            {(resolvedChampion) => {
+                                const confirmed = isChampionConfirmed(championIds()[1]);
+                                const hasAnyConfirmed = confirmedChampionIds().length > 0;
+                                const halfOpacity =
+                                    !hasAnyConfirmed || confirmed ? 1 : 0.55;
+                                return (
+                                    <image
+                                        href={resolvedChampion().img}
+                                        x={-PAIR_SLASH_OFFSET}
+                                        y={-PAIR_NODE_HEIGHT / 2}
+                                        width={PAIR_NODE_WIDTH / 2 + PAIR_SLASH_OFFSET}
+                                        height={PAIR_NODE_HEIGHT}
+                                        preserveAspectRatio="xMidYMid slice"
+                                        clip-path={`url(#${pairClipRightId()})`}
+                                        opacity={halfOpacity}
+                                        class="pointer-events-none transition-opacity duration-150"
+                                    />
+                                );
+                            }}
                         </Show>
                         <line
                             x1={PAIR_SLASH_OFFSET}
