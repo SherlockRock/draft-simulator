@@ -1,6 +1,7 @@
 import { Component, For, Show, createMemo } from "solid-js";
 import { NavigatorScenario } from "../../contexts/NavigatorContext";
 import { resolveChampion } from "../../utils/constants";
+import { ChampionPortrait } from "../ChampionPortrait";
 
 interface ScenarioCardProps {
     scenario: NavigatorScenario;
@@ -54,7 +55,7 @@ const ChampionCircle: Component<{
             >
                 {(resolvedChampion) => (
                     <>
-                        <img
+                        <ChampionPortrait
                             src={resolvedChampion().img}
                             alt={resolvedChampion().name}
                             class={
