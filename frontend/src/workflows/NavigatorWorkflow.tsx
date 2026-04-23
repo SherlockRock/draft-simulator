@@ -43,6 +43,7 @@ import {
     hashNavigatorEvents,
     makeCacheKey
 } from "../utils/navigatorEventHash";
+import { TURN_SEQUENCE } from "../utils/turnSequence";
 import { Socket } from "socket.io-client";
 
 const NavigatorDraftDataSchema = z.object({
@@ -241,6 +242,34 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             syntheticTree: synthetic,
             timestamp: Date.now()
         });
+    };
+
+    const applyCacheEntry = (
+        entry: CachedResult,
+        nextEvents: NavigatorEventData[]
+    ) => {
+        const finalSnapshot: NavigatorSessionState["snapshot"] = {
+            id: "cache",
+            navigator_draft_id:
+                untrack(navigatorContext).snapshot?.navigator_draft_id ?? "",
+            after_event_id:
+                nextEvents.length > 0 ? nextEvents[nextEvents.length - 1].id : null,
+            tree: entry.tree,
+            scenarios: entry.scenarios,
+            meta: null,
+            createdAt: new Date().toISOString()
+        };
+        setSyntheticTreeSignal(entry.syntheticTree);
+        setNavigatorContext((p) => ({
+            ...p,
+            events: nextEvents,
+            snapshot: finalSnapshot,
+            error: null
+        }));
+        setLastEventIdSeen(
+            nextEvents.length > 0 ? nextEvents[nextEvents.length - 1].id : null
+        );
+        console.log("[nav] cache hit — restored prior snapshot from local cache");
     };
 
     const isComputing = createMemo(() => {
@@ -710,11 +739,63 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         }
     });
 
+    const lookupCachePick = (
+        championId: string,
+        slot: number,
+        eventType: "pick" | "ban"
+    ): {
+        entry: CachedResult | undefined;
+        nextEvents: NavigatorEventData[];
+    } => {
+        const ctx = untrack(navigatorContext);
+        const session = ctx.session;
+        if (!session) return { entry: undefined, nextEvents: ctx.events };
+        const turn = TURN_SEQUENCE[slot];
+        const side = turn ? turn.side : "blue";
+        const syntheticEvent: NavigatorEventData = {
+            id: `optimistic-${slot}`,
+            navigator_draft_id: ctx.draft?.id ?? "",
+            event_type: eventType,
+            slot,
+            side,
+            champion_id: championId,
+            user_injected: false,
+            createdAt: new Date().toISOString()
+        };
+        const nextEvents = [...ctx.events, syntheticEvent];
+        const key = makeCacheKey(
+            session.config_version,
+            hashNavigatorEvents(nextEvents)
+        );
+        return { entry: snapshotCache.get(key), nextEvents };
+    };
+
+    const lookupCacheUndo = (): {
+        entry: CachedResult | undefined;
+        nextEvents: NavigatorEventData[];
+    } => {
+        const ctx = untrack(navigatorContext);
+        const session = ctx.session;
+        if (!session || ctx.events.length === 0)
+            return { entry: undefined, nextEvents: ctx.events };
+        const nextEvents = ctx.events.slice(0, -1);
+        const key = makeCacheKey(
+            session.config_version,
+            hashNavigatorEvents(nextEvents)
+        );
+        return { entry: snapshotCache.get(key), nextEvents };
+    };
+
     const emitPick = (draftId: string, championId: string, slot: number) => {
         const sock = currentSocket();
         const sessionId = getActiveSessionId();
 
         if (!sock || !sessionId) return;
+
+        const { entry, nextEvents } = lookupCachePick(championId, slot, "pick");
+        if (entry) {
+            applyCacheEntry(entry, nextEvents);
+        }
 
         sock.emit("navigatorPick", {
             sessionId,
@@ -730,6 +811,11 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
 
         if (!sock || !sessionId) return;
 
+        const { entry, nextEvents } = lookupCachePick(championId, slot, "ban");
+        if (entry) {
+            applyCacheEntry(entry, nextEvents);
+        }
+
         sock.emit("navigatorBan", {
             sessionId,
             draftId,
@@ -743,6 +829,11 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         const sessionId = getActiveSessionId();
 
         if (!sock || !sessionId) return;
+
+        const { entry, nextEvents } = lookupCacheUndo();
+        if (entry) {
+            applyCacheEntry(entry, nextEvents);
+        }
 
         sock.emit("navigatorUndo", {
             sessionId,
