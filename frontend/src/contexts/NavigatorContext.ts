@@ -73,6 +73,7 @@ export interface NavigatorSessionData {
     opponent_pool: string[] | null;
     draft_mode: "standard" | "fearless" | "ironman";
     status: "setup" | "active" | "completed";
+    config_version: number;
     NavigatorDrafts?: NavigatorDraftData[];
     createdAt: string;
     updatedAt: string;

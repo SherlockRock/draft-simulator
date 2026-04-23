@@ -58,6 +58,7 @@ const NavigatorSessionDataSchema = z.object({
     opponent_pool: z.array(z.string()).nullable(),
     draft_mode: z.enum(["standard", "fearless", "ironman"]),
     status: z.enum(["setup", "active", "completed"]),
+    config_version: z.number(),
     NavigatorDrafts: z.array(NavigatorDraftDataSchema).optional(),
     createdAt: z.string(),
     updatedAt: z.string()
