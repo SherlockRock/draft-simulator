@@ -12,6 +12,7 @@ import { z } from "zod";
 import toast from "solid-toast";
 import { TeamPoolSchema } from "@draft-sim/shared-types";
 import {
+    NavigatorEventData,
     NavigatorPanRequest,
     NavigatorScenario,
     NavigatorSessionState,
@@ -38,6 +39,10 @@ import {
 } from "../utils/treeReconcile";
 import type { ReconcilePriority } from "../utils/treeReconcile";
 import { validateSocketEvent } from "../utils/socketValidation";
+import {
+    hashNavigatorEvents,
+    makeCacheKey
+} from "../utils/navigatorEventHash";
 import { Socket } from "socket.io-client";
 
 const NavigatorDraftDataSchema = z.object({
@@ -212,6 +217,32 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     const [syntheticTreeSignal, setSyntheticTreeSignal] =
         createSignal<NavigatorTreeNode | null>(null);
     const [lastEventIdSeen, setLastEventIdSeen] = createSignal<string | null>(null);
+
+    interface CachedResult {
+        tree: NavigatorTreeNode;
+        scenarios: NavigatorScenario[];
+        syntheticTree: NavigatorTreeNode | null;
+        timestamp: number;
+    }
+
+    const snapshotCache = new Map<string, CachedResult>();
+
+    const writeCacheEntry = (
+        configVersion: number,
+        events: NavigatorEventData[],
+        tree: NavigatorTreeNode,
+        scenarios: NavigatorScenario[],
+        synthetic: NavigatorTreeNode | null
+    ) => {
+        const key = makeCacheKey(configVersion, hashNavigatorEvents(events));
+        snapshotCache.set(key, {
+            tree,
+            scenarios,
+            syntheticTree: synthetic,
+            timestamp: Date.now()
+        });
+    };
+
     const isComputing = createMemo(() => {
         const ctx = navigatorContext();
         const snapshot = ctx.snapshot;
@@ -302,11 +333,19 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             connected: true,
             error: null
         });
-        setSyntheticTreeSignal(
-            response.snapshot
-                ? synthesizeFullTree(response.snapshot.tree, confirmedTurns)
-                : null
-        );
+        const joinSynthetic = response.snapshot
+            ? synthesizeFullTree(response.snapshot.tree, confirmedTurns)
+            : null;
+        setSyntheticTreeSignal(joinSynthetic);
+        if (response.snapshot && response.session) {
+            writeCacheEntry(
+                response.session.config_version,
+                response.events ?? [],
+                response.snapshot.tree,
+                scenarios,
+                joinSynthetic
+            );
+        }
         setLastEventIdSeen(
             response.events && response.events.length > 0
                 ? response.events[response.events.length - 1].id
@@ -512,6 +551,19 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             connected: true,
             error: null
         }));
+
+        if (finalSnapshot && (data.session ?? untrack(navigatorContext).session)) {
+            const sess = data.session ?? untrack(navigatorContext).session;
+            if (sess) {
+                writeCacheEntry(
+                    sess.config_version,
+                    nextEvents,
+                    finalSnapshot.tree,
+                    finalSnapshot.scenarios,
+                    nextSynthetic
+                );
+            }
+        }
 
         setLastEventIdSeen(
             nextEvents.length > 0 ? nextEvents[nextEvents.length - 1].id : null
