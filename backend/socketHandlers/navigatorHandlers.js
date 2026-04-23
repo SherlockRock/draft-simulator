@@ -4,6 +4,20 @@ const NavigatorEvent = require("../models/NavigatorEvent");
 const NavigatorSnapshot = require("../models/NavigatorSnapshot");
 const { computeForDraft } = require("../services/navigatorEngine");
 
+// Per-session engine job version. Bumped on every pick/ban/undo. Results whose
+// job version is behind the session's current version are dropped.
+const sessionVersions = new Map();
+
+function bumpVersion(sessionId) {
+  const next = (sessionVersions.get(sessionId) || 0) + 1;
+  sessionVersions.set(sessionId, next);
+  return next;
+}
+
+function getCurrentVersion(sessionId) {
+  return sessionVersions.get(sessionId) || 0;
+}
+
 const TURN_SEQUENCE = [
   { side: "blue", type: "ban", phase: "ban1" },
   { side: "red", type: "ban", phase: "ban1" },
@@ -132,15 +146,23 @@ async function emitDraftUpdate(io, sessionId, payload) {
   io.to(getRoomName(sessionId)).emit("navigatorDraftUpdate", payload);
 }
 
-async function recomputeAndBroadcast(io, socket, session, draft, events) {
+async function recomputeAndBroadcast(io, socket, session, draft, events, version) {
+  void socket;
   try {
-    const snapshot = await computeForDraft(draft, session, events, io);
+    const result = await computeForDraft(draft, session, events, version, io);
+    const currentVersion = getCurrentVersion(session.id);
+    if (result.version !== currentVersion) {
+      console.log(
+        `[nav] dropping stale engine result: session=${session.id} job_v=${result.version} current_v=${currentVersion}`,
+      );
+      return null;
+    }
     await emitDraftUpdate(io, session.id, {
       draft,
       events,
-      snapshot,
+      snapshot: result.snapshot,
     });
-    return snapshot;
+    return result.snapshot;
   } catch (error) {
     console.error("Navigator engine compute failed:", error);
     await emitDraftUpdate(io, session.id, {
@@ -234,10 +256,10 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
     await emitDraftUpdate(io, sessionId, {
       draft,
       events,
-      snapshot: null,
     });
 
-    await recomputeAndBroadcast(io, socket, session, draft, events);
+    const version = bumpVersion(sessionId);
+    await recomputeAndBroadcast(io, socket, session, draft, events, version);
   }
 
   wrap("navigatorPick", async (data = {}) => {
@@ -297,10 +319,10 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       await emitDraftUpdate(io, sessionId, {
         draft,
         events,
-        snapshot: null,
       });
 
-      await recomputeAndBroadcast(io, socket, session, draft, events);
+      const version = bumpVersion(sessionId);
+      await recomputeAndBroadcast(io, socket, session, draft, events, version);
     } catch (error) {
       console.error("Error in navigatorUndo:", error);
       emitNavigatorError(socket, "Failed to undo navigator event");
