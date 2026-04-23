@@ -287,16 +287,16 @@ async function processQueue() {
   return pending;
 }
 
-async function enqueue(request, navigatorDraft, lastEventId) {
+async function enqueue(request, navigatorDraft, lastEventId, version) {
   return new Promise((resolve, reject) => {
-    queue.push({ request, navigatorDraft, lastEventId, resolve, reject });
+    queue.push({ request, navigatorDraft, lastEventId, version, resolve, reject });
     processQueue().catch((error) => {
       console.error("Navigator engine queue failed to start", error);
     });
   });
 }
 
-async function computeForDraft(navigatorDraft, session, events, io) {
+async function computeForDraft(navigatorDraft, session, events, version, io) {
   void io;
 
   if (!navigatorDraft || !navigatorDraft.id) {
@@ -307,9 +307,14 @@ async function computeForDraft(navigatorDraft, session, events, io) {
     throw new Error("session is required");
   }
 
+  if (typeof version !== "number") {
+    throw new Error("version is required");
+  }
+
   const request = await buildEngineRequest(session, events);
   const lastEventId = getLastEventId(events);
-  return enqueue(request, navigatorDraft, lastEventId);
+  const snapshot = await enqueue(request, navigatorDraft, lastEventId, version);
+  return { version, snapshot };
 }
 
 function getEngineStatus() {
