@@ -52,6 +52,11 @@ const NavigatorSession = sequelize.define("NavigatorSession", {
     defaultValue: "setup",
     validate: { isIn: [["setup", "active", "completed"]] },
   },
+  config_version: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 1,
+  },
 });
 
 module.exports = NavigatorSession;
