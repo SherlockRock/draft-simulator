@@ -110,6 +110,13 @@ router.get("/:id", protect, async (req, res) => {
   }
 });
 
+const CONFIG_FIELDS = new Set([
+  "blue_pool",
+  "red_pool",
+  "draft_mode",
+  "our_side",
+]);
+
 router.patch("/:id", protect, async (req, res) => {
   try {
     const result = await findSessionForUser(req.params.id, req.user.id);
@@ -128,10 +135,20 @@ router.patch("/:id", protect, async (req, res) => {
       "status",
     ];
 
+    let configChanged = false;
     for (const field of allowedFields) {
       if (Object.prototype.hasOwnProperty.call(req.body, field)) {
-        result.session[field] = req.body[field];
+        const prev = result.session[field];
+        const next = req.body[field];
+        if (CONFIG_FIELDS.has(field) && JSON.stringify(prev) !== JSON.stringify(next)) {
+          configChanged = true;
+        }
+        result.session[field] = next;
       }
+    }
+
+    if (configChanged) {
+      result.session.config_version = (result.session.config_version || 1) + 1;
     }
 
     await result.session.save();
