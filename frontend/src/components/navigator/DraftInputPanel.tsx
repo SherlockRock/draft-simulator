@@ -1,5 +1,6 @@
 import { Component, For, Show, createMemo } from "solid-js";
 import { Undo2 } from "lucide-solid";
+import { ChampionPortrait } from "../ChampionPortrait";
 import { FilterBar } from "../FilterBar";
 import { RoleFilter } from "../RoleFilter";
 import { useMultiFilterableItems } from "../../hooks/useFilterableItems";
@@ -81,7 +82,7 @@ const SlotCircle: Component<{
             >
                 {(resolvedChampion) => (
                     <>
-                        <img
+                        <ChampionPortrait
                             src={resolvedChampion().img}
                             alt={resolvedChampion().name}
                             class="h-full w-full object-cover"
@@ -386,10 +387,9 @@ const DraftInputPanel: Component = () => {
                                                           : "border-slate-600 hover:border-slate-400 hover:-translate-y-0.5"
                                             }`}
                                         >
-                                            <img
+                                            <ChampionPortrait
                                                 src={champion.img}
                                                 alt={champion.name}
-                                                draggable={false}
                                                 class="h-10 w-10 object-cover"
                                             />
                                         </button>
