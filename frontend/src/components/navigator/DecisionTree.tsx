@@ -523,6 +523,7 @@ const TreeNodeComponent: Component<{
                                         preserveAspectRatio="xMidYMid slice"
                                         clip-path={`url(#${singleClipId()})`}
                                         class="pointer-events-none"
+                                        style="-webkit-user-drag: none; user-select: none"
                                     />
                                 )}
                             </Show>
@@ -573,6 +574,7 @@ const TreeNodeComponent: Component<{
                                         clip-path={`url(#${pairClipLeftId()})`}
                                         opacity={halfOpacity}
                                         class="pointer-events-none transition-opacity duration-150"
+                                        style="-webkit-user-drag: none; user-select: none"
                                     />
                                 );
                             }}
@@ -594,6 +596,7 @@ const TreeNodeComponent: Component<{
                                         clip-path={`url(#${pairClipRightId()})`}
                                         opacity={halfOpacity}
                                         class="pointer-events-none transition-opacity duration-150"
+                                        style="-webkit-user-drag: none; user-select: none"
                                     />
                                 );
                             }}
