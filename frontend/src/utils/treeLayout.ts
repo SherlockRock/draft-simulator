@@ -567,9 +567,14 @@ function radialTreeLayoutWithConfig<T extends LayoutNode>(
                 availableSpan,
                 Math.max(child.minSpan, child.preferredSpan)
             );
+            const childOverride = getOverrideAngle?.(child.data);
+            const childAngle =
+                childOverride !== undefined && child.depth > 0
+                    ? childOverride
+                    : centerAngle;
             const childRadius = child.radius;
-            const childX = childRadius * Math.cos(centerAngle - Math.PI / 2);
-            const childY = childRadius * Math.sin(centerAngle - Math.PI / 2);
+            const childX = childRadius * Math.cos(childAngle - Math.PI / 2);
+            const childY = childRadius * Math.sin(childAngle - Math.PI / 2);
 
             rawLinks.push({
                 source: { x, y, data: measured.data },
@@ -624,9 +629,14 @@ function radialTreeLayoutWithConfig<T extends LayoutNode>(
             }
             const childSector = Math.min(child.preferredSpan, child.minSpan + bonus);
             const childCenter = cursor + childSector / 2;
+            const childOverride = getOverrideAngle?.(child.data);
+            const childAngle =
+                childOverride !== undefined && child.depth > 0
+                    ? childOverride
+                    : childCenter;
             const childRadius = child.radius;
-            const childX = childRadius * Math.cos(childCenter - Math.PI / 2);
-            const childY = childRadius * Math.sin(childCenter - Math.PI / 2);
+            const childX = childRadius * Math.cos(childAngle - Math.PI / 2);
+            const childY = childRadius * Math.sin(childAngle - Math.PI / 2);
 
             rawLinks.push({
                 source: { x, y, data: measured.data },
