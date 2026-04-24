@@ -53,6 +53,18 @@ const ChampionPicker: Component<ChampionPickerProps> = (props) => {
         items: champions,
         categoryMap: championCategories
     });
+    const [highlightedIndex, setHighlightedIndex] = createSignal(0);
+
+    // Reset highlight to 0 whenever the filtered list changes.
+    createEffect(() => {
+        filterState.filteredItems();
+        setHighlightedIndex(0);
+    });
+
+    const highlightedChampion = createMemo(() => {
+        const items = filterState.filteredItems();
+        return items[highlightedIndex()]?.item ?? null;
+    });
 
     let searchInputRef: HTMLInputElement | undefined;
 
@@ -68,13 +80,44 @@ const ChampionPicker: Component<ChampionPickerProps> = (props) => {
         queueMicrotask(() => searchInputRef?.focus());
     });
 
-    // Close on Escape.
     createEffect(() => {
         if (!props.isOpen) return;
         const handleKey = (e: KeyboardEvent) => {
             if (e.key === "Escape") {
                 e.preventDefault();
                 props.onClose();
+                return;
+            }
+
+            const items = filterState.filteredItems();
+            if (items.length === 0) return;
+
+            if (e.key === "ArrowRight") {
+                e.preventDefault();
+                setHighlightedIndex((i) => Math.min(i + 1, items.length - 1));
+                return;
+            }
+            if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                setHighlightedIndex((i) => Math.max(i - 1, 0));
+                return;
+            }
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setHighlightedIndex((i) => Math.min(i + GRID_COLS, items.length - 1));
+                return;
+            }
+            if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setHighlightedIndex((i) => Math.max(i - GRID_COLS, 0));
+                return;
+            }
+            if (e.key === "Enter") {
+                e.preventDefault();
+                const champ = items[highlightedIndex()]?.item;
+                if (!champ) return;
+                if (props.disabledChampionIds?.has(champ.id)) return;
+                props.onSelect(champ.id);
             }
         };
         window.addEventListener("keydown", handleKey);
@@ -127,12 +170,13 @@ const ChampionPicker: Component<ChampionPickerProps> = (props) => {
                     <div class="custom-scrollbar max-h-[360px] overflow-y-auto px-3 py-3">
                         <div class={`grid grid-cols-${GRID_COLS} gap-1.5`}>
                             <For each={filterState.filteredItems()}>
-                                {({ item: champion }) => {
+                                {({ item: champion }, index) => {
                                     const state = () =>
                                         props.championColoring?.(champion.id) ?? "neutral";
                                     const disabled = () =>
                                         props.disabledChampionIds?.has(champion.id) ??
                                         false;
+                                    const highlighted = () => highlightedIndex() === index();
                                     return (
                                         <button
                                             type="button"
@@ -140,12 +184,13 @@ const ChampionPicker: Component<ChampionPickerProps> = (props) => {
                                                 if (disabled()) return;
                                                 props.onSelect(champion.id);
                                             }}
+                                            onMouseEnter={() => setHighlightedIndex(index())}
                                             disabled={disabled()}
                                             title={champion.name}
                                             class={`relative aspect-square overflow-hidden rounded border-2 transition-all ${borderClassFor(
                                                 state(),
                                                 disabled(),
-                                                false
+                                                highlighted()
                                             )}`}
                                         >
                                             <img
@@ -176,8 +221,7 @@ const ChampionPicker: Component<ChampionPickerProps> = (props) => {
                                 <span>
                                     {actionVerb()}{" "}
                                     <span class="text-darius-text-primary">
-                                        {/* Champion name — filled in Task 4 */}
-                                        —
+                                        {highlightedChampion()?.name ?? "—"}
                                     </span>
                                 </span>
                             </span>
