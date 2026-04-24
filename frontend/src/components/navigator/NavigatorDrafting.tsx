@@ -1,7 +1,10 @@
 import { Component, Show, createEffect, createMemo, createSignal } from "solid-js";
 import toast from "solid-toast";
+import ChampionPicker, { type ChampionColorState } from "../ChampionPicker";
 import { useNavigatorContext } from "../../contexts/NavigatorContext";
 import type { NavigatorTreeNode } from "../../contexts/NavigatorContext";
+import { getPickerState } from "../../utils/navigatorPool";
+import { TURN_SEQUENCE } from "../../utils/turnSequence";
 import { eventsToConfirmedTurns } from "../../utils/treeReconcile";
 import DraftInputPanel from "./DraftInputPanel";
 import DecisionTree from "./DecisionTree";
@@ -17,11 +20,17 @@ const NavigatorDrafting: Component = () => {
         setSelectedScenarioIndex,
         panRequest,
         emitPick,
-        emitBan
+        emitBan,
+        swapChampion
     } = useNavigatorContext();
     const [highlightedTreePath, setHighlightedTreePath] = createSignal<number[] | null>(
         null
     );
+    const [swapTarget, setSwapTarget] = createSignal<{
+        path: number[];
+        oldChampionId: string;
+        contextLabel: string;
+    } | null>(null);
 
     const treeData = syntheticTree;
     const scenarios = createMemo(() => navigatorContext().snapshot?.scenarios ?? []);
@@ -35,6 +44,29 @@ const NavigatorDrafting: Component = () => {
             !isComputingFromContext()
     );
     const activeSessionId = createMemo(() => navigatorContext().session?.id ?? null);
+    const usedChampionIdSet = createMemo<Set<string>>(() => {
+        const ids = new Set<string>();
+        for (const event of navigatorContext().events) {
+            if (event.event_type === "ban" || event.event_type === "pick") {
+                ids.add(event.champion_id);
+            }
+        }
+        return ids;
+    });
+
+    const swapColoringFor = (championId: string): ChampionColorState => {
+        const session = navigatorContext().session;
+        if (!session) return "neutral";
+        const turnIndex = swapTarget()?.path.length ?? 0;
+        const turnInfo = TURN_SEQUENCE[turnIndex - 1];
+        return getPickerState(
+            championId,
+            turnInfo?.side ?? null,
+            session.blue_pool,
+            session.red_pool,
+            usedChampionIdSet()
+        );
+    };
 
     createEffect(() => {
         const nextScenarios = scenarios();
@@ -102,8 +134,30 @@ const NavigatorDrafting: Component = () => {
         }
     };
 
-    const handleOpenSwap = (_path: number[]) => {
-        // Wired in Task 12.
+    const handleOpenSwap = (path: number[]) => {
+        const synthetic = syntheticTree();
+        if (!synthetic) return;
+
+        let node: NavigatorTreeNode | null = synthetic;
+        for (const index of path) {
+            if (!node || !node.children[index]) return;
+            node = node.children[index];
+        }
+        if (!node) return;
+
+        const oldChampionId = node.championIds[0];
+        if (!oldChampionId) return;
+
+        const turnInfo = TURN_SEQUENCE[path.length - 1];
+        const label = turnInfo
+            ? `${turnInfo.side.toUpperCase()} ${turnInfo.type.toUpperCase()} ${path.length}`
+            : `TURN ${path.length}`;
+
+        setSwapTarget({
+            path,
+            oldChampionId,
+            contextLabel: label
+        });
     };
 
     const handleOpenBranch = (_path: number[]) => {
@@ -111,56 +165,80 @@ const NavigatorDrafting: Component = () => {
     };
 
     return (
-        <div
-            class="grid h-full w-full"
-            style={{
-                "grid-template-columns": "300px 1fr",
-                "grid-template-rows": "1fr 280px"
-            }}
-        >
-            <div class="row-span-2 overflow-y-auto border-r border-slate-700/50">
-                <DraftInputPanel />
-            </div>
+        <>
+            <div
+                class="grid h-full w-full"
+                style={{
+                    "grid-template-columns": "300px 1fr",
+                    "grid-template-rows": "1fr 280px"
+                }}
+            >
+                <div class="row-span-2 overflow-y-auto border-r border-slate-700/50">
+                    <DraftInputPanel />
+                </div>
 
-            <div class="relative min-h-0 bg-slate-900/20">
-                <DecisionTree
-                    treeData={treeData()}
+                <div class="relative min-h-0 bg-slate-900/20">
+                    <DecisionTree
+                        treeData={treeData()}
+                        isComputing={isComputingFromContext()}
+                        highlightedPath={highlightedTreePath()}
+                        confirmedDepth={confirmedDepth()}
+                        scenarioPaths={scenarios().map((scenario, index) => ({
+                            path: scenario.treePath,
+                            tier:
+                                selectedScenarioIndex() === index ? "selected" : "unselected"
+                        }))}
+                        panRequest={panRequest()}
+                        onNodeClick={handleNodeClick}
+                        onPromoteToScenario={handlePromoteToScenario}
+                        onConfirmProjectedPick={handleConfirmProjectedPick}
+                        onOpenSwap={handleOpenSwap}
+                        onOpenBranch={handleOpenBranch}
+                    />
+
+                    <Show when={isStale()}>
+                        <div class="pointer-events-none absolute right-4 top-4 flex items-center gap-2">
+                            <span class="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-amber-300">
+                                Stale
+                            </span>
+                            <button
+                                type="button"
+                                class="pointer-events-auto rounded-full border border-slate-600 bg-slate-900/90 px-3 py-1 text-xs font-medium text-slate-200 transition-colors hover:border-slate-500 hover:bg-slate-800"
+                                onClick={handleRetry}
+                            >
+                                Retry
+                            </button>
+                        </div>
+                    </Show>
+                </div>
+
+                <ScenarioLanes
+                    scenarios={scenarios()}
                     isComputing={isComputingFromContext()}
-                    highlightedPath={highlightedTreePath()}
-                    confirmedDepth={confirmedDepth()}
-                    scenarioPaths={scenarios().map((scenario, index) => ({
-                        path: scenario.treePath,
-                        tier: selectedScenarioIndex() === index ? "selected" : "unselected"
-                    }))}
-                    panRequest={panRequest()}
-                    onNodeClick={handleNodeClick}
-                    onPromoteToScenario={handlePromoteToScenario}
-                    onConfirmProjectedPick={handleConfirmProjectedPick}
-                    onOpenSwap={handleOpenSwap}
-                    onOpenBranch={handleOpenBranch}
                 />
-
-                <Show when={isStale()}>
-                    <div class="pointer-events-none absolute right-4 top-4 flex items-center gap-2">
-                        <span class="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-amber-300">
-                            Stale
-                        </span>
-                        <button
-                            type="button"
-                            class="pointer-events-auto rounded-full border border-slate-600 bg-slate-900/90 px-3 py-1 text-xs font-medium text-slate-200 transition-colors hover:border-slate-500 hover:bg-slate-800"
-                            onClick={handleRetry}
-                        >
-                            Retry
-                        </button>
-                    </div>
-                </Show>
             </div>
-
-            <ScenarioLanes
-                scenarios={scenarios()}
-                isComputing={isComputingFromContext()}
-            />
-        </div>
+            <Show when={swapTarget()}>
+                {(target) => (
+                    <ChampionPicker
+                        isOpen={true}
+                        onClose={() => setSwapTarget(null)}
+                        onSelect={(newChampionId) => {
+                            const currentTarget = target();
+                            swapChampion({
+                                pathToParent: currentTarget.path.slice(0, -1),
+                                newChampionId,
+                                oldChampionId: currentTarget.oldChampionId
+                            });
+                            setSwapTarget(null);
+                        }}
+                        contextLabel={target().contextLabel}
+                        actionVerb="Swap to"
+                        disabledChampionIds={usedChampionIdSet()}
+                        championColoring={(id) => swapColoringFor(id)}
+                    />
+                )}
+            </Show>
+        </>
     );
 };
 
