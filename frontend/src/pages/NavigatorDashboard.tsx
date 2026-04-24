@@ -53,7 +53,9 @@ const NavigatorDashboard: Component = () => {
                 our_side: "blue",
                 blue_pool: EMPTY_TEAM_POOL,
                 red_pool: EMPTY_TEAM_POOL,
-                draft_mode: "standard"
+                draft_mode: "standard",
+                series_length: 1,
+                side_swap_mode: "auto"
             }),
         onSuccess: (session) => {
             queryClient.invalidateQueries({ queryKey: ["navigatorSessions"] });

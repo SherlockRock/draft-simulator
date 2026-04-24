@@ -17,6 +17,8 @@ export async function createNavigatorSession(data: {
     blue_pool: TeamPool;
     red_pool: TeamPool;
     draft_mode: "standard" | "fearless" | "ironman";
+    series_length: 1 | 3 | 5 | 7;
+    side_swap_mode: "auto" | "manual";
     name?: string | null;
 }): Promise<NavigatorSessionData> {
     const response = await fetchWithRefresh(`${API_BASE}/api/navigator`, {
@@ -46,6 +48,8 @@ export interface UpdateNavigatorSessionPayload {
     red_pool?: TeamPool;
     opponent_pool?: string[] | null;
     draft_mode?: "standard" | "fearless" | "ironman";
+    series_length?: 1 | 3 | 5 | 7;
+    side_swap_mode?: "auto" | "manual";
     status?: "setup" | "active" | "completed";
 }
 
