@@ -72,7 +72,7 @@ interface ViewportSize {
 }
 
 interface DragState {
-    nodeKey: string;
+    keyPath: string;
     startPageX: number;
     startPageY: number;
     startedDragging: boolean;
@@ -126,18 +126,6 @@ function getPairLeftClipPath() {
         `Q ${-halfWidth} ${-halfHeight} ${-halfWidth + radius} ${-halfHeight}`,
         "Z"
     ].join(" ");
-}
-
-function collectNodeKeys(tree: LayoutNode): Set<string> {
-    const result = new Set<string>();
-    function walk(node: LayoutNode) {
-        for (const child of node.children) {
-            result.add(nodeKey(child));
-            walk(child);
-        }
-    }
-    walk(tree);
-    return result;
 }
 
 function getPairRightClipPath() {
@@ -379,7 +367,7 @@ const TreeNodeComponent: Component<{
     glowFilterId: string;
     latestGlowFilterId: string;
     onClick: (path: number[]) => void;
-    onPointerDown: (event: PointerEvent, nodeKeyStr: string) => void;
+    onPointerDown: (event: PointerEvent, indexPath: number[]) => void;
     onToggleExpand: (path: number[]) => void;
     isConfirmed: boolean;
     isLatestConfirmed: boolean;
@@ -473,7 +461,7 @@ const TreeNodeComponent: Component<{
             transform={`translate(${props.node.x} ${props.node.y})`}
             opacity={strokeOpacity()}
             onPointerDown={(e) => {
-                props.onPointerDown(e, nodeKey(props.node.data));
+                props.onPointerDown(e, props.node.data.path);
             }}
             onMouseEnter={() => props.onHover(props.node.data.path)}
             onMouseLeave={() => props.onHover(null)}
@@ -777,18 +765,16 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         return props.treeData;
     });
 
-    // Drop manual overrides and layout overrides whose node keys no longer exist in the tree.
+    // Drop manual overrides and layout overrides whose node-key paths no longer exist in the tree.
     createEffect(() => {
         const tree = effectiveTreeData();
         if (!tree) return;
         const validPaths = collectNodeKeyPaths(tree);
-        const validKeys = collectNodeKeys(tree);
         setManualExpansionKeys((prev) => new Set([...prev].filter((k) => validPaths.has(k))));
         setManualCollapseKeys((prev) => new Set([...prev].filter((k) => validPaths.has(k))));
-        // Drop layout overrides for nodes no longer in the tree.
         const overrides = layoutOverrides();
         for (const key of overrides.keys()) {
-            if (!validKeys.has(key)) {
+            if (!validPaths.has(key)) {
                 setLayoutOverride(key, null);
             }
         }
@@ -909,8 +895,8 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         return pruneTree(tree, expandedPaths(), manualExpansionIndexKeys());
     });
 
-    const getOverrideAngle = (node: LayoutNode): number | undefined => {
-        return layoutOverrides().get(nodeKey(node))?.angle;
+    const getOverrideAngle = (keyPath: string): number | undefined => {
+        return layoutOverrides().get(keyPath)?.angle;
     };
 
     const layoutFn = createMemo(() => {
@@ -1034,10 +1020,14 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         return Math.atan2(dy, dx) + Math.PI / 2;
     }
 
-    const handleNodePointerDown = (event: PointerEvent, nodeKeyStr: string) => {
+    const handleNodePointerDown = (event: PointerEvent, indexPath: number[]) => {
         if (event.button !== 0) return;
+        const tree = effectiveTreeData();
+        if (!tree) return;
+        const keyPath = pathIndicesToNodeKeyPath(tree, indexPath);
+        if (keyPath === null || keyPath === "") return;
         setDragState({
-            nodeKey: nodeKeyStr,
+            keyPath,
             startPageX: event.pageX,
             startPageY: event.pageY,
             startedDragging: false
@@ -1057,7 +1047,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
             }
             const angle = getCursorAngleFromRoot(moveEvent.pageX, moveEvent.pageY);
             if (angle === null) return;
-            setLayoutOverride(current.nodeKey, { angle });
+            setLayoutOverride(current.keyPath, { angle });
         };
 
         const handleUp = () => {

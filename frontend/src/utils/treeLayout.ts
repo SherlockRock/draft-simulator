@@ -1,4 +1,5 @@
 import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
+import { nodeKey, nodeKeyPath } from "./treeReconcile";
 
 export interface LayoutNode {
     championIds: string[];
@@ -344,7 +345,7 @@ export const DEFAULT_RADIAL_CONFIG: RadialLayoutConfig = {
 
 export function makeRadialTreeLayout(
     config: RadialLayoutConfig = DEFAULT_RADIAL_CONFIG,
-    getOverrideAngle?: (node: LayoutNode) => number | undefined
+    getOverrideAngle?: (keyPath: string) => number | undefined
 ): LayoutFn {
     return <T extends LayoutNode>(
         treeData: T,
@@ -372,7 +373,7 @@ function radialTreeLayoutWithConfig<T extends LayoutNode>(
     nodeWidth: number,
     nodeHeight: number,
     config: RadialLayoutConfig,
-    getOverrideAngle?: (node: LayoutNode) => number | undefined
+    getOverrideAngle?: (keyPath: string) => number | undefined
 ): LayoutResult<T> {
     const nodeRadius = Math.max(nodeWidth, nodeHeight) / 2;
     const ringSpacing =
@@ -539,9 +540,12 @@ function radialTreeLayoutWithConfig<T extends LayoutNode>(
     function place(
         measured: MeasuredNode,
         centerAngle: number,
-        availableSpan: number
+        availableSpan: number,
+        keyPathSegments: string[]
     ): void {
-        const override = getOverrideAngle?.(measured.data);
+        const selfKeyPath = nodeKeyPath(keyPathSegments);
+        const override =
+            selfKeyPath === "" ? undefined : getOverrideAngle?.(selfKeyPath);
         if (override !== undefined && measured.depth > 0) {
             centerAngle = override;
         }
@@ -567,7 +571,11 @@ function radialTreeLayoutWithConfig<T extends LayoutNode>(
                 availableSpan,
                 Math.max(child.minSpan, child.preferredSpan)
             );
-            const childOverride = getOverrideAngle?.(child.data);
+            const childKeyPath = nodeKeyPath([
+                ...keyPathSegments,
+                nodeKey(child.data)
+            ]);
+            const childOverride = getOverrideAngle?.(childKeyPath);
             const childAngle =
                 childOverride !== undefined && child.depth > 0
                     ? childOverride
@@ -581,7 +589,10 @@ function radialTreeLayoutWithConfig<T extends LayoutNode>(
                 target: { x: childX, y: childY, data: child.data }
             });
 
-            place(child, centerAngle, childSector);
+            place(child, centerAngle, childSector, [
+                ...keyPathSegments,
+                nodeKey(child.data)
+            ]);
             return;
         }
 
@@ -629,7 +640,11 @@ function radialTreeLayoutWithConfig<T extends LayoutNode>(
             }
             const childSector = Math.min(child.preferredSpan, child.minSpan + bonus);
             const childCenter = cursor + childSector / 2;
-            const childOverride = getOverrideAngle?.(child.data);
+            const childKeyPath = nodeKeyPath([
+                ...keyPathSegments,
+                nodeKey(child.data)
+            ]);
+            const childOverride = getOverrideAngle?.(childKeyPath);
             const childAngle =
                 childOverride !== undefined && child.depth > 0
                     ? childOverride
@@ -643,13 +658,16 @@ function radialTreeLayoutWithConfig<T extends LayoutNode>(
                 target: { x: childX, y: childY, data: child.data }
             });
 
-            place(child, childCenter, childSector);
+            place(child, childCenter, childSector, [
+                ...keyPathSegments,
+                nodeKey(child.data)
+            ]);
             cursor += childSector + childGap;
         }
     }
 
     const measuredRoot = measure(treeData, 0, 0, true);
-    place(measuredRoot, 0, FULL_CIRCLE);
+    place(measuredRoot, 0, FULL_CIRCLE, []);
 
     return normalizeLayout(rawNodes, rawLinks, padding, padding);
 }
