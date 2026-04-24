@@ -280,6 +280,61 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
     }
   });
 
+  wrap("navigatorSwapChampion", async (data = {}) => {
+    try {
+      const { sessionId, draftId, pathToParent, newChampionId, oldChampionId } = data;
+
+      if (!sessionId || !draftId || !Array.isArray(pathToParent) || !newChampionId) {
+        emitNavigatorError(socket, "Invalid navigatorSwapChampion payload");
+        return;
+      }
+
+      // TODO(engine): when the engine supports seeded re-search, pass the
+      // (pathToParent, newChampionId, oldChampionId) as a seed hint.
+      console.log("[nav] swap requested (stub)", {
+        sessionId,
+        draftId,
+        pathToParent,
+        newChampionId,
+        oldChampionId,
+      });
+      emitNavigatorError(
+        socket,
+        "Swap champion is not yet implemented by the engine. Coming with the Rust engine rewrite."
+      );
+    } catch (error) {
+      console.error("Error in navigatorSwapChampion:", error);
+      emitNavigatorError(socket, "Swap champion failed");
+    }
+  });
+
+  wrap("navigatorBranch", async (data = {}) => {
+    try {
+      const { sessionId, draftId, pathToParent, newChampionId } = data;
+
+      if (!sessionId || !draftId || !Array.isArray(pathToParent) || !newChampionId) {
+        emitNavigatorError(socket, "Invalid navigatorBranch payload");
+        return;
+      }
+
+      // TODO(engine): additive branch — engine-side re-search adds a sibling
+      // node with newChampionId under pathToParent. Not yet implemented.
+      console.log("[nav] branch requested (stub)", {
+        sessionId,
+        draftId,
+        pathToParent,
+        newChampionId,
+      });
+      emitNavigatorError(
+        socket,
+        "Create branch is not yet implemented by the engine. Coming with the Rust engine rewrite."
+      );
+    } catch (error) {
+      console.error("Error in navigatorBranch:", error);
+      emitNavigatorError(socket, "Create branch failed");
+    }
+  });
+
   wrap("navigatorUndo", async (data = {}) => {
     try {
       const { sessionId, draftId } = data;
