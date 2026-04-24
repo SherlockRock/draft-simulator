@@ -27,6 +27,13 @@ const NavigatorDraft = sequelize.define("NavigatorDraft", {
       isIn: [["active", "completed"]],
     },
   },
+  our_side_override: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    validate: {
+      isIn: [["blue", "red"]],
+    },
+  },
   draft_id: {
     type: DataTypes.UUID,
     allowNull: true,

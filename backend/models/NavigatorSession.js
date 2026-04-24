@@ -46,6 +46,22 @@ const NavigatorSession = sequelize.define("NavigatorSession", {
     defaultValue: "standard",
     validate: { isIn: [["standard", "fearless", "ironman"]] },
   },
+  series_length: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 1,
+    validate: {
+      isIn: [[1, 3, 5, 7]],
+    },
+  },
+  side_swap_mode: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: "auto",
+    validate: {
+      isIn: [["auto", "manual"]],
+    },
+  },
   status: {
     type: DataTypes.STRING,
     allowNull: false,
