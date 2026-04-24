@@ -442,6 +442,13 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         ) {
             setSyntheticTreeSignal(null);
             setLastEventIdSeen(null);
+            // Snapshot cache is keyed by (config_version, event-tuple hash) and
+            // has no draft/game scope. Without clearing it here, Game N+1's
+            // first pick can hit Game N's cached snapshot (same hash, same
+            // config_version) and paint a stale tree that mergeEngineTree
+            // preserves as projection even after the server's correctly-
+            // excluded snapshot arrives.
+            snapshotCache.clear();
         }
         const prevEvents = prev.events;
         const prevSynthetic = untrack(syntheticTreeSignal);
