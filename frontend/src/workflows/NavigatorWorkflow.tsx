@@ -18,7 +18,8 @@ import {
     NavigatorSessionState,
     NavigatorTreeNode,
     NavigatorWorkflowContext,
-    NavigatorWorkflowContextValue
+    NavigatorWorkflowContextValue,
+    NodeLayoutOverride
 } from "../contexts/NavigatorContext";
 import {
     NavigatorSocketProvider,
@@ -215,6 +216,9 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     const [manualCollapseKeys, setManualCollapseKeysSignal] = createSignal<
         ReadonlySet<string>
     >(new Set<string>());
+    const [layoutOverrides, setLayoutOverridesSignal] = createSignal<
+        ReadonlyMap<string, NodeLayoutOverride>
+    >(new Map());
     const [syntheticTreeSignal, setSyntheticTreeSignal] =
         createSignal<NavigatorTreeNode | null>(null);
     const [lastEventIdSeen, setLastEventIdSeen] = createSignal<string | null>(null);
@@ -288,6 +292,20 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     const setManualCollapseKeys = (
         updater: (prev: ReadonlySet<string>) => ReadonlySet<string>
     ) => setManualCollapseKeysSignal((prev) => updater(prev));
+    const setLayoutOverride = (nodeKey: string, override: NodeLayoutOverride | null) => {
+        setLayoutOverridesSignal((prev) => {
+            const next = new Map(prev);
+            if (override === null) {
+                next.delete(nodeKey);
+            } else {
+                next.set(nodeKey, override);
+            }
+            return next;
+        });
+    };
+    const clearAllLayoutOverrides = () => {
+        setLayoutOverridesSignal(new Map());
+    };
     const requestScenarioPan = (treePath: number[]) => {
         setPanRequest({ path: treePath });
     };
@@ -805,6 +823,40 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         });
     };
 
+    const swapChampion: NavigatorWorkflowContextValue["swapChampion"] = ({
+        pathToParent,
+        newChampionId,
+        oldChampionId
+    }) => {
+        const sock = currentSocket();
+        const sessionId = getActiveSessionId();
+        const draftId = navigatorContext().draft?.id;
+        if (!sock || !sessionId || !draftId) return;
+        sock.emit("navigatorSwapChampion", {
+            sessionId,
+            draftId,
+            pathToParent,
+            newChampionId,
+            oldChampionId
+        });
+    };
+
+    const createBranch: NavigatorWorkflowContextValue["createBranch"] = ({
+        pathToParent,
+        newChampionId
+    }) => {
+        const sock = currentSocket();
+        const sessionId = getActiveSessionId();
+        const draftId = navigatorContext().draft?.id;
+        if (!sock || !sessionId || !draftId) return;
+        sock.emit("navigatorBranch", {
+            sessionId,
+            draftId,
+            pathToParent,
+            newChampionId
+        });
+    };
+
     const emitBan = (draftId: string, championId: string, slot: number) => {
         const sock = currentSocket();
         const sessionId = getActiveSessionId();
@@ -878,7 +930,12 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         manualExpansionKeys,
         manualCollapseKeys,
         setManualExpansionKeys,
-        setManualCollapseKeys
+        setManualCollapseKeys,
+        layoutOverrides,
+        setLayoutOverride,
+        clearAllLayoutOverrides,
+        swapChampion,
+        createBranch
     };
 
     return (

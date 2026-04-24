@@ -118,6 +118,11 @@ export interface NavigatorPanRequest {
     path: number[];
 }
 
+export interface NodeLayoutOverride {
+    /** Override angle in radians (radial coordinate, before the -π/2 rotation). */
+    angle: number;
+}
+
 export interface NavigatorWorkflowContextValue {
     navigatorContext: Accessor<NavigatorSessionState>;
     syntheticTree: Accessor<NavigatorTreeNode | null>;
@@ -142,6 +147,18 @@ export interface NavigatorWorkflowContextValue {
     setManualCollapseKeys: (
         updater: (prev: ReadonlySet<string>) => ReadonlySet<string>
     ) => void;
+    layoutOverrides: Accessor<ReadonlyMap<string, NodeLayoutOverride>>;
+    setLayoutOverride: (nodeKey: string, override: NodeLayoutOverride | null) => void;
+    clearAllLayoutOverrides: () => void;
+    swapChampion: (params: {
+        pathToParent: number[];
+        newChampionId: string;
+        oldChampionId: string;
+    }) => void;
+    createBranch: (params: {
+        pathToParent: number[];
+        newChampionId: string;
+    }) => void;
 }
 
 export const NavigatorWorkflowContext = createContext<NavigatorWorkflowContextValue>();
