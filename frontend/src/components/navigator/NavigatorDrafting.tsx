@@ -1,5 +1,7 @@
 import { Component, Show, createEffect, createMemo, createSignal } from "solid-js";
+import toast from "solid-toast";
 import { useNavigatorContext } from "../../contexts/NavigatorContext";
+import type { NavigatorTreeNode } from "../../contexts/NavigatorContext";
 import { eventsToConfirmedTurns } from "../../utils/treeReconcile";
 import DraftInputPanel from "./DraftInputPanel";
 import DecisionTree from "./DecisionTree";
@@ -13,7 +15,9 @@ const NavigatorDrafting: Component = () => {
         isComputing: isComputingFromContext,
         selectedScenarioIndex,
         setSelectedScenarioIndex,
-        panRequest
+        panRequest,
+        emitPick,
+        emitBan
     } = useNavigatorContext();
     const [highlightedTreePath, setHighlightedTreePath] = createSignal<number[] | null>(
         null
@@ -66,6 +70,46 @@ const NavigatorDrafting: Component = () => {
         }
     };
 
+    const handlePromoteToScenario = (_path: number[]) => {
+        toast("Promote-to-scenario coming soon.", { icon: "ℹ️" });
+    };
+
+    const handleConfirmProjectedPick = (path: number[]) => {
+        const synthetic = syntheticTree();
+        if (!synthetic) return;
+
+        let current: NavigatorTreeNode | null = synthetic;
+        for (const index of path) {
+            if (!current || !current.children[index]) return;
+            current = current.children[index];
+        }
+        if (!current) return;
+
+        const draftId = navigatorContext().draft?.id;
+        if (!draftId) return;
+
+        const championId = current.championIds[0];
+        if (!championId) return;
+
+        const turnIndex = navigatorContext().events.filter(
+            (event) => event.event_type === "ban" || event.event_type === "pick"
+        ).length;
+
+        if (current.actionType === "pick") {
+            emitPick(draftId, championId, turnIndex);
+        } else {
+            emitBan(draftId, championId, turnIndex);
+        }
+    };
+
+    const handleOpenSwap = (_path: number[]) => {
+        // Wired in Task 12.
+    };
+
+    const handleOpenBranch = (_path: number[]) => {
+        // Wired in Task 13.
+    };
+
     return (
         <div
             class="grid h-full w-full"
@@ -90,6 +134,10 @@ const NavigatorDrafting: Component = () => {
                     }))}
                     panRequest={panRequest()}
                     onNodeClick={handleNodeClick}
+                    onPromoteToScenario={handlePromoteToScenario}
+                    onConfirmProjectedPick={handleConfirmProjectedPick}
+                    onOpenSwap={handleOpenSwap}
+                    onOpenBranch={handleOpenBranch}
                 />
 
                 <Show when={isStale()}>
