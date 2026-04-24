@@ -1,4 +1,5 @@
 import {
+    Accessor,
     Component,
     For,
     Show,
@@ -68,6 +69,13 @@ interface PositionedLink {
 interface ViewportSize {
     width: number;
     height: number;
+}
+
+interface DragState {
+    nodeKey: string;
+    startPageX: number;
+    startPageY: number;
+    startedDragging: boolean;
 }
 
 interface FitTransform {
@@ -363,9 +371,11 @@ const TreeNodeComponent: Component<{
     glowFilterId: string;
     latestGlowFilterId: string;
     onClick: (path: number[]) => void;
+    onPointerDown: (event: PointerEvent, nodeKeyStr: string) => void;
     onToggleExpand: (path: number[]) => void;
     isConfirmed: boolean;
     isLatestConfirmed: boolean;
+    justDragged: Accessor<boolean>;
 }> = (props) => {
     const clipSeed = createUniqueId();
     const championIds = createMemo(() => props.node.data.championIds);
@@ -434,6 +444,7 @@ const TreeNodeComponent: Component<{
     const isCollapsed = createMemo(() => props.node.data.collapsedChildCount > 0);
 
     const handleNodeClick = () => {
+        if (props.justDragged()) return;
         // If collapsed, expand to reveal children
         if (isCollapsed()) {
             props.onToggleExpand(props.node.data.path);
@@ -448,6 +459,9 @@ const TreeNodeComponent: Component<{
             class="transition-transform duration-200 ease-out"
             transform={`translate(${props.node.x} ${props.node.y})`}
             opacity={strokeOpacity()}
+            onPointerDown={(e) => {
+                props.onPointerDown(e, nodeKey(props.node.data));
+            }}
         >
             <title>{championLabel()}</title>
             <defs>
@@ -724,6 +738,9 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
     const [treeFrozen, setTreeFrozen] = createSignal(false);
     const [frozenTree, setFrozenTree] = createSignal<LayoutNode | null>(null);
     const [viewportLocked, setViewportLocked] = createSignal(import.meta.env.DEV);
+    const [dragState, setDragState] = createSignal<DragState | null>(null);
+    const [justDragged, setJustDragged] = createSignal(false);
+    const DRAG_THRESHOLD_PX = 5;
 
     const effectiveTreeData = createMemo<LayoutNode | null>(() => {
         if (import.meta.env.DEV && treeFrozen()) {
@@ -951,6 +968,64 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
 
         const rect = svgRef.getBoundingClientRect();
         panzoomInstance.smoothZoom(rect.width / 2, rect.height / 2, scaleMultiplier);
+    };
+
+    function getCursorAngleFromRoot(pageX: number, pageY: number): number | null {
+        if (!svgGroupRef || !svgRef) return null;
+        const rootPositioned = nodes().find((n) => n.depth === 0);
+        if (!rootPositioned) return null;
+        const transform = panzoomInstance?.getTransform();
+        if (!transform) return null;
+        const svgRect = svgRef.getBoundingClientRect();
+        const relX = pageX - svgRect.left;
+        const relY = pageY - svgRect.top;
+        const groupX = (relX - transform.x) / transform.scale;
+        const groupY = (relY - transform.y) / transform.scale;
+        const dx = groupX - rootPositioned.x;
+        const dy = groupY - rootPositioned.y;
+        if (dx === 0 && dy === 0) return null;
+        return Math.atan2(dy, dx) + Math.PI / 2;
+    }
+
+    const handleNodePointerDown = (event: PointerEvent, nodeKeyStr: string) => {
+        if (event.button !== 0) return;
+        setDragState({
+            nodeKey: nodeKeyStr,
+            startPageX: event.pageX,
+            startPageY: event.pageY,
+            startedDragging: false
+        });
+
+        const handleMove = (moveEvent: PointerEvent) => {
+            const current = dragState();
+            if (!current) return;
+            const dx = moveEvent.pageX - current.startPageX;
+            const dy = moveEvent.pageY - current.startPageY;
+            const dist2 = dx * dx + dy * dy;
+            if (!current.startedDragging && dist2 < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) {
+                return;
+            }
+            if (!current.startedDragging) {
+                setDragState({ ...current, startedDragging: true });
+            }
+            const angle = getCursorAngleFromRoot(moveEvent.pageX, moveEvent.pageY);
+            if (angle === null) return;
+            setLayoutOverride(current.nodeKey, { angle });
+        };
+
+        const handleUp = () => {
+            window.removeEventListener("pointermove", handleMove);
+            window.removeEventListener("pointerup", handleUp);
+            const state = dragState();
+            if (state?.startedDragging) {
+                setJustDragged(true);
+                queueMicrotask(() => setJustDragged(false));
+            }
+            setDragState(null);
+        };
+
+        window.addEventListener("pointermove", handleMove);
+        window.addEventListener("pointerup", handleUp);
     };
 
     onMount(() => {
@@ -1195,12 +1270,14 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                                 glowFilterId={`tree-glow-${svgId}`}
                                 latestGlowFilterId={`latest-glow-${svgId}`}
                                 onClick={props.onNodeClick}
+                                onPointerDown={handleNodePointerDown}
                                 onToggleExpand={toggleExpand}
                                 isConfirmed={node.data.path.length < props.confirmedDepth}
                                 isLatestConfirmed={
                                     pathKey(node.data.path) ===
                                     pathKey(latestConfirmedPath())
                                 }
+                                justDragged={justDragged}
                             />
                         )}
                     </For>
