@@ -878,3 +878,21 @@ export const PoolJsonImportSchema = z.object({
   }),
 });
 export type PoolJsonImport = z.infer<typeof PoolJsonImportSchema>;
+
+// =============================================================================
+// Navigator Series Schemas
+// =============================================================================
+
+export const SeriesLengthSchema = z.union([
+  z.literal(1),
+  z.literal(3),
+  z.literal(5),
+  z.literal(7),
+]);
+export type SeriesLength = z.infer<typeof SeriesLengthSchema>;
+
+export const SideSwapModeSchema = z.enum(["auto", "manual"]);
+export type SideSwapMode = z.infer<typeof SideSwapModeSchema>;
+
+export const OurSideOverrideSchema = z.enum(["blue", "red"]).nullable();
+export type OurSideOverride = z.infer<typeof OurSideOverrideSchema>;
