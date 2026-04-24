@@ -69,7 +69,7 @@ export function backgroundActions(
 ): ContextMenuAction[] {
     return [
         {
-            label: "Reset all layout",
+            label: "Reset full layout",
             action: onResetAll
         }
     ];
