@@ -27,7 +27,7 @@ router.get("/", protect, async (req, res) => {
       include: [
         {
           model: NavigatorDraft,
-          attributes: ["id", "game_number", "status"],
+          attributes: ["id", "game_number", "status", "our_side_override"],
         },
       ],
       order: [["createdAt", "DESC"]],
@@ -49,6 +49,8 @@ router.post("/", protect, async (req, res) => {
       red_pool,
       opponent_pool,
       draft_mode,
+      series_length,
+      side_swap_mode,
     } = req.body;
 
     const session = await NavigatorSession.create({
@@ -59,6 +61,8 @@ router.post("/", protect, async (req, res) => {
       red_pool,
       opponent_pool,
       draft_mode,
+      series_length,
+      side_swap_mode,
     });
 
     await NavigatorDraft.create({
@@ -70,7 +74,7 @@ router.post("/", protect, async (req, res) => {
       include: [
         {
           model: NavigatorDraft,
-          attributes: ["id", "game_number", "status"],
+          attributes: ["id", "game_number", "status", "our_side_override"],
         },
       ],
       order: [[NavigatorDraft, "game_number", "ASC"]],
@@ -132,19 +136,27 @@ router.patch("/:id", protect, async (req, res) => {
       "red_pool",
       "opponent_pool",
       "draft_mode",
+      "series_length",
+      "side_swap_mode",
       "status",
     ];
+    const seriesLockedFields = ["series_length", "side_swap_mode"];
+    const isLocked = result.session.status !== "setup";
 
     let configChanged = false;
     for (const field of allowedFields) {
-      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
-        const prev = result.session[field];
-        const next = req.body[field];
-        if (CONFIG_FIELDS.has(field) && JSON.stringify(prev) !== JSON.stringify(next)) {
-          configChanged = true;
-        }
-        result.session[field] = next;
+      if (!Object.prototype.hasOwnProperty.call(req.body, field)) continue;
+      if (isLocked && seriesLockedFields.includes(field)) {
+        return res
+          .status(400)
+          .json({ error: `Cannot modify ${field} after draft has started` });
       }
+      const prev = result.session[field];
+      const next = req.body[field];
+      if (CONFIG_FIELDS.has(field) && JSON.stringify(prev) !== JSON.stringify(next)) {
+        configChanged = true;
+      }
+      result.session[field] = next;
     }
 
     if (configChanged) {
