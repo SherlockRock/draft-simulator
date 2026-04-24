@@ -124,6 +124,26 @@ async function findLatestSnapshot(draftId) {
   });
 }
 
+async function listCompletedGames(sessionId, currentDraftId) {
+  const drafts = await NavigatorDraft.findAll({
+    where: { session_id: sessionId, status: "completed" },
+    order: [["game_number", "ASC"]],
+  });
+
+  const result = [];
+  for (const draft of drafts) {
+    if (draft.id === currentDraftId) continue;
+    const events = await listDraftEvents(draft.id);
+    const snapshot = await findLatestSnapshot(draft.id);
+    result.push({
+      draft,
+      events,
+      snapshot: toClientSnapshot(snapshot),
+    });
+  }
+  return result;
+}
+
 function toClientSnapshot(snapshot) {
   if (!snapshot) {
     return null;
@@ -198,6 +218,10 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       const draft = await findCurrentDraft(sessionId);
       const events = draft ? await listDraftEvents(draft.id) : [];
       const snapshot = draft ? await findLatestSnapshot(draft.id) : null;
+      const completedGames = await listCompletedGames(
+        sessionId,
+        draft ? draft.id : null,
+      );
 
       socket.join(getRoomName(sessionId));
       socket.emit("navigatorJoinResponse", {
@@ -206,6 +230,7 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
         draft,
         events,
         snapshot: toClientSnapshot(snapshot),
+        completedGames,
       });
     } catch (error) {
       console.error("Error in navigatorJoin:", error);
