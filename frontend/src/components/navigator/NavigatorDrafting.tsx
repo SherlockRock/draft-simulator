@@ -139,17 +139,21 @@ const NavigatorDrafting: Component = () => {
         const draftId = navigatorContext().draft?.id;
         if (!draftId) return;
 
-        const championId = current.championIds[0];
-        if (!championId) return;
+        const championIds = current.championIds;
+        if (championIds.length === 0) return;
 
         const turnIndex = navigatorContext().events.filter(
             (event) => event.event_type === "ban" || event.event_type === "pick"
         ).length;
 
         if (current.actionType === "pick") {
-            emitPick(draftId, championId, turnIndex);
+            // Pair-pick nodes carry two champions across two adjacent slots; emit both.
+            emitPick(draftId, championIds[0], turnIndex);
+            if (championIds.length > 1) {
+                emitPick(draftId, championIds[1], turnIndex + 1);
+            }
         } else {
-            emitBan(draftId, championId, turnIndex);
+            emitBan(draftId, championIds[0], turnIndex);
         }
     };
 

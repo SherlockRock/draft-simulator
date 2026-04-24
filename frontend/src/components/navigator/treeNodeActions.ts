@@ -64,10 +64,9 @@ export function actionsForNode(ctx: TreeActionContext): ContextMenuAction[] {
 }
 
 export function backgroundActions(
-    hasAnyOverrides: boolean,
+    _hasAnyOverrides: boolean,
     onResetAll: () => void
 ): ContextMenuAction[] {
-    if (!hasAnyOverrides) return [];
     return [
         {
             label: "Reset all layout",
