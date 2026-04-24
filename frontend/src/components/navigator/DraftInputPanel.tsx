@@ -99,8 +99,16 @@ const SlotCircle: Component<{
     );
 };
 
-const DraftInputPanel: Component = () => {
+interface DraftInputPanelProps {
+    mode?: "active" | "review";
+    reviewEvents?: NavigatorEventData[];
+    crossGameExcluded?: Map<string, number>;
+}
+
+const DraftInputPanel: Component<DraftInputPanelProps> = (props) => {
     const { navigatorContext, emitBan, emitPick, emitUndo } = useNavigatorContext();
+
+    const resolvedMode = () => props.mode ?? "active";
 
     const filterState = useMultiFilterableItems({
         items: champions,
@@ -109,11 +117,16 @@ const DraftInputPanel: Component = () => {
 
     const filteredChampions = createMemo(() => filterState.filteredItems());
 
-    const draftEvents = createMemo(() =>
-        navigatorContext().events.filter(
+    const draftEvents = createMemo(() => {
+        if (resolvedMode() === "review") {
+            return (props.reviewEvents ?? []).filter(
+                (event) => event.event_type === "ban" || event.event_type === "pick"
+            );
+        }
+        return navigatorContext().events.filter(
             (event) => event.event_type === "ban" || event.event_type === "pick"
-        )
-    );
+        );
+    });
 
     const turnIndex = createMemo(() => draftEvents().length);
     const currentTurn = createMemo(() => PANEL_TURN_SEQUENCE[turnIndex()] ?? null);
@@ -137,6 +150,10 @@ const DraftInputPanel: Component = () => {
             session.red_pool,
             usedChampionIds()
         );
+    };
+
+    const crossGameExcludedFor = (championId: string): number | null => {
+        return props.crossGameExcluded?.get(championId) ?? null;
     };
 
     const slotStates = createMemo<DraftSlotState[]>(() =>
@@ -334,81 +351,103 @@ const DraftInputPanel: Component = () => {
                     </div>
                 </section>
 
-                <section class="flex min-h-0 flex-1 flex-col rounded-xl border border-slate-700/50 bg-slate-900 p-4">
-                    <div class="text-sm font-semibold text-slate-300">
-                        Champion Picker
-                    </div>
-                    <div class="mt-3">
-                        <FilterBar
-                            searchText={filterState.searchText}
-                            onSearchChange={filterState.setSearchText}
-                            searchPlaceholder="Search champions..."
-                        />
-                        <RoleFilter
-                            categories={filterState.categories}
-                            selectedCategories={filterState.selectedCategories}
-                            onToggle={filterState.toggleCategory}
-                            onClearAll={filterState.clearCategories}
-                            theme="neutral"
-                        />
-                    </div>
-
-                    <div class="mt-4 flex-1 overflow-y-auto">
-                        <div class="grid grid-cols-6 gap-2">
-                            <For each={filteredChampions()}>
-                                {({ item: champion }) => {
-                                    const state = () => pickerStateFor(champion.id);
-                                    const isDisabled = () =>
-                                        state() === "picked" ||
-                                        !currentTurn() ||
-                                        !navigatorContext().draft?.id;
-
-                                    return (
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                handleChampionSelect(champion.id)
-                                            }
-                                            disabled={isDisabled()}
-                                            title={champion.name}
-                                            class={`relative overflow-hidden rounded-full border-2 bg-slate-800 transition-all ${
-                                                state() === "picked"
-                                                    ? "cursor-not-allowed border-slate-700 opacity-30"
-                                                    : state() === "own-team"
-                                                      ? currentTurn()?.side === "blue"
-                                                          ? "border-blue-400 hover:-translate-y-0.5"
-                                                          : "border-red-400 hover:-translate-y-0.5"
-                                                      : state() === "other-team"
-                                                        ? currentTurn()?.side === "blue"
-                                                            ? "border-red-400/60 hover:-translate-y-0.5"
-                                                            : "border-blue-400/60 hover:-translate-y-0.5"
-                                                        : state() === "shared"
-                                                          ? "border-purple-400 hover:-translate-y-0.5"
-                                                          : "border-slate-600 hover:border-slate-400 hover:-translate-y-0.5"
-                                            }`}
-                                        >
-                                            <ChampionPortrait
-                                                src={champion.img}
-                                                alt={champion.name}
-                                                class="h-10 w-10 object-cover"
-                                            />
-                                        </button>
-                                    );
-                                }}
-                            </For>
+                <Show when={resolvedMode() === "active"}>
+                    <section class="flex min-h-0 flex-1 flex-col rounded-xl border border-slate-700/50 bg-slate-900 p-4">
+                        <div class="text-sm font-semibold text-slate-300">
+                            Champion Picker
                         </div>
-                    </div>
-                </section>
+                        <div class="mt-3">
+                            <FilterBar
+                                searchText={filterState.searchText}
+                                onSearchChange={filterState.setSearchText}
+                                searchPlaceholder="Search champions..."
+                            />
+                            <RoleFilter
+                                categories={filterState.categories}
+                                selectedCategories={filterState.selectedCategories}
+                                onToggle={filterState.toggleCategory}
+                                onClearAll={filterState.clearCategories}
+                                theme="neutral"
+                            />
+                        </div>
 
-                <button
-                    type="button"
-                    onClick={handleUndo}
-                    disabled={draftEvents().length === 0 || !navigatorContext().draft?.id}
-                    class="mt-auto flex items-center justify-center gap-2 rounded-lg border border-slate-700/50 bg-slate-900 px-4 py-3 text-sm font-medium text-slate-300 transition-colors hover:border-slate-600 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                    <Undo2 size={16} />
-                    <span>Undo Last</span>
-                </button>
+                        <div class="mt-4 flex-1 overflow-y-auto">
+                            <div class="grid grid-cols-6 gap-2">
+                                <For each={filteredChampions()}>
+                                    {({ item: champion }) => {
+                                        const state = () => pickerStateFor(champion.id);
+                                        const excludedGame = () =>
+                                            crossGameExcludedFor(champion.id);
+                                        const isDisabled = () =>
+                                            state() === "picked" ||
+                                            excludedGame() !== null ||
+                                            !currentTurn() ||
+                                            !navigatorContext().draft?.id;
+                                        const tooltip = () => {
+                                            const gn = excludedGame();
+                                            if (gn === null) return champion.name;
+                                            const mode =
+                                                navigatorContext().session
+                                                    ?.draft_mode === "ironman"
+                                                    ? "ironman"
+                                                    : "fearless";
+                                            return `${champion.name} — picked in Game ${gn} (${mode})`;
+                                        };
+
+                                        return (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    handleChampionSelect(champion.id)
+                                                }
+                                                disabled={isDisabled()}
+                                                title={tooltip()}
+                                                class={`relative overflow-hidden rounded-full border-2 bg-slate-800 transition-all ${
+                                                    excludedGame() !== null
+                                                        ? "cursor-not-allowed border-slate-700 opacity-30"
+                                                        : state() === "picked"
+                                                          ? "cursor-not-allowed border-slate-700 opacity-30"
+                                                          : state() === "own-team"
+                                                            ? currentTurn()?.side ===
+                                                              "blue"
+                                                                ? "border-blue-400 hover:-translate-y-0.5"
+                                                                : "border-red-400 hover:-translate-y-0.5"
+                                                            : state() ===
+                                                                "other-team"
+                                                              ? currentTurn()?.side ===
+                                                                "blue"
+                                                                  ? "border-red-400/60 hover:-translate-y-0.5"
+                                                                  : "border-blue-400/60 hover:-translate-y-0.5"
+                                                              : state() === "shared"
+                                                                ? "border-purple-400 hover:-translate-y-0.5"
+                                                                : "border-slate-600 hover:border-slate-400 hover:-translate-y-0.5"
+                                                }`}
+                                            >
+                                                <ChampionPortrait
+                                                    src={champion.img}
+                                                    alt={champion.name}
+                                                    class="h-10 w-10 object-cover"
+                                                />
+                                            </button>
+                                        );
+                                    }}
+                                </For>
+                            </div>
+                        </div>
+                    </section>
+                </Show>
+
+                <Show when={resolvedMode() === "active"}>
+                    <button
+                        type="button"
+                        onClick={handleUndo}
+                        disabled={draftEvents().length === 0 || !navigatorContext().draft?.id}
+                        class="mt-auto flex items-center justify-center gap-2 rounded-lg border border-slate-700/50 bg-slate-900 px-4 py-3 text-sm font-medium text-slate-300 transition-colors hover:border-slate-600 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                        <Undo2 size={16} />
+                        <span>Undo Last</span>
+                    </button>
+                </Show>
             </div>
         </div>
     );
