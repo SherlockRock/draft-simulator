@@ -3,6 +3,7 @@ const path = require("path");
 const { pathToFileURL } = require("url");
 
 const NavigatorSnapshot = require("../models/NavigatorSnapshot");
+const { getCrossGameExclusions } = require("../utils/navigatorSeriesRestrictions");
 
 const ENGINE_INDEX_PATH = path.resolve(
   __dirname,
@@ -151,7 +152,7 @@ function sortEvents(events) {
   });
 }
 
-async function buildEngineRequest(session, events) {
+async function buildEngineRequest(session, events, exclusions) {
   const turnSequence = await loadTurnSequence();
   const orderedEvents = sortEvents(events);
   const realEvents = orderedEvents.filter(isRealDraftEvent);
@@ -185,6 +186,7 @@ async function buildEngineRequest(session, events) {
   };
   const bluePool = session.blue_pool || EMPTY_TEAM_POOL;
   const redPool = session.red_pool || EMPTY_TEAM_POOL;
+  const excluded = new Set(exclusions || []);
   const flattenDisplay = (d) => [
     ...(d.top || []),
     ...(d.jungle || []),
@@ -196,9 +198,11 @@ async function buildEngineRequest(session, events) {
 
   const rawSearchPool = Array.from(
     new Set([...(bluePool.search || []), ...(redPool.search || [])])
-  );
+  ).filter((id) => !excluded.has(id));
   const searchPool = capSearchPool(rawSearchPool);
-  const coreTier = flattenDisplay(ourPool.display || {});
+  const coreTier = flattenDisplay(ourPool.display || {}).filter(
+    (id) => !excluded.has(id)
+  );
 
   return {
     draftState: {
@@ -311,7 +315,8 @@ async function computeForDraft(navigatorDraft, session, events, version, io) {
     throw new Error("version is required");
   }
 
-  const request = await buildEngineRequest(session, events);
+  const exclusions = await getCrossGameExclusions(session, navigatorDraft);
+  const request = await buildEngineRequest(session, events, exclusions);
   const lastEventId = getLastEventId(events);
   const snapshot = await enqueue(request, navigatorDraft, lastEventId, version);
   return { version, snapshot };
