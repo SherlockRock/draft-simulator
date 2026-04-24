@@ -21,7 +21,8 @@ const NavigatorDrafting: Component = () => {
         panRequest,
         emitPick,
         emitBan,
-        swapChampion
+        swapChampion,
+        createBranch
     } = useNavigatorContext();
     const [highlightedTreePath, setHighlightedTreePath] = createSignal<number[] | null>(
         null
@@ -29,6 +30,10 @@ const NavigatorDrafting: Component = () => {
     const [swapTarget, setSwapTarget] = createSignal<{
         path: number[];
         oldChampionId: string;
+        contextLabel: string;
+    } | null>(null);
+    const [branchTarget, setBranchTarget] = createSignal<{
+        pathToParent: number[];
         contextLabel: string;
     } | null>(null);
 
@@ -58,6 +63,20 @@ const NavigatorDrafting: Component = () => {
         const session = navigatorContext().session;
         if (!session) return "neutral";
         const turnIndex = swapTarget()?.path.length ?? 0;
+        const turnInfo = TURN_SEQUENCE[turnIndex - 1];
+        return getPickerState(
+            championId,
+            turnInfo?.side ?? null,
+            session.blue_pool,
+            session.red_pool,
+            usedChampionIdSet()
+        );
+    };
+
+    const branchColoringFor = (championId: string): ChampionColorState => {
+        const session = navigatorContext().session;
+        if (!session) return "neutral";
+        const turnIndex = (branchTarget()?.pathToParent.length ?? 0) + 1;
         const turnInfo = TURN_SEQUENCE[turnIndex - 1];
         return getPickerState(
             championId,
@@ -160,8 +179,15 @@ const NavigatorDrafting: Component = () => {
         });
     };
 
-    const handleOpenBranch = (_path: number[]) => {
-        // Wired in Task 13.
+    const handleOpenBranch = (path: number[]) => {
+        const turnInfo = TURN_SEQUENCE[path.length - 1];
+        const label = turnInfo
+            ? `${turnInfo.side.toUpperCase()} ${turnInfo.type.toUpperCase()} ${path.length}`
+            : `TURN ${path.length}`;
+        setBranchTarget({
+            pathToParent: path.slice(0, -1),
+            contextLabel: label
+        });
     };
 
     return (
@@ -235,6 +261,26 @@ const NavigatorDrafting: Component = () => {
                         actionVerb="Swap to"
                         disabledChampionIds={usedChampionIdSet()}
                         championColoring={(id) => swapColoringFor(id)}
+                    />
+                )}
+            </Show>
+            <Show when={branchTarget()}>
+                {(target) => (
+                    <ChampionPicker
+                        isOpen={true}
+                        onClose={() => setBranchTarget(null)}
+                        onSelect={(newChampionId) => {
+                            const t = target();
+                            createBranch({
+                                pathToParent: t.pathToParent,
+                                newChampionId
+                            });
+                            setBranchTarget(null);
+                        }}
+                        contextLabel={target().contextLabel}
+                        actionVerb="Add branch with"
+                        disabledChampionIds={usedChampionIdSet()}
+                        championColoring={(id) => branchColoringFor(id)}
                     />
                 )}
             </Show>
