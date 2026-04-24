@@ -3,6 +3,7 @@ const NavigatorDraft = require("../models/NavigatorDraft");
 const NavigatorEvent = require("../models/NavigatorEvent");
 const NavigatorSnapshot = require("../models/NavigatorSnapshot");
 const { computeForDraft } = require("../services/navigatorEngine");
+const { getOurSideForGame } = require("../utils/navigatorSide");
 
 // Per-session engine job version. Bumped on every pick/ban/undo. Results whose
 // job version is behind the session's current version are dropped.
@@ -429,7 +430,7 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
   wrap("navigatorNextGame", async (data = {}) => {
     try {
-      const { sessionId } = data;
+      const { sessionId, ourSideOverride } = data;
 
       if (!sessionId) {
         emitNavigatorError(socket, "sessionId is required");
@@ -442,16 +443,46 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       }
 
       const currentDraft = await findCurrentDraft(sessionId);
-      if (currentDraft) {
-        currentDraft.status = "completed";
-        await currentDraft.save();
+      if (!currentDraft) {
+        emitNavigatorError(socket, "No current draft for this session");
+        return;
       }
 
-      const newDraft = await NavigatorDraft.create({
+      if (currentDraft.status !== "completed") {
+        emitNavigatorError(socket, "Current game must be completed first");
+        return;
+      }
+
+      const nextGameNumber = currentDraft.game_number + 1;
+      if (nextGameNumber > session.series_length) {
+        emitNavigatorError(socket, "Series already complete");
+        return;
+      }
+
+      // Validate manual-mode override:
+      //  - manual + override present => write override
+      //  - manual + no override      => derive (defaults to session.our_side)
+      //  - auto   + override present => ignore (auto is authoritative)
+      //  - auto   + no override      => derive (alternates)
+      const newDraftAttrs = {
         session_id: sessionId,
-        game_number: currentDraft ? currentDraft.game_number + 1 : 1,
+        game_number: nextGameNumber,
         status: "active",
-      });
+        our_side_override: null,
+      };
+
+      if (session.side_swap_mode === "manual") {
+        if (ourSideOverride === "blue" || ourSideOverride === "red") {
+          newDraftAttrs.our_side_override = ourSideOverride;
+        }
+      }
+
+      const newDraft = await NavigatorDraft.create(newDraftAttrs);
+
+      const derivedSide = getOurSideForGame(session, newDraft);
+      console.log(
+        `[nav] Game ${nextGameNumber} started for session ${sessionId} on ${derivedSide}`,
+      );
 
       await emitDraftUpdate(io, sessionId, {
         session,
