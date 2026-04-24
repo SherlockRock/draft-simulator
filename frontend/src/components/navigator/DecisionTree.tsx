@@ -15,6 +15,7 @@ import {
 import createPanZoom, { type PanZoom } from "panzoom";
 import { ContextMenu } from "../ContextMenu";
 import { useNavigatorContext } from "../../contexts/NavigatorContext";
+import toast from "solid-toast";
 import { resolveChampion } from "../../utils/constants";
 import { ContextMenuAction } from "../../utils/types";
 import {
@@ -951,7 +952,10 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
             .filter((name): name is string => !!name);
         if (names.length === 0) return;
         const text = names.join(" + ");
-        void navigator.clipboard?.writeText(text).catch(() => undefined);
+        void navigator.clipboard
+            ?.writeText(text)
+            .then(() => toast.success(`Copied "${text}"`))
+            .catch(() => toast.error("Failed to copy to clipboard"));
     };
 
     const resetNodeLayout = (path: number[]) => {

@@ -42,7 +42,7 @@ export const ContextMenu = (props: ContextMenuProps) => {
 
     return (
         <div
-            class="fixed z-50 min-w-48 rounded border border-darius-border bg-darius-card-hover py-1 shadow-lg"
+            class="fixed z-50 w-max min-w-48 max-w-xs rounded border border-darius-border bg-darius-card-hover py-1 shadow-lg"
             style={{
                 left: `${props.position.x}px`,
                 top: `${props.position.y}px`
