@@ -343,14 +343,21 @@ export const DEFAULT_RADIAL_CONFIG: RadialLayoutConfig = {
 };
 
 export function makeRadialTreeLayout(
-    config: RadialLayoutConfig = DEFAULT_RADIAL_CONFIG
+    config: RadialLayoutConfig = DEFAULT_RADIAL_CONFIG,
+    getOverrideAngle?: (node: LayoutNode) => number | undefined
 ): LayoutFn {
     return <T extends LayoutNode>(
         treeData: T,
         nodeWidth: number,
         nodeHeight: number
     ): LayoutResult<T> =>
-        radialTreeLayoutWithConfig(treeData, nodeWidth, nodeHeight, config);
+        radialTreeLayoutWithConfig(
+            treeData,
+            nodeWidth,
+            nodeHeight,
+            config,
+            getOverrideAngle
+        );
 }
 
 export const radialTreeLayout: LayoutFn = <T extends LayoutNode>(
@@ -364,7 +371,8 @@ function radialTreeLayoutWithConfig<T extends LayoutNode>(
     treeData: T,
     nodeWidth: number,
     nodeHeight: number,
-    config: RadialLayoutConfig
+    config: RadialLayoutConfig,
+    getOverrideAngle?: (node: LayoutNode) => number | undefined
 ): LayoutResult<T> {
     const nodeRadius = Math.max(nodeWidth, nodeHeight) / 2;
     const ringSpacing =
@@ -533,6 +541,11 @@ function radialTreeLayoutWithConfig<T extends LayoutNode>(
         centerAngle: number,
         availableSpan: number
     ): void {
+        const override = getOverrideAngle?.(measured.data);
+        if (override !== undefined && measured.depth > 0) {
+            centerAngle = override;
+        }
+
         const radius = measured.radius;
         const x = radius * Math.cos(centerAngle - Math.PI / 2);
         const y = radius * Math.sin(centerAngle - Math.PI / 2);
