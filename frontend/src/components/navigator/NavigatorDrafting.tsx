@@ -9,6 +9,8 @@ import { eventsToConfirmedTurns } from "../../utils/treeReconcile";
 import DraftInputPanel from "./DraftInputPanel";
 import DecisionTree from "./DecisionTree";
 import ScenarioLanes from "./ScenarioLanes";
+import { SeriesTabStrip } from "./SeriesTabStrip";
+import { BetweenGamesPanel } from "./BetweenGamesPanel";
 
 const NavigatorDrafting: Component = () => {
     const {
@@ -22,7 +24,11 @@ const NavigatorDrafting: Component = () => {
         emitPick,
         emitBan,
         swapChampion,
-        createBranch
+        createBranch,
+        viewingGameNumber,
+        viewGame,
+        startNextGame,
+        updateSessionPools
     } = useNavigatorContext();
     const [highlightedTreePath, setHighlightedTreePath] = createSignal<number[] | null>(
         null
@@ -37,13 +43,71 @@ const NavigatorDrafting: Component = () => {
         contextLabel: string;
     } | null>(null);
 
-    const treeData = syntheticTree;
-    const scenarios = createMemo(() => navigatorContext().snapshot?.scenarios ?? []);
-    const confirmedDepth = createMemo(
-        () => eventsToConfirmedTurns(navigatorContext().events).length + 1
-    );
+    const session = () => navigatorContext().session;
+    const activeDraft = () => navigatorContext().draft;
+    const completedGames = () => navigatorContext().completedGames;
+
+    const viewingArchive = createMemo(() => {
+        const gn = viewingGameNumber();
+        if (gn === null) return null;
+        return completedGames().find((c) => c.draft.game_number === gn) ?? null;
+    });
+
+    const showBetweenGamesPanel = createMemo(() => {
+        if (viewingGameNumber() !== null) return false;
+        const draft = activeDraft();
+        if (!draft) return false;
+        return draft.status === "completed";
+    });
+
+    const isSeriesComplete = createMemo(() => {
+        const s = session();
+        const draft = activeDraft();
+        if (!s || !draft) return false;
+        return draft.status === "completed" && draft.game_number >= s.series_length;
+    });
+
+    const crossGameExcluded = createMemo(() => {
+        const map = new Map<string, number>();
+        const s = session();
+        if (!s || s.draft_mode === "standard") return map;
+        const includeBans = s.draft_mode === "ironman";
+        for (const archive of completedGames()) {
+            for (const event of archive.events) {
+                if (
+                    event.event_type === "pick" ||
+                    (includeBans && event.event_type === "ban")
+                ) {
+                    if (!map.has(event.champion_id)) {
+                        map.set(event.champion_id, archive.draft.game_number);
+                    }
+                }
+            }
+        }
+        return map;
+    });
+
+    const treeData = createMemo(() => {
+        const archive = viewingArchive();
+        if (archive) return archive.snapshot?.tree ?? null;
+        return syntheticTree();
+    });
+
+    const scenarios = createMemo(() => {
+        const archive = viewingArchive();
+        if (archive) return archive.snapshot?.scenarios ?? [];
+        return navigatorContext().snapshot?.scenarios ?? [];
+    });
+
+    const confirmedDepth = createMemo(() => {
+        const archive = viewingArchive();
+        const events = archive ? archive.events : navigatorContext().events;
+        return eventsToConfirmedTurns(events).length + 1;
+    });
+
     const isStale = createMemo(
         () =>
+            viewingGameNumber() === null &&
             navigatorContext().snapshot === null &&
             navigatorContext().events.length > 0 &&
             !isComputingFromContext()
@@ -196,56 +260,118 @@ const NavigatorDrafting: Component = () => {
 
     return (
         <>
-            <div
-                class="grid h-full w-full"
-                style={{
-                    "grid-template-columns": "300px 1fr",
-                    "grid-template-rows": "1fr 280px"
-                }}
-            >
-                <div class="row-span-2 overflow-y-auto border-r border-slate-700/50">
-                    <DraftInputPanel />
-                </div>
+            <div class="flex h-full w-full flex-col">
+                <Show when={session()}>
+                    {(s) => (
+                        <SeriesTabStrip
+                            session={s()}
+                            activeDraft={activeDraft()}
+                            completedGames={completedGames()}
+                            viewingGameNumber={viewingGameNumber()}
+                            onViewGame={viewGame}
+                        />
+                    )}
+                </Show>
 
-                <div class="relative min-h-0 bg-slate-900/20">
-                    <DecisionTree
-                        treeData={treeData()}
-                        isComputing={isComputingFromContext()}
-                        highlightedPath={highlightedTreePath()}
-                        confirmedDepth={confirmedDepth()}
-                        scenarioPaths={scenarios().map((scenario, index) => ({
-                            path: scenario.treePath,
-                            tier:
-                                selectedScenarioIndex() === index ? "selected" : "unselected"
-                        }))}
-                        panRequest={panRequest()}
-                        onNodeClick={handleNodeClick}
-                        onPromoteToScenario={handlePromoteToScenario}
-                        onConfirmProjectedPick={handleConfirmProjectedPick}
-                        onOpenSwap={handleOpenSwap}
-                        onOpenBranch={handleOpenBranch}
+                <div
+                    class="grid min-h-0 w-full flex-1"
+                    style={{
+                        "grid-template-columns": "300px 1fr",
+                        "grid-template-rows": "1fr 280px"
+                    }}
+                >
+                    <div class="row-span-2 overflow-y-auto border-r border-slate-700/50">
+                        <Show
+                            when={showBetweenGamesPanel()}
+                            fallback={
+                                <DraftInputPanel
+                                    mode={
+                                        viewingGameNumber() !== null ? "review" : "active"
+                                    }
+                                    reviewEvents={viewingArchive()?.events}
+                                    crossGameExcluded={crossGameExcluded()}
+                                />
+                            }
+                        >
+                            <Show when={session() && activeDraft()}>
+                                {(_) => {
+                                    const s = session();
+                                    const d = activeDraft();
+                                    if (!s || !d) return null;
+                                    return (
+                                        <BetweenGamesPanel
+                                            session={s}
+                                            completedDraft={d}
+                                            isSeriesComplete={isSeriesComplete()}
+                                            onStartNextGame={(override) =>
+                                                startNextGame(override)
+                                            }
+                                            onSavePools={(blue, red) =>
+                                                updateSessionPools(blue, red)
+                                            }
+                                        />
+                                    );
+                                }}
+                            </Show>
+                        </Show>
+                    </div>
+
+                    <div class="relative min-h-0 bg-slate-900/20">
+                        <DecisionTree
+                            treeData={treeData()}
+                            isComputing={
+                                viewingGameNumber() === null
+                                    ? isComputingFromContext()
+                                    : false
+                            }
+                            highlightedPath={highlightedTreePath()}
+                            confirmedDepth={confirmedDepth()}
+                            scenarioPaths={scenarios().map((scenario, index) => ({
+                                path: scenario.treePath,
+                                tier:
+                                    selectedScenarioIndex() === index
+                                        ? "selected"
+                                        : "unselected"
+                            }))}
+                            panRequest={panRequest()}
+                            onNodeClick={handleNodeClick}
+                            onPromoteToScenario={handlePromoteToScenario}
+                            onConfirmProjectedPick={handleConfirmProjectedPick}
+                            onOpenSwap={handleOpenSwap}
+                            onOpenBranch={handleOpenBranch}
+                        />
+
+                        <Show when={isStale()}>
+                            <div class="pointer-events-none absolute right-4 top-4 flex items-center gap-2">
+                                <span class="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-amber-300">
+                                    Stale
+                                </span>
+                                <button
+                                    type="button"
+                                    class="pointer-events-auto rounded-full border border-slate-600 bg-slate-900/90 px-3 py-1 text-xs font-medium text-slate-200 transition-colors hover:border-slate-500 hover:bg-slate-800"
+                                    onClick={handleRetry}
+                                >
+                                    Retry
+                                </button>
+                            </div>
+                        </Show>
+
+                        <Show when={viewingGameNumber() !== null}>
+                            <div class="pointer-events-none absolute left-4 top-4 rounded-full border border-slate-500/40 bg-slate-900/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-200">
+                                Reviewing Game {viewingGameNumber()}
+                            </div>
+                        </Show>
+                    </div>
+
+                    <ScenarioLanes
+                        scenarios={scenarios()}
+                        isComputing={
+                            viewingGameNumber() === null
+                                ? isComputingFromContext()
+                                : false
+                        }
                     />
-
-                    <Show when={isStale()}>
-                        <div class="pointer-events-none absolute right-4 top-4 flex items-center gap-2">
-                            <span class="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-amber-300">
-                                Stale
-                            </span>
-                            <button
-                                type="button"
-                                class="pointer-events-auto rounded-full border border-slate-600 bg-slate-900/90 px-3 py-1 text-xs font-medium text-slate-200 transition-colors hover:border-slate-500 hover:bg-slate-800"
-                                onClick={handleRetry}
-                            >
-                                Retry
-                            </button>
-                        </div>
-                    </Show>
                 </div>
-
-                <ScenarioLanes
-                    scenarios={scenarios()}
-                    isComputing={isComputingFromContext()}
-                />
             </div>
             <Show when={swapTarget()}>
                 {(target) => (
