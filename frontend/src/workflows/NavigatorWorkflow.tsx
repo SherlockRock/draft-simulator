@@ -10,7 +10,7 @@ import {
 import { RouteSectionProps, useLocation, useParams } from "@solidjs/router";
 import { z } from "zod";
 import toast from "solid-toast";
-import { TeamPoolSchema } from "@draft-sim/shared-types";
+import { TeamPoolSchema, type TeamPool } from "@draft-sim/shared-types";
 import {
     NavigatorEventData,
     NavigatorPanRequest,
@@ -52,6 +52,7 @@ const NavigatorDraftDataSchema = z.object({
     session_id: z.string(),
     game_number: z.number(),
     status: z.enum(["active", "completed"]),
+    our_side_override: z.enum(["blue", "red"]).nullable(),
     draft_id: z.string().nullable()
 });
 
@@ -64,6 +65,8 @@ const NavigatorSessionDataSchema = z.object({
     red_pool: TeamPoolSchema,
     opponent_pool: z.array(z.string()).nullable(),
     draft_mode: z.enum(["standard", "fearless", "ironman"]),
+    series_length: z.union([z.literal(1), z.literal(3), z.literal(5), z.literal(7)]),
+    side_swap_mode: z.enum(["auto", "manual"]),
     status: z.enum(["setup", "active", "completed"]),
     config_version: z.number(),
     NavigatorDrafts: z.array(NavigatorDraftDataSchema).optional(),
@@ -154,12 +157,19 @@ const NavigatorSnapshotDataSchema = z.object({
     createdAt: z.string()
 });
 
+const NavigatorCompletedGameSchema = z.object({
+    draft: NavigatorDraftDataSchema,
+    events: z.array(NavigatorEventDataSchema),
+    snapshot: NavigatorSnapshotDataSchema.nullable()
+});
+
 const NavigatorJoinResponseSchema = z.object({
     success: z.boolean(),
     session: NavigatorSessionDataSchema.nullable().optional(),
     draft: NavigatorDraftDataSchema.nullable().optional(),
     events: z.array(NavigatorEventDataSchema).optional(),
-    snapshot: NavigatorSnapshotDataSchema.nullable().optional()
+    snapshot: NavigatorSnapshotDataSchema.nullable().optional(),
+    completedGames: z.array(NavigatorCompletedGameSchema).optional()
 });
 
 const NavigatorDraftUpdateSchema = z.object({
@@ -178,6 +188,7 @@ const initialNavigatorState = (): NavigatorSessionState => ({
     draft: null,
     events: [],
     snapshot: null,
+    completedGames: [],
     connected: false,
     error: null
 });
@@ -222,6 +233,9 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     const [syntheticTreeSignal, setSyntheticTreeSignal] =
         createSignal<NavigatorTreeNode | null>(null);
     const [lastEventIdSeen, setLastEventIdSeen] = createSignal<string | null>(null);
+    const [viewingGameNumber, setViewingGameNumberSignal] = createSignal<
+        number | null
+    >(null);
 
     interface CachedResult {
         tree: NavigatorTreeNode;
@@ -377,6 +391,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             draft: response.draft ?? null,
             events: response.events ?? [],
             snapshot: response.snapshot ? { ...response.snapshot, scenarios } : null,
+            completedGames: response.completedGames ?? [],
             connected: true,
             error: null
         });
@@ -418,6 +433,16 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         }
 
         const prev = untrack(navigatorContext);
+        const incomingDraft = data.draft;
+        if (
+            incomingDraft &&
+            prev.draft &&
+            incomingDraft.id !== prev.draft.id &&
+            (data.events ?? []).length === 0
+        ) {
+            setSyntheticTreeSignal(null);
+            setLastEventIdSeen(null);
+        }
         const prevEvents = prev.events;
         const prevSynthetic = untrack(syntheticTreeSignal);
         const prevSnapshot = prev.snapshot;
@@ -590,11 +615,46 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             ? { ...nextSnapshot, scenarios: nextScenarios }
             : prevSnapshot;
 
+        let nextCompletedGames = prev.completedGames;
+        const prevDraft = prev.draft;
+        const nextDraft = data.draft === undefined ? prev.draft : data.draft;
+        if (
+            prevDraft &&
+            nextDraft &&
+            prevDraft.id === nextDraft.id &&
+            prevDraft.status !== "completed" &&
+            nextDraft.status === "completed"
+        ) {
+            const archive = {
+                draft: nextDraft,
+                events: nextEvents,
+                snapshot: finalSnapshot ?? null
+            };
+            nextCompletedGames = [...nextCompletedGames, archive];
+        } else if (nextDraft && prevDraft && nextDraft.id !== prevDraft.id) {
+            // Safety net: new game started before the completion update
+            // arrived — archive the prior draft if it was completed.
+            const alreadyArchived = nextCompletedGames.some(
+                (c) => c.draft.id === prevDraft.id
+            );
+            if (!alreadyArchived && prevDraft.status === "completed") {
+                nextCompletedGames = [
+                    ...nextCompletedGames,
+                    {
+                        draft: prevDraft,
+                        events: prev.events,
+                        snapshot: prev.snapshot
+                    }
+                ];
+            }
+        }
+
         setNavigatorContext((p) => ({
             session: data.session ?? p.session,
             draft: data.draft === undefined ? p.draft : data.draft,
             events: nextEvents,
             snapshot: finalSnapshot ?? null,
+            completedGames: nextCompletedGames,
             connected: true,
             error: null
         }));
@@ -911,6 +971,34 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         sock.emit("navigatorNextGame", { sessionId });
     };
 
+    const viewGame = (gameNumber: number | null) => {
+        setViewingGameNumberSignal(gameNumber);
+    };
+
+    const startNextGame = (ourSideOverride?: "blue" | "red") => {
+        const sock = currentSocket();
+        const sessionId = getActiveSessionId();
+        if (!sock || !sessionId) return;
+
+        sock.emit("navigatorNextGame", {
+            sessionId,
+            ourSideOverride: ourSideOverride ?? null
+        });
+        setViewingGameNumberSignal(null);
+    };
+
+    const updateSessionPools = (bluePool: TeamPool, redPool: TeamPool) => {
+        const sock = currentSocket();
+        const sessionId = getActiveSessionId();
+        if (!sock || !sessionId) return;
+
+        sock.emit("navigatorUpdatePools", {
+            sessionId,
+            blue_pool: bluePool,
+            red_pool: redPool
+        });
+    };
+
     const contextValue: NavigatorWorkflowContextValue = {
         navigatorContext,
         syntheticTree: syntheticTreeSignal,
@@ -922,6 +1010,10 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         emitUndo,
         startDraft,
         nextGame,
+        startNextGame,
+        updateSessionPools,
+        viewingGameNumber,
+        viewGame,
         selectedScenarioIndex,
         setSelectedScenarioIndex,
         panRequest,
