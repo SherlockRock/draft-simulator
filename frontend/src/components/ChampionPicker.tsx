@@ -54,11 +54,20 @@ const ChampionPicker: Component<ChampionPickerProps> = (props) => {
         categoryMap: championCategories
     });
     const [highlightedIndex, setHighlightedIndex] = createSignal(0);
+    let gridRef: HTMLDivElement | undefined;
 
     // Reset highlight to 0 whenever the filtered list changes.
     createEffect(() => {
         filterState.filteredItems();
         setHighlightedIndex(0);
+    });
+
+    // Scroll highlighted tile into view on change.
+    createEffect(() => {
+        const idx = highlightedIndex();
+        if (!gridRef) return;
+        const tile = gridRef.querySelector<HTMLButtonElement>(`[data-grid-idx="${idx}"]`);
+        tile?.scrollIntoView({ block: "nearest", inline: "nearest" });
     });
 
     const highlightedChampion = createMemo(() => {
@@ -119,6 +128,16 @@ const ChampionPicker: Component<ChampionPickerProps> = (props) => {
                 if (props.disabledChampionIds?.has(champ.id)) return;
                 props.onSelect(champ.id);
             }
+
+            // Auto-focus search for alphanumeric keys when search isn't focused.
+            if (
+                e.key.length === 1 &&
+                /^[a-zA-Z0-9 ]$/.test(e.key) &&
+                document.activeElement !== searchInputRef
+            ) {
+                searchInputRef?.focus();
+                // Do not preventDefault — let the character land in the input.
+            }
         };
         window.addEventListener("keydown", handleKey);
         onCleanup(() => window.removeEventListener("keydown", handleKey));
@@ -168,7 +187,10 @@ const ChampionPicker: Component<ChampionPickerProps> = (props) => {
 
                     {/* Grid */}
                     <div class="custom-scrollbar max-h-[360px] overflow-y-auto px-3 py-3">
-                        <div class={`grid grid-cols-${GRID_COLS} gap-1.5`}>
+                        <div
+                            ref={gridRef}
+                            class={`grid grid-cols-${GRID_COLS} gap-1.5`}
+                        >
                             <For each={filterState.filteredItems()}>
                                 {({ item: champion }, index) => {
                                     const state = () =>
@@ -180,6 +202,7 @@ const ChampionPicker: Component<ChampionPickerProps> = (props) => {
                                     return (
                                         <button
                                             type="button"
+                                            data-grid-idx={index()}
                                             onClick={() => {
                                                 if (disabled()) return;
                                                 props.onSelect(champion.id);
