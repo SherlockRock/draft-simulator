@@ -340,12 +340,20 @@ function walkEngagement(
 const TreeLink: Component<{
     link: PositionedLink;
     highlightedPath: number[] | null;
+    isLineageHover: boolean;
 }> = (props) => {
     const highlighted = createMemo(() =>
         isPathHighlighted(props.link.target.data.path, props.highlightedPath)
     );
-    const strokeOpacity = createMemo(() => (highlighted() ? 0.95 : 0.8));
-    const strokeWidth = createMemo(() => (highlighted() ? 3 : 1.75));
+    const strokeOpacity = createMemo(() =>
+        props.isLineageHover ? 1 : highlighted() ? 0.95 : 0.8
+    );
+    const strokeWidth = createMemo(() =>
+        props.isLineageHover ? 3 : highlighted() ? 3 : 1.75
+    );
+    const stroke = createMemo(() =>
+        props.isLineageHover ? "#22d3ee" : highlighted() ? "#60a5fa" : "#334155"
+    );
 
     return (
         <path
@@ -357,7 +365,7 @@ const TreeLink: Component<{
                 props.link.target.y
             )}
             fill="none"
-            stroke={highlighted() ? "#60a5fa" : "#334155"}
+            stroke={stroke()}
             stroke-width={strokeWidth()}
             stroke-linecap="round"
             opacity={strokeOpacity()}
@@ -376,6 +384,8 @@ const TreeNodeComponent: Component<{
     isConfirmed: boolean;
     isLatestConfirmed: boolean;
     justDragged: Accessor<boolean>;
+    isLineageHover: boolean;
+    onHover: (path: number[] | null) => void;
 }> = (props) => {
     const clipSeed = createUniqueId();
     const championIds = createMemo(() => props.node.data.championIds);
@@ -426,6 +436,9 @@ const TreeNodeComponent: Component<{
         () => props.node.data.actionType === "ban" && !isRoot()
     );
     const effectiveStroke = createMemo(() => {
+        if (props.isLineageHover) {
+            return "#22d3ee";
+        }
         if (isRoot()) {
             return "#94a3b8";
         }
@@ -462,6 +475,8 @@ const TreeNodeComponent: Component<{
             onPointerDown={(e) => {
                 props.onPointerDown(e, nodeKey(props.node.data));
             }}
+            onMouseEnter={() => props.onHover(props.node.data.path)}
+            onMouseLeave={() => props.onHover(null)}
         >
             <title>{championLabel()}</title>
             <defs>
@@ -512,7 +527,13 @@ const TreeNodeComponent: Component<{
                                 cy="0"
                                 r={nodeRadius()}
                                 fill={fillColor()}
-                                stroke={highlighted() ? "#93c5fd" : effectiveStroke()}
+                                stroke={
+                                    highlighted()
+                                        ? "#93c5fd"
+                                        : props.isLineageHover
+                                          ? "#22d3ee"
+                                          : effectiveStroke()
+                                }
                                 stroke-width={strokeWidth()}
                                 stroke-dasharray={
                                     props.node.data.userInjected ? "4 3" : undefined
@@ -574,7 +595,13 @@ const TreeNodeComponent: Component<{
                             height={PAIR_NODE_HEIGHT}
                             rx={PAIR_NODE_HEIGHT / 2}
                             fill={fillColor()}
-                            stroke={highlighted() ? "#93c5fd" : effectiveStroke()}
+                            stroke={
+                                highlighted()
+                                    ? "#93c5fd"
+                                    : props.isLineageHover
+                                      ? "#22d3ee"
+                                      : effectiveStroke()
+                            }
                             stroke-width={strokeWidth()}
                             stroke-dasharray={
                                 props.node.data.userInjected ? "4 3" : undefined
@@ -740,6 +767,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
     const [viewportLocked, setViewportLocked] = createSignal(import.meta.env.DEV);
     const [dragState, setDragState] = createSignal<DragState | null>(null);
     const [justDragged, setJustDragged] = createSignal(false);
+    const [hoveredPath, setHoveredPath] = createSignal<number[] | null>(null);
     const DRAG_THRESHOLD_PX = 5;
 
     const effectiveTreeData = createMemo<LayoutNode | null>(() => {
@@ -828,6 +856,25 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         const treeData = effectiveTreeData();
         if (!treeData) return null;
         return withPaths(treeData);
+    });
+    const hoveredPathKeys = createMemo<ReadonlySet<string>>(() => {
+        const path = hoveredPath();
+        if (!path) return new Set();
+        const keys = new Set<string>();
+        keys.add(pathKey(path));
+        if (path.length > 0) {
+            keys.add(pathKey(path.slice(0, -1)));
+        }
+        const tree = annotatedTree();
+        if (tree) {
+            const node = getNodeAtPath(tree, path);
+            if (node) {
+                for (let i = 0; i < node.children.length; i++) {
+                    keys.add(pathKey([...path, i]));
+                }
+            }
+        }
+        return keys;
     });
 
     const manualExpansionIndexKeys = createMemo<ReadonlySet<string>>(() => {
@@ -1255,12 +1302,25 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                         )}
                     </For>
                     <For each={links()}>
-                        {(link) => (
-                            <TreeLink
-                                link={link}
-                                highlightedPath={props.highlightedPath}
-                            />
-                        )}
+                        {(link) => {
+                            const isLineage = createMemo(() => {
+                                const path = hoveredPath();
+                                if (!path) return false;
+                                const targetKey = pathKey(link.target.data.path);
+                                const sourceKey = pathKey(link.source.data.path);
+                                return (
+                                    hoveredPathKeys().has(targetKey) &&
+                                    hoveredPathKeys().has(sourceKey)
+                                );
+                            });
+                            return (
+                                <TreeLink
+                                    link={link}
+                                    highlightedPath={props.highlightedPath}
+                                    isLineageHover={isLineage()}
+                                />
+                            );
+                        }}
                     </For>
                     <For each={nodes()}>
                         {(node) => (
@@ -1278,6 +1338,10 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                                     pathKey(latestConfirmedPath())
                                 }
                                 justDragged={justDragged}
+                                isLineageHover={hoveredPathKeys().has(
+                                    pathKey(node.data.path)
+                                )}
+                                onHover={setHoveredPath}
                             />
                         )}
                     </For>
