@@ -1,4 +1,4 @@
-import { Component, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import { Component, For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { X } from "lucide-solid";
 import { FilterBar } from "./FilterBar";
 import { RoleFilter } from "./RoleFilter";
@@ -25,6 +25,28 @@ export interface ChampionPickerProps {
 }
 
 const GRID_COLS = 5;
+
+function borderClassFor(
+    state: ChampionColorState,
+    disabled: boolean,
+    highlighted: boolean
+): string {
+    if (disabled) return "border-slate-700 opacity-30 cursor-not-allowed";
+    if (highlighted) return "border-darius-crimson ring-2 ring-darius-crimson/40";
+    switch (state) {
+        case "picked":
+            return "border-slate-700 opacity-30 cursor-not-allowed";
+        case "own-team":
+            return "border-blue-400";
+        case "other-team":
+            return "border-red-400/60";
+        case "shared":
+            return "border-purple-400";
+        case "neutral":
+        default:
+            return "border-darius-border hover:border-darius-purple-bright";
+    }
+}
 
 const ChampionPicker: Component<ChampionPickerProps> = (props) => {
     const filterState = useMultiFilterableItems({
@@ -101,9 +123,42 @@ const ChampionPicker: Component<ChampionPickerProps> = (props) => {
                         />
                     </div>
 
-                    {/* Grid placeholder — filled in Task 3 */}
-                    <div class="flex h-80 items-center justify-center text-sm text-darius-text-secondary">
-                        Grid: {filterState.filteredItems().length} champions
+                    {/* Grid */}
+                    <div class="custom-scrollbar max-h-[360px] overflow-y-auto px-3 py-3">
+                        <div class={`grid grid-cols-${GRID_COLS} gap-1.5`}>
+                            <For each={filterState.filteredItems()}>
+                                {({ item: champion }) => {
+                                    const state = () =>
+                                        props.championColoring?.(champion.id) ?? "neutral";
+                                    const disabled = () =>
+                                        props.disabledChampionIds?.has(champion.id) ??
+                                        false;
+                                    return (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (disabled()) return;
+                                                props.onSelect(champion.id);
+                                            }}
+                                            disabled={disabled()}
+                                            title={champion.name}
+                                            class={`relative aspect-square overflow-hidden rounded border-2 transition-all ${borderClassFor(
+                                                state(),
+                                                disabled(),
+                                                false
+                                            )}`}
+                                        >
+                                            <img
+                                                src={champion.img}
+                                                alt={champion.name}
+                                                draggable={false}
+                                                class="h-full w-full object-cover"
+                                            />
+                                        </button>
+                                    );
+                                }}
+                            </For>
+                        </div>
                     </div>
 
                     {/* Footer */}
