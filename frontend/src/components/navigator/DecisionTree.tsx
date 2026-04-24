@@ -13,8 +13,10 @@ import {
     untrack
 } from "solid-js";
 import createPanZoom, { type PanZoom } from "panzoom";
+import { ContextMenu } from "../ContextMenu";
 import { useNavigatorContext } from "../../contexts/NavigatorContext";
 import { resolveChampion } from "../../utils/constants";
+import { ContextMenuAction } from "../../utils/types";
 import {
     collectNodeKeyPaths,
     nodeKey,
@@ -29,6 +31,7 @@ import {
     makeRadialTreeLayout
 } from "../../utils/treeLayout";
 import LayoutKnobPanel, { loadStoredState } from "./LayoutKnobPanel";
+import { actionsForNode, backgroundActions } from "./treeNodeActions";
 
 export type ScenarioPathTier = "selected" | "unselected";
 
@@ -45,6 +48,10 @@ interface DecisionTreeProps {
     panRequest: { path: number[] } | null;
     onNodeClick: (nodeIndex: number[]) => void;
     confirmedDepth: number;
+    onPromoteToScenario?: (path: number[]) => void;
+    onConfirmProjectedPick?: (path: number[]) => void;
+    onOpenSwap?: (path: number[]) => void;
+    onOpenBranch?: (path: number[]) => void;
 }
 
 interface TreeNodeWithPath extends LayoutNode {
@@ -82,6 +89,12 @@ interface FitTransform {
     x: number;
     y: number;
     scale: number;
+}
+
+interface TreeContextMenuState {
+    x: number;
+    y: number;
+    target: { path: number[] } | "background";
 }
 
 const NODE_RADIUS = 20;
@@ -374,6 +387,7 @@ const TreeNodeComponent: Component<{
     justDragged: Accessor<boolean>;
     isLineageHover: boolean;
     onHover: (path: number[] | null) => void;
+    onContextMenu: (event: MouseEvent, path: number[]) => void;
 }> = (props) => {
     const clipSeed = createUniqueId();
     const championIds = createMemo(() => props.node.data.championIds);
@@ -465,6 +479,11 @@ const TreeNodeComponent: Component<{
             }}
             onMouseEnter={() => props.onHover(props.node.data.path)}
             onMouseLeave={() => props.onHover(null)}
+            onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                props.onContextMenu(e, props.node.data.path);
+            }}
         >
             <title>{championLabel()}</title>
             <defs>
@@ -756,7 +775,19 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
     const [dragState, setDragState] = createSignal<DragState | null>(null);
     const [justDragged, setJustDragged] = createSignal(false);
     const [hoveredPath, setHoveredPath] = createSignal<number[] | null>(null);
+    const [contextMenuState, setContextMenuState] =
+        createSignal<TreeContextMenuState | null>(null);
     const DRAG_THRESHOLD_PX = 5;
+
+    const closeContextMenu = () => setContextMenuState(null);
+
+    const handleNodeContextMenu = (event: MouseEvent, path: number[]) => {
+        setContextMenuState({
+            x: event.pageX,
+            y: event.pageY,
+            target: { path }
+        });
+    };
 
     const effectiveTreeData = createMemo<LayoutNode | null>(() => {
         if (import.meta.env.DEV && treeFrozen()) {
@@ -887,6 +918,108 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
             }
         }
         return result;
+    });
+
+    const getNodeAt = (path: number[]): TreeNodeWithPath | null => {
+        const tree = annotatedTree();
+        if (!tree) return null;
+        return getNodeAtPath(tree, path);
+    };
+
+    const collapseSubtree = (path: number[]) => {
+        const tree = effectiveTreeData();
+        if (!tree) return;
+        const keyPathString = pathIndicesToNodeKeyPath(tree, path);
+        if (!keyPathString) return;
+        setManualCollapseKeys((prev) => {
+            const next = new Set(prev);
+            next.add(keyPathString);
+            return next;
+        });
+        setManualExpansionKeys((prev) => {
+            const next = new Set(prev);
+            next.delete(keyPathString);
+            return next;
+        });
+    };
+
+    const copyChampionName = (path: number[]) => {
+        const node = getNodeAt(path);
+        if (!node) return;
+        const names = node.championIds
+            .map((id) => resolveChampion(id)?.name)
+            .filter((name): name is string => !!name);
+        if (names.length === 0) return;
+        const text = names.join(" + ");
+        void navigator.clipboard?.writeText(text).catch(() => undefined);
+    };
+
+    const resetNodeLayout = (path: number[]) => {
+        const tree = effectiveTreeData();
+        if (!tree) return;
+        const keyPathString = pathIndicesToNodeKeyPath(tree, path);
+        if (!keyPathString) return;
+        setLayoutOverride(keyPathString, null);
+    };
+
+    const currentActions = createMemo<ContextMenuAction[]>(() => {
+        const state = contextMenuState();
+        if (!state) return [];
+
+        if (state.target === "background") {
+            return backgroundActions(layoutOverrides().size > 0, () => {
+                clearAllLayoutOverrides();
+                closeContextMenu();
+            });
+        }
+
+        const path = state.target.path;
+        const node = getNodeAt(path);
+        if (!node) return [];
+
+        const isConfirmed = path.length < props.confirmedDepth;
+        const isDepthOneProjected =
+            !isConfirmed && path.length === props.confirmedDepth;
+        const tree = effectiveTreeData();
+        const nodeKeyPathString = tree ? pathIndicesToNodeKeyPath(tree, path) : null;
+        const hasLayoutOverride =
+            nodeKeyPathString !== null &&
+            nodeKeyPathString !== "" &&
+            layoutOverrides().has(nodeKeyPathString);
+
+        return actionsForNode({
+            isConfirmed,
+            isDepthOneProjected,
+            hasLayoutOverride,
+            onConfirmPick: () => {
+                props.onConfirmProjectedPick?.(path);
+                closeContextMenu();
+            },
+            onCollapseSubtree: () => {
+                collapseSubtree(path);
+                closeContextMenu();
+            },
+            onPromoteToScenario: () => {
+                props.onPromoteToScenario?.(path);
+                closeContextMenu();
+            },
+            onSwapChampion: () => {
+                props.onOpenSwap?.(path);
+                closeContextMenu();
+            },
+            onCreateBranch: () => {
+                props.onOpenBranch?.(path);
+                closeContextMenu();
+            },
+            onCopyChampionName: () => {
+                copyChampionName(path);
+                closeContextMenu();
+            },
+            onResetNodeLayout: () => {
+                resetNodeLayout(path);
+                closeContextMenu();
+            }
+        });
     });
 
     const prunedTree = createMemo(() => {
@@ -1169,7 +1302,20 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
     );
 
     return (
-        <div ref={containerRef} class="relative h-full w-full overflow-hidden">
+        <div
+            ref={containerRef}
+            class="relative h-full w-full overflow-hidden"
+            onContextMenu={(e) => {
+                if (
+                    e.target instanceof Element &&
+                    e.target.closest("[data-tree-node='true']")
+                ) {
+                    return;
+                }
+                e.preventDefault();
+                setContextMenuState({ x: e.pageX, y: e.pageY, target: "background" });
+            }}
+        >
             <Show when={props.isComputing}>
                 <div
                     class="pointer-events-none absolute right-3 top-3 z-10 flex items-center gap-2 rounded-full border border-slate-700/50 bg-slate-900/80 px-3 py-1 text-xs text-slate-300 backdrop-blur"
@@ -1332,6 +1478,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                                     pathKey(node.data.path)
                                 )}
                                 onHover={setHoveredPath}
+                                onContextMenu={handleNodeContextMenu}
                             />
                         )}
                     </For>
@@ -1348,6 +1495,15 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                     </text>
                 </Show>
             </svg>
+            <Show when={contextMenuState()}>
+                {(state) => (
+                    <ContextMenu
+                        position={{ x: state().x, y: state().y }}
+                        actions={currentActions()}
+                        onClose={closeContextMenu}
+                    />
+                )}
+            </Show>
         </div>
     );
 };
