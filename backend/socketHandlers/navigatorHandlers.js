@@ -495,6 +495,48 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       emitNavigatorError(socket, "Failed to create next navigator draft");
     }
   });
+
+  wrap("navigatorUpdatePools", async (data = {}) => {
+    try {
+      const { sessionId, blue_pool, red_pool } = data;
+
+      if (!sessionId) {
+        emitNavigatorError(socket, "sessionId is required");
+        return;
+      }
+
+      const session = await findOwnedSession(sessionId, socket);
+      if (!session) {
+        return;
+      }
+
+      // Reject pool edits while a draft is mid-game. Allowed between games
+      // (current draft is completed OR empty).
+      const currentDraft = await findCurrentDraft(sessionId);
+      const midGame =
+        currentDraft &&
+        currentDraft.status === "active" &&
+        (await NavigatorEvent.count({
+          where: { navigator_draft_id: currentDraft.id },
+        })) > 0;
+      if (midGame) {
+        emitNavigatorError(
+          socket,
+          "Cannot edit pools while a game is in progress",
+        );
+        return;
+      }
+
+      if (blue_pool) session.blue_pool = blue_pool;
+      if (red_pool) session.red_pool = red_pool;
+      await session.save();
+
+      await emitDraftUpdate(io, sessionId, { session });
+    } catch (error) {
+      console.error("Error in navigatorUpdatePools:", error);
+      emitNavigatorError(socket, "Failed to update pools");
+    }
+  });
 }
 
 module.exports = { setupNavigatorHandlers };
