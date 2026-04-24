@@ -845,13 +845,19 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         return pruneTree(tree, expandedPaths(), manualExpansionIndexKeys());
     });
 
+    const getOverrideAngle = (node: LayoutNode): number | undefined => {
+        return layoutOverrides().get(nodeKey(node))?.angle;
+    };
+
     const layoutFn = createMemo(() => {
+        // Track reactive dep on overrides so layout recomputes when they change.
+        layoutOverrides();
         const variantId = layoutVariantId();
         if (variantId === "radial") {
-            return makeRadialTreeLayout(layoutConfig());
+            return makeRadialTreeLayout(layoutConfig(), getOverrideAngle);
         }
         const variant = layoutVariants.find((v) => v.id === variantId);
-        return variant?.fn ?? makeRadialTreeLayout(layoutConfig());
+        return variant?.fn ?? makeRadialTreeLayout(layoutConfig(), getOverrideAngle);
     });
 
     const layout = createMemo(() => {
