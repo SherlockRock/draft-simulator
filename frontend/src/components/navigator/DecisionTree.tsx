@@ -120,6 +120,18 @@ function getPairLeftClipPath() {
     ].join(" ");
 }
 
+function collectNodeKeys(tree: LayoutNode): Set<string> {
+    const result = new Set<string>();
+    function walk(node: LayoutNode) {
+        for (const child of node.children) {
+            result.add(nodeKey(child));
+            walk(child);
+        }
+    }
+    walk(tree);
+    return result;
+}
+
 function getPairRightClipPath() {
     const halfWidth = PAIR_NODE_WIDTH / 2 - PAIR_IMAGE_INSET;
     const halfHeight = PAIR_NODE_HEIGHT / 2 - PAIR_IMAGE_INSET;
@@ -685,7 +697,10 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         manualExpansionKeys,
         manualCollapseKeys,
         setManualExpansionKeys,
-        setManualCollapseKeys
+        setManualCollapseKeys,
+        layoutOverrides,
+        setLayoutOverride,
+        clearAllLayoutOverrides
     } = useNavigatorContext();
     const svgId = createUniqueId();
     let containerRef: HTMLDivElement | undefined;
@@ -717,13 +732,21 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         return props.treeData;
     });
 
-    // Drop manual overrides whose node-key paths no longer exist in the tree.
+    // Drop manual overrides and layout overrides whose node keys no longer exist in the tree.
     createEffect(() => {
         const tree = effectiveTreeData();
         if (!tree) return;
-        const valid = collectNodeKeyPaths(tree);
-        setManualExpansionKeys((prev) => new Set([...prev].filter((k) => valid.has(k))));
-        setManualCollapseKeys((prev) => new Set([...prev].filter((k) => valid.has(k))));
+        const validPaths = collectNodeKeyPaths(tree);
+        const validKeys = collectNodeKeys(tree);
+        setManualExpansionKeys((prev) => new Set([...prev].filter((k) => validPaths.has(k))));
+        setManualCollapseKeys((prev) => new Set([...prev].filter((k) => validPaths.has(k))));
+        // Drop layout overrides for nodes no longer in the tree.
+        const overrides = layoutOverrides();
+        for (const key of overrides.keys()) {
+            if (!validKeys.has(key)) {
+                setLayoutOverride(key, null);
+            }
+        }
     });
 
     // Scenario paths drive default expansion; manual toggles override
