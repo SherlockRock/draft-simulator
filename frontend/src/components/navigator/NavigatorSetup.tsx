@@ -19,6 +19,10 @@ const NavigatorSetup: Component = () => {
     const [name, setName] = createSignal("");
     const [ourSide, setOurSide] = createSignal<"blue" | "red">("blue");
     const [draftMode, setDraftMode] = createSignal<DraftMode>("standard");
+    const [seriesLength, setSeriesLength] = createSignal<1 | 3 | 5 | 7>(1);
+    const [sideSwapMode, setSideSwapMode] = createSignal<"auto" | "manual">(
+        "auto"
+    );
     const [bluePool, setBluePool] = createSignal<TeamPool>(EMPTY_TEAM_POOL);
     const [redPool, setRedPool] = createSignal<TeamPool>(EMPTY_TEAM_POOL);
     const [isStarting, setIsStarting] = createSignal(false);
@@ -30,6 +34,8 @@ const NavigatorSetup: Component = () => {
         setName(session.name ?? "");
         setOurSide(session.our_side);
         setDraftMode(session.draft_mode);
+        setSeriesLength(session.series_length);
+        setSideSwapMode(session.side_swap_mode);
         setBluePool(session.blue_pool);
         setRedPool(session.red_pool);
     });
@@ -60,6 +66,8 @@ const NavigatorSetup: Component = () => {
                 name: name().trim() || null,
                 our_side: ourSide(),
                 draft_mode: draftMode(),
+                series_length: seriesLength(),
+                side_swap_mode: sideSwapMode(),
                 blue_pool: derive(bluePool()),
                 red_pool: derive(redPool())
             });
@@ -103,7 +111,9 @@ const NavigatorSetup: Component = () => {
                                 </label>
 
                                 <div class="flex flex-col gap-2">
-                                    <span class="text-sm font-medium text-slate-300">Our Side</span>
+                                    <span class="text-sm font-medium text-slate-300">
+                                        Our Side{seriesLength() > 1 ? " (Game 1)" : ""}
+                                    </span>
                                     <div class="flex flex-wrap gap-2">
                                         <button
                                             type="button"
@@ -134,12 +144,73 @@ const NavigatorSetup: Component = () => {
                                     <span class="mb-2 block text-sm font-medium text-slate-300">Draft Mode</span>
                                     <StyledSelect
                                         value={draftMode()}
-                                        onChange={(val) => setDraftMode(val as DraftMode)}
+                                        onChange={(val) =>
+                                            setDraftMode(
+                                                val === "fearless"
+                                                    ? "fearless"
+                                                    : val === "ironman"
+                                                      ? "ironman"
+                                                      : "standard"
+                                            )
+                                        }
                                         options={[
                                             { value: "standard", label: "Standard" },
                                             { value: "fearless", label: "Fearless" },
                                             { value: "ironman", label: "Ironman" }
                                         ]}
+                                    />
+                                </label>
+                            </div>
+
+                            <div class="grid gap-4 lg:grid-cols-2 lg:items-end">
+                                <label class="block">
+                                    <span class="mb-2 block text-sm font-medium text-slate-300">
+                                        Series Length
+                                    </span>
+                                    <StyledSelect
+                                        value={String(seriesLength())}
+                                        onChange={(val) =>
+                                            setSeriesLength(
+                                                Number(val) === 1
+                                                    ? 1
+                                                    : Number(val) === 3
+                                                      ? 3
+                                                      : Number(val) === 5
+                                                        ? 5
+                                                        : 7
+                                            )
+                                        }
+                                        options={[
+                                            { value: "1", label: "Best of 1" },
+                                            { value: "3", label: "Best of 3" },
+                                            { value: "5", label: "Best of 5" },
+                                            { value: "7", label: "Best of 7" }
+                                        ]}
+                                    />
+                                </label>
+
+                                <label class="block">
+                                    <span class="mb-2 block text-sm font-medium text-slate-300">
+                                        Side Swap
+                                    </span>
+                                    <StyledSelect
+                                        value={sideSwapMode()}
+                                        onChange={(val) =>
+                                            setSideSwapMode(
+                                                val === "manual" ? "manual" : "auto"
+                                            )
+                                        }
+                                        options={[
+                                            {
+                                                value: "auto",
+                                                label: "Auto (alternate each game)"
+                                            },
+                                            {
+                                                value: "manual",
+                                                label: "Manual (choose per game)"
+                                            }
+                                        ]}
+                                        disabled={seriesLength() === 1}
                                     />
                                 </label>
                             </div>
@@ -186,7 +257,11 @@ const NavigatorSetup: Component = () => {
                                     disabled={isStarting()}
                                     class="w-full rounded-lg bg-blue-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-400 disabled:cursor-not-allowed disabled:bg-blue-500/60"
                                 >
-                                    {isStarting() ? "Saving..." : "Start Draft"}
+                                    {isStarting()
+                                        ? "Saving..."
+                                        : seriesLength() > 1
+                                          ? "Start Game 1"
+                                          : "Start Draft"}
                                 </button>
                             </div>
                         </div>
