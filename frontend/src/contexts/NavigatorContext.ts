@@ -54,11 +54,18 @@ export interface NavigatorScenario {
     indicators: string[];
 }
 
+export interface NavigatorCompletedGame {
+    draft: NavigatorDraftData;
+    events: NavigatorEventData[];
+    snapshot: NavigatorSnapshotData | null;
+}
+
 export interface NavigatorSessionState {
     session: NavigatorSessionData | null;
     draft: NavigatorDraftData | null;
     events: NavigatorEventData[];
     snapshot: NavigatorSnapshotData | null;
+    completedGames: NavigatorCompletedGame[];
     connected: boolean;
     error: string | null;
 }
@@ -72,6 +79,8 @@ export interface NavigatorSessionData {
     red_pool: TeamPool;
     opponent_pool: string[] | null;
     draft_mode: "standard" | "fearless" | "ironman";
+    series_length: 1 | 3 | 5 | 7;
+    side_swap_mode: "auto" | "manual";
     status: "setup" | "active" | "completed";
     config_version: number;
     NavigatorDrafts?: NavigatorDraftData[];
@@ -84,6 +93,7 @@ export interface NavigatorDraftData {
     session_id: string;
     game_number: number;
     status: "active" | "completed";
+    our_side_override: "blue" | "red" | null;
     draft_id: string | null;
 }
 
@@ -134,6 +144,10 @@ export interface NavigatorWorkflowContextValue {
     emitUndo: (draftId: string) => void;
     startDraft: () => void;
     nextGame: () => void;
+    startNextGame: (ourSideOverride?: "blue" | "red") => void;
+    updateSessionPools: (bluePool: TeamPool, redPool: TeamPool) => void;
+    viewingGameNumber: Accessor<number | null>;
+    viewGame: (gameNumber: number | null) => void;
     selectedScenarioIndex: Accessor<number | null>;
     setSelectedScenarioIndex: (index: number | null) => void;
     panRequest: Accessor<NavigatorPanRequest | null>;
