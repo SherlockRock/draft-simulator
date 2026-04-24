@@ -41,6 +41,8 @@ const TURN_SEQUENCE = [
   { side: "red", type: "pick", phase: "pick2" },
 ];
 
+const TOTAL_TURNS = TURN_SEQUENCE.length; // 20
+
 function getSocketUserId(socket) {
   return socket.user?.id || socket.user?.dataValues?.id || null;
 }
@@ -253,6 +255,12 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
     });
 
     const events = await listDraftEvents(draft.id);
+
+    if (events.length >= TOTAL_TURNS && draft.status !== "completed") {
+      draft.status = "completed";
+      await draft.save();
+    }
+
     await emitDraftUpdate(io, sessionId, {
       draft,
       events,
