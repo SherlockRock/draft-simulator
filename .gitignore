@@ -20,6 +20,7 @@ data/compiled/*
 # Rust
 target/
 *.node
+packages/engine-node/index.d.ts
 
 # Generated protocol artifacts
 packages/engine-protocol/schema.json
