@@ -1,0 +1,13 @@
+[package]
+name = "engine-node"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+engine-core = { path = "../engine-core" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
