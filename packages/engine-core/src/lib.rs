@@ -3,6 +3,7 @@
 pub mod cancellation;
 pub mod draft_state;
 pub mod evaluator;
+pub mod iterative_deepening;
 pub mod pair_filter;
 pub mod pools;
 pub mod protocol_types;
