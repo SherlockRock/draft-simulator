@@ -4,6 +4,7 @@ use engine_core::evaluator::{EvalContext, MetaData, PhaseWeightTable, PhaseWeigh
 use engine_core::pools::{Penalties, Role, RolePoolMap, TeamPool};
 use engine_core::role_solver::ChampionMeta;
 use engine_core::search::{search, search_with_stats, SearchParams};
+use proptest::prelude::*;
 use std::collections::HashMap;
 
 fn pool_with(champs: &[&str]) -> TeamPool {
@@ -95,7 +96,7 @@ fn pick_turn_yields_branch_width_children() {
     fast_forward_to_slot(&mut state, 6);
 
     let ctx = ctx_with_pool(&["A", "B", "C", "D", "E", "F"]);
-    let params = SearchParams { branch_width: 5, max_depth: 1 };
+    let params = SearchParams { branch_width: 5, max_depth: 1, disable_alpha_beta: false };
     let cancel = CancelHandle::new();
 
     let tree = search(&state, &params, &ctx, &cancel).unwrap();
@@ -118,7 +119,7 @@ fn ranks_candidates_by_static_score() {
     ctx.meta.win_rates.insert("B".into(), 0.50);
     ctx.meta.win_rates.insert("C".into(), 0.05);
 
-    let params = SearchParams { branch_width: 3, max_depth: 1 };
+    let params = SearchParams { branch_width: 3, max_depth: 1, disable_alpha_beta: false };
     let cancel = CancelHandle::new();
     let tree = search(&state, &params, &ctx, &cancel).unwrap();
 
@@ -140,7 +141,7 @@ fn pair_start_yields_pair_children() {
     assert!(TURN_SEQUENCE[state.turn_index()].pair_start);
 
     let ctx = ctx_with_pool(&["A", "B", "C", "D"]);
-    let params = SearchParams { branch_width: 3, max_depth: 1 };
+    let params = SearchParams { branch_width: 3, max_depth: 1, disable_alpha_beta: false };
     let cancel = CancelHandle::new();
 
     let tree = search(&state, &params, &ctx, &cancel).unwrap();
@@ -169,7 +170,7 @@ fn pair_consumes_two_slots_in_recursion() {
     fast_forward_to_slot(&mut state, 7);
 
     let ctx = ctx_with_pool(&["A", "B", "C", "D", "E", "F"]);
-    let params = SearchParams { branch_width: 2, max_depth: 2 };
+    let params = SearchParams { branch_width: 2, max_depth: 2, disable_alpha_beta: false };
     let cancel = CancelHandle::new();
 
     let tree = search(&state, &params, &ctx, &cancel).unwrap();
@@ -194,7 +195,7 @@ fn transposition_cache_populates_during_search() {
     fast_forward_to_slot(&mut state, 6);
 
     let ctx = ctx_with_pool(&["A", "B", "C"]);
-    let params = SearchParams { branch_width: 3, max_depth: 3 };
+    let params = SearchParams { branch_width: 3, max_depth: 3, disable_alpha_beta: false };
     let cancel = CancelHandle::new();
 
     let (_tree, stats) = search_with_stats(&state, &params, &ctx, &cancel).unwrap();
@@ -202,6 +203,54 @@ fn transposition_cache_populates_during_search() {
         stats.cache_entries > 0,
         "transposition cache must be populated during recursion"
     );
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(40))]
+
+    #[test]
+    fn alpha_beta_preserves_root_score(
+        slot in 6usize..14,
+        pattern_idx in 0usize..4,
+        max_depth in 1usize..4,
+    ) {
+        let mut state = DraftState::default();
+        fast_forward_to_slot(&mut state, slot);
+
+        let mut ctx = ctx_with_pool(&["A", "B", "C", "D", "E"]);
+        let patterns = [
+            [0.9_f64, 0.6, 0.5, 0.3, 0.1],
+            [0.5,     0.5, 0.5, 0.5, 0.5],
+            [0.1,     0.8, 0.4, 0.7, 0.2],
+            [0.95,    0.05, 0.6, 0.55, 0.5],
+        ];
+        let pat = patterns[pattern_idx];
+        for (id, w) in ["A", "B", "C", "D", "E"].iter().zip(pat.iter()) {
+            ctx.meta.win_rates.insert((*id).into(), *w);
+        }
+
+        let cancel = CancelHandle::new();
+        let params_ab = SearchParams {
+            branch_width: 5,
+            max_depth,
+            disable_alpha_beta: false,
+        };
+        let params_no_ab = SearchParams {
+            branch_width: 5,
+            max_depth,
+            disable_alpha_beta: true,
+        };
+
+        let tree_ab = search(&state, &params_ab, &ctx, &cancel).unwrap();
+        let tree_no_ab = search(&state, &params_no_ab, &ctx, &cancel).unwrap();
+
+        prop_assert!(
+            (tree_ab.scores.composite - tree_no_ab.scores.composite).abs() < 1e-6,
+            "αβ root score must equal full-search at slot={} pat={} depth={}: ab={}, full={}",
+            slot, pattern_idx, max_depth,
+            tree_ab.scores.composite, tree_no_ab.scores.composite
+        );
+    }
 }
 
 #[test]
@@ -220,7 +269,7 @@ fn opp_turn_minimizes_our_value() {
     ctx.meta.win_rates.insert("A".into(), 0.9);
     ctx.meta.win_rates.insert("B".into(), 0.1);
 
-    let params = SearchParams { branch_width: 2, max_depth: 1 };
+    let params = SearchParams { branch_width: 2, max_depth: 1, disable_alpha_beta: false };
     let cancel = CancelHandle::new();
     let tree = search(&state, &params, &ctx, &cancel).unwrap();
     // Root is opponent's turn. Best-for-them = worst-for-us.

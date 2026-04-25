@@ -13,6 +13,10 @@ use std::collections::HashSet;
 pub struct SearchParams {
     pub branch_width: usize,
     pub max_depth: usize,
+    /// When true, alpha-beta cutoffs are disabled and every candidate within
+    /// `branch_width` is fully explored. Used by the correctness property test
+    /// to validate that pruning never changes the back-propagated root score.
+    pub disable_alpha_beta: bool,
 }
 
 impl Default for SearchParams {
@@ -20,6 +24,7 @@ impl Default for SearchParams {
         Self {
             branch_width: 5,
             max_depth: 6,
+            disable_alpha_beta: false,
         }
     }
 }
@@ -211,7 +216,7 @@ fn search_recursive(
                 beta = best_value;
             }
         }
-        if alpha >= beta {
+        if !params.disable_alpha_beta && alpha >= beta {
             break;
         }
     }
@@ -465,7 +470,7 @@ fn expand_pair(
                 beta = best_value;
             }
         }
-        if alpha >= beta {
+        if !params.disable_alpha_beta && alpha >= beta {
             break;
         }
     }
