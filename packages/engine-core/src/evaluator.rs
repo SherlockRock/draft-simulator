@@ -48,6 +48,7 @@ pub struct MetaData {
     pub counters: HashMap<String, HashMap<String, f64>>,
 }
 
+#[derive(Clone)]
 pub struct EvalContext {
     pub side: Side,
     pub phase: Phase,
