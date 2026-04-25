@@ -17,6 +17,23 @@ $ npm install # or pnpm install or yarn install
 $ node index.js
 ```
 
+## Rust toolchain (for engine-core / engine-node)
+
+This repo includes a Rust workspace at `/Cargo.toml` containing `engine-core`
+(pure compute crate) and `engine-node` (napi-rs cdylib consumed by the
+backend).
+
+- One-time setup: `rustup default stable`
+- Build the napi binding: `pnpm --filter @draft-sim/engine-node build`
+- Engine dev with auto-rebuild: `pnpm --filter @draft-sim/engine-node dev`
+- Engine tests: `cd packages/engine-core && cargo test`
+- Engine benchmarks: `cd packages/engine-core && cargo bench`
+
+The compiled `.node` binary is gitignored — produced fresh on every build.
+Backend depends on `@draft-sim/engine-node` via the pnpm workspace; run
+`pnpm install` once after a fresh clone, then build the napi binding before
+starting the backend.
+
 ## Available Scripts
 
 In the project directory, you can run:
