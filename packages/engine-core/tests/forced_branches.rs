@@ -6,7 +6,7 @@ use engine_core::forced_branches::{
 };
 use engine_core::pools::{Penalties, Role, RolePoolMap, TeamPool};
 use engine_core::role_solver::ChampionMeta;
-use engine_core::search::{search, search_with_stats, SearchParams};
+use engine_core::search::{search, search_with_stats, SearchError, SearchParams};
 use std::collections::HashMap;
 
 fn step(slot: usize, ids: &[&str]) -> PathStep {
@@ -501,5 +501,45 @@ fn pair_end_force_optimizes_pair_start() {
         );
         assert_eq!(child.slots, vec![7, 8]);
         assert!(child.user_injected);
+    }
+}
+
+#[test]
+fn reverse_fill_pair_errors() {
+    // State has advanced past pair_start (turn_index = 8 = R2's pair_end turn,
+    // pair_start at slot 7 is locked in DraftState). A force targeting slot 7
+    // would retroactively change a pair_start that's already been resolved —
+    // structurally invalid per spec § "Pair-pick forcing".
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 8);
+    assert_eq!(state.turn_index(), 8);
+    assert!(TURN_SEQUENCE[7].pair_start);
+
+    let ctx = ctx_with_pool(&["A", "B", "C", "D"]);
+    let cancel = CancelHandle::new();
+
+    let params = SearchParams {
+        branch_width: 4,
+        max_depth: 1,
+        disable_alpha_beta: false,
+        forced_branches: vec![ForcedBranch {
+            path: vec![],
+            target_slot: 7, // pair_start, already past — pair_end is confirmed
+            champion_id: "A".into(),
+            mode: ForcedMode::Sole,
+        }],
+    };
+    let err = search(&state, &params, &ctx, &cancel)
+        .expect_err("reverse-fill pair force must surface as InvalidInput");
+
+    match err {
+        SearchError::InvalidInput { path } => {
+            assert_eq!(
+                path,
+                vec!["forcedBranches".to_string(), "0".to_string()],
+                "InvalidInput.path mirrors the protocol's Zod-style path"
+            );
+        }
+        other => panic!("expected InvalidInput, got {:?}", other),
     }
 }
