@@ -424,3 +424,56 @@ fn compute_propagates_user_injected_on_resolved_force() {
     assert_eq!(resp.forced_branches_dropped, 0);
     assert!(resp.tree.children.iter().any(|child| child.user_injected));
 }
+
+#[test]
+fn compute_errs_invalid_input_on_reverse_fill_pair_force() {
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 8);
+
+    let mut req = default_request(state);
+    req.our_pool = pool_with(&["A", "B", "C"]);
+    req.opp_pool = pool_with(&["A", "B", "C"]);
+    req.search_params.max_depth = 1;
+    req.search_params.branch_width = 3;
+    req.search_params.forced_branches = vec![ForcedBranch {
+        path: vec![],
+        target_slot: 7,
+        champion_id: "A".to_string(),
+        mode: ForcedMode::Sole,
+    }];
+    req.champion_meta = HashMap::from([
+        (
+            "A".to_string(),
+            ChampionMeta {
+                id: "A".to_string(),
+                positions: vec![Role::Top],
+            },
+        ),
+        (
+            "B".to_string(),
+            ChampionMeta {
+                id: "B".to_string(),
+                positions: vec![Role::Top],
+            },
+        ),
+        (
+            "C".to_string(),
+            ChampionMeta {
+                id: "C".to_string(),
+                positions: vec![Role::Top],
+            },
+        ),
+    ]);
+
+    let engine = Engine::new(MetaData::default(), HashMap::new());
+    let cancel = CancelHandle::new();
+    let resp = engine.compute(req, &cancel);
+
+    match resp {
+        Err(EngineError::InvalidInput { path }) => {
+            assert_eq!(path, vec!["forcedBranches".to_string(), "0".to_string()]);
+        }
+        Err(other) => panic!("expected InvalidInput, got {}", other),
+        Ok(_) => panic!("expected InvalidInput, got success"),
+    }
+}
