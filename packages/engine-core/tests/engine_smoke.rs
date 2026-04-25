@@ -540,3 +540,54 @@ fn compute_reports_nodes_evaluated_and_pruning_rate() {
     assert_eq!(resp_no_ab.pruning_rate, 0.0);
     assert!(resp_no_ab.nodes_evaluated >= resp_ab.nodes_evaluated);
 }
+
+#[test]
+fn compute_reports_compute_time_ms() {
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 6);
+
+    let champs = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+    let meta = MetaData {
+        win_rates: HashMap::from([
+            ("A".to_string(), 0.98),
+            ("B".to_string(), 0.92),
+            ("C".to_string(), 0.86),
+            ("D".to_string(), 0.78),
+            ("E".to_string(), 0.70),
+            ("F".to_string(), 0.62),
+            ("G".to_string(), 0.54),
+            ("H".to_string(), 0.46),
+            ("I".to_string(), 0.38),
+            ("J".to_string(), 0.30),
+        ]),
+        ..Default::default()
+    };
+    let champion_meta: HashMap<String, ChampionMeta> = champs
+        .into_iter()
+        .map(|champ| {
+            (
+                champ.to_string(),
+                ChampionMeta {
+                    id: champ.to_string(),
+                    positions: vec![Role::Top],
+                },
+            )
+        })
+        .collect();
+
+    let mut req = default_request(state);
+    req.our_pool = pool_with(&champs);
+    req.opp_pool = pool_with(&champs);
+    req.latency_budget_ms = 5000;
+    req.search_params.max_depth = 6;
+    req.search_params.branch_width = 5;
+    req.search_params.disable_alpha_beta = true;
+    req.meta_overrides = Some(meta);
+    req.champion_meta = champion_meta;
+
+    let engine = Engine::new(MetaData::default(), HashMap::new());
+    let cancel = CancelHandle::new();
+    let resp = engine.compute(req, &cancel).unwrap();
+
+    assert!(resp.compute_time_ms > 0);
+}
