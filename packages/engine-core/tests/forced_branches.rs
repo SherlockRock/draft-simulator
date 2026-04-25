@@ -256,3 +256,55 @@ fn include_mode_augments_children() {
         "only the explicitly-forced champion is user_injected"
     );
 }
+
+#[test]
+fn parent_lineage_resolves_after_swap() {
+    // Two stacked sole-mode forces — the second's `path` points at the first's
+    // forced node. From DraftState::default() (slots 0/1 are blue/red Ban1,
+    // both single picks), force slot 0 → "X" and slot 1 → "Y" with path
+    // anchored at (0, ["X"]). Depth-2 search must produce a single chain
+    // X → Y, both user_injected.
+    let state = DraftState::default();
+
+    let ctx = ctx_with_pool(&["A", "B", "C", "X", "Y"]);
+    let cancel = CancelHandle::new();
+
+    let params = SearchParams {
+        branch_width: 5,
+        max_depth: 2,
+        disable_alpha_beta: false,
+        forced_branches: vec![
+            ForcedBranch {
+                path: vec![],
+                target_slot: 0,
+                champion_id: "X".into(),
+                mode: ForcedMode::Sole,
+            },
+            ForcedBranch {
+                path: vec![step(0, &["X"])],
+                target_slot: 1,
+                champion_id: "Y".into(),
+                mode: ForcedMode::Sole,
+            },
+        ],
+    };
+    let tree = search(&state, &params, &ctx, &cancel).unwrap();
+
+    assert_eq!(
+        tree.children.len(),
+        1,
+        "outer sole force collapses to a single child"
+    );
+    let outer = &tree.children[0];
+    assert_eq!(outer.champion_ids, vec!["X".to_string()]);
+    assert!(outer.user_injected);
+
+    assert_eq!(
+        outer.children.len(),
+        1,
+        "inner sole force (path-anchored to the swap) collapses to single child"
+    );
+    let inner = &outer.children[0];
+    assert_eq!(inner.champion_ids, vec!["Y".to_string()]);
+    assert!(inner.user_injected);
+}
