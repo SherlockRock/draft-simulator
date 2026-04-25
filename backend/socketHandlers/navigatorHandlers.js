@@ -169,10 +169,17 @@ async function emitDraftUpdate(io, sessionId, payload) {
   io.to(getRoomName(sessionId)).emit("navigatorDraftUpdate", payload);
 }
 
-async function recomputeAndBroadcast(io, socket, session, draft, events, version) {
+async function recomputeAndBroadcast(io, socket, session, draft, events, version, options = {}) {
   void socket;
   try {
-    const result = await computeForDraft(draft, session, events, version, io);
+    const result = await computeForDraft(draft, session, events, version, io, options);
+
+    // Cancellation-driven swallow (engine.cancelled or meta.cancelled === true).
+    // Newer compute will broadcast its own snapshot — drop silently.
+    if (result.cancelled || (!result.snapshot && result.partial)) {
+      return null;
+    }
+
     const currentVersion = getCurrentVersion(session.id);
     if (result.version !== currentVersion) {
       console.log(
@@ -187,6 +194,13 @@ async function recomputeAndBroadcast(io, socket, session, draft, events, version
     });
     return result.snapshot;
   } catch (error) {
+    if (error && error.code === "engine.invalid_input") {
+      console.warn(
+        `[nav] engine.invalid_input session=${session.id} draft=${draft.id} path=${JSON.stringify(error.path || [])}`,
+      );
+      emitNavigatorError(socket, "Engine rejected request: invalid input");
+      return null;
+    }
     console.error("Navigator engine compute failed:", error);
     await emitDraftUpdate(io, session.id, {
       draft,
@@ -314,60 +328,59 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
     }
   });
 
-  wrap("navigatorSwapChampion", async (data = {}) => {
-    try {
-      const { sessionId, draftId, pathToParent, newChampionId, oldChampionId } = data;
+  // Phase 11 frontend will switch to the content-addressed { path, targetSlot,
+  // championId } payload. Until then, this handler validates the new shape
+  // and rejects the legacy { pathToParent, newChampionId } shape with a clear
+  // error — that's intentional: the legacy payload can't be served by the
+  // Rust engine, so we'd rather fail loudly than silently misinterpret.
+  function dispatchForcedBranch(eventName, mode) {
+    return async (data = {}) => {
+      try {
+        const { sessionId, draftId, path, targetSlot, championId } = data;
 
-      if (!sessionId || !draftId || !Array.isArray(pathToParent) || !newChampionId) {
-        emitNavigatorError(socket, "Invalid navigatorSwapChampion payload");
-        return;
+        if (
+          !sessionId ||
+          !draftId ||
+          !Array.isArray(path) ||
+          typeof targetSlot !== "number" ||
+          !championId
+        ) {
+          emitNavigatorError(
+            socket,
+            `Invalid ${eventName} payload (expected { path, targetSlot, championId })`,
+          );
+          return;
+        }
+
+        const session = await findOwnedSession(sessionId, socket);
+        if (!session) {
+          return;
+        }
+
+        const draft = await findSessionDraft(sessionId, draftId);
+        if (!draft) {
+          emitNavigatorError(socket, "Navigator draft not found");
+          return;
+        }
+
+        const events = await listDraftEvents(draft.id);
+
+        // Append a single forcedBranches entry for this dispatch. The engine
+        // produces a full tree with the forced node marked userInjected: true.
+        const forcedBranches = [{ path, targetSlot, championId, mode }];
+        const version = bumpVersion(sessionId);
+        await recomputeAndBroadcast(io, socket, session, draft, events, version, {
+          forcedBranches,
+        });
+      } catch (error) {
+        console.error(`Error in ${eventName}:`, error);
+        emitNavigatorError(socket, `${eventName} failed`);
       }
+    };
+  }
 
-      // TODO(engine): when the engine supports seeded re-search, pass the
-      // (pathToParent, newChampionId, oldChampionId) as a seed hint.
-      console.log("[nav] swap requested (stub)", {
-        sessionId,
-        draftId,
-        pathToParent,
-        newChampionId,
-        oldChampionId,
-      });
-      emitNavigatorError(
-        socket,
-        "Swap champion is not yet implemented by the engine. Coming with the Rust engine rewrite."
-      );
-    } catch (error) {
-      console.error("Error in navigatorSwapChampion:", error);
-      emitNavigatorError(socket, "Swap champion failed");
-    }
-  });
-
-  wrap("navigatorBranch", async (data = {}) => {
-    try {
-      const { sessionId, draftId, pathToParent, newChampionId } = data;
-
-      if (!sessionId || !draftId || !Array.isArray(pathToParent) || !newChampionId) {
-        emitNavigatorError(socket, "Invalid navigatorBranch payload");
-        return;
-      }
-
-      // TODO(engine): additive branch — engine-side re-search adds a sibling
-      // node with newChampionId under pathToParent. Not yet implemented.
-      console.log("[nav] branch requested (stub)", {
-        sessionId,
-        draftId,
-        pathToParent,
-        newChampionId,
-      });
-      emitNavigatorError(
-        socket,
-        "Create branch is not yet implemented by the engine. Coming with the Rust engine rewrite."
-      );
-    } catch (error) {
-      console.error("Error in navigatorBranch:", error);
-      emitNavigatorError(socket, "Create branch failed");
-    }
-  });
+  wrap("navigatorSwapChampion", dispatchForcedBranch("navigatorSwapChampion", "sole"));
+  wrap("navigatorBranch", dispatchForcedBranch("navigatorBranch", "include"));
 
   wrap("navigatorUndo", async (data = {}) => {
     try {
