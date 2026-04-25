@@ -2,11 +2,15 @@
 
 mod data_loader;
 mod error;
+mod projection;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use engine_core::cancellation::CancelHandle;
-use engine_core::engine::{Engine as CoreEngine, EngineError};
+use engine_core::engine::Engine as CoreEngine;
+use engine_core::protocol_types as proto;
+use engine_core::role_solver::ChampionMeta;
 use napi_derive::napi;
 
 #[napi]
@@ -49,6 +53,7 @@ pub struct CreateEngineOptions {
 #[napi]
 pub struct Engine {
     inner: Arc<CoreEngine>,
+    champion_meta: Arc<HashMap<String, ChampionMeta>>,
 }
 
 #[napi]
@@ -60,20 +65,38 @@ impl Engine {
             std::path::Path::new(&options.matchup_data_path),
         )
         .map_err(error::map_load_error)?;
-        let core = CoreEngine::new(meta, champion_meta);
+        let champion_meta_for_engine = champion_meta.clone();
+        let core = CoreEngine::new(meta, champion_meta_for_engine);
         Ok(Self {
             inner: Arc::new(core),
+            champion_meta: Arc::new(champion_meta),
         })
     }
 
     #[napi]
     pub async fn compute(
         &self,
-        _request_json: String,
-        _token: &CancelToken,
+        request_json: String,
+        token: &CancelToken,
     ) -> napi::Result<String> {
-        Err(error::map_engine_error(EngineError::Internal(
-            "compute not yet implemented".to_string(),
-        )))
+        let proto_request: proto::EngineRequest = serde_json::from_str(&request_json)
+            .map_err(|e| error::invalid_input(vec![], format!("request parse failed: {}", e)))?;
+
+        let champion_meta = (*self.champion_meta).clone();
+        let core_request = projection::request_to_core(&proto_request, champion_meta)
+            .map_err(error::map_engine_error)?;
+
+        let token_handle = token.inner.clone();
+        let engine = self.inner.clone();
+        let core_response = tokio::task::spawn_blocking(move || {
+            engine.compute(core_request, &token_handle)
+        })
+        .await
+        .map_err(|e| error::internal(format!("join error: {}", e)))?
+        .map_err(error::map_engine_error)?;
+
+        let proto_response = projection::core_to_response(core_response);
+        serde_json::to_string(&proto_response)
+            .map_err(|e| error::internal(format!("response serialize: {}", e)))
     }
 }
