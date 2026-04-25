@@ -1,7 +1,7 @@
 use crate::draft_state::{ActionType, Side};
 use crate::evaluator::ScoreSet;
 use crate::forced_branches::PathStep;
-use crate::role_solver::{ChampionMeta, WeightedAssignment};
+use crate::role_solver::{self, ChampionMeta, WeightedAssignment};
 use crate::search::TreeNode;
 use std::collections::HashMap;
 
@@ -259,22 +259,40 @@ pub fn extract_scenarios(
     selected
         .into_iter()
         .enumerate()
-        .map(|(idx, (leaf, _))| Scenario {
-            name: label_scenario(&leaf.blue_picks, champion_meta),
-            description: format!("{} vs {}", leaf.blue_picks.join(", "), leaf.red_picks.join(", ")),
-            perspective: if idx == 0 {
-                Perspective::Robust
+        .map(|(idx, (leaf, _))| {
+            let likely_assignments = if leaf.blue_picks.len() == 5
+                && leaf
+                    .blue_picks
+                    .iter()
+                    .all(|pick| champion_meta.contains_key(pick))
+            {
+                let picks: Vec<&str> = leaf.blue_picks.iter().map(String::as_str).collect();
+                role_solver::solve(&picks, champion_meta)
             } else {
-                Perspective::Likely
-            },
-            indicators: Vec::new(),
-            scores: leaf.scores,
-            blue_picks: leaf.blue_picks,
-            red_picks: leaf.red_picks,
-            blue_bans: leaf.blue_bans,
-            red_bans: leaf.red_bans,
-            likely_assignments: Vec::new(),
-            tree_path: leaf.path,
+                Vec::new()
+            };
+
+            Scenario {
+                name: label_scenario(&leaf.blue_picks, champion_meta),
+                description: format!(
+                    "{} vs {}",
+                    leaf.blue_picks.join(", "),
+                    leaf.red_picks.join(", ")
+                ),
+                perspective: if idx == 0 {
+                    Perspective::Robust
+                } else {
+                    Perspective::Likely
+                },
+                indicators: Vec::new(),
+                scores: leaf.scores,
+                blue_picks: leaf.blue_picks,
+                red_picks: leaf.red_picks,
+                blue_bans: leaf.blue_bans,
+                red_bans: leaf.red_bans,
+                likely_assignments,
+                tree_path: leaf.path,
+            }
         })
         .collect()
 }

@@ -80,8 +80,9 @@ fn sample_tree() -> TreeNode {
     )
 }
 
-fn champion_meta(
+fn champion_meta_with_positions(
     id: &str,
+    positions: Vec<Role>,
     damage: (f64, f64),
     scaling: (f64, f64, f64),
     engage: f64,
@@ -89,7 +90,7 @@ fn champion_meta(
 ) -> ChampionMeta {
     ChampionMeta {
         id: id.to_string(),
-        positions: vec![Role::Top],
+        positions,
         damage_profile: DamageProfile {
             physical: damage.0,
             magic: damage.1,
@@ -108,6 +109,16 @@ fn champion_meta(
         },
         tags: ChampionTags::default(),
     }
+}
+
+fn champion_meta(
+    id: &str,
+    damage: (f64, f64),
+    scaling: (f64, f64, f64),
+    engage: f64,
+    peel: f64,
+) -> ChampionMeta {
+    champion_meta_with_positions(id, vec![Role::Top], damage, scaling, engage, peel)
 }
 
 fn sample_meta() -> HashMap<String, ChampionMeta> {
@@ -178,6 +189,112 @@ fn extraction_tree() -> TreeNode {
             scenario_branch("Alpha", "Psi", 0.65),
         ],
     )
+}
+
+fn complete_blue_tree() -> TreeNode {
+    node(
+        &[],
+        None,
+        ActionType::Ban,
+        &[],
+        0.0,
+        vec![node(
+            &["Topper"],
+            Some(Side::Blue),
+            ActionType::Pick,
+            &[6],
+            0.9,
+            vec![node(
+                &["Jungler"],
+                Some(Side::Blue),
+                ActionType::Pick,
+                &[9],
+                0.85,
+                vec![node(
+                    &["Midder"],
+                    Some(Side::Blue),
+                    ActionType::Pick,
+                    &[10],
+                    0.8,
+                    vec![node(
+                        &["Carry"],
+                        Some(Side::Blue),
+                        ActionType::Pick,
+                        &[17],
+                        0.75,
+                        vec![node(
+                            &["Supporter"],
+                            Some(Side::Blue),
+                            ActionType::Pick,
+                            &[18],
+                            0.7,
+                            vec![],
+                        )],
+                    )],
+                )],
+            )],
+        )],
+    )
+}
+
+fn complete_blue_meta() -> HashMap<String, ChampionMeta> {
+    HashMap::from([
+        (
+            "Topper".to_string(),
+            champion_meta_with_positions(
+                "Topper",
+                vec![Role::Top],
+                (0.7, 0.1),
+                (0.5, 0.3, 0.3),
+                0.2,
+                0.1,
+            ),
+        ),
+        (
+            "Jungler".to_string(),
+            champion_meta_with_positions(
+                "Jungler",
+                vec![Role::Jungle],
+                (0.6, 0.2),
+                (0.6, 0.3, 0.2),
+                0.3,
+                0.1,
+            ),
+        ),
+        (
+            "Midder".to_string(),
+            champion_meta_with_positions(
+                "Midder",
+                vec![Role::Middle],
+                (0.2, 0.7),
+                (0.3, 0.5, 0.5),
+                0.1,
+                0.2,
+            ),
+        ),
+        (
+            "Carry".to_string(),
+            champion_meta_with_positions(
+                "Carry",
+                vec![Role::Adc],
+                (0.8, 0.1),
+                (0.2, 0.4, 0.8),
+                0.0,
+                0.1,
+            ),
+        ),
+        (
+            "Supporter".to_string(),
+            champion_meta_with_positions(
+                "Supporter",
+                vec![Role::Support],
+                (0.1, 0.4),
+                (0.2, 0.4, 0.6),
+                0.7,
+                0.8,
+            ),
+        ),
+    ])
 }
 
 #[test]
@@ -319,4 +436,23 @@ fn extract_scenarios_indicators_empty() {
     let scenarios = extract_scenarios(&extraction_tree(), &meta, 5);
 
     assert!(scenarios.iter().all(|scenario| scenario.indicators.is_empty()));
+}
+
+#[test]
+fn extract_scenarios_populates_likely_assignments_for_complete_blue_comp() {
+    let meta = complete_blue_meta();
+    let scenarios = extract_scenarios(&complete_blue_tree(), &meta, 1);
+    let assignments = &scenarios[0].likely_assignments;
+
+    assert_eq!(assignments.len(), 120);
+    let weight_sum: f64 = assignments.iter().map(|assignment| assignment.weight).sum();
+    assert!((weight_sum - 1.0).abs() < 1e-9);
+}
+
+#[test]
+fn extract_scenarios_leaves_assignments_empty_for_partial_comp() {
+    let meta = complete_blue_meta();
+    let scenarios = extract_scenarios(&extraction_tree(), &meta, 1);
+
+    assert!(scenarios[0].likely_assignments.is_empty());
 }
