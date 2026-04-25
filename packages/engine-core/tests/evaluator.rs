@@ -1,6 +1,6 @@
 use engine_core::draft_state::{DraftState, Phase, Side};
 use engine_core::evaluator::{
-    phase_weight_for, score_pick, EvalContext, PhaseWeightTable, PhaseWeights,
+    phase_weight_for, score_pick, EvalContext, MetaData, PhaseWeightTable, PhaseWeights,
 };
 use engine_core::pools::{Penalties, Role, RolePoolMap, TeamPool};
 use engine_core::role_solver::ChampionMeta;
@@ -59,8 +59,11 @@ fn ctx() -> EvalContext {
         phase: Phase::Pick1,
         our_pool: pool.clone(),
         opp_pool: pool,
+        our_picks: Vec::new(),
+        opp_picks: Vec::new(),
         penalties,
         champion_meta,
+        meta: MetaData::default(),
         phase_weights_blue: default_blue_weights(),
         phase_weights_red: default_red_weights(),
         synergy_multiplier: 1.0,
@@ -110,4 +113,34 @@ fn blue_red_phase_weights_independent() {
     let blue_ban1 = phase_weight_for(Side::Blue, Phase::Ban1, &blue, &red);
     let red_ban1 = phase_weight_for(Side::Red, Phase::Ban1, &blue, &red);
     assert!(blue_ban1.info != red_ban1.info || blue_ban1.comp != red_ban1.comp);
+}
+
+#[test]
+fn comp_strength_uses_win_rate_baseline() {
+    let mut c = ctx();
+    c.meta.win_rates.insert("Aatrox".into(), 0.55);
+    let state = DraftState::default();
+    let s = score_pick("Aatrox", Role::Top, &state, &c);
+    // Without synergy/counter contributions, compStrength ≈ win_rate
+    assert!((s.compStrength - 0.55).abs() < 0.05);
+}
+
+#[test]
+fn comp_strength_punishes_counter() {
+    let mut c = ctx();
+    c.meta.win_rates.insert("Aatrox".into(), 0.50);
+    c.opp_picks = vec!["Renekton".into()];
+    let mut renekton_counter = HashMap::new();
+    renekton_counter.insert("Renekton".into(), -0.10);
+    let mut counters = HashMap::new();
+    counters.insert("Aatrox".into(), renekton_counter);
+    c.meta.counters = counters;
+
+    let state = DraftState::default();
+    let s = score_pick("Aatrox", Role::Top, &state, &c);
+    assert!(
+        s.compStrength < 0.50,
+        "Counter risk must reduce compStrength: got {}",
+        s.compStrength
+    );
 }

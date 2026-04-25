@@ -35,13 +35,29 @@ pub fn phase_weight_for(
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct SynergyRule {
+    pub tags: (String, String),
+    pub bonus: f64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct MetaData {
+    pub win_rates: HashMap<String, f64>,
+    pub synergies: Vec<SynergyRule>,
+    pub counters: HashMap<String, HashMap<String, f64>>,
+}
+
 pub struct EvalContext {
     pub side: Side,
     pub phase: Phase,
     pub our_pool: TeamPool,
     pub opp_pool: TeamPool,
+    pub our_picks: Vec<String>,
+    pub opp_picks: Vec<String>,
     pub penalties: Penalties,
     pub champion_meta: HashMap<String, ChampionMeta>,
+    pub meta: MetaData,
     pub phase_weights_blue: PhaseWeightTable,
     pub phase_weights_red: PhaseWeightTable,
     pub synergy_multiplier: f64,
@@ -93,9 +109,52 @@ pub fn score_pick(
     }
 }
 
-fn comp_strength_for(_champion_id: &str, _role: Role, _ctx: &EvalContext) -> f64 {
-    // Task 4.2 wires real synergy/counter math; placeholder seed for the frame.
-    0.5
+fn comp_strength_for(champion_id: &str, _role: Role, ctx: &EvalContext) -> f64 {
+    let win_rate = ctx.meta.win_rates.get(champion_id).copied().unwrap_or(0.5);
+    let synergy = synergy_score(champion_id, &ctx.our_picks, &ctx.meta);
+    let counter_risk = counter_risk(champion_id, &ctx.opp_picks, &ctx.meta);
+    let raw = win_rate
+        + ctx.synergy_multiplier * synergy
+        - ctx.counter_multiplier * counter_risk;
+    raw.clamp(0.0, 1.0)
+}
+
+fn synergy_score(champion_id: &str, teammates: &[String], meta: &MetaData) -> f64 {
+    let candidate_tags = champion_tags(champion_id, &meta.synergies);
+    let mut total = 0.0;
+    for teammate in teammates {
+        let mate_tags = champion_tags(teammate, &meta.synergies);
+        for (a, b) in candidate_tags.iter().zip(mate_tags.iter()) {
+            for rule in &meta.synergies {
+                if (rule.tags.0 == *a && rule.tags.1 == *b)
+                    || (rule.tags.0 == *b && rule.tags.1 == *a)
+                {
+                    total += rule.bonus;
+                }
+            }
+        }
+    }
+    total
+}
+
+fn champion_tags<'a>(_champion_id: &str, _synergies: &'a [SynergyRule]) -> Vec<String> {
+    // Stub. Tag-based synergy keys come from championMeta which lands at
+    // engine boot (Task 7.x). Returning empty keeps synergy contribution at 0
+    // until that wiring exists, which is fine for the tests in this phase.
+    Vec::new()
+}
+
+fn counter_risk(champion_id: &str, opponents: &[String], meta: &MetaData) -> f64 {
+    let mut total = 0.0;
+    if let Some(counter_map) = meta.counters.get(champion_id) {
+        for opp in opponents {
+            if let Some(diff) = counter_map.get(opp) {
+                // negative differential means we get countered by `opp`
+                total += (-diff).max(0.0);
+            }
+        }
+    }
+    total
 }
 
 fn information_value_for(_champion_id: &str, _role: Role, ctx: &EvalContext) -> f64 {
