@@ -2,8 +2,8 @@
 //! `search` + iterative deepening, Task 7.3 adds scenario extraction.
 
 use crate::cancellation::CancelHandle;
-use crate::draft_state::{ActionType, DraftState, Phase, Side};
-use crate::evaluator::{EvalContext, MetaData, PhaseWeightTable, ScoreSet};
+use crate::draft_state::{DraftState, Phase, Side};
+use crate::evaluator::{EvalContext, MetaData, PhaseWeightTable};
 use crate::iterative_deepening::{self, SearchResult};
 use crate::pools::{Penalties, TeamPool};
 use crate::role_solver::ChampionMeta;
@@ -100,7 +100,7 @@ impl Engine {
         cancel: &CancelHandle,
     ) -> Result<ComputeResponse, EngineError> {
         if cancel.is_cancelled() {
-            return Ok(Self::empty_response(&request.state, true));
+            return Err(EngineError::Cancelled);
         }
 
         let start = Instant::now();
@@ -186,32 +186,8 @@ impl Engine {
                     cancelled: result.partial,
                 })
             }
-            Err(EngineError::Cancelled) => Ok(Self::empty_response(&state, true)),
+            Err(EngineError::Cancelled) => Err(EngineError::Cancelled),
             Err(err) => Err(err),
-        }
-    }
-
-    fn empty_response(state: &DraftState, cancelled: bool) -> ComputeResponse {
-        let turn = state.current_turn();
-        ComputeResponse {
-            tree: TreeNode {
-                champion_ids: vec![],
-                scores: ScoreSet::default(),
-                side: None,
-                slots: vec![],
-                action_type: turn.map(|t| t.action_type).unwrap_or(ActionType::Pick),
-                phase: turn.map(|t| t.phase).unwrap_or(Phase::Ban1),
-                user_injected: false,
-                children: vec![],
-            },
-            scenarios: vec![],
-            nodes_evaluated: 0,
-            compute_time_ms: 0,
-            pruning_rate: 0.0,
-            depth_reached: 0,
-            transpositions_found: 0,
-            forced_branches_dropped: 0,
-            cancelled,
         }
     }
 }

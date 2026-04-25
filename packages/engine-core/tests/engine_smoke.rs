@@ -130,18 +130,14 @@ fn empty_engine_returns_empty_tree() {
 }
 
 #[test]
-fn compute_marks_response_cancelled_when_token_already_cancelled() {
-    // Eager cancellation propagates: a handle cancelled before compute() runs
-    // produces a response with cancelled = true. The skeleton doesn't yet do
-    // any work, so it just echoes the handle's state — once 7.2 lands real
-    // search, the same surface stays valid.
+fn compute_errs_cancelled_when_token_already_cancelled() {
     let engine = Engine::new(MetaData::default(), HashMap::new());
     let req = default_request(DraftState::default());
     let cancel = CancelHandle::new();
     cancel.cancel();
-    let resp = engine.compute(req, &cancel).expect("skeleton must not error");
+    let resp = engine.compute(req, &cancel);
 
-    assert!(resp.cancelled);
+    assert!(matches!(resp, Err(EngineError::Cancelled)));
 }
 
 #[test]
@@ -211,4 +207,55 @@ fn compute_returns_real_tree_for_pick_turn() {
     assert!(resp.depth_reached >= 1);
     assert!(!resp.tree.children[0].champion_ids.is_empty());
     assert!(!resp.cancelled);
+}
+
+#[test]
+fn compute_errs_cancelled_when_cancelled_before_first_depth() {
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 6);
+
+    let mut req = default_request(state);
+    req.our_pool = pool_with(&["A", "B", "C"]);
+    req.opp_pool = pool_with(&["A", "B", "C"]);
+    req.latency_budget_ms = 5000;
+    req.search_params.max_depth = 1;
+    req.search_params.branch_width = 5;
+    req.meta_overrides = Some(MetaData {
+        win_rates: HashMap::from([
+            ("A".to_string(), 0.95),
+            ("B".to_string(), 0.70),
+            ("C".to_string(), 0.20),
+        ]),
+        ..Default::default()
+    });
+    req.champion_meta = HashMap::from([
+        (
+            "A".to_string(),
+            ChampionMeta {
+                id: "A".to_string(),
+                positions: vec![Role::Top],
+            },
+        ),
+        (
+            "B".to_string(),
+            ChampionMeta {
+                id: "B".to_string(),
+                positions: vec![Role::Top],
+            },
+        ),
+        (
+            "C".to_string(),
+            ChampionMeta {
+                id: "C".to_string(),
+                positions: vec![Role::Top],
+            },
+        ),
+    ]);
+
+    let engine = Engine::new(MetaData::default(), HashMap::new());
+    let cancel = CancelHandle::new();
+    cancel.cancel();
+
+    let resp = engine.compute(req, &cancel);
+    assert!(matches!(resp, Err(EngineError::Cancelled)));
 }
