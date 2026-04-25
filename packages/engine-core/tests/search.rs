@@ -3,7 +3,7 @@ use engine_core::draft_state::{ActionType, DraftState, Phase, Side, TURN_SEQUENC
 use engine_core::evaluator::{EvalContext, MetaData, PhaseWeightTable, PhaseWeights};
 use engine_core::pools::{Penalties, Role, RolePoolMap, TeamPool};
 use engine_core::role_solver::ChampionMeta;
-use engine_core::search::{search, SearchParams};
+use engine_core::search::{search, search_with_stats, SearchParams};
 use std::collections::HashMap;
 
 fn pool_with(champs: &[&str]) -> TeamPool {
@@ -185,6 +185,23 @@ fn pair_consumes_two_slots_in_recursion() {
         );
         assert_eq!(grandchild.slots, vec![9, 10]);
     }
+}
+
+#[test]
+fn transposition_cache_populates_during_search() {
+    // A multi-depth search should populate the cache with at least one entry.
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 6);
+
+    let ctx = ctx_with_pool(&["A", "B", "C"]);
+    let params = SearchParams { branch_width: 3, max_depth: 3 };
+    let cancel = CancelHandle::new();
+
+    let (_tree, stats) = search_with_stats(&state, &params, &ctx, &cancel).unwrap();
+    assert!(
+        stats.cache_entries > 0,
+        "transposition cache must be populated during recursion"
+    );
 }
 
 #[test]

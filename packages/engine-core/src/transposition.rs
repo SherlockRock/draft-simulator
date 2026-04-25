@@ -1,4 +1,5 @@
 use crate::draft_state::DraftState;
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
@@ -6,6 +7,10 @@ use std::hash::{Hash, Hasher};
 pub struct StateHash(u64);
 
 impl StateHash {
+    pub fn from_u64(value: u64) -> Self {
+        Self(value)
+    }
+
     pub fn from(state: &DraftState) -> Self {
         // Bans hashed as multisets (sorted)
         let mut blue_bans = state.blue_bans.clone();
@@ -28,10 +33,6 @@ impl StateHash {
 }
 
 fn canonicalize_blue_picks(picks: &[String]) -> Vec<String> {
-    // Blue pick order in DraftState.blue_picks:
-    //   index 0 = B1 (slot 6)
-    //   index 1 = B2 (slot 9), index 2 = B3 (slot 10) — paired
-    //   index 3 = B4 (slot 17), index 4 = B5 (slot 18) — paired
     let mut out: Vec<String> = picks.to_vec();
     if out.len() >= 3 {
         out[1..3].sort();
@@ -43,11 +44,6 @@ fn canonicalize_blue_picks(picks: &[String]) -> Vec<String> {
 }
 
 fn canonicalize_red_picks(picks: &[String]) -> Vec<String> {
-    // Red pick order in DraftState.red_picks:
-    //   index 0 = R1 (slot 7), index 1 = R2 (slot 8) — paired
-    //   index 2 = R3 (slot 11)
-    //   index 3 = R4 (slot 16)
-    //   index 4 = R5 (slot 19)
     let mut out: Vec<String> = picks.to_vec();
     if out.len() >= 2 {
         out[0..2].sort();
@@ -55,22 +51,43 @@ fn canonicalize_red_picks(picks: &[String]) -> Vec<String> {
     out
 }
 
-#[derive(Default)]
-pub struct TranspositionCache {
-    map: HashMap<StateHash, f64>,
+/// Per-compute transposition cache. Generic over the cached value so callers
+/// can store either a propagated score (f64) or a full TreeNode. Single-threaded
+/// by design — interior mutability via Cell tracks hit counts without requiring
+/// `&mut` at every read site.
+pub struct TranspositionCache<V = f64> {
+    map: HashMap<StateHash, V>,
+    hits: Cell<usize>,
 }
 
-impl TranspositionCache {
+impl<V: Clone> Default for TranspositionCache<V> {
+    fn default() -> Self {
+        Self {
+            map: HashMap::new(),
+            hits: Cell::new(0),
+        }
+    }
+}
+
+impl<V: Clone> TranspositionCache<V> {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn insert(&mut self, hash: StateHash, score: f64) {
-        self.map.insert(hash, score);
+    pub fn insert(&mut self, hash: StateHash, value: V) {
+        self.map.insert(hash, value);
     }
 
-    pub fn get(&self, hash: &StateHash) -> Option<f64> {
-        self.map.get(hash).copied()
+    pub fn get(&self, hash: &StateHash) -> Option<V> {
+        let result = self.map.get(hash).cloned();
+        if result.is_some() {
+            self.hits.set(self.hits.get() + 1);
+        }
+        result
+    }
+
+    pub fn hits(&self) -> usize {
+        self.hits.get()
     }
 
     pub fn len(&self) -> usize {

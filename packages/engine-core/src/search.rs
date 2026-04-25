@@ -4,7 +4,7 @@ use crate::evaluator::{score_pick, EvalContext, ScoreSet};
 use crate::pair_filter::{seed_pair_candidates, PairFilterConfig};
 use crate::pools::{Role, TeamPool};
 use crate::role_solver::ChampionMeta;
-use crate::transposition::TranspositionCache;
+use crate::transposition::{StateHash, TranspositionCache};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -42,7 +42,7 @@ pub fn search(
     eval_ctx: &EvalContext,
     cancel: &CancelHandle,
 ) -> Result<TreeNode, CancelError> {
-    let mut cache = TranspositionCache::new();
+    let mut cache: TranspositionCache<TreeNode> = TranspositionCache::new();
     search_recursive(
         state,
         params,
@@ -55,24 +55,63 @@ pub fn search(
     )
 }
 
+/// Like `search`, but also reports cache statistics (transposition hits, entries).
+/// Useful for tests and the engine `meta.transpositionsFound` counter.
+pub fn search_with_stats(
+    state: &DraftState,
+    params: &SearchParams,
+    eval_ctx: &EvalContext,
+    cancel: &CancelHandle,
+) -> Result<(TreeNode, SearchStats), CancelError> {
+    let mut cache: TranspositionCache<TreeNode> = TranspositionCache::new();
+    let tree = search_recursive(
+        state,
+        params,
+        params.max_depth,
+        eval_ctx,
+        cancel,
+        &mut cache,
+        f64::NEG_INFINITY,
+        f64::INFINITY,
+    )?;
+    let stats = SearchStats {
+        transpositions_found: cache.hits(),
+        cache_entries: cache.len(),
+    };
+    Ok((tree, stats))
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SearchStats {
+    pub transpositions_found: usize,
+    pub cache_entries: usize,
+}
+
 fn search_recursive(
     state: &DraftState,
     params: &SearchParams,
     remaining_depth: usize,
     eval_ctx: &EvalContext,
     cancel: &CancelHandle,
-    cache: &mut TranspositionCache,
+    cache: &mut TranspositionCache<TreeNode>,
     mut alpha: f64,
     mut beta: f64,
 ) -> Result<TreeNode, CancelError> {
     ensure_not_cancelled(cancel)?;
+
+    // Transposition lookup. Cache key includes remaining_depth so that a
+    // shallow cached result doesn't replace what a deeper search would compute.
+    let cache_key = state_cache_key(state, remaining_depth);
+    if let Some(hit) = cache.get(&cache_key) {
+        return Ok(hit);
+    }
 
     let turn_opt = state.current_turn();
 
     // Terminal or depth-bound: produce a leaf node carrying a static evaluation.
     if turn_opt.is_none() || remaining_depth == 0 {
         let value = eval_state(state, eval_ctx);
-        return Ok(TreeNode {
+        let leaf = TreeNode {
             champion_ids: vec![],
             scores: ScoreSet {
                 composite: value,
@@ -84,7 +123,9 @@ fn search_recursive(
             phase: turn_opt.map(|t| t.phase).unwrap_or(Phase::Pick2),
             user_injected: false,
             children: vec![],
-        });
+        };
+        cache.insert(cache_key, leaf.clone());
+        return Ok(leaf);
     }
 
     let turn = turn_opt.expect("guarded above");
@@ -188,7 +229,7 @@ fn search_recursive(
             .unwrap_or(Ordering::Equal)
     });
 
-    Ok(TreeNode {
+    let result = TreeNode {
         champion_ids: vec![],
         scores: ScoreSet {
             composite: best_value,
@@ -200,7 +241,19 @@ fn search_recursive(
         phase: turn.phase,
         user_injected: false,
         children,
-    })
+    };
+    cache.insert(cache_key, result.clone());
+    Ok(result)
+}
+
+/// Cache key combines state hash with remaining depth so a shallow cached
+/// result isn't reused at a deeper call where more search would have been done.
+fn state_cache_key(state: &DraftState, remaining_depth: usize) -> StateHash {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    StateHash::from(state).hash(&mut hasher);
+    remaining_depth.hash(&mut hasher);
+    StateHash::from_u64(hasher.finish())
 }
 
 /// Static evaluation of a draft state from `ctx.side`'s perspective. Sums
@@ -297,7 +350,7 @@ fn expand_pair(
     remaining_depth: usize,
     eval_ctx: &EvalContext,
     cancel: &CancelHandle,
-    cache: &mut TranspositionCache,
+    cache: &mut TranspositionCache<TreeNode>,
     mut alpha: f64,
     mut beta: f64,
     turn: TurnInfo,
@@ -427,7 +480,7 @@ fn expand_pair(
             .unwrap_or(Ordering::Equal)
     });
 
-    Ok(TreeNode {
+    let result = TreeNode {
         champion_ids: vec![],
         scores: ScoreSet {
             composite: best_value,
@@ -439,5 +492,8 @@ fn expand_pair(
         phase: turn.phase,
         user_injected: false,
         children,
-    })
+    };
+    let cache_key = state_cache_key(state, remaining_depth);
+    cache.insert(cache_key, result.clone());
+    Ok(result)
 }
