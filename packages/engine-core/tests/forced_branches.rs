@@ -351,3 +351,67 @@ fn unresolved_path_drops_silently() {
         "unresolved path increments forced_branches_dropped"
     );
 }
+
+#[test]
+fn resolves_after_sibling_rerank() {
+    // The force's path is content-addressed: it matches by (slot, championIds),
+    // not by sibling position. Two computes with different win_rates re-order
+    // children at slot 0 (A first vs A last among siblings) — the force at
+    // slot 1 anchored to (0, ["A"]) must resolve in both.
+    let state = DraftState::default();
+    let cancel = CancelHandle::new();
+
+    fn run_with_winrates(
+        state: &DraftState,
+        winrates: &[(&str, f64)],
+        cancel: &CancelHandle,
+    ) -> engine_core::search::TreeNode {
+        let mut ctx = ctx_with_pool(&["A", "B", "C"]);
+        for (id, w) in winrates {
+            ctx.meta.win_rates.insert((*id).into(), *w);
+        }
+        let params = SearchParams {
+            branch_width: 3,
+            max_depth: 2,
+            disable_alpha_beta: false,
+            forced_branches: vec![ForcedBranch {
+                path: vec![step(0, &["A"])],
+                target_slot: 1,
+                champion_id: "Y".into(),
+                mode: ForcedMode::Sole,
+            }],
+        };
+        search(state, &params, &ctx, cancel).unwrap()
+    }
+
+    fn find_a_child(
+        tree: &engine_core::search::TreeNode,
+    ) -> &engine_core::search::TreeNode {
+        tree.children
+            .iter()
+            .find(|c| c.champion_ids == vec!["A".to_string()])
+            .expect("A must be among children for branch_width=3")
+    }
+
+    // Compute 1: A ranked first.
+    let tree_a_first = run_with_winrates(
+        &state,
+        &[("A", 0.9), ("B", 0.6), ("C", 0.3)],
+        &cancel,
+    );
+    let a_first = find_a_child(&tree_a_first);
+    assert_eq!(a_first.children.len(), 1, "force collapses slot 1 to one child");
+    assert_eq!(a_first.children[0].champion_ids, vec!["Y".to_string()]);
+    assert!(a_first.children[0].user_injected);
+
+    // Compute 2: same pool but A ranked last (B and C now score higher).
+    let tree_a_last = run_with_winrates(
+        &state,
+        &[("A", 0.3), ("B", 0.9), ("C", 0.6)],
+        &cancel,
+    );
+    let a_last = find_a_child(&tree_a_last);
+    assert_eq!(a_last.children.len(), 1, "force still resolves after sibling rerank");
+    assert_eq!(a_last.children[0].champion_ids, vec!["Y".to_string()]);
+    assert!(a_last.children[0].user_injected);
+}
