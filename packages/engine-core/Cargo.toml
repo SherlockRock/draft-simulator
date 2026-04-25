@@ -10,6 +10,10 @@ crate-type = ["lib"]
 name = "pair_turn_171"
 harness = false
 
+[[bench]]
+name = "cancellation_latency"
+harness = false
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
