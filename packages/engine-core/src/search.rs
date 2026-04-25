@@ -55,6 +55,8 @@ struct SearchAccum {
     /// Indices of `forced_branches` that were applied at least once during the
     /// search. The final `forced_branches_dropped` is `total - applied`.
     applied_forced: HashSet<usize>,
+    nodes_evaluated: usize,
+    nodes_pruned: usize,
 }
 
 pub fn search(
@@ -95,6 +97,8 @@ pub fn search_with_stats(
     let stats = SearchStats {
         transpositions_found: cache.hits(),
         cache_entries: cache.len(),
+        nodes_evaluated: accum.nodes_evaluated,
+        nodes_pruned: accum.nodes_pruned,
         forced_branches_dropped: params
             .forced_branches
             .len()
@@ -107,6 +111,8 @@ pub fn search_with_stats(
 pub struct SearchStats {
     pub transpositions_found: usize,
     pub cache_entries: usize,
+    pub nodes_evaluated: usize,
+    pub nodes_pruned: usize,
     /// Forced branches whose `path` did not resolve against any actual lineage
     /// during the search. Spec: silent drop, telemetry-only.
     pub forced_branches_dropped: usize,
@@ -197,6 +203,8 @@ fn search_recursive(
         );
     }
 
+    accum.nodes_evaluated += 1;
+
     let our_turn = turn.side == eval_ctx.side;
     let candidates = collect_candidates(state, turn, eval_ctx);
     let ranked = score_and_rank(
@@ -220,7 +228,7 @@ fn search_recursive(
         f64::INFINITY
     };
 
-    for (champ, _static_score) in &forced_set {
+    for (idx, (champ, _static_score)) in forced_set.iter().enumerate() {
         ensure_not_cancelled(cancel)?;
 
         let mut child_state = state.clone();
@@ -273,6 +281,7 @@ fn search_recursive(
             }
         }
         if !params.disable_alpha_beta && alpha >= beta {
+            accum.nodes_pruned += forced_set.len().saturating_sub(idx + 1);
             break;
         }
     }
@@ -467,6 +476,8 @@ fn expand_pair(
     mut beta: f64,
     turn: TurnInfo,
 ) -> Result<TreeNode, EngineError> {
+    accum.nodes_evaluated += 1;
+
     let our_turn = turn.side == eval_ctx.side;
     let pair_start_slot = state.turn_index();
     let pair_end_slot = pair_start_slot + 1;
@@ -514,7 +525,7 @@ fn expand_pair(
 
     let injected = pair_force.is_some();
 
-    for (first, second, _static) in &scored_pairs {
+    for (idx, (first, second, _static)) in scored_pairs.iter().enumerate() {
         ensure_not_cancelled(cancel)?;
 
         let mut child_state = state.clone();
@@ -567,6 +578,7 @@ fn expand_pair(
             }
         }
         if !params.disable_alpha_beta && alpha >= beta {
+            accum.nodes_pruned += scored_pairs.len().saturating_sub(idx + 1);
             break;
         }
     }

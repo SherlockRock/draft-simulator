@@ -177,9 +177,14 @@ impl Engine {
                 Ok(ComputeResponse {
                     tree: result.payload,
                     scenarios: vec![],
-                    nodes_evaluated: 0,
+                    nodes_evaluated: stats.nodes_evaluated,
                     compute_time_ms: start.elapsed().as_millis() as u64,
-                    pruning_rate: 0.0,
+                    pruning_rate: if stats.nodes_evaluated + stats.nodes_pruned > 0 {
+                        stats.nodes_pruned as f64
+                            / (stats.nodes_evaluated + stats.nodes_pruned) as f64
+                    } else {
+                        0.0
+                    },
                     depth_reached: result.depth,
                     transpositions_found: stats.transpositions_found,
                     forced_branches_dropped: stats.forced_branches_dropped,
