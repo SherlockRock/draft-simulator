@@ -3,6 +3,7 @@
 pub mod draft_state;
 pub mod pools;
 pub mod protocol_types;
+pub mod role_solver;
 
 #[cfg(test)]
 mod smoke {
