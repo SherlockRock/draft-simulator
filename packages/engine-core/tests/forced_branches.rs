@@ -188,3 +188,71 @@ fn sole_mode_replaces_children() {
         "forced child must carry user_injected = true"
     );
 }
+
+#[test]
+fn include_mode_augments_children() {
+    // Slot 6, pool of 4 champs with distinct win_rates. branch_width=2 keeps
+    // top-2 (A, B). Include-mode force on D (worst-scoring) augments — final
+    // children list is [A, B, D], with D user_injected = true.
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 6);
+
+    let mut ctx = ctx_with_pool(&["A", "B", "C", "D"]);
+    ctx.meta.win_rates.insert("A".into(), 0.95);
+    ctx.meta.win_rates.insert("B".into(), 0.70);
+    ctx.meta.win_rates.insert("C".into(), 0.50);
+    ctx.meta.win_rates.insert("D".into(), 0.30);
+
+    let cancel = CancelHandle::new();
+
+    // Baseline: branch_width=2 → top 2 = [A, B], no D.
+    let baseline_params = SearchParams {
+        branch_width: 2,
+        max_depth: 1,
+        disable_alpha_beta: false,
+        forced_branches: vec![],
+    };
+    let baseline = search(&state, &baseline_params, &ctx, &cancel).unwrap();
+    let baseline_ids: Vec<&str> = baseline
+        .children
+        .iter()
+        .map(|c| c.champion_ids[0].as_str())
+        .collect();
+    assert_eq!(baseline.children.len(), 2);
+    assert!(!baseline_ids.contains(&"D"));
+
+    // Include D — should add a 3rd child for D with user_injected=true.
+    let forced_params = SearchParams {
+        branch_width: 2,
+        max_depth: 1,
+        disable_alpha_beta: false,
+        forced_branches: vec![ForcedBranch {
+            path: vec![],
+            target_slot: 6,
+            champion_id: "D".into(),
+            mode: ForcedMode::Include,
+        }],
+    };
+    let forced = search(&state, &forced_params, &ctx, &cancel).unwrap();
+
+    assert_eq!(
+        forced.children.len(),
+        3,
+        "include mode must augment top-N with the forced champion"
+    );
+    let d_child = forced
+        .children
+        .iter()
+        .find(|c| c.champion_ids == vec!["D".to_string()])
+        .expect("D must be present after include force");
+    assert!(
+        d_child.user_injected,
+        "forced-included child must carry user_injected = true"
+    );
+    // The two non-D children should NOT be user_injected.
+    let injected_count = forced.children.iter().filter(|c| c.user_injected).count();
+    assert_eq!(
+        injected_count, 1,
+        "only the explicitly-forced champion is user_injected"
+    );
+}
