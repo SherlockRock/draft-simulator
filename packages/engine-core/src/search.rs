@@ -1,5 +1,6 @@
-use crate::cancellation::{ensure_not_cancelled, CancelError, CancelHandle};
+use crate::cancellation::{ensure_not_cancelled, CancelHandle};
 use crate::draft_state::{ActionType, DraftState, Phase, Side, TurnInfo, TURN_SEQUENCE};
+use crate::engine::EngineError;
 use crate::evaluator::{score_pick, EvalContext, ScoreSet};
 use crate::forced_branches::{resolve_path, ForcedBranch, ForcedMode, PathMatch};
 use crate::pair_filter::{seed_pair_candidates, PairFilterConfig};
@@ -9,25 +10,6 @@ use crate::transposition::{StateHash, TranspositionCache};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::collections::HashSet;
-
-/// Errors that may surface from `search`. Phase 7 will fold this into the
-/// engine-wide `EngineError` taxonomy; for now the search layer carries its
-/// own enum so the proto/cancellation paths don't bleed engine semantics.
-#[derive(Clone, Debug)]
-pub enum SearchError {
-    /// Search was cancelled before producing a usable tree.
-    Cancelled,
-    /// A forced branch entry violates a structural invariant (e.g., reverse
-    /// fill at a pair node). `path` mirrors the protocol's
-    /// `engine.invalid_input` Zod-style path.
-    InvalidInput { path: Vec<String> },
-}
-
-impl From<CancelError> for SearchError {
-    fn from(_: CancelError) -> Self {
-        SearchError::Cancelled
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct SearchParams {
@@ -80,7 +62,7 @@ pub fn search(
     params: &SearchParams,
     eval_ctx: &EvalContext,
     cancel: &CancelHandle,
-) -> Result<TreeNode, SearchError> {
+) -> Result<TreeNode, EngineError> {
     let (tree, _stats) = search_with_stats(state, params, eval_ctx, cancel)?;
     Ok(tree)
 }
@@ -92,7 +74,7 @@ pub fn search_with_stats(
     params: &SearchParams,
     eval_ctx: &EvalContext,
     cancel: &CancelHandle,
-) -> Result<(TreeNode, SearchStats), SearchError> {
+) -> Result<(TreeNode, SearchStats), EngineError> {
     validate_forced_branches(state, &params.forced_branches)?;
 
     let mut cache: TranspositionCache<TreeNode> = TranspositionCache::new();
@@ -137,14 +119,14 @@ pub struct SearchStats {
 fn validate_forced_branches(
     state: &DraftState,
     branches: &[ForcedBranch],
-) -> Result<(), SearchError> {
+) -> Result<(), EngineError> {
     for (idx, fb) in branches.iter().enumerate() {
         let target_turn = match TURN_SEQUENCE.get(fb.target_slot) {
             Some(t) => t,
             None => continue,
         };
         if target_turn.pair_start && fb.target_slot < state.turn_index() {
-            return Err(SearchError::InvalidInput {
+            return Err(EngineError::InvalidInput {
                 path: vec!["forcedBranches".to_string(), idx.to_string()],
             });
         }
@@ -164,7 +146,7 @@ fn search_recursive(
     lineage: &mut Vec<(usize, Vec<String>)>,
     mut alpha: f64,
     mut beta: f64,
-) -> Result<TreeNode, SearchError> {
+) -> Result<TreeNode, EngineError> {
     ensure_not_cancelled(cancel)?;
 
     // Transposition lookup. Cache key includes remaining_depth so that a
@@ -484,7 +466,7 @@ fn expand_pair(
     mut alpha: f64,
     mut beta: f64,
     turn: TurnInfo,
-) -> Result<TreeNode, SearchError> {
+) -> Result<TreeNode, EngineError> {
     let our_turn = turn.side == eval_ctx.side;
     let pair_start_slot = state.turn_index();
     let pair_end_slot = pair_start_slot + 1;

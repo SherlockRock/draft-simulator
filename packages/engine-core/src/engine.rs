@@ -21,7 +21,7 @@ pub struct Engine {
 /// Engine-level error taxonomy. Mirrors the protocol's `engine.*` codes:
 /// `InvalidInput.path` is the Zod-style path to the offending field, used by
 /// the napi-rs wrapper to populate `EngineError.path` on the JS side.
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Debug, thiserror::Error)]
 pub enum EngineError {
     #[error("invalid input")]
     InvalidInput { path: Vec<String> },
@@ -31,6 +31,12 @@ pub enum EngineError {
     Timeout(usize),
     #[error("internal engine error: {0}")]
     Internal(String),
+}
+
+impl From<crate::cancellation::CancelError> for EngineError {
+    fn from(_: crate::cancellation::CancelError) -> Self {
+        EngineError::Cancelled
+    }
 }
 
 /// Request to `Engine::compute()`. Task 7.1 keeps this minimal; Task 7.2

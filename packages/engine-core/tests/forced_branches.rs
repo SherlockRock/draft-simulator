@@ -1,12 +1,13 @@
 use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::{ActionType, DraftState, Phase, Side, TURN_SEQUENCE};
+use engine_core::engine::EngineError;
 use engine_core::evaluator::{EvalContext, MetaData, PhaseWeightTable, PhaseWeights};
 use engine_core::forced_branches::{
     resolve_path, ForcedBranch, ForcedMode, PathMatch, PathStep,
 };
 use engine_core::pools::{Penalties, Role, RolePoolMap, TeamPool};
 use engine_core::role_solver::ChampionMeta;
-use engine_core::search::{search, search_with_stats, SearchError, SearchParams};
+use engine_core::search::{search, search_with_stats, SearchParams};
 use std::collections::HashMap;
 
 fn step(slot: usize, ids: &[&str]) -> PathStep {
@@ -533,7 +534,7 @@ fn reverse_fill_pair_errors() {
         .expect_err("reverse-fill pair force must surface as InvalidInput");
 
     match err {
-        SearchError::InvalidInput { path } => {
+        EngineError::InvalidInput { path } => {
             assert_eq!(
                 path,
                 vec!["forcedBranches".to_string(), "0".to_string()],
