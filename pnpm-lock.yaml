@@ -14,6 +14,9 @@ importers:
 
   backend:
     dependencies:
+      '@draft-sim/engine-node':
+        specifier: workspace:*
+        version: link:../packages/engine-node
       '@draft-sim/shared-types':
         specifier: workspace:*
         version: link:../packages/shared-types
@@ -93,6 +96,9 @@ importers:
       sequelize-cli:
         specifier: ^6.6.5
         version: 6.6.5
+      vitest:
+        specifier: ^3.1.1
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.11)(jiti@1.21.7)(yaml@2.8.2)
 
   frontend:
     dependencies:
@@ -211,6 +217,12 @@ importers:
       typescript:
         specifier: ^5.1.3
         version: 5.9.3
+
+  packages/engine-node:
+    devDependencies:
+      '@napi-rs/cli':
+        specifier: ^2.18.0
+        version: 2.18.4
 
   packages/engine-proto:
     devDependencies:
@@ -740,6 +752,11 @@ packages:
 
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
+
+  '@napi-rs/cli@2.18.4':
+    resolution: {integrity: sha512-SgJeA4df9DE2iAEpr3M2H0OKl/yjtg1BnRI5/JyowS71tUWhrfSu2LT0V3vlHET+g1hBVlrO60PmEXwUEKp8Mg==}
+    engines: {node: '>= 10'}
+    hasBin: true
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -4036,6 +4053,8 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   '@js-sdsl/ordered-map@4.4.2': {}
+
+  '@napi-rs/cli@2.18.4': {}
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:

@@ -8,9 +8,11 @@
     "db:migrate": "npx sequelize-cli db:migrate",
     "db:migrate:undo": "npx sequelize-cli db:migrate:undo",
     "db:migrate:status": "npx sequelize-cli db:migrate:status",
-    "migration:generate": "npx sequelize-cli migration:generate"
+    "migration:generate": "npx sequelize-cli migration:generate",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@draft-sim/engine-node": "workspace:*",
     "@draft-sim/shared-types": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.213.0",
@@ -38,6 +40,7 @@
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
-    "sequelize-cli": "^6.6.5"
+    "sequelize-cli": "^6.6.5",
+    "vitest": "^3.1.1"
   }
 }
