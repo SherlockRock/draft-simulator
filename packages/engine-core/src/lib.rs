@@ -2,6 +2,7 @@
 
 pub mod cancellation;
 pub mod draft_state;
+pub mod engine;
 pub mod evaluator;
 pub mod forced_branches;
 pub mod iterative_deepening;
