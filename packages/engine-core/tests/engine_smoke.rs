@@ -2,6 +2,7 @@ use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::{ActionType, DraftState, Side, TURN_SEQUENCE};
 use engine_core::engine::{ComputeRequest, Engine, EngineError};
 use engine_core::evaluator::{MetaData, PhaseWeightTable, PhaseWeights};
+use engine_core::forced_branches::{ForcedBranch, ForcedMode, PathStep};
 use engine_core::role_solver::ChampionMeta;
 use engine_core::pools::{Penalties, RolePoolMap, TeamPool};
 use engine_core::pools::Role;
@@ -106,6 +107,13 @@ fn fast_forward_to_slot(state: &mut DraftState, slot: usize) {
             (ActionType::Pick, Side::Blue) => state.blue_picks.push(id),
             (ActionType::Pick, Side::Red) => state.red_picks.push(id),
         }
+    }
+}
+
+fn step(slot: usize, ids: &[&str]) -> PathStep {
+    PathStep {
+        slot,
+        champion_ids: ids.iter().map(|id| (*id).to_string()).collect(),
     }
 }
 
@@ -304,4 +312,115 @@ fn compute_returns_partial_on_budget_exhaustion() {
 
     assert!(resp.depth_reached >= 1);
     assert!(resp.cancelled);
+}
+
+#[test]
+fn compute_propagates_forced_branches_dropped() {
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 6);
+
+    let mut req = default_request(state);
+    req.our_pool = pool_with(&["A", "B", "C"]);
+    req.opp_pool = pool_with(&["A", "B", "C"]);
+    req.search_params.max_depth = 1;
+    req.search_params.branch_width = 3;
+    req.search_params.forced_branches = vec![ForcedBranch {
+        path: vec![step(99, &["missing"])],
+        target_slot: 6,
+        champion_id: "C".to_string(),
+        mode: ForcedMode::Include,
+    }];
+    req.meta_overrides = Some(MetaData {
+        win_rates: HashMap::from([
+            ("A".to_string(), 0.95),
+            ("B".to_string(), 0.70),
+            ("C".to_string(), 0.20),
+        ]),
+        ..Default::default()
+    });
+    req.champion_meta = HashMap::from([
+        (
+            "A".to_string(),
+            ChampionMeta {
+                id: "A".to_string(),
+                positions: vec![Role::Top],
+            },
+        ),
+        (
+            "B".to_string(),
+            ChampionMeta {
+                id: "B".to_string(),
+                positions: vec![Role::Top],
+            },
+        ),
+        (
+            "C".to_string(),
+            ChampionMeta {
+                id: "C".to_string(),
+                positions: vec![Role::Top],
+            },
+        ),
+    ]);
+
+    let engine = Engine::new(MetaData::default(), HashMap::new());
+    let cancel = CancelHandle::new();
+    let resp = engine.compute(req, &cancel).unwrap();
+
+    assert_eq!(resp.forced_branches_dropped, 1);
+}
+
+#[test]
+fn compute_propagates_user_injected_on_resolved_force() {
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 6);
+
+    let mut req = default_request(state);
+    req.our_pool = pool_with(&["A", "B", "C"]);
+    req.opp_pool = pool_with(&["A", "B", "C"]);
+    req.search_params.max_depth = 1;
+    req.search_params.branch_width = 2;
+    req.search_params.forced_branches = vec![ForcedBranch {
+        path: vec![],
+        target_slot: 6,
+        champion_id: "C".to_string(),
+        mode: ForcedMode::Sole,
+    }];
+    req.meta_overrides = Some(MetaData {
+        win_rates: HashMap::from([
+            ("A".to_string(), 0.95),
+            ("B".to_string(), 0.70),
+            ("C".to_string(), 0.20),
+        ]),
+        ..Default::default()
+    });
+    req.champion_meta = HashMap::from([
+        (
+            "A".to_string(),
+            ChampionMeta {
+                id: "A".to_string(),
+                positions: vec![Role::Top],
+            },
+        ),
+        (
+            "B".to_string(),
+            ChampionMeta {
+                id: "B".to_string(),
+                positions: vec![Role::Top],
+            },
+        ),
+        (
+            "C".to_string(),
+            ChampionMeta {
+                id: "C".to_string(),
+                positions: vec![Role::Top],
+            },
+        ),
+    ]);
+
+    let engine = Engine::new(MetaData::default(), HashMap::new());
+    let cancel = CancelHandle::new();
+    let resp = engine.compute(req, &cancel).unwrap();
+
+    assert_eq!(resp.forced_branches_dropped, 0);
+    assert!(resp.tree.children.iter().any(|child| child.user_injected));
 }
