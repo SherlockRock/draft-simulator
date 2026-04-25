@@ -259,3 +259,49 @@ fn compute_errs_cancelled_when_cancelled_before_first_depth() {
     let resp = engine.compute(req, &cancel);
     assert!(matches!(resp, Err(EngineError::Cancelled)));
 }
+
+#[test]
+fn compute_returns_partial_on_budget_exhaustion() {
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 6);
+
+    let champs = ["A", "B", "C", "D", "E", "F", "G", "H"];
+    let mut req = default_request(state);
+    req.our_pool = pool_with(&champs);
+    req.opp_pool = pool_with(&champs);
+    req.latency_budget_ms = 1;
+    req.search_params.max_depth = 8;
+    req.search_params.branch_width = 5;
+    req.meta_overrides = Some(MetaData {
+        win_rates: HashMap::from([
+            ("A".to_string(), 0.95),
+            ("B".to_string(), 0.80),
+            ("C".to_string(), 0.70),
+            ("D".to_string(), 0.60),
+            ("E".to_string(), 0.50),
+            ("F".to_string(), 0.40),
+            ("G".to_string(), 0.30),
+            ("H".to_string(), 0.20),
+        ]),
+        ..Default::default()
+    });
+    req.champion_meta = champs
+        .into_iter()
+        .map(|champ| {
+            (
+                champ.to_string(),
+                ChampionMeta {
+                    id: champ.to_string(),
+                    positions: vec![Role::Top],
+                },
+            )
+        })
+        .collect();
+
+    let engine = Engine::new(MetaData::default(), HashMap::new());
+    let cancel = CancelHandle::new();
+    let resp = engine.compute(req, &cancel).unwrap();
+
+    assert!(resp.depth_reached >= 1);
+    assert!(resp.cancelled);
+}
