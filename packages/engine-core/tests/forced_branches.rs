@@ -105,6 +105,7 @@ fn ctx_with_pool(champs: &[&str]) -> EvalContext {
             ChampionMeta {
                 id: (*c).into(),
                 positions: vec![Role::Top],
+                ..Default::default()
             },
         );
     }

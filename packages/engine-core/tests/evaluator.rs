@@ -47,27 +47,51 @@ fn ctx() -> EvalContext {
     let mut champion_meta = HashMap::new();
     champion_meta.insert(
         "Aatrox".into(),
-        ChampionMeta { id: "Aatrox".into(), positions: vec![Role::Top] },
+        ChampionMeta {
+            id: "Aatrox".into(),
+            positions: vec![Role::Top],
+            ..Default::default()
+        },
     );
     champion_meta.insert(
         "Vi".into(),
-        ChampionMeta { id: "Vi".into(), positions: vec![Role::Jungle] },
+        ChampionMeta {
+            id: "Vi".into(),
+            positions: vec![Role::Jungle],
+            ..Default::default()
+        },
     );
     champion_meta.insert(
         "Ahri".into(),
-        ChampionMeta { id: "Ahri".into(), positions: vec![Role::Middle] },
+        ChampionMeta {
+            id: "Ahri".into(),
+            positions: vec![Role::Middle],
+            ..Default::default()
+        },
     );
     champion_meta.insert(
         "Jinx".into(),
-        ChampionMeta { id: "Jinx".into(), positions: vec![Role::Adc] },
+        ChampionMeta {
+            id: "Jinx".into(),
+            positions: vec![Role::Adc],
+            ..Default::default()
+        },
     );
     champion_meta.insert(
         "Nautilus".into(),
-        ChampionMeta { id: "Nautilus".into(), positions: vec![Role::Support] },
+        ChampionMeta {
+            id: "Nautilus".into(),
+            positions: vec![Role::Support],
+            ..Default::default()
+        },
     );
     champion_meta.insert(
         "Yone".into(),
-        ChampionMeta { id: "Yone".into(), positions: vec![Role::Middle, Role::Top] },
+        ChampionMeta {
+            id: "Yone".into(),
+            positions: vec![Role::Middle, Role::Top],
+            ..Default::default()
+        },
     );
 
     EvalContext {

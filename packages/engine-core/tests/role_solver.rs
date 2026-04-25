@@ -10,6 +10,7 @@ fn champ(id: &str, primary: Role, secondary: Option<Role>) -> ChampionMeta {
     ChampionMeta {
         id: id.into(),
         positions,
+        ..Default::default()
     }
 }
 

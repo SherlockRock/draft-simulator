@@ -189,6 +189,7 @@ fn compute_returns_real_tree_for_pick_turn() {
             ChampionMeta {
                 id: "A".to_string(),
                 positions: vec![Role::Top],
+                ..Default::default()
             },
         ),
         (
@@ -196,6 +197,7 @@ fn compute_returns_real_tree_for_pick_turn() {
             ChampionMeta {
                 id: "B".to_string(),
                 positions: vec![Role::Top],
+                ..Default::default()
             },
         ),
         (
@@ -203,6 +205,7 @@ fn compute_returns_real_tree_for_pick_turn() {
             ChampionMeta {
                 id: "C".to_string(),
                 positions: vec![Role::Top],
+                ..Default::default()
             },
         ),
     ]);
@@ -242,6 +245,7 @@ fn compute_errs_cancelled_when_cancelled_before_first_depth() {
             ChampionMeta {
                 id: "A".to_string(),
                 positions: vec![Role::Top],
+                ..Default::default()
             },
         ),
         (
@@ -249,6 +253,7 @@ fn compute_errs_cancelled_when_cancelled_before_first_depth() {
             ChampionMeta {
                 id: "B".to_string(),
                 positions: vec![Role::Top],
+                ..Default::default()
             },
         ),
         (
@@ -256,6 +261,7 @@ fn compute_errs_cancelled_when_cancelled_before_first_depth() {
             ChampionMeta {
                 id: "C".to_string(),
                 positions: vec![Role::Top],
+                ..Default::default()
             },
         ),
     ]);
@@ -301,6 +307,7 @@ fn compute_returns_partial_on_budget_exhaustion() {
                 ChampionMeta {
                     id: champ.to_string(),
                     positions: vec![Role::Top],
+                    ..Default::default()
                 },
             )
         })
@@ -344,6 +351,7 @@ fn compute_propagates_forced_branches_dropped() {
             ChampionMeta {
                 id: "A".to_string(),
                 positions: vec![Role::Top],
+                ..Default::default()
             },
         ),
         (
@@ -351,6 +359,7 @@ fn compute_propagates_forced_branches_dropped() {
             ChampionMeta {
                 id: "B".to_string(),
                 positions: vec![Role::Top],
+                ..Default::default()
             },
         ),
         (
@@ -358,6 +367,7 @@ fn compute_propagates_forced_branches_dropped() {
             ChampionMeta {
                 id: "C".to_string(),
                 positions: vec![Role::Top],
+                ..Default::default()
             },
         ),
     ]);
@@ -399,6 +409,7 @@ fn compute_propagates_user_injected_on_resolved_force() {
             ChampionMeta {
                 id: "A".to_string(),
                 positions: vec![Role::Top],
+                ..Default::default()
             },
         ),
         (
@@ -406,6 +417,7 @@ fn compute_propagates_user_injected_on_resolved_force() {
             ChampionMeta {
                 id: "B".to_string(),
                 positions: vec![Role::Top],
+                ..Default::default()
             },
         ),
         (
@@ -413,6 +425,7 @@ fn compute_propagates_user_injected_on_resolved_force() {
             ChampionMeta {
                 id: "C".to_string(),
                 positions: vec![Role::Top],
+                ..Default::default()
             },
         ),
     ]);
@@ -447,6 +460,7 @@ fn compute_errs_invalid_input_on_reverse_fill_pair_force() {
             ChampionMeta {
                 id: "A".to_string(),
                 positions: vec![Role::Top],
+                ..Default::default()
             },
         ),
         (
@@ -454,6 +468,7 @@ fn compute_errs_invalid_input_on_reverse_fill_pair_force() {
             ChampionMeta {
                 id: "B".to_string(),
                 positions: vec![Role::Top],
+                ..Default::default()
             },
         ),
         (
@@ -461,6 +476,7 @@ fn compute_errs_invalid_input_on_reverse_fill_pair_force() {
             ChampionMeta {
                 id: "C".to_string(),
                 positions: vec![Role::Top],
+                ..Default::default()
             },
         ),
     ]);
@@ -503,6 +519,7 @@ fn compute_reports_nodes_evaluated_and_pruning_rate() {
                 ChampionMeta {
                     id: champ.to_string(),
                     positions: vec![Role::Top],
+                    ..Default::default()
                 },
             )
         })
@@ -570,6 +587,7 @@ fn compute_reports_compute_time_ms() {
                 ChampionMeta {
                     id: champ.to_string(),
                     positions: vec![Role::Top],
+                    ..Default::default()
                 },
             )
         })

@@ -44,7 +44,11 @@ fn ctx_with_pool(champs: &[&str]) -> EvalContext {
     for c in champs {
         champion_meta.insert(
             (*c).into(),
-            ChampionMeta { id: (*c).into(), positions: vec![Role::Top] },
+            ChampionMeta {
+                id: (*c).into(),
+                positions: vec![Role::Top],
+                ..Default::default()
+            },
         );
     }
     EvalContext {

@@ -1,10 +1,42 @@
 use crate::pools::Role;
 use std::collections::HashMap;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
+pub struct DamageProfile {
+    pub physical: f64,
+    pub magic: f64,
+    pub r#true: f64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ScalingProfile {
+    pub early: f64,
+    pub mid: f64,
+    pub late: f64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct CcProfile {
+    pub has_cc: bool,
+    pub cc_types: Vec<String>,
+    pub engage_quality: f64,
+    pub peel_quality: f64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ChampionTags {
+    pub archetype: Vec<String>,
+    pub synergy: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct ChampionMeta {
     pub id: String,
     pub positions: Vec<Role>,
+    pub damage_profile: DamageProfile,
+    pub scaling_profile: ScalingProfile,
+    pub cc_profile: CcProfile,
+    pub tags: ChampionTags,
 }
 
 #[derive(Clone, Debug)]
