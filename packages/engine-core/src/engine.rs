@@ -2,10 +2,12 @@
 //! `search` + iterative deepening, Task 7.3 adds scenario extraction.
 
 use crate::cancellation::CancelHandle;
-use crate::draft_state::{ActionType, DraftState, Phase};
-use crate::evaluator::{MetaData, ScoreSet};
+use crate::draft_state::{ActionType, DraftState, Phase, Side};
+use crate::evaluator::{MetaData, PhaseWeightTable, ScoreSet};
+use crate::pools::{Penalties, TeamPool};
 use crate::role_solver::ChampionMeta;
-use crate::search::TreeNode;
+use crate::scenarios::Scenario;
+use crate::search::{SearchParams, TreeNode};
 use std::collections::HashMap;
 
 /// Top-level engine handle. Holds metadata loaded once at construction so
@@ -45,6 +47,21 @@ impl From<crate::cancellation::CancelError> for EngineError {
 /// it from `protocol_types::EngineRequest`.
 pub struct ComputeRequest {
     pub state: DraftState,
+    pub our_side: Side,
+    pub our_pool: TeamPool,
+    pub opp_pool: TeamPool,
+    pub cross_game_exclusions: Vec<String>,
+    pub search_params: SearchParams,
+    pub latency_budget_ms: u64,
+    pub champion_meta: HashMap<String, ChampionMeta>,
+    pub meta_overrides: Option<MetaData>,
+    pub phase_weights_blue: PhaseWeightTable,
+    pub phase_weights_red: PhaseWeightTable,
+    pub penalties: Penalties,
+    pub synergy_multiplier: f64,
+    pub counter_multiplier: f64,
+    pub flex_retention_weight: f64,
+    pub reveal_cost_weight: f64,
 }
 
 /// Response shape mirrors spec § "Response schema" — `meta` aggregated as
@@ -53,6 +70,7 @@ pub struct ComputeRequest {
 /// onto `EngineResponse.meta.*`.
 pub struct ComputeResponse {
     pub tree: TreeNode,
+    pub scenarios: Vec<Scenario>,
     pub nodes_evaluated: usize,
     pub compute_time_ms: u64,
     pub pruning_rate: f64,
@@ -79,7 +97,12 @@ impl Engine {
         request: ComputeRequest,
         cancel: &CancelHandle,
     ) -> Result<ComputeResponse, EngineError> {
-        let _ = (request, &self.meta, &self.champion_meta);
+        let _ = (
+            request,
+            &self.meta,
+            &self.champion_meta,
+            cancel,
+        );
         Ok(ComputeResponse {
             tree: TreeNode {
                 champion_ids: vec![],
@@ -91,6 +114,7 @@ impl Engine {
                 user_injected: false,
                 children: vec![],
             },
+            scenarios: vec![],
             nodes_evaluated: 0,
             compute_time_ms: 0,
             pruning_rate: 0.0,
