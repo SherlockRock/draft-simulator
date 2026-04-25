@@ -4,7 +4,7 @@ use engine_core::pools::Role;
 use engine_core::role_solver::{
     CcProfile, ChampionMeta, ChampionTags, DamageProfile, ScalingProfile,
 };
-use engine_core::scenarios::{collect_leaves, feature_vector, label_scenario};
+use engine_core::scenarios::{collect_leaves, extract_scenarios, feature_vector, label_scenario, Perspective};
 use engine_core::search::TreeNode;
 use std::collections::HashMap;
 
@@ -128,7 +128,56 @@ fn sample_meta() -> HashMap<String, ChampionMeta> {
             "Delta".to_string(),
             champion_meta("Delta", (0.8, 0.1), (0.2, 0.2, 0.8), 0.7, 0.1),
         ),
+        (
+            "Epsilon".to_string(),
+            champion_meta("Epsilon", (0.1, 0.8), (0.7, 0.2, 0.2), 0.1, 0.6),
+        ),
+        (
+            "Zeta".to_string(),
+            champion_meta("Zeta", (0.55, 0.2), (0.4, 0.6, 0.2), 0.3, 0.1),
+        ),
+        (
+            "Eta".to_string(),
+            champion_meta("Eta", (0.15, 0.7), (0.1, 0.3, 0.9), 0.0, 0.7),
+        ),
     ])
+}
+
+fn scenario_branch(blue_pick: &str, red_pick: &str, composite: f64) -> TreeNode {
+    node(
+        &[blue_pick],
+        Some(Side::Blue),
+        ActionType::Pick,
+        &[6],
+        composite,
+        vec![node(
+            &[red_pick],
+            Some(Side::Red),
+            ActionType::Pick,
+            &[7],
+            composite,
+            vec![],
+        )],
+    )
+}
+
+fn extraction_tree() -> TreeNode {
+    node(
+        &[],
+        None,
+        ActionType::Ban,
+        &[],
+        0.0,
+        vec![
+            scenario_branch("Alpha", "Rho", 0.95),
+            scenario_branch("Alpha", "Sigma", 0.90),
+            scenario_branch("Delta", "Tau", 0.85),
+            scenario_branch("Alpha", "Upsilon", 0.80),
+            scenario_branch("Alpha", "Phi", 0.75),
+            scenario_branch("Alpha", "Chi", 0.70),
+            scenario_branch("Alpha", "Psi", 0.65),
+        ],
+    )
 }
 
 #[test]
@@ -204,4 +253,70 @@ fn label_scenario_default_mid_mixed() {
     let picks = vec!["Gamma".to_string()];
 
     assert_eq!(label_scenario(&picks, &meta), "Mixed Damage / Mid Game");
+}
+
+#[test]
+fn extract_scenarios_returns_one_to_five_scenarios() {
+    let meta = sample_meta();
+    let scenarios = extract_scenarios(&extraction_tree(), &meta, 5);
+
+    assert!((1..=5).contains(&scenarios.len()));
+}
+
+#[test]
+fn extract_scenarios_first_is_highest_composite() {
+    let meta = sample_meta();
+    let scenarios = extract_scenarios(&extraction_tree(), &meta, 5);
+    let max_composite = 0.95;
+
+    assert_eq!(scenarios[0].scores.composite, max_composite);
+}
+
+#[test]
+fn extract_scenarios_uses_farthest_first_after_first() {
+    let meta = sample_meta();
+    let scenarios = extract_scenarios(&extraction_tree(), &meta, 3);
+
+    assert_eq!(scenarios[0].blue_picks, vec!["Alpha".to_string()]);
+    assert_eq!(scenarios[1].blue_picks, vec!["Delta".to_string()]);
+}
+
+#[test]
+fn extract_scenarios_marks_first_robust_others_likely() {
+    let meta = sample_meta();
+    let scenarios = extract_scenarios(&extraction_tree(), &meta, 4);
+
+    assert_eq!(scenarios[0].perspective, Perspective::Robust);
+    assert!(scenarios[1..]
+        .iter()
+        .all(|scenario| scenario.perspective == Perspective::Likely));
+}
+
+#[test]
+fn extract_scenarios_populates_tree_path_with_content_addressed_steps() {
+    let meta = sample_meta();
+    let scenarios = extract_scenarios(&extraction_tree(), &meta, 1);
+    let path = &scenarios[0].tree_path;
+
+    assert_eq!(path.len(), 2);
+    assert_eq!(path[0].slot, 6);
+    assert_eq!(path[0].champion_ids, vec!["Alpha".to_string()]);
+    assert_eq!(path[1].slot, 7);
+    assert_eq!(path[1].champion_ids, vec!["Rho".to_string()]);
+}
+
+#[test]
+fn extract_scenarios_description_format() {
+    let meta = sample_meta();
+    let scenarios = extract_scenarios(&extraction_tree(), &meta, 1);
+
+    assert_eq!(scenarios[0].description, "Alpha vs Rho");
+}
+
+#[test]
+fn extract_scenarios_indicators_empty() {
+    let meta = sample_meta();
+    let scenarios = extract_scenarios(&extraction_tree(), &meta, 5);
+
+    assert!(scenarios.iter().all(|scenario| scenario.indicators.is_empty()));
 }

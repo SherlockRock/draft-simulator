@@ -216,3 +216,65 @@ fn vector_distance(a: &[f64; 7], b: &[f64; 7]) -> f64 {
     }
     sum.sqrt()
 }
+
+pub fn extract_scenarios(
+    tree: &TreeNode,
+    champion_meta: &HashMap<String, ChampionMeta>,
+    max_scenarios: usize,
+) -> Vec<Scenario> {
+    let leaves = collect_leaves(tree);
+    if leaves.is_empty() || max_scenarios == 0 {
+        return Vec::new();
+    }
+
+    let mut featured: Vec<(LeafInfo, [f64; 7])> = leaves
+        .into_iter()
+        .map(|leaf| {
+            let vector = feature_vector(&leaf.blue_picks, champion_meta);
+            (leaf, vector)
+        })
+        .collect();
+    featured.sort_by(|(left_leaf, _), (right_leaf, _)| {
+        right_leaf.scores.composite.total_cmp(&left_leaf.scores.composite)
+    });
+
+    let mut selected = vec![featured.remove(0)];
+
+    while selected.len() < max_scenarios && !featured.is_empty() {
+        let (farthest_idx, _) = featured
+            .iter()
+            .enumerate()
+            .map(|(idx, (_, vector))| {
+                let min_distance = selected
+                    .iter()
+                    .map(|(_, selected_vector)| vector_distance(vector, selected_vector))
+                    .fold(f64::INFINITY, f64::min);
+                (idx, min_distance)
+            })
+            .max_by(|(_, left), (_, right)| left.total_cmp(right))
+            .expect("featured is non-empty");
+        selected.push(featured.remove(farthest_idx));
+    }
+
+    selected
+        .into_iter()
+        .enumerate()
+        .map(|(idx, (leaf, _))| Scenario {
+            name: label_scenario(&leaf.blue_picks, champion_meta),
+            description: format!("{} vs {}", leaf.blue_picks.join(", "), leaf.red_picks.join(", ")),
+            perspective: if idx == 0 {
+                Perspective::Robust
+            } else {
+                Perspective::Likely
+            },
+            indicators: Vec::new(),
+            scores: leaf.scores,
+            blue_picks: leaf.blue_picks,
+            red_picks: leaf.red_picks,
+            blue_bans: leaf.blue_bans,
+            red_bans: leaf.red_bans,
+            likely_assignments: Vec::new(),
+            tree_path: leaf.path,
+        })
+        .collect()
+}
