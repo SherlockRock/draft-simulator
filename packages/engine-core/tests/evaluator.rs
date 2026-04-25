@@ -50,6 +50,22 @@ fn ctx() -> EvalContext {
         ChampionMeta { id: "Aatrox".into(), positions: vec![Role::Top] },
     );
     champion_meta.insert(
+        "Vi".into(),
+        ChampionMeta { id: "Vi".into(), positions: vec![Role::Jungle] },
+    );
+    champion_meta.insert(
+        "Ahri".into(),
+        ChampionMeta { id: "Ahri".into(), positions: vec![Role::Middle] },
+    );
+    champion_meta.insert(
+        "Jinx".into(),
+        ChampionMeta { id: "Jinx".into(), positions: vec![Role::Adc] },
+    );
+    champion_meta.insert(
+        "Nautilus".into(),
+        ChampionMeta { id: "Nautilus".into(), positions: vec![Role::Support] },
+    );
+    champion_meta.insert(
         "Yone".into(),
         ChampionMeta { id: "Yone".into(), positions: vec![Role::Middle, Role::Top] },
     );
@@ -123,6 +139,40 @@ fn comp_strength_uses_win_rate_baseline() {
     let s = score_pick("Aatrox", Role::Top, &state, &c);
     // Without synergy/counter contributions, compStrength ≈ win_rate
     assert!((s.compStrength - 0.55).abs() < 0.05);
+}
+
+#[test]
+fn flex_retention_high_for_flex_comp() {
+    let mut c = ctx();
+    c.our_picks = vec![
+        "Yone".into(),
+        "Vi".into(),
+        "Ahri".into(),
+        "Jinx".into(),
+        "Nautilus".into(),
+    ];
+    let state = DraftState::default();
+    let s = score_pick("Yone", Role::Middle, &state, &c);
+    assert!(
+        s.flexRetention > 0.0,
+        "flex comp should have non-zero flex retention: got {}",
+        s.flexRetention
+    );
+}
+
+#[test]
+fn reveal_cost_complement_of_flex() {
+    let mut c = ctx();
+    c.our_picks = vec![
+        "Aatrox".into(),
+        "Vi".into(),
+        "Ahri".into(),
+        "Jinx".into(),
+        "Nautilus".into(),
+    ];
+    let state = DraftState::default();
+    let s = score_pick("Aatrox", Role::Top, &state, &c);
+    assert!((s.flexRetention + s.revealCost - 1.0).abs() < 0.05);
 }
 
 #[test]

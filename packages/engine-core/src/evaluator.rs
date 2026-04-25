@@ -158,14 +158,31 @@ fn counter_risk(champion_id: &str, opponents: &[String], meta: &MetaData) -> f64
 }
 
 fn information_value_for(_champion_id: &str, _role: Role, ctx: &EvalContext) -> f64 {
-    // Task 4.3 wires real flex retention + reveal cost.
-    0.5 * ctx.flex_retention_weight + 0.0 * ctx.reveal_cost_weight
+    let flex = flex_retention_for("", ctx);
+    let reveal = reveal_cost_for("", Role::Top, ctx);
+    ctx.flex_retention_weight * flex - ctx.reveal_cost_weight * reveal
 }
 
-fn flex_retention_for(_champion_id: &str, _ctx: &EvalContext) -> f64 {
-    0.5
+fn flex_retention_for(_champion_id: &str, ctx: &EvalContext) -> f64 {
+    use crate::role_solver::solve;
+    if ctx.our_picks.len() < 5 {
+        // Pre-resolved partial comp — flex is high by construction.
+        return 1.0;
+    }
+    let ids: Vec<&str> = ctx.our_picks.iter().map(|s| s.as_str()).collect();
+    let assignments = solve(&ids, &ctx.champion_meta);
+    let n = assignments.len() as f64;
+    if n <= 1.0 {
+        return 0.0;
+    }
+    let max_entropy = n.ln();
+    let entropy: f64 = assignments
+        .iter()
+        .map(|a| if a.weight > 0.0 { -a.weight * a.weight.ln() } else { 0.0 })
+        .sum();
+    (entropy / max_entropy).clamp(0.0, 1.0)
 }
 
-fn reveal_cost_for(_champion_id: &str, _role: Role, _ctx: &EvalContext) -> f64 {
-    0.0
+fn reveal_cost_for(_champion_id: &str, _role: Role, ctx: &EvalContext) -> f64 {
+    1.0 - flex_retention_for("", ctx)
 }
