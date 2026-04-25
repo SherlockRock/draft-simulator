@@ -16,3 +16,12 @@ data/raw/*
 !data/raw/.gitkeep
 data/compiled/*
 !data/compiled/.gitkeep
+
+# Rust
+target/
+*.node
+
+# Generated protocol artifacts
+packages/engine-protocol/schema.json
+packages/engine-protocol/dist/
+packages/engine-core/src/protocol_types.rs
