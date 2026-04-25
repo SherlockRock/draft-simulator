@@ -6,7 +6,7 @@ use engine_core::forced_branches::{
 };
 use engine_core::pools::{Penalties, Role, RolePoolMap, TeamPool};
 use engine_core::role_solver::ChampionMeta;
-use engine_core::search::{search, SearchParams};
+use engine_core::search::{search, search_with_stats, SearchParams};
 use std::collections::HashMap;
 
 fn step(slot: usize, ids: &[&str]) -> PathStep {
@@ -307,4 +307,47 @@ fn parent_lineage_resolves_after_swap() {
     let inner = &outer.children[0];
     assert_eq!(inner.champion_ids, vec!["Y".to_string()]);
     assert!(inner.user_injected);
+}
+
+#[test]
+fn unresolved_path_drops_silently() {
+    // A force whose `path` references a champion that's never picked anywhere
+    // in the tree must (a) not error, (b) not appear in the tree, and (c)
+    // bump SearchStats.forced_branches_dropped.
+    let state = DraftState::default();
+    let ctx = ctx_with_pool(&["A", "B", "C"]);
+    let cancel = CancelHandle::new();
+
+    let params = SearchParams {
+        branch_width: 3,
+        max_depth: 2,
+        disable_alpha_beta: false,
+        forced_branches: vec![ForcedBranch {
+            // Path references "GHOST" at slot 0 — pool doesn't contain it, so
+            // no actual lineage will ever match.
+            path: vec![step(0, &["GHOST"])],
+            target_slot: 1,
+            champion_id: "Z".into(),
+            mode: ForcedMode::Sole,
+        }],
+    };
+    let (tree, stats) = search_with_stats(&state, &params, &ctx, &cancel).unwrap();
+
+    // Tree should be the natural search — no Z anywhere because the force was
+    // dropped.
+    fn contains_champ(node: &engine_core::search::TreeNode, target: &str) -> bool {
+        if node.champion_ids.iter().any(|c| c == target) {
+            return true;
+        }
+        node.children.iter().any(|c| contains_champ(c, target))
+    }
+    assert!(
+        !contains_champ(&tree, "Z"),
+        "dropped force must not inject its champion into the tree"
+    );
+
+    assert_eq!(
+        stats.forced_branches_dropped, 1,
+        "unresolved path increments forced_branches_dropped"
+    );
 }
