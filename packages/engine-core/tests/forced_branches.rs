@@ -415,3 +415,46 @@ fn resolves_after_sibling_rerank() {
     assert_eq!(a_last.children[0].champion_ids, vec!["Y".to_string()]);
     assert!(a_last.children[0].user_injected);
 }
+
+#[test]
+fn pair_start_force_optimizes_pair_end() {
+    // Slot 7 is R1 (pair_start). With a sole-mode force at slot 7 → "A",
+    // every pair child must carry "A" as first half. Pair_end (R2) varies
+    // across the remaining candidates.
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 7);
+    assert!(TURN_SEQUENCE[state.turn_index()].pair_start);
+
+    let ctx = ctx_with_pool(&["A", "B", "C", "D", "E"]);
+    let cancel = CancelHandle::new();
+
+    let params = SearchParams {
+        branch_width: 10,
+        max_depth: 1,
+        disable_alpha_beta: false,
+        forced_branches: vec![ForcedBranch {
+            path: vec![],
+            target_slot: 7,
+            champion_id: "A".into(),
+            mode: ForcedMode::Sole,
+        }],
+    };
+    let tree = search(&state, &params, &ctx, &cancel).unwrap();
+
+    assert!(!tree.children.is_empty(), "must produce at least one pair child");
+    assert_eq!(
+        tree.children.len(),
+        4,
+        "pool size 5 minus the forced champion = 4 pair partners"
+    );
+    for child in &tree.children {
+        assert_eq!(child.champion_ids.len(), 2);
+        assert_eq!(
+            child.champion_ids[0], "A",
+            "pair_start half must be the forced champion"
+        );
+        assert_ne!(child.champion_ids[1], "A", "pair_end half must differ from forced");
+        assert_eq!(child.slots, vec![7, 8]);
+        assert!(child.user_injected, "forced-pair children carry user_injected = true");
+    }
+}
