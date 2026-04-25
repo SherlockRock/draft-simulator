@@ -7,7 +7,7 @@ use crate::evaluator::{EvalContext, MetaData, PhaseWeightTable};
 use crate::iterative_deepening::{self, SearchResult};
 use crate::pools::{Penalties, TeamPool};
 use crate::role_solver::ChampionMeta;
-use crate::scenarios::Scenario;
+use crate::scenarios::{extract_scenarios, Scenario};
 use crate::search::{search_with_stats, SearchParams, TreeNode};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -174,9 +174,11 @@ impl Engine {
                 let stats = latest_stats.ok_or_else(|| {
                     EngineError::Internal("search completed without producing stats".into())
                 })?;
+                let tree = result.payload;
+                let scenarios = extract_scenarios(&tree, &eval_ctx.champion_meta, 5);
                 Ok(ComputeResponse {
-                    tree: result.payload,
-                    scenarios: vec![],
+                    tree,
+                    scenarios,
                     nodes_evaluated: stats.nodes_evaluated,
                     compute_time_ms: start.elapsed().as_millis() as u64,
                     pruning_rate: if stats.nodes_evaluated + stats.nodes_pruned > 0 {

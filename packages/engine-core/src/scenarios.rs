@@ -223,7 +223,8 @@ pub fn extract_scenarios(
     max_scenarios: usize,
 ) -> Vec<Scenario> {
     let leaves = collect_leaves(tree);
-    if leaves.is_empty() || max_scenarios == 0 {
+    if leaves.is_empty() || (leaves.len() == 1 && leaves[0].path.is_empty()) || max_scenarios == 0
+    {
         return Vec::new();
     }
 
