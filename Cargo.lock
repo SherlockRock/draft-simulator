@@ -240,11 +240,13 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "insta",
+ "prettyplease",
  "proptest",
  "rayon",
  "schemars",
  "serde",
  "serde_json",
+ "syn",
  "thiserror",
  "tokio",
  "tokio-util",
