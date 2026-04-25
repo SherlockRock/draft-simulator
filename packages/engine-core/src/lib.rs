@@ -8,6 +8,7 @@ pub mod pair_filter;
 pub mod pools;
 pub mod protocol_types;
 pub mod role_solver;
+pub mod search;
 pub mod transposition;
 
 #[cfg(test)]
