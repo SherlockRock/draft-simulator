@@ -84,6 +84,7 @@ pub struct ComputeResponse {
 
 impl Engine {
     pub fn new(meta: MetaData, champion_meta: HashMap<String, ChampionMeta>) -> Self {
+        crate::rayon_pool::ensure_rayon_pool();
         Self {
             meta,
             champion_meta,
