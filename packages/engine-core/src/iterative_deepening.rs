@@ -1,36 +1,35 @@
-use crate::cancellation::{ensure_not_cancelled, CancelError, CancelHandle};
+use crate::cancellation::{ensure_not_cancelled, CancelHandle};
+use crate::engine::EngineError;
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug)]
-pub struct SearchResult {
+pub struct SearchResult<T> {
     pub score: f64,
     pub depth: usize,
     pub partial: bool,
+    pub payload: T,
 }
 
-pub fn deepen<F>(
+pub fn deepen<T, F>(
     mut search_at_depth: F,
     max_depth: usize,
     budget: Duration,
     cancel: &CancelHandle,
-) -> Result<SearchResult, CancelError>
+) -> Result<SearchResult<T>, EngineError>
 where
-    F: FnMut(usize, &CancelHandle) -> Result<SearchResult, CancelError>,
+    F: FnMut(usize, &CancelHandle) -> Result<SearchResult<T>, EngineError>,
 {
     let start = Instant::now();
-    let mut best: Option<SearchResult> = None;
+    let mut best: Option<SearchResult<T>> = None;
 
     for depth in 1..=max_depth {
         ensure_not_cancelled(cancel)?;
 
         let elapsed = start.elapsed();
-        if elapsed >= budget {
-            // Budget exhausted — return what we have, mark partial if we haven't reached max.
-            if let Some(mut r) = best.clone() {
-                r.partial = depth <= max_depth;
-                return Ok(r);
-            }
-            return Ok(SearchResult { score: 0.0, depth: 0, partial: true });
+        if best.is_some() && elapsed >= budget {
+            let mut r = best.take().expect("guarded by best.is_some()");
+            r.partial = true;
+            return Ok(r);
         }
 
         let remaining = budget.saturating_sub(elapsed);
@@ -39,7 +38,7 @@ where
         if let Some(prev) = &best {
             let prev_iter_estimate = elapsed / (prev.depth.max(1) as u32);
             if prev_iter_estimate * 2 > remaining {
-                let mut r = prev.clone();
+                let mut r = best.take().expect("guarded by best.is_some()");
                 r.partial = true;
                 return Ok(r);
             }
@@ -47,19 +46,16 @@ where
 
         match search_at_depth(depth, cancel) {
             Ok(r) => best = Some(r),
-            Err(CancelError::Cancelled) => {
-                if let Some(mut r) = best {
+            Err(EngineError::Cancelled) => {
+                if let Some(mut r) = best.take() {
                     r.partial = true;
                     return Ok(r);
                 }
-                return Err(CancelError::Cancelled);
+                return Err(EngineError::Cancelled);
             }
+            Err(other) => return Err(other),
         }
     }
 
-    Ok(best.unwrap_or(SearchResult {
-        score: 0.0,
-        depth: 0,
-        partial: false,
-    }))
+    best.ok_or_else(|| EngineError::Internal("iterative deepening ran with max_depth=0".into()))
 }

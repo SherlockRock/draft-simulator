@@ -8,7 +8,12 @@ fn returns_deepest_within_budget() {
     let result = deepen(
         |depth, _h| {
             std::thread::sleep(Duration::from_millis(10));
-            Ok(SearchResult { score: depth as f64, depth, partial: false })
+            Ok(SearchResult {
+                score: depth as f64,
+                depth,
+                partial: false,
+                payload: (),
+            })
         },
         4,
         Duration::from_millis(100),
@@ -25,7 +30,12 @@ fn returns_partial_on_budget_exceed() {
     let result = deepen(
         |depth, _h| {
             std::thread::sleep(Duration::from_millis(50));
-            Ok(SearchResult { score: depth as f64, depth, partial: false })
+            Ok(SearchResult {
+                score: depth as f64,
+                depth,
+                partial: false,
+                payload: (),
+            })
         },
         10,
         Duration::from_millis(75),

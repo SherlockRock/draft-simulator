@@ -3,12 +3,14 @@
 
 use crate::cancellation::CancelHandle;
 use crate::draft_state::{ActionType, DraftState, Phase, Side};
-use crate::evaluator::{MetaData, PhaseWeightTable, ScoreSet};
+use crate::evaluator::{EvalContext, MetaData, PhaseWeightTable, ScoreSet};
+use crate::iterative_deepening::{self, SearchResult};
 use crate::pools::{Penalties, TeamPool};
 use crate::role_solver::ChampionMeta;
 use crate::scenarios::Scenario;
-use crate::search::{SearchParams, TreeNode};
+use crate::search::{search_with_stats, SearchParams, TreeNode};
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 /// Top-level engine handle. Holds metadata loaded once at construction so
 /// callers don't pay per-request load cost. Cheap to clone — Phase 9 will wrap
@@ -97,20 +99,108 @@ impl Engine {
         request: ComputeRequest,
         cancel: &CancelHandle,
     ) -> Result<ComputeResponse, EngineError> {
-        let _ = (
-            request,
-            &self.meta,
-            &self.champion_meta,
+        if cancel.is_cancelled() {
+            return Ok(Self::empty_response(&request.state, true));
+        }
+
+        let start = Instant::now();
+        let ComputeRequest {
+            state,
+            our_side,
+            our_pool,
+            opp_pool,
+            cross_game_exclusions,
+            search_params,
+            latency_budget_ms,
+            champion_meta,
+            meta_overrides,
+            phase_weights_blue,
+            phase_weights_red,
+            penalties,
+            synergy_multiplier,
+            counter_multiplier,
+            flex_retention_weight,
+            reveal_cost_weight,
+        } = request;
+        let _ = cross_game_exclusions;
+
+        let phase = state
+            .current_turn()
+            .map(|turn| turn.phase)
+            .unwrap_or(Phase::Pick2);
+        let (our_picks, opp_picks) = if our_side == Side::Blue {
+            (state.blue_picks.clone(), state.red_picks.clone())
+        } else {
+            (state.red_picks.clone(), state.blue_picks.clone())
+        };
+        let eval_ctx = EvalContext {
+            side: our_side,
+            phase,
+            our_pool,
+            opp_pool,
+            our_picks,
+            opp_picks,
+            penalties,
+            champion_meta,
+            meta: meta_overrides.unwrap_or_else(|| self.meta.clone()),
+            phase_weights_blue,
+            phase_weights_red,
+            synergy_multiplier,
+            counter_multiplier,
+            flex_retention_weight,
+            reveal_cost_weight,
+        };
+        let mut latest_stats = None;
+        let result = iterative_deepening::deepen(
+            |depth, handle| {
+                let mut params = search_params.clone();
+                params.max_depth = depth;
+                let (tree, stats) = search_with_stats(&state, &params, &eval_ctx, handle)?;
+                latest_stats = Some(stats);
+                Ok(SearchResult {
+                    score: tree.scores.composite,
+                    depth,
+                    partial: false,
+                    payload: tree,
+                })
+            },
+            search_params.max_depth,
+            Duration::from_millis(latency_budget_ms),
             cancel,
         );
-        Ok(ComputeResponse {
+
+        match result {
+            Ok(result) => {
+                let stats = latest_stats.ok_or_else(|| {
+                    EngineError::Internal("search completed without producing stats".into())
+                })?;
+                Ok(ComputeResponse {
+                    tree: result.payload,
+                    scenarios: vec![],
+                    nodes_evaluated: 0,
+                    compute_time_ms: start.elapsed().as_millis() as u64,
+                    pruning_rate: 0.0,
+                    depth_reached: result.depth,
+                    transpositions_found: stats.transpositions_found,
+                    forced_branches_dropped: stats.forced_branches_dropped,
+                    cancelled: result.partial,
+                })
+            }
+            Err(EngineError::Cancelled) => Ok(Self::empty_response(&state, true)),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn empty_response(state: &DraftState, cancelled: bool) -> ComputeResponse {
+        let turn = state.current_turn();
+        ComputeResponse {
             tree: TreeNode {
                 champion_ids: vec![],
                 scores: ScoreSet::default(),
                 side: None,
                 slots: vec![],
-                action_type: ActionType::Pick,
-                phase: Phase::Ban1,
+                action_type: turn.map(|t| t.action_type).unwrap_or(ActionType::Pick),
+                phase: turn.map(|t| t.phase).unwrap_or(Phase::Ban1),
                 user_injected: false,
                 children: vec![],
             },
@@ -121,7 +211,7 @@ impl Engine {
             depth_reached: 0,
             transpositions_found: 0,
             forced_branches_dropped: 0,
-            cancelled: cancel.is_cancelled(),
-        })
+            cancelled,
+        }
     }
 }
