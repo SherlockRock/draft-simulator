@@ -4,6 +4,9 @@ export type { ErrorCode, EngineError } from "./schemas/protocol.js";
 export { EngineRequestSchema } from "./schemas/request.js";
 export type { EngineRequest } from "./schemas/request.js";
 
+export { EngineResponseSchema, TreeNodeSchema } from "./schemas/response.js";
+export type { EngineResponse, ScoreSet } from "./schemas/response.js";
+
 export {
   SideSchema,
   PhaseSchema,
