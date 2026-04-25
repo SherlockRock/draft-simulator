@@ -7,6 +7,7 @@ use crate::pair_filter::{seed_pair_candidates, PairFilterConfig};
 use crate::pools::{Role, TeamPool};
 use crate::role_solver::ChampionMeta;
 use crate::transposition::{StateHash, TranspositionCache};
+use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -490,13 +491,18 @@ fn expand_pair(
     sub_ctx.side = turn.side;
     sub_ctx.phase = turn.phase;
     let scored_singles: Vec<(String, f64)> = candidates
-        .iter()
-        .map(|c| {
-            let role = primary_role(c, &eval_ctx.champion_meta).unwrap_or(Role::Top);
-            let s = score_pick(c, role, state, &sub_ctx);
-            (c.clone(), s.composite)
+        .par_iter()
+        .filter_map(|c| {
+            if cancel.is_cancelled() {
+                None
+            } else {
+                let role = primary_role(c, &eval_ctx.champion_meta).unwrap_or(Role::Top);
+                let s = score_pick(c, role, state, &sub_ctx);
+                Some((c.clone(), s.composite))
+            }
         })
         .collect();
+    ensure_not_cancelled(cancel)?;
 
     // Detect pair-pick force: at most one sole-mode force per side of the pair
     // (pair_start or pair_end). Forces matching the lineage but with the wrong
