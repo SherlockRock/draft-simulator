@@ -213,9 +213,10 @@ fn search_recursive(
         state,
         turn,
         eval_ctx,
+        cancel,
         our_turn,
         params.branch_width,
-    );
+    )?;
 
     // Apply forced branches at this single-slot expansion.
     let current_slot = state.turn_index();
@@ -424,21 +425,27 @@ fn score_and_rank(
     state: &DraftState,
     turn: TurnInfo,
     ctx: &EvalContext,
+    cancel: &CancelHandle,
     our_turn: bool,
     branch_width: usize,
-) -> Vec<(String, f64)> {
+) -> Result<Vec<(String, f64)>, EngineError> {
     let mut sub_ctx = ctx.clone();
     sub_ctx.side = turn.side;
     sub_ctx.phase = turn.phase;
 
     let mut scored: Vec<(String, f64)> = candidates
-        .iter()
-        .map(|c| {
-            let role = primary_role(c, &ctx.champion_meta).unwrap_or(Role::Top);
-            let s = score_pick(c, role, state, &sub_ctx);
-            (c.clone(), s.composite)
+        .par_iter()
+        .filter_map(|c| {
+            if cancel.is_cancelled() {
+                None
+            } else {
+                let role = primary_role(c, &ctx.champion_meta).unwrap_or(Role::Top);
+                let s = score_pick(c, role, state, &sub_ctx);
+                Some((c.clone(), s.composite))
+            }
         })
         .collect();
+    ensure_not_cancelled(cancel)?;
 
     // Move ordering: best-for-mover first improves alpha-beta pruning.
     if our_turn {
@@ -447,7 +454,7 @@ fn score_and_rank(
         scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
     }
     scored.truncate(branch_width);
-    scored
+    Ok(scored)
 }
 
 fn primary_role(champ: &str, meta: &HashMap<String, ChampionMeta>) -> Option<Role> {
