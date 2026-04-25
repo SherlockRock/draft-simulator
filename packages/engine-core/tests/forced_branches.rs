@@ -458,3 +458,48 @@ fn pair_start_force_optimizes_pair_end() {
         assert!(child.user_injected, "forced-pair children carry user_injected = true");
     }
 }
+
+#[test]
+fn pair_end_force_optimizes_pair_start() {
+    // Symmetric: force pair_end (slot 8 = R2). Pair_start varies across the
+    // remaining candidates, every child has the forced champion as second half.
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 7);
+    assert!(TURN_SEQUENCE[state.turn_index()].pair_start);
+
+    let ctx = ctx_with_pool(&["A", "B", "C", "D", "E"]);
+    let cancel = CancelHandle::new();
+
+    let params = SearchParams {
+        branch_width: 10,
+        max_depth: 1,
+        disable_alpha_beta: false,
+        forced_branches: vec![ForcedBranch {
+            path: vec![],
+            target_slot: 8,
+            champion_id: "B".into(),
+            mode: ForcedMode::Sole,
+        }],
+    };
+    let tree = search(&state, &params, &ctx, &cancel).unwrap();
+
+    assert!(!tree.children.is_empty());
+    assert_eq!(
+        tree.children.len(),
+        4,
+        "pool size 5 minus the forced champion = 4 pair partners"
+    );
+    for child in &tree.children {
+        assert_eq!(child.champion_ids.len(), 2);
+        assert_ne!(
+            child.champion_ids[0], "B",
+            "pair_start half must differ from forced pair_end"
+        );
+        assert_eq!(
+            child.champion_ids[1], "B",
+            "pair_end half must be the forced champion"
+        );
+        assert_eq!(child.slots, vec![7, 8]);
+        assert!(child.user_injected);
+    }
+}
