@@ -6,6 +6,10 @@ edition.workspace = true
 [lib]
 crate-type = ["lib"]
 
+[[bench]]
+name = "pair_turn_171"
+harness = false
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
