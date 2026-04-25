@@ -133,6 +133,61 @@ fn ranks_candidates_by_static_score() {
 }
 
 #[test]
+fn pair_start_yields_pair_children() {
+    // Slot 7 is the R1 pair_start. Fast-forward to it.
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 7);
+    assert!(TURN_SEQUENCE[state.turn_index()].pair_start);
+
+    let ctx = ctx_with_pool(&["A", "B", "C", "D"]);
+    let params = SearchParams { branch_width: 3, max_depth: 1 };
+    let cancel = CancelHandle::new();
+
+    let tree = search(&state, &params, &ctx, &cancel).unwrap();
+    assert!(!tree.children.is_empty());
+    for child in &tree.children {
+        assert_eq!(
+            child.champion_ids.len(),
+            2,
+            "pair child must carry 2 championIds"
+        );
+        assert_eq!(
+            child.slots.len(),
+            2,
+            "pair child must occupy 2 slots"
+        );
+        assert_eq!(child.slots, vec![7, 8]);
+    }
+}
+
+#[test]
+fn pair_consumes_two_slots_in_recursion() {
+    // After R1-R2 pair, the next turn should be slot 9 (B2 pair_start) — depth-2 search
+    // should produce a child whose champion_ids has length 2 AND its sub-children also
+    // have championIds.len() == 2 (since slot 9 is also a pair_start).
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 7);
+
+    let ctx = ctx_with_pool(&["A", "B", "C", "D", "E", "F"]);
+    let params = SearchParams { branch_width: 2, max_depth: 2 };
+    let cancel = CancelHandle::new();
+
+    let tree = search(&state, &params, &ctx, &cancel).unwrap();
+    assert!(!tree.children.is_empty());
+    let first = &tree.children[0];
+    assert_eq!(first.champion_ids.len(), 2);
+    // Sub-tree below should be at slot 9 (B2-B3 pair).
+    if let Some(grandchild) = first.children.first() {
+        assert_eq!(
+            grandchild.champion_ids.len(),
+            2,
+            "grandchild at next pair (slot 9) must also be a pair node"
+        );
+        assert_eq!(grandchild.slots, vec![9, 10]);
+    }
+}
+
+#[test]
 fn opp_turn_minimizes_our_value() {
     // At opponent's turn, we expect the search to assume they pick the choice
     // that hurts us most. With a single-depth lookahead and opp's pool = ours,

@@ -1,6 +1,7 @@
 use crate::cancellation::{ensure_not_cancelled, CancelError, CancelHandle};
-use crate::draft_state::{ActionType, DraftState, Phase, Side, TurnInfo};
+use crate::draft_state::{ActionType, DraftState, Phase, Side, TurnInfo, TURN_SEQUENCE};
 use crate::evaluator::{score_pick, EvalContext, ScoreSet};
+use crate::pair_filter::{seed_pair_candidates, PairFilterConfig};
 use crate::pools::{Role, TeamPool};
 use crate::role_solver::ChampionMeta;
 use crate::transposition::TranspositionCache;
@@ -87,6 +88,22 @@ fn search_recursive(
     }
 
     let turn = turn_opt.expect("guarded above");
+
+    // Pair-pick turns expand both halves as a single decision unit.
+    if turn.pair_start {
+        return expand_pair(
+            state,
+            params,
+            remaining_depth,
+            eval_ctx,
+            cancel,
+            cache,
+            alpha,
+            beta,
+            turn,
+        );
+    }
+
     let our_turn = turn.side == eval_ctx.side;
     let candidates = collect_candidates(state, turn, eval_ctx);
     let ranked = score_and_rank(
@@ -271,4 +288,156 @@ fn push_action(state: &mut DraftState, turn: TurnInfo, champ: &str) {
         (ActionType::Pick, Side::Blue) => state.blue_picks.push(champ.into()),
         (ActionType::Pick, Side::Red) => state.red_picks.push(champ.into()),
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn expand_pair(
+    state: &DraftState,
+    params: &SearchParams,
+    remaining_depth: usize,
+    eval_ctx: &EvalContext,
+    cancel: &CancelHandle,
+    cache: &mut TranspositionCache,
+    mut alpha: f64,
+    mut beta: f64,
+    turn: TurnInfo,
+) -> Result<TreeNode, CancelError> {
+    let our_turn = turn.side == eval_ctx.side;
+    let pair_start_slot = state.turn_index();
+    let pair_end_slot = pair_start_slot + 1;
+    let pair_end_turn = TURN_SEQUENCE[pair_end_slot];
+
+    let candidates = collect_candidates(state, turn, eval_ctx);
+
+    // Score every candidate as a single (used both to seed pair_filter and to score pairs).
+    let mut sub_ctx = eval_ctx.clone();
+    sub_ctx.side = turn.side;
+    sub_ctx.phase = turn.phase;
+    let scored_singles: Vec<(String, f64)> = candidates
+        .iter()
+        .map(|c| {
+            let role = primary_role(c, &eval_ctx.champion_meta).unwrap_or(Role::Top);
+            let s = score_pick(c, role, state, &sub_ctx);
+            (c.clone(), s.composite)
+        })
+        .collect();
+
+    // pair_filter wants singles sorted DESC by score.
+    let mut singles_desc = scored_singles.clone();
+    singles_desc.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+    let scored_refs: Vec<(&str, f64)> =
+        singles_desc.iter().map(|(s, f)| (s.as_str(), *f)).collect();
+
+    let cfg = PairFilterConfig {
+        single_top_k: 32,
+        per_role_top: 0,
+        max_pairs: (params.branch_width * 4).max(params.branch_width),
+    };
+    let pairs = seed_pair_candidates(&scored_refs, &[], &[], None, &cfg);
+
+    // Score each pair = sum of its two singles' composites.
+    let mut single_lookup: HashMap<&str, f64> = HashMap::with_capacity(scored_refs.len());
+    for (id, score) in &scored_refs {
+        single_lookup.insert(*id, *score);
+    }
+    let mut scored_pairs: Vec<(String, String, f64)> = pairs
+        .into_iter()
+        .map(|p| {
+            let value = single_lookup.get(p.first.as_str()).copied().unwrap_or(0.0)
+                + single_lookup.get(p.second.as_str()).copied().unwrap_or(0.0);
+            (p.first, p.second, value)
+        })
+        .collect();
+
+    // Move ordering: best-for-mover first.
+    if our_turn {
+        scored_pairs.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(Ordering::Equal));
+    } else {
+        scored_pairs.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(Ordering::Equal));
+    }
+    scored_pairs.truncate(params.branch_width);
+
+    let mut children: Vec<TreeNode> = Vec::with_capacity(scored_pairs.len());
+    let mut best_value = if our_turn {
+        f64::NEG_INFINITY
+    } else {
+        f64::INFINITY
+    };
+
+    for (first, second, _static) in &scored_pairs {
+        ensure_not_cancelled(cancel)?;
+
+        let mut child_state = state.clone();
+        push_action(&mut child_state, turn, first);
+        push_action(&mut child_state, pair_end_turn, second);
+
+        let child_tree = search_recursive(
+            &child_state,
+            params,
+            remaining_depth - 1,
+            eval_ctx,
+            cancel,
+            cache,
+            alpha,
+            beta,
+        )?;
+        let child_value = child_tree.scores.composite;
+
+        children.push(TreeNode {
+            champion_ids: vec![first.clone(), second.clone()],
+            scores: ScoreSet {
+                composite: child_value,
+                ..Default::default()
+            },
+            side: Some(turn.side),
+            slots: vec![pair_start_slot, pair_end_slot],
+            action_type: turn.action_type,
+            phase: turn.phase,
+            user_injected: false,
+            children: child_tree.children,
+        });
+
+        if our_turn {
+            if child_value > best_value {
+                best_value = child_value;
+            }
+            if best_value > alpha {
+                alpha = best_value;
+            }
+        } else {
+            if child_value < best_value {
+                best_value = child_value;
+            }
+            if best_value < beta {
+                beta = best_value;
+            }
+        }
+        if alpha >= beta {
+            break;
+        }
+    }
+
+    if children.is_empty() {
+        best_value = eval_state(state, eval_ctx);
+    }
+    children.sort_by(|a, b| {
+        b.scores
+            .composite
+            .partial_cmp(&a.scores.composite)
+            .unwrap_or(Ordering::Equal)
+    });
+
+    Ok(TreeNode {
+        champion_ids: vec![],
+        scores: ScoreSet {
+            composite: best_value,
+            ..Default::default()
+        },
+        side: Some(turn.side),
+        slots: vec![pair_start_slot, pair_end_slot],
+        action_type: turn.action_type,
+        phase: turn.phase,
+        user_injected: false,
+        children,
+    })
 }
