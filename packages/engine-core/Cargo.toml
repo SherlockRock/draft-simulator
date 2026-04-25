@@ -20,7 +20,6 @@ serde_json.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 rayon.workspace = true
-num_cpus.workspace = true
 thiserror.workspace = true
 
 [build-dependencies]

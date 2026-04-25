@@ -240,7 +240,6 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "insta",
- "num_cpus",
  "prettyplease",
  "proptest",
  "rayon",
@@ -485,10 +484,6 @@ checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
 ]
-
-[[package]]
-name = "num_cpus"
-version = "1.0.0"
 
 [[package]]
 name = "once_cell"

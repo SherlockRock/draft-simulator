@@ -1,5 +1,5 @@
 [workspace]
-members = ["packages/engine-core", "packages/num_cpus"]
+members = ["packages/engine-core"]
 resolver = "2"
 
 [workspace.package]
@@ -12,7 +12,6 @@ serde_json = "1"
 tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros"] }
 tokio-util = "0.7"
 rayon = "1.10"
-num_cpus = { path = "packages/num_cpus" }
 napi = { version = "2", features = ["napi8", "async", "tokio_rt"] }
 napi-derive = "2"
 thiserror = "1"
