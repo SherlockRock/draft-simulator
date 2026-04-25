@@ -1,6 +1,7 @@
 use crate::cancellation::{ensure_not_cancelled, CancelError, CancelHandle};
 use crate::draft_state::{ActionType, DraftState, Phase, Side, TurnInfo, TURN_SEQUENCE};
 use crate::evaluator::{score_pick, EvalContext, ScoreSet};
+use crate::forced_branches::{resolve_path, ForcedBranch, ForcedMode, PathMatch};
 use crate::pair_filter::{seed_pair_candidates, PairFilterConfig};
 use crate::pools::{Role, TeamPool};
 use crate::role_solver::ChampionMeta;
@@ -8,6 +9,25 @@ use crate::transposition::{StateHash, TranspositionCache};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::collections::HashSet;
+
+/// Errors that may surface from `search`. Phase 7 will fold this into the
+/// engine-wide `EngineError` taxonomy; for now the search layer carries its
+/// own enum so the proto/cancellation paths don't bleed engine semantics.
+#[derive(Clone, Debug)]
+pub enum SearchError {
+    /// Search was cancelled before producing a usable tree.
+    Cancelled,
+    /// A forced branch entry violates a structural invariant (e.g., reverse
+    /// fill at a pair node). `path` mirrors the protocol's
+    /// `engine.invalid_input` Zod-style path.
+    InvalidInput { path: Vec<String> },
+}
+
+impl From<CancelError> for SearchError {
+    fn from(_: CancelError) -> Self {
+        SearchError::Cancelled
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct SearchParams {
@@ -17,6 +37,10 @@ pub struct SearchParams {
     /// `branch_width` is fully explored. Used by the correctness property test
     /// to validate that pruning never changes the back-propagated root score.
     pub disable_alpha_beta: bool,
+    /// Forced branches override or augment candidate sets at specific
+    /// content-addressed paths. See `forced_branches.rs` and the spec section
+    /// "Swap and Branch Semantics".
+    pub forced_branches: Vec<ForcedBranch>,
 }
 
 impl Default for SearchParams {
@@ -25,6 +49,7 @@ impl Default for SearchParams {
             branch_width: 5,
             max_depth: 6,
             disable_alpha_beta: false,
+            forced_branches: Vec::new(),
         }
     }
 }
@@ -41,34 +66,38 @@ pub struct TreeNode {
     pub children: Vec<TreeNode>,
 }
 
+/// Mutable accumulators threaded through the recursion. Holds counters that
+/// the caller may want to surface alongside the produced tree (in `SearchStats`).
+#[derive(Clone, Debug, Default)]
+struct SearchAccum {
+    /// Indices of `forced_branches` that were applied at least once during the
+    /// search. The final `forced_branches_dropped` is `total - applied`.
+    applied_forced: HashSet<usize>,
+}
+
 pub fn search(
     state: &DraftState,
     params: &SearchParams,
     eval_ctx: &EvalContext,
     cancel: &CancelHandle,
-) -> Result<TreeNode, CancelError> {
-    let mut cache: TranspositionCache<TreeNode> = TranspositionCache::new();
-    search_recursive(
-        state,
-        params,
-        params.max_depth,
-        eval_ctx,
-        cancel,
-        &mut cache,
-        f64::NEG_INFINITY,
-        f64::INFINITY,
-    )
+) -> Result<TreeNode, SearchError> {
+    let (tree, _stats) = search_with_stats(state, params, eval_ctx, cancel)?;
+    Ok(tree)
 }
 
-/// Like `search`, but also reports cache statistics (transposition hits, entries).
-/// Useful for tests and the engine `meta.transpositionsFound` counter.
+/// Like `search`, but also reports cache statistics (transposition hits, entries)
+/// and the count of forced branches that did not resolve to any node in the tree.
 pub fn search_with_stats(
     state: &DraftState,
     params: &SearchParams,
     eval_ctx: &EvalContext,
     cancel: &CancelHandle,
-) -> Result<(TreeNode, SearchStats), CancelError> {
+) -> Result<(TreeNode, SearchStats), SearchError> {
+    validate_forced_branches(state, &params.forced_branches)?;
+
     let mut cache: TranspositionCache<TreeNode> = TranspositionCache::new();
+    let mut accum = SearchAccum::default();
+    let mut lineage: Vec<(usize, Vec<String>)> = Vec::new();
     let tree = search_recursive(
         state,
         params,
@@ -76,12 +105,18 @@ pub fn search_with_stats(
         eval_ctx,
         cancel,
         &mut cache,
+        &mut accum,
+        &mut lineage,
         f64::NEG_INFINITY,
         f64::INFINITY,
     )?;
     let stats = SearchStats {
         transpositions_found: cache.hits(),
         cache_entries: cache.len(),
+        forced_branches_dropped: params
+            .forced_branches
+            .len()
+            .saturating_sub(accum.applied_forced.len()),
     };
     Ok((tree, stats))
 }
@@ -90,8 +125,34 @@ pub fn search_with_stats(
 pub struct SearchStats {
     pub transpositions_found: usize,
     pub cache_entries: usize,
+    /// Forced branches whose `path` did not resolve against any actual lineage
+    /// during the search. Spec: silent drop, telemetry-only.
+    pub forced_branches_dropped: usize,
 }
 
+/// Up-front structural validation of forced branches. Currently catches the
+/// reverse-fill pair case (forcing `pair_start` when state has already moved
+/// past it — pair-end implicitly confirmed). Other illegal inputs (out-of-range
+/// slot, unresolved path) fail soft in the search loop.
+fn validate_forced_branches(
+    state: &DraftState,
+    branches: &[ForcedBranch],
+) -> Result<(), SearchError> {
+    for (idx, fb) in branches.iter().enumerate() {
+        let target_turn = match TURN_SEQUENCE.get(fb.target_slot) {
+            Some(t) => t,
+            None => continue,
+        };
+        if target_turn.pair_start && fb.target_slot < state.turn_index() {
+            return Err(SearchError::InvalidInput {
+                path: vec!["forcedBranches".to_string(), idx.to_string()],
+            });
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
 fn search_recursive(
     state: &DraftState,
     params: &SearchParams,
@@ -99,9 +160,11 @@ fn search_recursive(
     eval_ctx: &EvalContext,
     cancel: &CancelHandle,
     cache: &mut TranspositionCache<TreeNode>,
+    accum: &mut SearchAccum,
+    lineage: &mut Vec<(usize, Vec<String>)>,
     mut alpha: f64,
     mut beta: f64,
-) -> Result<TreeNode, CancelError> {
+) -> Result<TreeNode, SearchError> {
     ensure_not_cancelled(cancel)?;
 
     // Transposition lookup. Cache key includes remaining_depth so that a
@@ -144,6 +207,8 @@ fn search_recursive(
             eval_ctx,
             cancel,
             cache,
+            accum,
+            lineage,
             alpha,
             beta,
             turn,
@@ -161,19 +226,25 @@ fn search_recursive(
         params.branch_width,
     );
 
-    let mut children: Vec<TreeNode> = Vec::with_capacity(ranked.len());
+    // Apply forced branches at this single-slot expansion.
+    let current_slot = state.turn_index();
+    let (forced_set, injected_ids) =
+        apply_single_slot_forces(&params.forced_branches, current_slot, lineage, accum, &ranked);
+
+    let mut children: Vec<TreeNode> = Vec::with_capacity(forced_set.len());
     let mut best_value = if our_turn {
         f64::NEG_INFINITY
     } else {
         f64::INFINITY
     };
 
-    for (champ, _static_score) in &ranked {
+    for (champ, _static_score) in &forced_set {
         ensure_not_cancelled(cancel)?;
 
         let mut child_state = state.clone();
         push_action(&mut child_state, turn, champ);
 
+        lineage.push((current_slot, vec![champ.clone()]));
         let child_tree = search_recursive(
             &child_state,
             params,
@@ -181,9 +252,12 @@ fn search_recursive(
             eval_ctx,
             cancel,
             cache,
+            accum,
+            lineage,
             alpha,
             beta,
         )?;
+        lineage.pop();
         let child_value = child_tree.scores.composite;
 
         let branch_node = TreeNode {
@@ -193,10 +267,10 @@ fn search_recursive(
                 ..Default::default()
             },
             side: Some(turn.side),
-            slots: vec![state.turn_index()],
+            slots: vec![current_slot],
             action_type: turn.action_type,
             phase: turn.phase,
-            user_injected: false,
+            user_injected: injected_ids.contains(champ.as_str()),
             children: child_tree.children,
         };
         children.push(branch_node);
@@ -241,7 +315,7 @@ fn search_recursive(
             ..Default::default()
         },
         side: Some(turn.side),
-        slots: vec![state.turn_index()],
+        slots: vec![current_slot],
         action_type: turn.action_type,
         phase: turn.phase,
         user_injected: false,
@@ -249,6 +323,55 @@ fn search_recursive(
     };
     cache.insert(cache_key, result.clone());
     Ok(result)
+}
+
+/// Returns the candidate list to actually expand at this single-slot turn,
+/// after applying any matching forced branches. Also returns the set of
+/// champion IDs that were injected by force (for `user_injected`).
+///
+/// A forced branch matches when its `path` resolves against `lineage` AND its
+/// `target_slot` equals `current_slot`. Sole mode replaces the candidate set
+/// with `[champion_id]`. Include mode appends `champion_id` after dedup.
+/// Each application records the branch's index in `accum.applied_forced`.
+fn apply_single_slot_forces(
+    branches: &[ForcedBranch],
+    current_slot: usize,
+    lineage: &[(usize, Vec<String>)],
+    accum: &mut SearchAccum,
+    ranked: &[(String, f64)],
+) -> (Vec<(String, f64)>, HashSet<String>) {
+    let mut out: Vec<(String, f64)> = ranked.to_vec();
+    let mut injected: HashSet<String> = HashSet::new();
+    let mut sole_override: Option<(usize, String)> = None;
+
+    for (idx, fb) in branches.iter().enumerate() {
+        if fb.target_slot != current_slot {
+            continue;
+        }
+        if !matches!(resolve_path(&fb.path, lineage), PathMatch::Resolved { .. }) {
+            continue;
+        }
+        accum.applied_forced.insert(idx);
+        match fb.mode {
+            ForcedMode::Sole => {
+                // Last sole-mode wins if multiple at same slot. (Multiple soles
+                // at the same slot are not expected; this preserves determinism.)
+                sole_override = Some((idx, fb.champion_id.clone()));
+            }
+            ForcedMode::Include => {
+                if !out.iter().any(|(c, _)| c == &fb.champion_id) {
+                    out.push((fb.champion_id.clone(), 0.0));
+                }
+                injected.insert(fb.champion_id.clone());
+            }
+        }
+    }
+
+    if let Some((_idx, id)) = sole_override {
+        injected.insert(id.clone());
+        return (vec![(id, 0.0)], injected);
+    }
+    (out, injected)
 }
 
 /// Cache key combines state hash with remaining depth so a shallow cached
@@ -356,10 +479,12 @@ fn expand_pair(
     eval_ctx: &EvalContext,
     cancel: &CancelHandle,
     cache: &mut TranspositionCache<TreeNode>,
+    accum: &mut SearchAccum,
+    lineage: &mut Vec<(usize, Vec<String>)>,
     mut alpha: f64,
     mut beta: f64,
     turn: TurnInfo,
-) -> Result<TreeNode, CancelError> {
+) -> Result<TreeNode, SearchError> {
     let our_turn = turn.side == eval_ctx.side;
     let pair_start_slot = state.turn_index();
     let pair_end_slot = pair_start_slot + 1;
@@ -380,40 +505,23 @@ fn expand_pair(
         })
         .collect();
 
-    // pair_filter wants singles sorted DESC by score.
-    let mut singles_desc = scored_singles.clone();
-    singles_desc.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
-    let scored_refs: Vec<(&str, f64)> =
-        singles_desc.iter().map(|(s, f)| (s.as_str(), *f)).collect();
+    // Detect pair-pick force: at most one sole-mode force per side of the pair
+    // (pair_start or pair_end). Forces matching the lineage but with the wrong
+    // mode for a pair node (include) are ignored.
+    let pair_force = match_pair_force(
+        &params.forced_branches,
+        pair_start_slot,
+        pair_end_slot,
+        lineage,
+        accum,
+    );
 
-    let cfg = PairFilterConfig {
-        single_top_k: 32,
-        per_role_top: 0,
-        max_pairs: (params.branch_width * 4).max(params.branch_width),
-    };
-    let pairs = seed_pair_candidates(&scored_refs, &[], &[], None, &cfg);
-
-    // Score each pair = sum of its two singles' composites.
-    let mut single_lookup: HashMap<&str, f64> = HashMap::with_capacity(scored_refs.len());
-    for (id, score) in &scored_refs {
-        single_lookup.insert(*id, *score);
-    }
-    let mut scored_pairs: Vec<(String, String, f64)> = pairs
-        .into_iter()
-        .map(|p| {
-            let value = single_lookup.get(p.first.as_str()).copied().unwrap_or(0.0)
-                + single_lookup.get(p.second.as_str()).copied().unwrap_or(0.0);
-            (p.first, p.second, value)
-        })
-        .collect();
-
-    // Move ordering: best-for-mover first.
-    if our_turn {
-        scored_pairs.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(Ordering::Equal));
-    } else {
-        scored_pairs.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(Ordering::Equal));
-    }
-    scored_pairs.truncate(params.branch_width);
+    let scored_pairs = build_pair_candidates(
+        &scored_singles,
+        &pair_force,
+        params.branch_width,
+        our_turn,
+    );
 
     let mut children: Vec<TreeNode> = Vec::with_capacity(scored_pairs.len());
     let mut best_value = if our_turn {
@@ -422,6 +530,8 @@ fn expand_pair(
         f64::INFINITY
     };
 
+    let injected = pair_force.is_some();
+
     for (first, second, _static) in &scored_pairs {
         ensure_not_cancelled(cancel)?;
 
@@ -429,6 +539,7 @@ fn expand_pair(
         push_action(&mut child_state, turn, first);
         push_action(&mut child_state, pair_end_turn, second);
 
+        lineage.push((pair_start_slot, vec![first.clone(), second.clone()]));
         let child_tree = search_recursive(
             &child_state,
             params,
@@ -436,9 +547,12 @@ fn expand_pair(
             eval_ctx,
             cancel,
             cache,
+            accum,
+            lineage,
             alpha,
             beta,
         )?;
+        lineage.pop();
         let child_value = child_tree.scores.composite;
 
         children.push(TreeNode {
@@ -451,7 +565,7 @@ fn expand_pair(
             slots: vec![pair_start_slot, pair_end_slot],
             action_type: turn.action_type,
             phase: turn.phase,
-            user_injected: false,
+            user_injected: injected,
             children: child_tree.children,
         });
 
@@ -501,4 +615,112 @@ fn expand_pair(
     let cache_key = state_cache_key(state, remaining_depth);
     cache.insert(cache_key, result.clone());
     Ok(result)
+}
+
+/// Which slot of a pair is fixed by a forced branch, and to which champion.
+/// `None` when no pair force matches the current lineage.
+#[derive(Clone, Debug)]
+enum PairForce {
+    Start(String),
+    End(String),
+}
+
+/// Finds at most one matching pair force at the current pair node. Sole mode
+/// only — include-mode at a pair turn is dropped (and its index is NOT added
+/// to `applied_forced`, so it'll count as dropped at the end).
+fn match_pair_force(
+    branches: &[ForcedBranch],
+    pair_start_slot: usize,
+    pair_end_slot: usize,
+    lineage: &[(usize, Vec<String>)],
+    accum: &mut SearchAccum,
+) -> Option<PairForce> {
+    for (idx, fb) in branches.iter().enumerate() {
+        if fb.target_slot != pair_start_slot && fb.target_slot != pair_end_slot {
+            continue;
+        }
+        if fb.mode != ForcedMode::Sole {
+            continue;
+        }
+        if !matches!(resolve_path(&fb.path, lineage), PathMatch::Resolved { .. }) {
+            continue;
+        }
+        accum.applied_forced.insert(idx);
+        return Some(if fb.target_slot == pair_start_slot {
+            PairForce::Start(fb.champion_id.clone())
+        } else {
+            PairForce::End(fb.champion_id.clone())
+        });
+    }
+    None
+}
+
+/// Builds the pair candidate list for `expand_pair`, applying any pair force.
+/// Without a force, falls back to `seed_pair_candidates`'s three-bucket
+/// expansion. With a force, enumerates `forced × every other` directly so the
+/// fixed slot is always the forced champion.
+fn build_pair_candidates(
+    scored_singles: &[(String, f64)],
+    pair_force: &Option<PairForce>,
+    branch_width: usize,
+    our_turn: bool,
+) -> Vec<(String, String, f64)> {
+    let mut single_lookup: HashMap<&str, f64> = HashMap::with_capacity(scored_singles.len());
+    for (id, score) in scored_singles {
+        single_lookup.insert(id.as_str(), *score);
+    }
+
+    let mut scored_pairs: Vec<(String, String, f64)> = match pair_force {
+        Some(PairForce::Start(forced)) => scored_singles
+            .iter()
+            .filter(|(c, _)| c != forced)
+            .map(|(other, _)| {
+                let value = single_lookup.get(forced.as_str()).copied().unwrap_or(0.0)
+                    + single_lookup.get(other.as_str()).copied().unwrap_or(0.0);
+                (forced.clone(), other.clone(), value)
+            })
+            .collect(),
+        Some(PairForce::End(forced)) => scored_singles
+            .iter()
+            .filter(|(c, _)| c != forced)
+            .map(|(other, _)| {
+                let value = single_lookup.get(other.as_str()).copied().unwrap_or(0.0)
+                    + single_lookup.get(forced.as_str()).copied().unwrap_or(0.0);
+                (other.clone(), forced.clone(), value)
+            })
+            .collect(),
+        None => {
+            // pair_filter wants singles sorted DESC by score.
+            let mut singles_desc: Vec<(String, f64)> = scored_singles.to_vec();
+            singles_desc.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+            let scored_refs: Vec<(&str, f64)> = singles_desc
+                .iter()
+                .map(|(s, f)| (s.as_str(), *f))
+                .collect();
+
+            let cfg = PairFilterConfig {
+                single_top_k: 32,
+                per_role_top: 0,
+                max_pairs: (branch_width * 4).max(branch_width),
+            };
+            let pairs = seed_pair_candidates(&scored_refs, &[], &[], None, &cfg);
+
+            pairs
+                .into_iter()
+                .map(|p| {
+                    let value = single_lookup.get(p.first.as_str()).copied().unwrap_or(0.0)
+                        + single_lookup.get(p.second.as_str()).copied().unwrap_or(0.0);
+                    (p.first, p.second, value)
+                })
+                .collect()
+        }
+    };
+
+    if our_turn {
+        scored_pairs.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(Ordering::Equal));
+    } else {
+        scored_pairs.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(Ordering::Equal));
+    }
+    scored_pairs.truncate(branch_width);
+    scored_pairs
 }

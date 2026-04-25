@@ -96,7 +96,12 @@ fn pick_turn_yields_branch_width_children() {
     fast_forward_to_slot(&mut state, 6);
 
     let ctx = ctx_with_pool(&["A", "B", "C", "D", "E", "F"]);
-    let params = SearchParams { branch_width: 5, max_depth: 1, disable_alpha_beta: false };
+    let params = SearchParams {
+        branch_width: 5,
+        max_depth: 1,
+        disable_alpha_beta: false,
+        forced_branches: vec![],
+    };
     let cancel = CancelHandle::new();
 
     let tree = search(&state, &params, &ctx, &cancel).unwrap();
@@ -119,7 +124,12 @@ fn ranks_candidates_by_static_score() {
     ctx.meta.win_rates.insert("B".into(), 0.50);
     ctx.meta.win_rates.insert("C".into(), 0.05);
 
-    let params = SearchParams { branch_width: 3, max_depth: 1, disable_alpha_beta: false };
+    let params = SearchParams {
+        branch_width: 3,
+        max_depth: 1,
+        disable_alpha_beta: false,
+        forced_branches: vec![],
+    };
     let cancel = CancelHandle::new();
     let tree = search(&state, &params, &ctx, &cancel).unwrap();
 
@@ -141,7 +151,12 @@ fn pair_start_yields_pair_children() {
     assert!(TURN_SEQUENCE[state.turn_index()].pair_start);
 
     let ctx = ctx_with_pool(&["A", "B", "C", "D"]);
-    let params = SearchParams { branch_width: 3, max_depth: 1, disable_alpha_beta: false };
+    let params = SearchParams {
+        branch_width: 3,
+        max_depth: 1,
+        disable_alpha_beta: false,
+        forced_branches: vec![],
+    };
     let cancel = CancelHandle::new();
 
     let tree = search(&state, &params, &ctx, &cancel).unwrap();
@@ -170,7 +185,12 @@ fn pair_consumes_two_slots_in_recursion() {
     fast_forward_to_slot(&mut state, 7);
 
     let ctx = ctx_with_pool(&["A", "B", "C", "D", "E", "F"]);
-    let params = SearchParams { branch_width: 2, max_depth: 2, disable_alpha_beta: false };
+    let params = SearchParams {
+        branch_width: 2,
+        max_depth: 2,
+        disable_alpha_beta: false,
+        forced_branches: vec![],
+    };
     let cancel = CancelHandle::new();
 
     let tree = search(&state, &params, &ctx, &cancel).unwrap();
@@ -195,7 +215,12 @@ fn transposition_cache_populates_during_search() {
     fast_forward_to_slot(&mut state, 6);
 
     let ctx = ctx_with_pool(&["A", "B", "C"]);
-    let params = SearchParams { branch_width: 3, max_depth: 3, disable_alpha_beta: false };
+    let params = SearchParams {
+        branch_width: 3,
+        max_depth: 3,
+        disable_alpha_beta: false,
+        forced_branches: vec![],
+    };
     let cancel = CancelHandle::new();
 
     let (_tree, stats) = search_with_stats(&state, &params, &ctx, &cancel).unwrap();
@@ -234,11 +259,13 @@ proptest! {
             branch_width: 5,
             max_depth,
             disable_alpha_beta: false,
+            forced_branches: vec![],
         };
         let params_no_ab = SearchParams {
             branch_width: 5,
             max_depth,
             disable_alpha_beta: true,
+            forced_branches: vec![],
         };
 
         let tree_ab = search(&state, &params_ab, &ctx, &cancel).unwrap();
@@ -269,7 +296,12 @@ fn opp_turn_minimizes_our_value() {
     ctx.meta.win_rates.insert("A".into(), 0.9);
     ctx.meta.win_rates.insert("B".into(), 0.1);
 
-    let params = SearchParams { branch_width: 2, max_depth: 1, disable_alpha_beta: false };
+    let params = SearchParams {
+        branch_width: 2,
+        max_depth: 1,
+        disable_alpha_beta: false,
+        forced_branches: vec![],
+    };
     let cancel = CancelHandle::new();
     let tree = search(&state, &params, &ctx, &cancel).unwrap();
     // Root is opponent's turn. Best-for-them = worst-for-us.
