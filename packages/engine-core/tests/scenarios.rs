@@ -456,3 +456,20 @@ fn extract_scenarios_leaves_assignments_empty_for_partial_comp() {
 
     assert!(scenarios[0].likely_assignments.is_empty());
 }
+
+#[test]
+fn extract_scenarios_deterministic_for_same_tree() {
+    let meta = sample_meta();
+    let tree = extraction_tree();
+
+    let first = extract_scenarios(&tree, &meta, 5);
+    let second = extract_scenarios(&tree, &meta, 5);
+
+    assert_eq!(first[0].name, second[0].name);
+    assert_eq!(first[0].description, second[0].description);
+    assert_eq!(first[0].tree_path.len(), second[0].tree_path.len());
+    for (left, right) in first[0].tree_path.iter().zip(second[0].tree_path.iter()) {
+        assert_eq!(left.slot, right.slot);
+        assert_eq!(left.champion_ids, right.champion_ids);
+    }
+}
