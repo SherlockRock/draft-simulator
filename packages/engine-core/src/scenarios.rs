@@ -1,8 +1,9 @@
 use crate::draft_state::{ActionType, Side};
 use crate::evaluator::ScoreSet;
 use crate::forced_branches::PathStep;
-use crate::role_solver::WeightedAssignment;
+use crate::role_solver::{ChampionMeta, WeightedAssignment};
 use crate::search::TreeNode;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 pub struct Scenario {
@@ -143,4 +144,75 @@ pub fn collect_leaves(tree: &TreeNode) -> Vec<LeafInfo> {
     }
 
     leaves
+}
+
+pub fn feature_vector(picks: &[String], meta: &HashMap<String, ChampionMeta>) -> [f64; 7] {
+    if picks.is_empty() {
+        return [0.0; 7];
+    }
+
+    let mut vector = [0.0; 7];
+    let mut count = 0.0;
+
+    for pick in picks {
+        let Some(champion) = meta.get(pick) else {
+            continue;
+        };
+        vector[0] += champion.damage_profile.physical;
+        vector[1] += champion.damage_profile.magic;
+        vector[2] += champion.scaling_profile.early;
+        vector[3] += champion.scaling_profile.mid;
+        vector[4] += champion.scaling_profile.late;
+        vector[5] += champion.cc_profile.engage_quality;
+        vector[6] += champion.cc_profile.peel_quality;
+        count += 1.0;
+    }
+
+    if count == 0.0 {
+        return [0.0; 7];
+    }
+
+    for value in &mut vector {
+        *value /= count;
+    }
+
+    vector
+}
+
+pub fn label_scenario(picks: &[String], meta: &HashMap<String, ChampionMeta>) -> String {
+    let vector = feature_vector(picks, meta);
+    let mut traits = Vec::with_capacity(3);
+
+    if vector[0] > 0.6 {
+        traits.push("Physical Heavy");
+    } else if vector[1] > 0.6 {
+        traits.push("Magic Heavy");
+    } else {
+        traits.push("Mixed Damage");
+    }
+
+    if vector[2] > 0.6 {
+        traits.push("Early Game");
+    } else if vector[4] > 0.6 {
+        traits.push("Late Scaling");
+    } else {
+        traits.push("Mid Game");
+    }
+
+    if vector[5] > 0.4 {
+        traits.push("Hard Engage");
+    } else if vector[6] > 0.4 {
+        traits.push("Peel Focused");
+    }
+
+    traits.into_iter().take(2).collect::<Vec<_>>().join(" / ")
+}
+
+fn vector_distance(a: &[f64; 7], b: &[f64; 7]) -> f64 {
+    let mut sum = 0.0;
+    for (left, right) in a.iter().zip(b.iter()) {
+        let diff = left - right;
+        sum += diff * diff;
+    }
+    sum.sqrt()
 }
