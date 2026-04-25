@@ -165,12 +165,13 @@ export interface NavigatorWorkflowContextValue {
     setLayoutOverride: (nodeKey: string, override: NodeLayoutOverride | null) => void;
     clearAllLayoutOverrides: () => void;
     swapChampion: (params: {
-        pathToParent: number[];
+        path: { slot: number; championIds: string[] }[];
+        targetSlot: number;
         newChampionId: string;
-        oldChampionId: string;
     }) => void;
     createBranch: (params: {
-        pathToParent: number[];
+        path: { slot: number; championIds: string[] }[];
+        targetSlot: number;
         newChampionId: string;
     }) => void;
 }

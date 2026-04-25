@@ -891,9 +891,9 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     };
 
     const swapChampion: NavigatorWorkflowContextValue["swapChampion"] = ({
-        pathToParent,
-        newChampionId,
-        oldChampionId
+        path,
+        targetSlot,
+        newChampionId
     }) => {
         const sock = currentSocket();
         const sessionId = getActiveSessionId();
@@ -902,14 +902,15 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         sock.emit("navigatorSwapChampion", {
             sessionId,
             draftId,
-            pathToParent,
-            newChampionId,
-            oldChampionId
+            path,
+            targetSlot,
+            championId: newChampionId
         });
     };
 
     const createBranch: NavigatorWorkflowContextValue["createBranch"] = ({
-        pathToParent,
+        path,
+        targetSlot,
         newChampionId
     }) => {
         const sock = currentSocket();
@@ -919,8 +920,9 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         sock.emit("navigatorBranch", {
             sessionId,
             draftId,
-            pathToParent,
-            newChampionId
+            path,
+            targetSlot,
+            championId: newChampionId
         });
     };
 

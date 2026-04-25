@@ -33,15 +33,49 @@ const NavigatorDrafting: Component = () => {
     const [highlightedTreePath, setHighlightedTreePath] = createSignal<number[] | null>(
         null
     );
+    type ContentAddressedStep = { slot: number; championIds: string[] };
     const [swapTarget, setSwapTarget] = createSignal<{
-        path: number[];
+        path: ContentAddressedStep[];
+        targetSlot: number;
         oldChampionId: string;
         contextLabel: string;
+        depth: number;
     } | null>(null);
     const [branchTarget, setBranchTarget] = createSignal<{
-        pathToParent: number[];
+        path: ContentAddressedStep[];
+        targetSlot: number;
         contextLabel: string;
+        depth: number;
     } | null>(null);
+
+    // Walks the synthetic tree using an index path and returns the
+    // content-addressed lineage (slot + championIds at each step). Returns the
+    // PARENT lineage (excludes the targeted node's own step), the targetSlot,
+    // and the target's championIds for the picker label. Matches the protocol
+    // EngineRequest.config.forcedBranches[].path shape.
+    const deriveContentAddressedTarget = (
+        indexPath: number[]
+    ): { path: ContentAddressedStep[]; targetSlot: number; championIds: string[] } | null => {
+        const tree = syntheticTree();
+        if (!tree || indexPath.length === 0) return null;
+        const fullLineage: ContentAddressedStep[] = [];
+        let node: NavigatorTreeNode | null = tree;
+        for (const idx of indexPath) {
+            if (!node || !node.children[idx]) return null;
+            node = node.children[idx];
+            fullLineage.push({
+                slot: node.slots[0],
+                championIds: [...node.championIds]
+            });
+        }
+        if (!node) return null;
+        const target = fullLineage[fullLineage.length - 1];
+        return {
+            path: fullLineage.slice(0, -1),
+            targetSlot: target.slot,
+            championIds: node.championIds
+        };
+    };
 
     const session = () => navigatorContext().session;
     const activeDraft = () => navigatorContext().draft;
@@ -126,8 +160,8 @@ const NavigatorDrafting: Component = () => {
     const swapColoringFor = (championId: string): ChampionColorState => {
         const session = navigatorContext().session;
         if (!session) return "neutral";
-        const turnIndex = swapTarget()?.path.length ?? 0;
-        const turnInfo = TURN_SEQUENCE[turnIndex - 1];
+        const depth = swapTarget()?.depth ?? 0;
+        const turnInfo = TURN_SEQUENCE[depth - 1];
         return getPickerState(
             championId,
             turnInfo?.side ?? null,
@@ -140,8 +174,8 @@ const NavigatorDrafting: Component = () => {
     const branchColoringFor = (championId: string): ChampionColorState => {
         const session = navigatorContext().session;
         if (!session) return "neutral";
-        const turnIndex = (branchTarget()?.pathToParent.length ?? 0) + 1;
-        const turnInfo = TURN_SEQUENCE[turnIndex - 1];
+        const depth = branchTarget()?.depth ?? 0;
+        const turnInfo = TURN_SEQUENCE[depth - 1];
         return getPickerState(
             championId,
             turnInfo?.side ?? null,
@@ -221,40 +255,41 @@ const NavigatorDrafting: Component = () => {
         }
     };
 
-    const handleOpenSwap = (path: number[]) => {
-        const synthetic = syntheticTree();
-        if (!synthetic) return;
-
-        let node: NavigatorTreeNode | null = synthetic;
-        for (const index of path) {
-            if (!node || !node.children[index]) return;
-            node = node.children[index];
-        }
-        if (!node) return;
-
-        const oldChampionId = node.championIds[0];
+    const handleOpenSwap = (indexPath: number[]) => {
+        const target = deriveContentAddressedTarget(indexPath);
+        if (!target) return;
+        const oldChampionId = target.championIds[0];
         if (!oldChampionId) return;
 
-        const turnInfo = TURN_SEQUENCE[path.length - 1];
+        const turnInfo = TURN_SEQUENCE[indexPath.length - 1];
         const label = turnInfo
-            ? `${turnInfo.side.toUpperCase()} ${turnInfo.type.toUpperCase()} ${path.length}`
-            : `TURN ${path.length}`;
+            ? `${turnInfo.side.toUpperCase()} ${turnInfo.type.toUpperCase()} ${indexPath.length}`
+            : `TURN ${indexPath.length}`;
 
         setSwapTarget({
-            path,
+            path: target.path,
+            targetSlot: target.targetSlot,
             oldChampionId,
-            contextLabel: label
+            contextLabel: label,
+            depth: indexPath.length
         });
     };
 
-    const handleOpenBranch = (path: number[]) => {
-        const turnInfo = TURN_SEQUENCE[path.length - 1];
+    const handleOpenBranch = (indexPath: number[]) => {
+        const target = deriveContentAddressedTarget(indexPath);
+        if (!target) return;
+        const turnInfo = TURN_SEQUENCE[indexPath.length - 1];
         const label = turnInfo
-            ? `${turnInfo.side.toUpperCase()} ${turnInfo.type.toUpperCase()} ${path.length}`
-            : `TURN ${path.length}`;
+            ? `${turnInfo.side.toUpperCase()} ${turnInfo.type.toUpperCase()} ${indexPath.length}`
+            : `TURN ${indexPath.length}`;
+        // For branch (mode: include) we add a sibling at the same slot as the
+        // node the user clicked — so targetSlot is the clicked node's slot,
+        // and path is the parent lineage (same as swap).
         setBranchTarget({
-            pathToParent: path.slice(0, -1),
-            contextLabel: label
+            path: target.path,
+            targetSlot: target.targetSlot,
+            contextLabel: label,
+            depth: indexPath.length
         });
     };
 
@@ -381,9 +416,9 @@ const NavigatorDrafting: Component = () => {
                         onSelect={(newChampionId) => {
                             const currentTarget = target();
                             swapChampion({
-                                pathToParent: currentTarget.path.slice(0, -1),
-                                newChampionId,
-                                oldChampionId: currentTarget.oldChampionId
+                                path: currentTarget.path,
+                                targetSlot: currentTarget.targetSlot,
+                                newChampionId
                             });
                             setSwapTarget(null);
                         }}
@@ -402,7 +437,8 @@ const NavigatorDrafting: Component = () => {
                         onSelect={(newChampionId) => {
                             const t = target();
                             createBranch({
-                                pathToParent: t.pathToParent,
+                                path: t.path,
+                                targetSlot: t.targetSlot,
                                 newChampionId
                             });
                             setBranchTarget(null);
