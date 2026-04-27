@@ -15,6 +15,7 @@ import {
     NavigatorEventData,
     NavigatorPanRequest,
     NavigatorScenario,
+    NavigatorScenarioPathStep,
     NavigatorSessionState,
     NavigatorTreeNode,
     NavigatorWorkflowContext,
@@ -27,8 +28,8 @@ import {
 } from "../providers/NavigatorSocketProvider";
 import { draftEventsToState } from "../utils/draftEventsToState";
 import {
-    nodeKey,
-    pathIndicesToNodeKeyPath,
+    pathStepsToIndexPath,
+    pathStepsToNodeKeyPath,
     eventsToConfirmedTurns,
     extendSpineOptimistic,
     includeConfirmedDraftStateForScenarios,
@@ -134,7 +135,12 @@ const NavigatorScenarioSchema: z.ZodType<NavigatorScenario> = z.object({
     redPicks: z.array(z.string()),
     blueBans: z.array(z.string()),
     redBans: z.array(z.string()),
-    treePath: z.array(z.number()),
+    treePath: z.array(
+        z.object({
+            slot: z.number().int().nonnegative(),
+            championIds: z.array(z.string())
+        })
+    ),
     perspective: z.enum(["robust", "likely", "off_profile"]),
     indicators: z.array(z.string())
 });
@@ -320,8 +326,12 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     const clearAllLayoutOverrides = () => {
         setLayoutOverridesSignal(new Map());
     };
-    const requestScenarioPan = (treePath: number[]) => {
-        setPanRequest({ path: treePath });
+    const requestScenarioPan = (treePath: NavigatorScenarioPathStep[]) => {
+        const synth = syntheticTreeSignal();
+        if (!synth) return;
+        const indexPath = pathStepsToIndexPath(synth, treePath);
+        if (!indexPath) return;
+        setPanRequest({ path: indexPath });
     };
     let socketWithListeners: Socket | undefined = undefined;
 
@@ -383,7 +393,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                       response.snapshot.scenarios,
                       draftState
                   ),
-                  spineNodeCount(confirmedTurns)
+                  confirmedTurns
               )
             : [];
         setNavigatorContext({
@@ -537,39 +547,19 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                 // extractScenarios emit a single empty scenario. Until that
                 // is fixed engine-side, preserve the previous snapshot's
                 // scenarios filtered to those whose pair side includes the
-                // just-clicked champion — same spirit as the filtered pair
-                // fanout in extendSpineOptimistic.
+                // just-clicked champion.
                 //
-                // Also remap each preserved scenario's treePath: the spine
-                // prefix still lands on the same fanout parent, but the
-                // fanout-layer index must move to wherever the matching pair
-                // node lives in the now-filtered children list. Deeper path
-                // indices stay untouched — subtrees survive the filter.
+                // Each preserved scenario's treePath is content-addressed
+                // (post-remap), so it walks to the same nodes in the new
+                // (filtered) fanout without index recomputation — the pair
+                // step's `championIds` match the surviving pair node by
+                // sorted-set equality.
                 const enteredChamp = tailTurn.championIds[0];
                 const side = tailTurn.side;
                 const preTurnPicks =
                     (side === "blue"
                         ? draftState.bluePicks.length
                         : draftState.redPicks.length) - 1;
-                const prefixLength = Math.max(spineLength, 1);
-
-                let fanoutParent: NavigatorTreeNode | null = nextSynthetic;
-                for (let i = 0; i < prefixLength; i++) {
-                    const next: NavigatorTreeNode | undefined =
-                        fanoutParent?.children[0];
-                    if (!next) {
-                        fanoutParent = null;
-                        break;
-                    }
-                    fanoutParent = next;
-                }
-
-                const newIdxByKey = new Map<string, number>();
-                if (fanoutParent) {
-                    fanoutParent.children.forEach((child, idx) => {
-                        newIdxByKey.set(nodeKey(child), idx);
-                    });
-                }
 
                 const preserved: NavigatorScenario[] = [];
                 for (const s of prevSnapshot.scenarios) {
@@ -578,17 +568,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                     const pairB = picks[preTurnPicks + 1];
                     if (pairA === undefined || pairB === undefined) continue;
                     if (pairA !== enteredChamp && pairB !== enteredChamp) continue;
-
-                    const pairKey = `${side}:pick:${[pairA, pairB].sort().join("|")}`;
-                    const newIdx = newIdxByKey.get(pairKey);
-                    if (newIdx === undefined) continue;
-
-                    const newTreePath = [
-                        ...s.treePath.slice(0, prefixLength),
-                        newIdx,
-                        ...s.treePath.slice(prefixLength + 1)
-                    ];
-                    preserved.push({ ...s, treePath: newTreePath });
+                    preserved.push(s);
                 }
 
                 nextScenarios = preserved;
@@ -598,7 +578,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                         nextSnapshot.scenarios,
                         draftState
                     ),
-                    spineLength
+                    confirmedTurns
                 );
             }
         } else if (!prevSynthetic && nextSnapshot) {
@@ -610,7 +590,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                     nextSnapshot.scenarios,
                     draftState
                 ),
-                spineNodeCount(confirmedTurns)
+                confirmedTurns
             );
         }
 
@@ -697,7 +677,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             idx !== null && snapshot ? (snapshot.scenarios[idx] ?? null) : null;
         const selectedKeyPath =
             selectedScenario && currentSynthetic
-                ? pathIndicesToNodeKeyPath(currentSynthetic, selectedScenario.treePath)
+                ? pathStepsToNodeKeyPath(currentSynthetic, selectedScenario.treePath)
                 : null;
         return {
             selectedScenarioKeyPath: selectedKeyPath,

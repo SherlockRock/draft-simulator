@@ -5,7 +5,7 @@ import { useNavigatorContext } from "../../contexts/NavigatorContext";
 import type { NavigatorTreeNode } from "../../contexts/NavigatorContext";
 import { getPickerState } from "../../utils/navigatorPool";
 import { TURN_SEQUENCE } from "../../utils/turnSequence";
-import { eventsToConfirmedTurns } from "../../utils/treeReconcile";
+import { eventsToConfirmedTurns, pathStepsToIndexPath } from "../../utils/treeReconcile";
 import DraftInputPanel from "./DraftInputPanel";
 import DecisionTree from "./DecisionTree";
 import ScenarioLanes from "./ScenarioLanes";
@@ -55,7 +55,11 @@ const NavigatorDrafting: Component = () => {
     // EngineRequest.config.forcedBranches[].path shape.
     const deriveContentAddressedTarget = (
         indexPath: number[]
-    ): { path: ContentAddressedStep[]; targetSlot: number; championIds: string[] } | null => {
+    ): {
+        path: ContentAddressedStep[];
+        targetSlot: number;
+        championIds: string[];
+    } | null => {
         const tree = syntheticTree();
         if (!tree || indexPath.length === 0) return null;
         const fullLineage: ContentAddressedStep[] = [];
@@ -188,24 +192,31 @@ const NavigatorDrafting: Component = () => {
     createEffect(() => {
         const nextScenarios = scenarios();
         const selectedIndex = selectedScenarioIndex();
+        const synth = syntheticTree();
 
         if (nextScenarios.length === 0) {
             setSelectedScenarioIndex(null);
             setHighlightedTreePath(null);
         } else if (selectedIndex !== null && selectedIndex >= nextScenarios.length) {
             setSelectedScenarioIndex(null);
-        } else if (selectedIndex !== null) {
+        } else if (selectedIndex !== null && synth) {
             const selected = nextScenarios[selectedIndex];
             if (selected?.treePath) {
-                setHighlightedTreePath(selected.treePath);
+                const indexPath = pathStepsToIndexPath(synth, selected.treePath);
+                if (indexPath) setHighlightedTreePath(indexPath);
             }
         }
     });
 
     const handleNodeClick = (nodePath: number[]) => {
-        const matchIdx = scenarios().findIndex((scenario) =>
-            nodePath.every((value, index) => scenario.treePath[index] === value)
-        );
+        const synth = syntheticTree();
+        const matchIdx = scenarios().findIndex((scenario) => {
+            if (!synth) return false;
+            const scenarioIndexPath = pathStepsToIndexPath(synth, scenario.treePath);
+            if (!scenarioIndexPath) return false;
+            if (nodePath.length > scenarioIndexPath.length) return false;
+            return nodePath.every((value, index) => scenarioIndexPath[index] === value);
+        });
 
         setHighlightedTreePath(nodePath);
         setSelectedScenarioIndex(matchIdx >= 0 ? matchIdx : null);
@@ -361,13 +372,26 @@ const NavigatorDrafting: Component = () => {
                             }
                             highlightedPath={highlightedTreePath()}
                             confirmedDepth={confirmedDepth()}
-                            scenarioPaths={scenarios().map((scenario, index) => ({
-                                path: scenario.treePath,
-                                tier:
-                                    selectedScenarioIndex() === index
-                                        ? "selected"
-                                        : "unselected"
-                            }))}
+                            scenarioPaths={(() => {
+                                const synth = syntheticTree();
+                                if (!synth) return [];
+                                return scenarios().flatMap((scenario, index) => {
+                                    const path = pathStepsToIndexPath(
+                                        synth,
+                                        scenario.treePath
+                                    );
+                                    if (!path) return [];
+                                    return [
+                                        {
+                                            path,
+                                            tier:
+                                                selectedScenarioIndex() === index
+                                                    ? ("selected" as const)
+                                                    : ("unselected" as const)
+                                        }
+                                    ];
+                                });
+                            })()}
                             panRequest={panRequest()}
                             onNodeClick={handleNodeClick}
                             onPromoteToScenario={handlePromoteToScenario}

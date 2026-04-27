@@ -40,6 +40,14 @@ export interface NavigatorTreeNode {
     confirmedChampionIds?: string[];
 }
 
+/** Content-addressed path step matching `engine-protocol`'s `PathStep`.
+ *  See spec § "Engine Protocol → treePath": each step identifies a hop by the
+ *  `(slot, championIds)` tuple of the child node, not by sibling index. */
+export interface NavigatorScenarioPathStep {
+    slot: number;
+    championIds: string[];
+}
+
 export interface NavigatorScenario {
     name: string;
     scores: Pick<NavigatorScoreSet, "composite" | "compStrength" | "informationValue">;
@@ -49,7 +57,7 @@ export interface NavigatorScenario {
     redPicks: string[];
     blueBans: string[];
     redBans: string[];
-    treePath: number[];
+    treePath: NavigatorScenarioPathStep[];
     perspective: "robust" | "likely" | "off_profile";
     indicators: string[];
 }
@@ -152,7 +160,7 @@ export interface NavigatorWorkflowContextValue {
     setSelectedScenarioIndex: (index: number | null) => void;
     panRequest: Accessor<NavigatorPanRequest | null>;
     setPanRequest: (request: NavigatorPanRequest | null) => void;
-    requestScenarioPan: (treePath: number[]) => void;
+    requestScenarioPan: (treePath: NavigatorScenarioPathStep[]) => void;
     manualExpansionKeys: Accessor<ReadonlySet<string>>;
     manualCollapseKeys: Accessor<ReadonlySet<string>>;
     setManualExpansionKeys: (

@@ -55,6 +55,58 @@ export function pathIndicesToNodeKeyPath(
 }
 
 /**
+ * Given a content-addressed path of `(slot, championIds)` steps, walk the
+ * tree by matching each step against the children of the current node. Match
+ * uses sorted-set equality on `championIds` so pair-pick entries are
+ * order-independent (mirrors `nodeKey`'s sort). `slot` is informational only —
+ * championIds uniquely identifies the child within a single decision layer.
+ *
+ * Used to translate `Scenario.treePath` (content-addressed, the new engine
+ * wire shape) into an index path the synthetic-tree consumers can use.
+ */
+export function pathStepsToIndexPath(
+    root: NodeKeyTreeNode,
+    steps: ReadonlyArray<{ slot: number; championIds: string[] }>
+): number[] | null {
+    const result: number[] = [];
+    let node = root;
+    for (const step of steps) {
+        const stepKey = [...step.championIds].sort().join("|");
+        const index = node.children.findIndex(
+            (child) => [...child.championIds].sort().join("|") === stepKey
+        );
+        if (index === -1) return null;
+        result.push(index);
+        node = node.children[index];
+    }
+    return result;
+}
+
+/**
+ * Given a content-addressed path of `(slot, championIds)` steps, return the
+ * matching node-key path (or null if any step doesn't match). Convenience
+ * wrapper around pathStepsToIndexPath + pathIndicesToNodeKeyPath that avoids
+ * walking the tree twice.
+ */
+export function pathStepsToNodeKeyPath(
+    root: NodeKeyTreeNode,
+    steps: ReadonlyArray<{ slot: number; championIds: string[] }>
+): NodeKeyPath | null {
+    const keys: string[] = [];
+    let node = root;
+    for (const step of steps) {
+        const stepKey = [...step.championIds].sort().join("|");
+        const child = node.children.find(
+            (c) => [...c.championIds].sort().join("|") === stepKey
+        );
+        if (!child) return null;
+        keys.push(nodeKey(child));
+        node = child;
+    }
+    return nodeKeyPath(keys);
+}
+
+/**
  * Given a node-key path and a `root`, return the index path (one index per
  * child step) that identifies the same node in `root`, or null if absent.
  */

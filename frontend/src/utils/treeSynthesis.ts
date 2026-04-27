@@ -1,6 +1,7 @@
 import type {
     NavigatorEventData,
     NavigatorScenario,
+    NavigatorScenarioPathStep,
     NavigatorTreeNode
 } from "../contexts/NavigatorContext";
 import type { DraftStateSummary } from "./draftEventsToState";
@@ -213,23 +214,29 @@ function emptyNodeChildren(): NavigatorTreeNode {
 }
 
 /**
- * Translate an engine-tree scenario path into the synthetic-tree index path.
+ * Translate an engine-relative scenario path into a synthetic-tree-relative
+ * content-addressed path.
  *
- * The synthetic tree prepends one zero per spine step from the overall root
- * down to the fanout-parent. When there are N>0 confirmed turns that's N zeros
- * (root → turn[0] → ... → turn[N-1], each via `children[0]`). When N=0 it's
- * one zero (root → engine-root placeholder). The engine's `treePath` indexes
- * from the fanout-parent's children outward, so the full synthetic path is
- * `[...spinePrefix, ...scenario.treePath]`.
+ * The synthetic tree wraps the engine tree with one spine node per confirmed
+ * turn (excluding pair-pending — see `spineNodeCount`), plus one synthetic
+ * root above. The engine's `treePath` is content-addressed and starts from the
+ * fanout-parent's children. The full synthetic-relative path is
+ * `[...spinePrefix, ...scenario.treePath]` where each prefix step matches one
+ * spine node by `(slot, championIds)`. When no turns are confirmed the prefix
+ * is a single step matching the engine-root placeholder (championIds: []).
  */
 export function remapScenarioPath(
     scenario: NavigatorScenario,
-    spineLength: number
+    confirmedTurns: ConfirmedTurn[]
 ): NavigatorScenario {
-    // Path length from the overall root to the fanout-parent (one link when
-    // no turns are confirmed, otherwise one link per confirmed turn).
-    const prefixLength = Math.max(spineLength, 1);
-    const spinePrefix = Array.from({ length: prefixLength }, () => 0);
+    const spineLength = spineNodeCount(confirmedTurns);
+    const spinePrefix: NavigatorScenarioPathStep[] =
+        spineLength === 0
+            ? [{ slot: 0, championIds: [] }]
+            : confirmedTurns.slice(0, spineLength).map((turn) => ({
+                  slot: turn.slots[0],
+                  championIds: [...turn.championIds]
+              }));
     return {
         ...scenario,
         treePath: [...spinePrefix, ...scenario.treePath]
@@ -238,9 +245,9 @@ export function remapScenarioPath(
 
 export function remapScenarios(
     scenarios: NavigatorScenario[],
-    spineLength: number
+    confirmedTurns: ConfirmedTurn[]
 ): NavigatorScenario[] {
-    return scenarios.map((scenario) => remapScenarioPath(scenario, spineLength));
+    return scenarios.map((scenario) => remapScenarioPath(scenario, confirmedTurns));
 }
 
 function prependConfirmedValues(projected: string[], confirmed: string[]): string[] {
