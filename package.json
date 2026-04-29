@@ -12,7 +12,9 @@
     "typecheck": "pnpm --filter draft-simulator-frontend exec tsc --noEmit",
     "update-champion-meta": "node scripts/scrape-meraki.mjs && node scripts/scrape-cdragon.mjs && node scripts/compile-champion-meta.mjs && node scripts/compile-matchup-data.mjs && node scripts/validate-compiled-data.mjs",
     "update-champions": "node scripts/update-champions.mjs",
-    "update-images": "node scripts/update-champion-images.mjs"
+    "update-images": "node scripts/update-champion-images.mjs",
+    "test:match-pipeline": "node --test scripts/match-pipeline/*.test.mjs",
+    "match-pipeline:smoke": "node scripts/match-pipeline/smoke.mjs"
   },
   "devDependencies": {
     "sharp": "^0.34.5"
