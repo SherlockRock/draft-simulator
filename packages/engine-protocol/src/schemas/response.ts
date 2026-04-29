@@ -33,7 +33,9 @@ const baseTreeNode = z.object({
   phase: PhaseSchema,
   userInjected: z.boolean(),
 });
-type TreeNodeShape = z.infer<typeof baseTreeNode> & { children: TreeNodeShape[] };
+type TreeNodeShape = z.infer<typeof baseTreeNode> & {
+  children: TreeNodeShape[];
+};
 
 export const TreeNodeSchema: z.ZodType<TreeNodeShape> = baseTreeNode.extend({
   children: z.lazy(() => z.array(TreeNodeSchema)),
@@ -53,7 +55,8 @@ const ScenarioSchema = z.object({
   redPicks: z.array(z.string()),
   blueBans: z.array(z.string()),
   redBans: z.array(z.string()),
-  likelyAssignments: z.array(WeightedAssignmentSchema),
+  blueLikelyAssignments: z.array(WeightedAssignmentSchema),
+  redLikelyAssignments: z.array(WeightedAssignmentSchema),
   treePath: z.array(
     z.object({
       slot: z.number().int().nonnegative(),

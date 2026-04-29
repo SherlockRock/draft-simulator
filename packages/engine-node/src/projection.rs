@@ -234,7 +234,7 @@ fn to_protocol_tree(node: &TreeNode) -> proto::TreeNode {
             ActionType::Pick => proto::TreeNodeActionType::Pick,
         },
         // v1: per-node assignment distribution is not populated by engine-core;
-        // it lives only on Scenario.likely_assignments. Frontend reads scenarios.
+        // it lives only on Scenario.{blue,red}_likely_assignments. Frontend reads scenarios.
         assignment_distribution: vec![],
         champion_ids: node.champion_ids.clone(),
         children: node.children.iter().map(to_protocol_tree).collect(),
@@ -279,7 +279,16 @@ fn to_protocol_scenario(s: &Scenario) -> proto::EngineResponseScenariosItem {
         blue_picks: s.blue_picks.clone(),
         description: s.description.clone(),
         indicators: s.indicators.clone(),
-        likely_assignments: s.likely_assignments.iter().map(to_protocol_assignment).collect(),
+        blue_likely_assignments: s
+            .blue_likely_assignments
+            .iter()
+            .map(to_protocol_blue_assignment)
+            .collect(),
+        red_likely_assignments: s
+            .red_likely_assignments
+            .iter()
+            .map(to_protocol_red_assignment)
+            .collect(),
         name: s.name.clone(),
         perspective: match s.perspective {
             Perspective::Robust => proto::EngineResponseScenariosItemPerspective::Robust,
@@ -311,19 +320,40 @@ fn scenario_scores(s: &ScoreSet) -> proto::EngineResponseScenariosItemScores {
     }
 }
 
-fn to_protocol_assignment(
+fn to_protocol_blue_assignment(
     a: &WeightedAssignment,
-) -> proto::EngineResponseScenariosItemLikelyAssignmentsItem {
-    proto::EngineResponseScenariosItemLikelyAssignmentsItem {
-        assignment: assignment_to_proto(&a.assignment),
+) -> proto::EngineResponseScenariosItemBlueLikelyAssignmentsItem {
+    proto::EngineResponseScenariosItemBlueLikelyAssignmentsItem {
+        assignment: blue_assignment_to_proto(&a.assignment),
         weight: a.weight,
     }
 }
 
-fn assignment_to_proto(
+fn blue_assignment_to_proto(
     a: &RoleAssignment,
-) -> proto::EngineResponseScenariosItemLikelyAssignmentsItemAssignment {
-    proto::EngineResponseScenariosItemLikelyAssignmentsItemAssignment {
+) -> proto::EngineResponseScenariosItemBlueLikelyAssignmentsItemAssignment {
+    proto::EngineResponseScenariosItemBlueLikelyAssignmentsItemAssignment {
+        adc: a.adc.clone(),
+        jungle: a.jungle.clone(),
+        middle: a.middle.clone(),
+        support: a.support.clone(),
+        top: a.top.clone(),
+    }
+}
+
+fn to_protocol_red_assignment(
+    a: &WeightedAssignment,
+) -> proto::EngineResponseScenariosItemRedLikelyAssignmentsItem {
+    proto::EngineResponseScenariosItemRedLikelyAssignmentsItem {
+        assignment: red_assignment_to_proto(&a.assignment),
+        weight: a.weight,
+    }
+}
+
+fn red_assignment_to_proto(
+    a: &RoleAssignment,
+) -> proto::EngineResponseScenariosItemRedLikelyAssignmentsItemAssignment {
+    proto::EngineResponseScenariosItemRedLikelyAssignmentsItemAssignment {
         adc: a.adc.clone(),
         jungle: a.jungle.clone(),
         middle: a.middle.clone(),

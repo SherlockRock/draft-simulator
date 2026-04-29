@@ -41,10 +41,7 @@ import {
 } from "../utils/treeReconcile";
 import type { ReconcilePriority } from "../utils/treeReconcile";
 import { validateSocketEvent } from "../utils/socketValidation";
-import {
-    hashNavigatorEvents,
-    makeCacheKey
-} from "../utils/navigatorEventHash";
+import { hashNavigatorEvents, makeCacheKey } from "../utils/navigatorEventHash";
 import { TURN_SEQUENCE } from "../utils/turnSequence";
 import { Socket } from "socket.io-client";
 
@@ -131,10 +128,11 @@ const NavigatorScenarioSchema: z.ZodType<NavigatorScenario> = z.object({
     }),
     description: z.string(),
     bluePicks: z.array(z.string()),
-    likelyAssignments: z.array(NavigatorWeightedAssignmentSchema),
     redPicks: z.array(z.string()),
     blueBans: z.array(z.string()),
     redBans: z.array(z.string()),
+    blueLikelyAssignments: z.array(NavigatorWeightedAssignmentSchema),
+    redLikelyAssignments: z.array(NavigatorWeightedAssignmentSchema),
     treePath: z.array(
         z.object({
             slot: z.number().int().nonnegative(),
@@ -239,9 +237,9 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     const [syntheticTreeSignal, setSyntheticTreeSignal] =
         createSignal<NavigatorTreeNode | null>(null);
     const [lastEventIdSeen, setLastEventIdSeen] = createSignal<string | null>(null);
-    const [viewingGameNumber, setViewingGameNumberSignal] = createSignal<
-        number | null
-    >(null);
+    const [viewingGameNumber, setViewingGameNumberSignal] = createSignal<number | null>(
+        null
+    );
 
     interface CachedResult {
         tree: NavigatorTreeNode;
@@ -268,10 +266,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         });
     };
 
-    const applyCacheEntry = (
-        entry: CachedResult,
-        nextEvents: NavigatorEventData[]
-    ) => {
+    const applyCacheEntry = (entry: CachedResult, nextEvents: NavigatorEventData[]) => {
         const finalSnapshot: NavigatorSessionState["snapshot"] = {
             id: "cache",
             navigator_draft_id:
@@ -828,10 +823,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             createdAt: new Date().toISOString()
         };
         const nextEvents = [...ctx.events, syntheticEvent];
-        const key = makeCacheKey(
-            session.config_version,
-            hashNavigatorEvents(nextEvents)
-        );
+        const key = makeCacheKey(session.config_version, hashNavigatorEvents(nextEvents));
         return { entry: snapshotCache.get(key), nextEvents };
     };
 
@@ -844,10 +836,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         if (!session || ctx.events.length === 0)
             return { entry: undefined, nextEvents: ctx.events };
         const nextEvents = ctx.events.slice(0, -1);
-        const key = makeCacheKey(
-            session.config_version,
-            hashNavigatorEvents(nextEvents)
-        );
+        const key = makeCacheKey(session.config_version, hashNavigatorEvents(nextEvents));
         return { entry: snapshotCache.get(key), nextEvents };
     };
 

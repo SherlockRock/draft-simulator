@@ -16,7 +16,8 @@ pub struct Scenario {
     pub red_picks: Vec<String>,
     pub blue_bans: Vec<String>,
     pub red_bans: Vec<String>,
-    pub likely_assignments: Vec<WeightedAssignment>,
+    pub blue_likely_assignments: Vec<WeightedAssignment>,
+    pub red_likely_assignments: Vec<WeightedAssignment>,
     pub tree_path: Vec<PathStep>,
 }
 
@@ -261,13 +262,24 @@ pub fn extract_scenarios(
         .into_iter()
         .enumerate()
         .map(|(idx, (leaf, _))| {
-            let likely_assignments = if leaf.blue_picks.len() == 5
+            let blue_likely_assignments = if leaf.blue_picks.len() == 5
                 && leaf
                     .blue_picks
                     .iter()
                     .all(|pick| champion_meta.contains_key(pick))
             {
                 let picks: Vec<&str> = leaf.blue_picks.iter().map(String::as_str).collect();
+                role_solver::solve(&picks, champion_meta)
+            } else {
+                Vec::new()
+            };
+            let red_likely_assignments = if leaf.red_picks.len() == 5
+                && leaf
+                    .red_picks
+                    .iter()
+                    .all(|pick| champion_meta.contains_key(pick))
+            {
+                let picks: Vec<&str> = leaf.red_picks.iter().map(String::as_str).collect();
                 role_solver::solve(&picks, champion_meta)
             } else {
                 Vec::new()
@@ -291,7 +303,8 @@ pub fn extract_scenarios(
                 red_picks: leaf.red_picks,
                 blue_bans: leaf.blue_bans,
                 red_bans: leaf.red_bans,
-                likely_assignments,
+                blue_likely_assignments,
+                red_likely_assignments,
                 tree_path: leaf.path,
             }
         })

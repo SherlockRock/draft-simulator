@@ -237,6 +237,52 @@ fn complete_blue_tree() -> TreeNode {
     )
 }
 
+fn complete_red_tree() -> TreeNode {
+    node(
+        &[],
+        None,
+        ActionType::Ban,
+        &[],
+        0.0,
+        vec![node(
+            &["Topper"],
+            Some(Side::Red),
+            ActionType::Pick,
+            &[7],
+            0.9,
+            vec![node(
+                &["Jungler"],
+                Some(Side::Red),
+                ActionType::Pick,
+                &[8],
+                0.85,
+                vec![node(
+                    &["Midder"],
+                    Some(Side::Red),
+                    ActionType::Pick,
+                    &[11],
+                    0.8,
+                    vec![node(
+                        &["Carry"],
+                        Some(Side::Red),
+                        ActionType::Pick,
+                        &[16],
+                        0.75,
+                        vec![node(
+                            &["Supporter"],
+                            Some(Side::Red),
+                            ActionType::Pick,
+                            &[19],
+                            0.7,
+                            vec![],
+                        )],
+                    )],
+                )],
+            )],
+        )],
+    )
+}
+
 fn complete_blue_meta() -> HashMap<String, ChampionMeta> {
     HashMap::from([
         (
@@ -442,11 +488,24 @@ fn extract_scenarios_indicators_empty() {
 fn extract_scenarios_populates_likely_assignments_for_complete_blue_comp() {
     let meta = complete_blue_meta();
     let scenarios = extract_scenarios(&complete_blue_tree(), &meta, 1);
-    let assignments = &scenarios[0].likely_assignments;
+    let assignments = &scenarios[0].blue_likely_assignments;
 
     assert_eq!(assignments.len(), 120);
     let weight_sum: f64 = assignments.iter().map(|assignment| assignment.weight).sum();
     assert!((weight_sum - 1.0).abs() < 1e-9);
+    assert!(scenarios[0].red_likely_assignments.is_empty());
+}
+
+#[test]
+fn extract_scenarios_populates_likely_assignments_for_complete_red_comp() {
+    let meta = complete_blue_meta();
+    let scenarios = extract_scenarios(&complete_red_tree(), &meta, 1);
+    let assignments = &scenarios[0].red_likely_assignments;
+
+    assert_eq!(assignments.len(), 120);
+    let weight_sum: f64 = assignments.iter().map(|assignment| assignment.weight).sum();
+    assert!((weight_sum - 1.0).abs() < 1e-9);
+    assert!(scenarios[0].blue_likely_assignments.is_empty());
 }
 
 #[test]
@@ -454,7 +513,8 @@ fn extract_scenarios_leaves_assignments_empty_for_partial_comp() {
     let meta = complete_blue_meta();
     let scenarios = extract_scenarios(&extraction_tree(), &meta, 1);
 
-    assert!(scenarios[0].likely_assignments.is_empty());
+    assert!(scenarios[0].blue_likely_assignments.is_empty());
+    assert!(scenarios[0].red_likely_assignments.is_empty());
 }
 
 #[test]

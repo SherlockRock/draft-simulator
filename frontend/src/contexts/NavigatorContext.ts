@@ -53,10 +53,11 @@ export interface NavigatorScenario {
     scores: Pick<NavigatorScoreSet, "composite" | "compStrength" | "informationValue">;
     description: string;
     bluePicks: string[];
-    likelyAssignments: NavigatorWeightedAssignment[];
     redPicks: string[];
     blueBans: string[];
     redBans: string[];
+    blueLikelyAssignments: NavigatorWeightedAssignment[];
+    redLikelyAssignments: NavigatorWeightedAssignment[];
     treePath: NavigatorScenarioPathStep[];
     perspective: "robust" | "likely" | "off_profile";
     indicators: string[];
