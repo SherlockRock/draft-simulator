@@ -17,7 +17,8 @@
     "match-pipeline:smoke": "node scripts/match-pipeline/smoke.mjs",
     "test:ugg-scraper": "node --test scripts/ugg-scraper/*.test.mjs",
     "ugg:scrape-rankings": "node scripts/ugg-scraper/scrape-rankings.mjs",
-    "ugg:scrape-matchups": "node scripts/ugg-scraper/scrape-matchups.mjs"
+    "ugg:scrape-matchups": "node scripts/ugg-scraper/scrape-matchups.mjs",
+    "ugg:refresh": "pnpm ugg:scrape-rankings && pnpm ugg:scrape-matchups && node scripts/compile-champion-meta.mjs && node scripts/compile-matchup-data.mjs && node scripts/validate-compiled-data.mjs"
   },
   "devDependencies": {
     "sharp": "^0.34.5"
