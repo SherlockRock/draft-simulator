@@ -29,3 +29,44 @@ export function decodeRanking(arr) {
     winRate: wins / matches,
   };
 }
+
+// Field positions in a single matchup record. Decoded 2026-04-29 by aligning
+// every Aatrox jungle record against u.gg's SSR `counters: [{champion_id,
+// wins, matches, win_rate}, ...]` array — all 10 spot-checks agreed.
+// Position 0 carries the *opponent's* champion ID; positions 3+ are stat
+// deltas (gold diff, xp diff, kills diff, ...) that we don't need.
+export const MATCHUP_FIELDS = {
+  championId: 0,
+  wins: 1,
+  matches: 2,
+};
+
+export function decodeMatchup(arr) {
+  if (!Array.isArray(arr) || arr.length < 3) return null;
+  const championId = arr[MATCHUP_FIELDS.championId];
+  const wins = arr[MATCHUP_FIELDS.wins];
+  const matches = arr[MATCHUP_FIELDS.matches];
+  if (
+    typeof championId !== "number" ||
+    typeof wins !== "number" ||
+    typeof matches !== "number" ||
+    matches === 0
+  ) {
+    return null;
+  }
+  return {
+    championId,
+    wins,
+    matches,
+    winRate: wins / matches,
+  };
+}
+
+// The leaf at [region][rank][role] in the matchups endpoint is a 2-tuple:
+// [recordsArray, lastUpdatedTimestamp]. This helper extracts the records.
+export function extractMatchupRecords(leaf) {
+  if (!Array.isArray(leaf) || leaf.length === 0) return null;
+  const records = leaf[0];
+  if (!Array.isArray(records)) return null;
+  return records;
+}
