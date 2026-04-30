@@ -14,7 +14,10 @@
     "update-champions": "node scripts/update-champions.mjs",
     "update-images": "node scripts/update-champion-images.mjs",
     "test:match-pipeline": "node --test scripts/match-pipeline/*.test.mjs",
-    "match-pipeline:smoke": "node scripts/match-pipeline/smoke.mjs"
+    "match-pipeline:smoke": "node scripts/match-pipeline/smoke.mjs",
+    "test:ugg-scraper": "node --test scripts/ugg-scraper/*.test.mjs",
+    "ugg:scrape-rankings": "node scripts/ugg-scraper/scrape-rankings.mjs",
+    "ugg:scrape-matchups": "node scripts/ugg-scraper/scrape-matchups.mjs"
   },
   "devDependencies": {
     "sharp": "^0.34.5"

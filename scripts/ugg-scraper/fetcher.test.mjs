@@ -31,6 +31,12 @@ test("getJson returns null on 404", async () => {
   assert.equal(await f.getJson("https://x"), null);
 });
 
+test("getJson returns null on 403 (non-real champion IDs)", async () => {
+  const fetch = stubFetch([{ status: 403, body: {} }]);
+  const f = new UggFetcher({ fetch, rateLimiter: noWaitLimiter() });
+  assert.equal(await f.getJson("https://x"), null);
+});
+
 test("getJson retries on 503 and succeeds", async () => {
   const fetch = stubFetch([
     { status: 503, body: {} },
@@ -60,9 +66,9 @@ test("getJson retries on 429", async () => {
 });
 
 test("getJson throws on non-retryable 4xx", async () => {
-  const fetch = stubFetch([{ status: 403, body: {} }]);
+  const fetch = stubFetch([{ status: 401, body: {} }]);
   const f = new UggFetcher({ fetch, rateLimiter: noWaitLimiter() });
-  await assert.rejects(() => f.getJson("https://x"), /403/);
+  await assert.rejects(() => f.getJson("https://x"), /401/);
 });
 
 test("getJson retries on network error then throws", async () => {

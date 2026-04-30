@@ -47,7 +47,10 @@ export class UggFetcher {
 
       if (response.ok) return response.json();
 
-      if (response.status === 404) return null;
+      // 404 — legitimate "no data" (e.g. champion not in this patch).
+      // 403 — u.gg's response for non-real champion IDs (Ruby_* placeholders,
+      //   private/internal IDs). Same downstream effect: skip this champion.
+      if (response.status === 404 || response.status === 403) return null;
 
       if (response.status >= 500 || response.status === 429) {
         if (attempt >= this.maxRetries) {
