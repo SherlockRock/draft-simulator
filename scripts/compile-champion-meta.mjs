@@ -31,6 +31,7 @@ const CHAMPIONS_PATH = join(ROOT, "frontend", "src", "data", "champions.json");
 const CC_MAPPING_PATH = join(ROOT, "data", "overrides", "cc-mapping.json");
 const SYNERGY_PATH = join(ROOT, "data", "overrides", "synergy-tags.json");
 const OVERRIDES_PATH = join(ROOT, "data", "overrides", "champion-overrides.json");
+const WINRATES_PATH = join(ROOT, "data", "compiled", "winrates.json");
 
 // Output
 const OUTPUT_PATH = join(ROOT, "data", "compiled", "champion-meta.json");
@@ -244,6 +245,33 @@ async function main() {
   const ccMapping = readJson(CC_MAPPING_PATH);
   const synergyTags = readJson(SYNERGY_PATH);
   const overrides = readJson(OVERRIDES_PATH);
+  const winratesRaw = existsSync(WINRATES_PATH) ? readJson(WINRATES_PATH) : null;
+  if (!winratesRaw) {
+    console.log(`  ! ${WINRATES_PATH} not found — winRate will be 0 for all champions`);
+  } else {
+    console.log(
+      `  Loaded u.gg winrates: ${winratesRaw.championCount} champions (patch ${winratesRaw.patch})`,
+    );
+  }
+  const winratesByNorm = new Map();
+  if (winratesRaw) {
+    for (const [alias, byRole] of Object.entries(winratesRaw.byChampion)) {
+      winratesByNorm.set(normalize(alias), byRole);
+    }
+  }
+  const lookupWinrate = (canonical) => {
+    if (!winratesByNorm.size) return 0;
+    const byRole = winratesByNorm.get(normalize(canonical.id));
+    if (!byRole) return 0;
+    // Prefer the champion's declared positions in order. Falls back to any
+    // role with data so off-meta picks still get a non-zero number.
+    for (const pos of canonical.positions ?? []) {
+      const entry = byRole[pos];
+      if (entry) return entry.wr;
+    }
+    const fallback = Object.values(byRole)[0];
+    return fallback?.wr ?? 0;
+  };
 
   // Build lookup maps by normalized name
   const merakiByNorm = new Map();
@@ -280,7 +308,7 @@ async function main() {
       blindability: 0.5,
       pickRate: 0,
       banRate: 0,
-      winRate: 0,
+      winRate: lookupWinrate(canonical),
     };
 
     // Apply overrides last

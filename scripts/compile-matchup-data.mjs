@@ -16,6 +16,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 
 const SYNERGY_PATH = join(ROOT, "data", "overrides", "synergy-tags.json");
+const COUNTERS_PATH = join(ROOT, "data", "compiled", "counters.json");
 const OUTPUT_PATH = join(ROOT, "data", "compiled", "matchup-data.json");
 
 function readJson(path) {
@@ -74,16 +75,28 @@ async function main() {
     },
   ];
 
-  // Counter matrix — empty for now. Will be populated when a matchup data
-  // source becomes available (friend's pipeline or community stats API).
-  const counters = {};
+  // Counter matrix — populated from data/compiled/counters.json (built by
+  // scripts/ugg-scraper/scrape-matchups.mjs). Empty if the file is missing,
+  // so the compile step still runs in environments without the scrape data.
+  let counters = {};
+  let counterSource = "none — awaiting data pipeline";
+  if (existsSync(COUNTERS_PATH)) {
+    const compiled = readJson(COUNTERS_PATH);
+    counters = compiled.counters ?? {};
+    if (compiled.source && compiled.patch && compiled.rank) {
+      counterSource = `${compiled.source} ${compiled.rank} ${compiled.patch}`;
+    }
+    console.log(`  Loaded counters: ${Object.keys(counters).length} champions (${counterSource})`);
+  } else {
+    console.log(`  ! ${COUNTERS_PATH} not found — counters map will be empty`);
+  }
 
   const output = {
     compiledAt: new Date().toISOString(),
     counters,
     synergyRules,
     _meta: {
-      counterSource: "none — awaiting data pipeline",
+      counterSource,
       synergyRuleCount: synergyRules.length,
       vocabularySize: synergyTags._vocabulary?.length || 0,
     },
@@ -91,7 +104,7 @@ async function main() {
 
   writeJson(OUTPUT_PATH, output);
   console.log(`  Synergy rules: ${synergyRules.length}`);
-  console.log(`  Counter entries: ${Object.keys(counters).length} (awaiting data source)`);
+  console.log(`  Counter entries: ${Object.keys(counters).length}`);
 }
 
 main().catch((err) => {
