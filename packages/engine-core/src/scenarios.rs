@@ -222,6 +222,8 @@ pub fn extract_scenarios(
     tree: &TreeNode,
     champion_meta: &HashMap<String, ChampionMeta>,
     max_scenarios: usize,
+    confirmed_blue_picks: &[String],
+    confirmed_red_picks: &[String],
 ) -> Vec<Scenario> {
     let leaves = collect_leaves(tree);
     if leaves.is_empty() || (leaves.len() == 1 && leaves[0].path.is_empty()) || max_scenarios == 0
@@ -262,25 +264,31 @@ pub fn extract_scenarios(
         .into_iter()
         .enumerate()
         .map(|(idx, (leaf, _))| {
-            let blue_likely_assignments = if leaf.blue_picks.len() == 5
-                && leaf
-                    .blue_picks
+            let full_blue_picks: Vec<&str> = confirmed_blue_picks
+                .iter()
+                .chain(leaf.blue_picks.iter())
+                .map(String::as_str)
+                .collect();
+            let full_red_picks: Vec<&str> = confirmed_red_picks
+                .iter()
+                .chain(leaf.red_picks.iter())
+                .map(String::as_str)
+                .collect();
+            let blue_likely_assignments = if full_blue_picks.len() == 5
+                && full_blue_picks
                     .iter()
-                    .all(|pick| champion_meta.contains_key(pick))
+                    .all(|pick| champion_meta.contains_key(*pick))
             {
-                let picks: Vec<&str> = leaf.blue_picks.iter().map(String::as_str).collect();
-                role_solver::solve(&picks, champion_meta)
+                role_solver::solve(&full_blue_picks, champion_meta)
             } else {
                 Vec::new()
             };
-            let red_likely_assignments = if leaf.red_picks.len() == 5
-                && leaf
-                    .red_picks
+            let red_likely_assignments = if full_red_picks.len() == 5
+                && full_red_picks
                     .iter()
-                    .all(|pick| champion_meta.contains_key(pick))
+                    .all(|pick| champion_meta.contains_key(*pick))
             {
-                let picks: Vec<&str> = leaf.red_picks.iter().map(String::as_str).collect();
-                role_solver::solve(&picks, champion_meta)
+                role_solver::solve(&full_red_picks, champion_meta)
             } else {
                 Vec::new()
             };
