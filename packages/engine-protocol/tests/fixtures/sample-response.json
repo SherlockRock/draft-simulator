@@ -3,7 +3,7 @@
   "engineId": "firstpick/v1.0.0",
   "tree": {
     "championIds": [],
-    "scores": { "composite": 0, "compStrength": 0, "informationValue": 0, "flexRetention": 0, "revealCost": 0 },
+    "scores": { "composite": 0, "compStrength": 0, "informationValue": 0, "flexRetention": 0, "revealCost": 0, "roleCoverage": 0 },
     "assignmentDistribution": [],
     "side": null,
     "slots": [],
