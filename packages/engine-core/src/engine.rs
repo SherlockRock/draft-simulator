@@ -176,7 +176,13 @@ impl Engine {
                     EngineError::Internal("search completed without producing stats".into())
                 })?;
                 let tree = result.payload;
-                let scenarios = extract_scenarios(&tree, &eval_ctx.champion_meta, 5);
+                let scenarios = extract_scenarios(
+                    &tree,
+                    &eval_ctx.champion_meta,
+                    5,
+                    &state.blue_picks,
+                    &state.red_picks,
+                );
                 Ok(ComputeResponse {
                     tree,
                     scenarios,
