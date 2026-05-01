@@ -1,6 +1,7 @@
 //! engine-core: pure Rust draft engine. No napi, no I/O, no Node types.
 
 pub mod cancellation;
+pub mod coverage;
 pub mod draft_state;
 pub mod engine;
 pub mod evaluator;
