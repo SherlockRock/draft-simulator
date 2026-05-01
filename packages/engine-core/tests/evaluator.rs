@@ -347,3 +347,56 @@ fn score_pick_role_coverage_silenced_when_weight_zero() {
         composite_diff
     );
 }
+
+#[test]
+fn score_pick_ban_uses_opponent_picks_for_coverage() {
+    // Opponent (red) has TOP and JG. Banning a TOP is wasted; banning
+    // a MID denies their gap.
+    let mut state = DraftState::default();
+    state.red_picks = vec!["Renekton".into(), "Lee".into()];
+
+    let meta = HashMap::from([
+        ("Renekton".into(), champ("Renekton", vec![Role::Top])),
+        ("Lee".into(), champ("Lee", vec![Role::Jungle])),
+        ("BanTop".into(), champ("BanTop", vec![Role::Top])),
+        ("BanMid".into(), champ("BanMid", vec![Role::Middle])),
+    ]);
+
+    let pw_ban2 = PhaseWeights { info: 0.0, comp: 0.0, coverage: 0.4 };
+    let pw_zero = PhaseWeights { info: 0.0, comp: 0.0, coverage: 0.0 };
+    let pw_table = PhaseWeightTable {
+        ban1: pw_zero,
+        pick1: pw_zero,
+        ban2: pw_ban2,
+        pick2: pw_zero,
+    };
+    let ctx = EvalContext {
+        side: Side::Blue,
+        phase: Phase::Ban2,
+        our_pool: TeamPool { display: empty_role_pool_map(), search: vec![] },
+        opp_pool: TeamPool { display: empty_role_pool_map(), search: vec![] },
+        our_picks: vec![],
+        opp_picks: state.red_picks.clone(),
+        penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
+        champion_meta: meta,
+        meta: MetaData::default(),
+        phase_weights_blue: pw_table,
+        phase_weights_red: pw_table,
+        synergy_multiplier: 0.0,
+        counter_multiplier: 0.0,
+        flex_retention_weight: 0.0,
+        reveal_cost_weight: 0.0,
+    };
+
+    let s_top = score_pick("BanTop", Role::Top, &state, &ctx, ActionType::Ban);
+    let s_mid = score_pick("BanMid", Role::Middle, &state, &ctx, ActionType::Ban);
+
+    assert!(
+        s_mid.composite > s_top.composite,
+        "BanMid (denies opp gap) should outscore BanTop (opp already filled TOP): mid={} top={}",
+        s_mid.composite,
+        s_top.composite,
+    );
+    assert!(s_top.roleCoverage.abs() < 1e-9, "BanTop gain on opp picks ~ 0");
+    assert!(s_mid.roleCoverage > 0.0, "BanMid gain > 0");
+}
