@@ -64,3 +64,25 @@ pub fn coverage_marginal_gain(
     let post = coverage_score(&with, meta);
     (post - base).max(0.0)
 }
+
+/// Returns roles whose max position factor over current picks is
+/// strictly below `threshold`. Order matches `ROLES`.
+///
+/// Threshold guidance:
+/// - `0.9`: a role is "missing" unless some champion has it as primary
+///   (recommended for Pick2 pair seeding — secondary fallbacks shouldn't
+///   stop us from forcing a primary specialist into the search)
+/// - `0.4`: a role is "missing" only if no champion has it anywhere
+pub fn missing_roles(
+    picks: &[String],
+    meta: &HashMap<String, ChampionMeta>,
+    threshold: f64,
+) -> Vec<Role> {
+    let factors = per_role_max_factors(picks, meta);
+    ROLES
+        .iter()
+        .zip(factors.iter())
+        .filter(|(_, &f)| f < threshold)
+        .map(|(r, _)| *r)
+        .collect()
+}

@@ -1,4 +1,6 @@
-use engine_core::coverage::{coverage_marginal_gain, coverage_score, per_role_max_factors};
+use engine_core::coverage::{
+    coverage_marginal_gain, coverage_score, missing_roles, per_role_max_factors,
+};
 use engine_core::pools::Role;
 use engine_core::role_solver::{
     CcProfile, ChampionMeta, ChampionTags, DamageProfile, ScalingProfile,
@@ -178,4 +180,53 @@ fn coverage_marginal_gain_filling_role_increases_score() {
         .collect();
     let gain = coverage_marginal_gain(&picks, "Jinx", &m);
     assert!(gain > 0.23 && gain < 0.25, "expected ~0.24, got {}", gain);
+}
+
+#[test]
+fn missing_roles_strict_threshold_catches_partial_coverage() {
+    let m = meta_from(&[
+        ("Lucian", &[Role::Adc, Role::Middle]),
+        ("Nami", &[Role::Support]),
+        ("Jarvan", &[Role::Jungle]),
+    ]);
+    let picks: Vec<String> = ["Lucian", "Nami", "Jarvan"]
+        .iter()
+        .map(|s| (*s).into())
+        .collect();
+    // < 0.9: TOP at 0.01 and MID at 0.4 are both missing
+    assert_eq!(
+        missing_roles(&picks, &m, 0.9),
+        vec![Role::Top, Role::Middle]
+    );
+}
+
+#[test]
+fn missing_roles_loose_threshold_only_catches_uncovered() {
+    let m = meta_from(&[
+        ("Lucian", &[Role::Adc, Role::Middle]),
+        ("Nami", &[Role::Support]),
+        ("Jarvan", &[Role::Jungle]),
+    ]);
+    let picks: Vec<String> = ["Lucian", "Nami", "Jarvan"]
+        .iter()
+        .map(|s| (*s).into())
+        .collect();
+    // < 0.4: only TOP (0.01) is missing; MID (0.4) is not strictly less than 0.4
+    assert_eq!(missing_roles(&picks, &m, 0.4), vec![Role::Top]);
+}
+
+#[test]
+fn missing_roles_full_comp_returns_empty() {
+    let m = meta_from(&[
+        ("T", &[Role::Top]),
+        ("J", &[Role::Jungle]),
+        ("M", &[Role::Middle]),
+        ("A", &[Role::Adc]),
+        ("S", &[Role::Support]),
+    ]);
+    let picks: Vec<String> = ["T", "J", "M", "A", "S"]
+        .iter()
+        .map(|s| (*s).into())
+        .collect();
+    assert!(missing_roles(&picks, &m, 0.9).is_empty());
 }
