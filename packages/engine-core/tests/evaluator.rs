@@ -218,3 +218,132 @@ fn comp_strength_punishes_counter() {
         s.compStrength
     );
 }
+
+fn champ(id: &str, positions: Vec<Role>) -> ChampionMeta {
+    ChampionMeta {
+        id: id.into(),
+        positions,
+        ..Default::default()
+    }
+}
+
+fn empty_role_pool_map() -> RolePoolMap {
+    RolePoolMap {
+        top: vec![],
+        jungle: vec![],
+        middle: vec![],
+        adc: vec![],
+        support: vec![],
+    }
+}
+
+#[test]
+fn score_pick_role_coverage_breaks_redundant_mid_tie() {
+    // Setup: 3 confirmed blue picks (Garen TOP, Amumu JG, Aurelion MID).
+    // Two candidates: Annie (redundant MID) vs Jinx (missing ADC).
+    // With non-zero coverage weight at Pick2, Jinx outscores Annie.
+
+    let mut state = DraftState::default();
+    state.blue_picks = vec!["Garen".into(), "Amumu".into(), "Aurelion".into()];
+
+    let meta = HashMap::from([
+        ("Garen".into(), champ("Garen", vec![Role::Top])),
+        ("Amumu".into(), champ("Amumu", vec![Role::Jungle])),
+        ("Aurelion".into(), champ("Aurelion", vec![Role::Middle])),
+        ("Annie".into(), champ("Annie", vec![Role::Middle])),
+        ("Jinx".into(), champ("Jinx", vec![Role::Adc])),
+    ]);
+
+    let pw_pick2 = PhaseWeights { info: 0.0, comp: 0.0, coverage: 0.6 };
+    let pw_zero = PhaseWeights { info: 0.0, comp: 0.0, coverage: 0.0 };
+    let pw_table = PhaseWeightTable {
+        ban1: pw_zero,
+        pick1: pw_zero,
+        ban2: pw_zero,
+        pick2: pw_pick2,
+    };
+    let ctx = EvalContext {
+        side: Side::Blue,
+        phase: Phase::Pick2,
+        our_pool: TeamPool { display: empty_role_pool_map(), search: vec![] },
+        opp_pool: TeamPool { display: empty_role_pool_map(), search: vec![] },
+        our_picks: state.blue_picks.clone(),
+        opp_picks: vec![],
+        penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
+        champion_meta: meta,
+        meta: MetaData::default(),
+        phase_weights_blue: pw_table,
+        phase_weights_red: pw_table,
+        synergy_multiplier: 0.0,
+        counter_multiplier: 0.0,
+        flex_retention_weight: 0.0,
+        reveal_cost_weight: 0.0,
+    };
+
+    let s_annie = score_pick("Annie", Role::Middle, &state, &ctx, ActionType::Pick);
+    let s_jinx = score_pick("Jinx", Role::Adc, &state, &ctx, ActionType::Pick);
+
+    assert!(
+        s_jinx.composite > s_annie.composite,
+        "Jinx (fills ADC gap) should outscore Annie (redundant MID): jinx={} annie={}",
+        s_jinx.composite,
+        s_annie.composite,
+    );
+    // Annie's roleCoverage gain is 0 (MID already covered).
+    assert!(s_annie.roleCoverage.abs() < 1e-9);
+    // Jinx's gain is the marginal jump 0.398 - 0.158 ~ 0.24.
+    assert!(
+        s_jinx.roleCoverage > 0.23 && s_jinx.roleCoverage < 0.25,
+        "expected ~0.24, got {}",
+        s_jinx.roleCoverage
+    );
+}
+
+#[test]
+fn score_pick_role_coverage_silenced_when_weight_zero() {
+    let mut state = DraftState::default();
+    state.blue_picks = vec!["Garen".into(), "Amumu".into(), "Aurelion".into()];
+
+    let meta = HashMap::from([
+        ("Garen".into(), champ("Garen", vec![Role::Top])),
+        ("Amumu".into(), champ("Amumu", vec![Role::Jungle])),
+        ("Aurelion".into(), champ("Aurelion", vec![Role::Middle])),
+        ("Annie".into(), champ("Annie", vec![Role::Middle])),
+        ("Jinx".into(), champ("Jinx", vec![Role::Adc])),
+    ]);
+
+    let pw_zero = PhaseWeights { info: 1.0, comp: 0.0, coverage: 0.0 };
+    let pw_table = PhaseWeightTable {
+        ban1: pw_zero,
+        pick1: pw_zero,
+        ban2: pw_zero,
+        pick2: pw_zero,
+    };
+    let ctx = EvalContext {
+        side: Side::Blue,
+        phase: Phase::Pick2,
+        our_pool: TeamPool { display: empty_role_pool_map(), search: vec![] },
+        opp_pool: TeamPool { display: empty_role_pool_map(), search: vec![] },
+        our_picks: state.blue_picks.clone(),
+        opp_picks: vec![],
+        penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
+        champion_meta: meta,
+        meta: MetaData::default(),
+        phase_weights_blue: pw_table,
+        phase_weights_red: pw_table,
+        synergy_multiplier: 0.0,
+        counter_multiplier: 0.0,
+        flex_retention_weight: 0.0,
+        reveal_cost_weight: 0.0,
+    };
+
+    let s_annie = score_pick("Annie", Role::Middle, &state, &ctx, ActionType::Pick);
+    let s_jinx = score_pick("Jinx", Role::Adc, &state, &ctx, ActionType::Pick);
+
+    let composite_diff = (s_jinx.composite - s_annie.composite).abs();
+    assert!(
+        composite_diff < 1e-9,
+        "with coverage=0 weight, composites should match: diff={}",
+        composite_diff
+    );
+}
