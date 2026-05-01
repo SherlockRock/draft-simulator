@@ -58,7 +58,7 @@ const PRIMARY_FACTOR: f64 = 1.0;
 const SECONDARY_FACTOR: f64 = 0.4;
 const NON_LISTED_FACTOR: f64 = 0.01;
 
-fn position_factor(role: Role, positions: &[Role]) -> f64 {
+pub fn position_factor(role: Role, positions: &[Role]) -> f64 {
     if positions.first().copied() == Some(role) {
         PRIMARY_FACTOR
     } else if positions.contains(&role) {
