@@ -82,16 +82,16 @@ function makeRequest(overrides = {}) {
       weights: {
         phaseWeights: {
           blue: {
-            ban1: { comp: 0.5, info: 0.5 },
-            pick1: { comp: 0.5, info: 0.5 },
-            ban2: { comp: 0.5, info: 0.5 },
-            pick2: { comp: 0.5, info: 0.5 },
+            ban1: { comp: 0.5, info: 0.5, coverage: 0.0 },
+            pick1: { comp: 0.5, info: 0.5, coverage: 0.0 },
+            ban2: { comp: 0.5, info: 0.5, coverage: 0.0 },
+            pick2: { comp: 0.5, info: 0.5, coverage: 0.0 },
           },
           red: {
-            ban1: { comp: 0.5, info: 0.5 },
-            pick1: { comp: 0.5, info: 0.5 },
-            ban2: { comp: 0.5, info: 0.5 },
-            pick2: { comp: 0.5, info: 0.5 },
+            ban1: { comp: 0.5, info: 0.5, coverage: 0.0 },
+            pick1: { comp: 0.5, info: 0.5, coverage: 0.0 },
+            ban2: { comp: 0.5, info: 0.5, coverage: 0.0 },
+            pick2: { comp: 0.5, info: 0.5, coverage: 0.0 },
           },
         },
         penalties: { outOfRole: 0.25, outOfPool: 0.75 },

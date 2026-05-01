@@ -41,16 +41,16 @@ const TURN_SEQUENCE = [
 // Default rev-4 phase weights, ported from packages/engine-proto/src/weights.ts.
 const DEFAULT_PHASE_WEIGHTS = {
   blue: {
-    ban1: { comp: 0.35, info: 0.65 },
-    pick1: { comp: 0.5, info: 0.5 },
-    ban2: { comp: 0.6, info: 0.4 },
-    pick2: { comp: 0.8, info: 0.2 },
+    ban1: { comp: 0.35, info: 0.65, coverage: 0.0 },
+    pick1: { comp: 0.5, info: 0.5, coverage: 0.3 },
+    ban2: { comp: 0.6, info: 0.4, coverage: 0.4 },
+    pick2: { comp: 0.8, info: 0.2, coverage: 0.6 },
   },
   red: {
-    ban1: { comp: 0.3, info: 0.7 },
-    pick1: { comp: 0.4, info: 0.6 },
-    ban2: { comp: 0.5, info: 0.5 },
-    pick2: { comp: 0.8, info: 0.2 },
+    ban1: { comp: 0.3, info: 0.7, coverage: 0.0 },
+    pick1: { comp: 0.4, info: 0.6, coverage: 0.3 },
+    ban2: { comp: 0.5, info: 0.5, coverage: 0.4 },
+    pick2: { comp: 0.8, info: 0.2, coverage: 0.6 },
   },
 };
 
