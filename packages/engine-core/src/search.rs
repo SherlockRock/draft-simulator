@@ -1,4 +1,5 @@
 use crate::cancellation::{ensure_not_cancelled, CancelHandle};
+use crate::coverage::missing_roles;
 use crate::draft_state::{ActionType, DraftState, Phase, Side, TurnInfo, TURN_SEQUENCE};
 use crate::engine::EngineError;
 use crate::evaluator::{score_pick, EvalContext, ScoreSet};
@@ -522,11 +523,34 @@ fn expand_pair(
         accum,
     );
 
+    // Pick2-only: identify up to two roles where current picks have NO
+    // primary coverage (threshold < 0.9). If exactly 2, populate per-role
+    // top-K for bucket-2 seeding. With < 2 missing or non-Pick2 phase,
+    // leave bucket 2 disabled.
+    let our_picks_now: &[String] = if turn.side == Side::Blue {
+        &state.blue_picks
+    } else {
+        &state.red_picks
+    };
+    let role_tops: Option<(Vec<String>, Vec<String>)> = if turn.phase == Phase::Pick2 {
+        let missing = missing_roles(our_picks_now, &eval_ctx.champion_meta, 0.9);
+        if missing.len() >= 2 {
+            let a = top_k_for_role(missing[0], state, turn, eval_ctx, cancel, 8)?;
+            let b = top_k_for_role(missing[1], state, turn, eval_ctx, cancel, 8)?;
+            Some((a, b))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let scored_pairs = build_pair_candidates(
         &scored_singles,
         &pair_force,
         params.branch_width,
         our_turn,
+        role_tops.as_ref(),
     );
 
     let mut children: Vec<TreeNode> = Vec::with_capacity(scored_pairs.len());
@@ -671,6 +695,7 @@ fn build_pair_candidates(
     pair_force: &Option<PairForce>,
     branch_width: usize,
     our_turn: bool,
+    role_tops: Option<&(Vec<String>, Vec<String>)>,
 ) -> Vec<(String, String, f64)> {
     let mut single_lookup: HashMap<&str, f64> = HashMap::with_capacity(scored_singles.len());
     for (id, score) in scored_singles {
@@ -705,12 +730,22 @@ fn build_pair_candidates(
                 .map(|(s, f)| (s.as_str(), *f))
                 .collect();
 
+            let (per_role_top, role_a_strs, role_b_strs): (usize, Vec<&str>, Vec<&str>) =
+                match role_tops {
+                    Some((a, b)) => (
+                        8,
+                        a.iter().map(String::as_str).collect(),
+                        b.iter().map(String::as_str).collect(),
+                    ),
+                    None => (0, Vec::new(), Vec::new()),
+                };
+
             let cfg = PairFilterConfig {
                 single_top_k: 32,
-                per_role_top: 0,
+                per_role_top,
                 max_pairs: (branch_width * 4).max(branch_width),
             };
-            let pairs = seed_pair_candidates(&scored_refs, &[], &[], None, &cfg);
+            let pairs = seed_pair_candidates(&scored_refs, &role_a_strs, &role_b_strs, None, &cfg);
 
             pairs
                 .into_iter()
@@ -730,4 +765,49 @@ fn build_pair_candidates(
     }
     scored_pairs.truncate(branch_width);
     scored_pairs
+}
+
+/// Score every candidate from `pool.display.for_role(role)` (filtered against
+/// used set) at the given role, return top `k` champion IDs by composite. Used
+/// by `expand_pair` at Pick2 to populate the per-role bucket of
+/// `seed_pair_candidates`.
+fn top_k_for_role(
+    role: Role,
+    state: &DraftState,
+    turn: TurnInfo,
+    ctx: &EvalContext,
+    cancel: &CancelHandle,
+    k: usize,
+) -> Result<Vec<String>, EngineError> {
+    let pool = pool_for(turn.side, ctx);
+    let role_pool = pool.display.for_role(role);
+    let used: HashSet<&str> = state
+        .blue_bans
+        .iter()
+        .map(String::as_str)
+        .chain(state.red_bans.iter().map(String::as_str))
+        .chain(state.blue_picks.iter().map(String::as_str))
+        .chain(state.red_picks.iter().map(String::as_str))
+        .collect();
+
+    let mut sub_ctx = ctx.clone();
+    sub_ctx.side = turn.side;
+    sub_ctx.phase = turn.phase;
+
+    let mut scored: Vec<(String, f64)> = role_pool
+        .par_iter()
+        .filter_map(|c| {
+            if used.contains(c.as_str()) || cancel.is_cancelled() {
+                None
+            } else {
+                let s = score_pick(c, role, state, &sub_ctx, turn.action_type);
+                Some((c.clone(), s.composite))
+            }
+        })
+        .collect();
+    ensure_not_cancelled(cancel)?;
+
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+    scored.truncate(k);
+    Ok(scored.into_iter().map(|(c, _)| c).collect())
 }
