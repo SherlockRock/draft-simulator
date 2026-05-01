@@ -7,6 +7,7 @@ const ScoreSetSchema = z.object({
   informationValue: z.number(),
   flexRetention: z.number(),
   revealCost: z.number(),
+  roleCoverage: z.number(),
 });
 export type ScoreSet = z.infer<typeof ScoreSetSchema>;
 
@@ -50,6 +51,7 @@ const ScenarioSchema = z.object({
     composite: true,
     compStrength: true,
     informationValue: true,
+    roleCoverage: true,
   }),
   bluePicks: z.array(z.string()),
   redPicks: z.array(z.string()),

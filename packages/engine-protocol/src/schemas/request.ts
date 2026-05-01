@@ -57,10 +57,10 @@ const SearchConfigSchema = z.object({
 });
 
 const PhaseWeightTableSchema = z.object({
-  ban1: z.object({ info: z.number(), comp: z.number() }),
-  pick1: z.object({ info: z.number(), comp: z.number() }),
-  ban2: z.object({ info: z.number(), comp: z.number() }),
-  pick2: z.object({ info: z.number(), comp: z.number() }),
+  ban1: z.object({ info: z.number(), comp: z.number(), coverage: z.number() }),
+  pick1: z.object({ info: z.number(), comp: z.number(), coverage: z.number() }),
+  ban2: z.object({ info: z.number(), comp: z.number(), coverage: z.number() }),
+  pick2: z.object({ info: z.number(), comp: z.number(), coverage: z.number() }),
 });
 
 const WeightsConfigSchema = z.object({
