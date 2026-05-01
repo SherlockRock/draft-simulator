@@ -26,18 +26,22 @@ fn weights_blue() -> PhaseWeightTable {
         ban1: PhaseWeights {
             info: 0.65,
             comp: 0.35,
+            coverage: 0.0,
         },
         pick1: PhaseWeights {
             info: 0.5,
             comp: 0.5,
+            coverage: 0.0,
         },
         ban2: PhaseWeights {
             info: 0.4,
             comp: 0.6,
+            coverage: 0.0,
         },
         pick2: PhaseWeights {
             info: 0.2,
             comp: 0.8,
+            coverage: 0.0,
         },
     }
 }
@@ -47,18 +51,22 @@ fn weights_red() -> PhaseWeightTable {
         ban1: PhaseWeights {
             info: 0.7,
             comp: 0.3,
+            coverage: 0.0,
         },
         pick1: PhaseWeights {
             info: 0.6,
             comp: 0.4,
+            coverage: 0.0,
         },
         ban2: PhaseWeights {
             info: 0.5,
             comp: 0.5,
+            coverage: 0.0,
         },
         pick2: PhaseWeights {
             info: 0.2,
             comp: 0.8,
+            coverage: 0.0,
         },
     }
 }

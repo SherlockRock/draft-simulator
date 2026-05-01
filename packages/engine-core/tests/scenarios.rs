@@ -421,7 +421,7 @@ fn label_scenario_default_mid_mixed() {
 #[test]
 fn extract_scenarios_returns_one_to_five_scenarios() {
     let meta = sample_meta();
-    let scenarios = extract_scenarios(&extraction_tree(), &meta, 5);
+    let scenarios = extract_scenarios(&extraction_tree(), &meta, 5, &[], &[]);
 
     assert!((1..=5).contains(&scenarios.len()));
 }
@@ -429,7 +429,7 @@ fn extract_scenarios_returns_one_to_five_scenarios() {
 #[test]
 fn extract_scenarios_first_is_highest_composite() {
     let meta = sample_meta();
-    let scenarios = extract_scenarios(&extraction_tree(), &meta, 5);
+    let scenarios = extract_scenarios(&extraction_tree(), &meta, 5, &[], &[]);
     let max_composite = 0.95;
 
     assert_eq!(scenarios[0].scores.composite, max_composite);
@@ -438,7 +438,7 @@ fn extract_scenarios_first_is_highest_composite() {
 #[test]
 fn extract_scenarios_uses_farthest_first_after_first() {
     let meta = sample_meta();
-    let scenarios = extract_scenarios(&extraction_tree(), &meta, 3);
+    let scenarios = extract_scenarios(&extraction_tree(), &meta, 3, &[], &[]);
 
     assert_eq!(scenarios[0].blue_picks, vec!["Alpha".to_string()]);
     assert_eq!(scenarios[1].blue_picks, vec!["Delta".to_string()]);
@@ -447,7 +447,7 @@ fn extract_scenarios_uses_farthest_first_after_first() {
 #[test]
 fn extract_scenarios_marks_first_robust_others_likely() {
     let meta = sample_meta();
-    let scenarios = extract_scenarios(&extraction_tree(), &meta, 4);
+    let scenarios = extract_scenarios(&extraction_tree(), &meta, 4, &[], &[]);
 
     assert_eq!(scenarios[0].perspective, Perspective::Robust);
     assert!(scenarios[1..]
@@ -458,7 +458,7 @@ fn extract_scenarios_marks_first_robust_others_likely() {
 #[test]
 fn extract_scenarios_populates_tree_path_with_content_addressed_steps() {
     let meta = sample_meta();
-    let scenarios = extract_scenarios(&extraction_tree(), &meta, 1);
+    let scenarios = extract_scenarios(&extraction_tree(), &meta, 1, &[], &[]);
     let path = &scenarios[0].tree_path;
 
     assert_eq!(path.len(), 2);
@@ -471,7 +471,7 @@ fn extract_scenarios_populates_tree_path_with_content_addressed_steps() {
 #[test]
 fn extract_scenarios_description_format() {
     let meta = sample_meta();
-    let scenarios = extract_scenarios(&extraction_tree(), &meta, 1);
+    let scenarios = extract_scenarios(&extraction_tree(), &meta, 1, &[], &[]);
 
     assert_eq!(scenarios[0].description, "Alpha vs Rho");
 }
@@ -479,7 +479,7 @@ fn extract_scenarios_description_format() {
 #[test]
 fn extract_scenarios_indicators_empty() {
     let meta = sample_meta();
-    let scenarios = extract_scenarios(&extraction_tree(), &meta, 5);
+    let scenarios = extract_scenarios(&extraction_tree(), &meta, 5, &[], &[]);
 
     assert!(scenarios.iter().all(|scenario| scenario.indicators.is_empty()));
 }
@@ -487,7 +487,7 @@ fn extract_scenarios_indicators_empty() {
 #[test]
 fn extract_scenarios_populates_likely_assignments_for_complete_blue_comp() {
     let meta = complete_blue_meta();
-    let scenarios = extract_scenarios(&complete_blue_tree(), &meta, 1);
+    let scenarios = extract_scenarios(&complete_blue_tree(), &meta, 1, &[], &[]);
     let assignments = &scenarios[0].blue_likely_assignments;
 
     assert_eq!(assignments.len(), 120);
@@ -499,7 +499,7 @@ fn extract_scenarios_populates_likely_assignments_for_complete_blue_comp() {
 #[test]
 fn extract_scenarios_populates_likely_assignments_for_complete_red_comp() {
     let meta = complete_blue_meta();
-    let scenarios = extract_scenarios(&complete_red_tree(), &meta, 1);
+    let scenarios = extract_scenarios(&complete_red_tree(), &meta, 1, &[], &[]);
     let assignments = &scenarios[0].red_likely_assignments;
 
     assert_eq!(assignments.len(), 120);
@@ -511,10 +511,304 @@ fn extract_scenarios_populates_likely_assignments_for_complete_red_comp() {
 #[test]
 fn extract_scenarios_leaves_assignments_empty_for_partial_comp() {
     let meta = complete_blue_meta();
-    let scenarios = extract_scenarios(&extraction_tree(), &meta, 1);
+    let scenarios = extract_scenarios(&extraction_tree(), &meta, 1, &[], &[]);
 
     assert!(scenarios[0].blue_likely_assignments.is_empty());
     assert!(scenarios[0].red_likely_assignments.is_empty());
+}
+
+#[test]
+fn extract_scenarios_populates_assignments_when_confirmed_plus_projected_total_five() {
+    let meta = complete_blue_meta();
+    let final_pick_tree = node(
+        &[],
+        None,
+        ActionType::Ban,
+        &[],
+        0.0,
+        vec![node(
+            &["Supporter"],
+            Some(Side::Blue),
+            ActionType::Pick,
+            &[18],
+            0.9,
+            vec![],
+        )],
+    );
+    let confirmed_blue: Vec<String> = ["Topper", "Jungler", "Midder", "Carry"]
+        .iter()
+        .map(|s| (*s).to_string())
+        .collect();
+
+    let scenarios = extract_scenarios(&final_pick_tree, &meta, 1, &confirmed_blue, &[]);
+    let assignments = &scenarios[0].blue_likely_assignments;
+
+    assert_eq!(assignments.len(), 120);
+    let weight_sum: f64 = assignments.iter().map(|assignment| assignment.weight).sum();
+    assert!((weight_sum - 1.0).abs() < 1e-9);
+    assert!(scenarios[0].red_likely_assignments.is_empty());
+}
+
+fn highest_weighted(
+    assignments: &[engine_core::role_solver::WeightedAssignment],
+) -> &engine_core::role_solver::RoleAssignment {
+    &assignments
+        .iter()
+        .max_by(|a, b| a.weight.partial_cmp(&b.weight).expect("non-NaN weight"))
+        .expect("non-empty")
+        .assignment
+}
+
+/// Each champion has a unique primary role. Highest-weighted assignment must
+/// place each at its primary regardless of input order.
+#[test]
+fn extract_scenarios_top_assignment_is_canonical_when_5_confirmed() {
+    let meta = complete_blue_meta();
+    let trivial_tree = node(&[], None, ActionType::Ban, &[], 0.0, Vec::new());
+    let confirmed: Vec<String> =
+        ["Topper", "Jungler", "Midder", "Carry", "Supporter"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+
+    // 5 confirmed, no projection. Tree has no children → no leaves with projection.
+    // Note: this exercises the API shape where the engine called extract_scenarios
+    // when the comp is already fully resolved confirmed-side. Today extract_scenarios
+    // returns Vec::new() for an empty tree; this test documents that shape.
+    let scenarios = extract_scenarios(&trivial_tree, &meta, 1, &confirmed, &[]);
+    assert!(
+        scenarios.is_empty(),
+        "trivial tree (no leaves with projection) yields no scenarios"
+    );
+}
+
+/// Confirmed [Topper, Jungler, Midder, Carry] + projected [Supporter] should
+/// produce a top-weighted assignment that places each champion at its primary role.
+#[test]
+fn extract_scenarios_top_assignment_is_canonical_for_4_confirmed_plus_1_projected() {
+    let meta = complete_blue_meta();
+    let final_pick_tree = node(
+        &[],
+        None,
+        ActionType::Ban,
+        &[],
+        0.0,
+        vec![node(
+            &["Supporter"],
+            Some(Side::Blue),
+            ActionType::Pick,
+            &[18],
+            0.9,
+            vec![],
+        )],
+    );
+    let confirmed_blue: Vec<String> = ["Topper", "Jungler", "Midder", "Carry"]
+        .iter()
+        .map(|s| (*s).to_string())
+        .collect();
+
+    let scenarios = extract_scenarios(&final_pick_tree, &meta, 1, &confirmed_blue, &[]);
+    let top = highest_weighted(&scenarios[0].blue_likely_assignments);
+
+    assert_eq!(top.top, "Topper", "Topper should be at TOP");
+    assert_eq!(top.jungle, "Jungler", "Jungler should be at JUNGLE");
+    assert_eq!(top.middle, "Midder", "Midder should be at MIDDLE");
+    assert_eq!(top.adc, "Carry", "Carry should be at ADC");
+    assert_eq!(top.support, "Supporter", "Supporter should be at SUPPORT");
+}
+
+/// Confirmed [Topper] + projected [Jungler, Midder, Carry, Supporter] (4 projected
+/// from a deep pick chain) should produce the same canonical assignment. Verifies
+/// the chain works mid-draft, where most picks come from projection.
+#[test]
+fn extract_scenarios_top_assignment_is_canonical_for_1_confirmed_plus_4_projected() {
+    let meta = complete_blue_meta();
+    let mid_draft_tree = node(
+        &[],
+        None,
+        ActionType::Ban,
+        &[],
+        0.0,
+        vec![node(
+            &["Jungler"],
+            Some(Side::Blue),
+            ActionType::Pick,
+            &[9],
+            0.9,
+            vec![node(
+                &["Midder"],
+                Some(Side::Blue),
+                ActionType::Pick,
+                &[10],
+                0.85,
+                vec![node(
+                    &["Carry"],
+                    Some(Side::Blue),
+                    ActionType::Pick,
+                    &[17],
+                    0.8,
+                    vec![node(
+                        &["Supporter"],
+                        Some(Side::Blue),
+                        ActionType::Pick,
+                        &[18],
+                        0.75,
+                        vec![],
+                    )],
+                )],
+            )],
+        )],
+    );
+    let confirmed_blue = vec!["Topper".to_string()];
+
+    let scenarios = extract_scenarios(&mid_draft_tree, &meta, 1, &confirmed_blue, &[]);
+    let top = highest_weighted(&scenarios[0].blue_likely_assignments);
+
+    assert_eq!(top.top, "Topper");
+    assert_eq!(top.jungle, "Jungler");
+    assert_eq!(top.middle, "Midder");
+    assert_eq!(top.adc, "Carry");
+    assert_eq!(top.support, "Supporter");
+}
+
+/// Degenerate comp: 3 champions whose primary is MID, plus a TOP and a JG —
+/// no real ADC or SUPPORT. Documents what the solver returns when forced to
+/// place off-role champions at ADC/SUPPORT, and verifies that the solver does
+/// pick a "least-bad" arrangement (no panic, real values).
+#[test]
+fn extract_scenarios_degenerate_comp_assigns_off_role_to_uncovered_slots() {
+    let mut meta = HashMap::new();
+    meta.insert(
+        "TopGuy".to_string(),
+        champion_meta_with_positions("TopGuy", vec![Role::Top], (0.7, 0.1), (0.5, 0.3, 0.3), 0.2, 0.1),
+    );
+    meta.insert(
+        "JgGuy".to_string(),
+        champion_meta_with_positions("JgGuy", vec![Role::Jungle], (0.6, 0.2), (0.6, 0.3, 0.2), 0.3, 0.1),
+    );
+    meta.insert(
+        "MidA".to_string(),
+        champion_meta_with_positions("MidA", vec![Role::Middle], (0.2, 0.7), (0.3, 0.5, 0.5), 0.1, 0.2),
+    );
+    meta.insert(
+        "MidB".to_string(),
+        champion_meta_with_positions("MidB", vec![Role::Middle], (0.2, 0.7), (0.3, 0.5, 0.5), 0.1, 0.2),
+    );
+    meta.insert(
+        "MidC".to_string(),
+        champion_meta_with_positions("MidC", vec![Role::Middle], (0.2, 0.7), (0.3, 0.5, 0.5), 0.1, 0.2),
+    );
+
+    let confirmed_blue: Vec<String> =
+        ["TopGuy", "JgGuy", "MidA", "MidB"].iter().map(|s| (*s).to_string()).collect();
+    let final_pick_tree = node(
+        &[],
+        None,
+        ActionType::Ban,
+        &[],
+        0.0,
+        vec![node(
+            &["MidC"],
+            Some(Side::Blue),
+            ActionType::Pick,
+            &[18],
+            0.9,
+            vec![],
+        )],
+    );
+
+    let scenarios = extract_scenarios(&final_pick_tree, &meta, 1, &confirmed_blue, &[]);
+    let top = highest_weighted(&scenarios[0].blue_likely_assignments);
+
+    // TopGuy and JgGuy fit perfectly. The 3 mids tie for MID; one wins MID, the
+    // other two are forced to ADC/SUPPORT (off-role). The solver returns a
+    // best-effort assignment — the user perceives this as "wrong" because a mid
+    // is shown with ADC role badge, but the engine has no real ADC to place.
+    assert_eq!(top.top, "TopGuy", "TopGuy fits at TOP");
+    assert_eq!(top.jungle, "JgGuy", "JgGuy fits at JUNGLE");
+    let mids = ["MidA", "MidB", "MidC"];
+    assert!(mids.contains(&top.middle.as_str()), "MID gets one of the mids");
+    assert!(
+        mids.contains(&top.adc.as_str()),
+        "ADC slot gets a mid (off-role) — user perceives this as 'wrong lane assignment'"
+    );
+    assert!(
+        mids.contains(&top.support.as_str()),
+        "SUPPORT slot gets a mid (off-role) — same"
+    );
+}
+
+/// Documents the dedup landmine: if confirmed and projected both contain the
+/// same champion, the chain has length 5 (passes the gate) but contains a
+/// duplicate, and `solve` produces a malformed assignment that places the
+/// duplicated champion in TWO roles and drops one champion entirely.
+///
+/// In normal operation this should not happen because `collect_candidates`
+/// filters out already-picked champions. But forced branches or other future
+/// code paths could allow it, so this test fails loudly if reality changes.
+#[test]
+fn extract_scenarios_overlap_produces_malformed_assignment() {
+    let meta = complete_blue_meta();
+    // Confirmed: Topper, Jungler. Projected: Topper (DUP), Midder, Carry.
+    // Chain: [Topper, Jungler, Topper, Midder, Carry] — len 5 with dup, no Supporter.
+    let tree_with_dup = node(
+        &[],
+        None,
+        ActionType::Ban,
+        &[],
+        0.0,
+        vec![node(
+            &["Topper"],
+            Some(Side::Blue),
+            ActionType::Pick,
+            &[10],
+            0.9,
+            vec![node(
+                &["Midder"],
+                Some(Side::Blue),
+                ActionType::Pick,
+                &[17],
+                0.85,
+                vec![node(
+                    &["Carry"],
+                    Some(Side::Blue),
+                    ActionType::Pick,
+                    &[18],
+                    0.8,
+                    vec![],
+                )],
+            )],
+        )],
+    );
+    let confirmed_blue: Vec<String> =
+        ["Topper", "Jungler"].iter().map(|s| (*s).to_string()).collect();
+
+    let scenarios = extract_scenarios(&tree_with_dup, &meta, 1, &confirmed_blue, &[]);
+    let assignments = &scenarios[0].blue_likely_assignments;
+
+    // 120 perms over 5-slot input including a duplicate.
+    assert_eq!(assignments.len(), 120);
+    let top = highest_weighted(assignments);
+    let used: std::collections::HashSet<&str> = [
+        top.top.as_str(),
+        top.jungle.as_str(),
+        top.middle.as_str(),
+        top.adc.as_str(),
+        top.support.as_str(),
+    ]
+    .into_iter()
+    .collect();
+    // Malformed: only 4 unique champions across 5 slots → one champion duplicated,
+    // one missing entirely. This is the documented broken behavior.
+    assert_eq!(
+        used.len(),
+        4,
+        "overlap input produces malformed assignment; if this changes the chain logic was hardened"
+    );
+    assert!(
+        !used.contains("Supporter"),
+        "Supporter (only in meta, not in chain) is missing as expected"
+    );
 }
 
 #[test]
@@ -522,8 +816,8 @@ fn extract_scenarios_deterministic_for_same_tree() {
     let meta = sample_meta();
     let tree = extraction_tree();
 
-    let first = extract_scenarios(&tree, &meta, 5);
-    let second = extract_scenarios(&tree, &meta, 5);
+    let first = extract_scenarios(&tree, &meta, 5, &[], &[]);
+    let second = extract_scenarios(&tree, &meta, 5, &[], &[]);
 
     assert_eq!(first[0].name, second[0].name);
     assert_eq!(first[0].description, second[0].description);

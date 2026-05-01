@@ -1,4 +1,4 @@
-use engine_core::draft_state::{DraftState, Phase, Side};
+use engine_core::draft_state::{ActionType, DraftState, Phase, Side};
 use engine_core::evaluator::{
     phase_weight_for, score_pick, EvalContext, MetaData, PhaseWeightTable, PhaseWeights,
 };
@@ -8,19 +8,19 @@ use std::collections::HashMap;
 
 fn default_blue_weights() -> PhaseWeightTable {
     PhaseWeightTable {
-        ban1: PhaseWeights { info: 0.65, comp: 0.35 },
-        pick1: PhaseWeights { info: 0.5, comp: 0.5 },
-        ban2: PhaseWeights { info: 0.4, comp: 0.6 },
-        pick2: PhaseWeights { info: 0.2, comp: 0.8 },
+        ban1: PhaseWeights { info: 0.65, comp: 0.35, coverage: 0.0 },
+        pick1: PhaseWeights { info: 0.5, comp: 0.5, coverage: 0.0 },
+        ban2: PhaseWeights { info: 0.4, comp: 0.6, coverage: 0.0 },
+        pick2: PhaseWeights { info: 0.2, comp: 0.8, coverage: 0.0 },
     }
 }
 
 fn default_red_weights() -> PhaseWeightTable {
     PhaseWeightTable {
-        ban1: PhaseWeights { info: 0.7, comp: 0.3 },
-        pick1: PhaseWeights { info: 0.6, comp: 0.4 },
-        ban2: PhaseWeights { info: 0.5, comp: 0.5 },
-        pick2: PhaseWeights { info: 0.2, comp: 0.8 },
+        ban1: PhaseWeights { info: 0.7, comp: 0.3, coverage: 0.0 },
+        pick1: PhaseWeights { info: 0.6, comp: 0.4, coverage: 0.0 },
+        ban2: PhaseWeights { info: 0.5, comp: 0.5, coverage: 0.0 },
+        pick2: PhaseWeights { info: 0.2, comp: 0.8, coverage: 0.0 },
     }
 }
 
@@ -118,9 +118,9 @@ fn score_uses_role_in_evaluator() {
     let c = ctx();
     let state = DraftState::default();
     // Aatrox in TOP role → full multiplier (1.0)
-    let aatrox_top = score_pick("Aatrox", Role::Top, &state, &c);
+    let aatrox_top = score_pick("Aatrox", Role::Top, &state, &c, ActionType::Pick);
     // Aatrox in JUNGLE role → out-of-role penalty (× 0.75)
-    let aatrox_jng = score_pick("Aatrox", Role::Jungle, &state, &c);
+    let aatrox_jng = score_pick("Aatrox", Role::Jungle, &state, &c, ActionType::Pick);
     assert!(
         aatrox_top.composite > aatrox_jng.composite,
         "in-role must score higher than out-of-role: top={} jng={}",
@@ -134,10 +134,10 @@ fn composite_uses_phase_weights() {
     let mut c = ctx();
     let state = DraftState::default();
     // Pick1: info=0.5 comp=0.5
-    let s1 = score_pick("Aatrox", Role::Top, &state, &c);
+    let s1 = score_pick("Aatrox", Role::Top, &state, &c, ActionType::Pick);
     // Pick2: info=0.2 comp=0.8 — same input may produce different composite
     c.phase = Phase::Pick2;
-    let s2 = score_pick("Aatrox", Role::Top, &state, &c);
+    let s2 = score_pick("Aatrox", Role::Top, &state, &c, ActionType::Pick);
     // For an in-pool champ, pick2's higher comp weight should produce a different
     // blend (unless the placeholder comp/info values happen to coincide).
     assert!(
@@ -160,7 +160,7 @@ fn comp_strength_uses_win_rate_baseline() {
     let mut c = ctx();
     c.meta.win_rates.insert("Aatrox".into(), 0.55);
     let state = DraftState::default();
-    let s = score_pick("Aatrox", Role::Top, &state, &c);
+    let s = score_pick("Aatrox", Role::Top, &state, &c, ActionType::Pick);
     // Without synergy/counter contributions, compStrength ≈ win_rate
     assert!((s.compStrength - 0.55).abs() < 0.05);
 }
@@ -176,7 +176,7 @@ fn flex_retention_high_for_flex_comp() {
         "Nautilus".into(),
     ];
     let state = DraftState::default();
-    let s = score_pick("Yone", Role::Middle, &state, &c);
+    let s = score_pick("Yone", Role::Middle, &state, &c, ActionType::Pick);
     assert!(
         s.flexRetention > 0.0,
         "flex comp should have non-zero flex retention: got {}",
@@ -195,7 +195,7 @@ fn reveal_cost_complement_of_flex() {
         "Nautilus".into(),
     ];
     let state = DraftState::default();
-    let s = score_pick("Aatrox", Role::Top, &state, &c);
+    let s = score_pick("Aatrox", Role::Top, &state, &c, ActionType::Pick);
     assert!((s.flexRetention + s.revealCost - 1.0).abs() < 0.05);
 }
 
@@ -211,7 +211,7 @@ fn comp_strength_punishes_counter() {
     c.meta.counters = counters;
 
     let state = DraftState::default();
-    let s = score_pick("Aatrox", Role::Top, &state, &c);
+    let s = score_pick("Aatrox", Role::Top, &state, &c, ActionType::Pick);
     assert!(
         s.compStrength < 0.50,
         "Counter risk must reduce compStrength: got {}",

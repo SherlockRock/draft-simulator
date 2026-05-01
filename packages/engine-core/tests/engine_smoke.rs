@@ -43,36 +43,44 @@ pub(crate) fn default_request(state: DraftState) -> ComputeRequest {
             ban1: PhaseWeights {
                 info: 0.0,
                 comp: 0.0,
+                coverage: 0.0,
             },
             pick1: PhaseWeights {
                 info: 0.0,
                 comp: 0.0,
+                coverage: 0.0,
             },
             ban2: PhaseWeights {
                 info: 0.0,
                 comp: 0.0,
+                coverage: 0.0,
             },
             pick2: PhaseWeights {
                 info: 0.0,
                 comp: 0.0,
+                coverage: 0.0,
             },
         },
         phase_weights_red: PhaseWeightTable {
             ban1: PhaseWeights {
                 info: 0.0,
                 comp: 0.0,
+                coverage: 0.0,
             },
             pick1: PhaseWeights {
                 info: 0.0,
                 comp: 0.0,
+                coverage: 0.0,
             },
             ban2: PhaseWeights {
                 info: 0.0,
                 comp: 0.0,
+                coverage: 0.0,
             },
             pick2: PhaseWeights {
                 info: 0.0,
                 comp: 0.0,
+                coverage: 0.0,
             },
         },
         penalties: Penalties {
