@@ -43,3 +43,24 @@ pub fn coverage_score(
     let product: f64 = factors.iter().product();
     product.powf(1.0 / 5.0)
 }
+
+/// Returns the gain in `coverage_score` from adding `candidate` to
+/// `picks`. The `.max(0.0)` clamp is defensive against floating-point
+/// imprecision (the underlying math is monotone non-decreasing — adding
+/// a pick can only raise per-role maxes — so the true value is always
+/// `>= 0`, but f64 ops can produce tiny negatives like `-1e-17`).
+///
+/// Used as the pick-side / ban-side coverage signal. For picks the
+/// caller passes our team's picks; for bans the caller passes
+/// opponent's picks — see `evaluator::role_coverage_for`.
+pub fn coverage_marginal_gain(
+    picks: &[String],
+    candidate: &str,
+    meta: &HashMap<String, ChampionMeta>,
+) -> f64 {
+    let base = coverage_score(picks, meta);
+    let mut with = picks.to_vec();
+    with.push(candidate.to_string());
+    let post = coverage_score(&with, meta);
+    (post - base).max(0.0)
+}

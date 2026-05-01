@@ -1,4 +1,4 @@
-use engine_core::coverage::{coverage_score, per_role_max_factors};
+use engine_core::coverage::{coverage_marginal_gain, coverage_score, per_role_max_factors};
 use engine_core::pools::Role;
 use engine_core::role_solver::{
     CcProfile, ChampionMeta, ChampionTags, DamageProfile, ScalingProfile,
@@ -144,4 +144,38 @@ fn coverage_score_empty_picks_minimum_value() {
     let m: HashMap<String, ChampionMeta> = HashMap::new();
     let picks: Vec<String> = vec![];
     assert!((coverage_score(&picks, &m) - 0.01).abs() < 1e-9);
+}
+
+#[test]
+fn coverage_marginal_gain_redundant_pick_is_zero() {
+    // Garen+Amumu+Aurelion. Adding Annie (another MID) gains nothing.
+    let m = meta_from(&[
+        ("Garen", &[Role::Top]),
+        ("Amumu", &[Role::Jungle]),
+        ("Aurelion", &[Role::Middle]),
+        ("Annie", &[Role::Middle]),
+    ]);
+    let picks: Vec<String> = ["Garen", "Amumu", "Aurelion"]
+        .iter()
+        .map(|s| (*s).into())
+        .collect();
+    let gain = coverage_marginal_gain(&picks, "Annie", &m);
+    assert!(gain.abs() < 1e-9);
+}
+
+#[test]
+fn coverage_marginal_gain_filling_role_increases_score() {
+    // Same comp; add Jinx (ADC). 0.158 -> 0.398, gain ~ 0.24.
+    let m = meta_from(&[
+        ("Garen", &[Role::Top]),
+        ("Amumu", &[Role::Jungle]),
+        ("Aurelion", &[Role::Middle]),
+        ("Jinx", &[Role::Adc]),
+    ]);
+    let picks: Vec<String> = ["Garen", "Amumu", "Aurelion"]
+        .iter()
+        .map(|s| (*s).into())
+        .collect();
+    let gain = coverage_marginal_gain(&picks, "Jinx", &m);
+    assert!(gain > 0.23 && gain < 0.25, "expected ~0.24, got {}", gain);
 }
