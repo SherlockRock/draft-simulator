@@ -1,4 +1,4 @@
-use engine_core::coverage::per_role_max_factors;
+use engine_core::coverage::{coverage_score, per_role_max_factors};
 use engine_core::pools::Role;
 use engine_core::role_solver::{
     CcProfile, ChampionMeta, ChampionTags, DamageProfile, ScalingProfile,
@@ -90,4 +90,58 @@ fn per_role_max_factors_unknown_pick_treated_as_no_signal() {
     let m: HashMap<String, ChampionMeta> = HashMap::new();
     let picks = vec!["UnknownChamp".to_string()];
     assert_eq!(per_role_max_factors(&picks, &m), [0.01; 5]);
+}
+
+#[test]
+fn coverage_score_full_5_unique_primaries_is_one() {
+    let m = meta_from(&[
+        ("T", &[Role::Top]),
+        ("J", &[Role::Jungle]),
+        ("M", &[Role::Middle]),
+        ("A", &[Role::Adc]),
+        ("S", &[Role::Support]),
+    ]);
+    let picks: Vec<String> = ["T", "J", "M", "A", "S"]
+        .iter()
+        .map(|s| (*s).into())
+        .collect();
+    assert!((coverage_score(&picks, &m) - 1.0).abs() < 1e-9);
+}
+
+#[test]
+fn coverage_score_one_missing_role_about_0_398() {
+    // 4 unique primaries; ADC is the missing role at 0.01.
+    let m = meta_from(&[
+        ("T", &[Role::Top]),
+        ("J", &[Role::Jungle]),
+        ("M", &[Role::Middle]),
+        ("S", &[Role::Support]),
+    ]);
+    let picks: Vec<String> = ["T", "J", "M", "S"]
+        .iter()
+        .map(|s| (*s).into())
+        .collect();
+    assert!((coverage_score(&picks, &m) - 0.398107170553_f64).abs() < 1e-6);
+}
+
+#[test]
+fn coverage_score_two_missing_roles_about_0_158() {
+    // The bug case: 3 picks (TOP/JG/MID), missing ADC and SUP.
+    let m = meta_from(&[
+        ("Garen", &[Role::Top]),
+        ("Amumu", &[Role::Jungle]),
+        ("Aurelion", &[Role::Middle]),
+    ]);
+    let picks: Vec<String> = ["Garen", "Amumu", "Aurelion"]
+        .iter()
+        .map(|s| (*s).into())
+        .collect();
+    assert!((coverage_score(&picks, &m) - 0.158489319246_f64).abs() < 1e-6);
+}
+
+#[test]
+fn coverage_score_empty_picks_minimum_value() {
+    let m: HashMap<String, ChampionMeta> = HashMap::new();
+    let picks: Vec<String> = vec![];
+    assert!((coverage_score(&picks, &m) - 0.01).abs() < 1e-9);
 }

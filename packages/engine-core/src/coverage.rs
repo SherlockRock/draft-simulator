@@ -30,3 +30,16 @@ pub fn per_role_max_factors(
     }
     maxes
 }
+
+/// Geometric mean (5th root) of the product of per-role max factors.
+/// Always in `[0.01, 1.0]`. 1.0 = every role primary-covered. Used as
+/// the magnitude-friendly form of role coverage; preserves ordering of
+/// raw product but stays at composite scale.
+pub fn coverage_score(
+    picks: &[String],
+    meta: &HashMap<String, ChampionMeta>,
+) -> f64 {
+    let factors = per_role_max_factors(picks, meta);
+    let product: f64 = factors.iter().product();
+    product.powf(1.0 / 5.0)
+}
