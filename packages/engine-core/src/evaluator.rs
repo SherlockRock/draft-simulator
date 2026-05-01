@@ -7,6 +7,7 @@ use std::collections::HashMap;
 pub struct PhaseWeights {
     pub info: f64,
     pub comp: f64,
+    pub coverage: f64,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -75,6 +76,7 @@ pub struct ScoreSet {
     pub informationValue: f64,
     pub flexRetention: f64,
     pub revealCost: f64,
+    pub roleCoverage: f64,
 }
 
 /// Score a single champion at a specific role, given the current draft state.
