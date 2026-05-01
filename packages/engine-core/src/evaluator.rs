@@ -1,4 +1,5 @@
-use crate::draft_state::{DraftState, Phase, Side};
+use crate::coverage::coverage_marginal_gain;
+use crate::draft_state::{ActionType, DraftState, Phase, Side};
 use crate::pools::{pool_multiplier, Penalties, Role, TeamPool};
 use crate::role_solver::ChampionMeta;
 use std::collections::HashMap;
@@ -80,18 +81,21 @@ pub struct ScoreSet {
 }
 
 /// Score a single champion at a specific role, given the current draft state.
-/// Components: comp strength (in-progress), information value, then composite blend
-/// weighted by side+phase. Pool-tier penalty multiplies the final composite.
+/// Components: comp strength (in-progress), information value, role coverage,
+/// then composite blend weighted by side+phase. Pool-tier penalty multiplies
+/// the final composite.
 pub fn score_pick(
     champion_id: &str,
     role: Role,
-    _state: &DraftState,
+    state: &DraftState,
     ctx: &EvalContext,
+    action_type: ActionType,
 ) -> ScoreSet {
     let comp_strength = comp_strength_for(champion_id, role, ctx);
     let information_value = information_value_for(champion_id, role, ctx);
     let flex_retention = flex_retention_for(champion_id, ctx);
     let reveal_cost = reveal_cost_for(champion_id, role, ctx);
+    let role_coverage = role_coverage_for(champion_id, state, ctx, action_type);
 
     let weights = phase_weight_for(
         ctx.side,
@@ -99,8 +103,13 @@ pub fn score_pick(
         &ctx.phase_weights_blue,
         &ctx.phase_weights_red,
     );
-    let raw_composite = weights.comp * comp_strength + weights.info * information_value;
+    let raw_composite = weights.comp * comp_strength
+        + weights.info * information_value
+        + weights.coverage * role_coverage;
 
+    // NOTE: ban scoring still goes through pool_multiplier. Today
+    // ban_multiplier returns 1.0 (a stub), but switching bans to it now
+    // would silently change ban rankings. Leaving as a follow-up.
     let (multiplier, _tier) = pool_multiplier(champion_id, role, &ctx.our_pool, &ctx.penalties);
 
     ScoreSet {
@@ -109,7 +118,29 @@ pub fn score_pick(
         informationValue: information_value,
         flexRetention: flex_retention,
         revealCost: reveal_cost,
+        roleCoverage: role_coverage,
     }
+}
+
+/// Marginal coverage gain from adding `candidate` to the appropriate
+/// team's picks. Picks come from the recursive search state — NOT from
+/// `ctx.our_picks` — because the search needs to evaluate at the
+/// projected node state, not the root snapshot.
+fn role_coverage_for(
+    candidate: &str,
+    state: &DraftState,
+    ctx: &EvalContext,
+    action_type: ActionType,
+) -> f64 {
+    let picks_to_use: &[String] = match (action_type, ctx.side) {
+        // Pick: marginal gain on OUR team — fill our gap
+        (ActionType::Pick, Side::Blue) => &state.blue_picks,
+        (ActionType::Pick, Side::Red) => &state.red_picks,
+        // Ban: marginal gain on OPPONENT — deny their gap
+        (ActionType::Ban, Side::Blue) => &state.red_picks,
+        (ActionType::Ban, Side::Red) => &state.blue_picks,
+    };
+    coverage_marginal_gain(picks_to_use, candidate, &ctx.champion_meta)
 }
 
 fn comp_strength_for(champion_id: &str, _role: Role, ctx: &EvalContext) -> f64 {
