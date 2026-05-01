@@ -323,3 +323,193 @@ fn opp_turn_minimizes_our_value() {
         composites
     );
 }
+
+#[test]
+fn pick2_pair_seeding_includes_missing_role_specialists_via_bucket_2() {
+    use engine_core::role_solver::{
+        CcProfile, ChampionMeta, ChampionTags, DamageProfile, ScalingProfile,
+    };
+    use engine_core::search::TreeNode;
+
+    fn champ_with_winrate(id: &str, positions: Vec<Role>) -> ChampionMeta {
+        ChampionMeta {
+            id: id.into(),
+            positions,
+            damage_profile: DamageProfile::default(),
+            scaling_profile: ScalingProfile::default(),
+            cc_profile: CcProfile::default(),
+            tags: ChampionTags::default(),
+        }
+    }
+
+    // Build state at Blue's pair_start at Pick2 (slot 17).
+    // Counts at slot 17: blue_bans=5, red_bans=5, blue_picks=3, red_picks=4.
+    let mut state = DraftState::default();
+    state.blue_bans = vec!["B1".into(), "B2".into(), "B3".into(), "B4".into(), "B5".into()];
+    state.red_bans = vec!["R1".into(), "R2".into(), "R3".into(), "R4".into(), "R5".into()];
+    state.blue_picks = vec!["Garen".into(), "Amumu".into(), "Aurelion".into()];
+    state.red_picks = vec!["Re1".into(), "Re2".into(), "Re3".into(), "Re4".into()];
+
+    // Meta: confirmed picks, top filler with high win_rate, ADC/SUP specialists low win_rate.
+    let mut meta_map: HashMap<String, ChampionMeta> = HashMap::new();
+    let mut win_rates: HashMap<String, f64> = HashMap::new();
+
+    for (id, pos) in [
+        ("Garen", vec![Role::Top]),
+        ("Amumu", vec![Role::Jungle]),
+        ("Aurelion", vec![Role::Middle]),
+        ("Re1", vec![Role::Top]),
+        ("Re2", vec![Role::Jungle]),
+        ("Re3", vec![Role::Middle]),
+        ("Re4", vec![Role::Adc]),
+    ] {
+        meta_map.insert(id.into(), champ_with_winrate(id, pos));
+        win_rates.insert(id.into(), 0.5);
+    }
+    for id in ["B1", "B2", "B3", "B4", "B5", "R1", "R2", "R3", "R4", "R5"] {
+        meta_map.insert(id.into(), champ_with_winrate(id, vec![]));
+    }
+
+    // Filler TOP/JG/MID candidates. Their composite at Pick2:
+    //   weights.comp * 0.5 + weights.coverage * 0  (no coverage gain — role covered)
+    // = 0.5
+    // ADC/SUP specialists composite = 1.0 * 0.30 + 0.6 * 0.24 ≈ 0.444.
+    // Specialists score LOWER than fillers, so they don't enter bucket-1's top-32.
+    // Only bucket-2 (per_role_top) can surface them into pair seeding.
+    let mut filler_pool: Vec<String> = Vec::new();
+    for i in 0..40 {
+        let id = format!("FillTop{}", i);
+        meta_map.insert(id.clone(), champ_with_winrate(&id, vec![Role::Top]));
+        win_rates.insert(id.clone(), 0.5);
+        filler_pool.push(id);
+    }
+    for i in 0..40 {
+        let id = format!("FillJg{}", i);
+        meta_map.insert(id.clone(), champ_with_winrate(&id, vec![Role::Jungle]));
+        win_rates.insert(id.clone(), 0.5);
+        filler_pool.push(id);
+    }
+    for i in 0..40 {
+        let id = format!("FillMid{}", i);
+        meta_map.insert(id.clone(), champ_with_winrate(&id, vec![Role::Middle]));
+        win_rates.insert(id.clone(), 0.5);
+        filler_pool.push(id);
+    }
+
+    // ADC / SUP specialists with LOW win_rate. Their composite (~0.444) sits
+    // below fillers (0.5), so they're not in bucket-1's single_top_k. The only
+    // path into the pair-seed list is bucket-2's per_role_top (Pick2 wiring).
+    let adc_specialists = vec!["AdcA".to_string(), "AdcB".to_string()];
+    let sup_specialists = vec!["SupA".to_string(), "SupB".to_string()];
+    for id in &adc_specialists {
+        meta_map.insert(id.clone(), champ_with_winrate(id, vec![Role::Adc]));
+        win_rates.insert(id.clone(), 0.30);
+    }
+    for id in &sup_specialists {
+        meta_map.insert(id.clone(), champ_with_winrate(id, vec![Role::Support]));
+        win_rates.insert(id.clone(), 0.30);
+    }
+
+    let our_pool = TeamPool {
+        display: RolePoolMap {
+            top: filler_pool
+                .iter()
+                .filter(|n| n.starts_with("FillTop"))
+                .cloned()
+                .collect(),
+            jungle: filler_pool
+                .iter()
+                .filter(|n| n.starts_with("FillJg"))
+                .cloned()
+                .collect(),
+            middle: filler_pool
+                .iter()
+                .filter(|n| n.starts_with("FillMid"))
+                .cloned()
+                .collect(),
+            adc: adc_specialists.clone(),
+            support: sup_specialists.clone(),
+        },
+        search: {
+            let mut s = filler_pool.clone();
+            s.extend(adc_specialists.clone());
+            s.extend(sup_specialists.clone());
+            s
+        },
+    };
+
+    let pw_pick2 = PhaseWeights { info: 0.0, comp: 1.0, coverage: 0.6 };
+    let pw_other = PhaseWeights { info: 0.0, comp: 1.0, coverage: 0.0 };
+    let pw_table = PhaseWeightTable {
+        ban1: pw_other,
+        pick1: pw_other,
+        ban2: pw_other,
+        pick2: pw_pick2,
+    };
+    let ctx = EvalContext {
+        side: Side::Blue,
+        phase: Phase::Pick2,
+        our_pool,
+        opp_pool: TeamPool {
+            display: RolePoolMap {
+                top: vec![],
+                jungle: vec![],
+                middle: vec![],
+                adc: vec![],
+                support: vec![],
+            },
+            search: vec![],
+        },
+        our_picks: state.blue_picks.clone(),
+        opp_picks: state.red_picks.clone(),
+        penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
+        champion_meta: meta_map,
+        meta: MetaData {
+            win_rates,
+            synergies: vec![],
+            counters: HashMap::new(),
+        },
+        phase_weights_blue: pw_table,
+        phase_weights_red: pw_table,
+        synergy_multiplier: 0.0,
+        counter_multiplier: 0.0,
+        flex_retention_weight: 0.0,
+        reveal_cost_weight: 0.0,
+    };
+
+    let params = SearchParams {
+        // Large branch_width so bucket-2 pairs survive the final value-sort
+        // truncate. With ~500 candidate pairs (496 bucket-1 + 4 bucket-2), all
+        // bucket-2 pairs are at the bottom of the value-sorted list — branch_width
+        // needs to be >= total to keep them.
+        branch_width: 600,
+        max_depth: 1,
+        ..Default::default()
+    };
+    let cancel = CancelHandle::new();
+
+    let tree = search(&state, &params, &ctx, &cancel).unwrap();
+
+    // Inspect tree.children. Each is a pair candidate (champion_ids has 2 entries).
+    let pair_children: Vec<&TreeNode> = tree
+        .children
+        .iter()
+        .filter(|c| c.champion_ids.len() == 2)
+        .collect();
+
+    // Assert at least one pair has an ADC + a SUP specialist.
+    let has_adc_sup = pair_children.iter().any(|c| {
+        let in_adc = c.champion_ids.iter().any(|id| adc_specialists.contains(id));
+        let in_sup = c.champion_ids.iter().any(|id| sup_specialists.contains(id));
+        in_adc && in_sup
+    });
+
+    assert!(
+        has_adc_sup,
+        "Bucket-2 pair seeding should produce an ADC+SUP pair. Got pairs: {:?}",
+        pair_children
+            .iter()
+            .map(|c| &c.champion_ids)
+            .collect::<Vec<_>>(),
+    );
+}
