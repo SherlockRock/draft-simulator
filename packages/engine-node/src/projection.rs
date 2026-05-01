@@ -189,19 +189,19 @@ fn convert_forced_branches(
 
 fn phase_table_blue(b: &proto::EngineRequestConfigWeightsPhaseWeightsBlue) -> PhaseWeightTable {
     PhaseWeightTable {
-        ban1: PhaseWeights { info: b.ban1.info, comp: b.ban1.comp },
-        pick1: PhaseWeights { info: b.pick1.info, comp: b.pick1.comp },
-        ban2: PhaseWeights { info: b.ban2.info, comp: b.ban2.comp },
-        pick2: PhaseWeights { info: b.pick2.info, comp: b.pick2.comp },
+        ban1: PhaseWeights { info: b.ban1.info, comp: b.ban1.comp, coverage: b.ban1.coverage },
+        pick1: PhaseWeights { info: b.pick1.info, comp: b.pick1.comp, coverage: b.pick1.coverage },
+        ban2: PhaseWeights { info: b.ban2.info, comp: b.ban2.comp, coverage: b.ban2.coverage },
+        pick2: PhaseWeights { info: b.pick2.info, comp: b.pick2.comp, coverage: b.pick2.coverage },
     }
 }
 
 fn phase_table_red(r: &proto::EngineRequestConfigWeightsPhaseWeightsRed) -> PhaseWeightTable {
     PhaseWeightTable {
-        ban1: PhaseWeights { info: r.ban1.info, comp: r.ban1.comp },
-        pick1: PhaseWeights { info: r.pick1.info, comp: r.pick1.comp },
-        ban2: PhaseWeights { info: r.ban2.info, comp: r.ban2.comp },
-        pick2: PhaseWeights { info: r.pick2.info, comp: r.pick2.comp },
+        ban1: PhaseWeights { info: r.ban1.info, comp: r.ban1.comp, coverage: r.ban1.coverage },
+        pick1: PhaseWeights { info: r.pick1.info, comp: r.pick1.comp, coverage: r.pick1.coverage },
+        ban2: PhaseWeights { info: r.ban2.info, comp: r.ban2.comp, coverage: r.ban2.coverage },
+        pick2: PhaseWeights { info: r.pick2.info, comp: r.pick2.comp, coverage: r.pick2.coverage },
     }
 }
 
@@ -270,6 +270,7 @@ fn tree_scores(s: &ScoreSet) -> proto::TreeNodeScores {
         flex_retention: s.flexRetention,
         information_value: s.informationValue,
         reveal_cost: s.revealCost,
+        role_coverage: s.roleCoverage,
     }
 }
 
@@ -317,6 +318,7 @@ fn scenario_scores(s: &ScoreSet) -> proto::EngineResponseScenariosItemScores {
         comp_strength: s.compStrength,
         composite: s.composite,
         information_value: s.informationValue,
+        role_coverage: s.roleCoverage,
     }
 }
 
@@ -404,16 +406,16 @@ mod tests {
                 "weights": {
                     "phaseWeights": {
                         "blue": {
-                            "ban1": { "comp": 0.5, "info": 0.5 },
-                            "pick1": { "comp": 0.6, "info": 0.4 },
-                            "ban2": { "comp": 0.5, "info": 0.5 },
-                            "pick2": { "comp": 0.7, "info": 0.3 },
+                            "ban1": { "comp": 0.5, "info": 0.5, "coverage": 0.0 },
+                            "pick1": { "comp": 0.6, "info": 0.4, "coverage": 0.3 },
+                            "ban2": { "comp": 0.5, "info": 0.5, "coverage": 0.4 },
+                            "pick2": { "comp": 0.7, "info": 0.3, "coverage": 0.6 },
                         },
                         "red": {
-                            "ban1": { "comp": 0.5, "info": 0.5 },
-                            "pick1": { "comp": 0.6, "info": 0.4 },
-                            "ban2": { "comp": 0.5, "info": 0.5 },
-                            "pick2": { "comp": 0.7, "info": 0.3 },
+                            "ban1": { "comp": 0.5, "info": 0.5, "coverage": 0.0 },
+                            "pick1": { "comp": 0.6, "info": 0.4, "coverage": 0.3 },
+                            "ban2": { "comp": 0.5, "info": 0.5, "coverage": 0.4 },
+                            "pick2": { "comp": 0.7, "info": 0.3, "coverage": 0.6 },
                         },
                     },
                     "penalties": { "outOfPool": 0.75, "outOfRole": 0.25 },
