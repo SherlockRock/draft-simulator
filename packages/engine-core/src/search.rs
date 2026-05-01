@@ -389,7 +389,7 @@ fn eval_state(state: &DraftState, ctx: &EvalContext) -> f64 {
     let mut total = 0.0;
     for champ in our_picks {
         let role = primary_role(champ, &ctx.champion_meta).unwrap_or(Role::Top);
-        let s = score_pick(champ, role, state, ctx);
+        let s = score_pick(champ, role, state, ctx, ActionType::Pick);
         total += s.composite;
     }
     total
@@ -440,7 +440,7 @@ fn score_and_rank(
                 None
             } else {
                 let role = primary_role(c, &ctx.champion_meta).unwrap_or(Role::Top);
-                let s = score_pick(c, role, state, &sub_ctx);
+                let s = score_pick(c, role, state, &sub_ctx, turn.action_type);
                 Some((c.clone(), s.composite))
             }
         })
@@ -504,7 +504,7 @@ fn expand_pair(
                 None
             } else {
                 let role = primary_role(c, &eval_ctx.champion_meta).unwrap_or(Role::Top);
-                let s = score_pick(c, role, state, &sub_ctx);
+                let s = score_pick(c, role, state, &sub_ctx, turn.action_type);
                 Some((c.clone(), s.composite))
             }
         })
