@@ -290,8 +290,14 @@ fn transposition_cache_populates_during_search() {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(40))]
 
+    /// Property: under MINIMAX selection, alpha-beta cutoffs cannot change the
+    /// back-propagated root score. Phase 2 of the role-parity plan shifts
+    /// selection to self-optimization, under which alpha-beta is approximate
+    /// — this test no longer holds. Kept as regression scaffolding against any
+    /// future re-introduction of the minimax model.
     #[test]
-    fn alpha_beta_preserves_root_score(
+    #[ignore]
+    fn alpha_beta_preserves_root_score_under_minimax(
         slot in 6usize..14,
         pattern_idx in 0usize..4,
         max_depth in 1usize..4,
@@ -340,16 +346,11 @@ proptest! {
 }
 
 #[test]
-fn opp_turn_minimizes_our_value() {
-    // At opponent's pick turn, the search assumes they pick the choice that
-    // hurts us most. With a single-depth lookahead and 2 candidates, the
-    // back-propagated value should equal the score of the LOWEST-scoring move.
-    //
-    // Use slot 16 (Red Pick2 single) where red is the mover and blue (ctx.side)
-    // is the perspective. Build state with 3 picks per side so feasibility holds:
-    // red has 2 picks remaining (slots 16, 19) and a 2-champ pool (ADC+SUP).
-    // Two locked red picks (TOP, JG) + 2 remaining → total=4... wait, red needs
-    // 5 total. Use 3 locked picks + pool of 2 → remaining=2, pool=2 → feasible.
+fn opp_turn_maximizes_opp_value() {
+    // Under self-optimization (Phase 2), every side picks the child that
+    // maximizes its own composite. At opp's turn, this means opp picks
+    // best-for-opp — not worst-for-us. Distinguish from minimax with a
+    // fixture where the two opp candidates produce different opp values.
     use engine_core::role_solver::{CcProfile, ChampionMeta, ChampionTags, DamageProfile, ScalingProfile};
     use engine_core::evaluator::PhaseWeights;
 
@@ -359,7 +360,7 @@ fn opp_turn_minimizes_our_value() {
             tags: ChampionTags::default() }
     }
 
-    // Slot 16: 5 blue bans + 5 red bans + 3 blue picks + 3 red picks = 16.
+    // Slot 16 (R Pick2 single): 5 blue bans + 5 red bans + 3 blue picks + 3 red picks.
     let mut state = DraftState::default();
     state.blue_bans = vec!["Bb1".into(),"Bb2".into(),"Bb3".into(),"Bb4".into(),"Bb5".into()];
     state.red_bans  = vec!["Rb1".into(),"Rb2".into(),"Rb3".into(),"Rb4".into(),"Rb5".into()];
@@ -368,9 +369,6 @@ fn opp_turn_minimizes_our_value() {
     assert_eq!(state.turn_index(), 16);
     assert_eq!(TURN_SEQUENCE[16].side, Side::Red);
 
-    // Champion meta: locked picks have distinct roles; A=ADC and B=SUP in pool.
-    // With 3 red picks locked at TOP/JG/MID + pool {A(ADC), B(SUP)}, red
-    // can pick any of A or B and still complete a 5-role comp at slot 19.
     let mut meta_map: HashMap<String, ChampionMeta> = HashMap::new();
     for (id, pos) in [("Rp1", Role::Top),("Rp2", Role::Jungle),("Rp3", Role::Middle),
                       ("Bp1", Role::Top),("Bp2", Role::Jungle),("Bp3", Role::Middle)] {
@@ -379,6 +377,7 @@ fn opp_turn_minimizes_our_value() {
     for id in ["Bb1","Bb2","Bb3","Bb4","Bb5","Rb1","Rb2","Rb3","Rb4","Rb5"] {
         meta_map.insert(id.into(), champ(id, vec![]));
     }
+    // Pool: A is ADC, B is SUP — both feasible (red still needs ADC+SUP after slot 16).
     meta_map.insert("A".into(), champ("A", vec![Role::Adc]));
     meta_map.insert("B".into(), champ("B", vec![Role::Support]));
 
@@ -390,7 +389,7 @@ fn opp_turn_minimizes_our_value() {
         search: vec!["A".into(), "B".into()],
     };
     let ctx = EvalContext {
-        side: Side::Blue,
+        side: Side::Blue,                   // request perspective is blue (opp = red mover)
         phase: Phase::Pick2,
         our_pool: TeamPool {
             display: RolePoolMap { top: vec![], jungle: vec![], middle: vec![], adc: vec![], support: vec![] },
@@ -402,6 +401,12 @@ fn opp_turn_minimizes_our_value() {
         penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
         champion_meta: meta_map,
         meta: MetaData {
+            // A is high WR (good for red); B is low WR (bad for red).
+            // Under minimax (legacy), red would pick whichever HURTS blue more — but
+            // since blue has no overlap with A/B and counter_multiplier=0, both candidates
+            // have identical effect on blue's composite. The two models diverge only when
+            // red's own value differs between candidates — which it does here (A=0.9, B=0.1).
+            // Under self-opt: red picks A.
             win_rates: HashMap::from([("A".to_string(), 0.9), ("B".to_string(), 0.1)]),
             synergies: vec![],
             counters: HashMap::new(),
@@ -423,20 +428,28 @@ fn opp_turn_minimizes_our_value() {
     };
     let cancel = CancelHandle::new();
     let tree = search(&state, &params, &ctx, &cancel).unwrap();
-    // Root is opponent's (red's) pick turn. Best-for-them = worst-for-us.
-    // Tree rendering still sorts children DESC by composite, but the back-propagated
-    // `tree.scores.composite` should reflect their min of the two options.
-    let composites: Vec<f64> = tree.children.iter().map(|c| c.scores.composite).collect();
-    assert_eq!(composites.len(), 2, "both red pick candidates must appear");
-    let min_observed = composites
-        .iter()
-        .cloned()
-        .fold(f64::INFINITY, |a, b| a.min(b));
+
+    assert_eq!(tree.children.len(), 2, "both red pick candidates must appear");
+
+    // Identify which child is A (the high-red-WR pick).
+    let child_a = tree.children.iter().find(|c| c.champion_ids == vec!["A".to_string()])
+        .expect("A child must exist");
+    let child_b = tree.children.iter().find(|c| c.champion_ids == vec!["B".to_string()])
+        .expect("B child must exist");
+
+    // Red maximizes its own value: A > B from red's perspective.
     assert!(
-        (tree.scores.composite - min_observed).abs() < 1e-9,
-        "opponent's minimax pick must equal the min child value: tree={} children={:?}",
-        tree.scores.composite,
-        composites
+        child_a.scores.composite_per_side.red > child_b.scores.composite_per_side.red,
+        "child A must score higher for red than child B: A.red={}, B.red={}",
+        child_a.scores.composite_per_side.red,
+        child_b.scores.composite_per_side.red
+    );
+
+    // The bubbled tree value must equal child A's per-side tuple (red picks A, the entire SideValues bubbles).
+    assert_eq!(
+        tree.scores.composite_per_side, child_a.scores.composite_per_side,
+        "tree.composite_per_side must equal child A (red's chosen pick): tree={:?} A={:?}",
+        tree.scores.composite_per_side, child_a.scores.composite_per_side
     );
 }
 
