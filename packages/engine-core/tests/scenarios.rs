@@ -510,11 +510,40 @@ fn extract_scenarios_populates_likely_assignments_for_complete_red_comp() {
 }
 
 #[test]
-fn extract_scenarios_leaves_assignments_empty_for_partial_comp() {
+fn extract_scenarios_populates_assignments_for_partial_comp() {
+    // Phase 3 of the role-parity plan: extract_scenarios drops its len==5 gate
+    // so partial comps surface role assignments. Build a tree where the leaf
+    // has a single blue pick ("Topper") matched in meta — assignments must
+    // populate with P(5,1) = 5 entries.
     let meta = complete_blue_meta();
-    let scenarios = extract_scenarios(&extraction_tree(), &meta, 1, &[], &[]);
+    let partial_tree = node(
+        &[],
+        None,
+        ActionType::Ban,
+        &[],
+        0.0,
+        vec![node(
+            &["Topper"],
+            Some(Side::Blue),
+            ActionType::Pick,
+            &[6],
+            0.5,
+            vec![],
+        )],
+    );
+    let scenarios = extract_scenarios(&partial_tree, &meta, 1, &[], &[]);
 
-    assert!(scenarios[0].blue_likely_assignments.is_empty());
+    assert_eq!(
+        scenarios[0].blue_likely_assignments.len(),
+        5,
+        "P(5,1) = 5 assignments for a single-pick partial comp"
+    );
+    let weight_sum: f64 = scenarios[0]
+        .blue_likely_assignments
+        .iter()
+        .map(|wa| wa.weight)
+        .sum();
+    assert!((weight_sum - 1.0).abs() < 1e-9, "weights sum to 1");
     assert!(scenarios[0].red_likely_assignments.is_empty());
 }
 

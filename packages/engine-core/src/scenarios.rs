@@ -274,7 +274,7 @@ pub fn extract_scenarios(
                 .chain(leaf.red_picks.iter())
                 .map(String::as_str)
                 .collect();
-            let blue_likely_assignments = if full_blue_picks.len() == 5
+            let blue_likely_assignments = if !full_blue_picks.is_empty()
                 && full_blue_picks
                     .iter()
                     .all(|pick| champion_meta.contains_key(*pick))
@@ -283,7 +283,7 @@ pub fn extract_scenarios(
             } else {
                 Vec::new()
             };
-            let red_likely_assignments = if full_red_picks.len() == 5
+            let red_likely_assignments = if !full_red_picks.is_empty()
                 && full_red_picks
                     .iter()
                     .all(|pick| champion_meta.contains_key(*pick))

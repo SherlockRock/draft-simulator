@@ -251,8 +251,12 @@ fn information_value_for(_champion_id: &str, _role: Role, ctx: &EvalContext) -> 
 
 fn flex_retention_for(_champion_id: &str, ctx: &EvalContext) -> f64 {
     use crate::role_solver::solve;
+    // Phase 3 of the role-parity plan relaxes solve() to accept partial picks,
+    // but flex_retention's semantic (info-value baseline at incomplete comp)
+    // intentionally returns 1.0 until the comp is complete. Lifting this guard
+    // would silently shift informationValue mid-draft and propagate into
+    // composite scores throughout Phase 2's leaf evals.
     if ctx.our_picks.len() < 5 {
-        // Pre-resolved partial comp — flex is high by construction.
         return 1.0;
     }
     // role_solver::solve panics on unknown champion ids; guard at call site
