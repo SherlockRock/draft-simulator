@@ -589,8 +589,8 @@ fn eval_state(state: &DraftState, ctx: &EvalContext) -> SideValues {
     let red_ctx = ctx.for_perspective(Side::Red, state, red_phase);
 
     SideValues {
-        blue: side_total(state, &state.blue_picks.clone(), &blue_ctx),
-        red: side_total(state, &state.red_picks.clone(), &red_ctx),
+        blue: side_total(state, &state.blue_picks, &blue_ctx),
+        red: side_total(state, &state.red_picks, &red_ctx),
     }
 }
 

@@ -100,6 +100,39 @@ fn terminal_node_evaluated() {
 }
 
 #[test]
+fn eval_state_returns_non_zero_for_both_sides_with_picks() {
+    // Regression test for Task 2.1's for_perspective swap: both perspectives
+    // must score their own side's picks. A bug that swapped our_picks/opp_picks
+    // in the Side::Red arm of for_perspective would silently zero the red value.
+    let mut state = DraftState::default();
+    state.blue_picks = vec!["B0".into(), "B1".into(), "B2".into(), "B3".into(), "B4".into()];
+    state.red_picks = vec!["R0".into(), "R1".into(), "R2".into(), "R3".into(), "R4".into()];
+    state.blue_bans = vec!["BB0".into(); 5];
+    state.red_bans = vec!["RB0".into(); 5];
+    // turn_index = 5 + 5 + 5 + 5 = 20 → terminal.
+
+    let all_champs: Vec<&str> = vec![
+        "B0", "B1", "B2", "B3", "B4",
+        "R0", "R1", "R2", "R3", "R4",
+    ];
+    let ctx = ctx_with_pool(&all_champs);
+    let params = SearchParams::default();
+    let cancel = CancelHandle::new();
+    let tree = search(&state, &params, &ctx, &cancel).unwrap();
+
+    assert!(
+        tree.scores.composite_per_side.blue > 0.0,
+        "blue perspective must score blue picks (got {})",
+        tree.scores.composite_per_side.blue
+    );
+    assert!(
+        tree.scores.composite_per_side.red > 0.0,
+        "red perspective must score red picks (got {})",
+        tree.scores.composite_per_side.red
+    );
+}
+
+#[test]
 fn pick_turn_yields_branch_width_children() {
     // Skip past the 6 ban slots so we land on slot 6 (B1 — blue's first pick).
     let mut state = DraftState::default();
