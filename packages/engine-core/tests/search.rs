@@ -287,6 +287,37 @@ fn transposition_cache_populates_during_search() {
     );
 }
 
+#[test]
+fn transposition_cache_correct_under_side_values() {
+    // Cache stores TreeNode (which carries composite_per_side under Phase 2).
+    // Running search twice from the same state must produce identical SideValues
+    // at the root — the cache must not corrupt or zero either side's value.
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 6);
+
+    let ctx = ctx_with_pool(&["A", "B", "C", "D", "E"]);
+    let params = SearchParams {
+        branch_width: 3,
+        pair_branch_width: 3,
+        max_depth: 3,
+        disable_alpha_beta: false,
+        forced_branches: vec![],
+    };
+    let cancel = CancelHandle::new();
+
+    let tree1 = search(&state, &params, &ctx, &cancel).unwrap();
+    let tree2 = search(&state, &params, &ctx, &cancel).unwrap();
+
+    assert_eq!(
+        tree1.scores.composite_per_side, tree2.scores.composite_per_side,
+        "deterministic search must produce identical SideValues across runs"
+    );
+    assert_eq!(
+        tree1.scores.composite, tree2.scores.composite,
+        "legacy composite must also be deterministic"
+    );
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(40))]
 
