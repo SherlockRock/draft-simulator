@@ -98,13 +98,19 @@ fn weights_red() -> PhaseWeightTable {
 
 fn ctx_with_pool(champs: &[&str]) -> EvalContext {
     let pool = pool_with(champs);
+    // Cycle through all 5 roles so a pool of ≥5 champs can satisfy feasibility
+    // even when champions have strict single-role positions.
+    let role_cycle = [
+        Role::Top, Role::Jungle, Role::Middle, Role::Adc, Role::Support,
+    ];
     let mut champion_meta = HashMap::new();
-    for c in champs {
+    for (i, c) in champs.iter().enumerate() {
+        let role = role_cycle[i % role_cycle.len()];
         champion_meta.insert(
             (*c).into(),
             ChampionMeta {
                 id: (*c).into(),
-                positions: vec![Role::Top],
+                positions: vec![role],
                 ..Default::default()
             },
         );
@@ -146,15 +152,18 @@ fn sole_mode_replaces_children() {
     // ranked children. With a sole-mode forced branch at slot 6, the engine
     // overrides the candidate set with [championId] — exactly one child,
     // user_injected = true.
+    // Pool needs ≥5 diverse-role champs: at Pick1, blue has 5 picks remaining;
+    // feasibility prune requires pool.len() ≥ remaining_picks after each pick.
     let mut state = DraftState::default();
     fast_forward_to_slot(&mut state, 6);
 
-    let ctx = ctx_with_pool(&["A", "B", "C", "D"]);
+    let ctx = ctx_with_pool(&["A", "B", "C", "D", "E"]);
     let cancel = CancelHandle::new();
 
     // Baseline: no force.
     let baseline_params = SearchParams {
         branch_width: 4,
+        pair_branch_width: 4,
         max_depth: 1,
         disable_alpha_beta: false,
         forced_branches: vec![],
@@ -168,6 +177,7 @@ fn sole_mode_replaces_children() {
     // Forced.
     let forced_params = SearchParams {
         branch_width: 4,
+        pair_branch_width: 4,
         max_depth: 1,
         disable_alpha_beta: false,
         forced_branches: vec![ForcedBranch {
@@ -193,23 +203,26 @@ fn sole_mode_replaces_children() {
 
 #[test]
 fn include_mode_augments_children() {
-    // Slot 6, pool of 4 champs with distinct win_rates. branch_width=2 keeps
+    // Slot 6, pool of 5 champs with distinct win_rates. branch_width=2 keeps
     // top-2 (A, B). Include-mode force on D (worst-scoring) augments — final
     // children list is [A, B, D], with D user_injected = true.
+    // Pool needs ≥5 diverse-role champs to pass feasibility at Pick1.
     let mut state = DraftState::default();
     fast_forward_to_slot(&mut state, 6);
 
-    let mut ctx = ctx_with_pool(&["A", "B", "C", "D"]);
+    let mut ctx = ctx_with_pool(&["A", "B", "C", "D", "E"]);
     ctx.meta.win_rates.insert("A".into(), 0.95);
     ctx.meta.win_rates.insert("B".into(), 0.70);
     ctx.meta.win_rates.insert("C".into(), 0.50);
     ctx.meta.win_rates.insert("D".into(), 0.30);
+    ctx.meta.win_rates.insert("E".into(), 0.15);
 
     let cancel = CancelHandle::new();
 
     // Baseline: branch_width=2 → top 2 = [A, B], no D.
     let baseline_params = SearchParams {
         branch_width: 2,
+        pair_branch_width: 2,
         max_depth: 1,
         disable_alpha_beta: false,
         forced_branches: vec![],
@@ -226,6 +239,7 @@ fn include_mode_augments_children() {
     // Include D — should add a 3rd child for D with user_injected=true.
     let forced_params = SearchParams {
         branch_width: 2,
+        pair_branch_width: 2,
         max_depth: 1,
         disable_alpha_beta: false,
         forced_branches: vec![ForcedBranch {
@@ -273,6 +287,7 @@ fn parent_lineage_resolves_after_swap() {
 
     let params = SearchParams {
         branch_width: 5,
+        pair_branch_width: 5,
         max_depth: 2,
         disable_alpha_beta: false,
         forced_branches: vec![
@@ -322,6 +337,7 @@ fn unresolved_path_drops_silently() {
 
     let params = SearchParams {
         branch_width: 3,
+        pair_branch_width: 3,
         max_depth: 2,
         disable_alpha_beta: false,
         forced_branches: vec![ForcedBranch {
@@ -360,6 +376,10 @@ fn resolves_after_sibling_rerank() {
     // not by sibling position. Two computes with different win_rates re-order
     // children at slot 0 (A first vs A last among siblings) — the force at
     // slot 1 anchored to (0, ["A"]) must resolve in both.
+    //
+    // Slot 0 is Ban1. Ban feasibility checks both sides — after banning one champ,
+    // pool.len() must be ≥ 5 (both sides' remaining picks). Use a 6-champ pool
+    // with diverse roles so banning 1 leaves 5 feasible candidates.
     let state = DraftState::default();
     let cancel = CancelHandle::new();
 
@@ -368,12 +388,13 @@ fn resolves_after_sibling_rerank() {
         winrates: &[(&str, f64)],
         cancel: &CancelHandle,
     ) -> engine_core::search::TreeNode {
-        let mut ctx = ctx_with_pool(&["A", "B", "C"]);
+        let mut ctx = ctx_with_pool(&["A", "B", "C", "D", "E", "F"]);
         for (id, w) in winrates {
             ctx.meta.win_rates.insert((*id).into(), *w);
         }
         let params = SearchParams {
             branch_width: 3,
+            pair_branch_width: 3,
             max_depth: 2,
             disable_alpha_beta: false,
             forced_branches: vec![ForcedBranch {
@@ -395,10 +416,10 @@ fn resolves_after_sibling_rerank() {
             .expect("A must be among children for branch_width=3")
     }
 
-    // Compute 1: A ranked first.
+    // Compute 1: A ranked first. D/E/F at very low WR so they don't crowd A/B/C.
     let tree_a_first = run_with_winrates(
         &state,
-        &[("A", 0.9), ("B", 0.6), ("C", 0.3)],
+        &[("A", 0.9), ("B", 0.6), ("C", 0.3), ("D", 0.05), ("E", 0.05), ("F", 0.05)],
         &cancel,
     );
     let a_first = find_a_child(&tree_a_first);
@@ -406,10 +427,11 @@ fn resolves_after_sibling_rerank() {
     assert_eq!(a_first.children[0].champion_ids, vec!["Y".to_string()]);
     assert!(a_first.children[0].user_injected);
 
-    // Compute 2: same pool but A ranked last (B and C now score higher).
+    // Compute 2: same pool but A ranked last (B and C now score higher). D/E/F
+    // at very low WR so top-3 stays within A/B/C even when A drops to 0.3.
     let tree_a_last = run_with_winrates(
         &state,
-        &[("A", 0.3), ("B", 0.9), ("C", 0.6)],
+        &[("A", 0.3), ("B", 0.9), ("C", 0.6), ("D", 0.05), ("E", 0.05), ("F", 0.05)],
         &cancel,
     );
     let a_last = find_a_child(&tree_a_last);
@@ -432,6 +454,7 @@ fn pair_start_force_optimizes_pair_end() {
 
     let params = SearchParams {
         branch_width: 10,
+        pair_branch_width: 10,
         max_depth: 1,
         disable_alpha_beta: false,
         forced_branches: vec![ForcedBranch {
@@ -474,6 +497,7 @@ fn pair_end_force_optimizes_pair_start() {
 
     let params = SearchParams {
         branch_width: 10,
+        pair_branch_width: 10,
         max_depth: 1,
         disable_alpha_beta: false,
         forced_branches: vec![ForcedBranch {
@@ -522,6 +546,7 @@ fn reverse_fill_pair_errors() {
 
     let params = SearchParams {
         branch_width: 4,
+        pair_branch_width: 4,
         max_depth: 1,
         disable_alpha_beta: false,
         forced_branches: vec![ForcedBranch {

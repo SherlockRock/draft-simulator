@@ -1,8 +1,9 @@
 use crate::cancellation::{ensure_not_cancelled, CancelHandle};
-use crate::coverage::missing_roles;
-use crate::draft_state::{ActionType, DraftState, Phase, Side, TurnInfo, TURN_SEQUENCE};
+use crate::coverage::{coverage_score, missing_roles};
+use crate::draft_state::{is_taken, picks_remaining, ActionType, DraftState, Phase, Side, TurnInfo, TURN_SEQUENCE};
 use crate::engine::EngineError;
-use crate::evaluator::{score_pick, EvalContext, ScoreSet};
+use crate::feasibility::can_complete_roles;
+use crate::evaluator::{phase_weight_for, score_pick, EvalContext, ScoreSet};
 use crate::forced_branches::{resolve_path, ForcedBranch, ForcedMode, PathMatch};
 use crate::pair_filter::{seed_pair_candidates, PairFilterConfig};
 use crate::pools::{Role, TeamPool};
@@ -16,6 +17,14 @@ use std::collections::HashSet;
 #[derive(Clone, Debug)]
 pub struct SearchParams {
     pub branch_width: usize,
+    /// Pair-pick search budget. Pair turns (Pick1 R1/B2/B3, Pick2 B4/B5)
+    /// expand candidate pairs separately from single picks; this is the
+    /// final-truncate budget after the value-sort, and is also used to size
+    /// the pair-seed `max_pairs` cap. Wired from `pairBranchWidth` on the
+    /// wire format. Decoupled from `branch_width` because pair search has
+    /// quadratic candidate space and benefits from more headroom (e.g.
+    /// `branch_width: 5, pair_branch_width: 500` in production).
+    pub pair_branch_width: usize,
     pub max_depth: usize,
     /// When true, alpha-beta cutoffs are disabled and every candidate within
     /// `branch_width` is fully explored. Used by the correctness property test
@@ -31,6 +40,7 @@ impl Default for SearchParams {
     fn default() -> Self {
         Self {
             branch_width: 5,
+            pair_branch_width: 500,
             max_depth: 6,
             disable_alpha_beta: false,
             forced_branches: Vec::new(),
@@ -209,7 +219,7 @@ fn search_recursive(
 
     let our_turn = turn.side == eval_ctx.side;
     let candidates = collect_candidates(state, turn, eval_ctx);
-    let ranked = score_and_rank(
+    let mut ranked = score_and_rank(
         &candidates,
         state,
         turn,
@@ -218,6 +228,117 @@ fn search_recursive(
         our_turn,
         params.branch_width,
     )?;
+
+    // Pick2 single-pick bucket-2 protection. Mirrors expand_pair's bucket-2
+    // logic. The branch_width truncation in score_and_rank uses static
+    // composite, which can crowd out low-WR specialists at missing roles when
+    // high-WR non-fills dominate. With N missing roles, append top-K
+    // specialists per missing role to the explored set (deduped against the
+    // existing top branch_width). The resulting candidate list can exceed
+    // branch_width — that's intentional, matching pair-pick bucket-2 protection.
+    if turn.phase == Phase::Pick2 && turn.action_type == ActionType::Pick {
+        let our_picks_now: &[String] = if turn.side == Side::Blue {
+            &state.blue_picks
+        } else {
+            &state.red_picks
+        };
+        let missing = missing_roles(our_picks_now, &eval_ctx.champion_meta, 0.9);
+        if !missing.is_empty() {
+            const PROTECTED_K: usize = 4;
+            let mut already: HashSet<String> =
+                ranked.iter().map(|(c, _)| c.clone()).collect();
+            let mut sub_ctx = eval_ctx.clone();
+            sub_ctx.side = turn.side;
+            sub_ctx.phase = turn.phase;
+            for role in &missing {
+                let specialists =
+                    top_k_for_role(*role, state, turn, eval_ctx, cancel, PROTECTED_K)?;
+                for champ in specialists {
+                    if already.insert(champ.clone()) {
+                        let pri =
+                            primary_role(&champ, &eval_ctx.champion_meta).unwrap_or(*role);
+                        let s = score_pick(&champ, pri, state, &sub_ctx, turn.action_type);
+                        ranked.push((champ, s.composite));
+                    }
+                }
+            }
+            if our_turn {
+                ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+            } else {
+                ranked.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
+            }
+        }
+    }
+
+    // Feasibility prune: drop candidates whose hypothetical post-action state
+    // leaves the picking side (or either side for bans) unable to complete a
+    // 5-role comp from their remaining pool. Pool source is `pool_for(side,
+    // eval_ctx).search` filtered against already-taken champions — matches the
+    // pool the engine would actually see when continuing the search.
+    let side_pool: Vec<String> = pool_for(turn.side, eval_ctx)
+        .search
+        .iter()
+        .filter(|c| !is_taken(c, state))
+        .cloned()
+        .collect();
+
+    let original_count = ranked.len();
+    ranked.retain(|(cand, _score)| {
+        let cand_str = cand.as_str();
+        let cand_pool_for_side: Vec<String> = side_pool
+            .iter()
+            .filter(|c| c.as_str() != cand_str)
+            .cloned()
+            .collect();
+
+        match turn.action_type {
+            ActionType::Pick => {
+                let mut hypothetical_locked = match turn.side {
+                    Side::Blue => state.blue_picks.clone(),
+                    Side::Red => state.red_picks.clone(),
+                };
+                hypothetical_locked.push(cand.clone());
+                let remaining = picks_remaining(state, turn.side).saturating_sub(1);
+                can_complete_roles(
+                    &hypothetical_locked,
+                    &cand_pool_for_side,
+                    remaining,
+                    &eval_ctx.champion_meta,
+                )
+            }
+            ActionType::Ban => {
+                // Bans check both sides — a ban that makes either side infeasible
+                // is dropped. Each side's pool is rebuilt independently so neither
+                // uses the (unused) `cand_pool_for_side` computed above.
+                let blue_pool: Vec<String> = pool_for(Side::Blue, eval_ctx)
+                    .search
+                    .iter()
+                    .filter(|c| !is_taken(c, state) && c.as_str() != cand_str)
+                    .cloned()
+                    .collect();
+                let red_pool: Vec<String> = pool_for(Side::Red, eval_ctx)
+                    .search
+                    .iter()
+                    .filter(|c| !is_taken(c, state) && c.as_str() != cand_str)
+                    .cloned()
+                    .collect();
+                let blue_remaining = picks_remaining(state, Side::Blue);
+                let red_remaining = picks_remaining(state, Side::Red);
+                can_complete_roles(
+                    &state.blue_picks,
+                    &blue_pool,
+                    blue_remaining,
+                    &eval_ctx.champion_meta,
+                ) && can_complete_roles(
+                    &state.red_picks,
+                    &red_pool,
+                    red_remaining,
+                    &eval_ctx.champion_meta,
+                )
+            }
+        }
+    });
+    accum.nodes_pruned += original_count - ranked.len();
 
     // Apply forced branches at this single-slot expansion.
     let current_slot = state.turn_index();
@@ -379,8 +500,16 @@ fn state_cache_key(state: &DraftState, remaining_depth: usize) -> StateHash {
 }
 
 /// Static evaluation of a draft state from `ctx.side`'s perspective. Sums
-/// composite score of each of our locked-in picks at their primary role.
-/// Crude — Phase 7 wires a richer eval — but sufficient for minimax direction.
+/// composite score of each of our locked-in picks at their primary role,
+/// then adds a whole-comp role-coverage signal once.
+///
+/// The per-pick `role_coverage` component returned by `score_pick` is 0 here
+/// by construction: `coverage_marginal_gain` is called with `picks` already
+/// containing `candidate`, so the per-role max is unchanged and the
+/// "marginal" gain is zero. Coverage is properly a whole-comp property at
+/// terminal/leaf states, so we add `weights.coverage * coverage_score(picks)`
+/// once here. Without this, the back-propagated minimax value is coverage-
+/// blind and prefers raw-win-rate-greedy comps over role-balanced ones.
 fn eval_state(state: &DraftState, ctx: &EvalContext) -> f64 {
     let our_picks = if ctx.side == Side::Blue {
         &state.blue_picks
@@ -393,6 +522,14 @@ fn eval_state(state: &DraftState, ctx: &EvalContext) -> f64 {
         let s = score_pick(champ, role, state, ctx, ActionType::Pick);
         total += s.composite;
     }
+    let weights = phase_weight_for(
+        ctx.side,
+        ctx.phase,
+        &ctx.phase_weights_blue,
+        &ctx.phase_weights_red,
+    );
+    let coverage = coverage_score(our_picks, &ctx.champion_meta);
+    total += weights.coverage * coverage;
     total
 }
 
@@ -523,34 +660,49 @@ fn expand_pair(
         accum,
     );
 
-    // Pick2-only: identify up to two roles where current picks have NO
-    // primary coverage (threshold < 0.9). If exactly 2, populate per-role
-    // top-K for bucket-2 seeding. With < 2 missing or non-Pick2 phase,
-    // leave bucket 2 disabled.
+    // Pick2-only: identify roles where current picks have NO primary coverage
+    // (threshold < 0.9). For each unordered pair of missing roles, populate a
+    // per-role top-K bucket. With N missing, this produces C(N,2) bucket-2
+    // groups so every role-completing pair shape is seeded. With < 2 missing
+    // or non-Pick2 phase, bucket 2 is disabled (empty Vec).
     let our_picks_now: &[String] = if turn.side == Side::Blue {
         &state.blue_picks
     } else {
         &state.red_picks
     };
-    let role_tops: Option<(Vec<String>, Vec<String>)> = if turn.phase == Phase::Pick2 {
+    let role_top_lists: Vec<Vec<String>> = if turn.phase == Phase::Pick2 {
         let missing = missing_roles(our_picks_now, &eval_ctx.champion_meta, 0.9);
         if missing.len() >= 2 {
-            let a = top_k_for_role(missing[0], state, turn, eval_ctx, cancel, 8)?;
-            let b = top_k_for_role(missing[1], state, turn, eval_ctx, cancel, 8)?;
-            Some((a, b))
+            let mut lists = Vec::with_capacity(missing.len());
+            for role in &missing {
+                lists.push(top_k_for_role(*role, state, turn, eval_ctx, cancel, 8)?);
+            }
+            lists
         } else {
-            None
+            Vec::new()
         }
     } else {
-        None
+        Vec::new()
+    };
+
+    // Enumerate all unordered pairs of role-buckets. Caller dedup happens in
+    // `seed_pair_candidates` via the `protected: HashSet`.
+    let role_bucket_pairs: Vec<(&[String], &[String])> = {
+        let mut buckets = Vec::new();
+        for i in 0..role_top_lists.len() {
+            for j in (i + 1)..role_top_lists.len() {
+                buckets.push((role_top_lists[i].as_slice(), role_top_lists[j].as_slice()));
+            }
+        }
+        buckets
     };
 
     let scored_pairs = build_pair_candidates(
         &scored_singles,
         &pair_force,
-        params.branch_width,
+        params.pair_branch_width,
         our_turn,
-        role_tops.as_ref(),
+        &role_bucket_pairs,
     );
 
     let mut children: Vec<TreeNode> = Vec::with_capacity(scored_pairs.len());
@@ -693,9 +845,9 @@ fn match_pair_force(
 fn build_pair_candidates(
     scored_singles: &[(String, f64)],
     pair_force: &Option<PairForce>,
-    branch_width: usize,
+    pair_branch_width: usize,
     our_turn: bool,
-    role_tops: Option<&(Vec<String>, Vec<String>)>,
+    role_bucket_pairs: &[(&[String], &[String])],
 ) -> Vec<(String, String, f64)> {
     let mut single_lookup: HashMap<&str, f64> = HashMap::with_capacity(scored_singles.len());
     for (id, score) in scored_singles {
@@ -730,22 +882,24 @@ fn build_pair_candidates(
                 .map(|(s, f)| (s.as_str(), *f))
                 .collect();
 
-            let (per_role_top, role_a_strs, role_b_strs): (usize, Vec<&str>, Vec<&str>) =
-                match role_tops {
-                    Some((a, b)) => (
-                        8,
-                        a.iter().map(String::as_str).collect(),
-                        b.iter().map(String::as_str).collect(),
-                    ),
-                    None => (0, Vec::new(), Vec::new()),
-                };
+            let role_buckets_refs: Vec<(Vec<&str>, Vec<&str>)> = role_bucket_pairs
+                .iter()
+                .map(|(a, b)| (
+                    a.iter().map(String::as_str).collect(),
+                    b.iter().map(String::as_str).collect(),
+                ))
+                .collect();
+            let per_role_top = if role_buckets_refs.is_empty() { 0 } else { 8 };
 
             let cfg = PairFilterConfig {
                 single_top_k: 32,
                 per_role_top,
-                max_pairs: (branch_width * 4).max(branch_width),
+                // Oversample bucket-1 by 4x the keep size, so the value-sort
+                // has surplus to choose from. Bucket-2/3 are protected by
+                // `seed_pair_candidates` regardless of this cap.
+                max_pairs: (pair_branch_width * 4).max(pair_branch_width),
             };
-            let pairs = seed_pair_candidates(&scored_refs, &role_a_strs, &role_b_strs, None, &cfg);
+            let pairs = seed_pair_candidates(&scored_refs, &role_buckets_refs, None, &cfg);
 
             pairs
                 .into_iter()
@@ -763,7 +917,7 @@ fn build_pair_candidates(
     } else {
         scored_pairs.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(Ordering::Equal));
     }
-    scored_pairs.truncate(branch_width);
+    scored_pairs.truncate(pair_branch_width);
     scored_pairs
 }
 

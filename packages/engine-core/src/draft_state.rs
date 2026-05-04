@@ -78,6 +78,15 @@ pub struct DraftState {
     pub red_picks: Vec<String>,
 }
 
+impl Side {
+    pub fn opposite(self) -> Self {
+        match self {
+            Side::Blue => Side::Red,
+            Side::Red => Side::Blue,
+        }
+    }
+}
+
 impl DraftState {
     pub fn turn_index(&self) -> usize {
         self.blue_bans.len() + self.red_bans.len() + self.blue_picks.len() + self.red_picks.len()
@@ -90,4 +99,21 @@ impl DraftState {
     pub fn is_complete(&self) -> bool {
         self.turn_index() >= TOTAL_TURNS
     }
+}
+
+/// Count of remaining pick slots for `side` from the current turn through terminal.
+pub fn picks_remaining(state: &DraftState, side: Side) -> usize {
+    let current_idx = state.turn_index();
+    TURN_SEQUENCE[current_idx..]
+        .iter()
+        .filter(|t| t.action_type == ActionType::Pick && t.side == side)
+        .count()
+}
+
+/// True if `champ` is in any picks or bans list on either side.
+pub fn is_taken(champ: &str, state: &DraftState) -> bool {
+    state.blue_picks.iter().any(|c| c == champ)
+        || state.red_picks.iter().any(|c| c == champ)
+        || state.blue_bans.iter().any(|c| c == champ)
+        || state.red_bans.iter().any(|c| c == champ)
 }
