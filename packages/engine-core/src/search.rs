@@ -272,73 +272,8 @@ fn search_recursive(
 
     // Feasibility prune: drop candidates whose hypothetical post-action state
     // leaves the picking side (or either side for bans) unable to complete a
-    // 5-role comp from their remaining pool. Pool source is `pool_for(side,
-    // eval_ctx).search` filtered against already-taken champions — matches the
-    // pool the engine would actually see when continuing the search.
-    let side_pool: Vec<String> = pool_for(turn.side, eval_ctx)
-        .search
-        .iter()
-        .filter(|c| !is_taken(c, state))
-        .cloned()
-        .collect();
-
-    let original_count = ranked.len();
-    ranked.retain(|(cand, _score)| {
-        let cand_str = cand.as_str();
-        let cand_pool_for_side: Vec<String> = side_pool
-            .iter()
-            .filter(|c| c.as_str() != cand_str)
-            .cloned()
-            .collect();
-
-        match turn.action_type {
-            ActionType::Pick => {
-                let mut hypothetical_locked = match turn.side {
-                    Side::Blue => state.blue_picks.clone(),
-                    Side::Red => state.red_picks.clone(),
-                };
-                hypothetical_locked.push(cand.clone());
-                let remaining = picks_remaining(state, turn.side).saturating_sub(1);
-                can_complete_roles(
-                    &hypothetical_locked,
-                    &cand_pool_for_side,
-                    remaining,
-                    &eval_ctx.champion_meta,
-                )
-            }
-            ActionType::Ban => {
-                // Bans check both sides — a ban that makes either side infeasible
-                // is dropped. Each side's pool is rebuilt independently so neither
-                // uses the (unused) `cand_pool_for_side` computed above.
-                let blue_pool: Vec<String> = pool_for(Side::Blue, eval_ctx)
-                    .search
-                    .iter()
-                    .filter(|c| !is_taken(c, state) && c.as_str() != cand_str)
-                    .cloned()
-                    .collect();
-                let red_pool: Vec<String> = pool_for(Side::Red, eval_ctx)
-                    .search
-                    .iter()
-                    .filter(|c| !is_taken(c, state) && c.as_str() != cand_str)
-                    .cloned()
-                    .collect();
-                let blue_remaining = picks_remaining(state, Side::Blue);
-                let red_remaining = picks_remaining(state, Side::Red);
-                can_complete_roles(
-                    &state.blue_picks,
-                    &blue_pool,
-                    blue_remaining,
-                    &eval_ctx.champion_meta,
-                ) && can_complete_roles(
-                    &state.red_picks,
-                    &red_pool,
-                    red_remaining,
-                    &eval_ctx.champion_meta,
-                )
-            }
-        }
-    });
-    accum.nodes_pruned += original_count - ranked.len();
+    // 5-role comp from their remaining pool.
+    accum.nodes_pruned += feasibility_filter_singles(&mut ranked, state, turn, eval_ctx);
 
     // Apply forced branches at this single-slot expansion.
     let current_slot = state.turn_index();
@@ -438,6 +373,89 @@ fn search_recursive(
     };
     cache.insert(cache_key, result.clone());
     Ok(result)
+}
+
+/// Drops candidates whose hypothetical post-action state leaves the picking
+/// side (or either side for bans) unable to complete a 5-role comp from the
+/// remaining pool. Returns the number of candidates pruned.
+fn feasibility_filter_singles(
+    ranked: &mut Vec<(String, f64)>,
+    state: &DraftState,
+    turn: TurnInfo,
+    eval_ctx: &EvalContext,
+) -> usize {
+    let original_count = ranked.len();
+
+    // Build per-side pools once (filtered against already-taken champions),
+    // so the retain closure does not rebuild them per candidate.
+    let blue_pool_full: Vec<String> = pool_for(Side::Blue, eval_ctx)
+        .search
+        .iter()
+        .filter(|c| !is_taken(c, state))
+        .cloned()
+        .collect();
+    let red_pool_full: Vec<String> = pool_for(Side::Red, eval_ctx)
+        .search
+        .iter()
+        .filter(|c| !is_taken(c, state))
+        .cloned()
+        .collect();
+
+    ranked.retain(|(cand, _score)| {
+        let cand_str = cand.as_str();
+        match turn.action_type {
+            ActionType::Pick => {
+                let side_pool_full = match turn.side {
+                    Side::Blue => &blue_pool_full,
+                    Side::Red => &red_pool_full,
+                };
+                let cand_pool_for_side: Vec<String> = side_pool_full
+                    .iter()
+                    .filter(|c| c.as_str() != cand_str)
+                    .cloned()
+                    .collect();
+                let mut hypothetical_locked = match turn.side {
+                    Side::Blue => state.blue_picks.clone(),
+                    Side::Red => state.red_picks.clone(),
+                };
+                hypothetical_locked.push(cand.clone());
+                let remaining = picks_remaining(state, turn.side).saturating_sub(1);
+                can_complete_roles(
+                    &hypothetical_locked,
+                    &cand_pool_for_side,
+                    remaining,
+                    &eval_ctx.champion_meta,
+                )
+            }
+            ActionType::Ban => {
+                let blue_pool_minus: Vec<String> = blue_pool_full
+                    .iter()
+                    .filter(|c| c.as_str() != cand_str)
+                    .cloned()
+                    .collect();
+                let red_pool_minus: Vec<String> = red_pool_full
+                    .iter()
+                    .filter(|c| c.as_str() != cand_str)
+                    .cloned()
+                    .collect();
+                let blue_remaining = picks_remaining(state, Side::Blue);
+                let red_remaining = picks_remaining(state, Side::Red);
+                can_complete_roles(
+                    &state.blue_picks,
+                    &blue_pool_minus,
+                    blue_remaining,
+                    &eval_ctx.champion_meta,
+                ) && can_complete_roles(
+                    &state.red_picks,
+                    &red_pool_minus,
+                    red_remaining,
+                    &eval_ctx.champion_meta,
+                )
+            }
+        }
+    });
+
+    original_count - ranked.len()
 }
 
 /// Returns the candidate list to actually expand at this single-slot turn,
