@@ -248,9 +248,7 @@ fn search_recursive(
             const PROTECTED_K: usize = 4;
             let mut already: HashSet<String> =
                 ranked.iter().map(|(c, _)| c.clone()).collect();
-            let mut sub_ctx = eval_ctx.clone();
-            sub_ctx.side = turn.side;
-            sub_ctx.phase = turn.phase;
+            let sub_ctx = eval_ctx.for_perspective(turn.side, state, turn.phase);
             for role in &missing {
                 let specialists =
                     top_k_for_role(*role, state, turn, eval_ctx, cancel, PROTECTED_K)?;
@@ -263,11 +261,8 @@ fn search_recursive(
                     }
                 }
             }
-            if our_turn {
-                ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
-            } else {
-                ranked.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
-            }
+            // Always descending: turn.side's specialists sorted best-for-mover first.
+            ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
         }
     }
 
@@ -282,12 +277,7 @@ fn search_recursive(
         apply_single_slot_forces(&params.forced_branches, current_slot, lineage, accum, &ranked);
 
     let mut children: Vec<TreeNode> = Vec::with_capacity(forced_set.len());
-    let mut best_value = if our_turn {
-        f64::NEG_INFINITY
-    } else {
-        f64::INFINITY
-    };
-    let mut best_value_pair = SideValues::default();
+    let mut best_value_pair = SideValues { blue: f64::NEG_INFINITY, red: f64::NEG_INFINITY };
 
     for (idx, (champ, _static_score)) in forced_set.iter().enumerate() {
         ensure_not_cancelled(cancel)?;
@@ -309,14 +299,13 @@ fn search_recursive(
             beta,
         )?;
         lineage.pop();
-        let child_value = child_tree.scores.composite;
-        let child_value_pair: SideValues = child_tree.scores.composite_per_side;
+        let child_pair: SideValues = child_tree.scores.composite_per_side;
 
         let branch_node = TreeNode {
             champion_ids: vec![champ.clone()],
             scores: ScoreSet {
-                composite: child_value,
-                composite_per_side: child_value_pair,
+                composite: child_pair.for_side(eval_ctx.side),
+                composite_per_side: child_pair,
                 ..Default::default()
             },
             side: Some(turn.side),
@@ -328,23 +317,28 @@ fn search_recursive(
         };
         children.push(branch_node);
 
+        // Self-optimization: turn.side picks the child maximizing its own composite.
+        // Both sides always maximize their own value — no minimax inversion.
+        let turn_side_value = child_pair.for_side(turn.side);
+        let best_turn_side_value = best_value_pair.for_side(turn.side);
+        if turn_side_value > best_turn_side_value {
+            best_value_pair = child_pair;
+        }
+        let best_value = best_value_pair.for_side(eval_ctx.side);
         if our_turn {
-            if child_value > best_value {
-                best_value = child_value;
-                best_value_pair = child_value_pair;
-            }
             if best_value > alpha {
                 alpha = best_value;
             }
         } else {
-            if child_value < best_value {
-                best_value = child_value;
-                best_value_pair = child_value_pair;
-            }
-            if best_value < beta {
-                beta = best_value;
+            // Approximate: beta tracks opp's best so far as a pruning hint.
+            let opp_best = best_value_pair.for_side(turn.side);
+            if opp_best > beta {
+                beta = opp_best;
             }
         }
+        // Under self-optimization (Phase 2), alpha-beta pruning is no longer
+        // strictly sound — it assumes minimax. Keep as approximate heuristic;
+        // benchmark in Task 2.5 quantifies its contribution.
         if !params.disable_alpha_beta && alpha >= beta {
             accum.nodes_pruned += forced_set.len().saturating_sub(idx + 1);
             break;
@@ -354,7 +348,6 @@ fn search_recursive(
     if children.is_empty() {
         // No legal candidates (e.g., depleted pool). Treat as terminal.
         best_value_pair = eval_state(state, eval_ctx);
-        best_value = best_value_pair.for_side(eval_ctx.side);
     }
 
     // Sort children by composite descending so tree-builders/UI see best-first.
@@ -365,6 +358,8 @@ fn search_recursive(
             .unwrap_or(Ordering::Equal)
     });
 
+    // best_value is derivative: the request-side's slice of best_value_pair.
+    let best_value = best_value_pair.for_side(eval_ctx.side);
     let result = TreeNode {
         champion_ids: vec![],
         scores: ScoreSet {
@@ -651,12 +646,12 @@ fn score_and_rank(
     turn: TurnInfo,
     ctx: &EvalContext,
     cancel: &CancelHandle,
-    our_turn: bool,
+    _our_turn: bool,
     branch_width: usize,
 ) -> Result<Vec<(String, f64)>, EngineError> {
-    let mut sub_ctx = ctx.clone();
-    sub_ctx.side = turn.side;
-    sub_ctx.phase = turn.phase;
+    // Full perspective swap so scoring uses turn.side's pools, picks, and phase —
+    // not just the side/phase fields. Correct for self-opt move ordering.
+    let sub_ctx = ctx.for_perspective(turn.side, state, turn.phase);
 
     let mut scored: Vec<(String, f64)> = candidates
         .par_iter()
@@ -672,12 +667,9 @@ fn score_and_rank(
         .collect();
     ensure_not_cancelled(cancel)?;
 
-    // Move ordering: best-for-mover first improves alpha-beta pruning.
-    if our_turn {
-        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
-    } else {
-        scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
-    }
+    // Move ordering: always descending (best-for-turn.side first).
+    // Under self-opt every mover prefers its own max, so always sort DESC.
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
     scored.truncate(branch_width);
     Ok(scored)
 }
@@ -719,9 +711,9 @@ fn expand_pair(
     let candidates = collect_candidates(state, turn, eval_ctx);
 
     // Score every candidate as a single (used both to seed pair_filter and to score pairs).
-    let mut sub_ctx = eval_ctx.clone();
-    sub_ctx.side = turn.side;
-    sub_ctx.phase = turn.phase;
+    // Full perspective swap so turn.side's pools and picks are used — consistent with
+    // score_and_rank's for_perspective call and the self-opt model.
+    let sub_ctx = eval_ctx.for_perspective(turn.side, state, turn.phase);
     let scored_singles: Vec<(String, f64)> = candidates
         .par_iter()
         .filter_map(|c| {
@@ -794,12 +786,7 @@ fn expand_pair(
     accum.nodes_pruned += feasibility_filter_pairs(&mut scored_pairs, state, turn, eval_ctx);
 
     let mut children: Vec<TreeNode> = Vec::with_capacity(scored_pairs.len());
-    let mut best_value = if our_turn {
-        f64::NEG_INFINITY
-    } else {
-        f64::INFINITY
-    };
-    let mut best_value_pair = SideValues::default();
+    let mut best_value_pair = SideValues { blue: f64::NEG_INFINITY, red: f64::NEG_INFINITY };
 
     let injected = pair_force.is_some();
 
@@ -824,14 +811,13 @@ fn expand_pair(
             beta,
         )?;
         lineage.pop();
-        let child_value = child_tree.scores.composite;
-        let child_value_pair: SideValues = child_tree.scores.composite_per_side;
+        let child_pair: SideValues = child_tree.scores.composite_per_side;
 
         children.push(TreeNode {
             champion_ids: vec![first.clone(), second.clone()],
             scores: ScoreSet {
-                composite: child_value,
-                composite_per_side: child_value_pair,
+                composite: child_pair.for_side(eval_ctx.side),
+                composite_per_side: child_pair,
                 ..Default::default()
             },
             side: Some(turn.side),
@@ -842,23 +828,27 @@ fn expand_pair(
             children: child_tree.children,
         });
 
+        // Self-optimization: turn.side picks the pair maximizing its own composite.
+        let turn_side_value = child_pair.for_side(turn.side);
+        let best_turn_side_value = best_value_pair.for_side(turn.side);
+        if turn_side_value > best_turn_side_value {
+            best_value_pair = child_pair;
+        }
+        let best_value = best_value_pair.for_side(eval_ctx.side);
         if our_turn {
-            if child_value > best_value {
-                best_value = child_value;
-                best_value_pair = child_value_pair;
-            }
             if best_value > alpha {
                 alpha = best_value;
             }
         } else {
-            if child_value < best_value {
-                best_value = child_value;
-                best_value_pair = child_value_pair;
-            }
-            if best_value < beta {
-                beta = best_value;
+            // Approximate: beta tracks opp's best so far as a pruning hint.
+            let opp_best = best_value_pair.for_side(turn.side);
+            if opp_best > beta {
+                beta = opp_best;
             }
         }
+        // Under self-optimization (Phase 2), alpha-beta pruning is no longer
+        // strictly sound — it assumes minimax. Keep as approximate heuristic;
+        // benchmark in Task 2.5 quantifies its contribution.
         if !params.disable_alpha_beta && alpha >= beta {
             accum.nodes_pruned += scored_pairs.len().saturating_sub(idx + 1);
             break;
@@ -867,7 +857,6 @@ fn expand_pair(
 
     if children.is_empty() {
         best_value_pair = eval_state(state, eval_ctx);
-        best_value = best_value_pair.for_side(eval_ctx.side);
     }
     children.sort_by(|a, b| {
         b.scores
@@ -876,6 +865,8 @@ fn expand_pair(
             .unwrap_or(Ordering::Equal)
     });
 
+    // best_value is derivative: the request-side's slice of best_value_pair.
+    let best_value = best_value_pair.for_side(eval_ctx.side);
     let result = TreeNode {
         champion_ids: vec![],
         scores: ScoreSet {
@@ -941,7 +932,7 @@ fn build_pair_candidates(
     scored_singles: &[(String, f64)],
     pair_force: &Option<PairForce>,
     pair_branch_width: usize,
-    our_turn: bool,
+    _our_turn: bool,
     role_bucket_pairs: &[(&[String], &[String])],
 ) -> Vec<(String, String, f64)> {
     let mut single_lookup: HashMap<&str, f64> = HashMap::with_capacity(scored_singles.len());
@@ -1007,11 +998,8 @@ fn build_pair_candidates(
         }
     };
 
-    if our_turn {
-        scored_pairs.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(Ordering::Equal));
-    } else {
-        scored_pairs.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(Ordering::Equal));
-    }
+    // Always descending: best-for-turn.side pairs first (self-opt move ordering).
+    scored_pairs.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(Ordering::Equal));
     scored_pairs.truncate(pair_branch_width);
     scored_pairs
 }
@@ -1039,9 +1027,7 @@ fn top_k_for_role(
         .chain(state.red_picks.iter().map(String::as_str))
         .collect();
 
-    let mut sub_ctx = ctx.clone();
-    sub_ctx.side = turn.side;
-    sub_ctx.phase = turn.phase;
+    let sub_ctx = ctx.for_perspective(turn.side, state, turn.phase);
 
     let mut scored: Vec<(String, f64)> = role_pool
         .par_iter()
