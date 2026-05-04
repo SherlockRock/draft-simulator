@@ -857,3 +857,275 @@ fn extract_scenarios_deterministic_for_same_tree() {
         assert_eq!(left.champion_ids, right.champion_ids);
     }
 }
+
+// ── Phase 4 scenario filter tests ─────────────────────────────────────────────
+
+/// Wide meta: 9 champs covering all 5 roles with at least 2 specialists each.
+/// Lets us build degenerate comps (2 missing roles) without fighting the small
+/// `complete_blue_meta` roster.
+fn wide_blue_meta() -> HashMap<String, ChampionMeta> {
+    HashMap::from([
+        ("Topper".to_string(),     champion_meta_with_positions("Topper",     vec![Role::Top],     (0.5, 0.5), (0.5, 0.5, 0.5), 0.0, 0.0)),
+        ("Topper2".to_string(),    champion_meta_with_positions("Topper2",    vec![Role::Top],     (0.5, 0.5), (0.5, 0.5, 0.5), 0.0, 0.0)),
+        ("Jungler".to_string(),    champion_meta_with_positions("Jungler",    vec![Role::Jungle],  (0.5, 0.5), (0.5, 0.5, 0.5), 0.0, 0.0)),
+        ("Jungler2".to_string(),   champion_meta_with_positions("Jungler2",   vec![Role::Jungle],  (0.5, 0.5), (0.5, 0.5, 0.5), 0.0, 0.0)),
+        ("Midder".to_string(),     champion_meta_with_positions("Midder",     vec![Role::Middle],  (0.5, 0.5), (0.5, 0.5, 0.5), 0.0, 0.0)),
+        ("Carry".to_string(),      champion_meta_with_positions("Carry",      vec![Role::Adc],     (0.5, 0.5), (0.5, 0.5, 0.5), 0.0, 0.0)),
+        ("Carry2".to_string(),     champion_meta_with_positions("Carry2",     vec![Role::Adc],     (0.5, 0.5), (0.5, 0.5, 0.5), 0.0, 0.0)),
+        ("Supporter".to_string(),  champion_meta_with_positions("Supporter",  vec![Role::Support], (0.5, 0.5), (0.5, 0.5, 0.5), 0.0, 0.0)),
+        ("Supporter2".to_string(), champion_meta_with_positions("Supporter2", vec![Role::Support], (0.5, 0.5), (0.5, 0.5, 0.5), 0.0, 0.0)),
+    ])
+}
+
+/// Builds a left-spine chain of pick nodes, bottom-up:
+///   blue_picks[0] → blue_picks[1] → … → red_picks[0] → … → red_picks[n] (leaf)
+/// All picks land in slot 0 for simplicity; `composite` is propagated to every node.
+fn build_full_comp_leaf(blue_picks: &[&str], red_picks: &[&str], composite: f64) -> TreeNode {
+    let mut node_chain: Option<TreeNode> = None;
+    for r in red_picks.iter().rev() {
+        node_chain = Some(node(
+            &[r],
+            Some(Side::Red),
+            ActionType::Pick,
+            &[0],
+            composite,
+            node_chain.into_iter().collect(),
+        ));
+    }
+    for b in blue_picks.iter().rev() {
+        node_chain = Some(node(
+            &[b],
+            Some(Side::Blue),
+            ActionType::Pick,
+            &[0],
+            composite,
+            node_chain.into_iter().collect(),
+        ));
+    }
+    node_chain.expect("at least one pick required")
+}
+
+/// Test 1: filter drops a degenerate-blue Likely candidate when the Robust
+/// scenario itself has healthy coverage.
+///
+/// Degenerate comp: [Topper, Topper2, Jungler, Supporter, Supporter2]
+///   → covers TOP, TOP, JG, SUP, SUP; MID and ADC missing.
+///   → coverage ≈ (1.0 * 1.0 * 0.01 * 0.01 * 1.0)^0.2 ≈ 0.158 — below floor.
+#[test]
+fn extract_scenarios_drops_degenerate_likely_when_robust_has_good_coverage() {
+    let meta = wide_blue_meta();
+
+    // Robust: all 5 roles cleanly covered on blue side.
+    let robust = build_full_comp_leaf(
+        &["Topper", "Jungler", "Midder", "Carry", "Supporter"],
+        &["Topper2", "Jungler2", "Midder", "Carry2", "Supporter2"],
+        0.9,
+    );
+    // Diverse good: also fully covered, different picks.
+    let diverse_good = build_full_comp_leaf(
+        &["Topper2", "Jungler", "Midder", "Carry", "Supporter"],
+        &["Topper", "Jungler2", "Midder", "Carry2", "Supporter2"],
+        0.85,
+    );
+    // Degenerate: blue covers TOP/TOP/JG/SUP/SUP — MID and ADC missing.
+    let degenerate = build_full_comp_leaf(
+        &["Topper", "Topper2", "Jungler", "Supporter", "Supporter2"],
+        &["Topper2", "Jungler2", "Midder", "Carry2", "Supporter2"],
+        0.80,
+    );
+
+    let root = node(&[], None, ActionType::Ban, &[], 0.0, vec![robust, diverse_good, degenerate]);
+    let scenarios = extract_scenarios(&root, &meta, 3, &[], &[]);
+
+    // Robust must be present (first scenario has all 5 roles).
+    assert!(
+        scenarios.iter().any(|s| s.blue_picks.contains(&"Midder".to_string())
+            && s.blue_picks.contains(&"Carry".to_string())),
+        "Robust (Midder + Carry on blue) must survive"
+    );
+
+    // Degenerate (Topper + Topper2 on blue, no Midder, no Carry) must be filtered.
+    let has_degenerate = scenarios.iter().any(|s| {
+        let blue = &s.blue_picks;
+        blue.contains(&"Topper".to_string())
+            && blue.contains(&"Topper2".to_string())
+            && !blue.contains(&"Midder".to_string())
+            && !blue.contains(&"Carry".to_string())
+    });
+    assert!(
+        !has_degenerate,
+        "degenerate dual-TOP/dual-SUP blue comp must be filtered out when Robust is healthy"
+    );
+}
+
+/// Test 2: when the Robust scenario is itself degenerate, the safety floor
+/// activates and no Likely candidates are filtered out.
+#[test]
+fn extract_scenarios_keeps_likely_when_robust_also_degenerate() {
+    let meta = wide_blue_meta();
+
+    // Both leaves: blue is degenerate (2 missing roles each).
+    let degenerate1 = build_full_comp_leaf(
+        &["Topper", "Topper2", "Jungler", "Supporter", "Supporter2"],
+        &["Topper", "Jungler", "Midder", "Carry", "Supporter"],
+        0.9,
+    );
+    let degenerate2 = build_full_comp_leaf(
+        &["Jungler", "Jungler2", "Topper", "Supporter", "Supporter2"],
+        &["Topper", "Jungler", "Midder", "Carry", "Supporter"],
+        0.85,
+    );
+
+    let root = node(&[], None, ActionType::Ban, &[], 0.0, vec![degenerate1, degenerate2]);
+    let scenarios = extract_scenarios(&root, &meta, 2, &[], &[]);
+
+    assert_eq!(
+        scenarios.len(),
+        2,
+        "filter must not over-filter when Robust is also degenerate (safety floor)"
+    );
+}
+
+/// Test 3: filter is skipped for partial comps (blue full.len() != 5).
+#[test]
+fn extract_scenarios_filter_skipped_for_partial_comps() {
+    let meta = wide_blue_meta();
+
+    // Leaf has only 2 blue picks and 0 red picks — partial comp.
+    // Even though both picks are TOPs (degenerate if full), filter must not activate.
+    let leaf = node(
+        &["Topper"],
+        Some(Side::Blue),
+        ActionType::Pick,
+        &[0],
+        0.5,
+        vec![node(
+            &["Topper2"],
+            Some(Side::Blue),
+            ActionType::Pick,
+            &[1],
+            0.5,
+            vec![],
+        )],
+    );
+    let root = node(&[], None, ActionType::Ban, &[], 0.0, vec![leaf]);
+    let scenarios = extract_scenarios(&root, &meta, 1, &[], &[]);
+
+    assert!(
+        !scenarios.is_empty(),
+        "partial comps must not be filtered by the coverage floor"
+    );
+}
+
+/// Test 4: filter applies per-side independently.
+/// Blue side is full (confirmed 3 + leaf 2 = 5) and degenerate.
+/// Red side is partial (confirmed 3 + leaf 1 = 4) — red filter must not activate.
+/// Expected: only the robust leaf survives (degenerate-blue leaf is dropped).
+#[test]
+fn extract_scenarios_filter_handles_asymmetric_full_states() {
+    let meta = wide_blue_meta();
+
+    // Confirmed: Topper(b), Jungler(b), Midder(b) + Topper2(r), Jungler2(r), Midder(r)
+    let confirmed_blue: Vec<String> = vec!["Topper".into(), "Jungler".into(), "Midder".into()];
+    let confirmed_red: Vec<String>  = vec!["Topper2".into(), "Jungler2".into(), "Midder".into()];
+
+    // Robust leaf: blue adds Carry + Supporter → full [Topper, Jungler, Midder, Carry, Supporter]
+    //              red adds Carry2 → partial [Topper2, Jungler2, Midder, Carry2] (4 picks)
+    let robust_leaf = node(
+        &["Carry"],
+        Some(Side::Blue),
+        ActionType::Pick,
+        &[0],
+        0.9,
+        vec![node(
+            &["Supporter"],
+            Some(Side::Blue),
+            ActionType::Pick,
+            &[1],
+            0.9,
+            vec![node(
+                &["Carry2"],
+                Some(Side::Red),
+                ActionType::Pick,
+                &[2],
+                0.9,
+                vec![],
+            )],
+        )],
+    );
+
+    // Degenerate leaf: blue adds Topper2 + Jungler2 → full [Topper, Jungler, Midder, Topper2, Jungler2]
+    //                  → covers TOP, JG, MID, TOP, JG — missing ADC and SUP → coverage below floor
+    //                  red adds Carry2 → partial [Topper2, Jungler2, Midder, Carry2] (4 picks, red filter skipped)
+    let degenerate_blue_leaf = node(
+        &["Topper2"],
+        Some(Side::Blue),
+        ActionType::Pick,
+        &[0],
+        0.7,
+        vec![node(
+            &["Jungler2"],
+            Some(Side::Blue),
+            ActionType::Pick,
+            &[1],
+            0.7,
+            vec![node(
+                &["Carry2"],
+                Some(Side::Red),
+                ActionType::Pick,
+                &[2],
+                0.7,
+                vec![],
+            )],
+        )],
+    );
+
+    let root = node(
+        &[],
+        None,
+        ActionType::Ban,
+        &[],
+        0.0,
+        vec![robust_leaf, degenerate_blue_leaf],
+    );
+    let scenarios = extract_scenarios(&root, &meta, 2, &confirmed_blue, &confirmed_red);
+
+    // Robust (Carry on blue) must survive.
+    assert!(
+        scenarios.iter().any(|s| s.blue_picks.contains(&"Carry".to_string())),
+        "robust leaf (Carry as blue pick) must survive"
+    );
+
+    // Degenerate-blue leaf (Topper2 + Jungler2 as both blue picks) must be filtered.
+    let degenerate_survived = scenarios.iter().any(|s| {
+        s.blue_picks.contains(&"Topper2".to_string())
+            && s.blue_picks.contains(&"Jungler2".to_string())
+    });
+    assert!(
+        !degenerate_survived,
+        "degenerate blue comp must be filtered even when red side is partial"
+    );
+}
+
+/// Test 5: filter is skipped when any pick in the full comp is absent from meta.
+/// Even if the coverage_score of the unknown-champ comp would be low (e.g. a
+/// pure SUP in the ADC slot), the guard `!blue_meta_complete` prevents filtering.
+#[test]
+fn extract_scenarios_filter_skips_picks_not_in_meta() {
+    let meta = wide_blue_meta();
+    // "OffMetaChamp" is intentionally NOT in meta.
+
+    // The leaf's blue comp includes OffMetaChamp: filter must be skipped on blue side.
+    let leaf = build_full_comp_leaf(
+        &["OffMetaChamp", "Jungler", "Midder", "Carry", "Supporter"],
+        &["Topper", "Jungler", "Midder", "Carry", "Supporter"],
+        0.9,
+    );
+    let root = node(&[], None, ActionType::Ban, &[], 0.0, vec![leaf]);
+    let scenarios = extract_scenarios(&root, &meta, 1, &[], &[]);
+
+    assert!(
+        !scenarios.is_empty(),
+        "filter must be skipped when any pick in the comp is missing from champion_meta"
+    );
+}
