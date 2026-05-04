@@ -1,9 +1,18 @@
+use crate::coverage::coverage_score;
 use crate::draft_state::{ActionType, Side};
 use crate::evaluator::ScoreSet;
 use crate::forced_branches::PathStep;
 use crate::role_solver::{self, ChampionMeta, WeightedAssignment};
 use crate::search::TreeNode;
 use std::collections::HashMap;
+
+/// Threshold for "degenerate" coverage. Tunable. Rakan+Rell ≈ 0.003,
+/// healthy comps 0.30–0.60. See plan v4 calibration constants.
+const SCENARIO_FILTER_COVERAGE_FLOOR: f64 = 0.20;
+
+fn full_picks_owned(confirmed: &[String], leaf_picks: &[String]) -> Vec<String> {
+    confirmed.iter().chain(leaf_picks.iter()).cloned().collect()
+}
 
 #[derive(Clone, Debug)]
 pub struct Scenario {
@@ -242,7 +251,52 @@ pub fn extract_scenarios(
         right_leaf.scores.composite.total_cmp(&left_leaf.scores.composite)
     });
 
-    let mut selected = vec![featured.remove(0)];
+    // Phase 4 scenario filter: drop legally-feasible-but-degenerate full-comp
+    // candidates (Rakan+Rell-class). Compute against the FULL comp (confirmed +
+    // leaf-projected); leaf.{blue,red}_picks alone is the projection delta.
+    // Skip filter when comp is partial, when meta is missing for any pick, or
+    // when the Robust scenario itself is degenerate (don't over-filter).
+    let robust_full_blue = full_picks_owned(confirmed_blue_picks, &featured[0].0.blue_picks);
+    let robust_full_red = full_picks_owned(confirmed_red_picks, &featured[0].0.red_picks);
+    let robust_blue_meta_complete =
+        robust_full_blue.iter().all(|p| champion_meta.contains_key(p));
+    let robust_red_meta_complete =
+        robust_full_red.iter().all(|p| champion_meta.contains_key(p));
+    let robust_blue_cov = if robust_full_blue.len() == 5 && robust_blue_meta_complete {
+        coverage_score(&robust_full_blue, champion_meta)
+    } else {
+        0.0
+    };
+    let robust_red_cov = if robust_full_red.len() == 5 && robust_red_meta_complete {
+        coverage_score(&robust_full_red, champion_meta)
+    } else {
+        0.0
+    };
+
+    let robust = featured.remove(0);
+    featured.retain(|(leaf, _vec)| {
+        let full_blue = full_picks_owned(confirmed_blue_picks, &leaf.blue_picks);
+        let full_red = full_picks_owned(confirmed_red_picks, &leaf.red_picks);
+
+        let blue_full = full_blue.len() == 5;
+        let red_full = full_red.len() == 5;
+        let blue_meta_complete = full_blue.iter().all(|p| champion_meta.contains_key(p));
+        let red_meta_complete = full_red.iter().all(|p| champion_meta.contains_key(p));
+
+        let blue_ok = !blue_full
+            || !blue_meta_complete
+            || coverage_score(&full_blue, champion_meta) >= SCENARIO_FILTER_COVERAGE_FLOOR
+            || robust_blue_cov < SCENARIO_FILTER_COVERAGE_FLOOR;
+
+        let red_ok = !red_full
+            || !red_meta_complete
+            || coverage_score(&full_red, champion_meta) >= SCENARIO_FILTER_COVERAGE_FLOOR
+            || robust_red_cov < SCENARIO_FILTER_COVERAGE_FLOOR;
+
+        blue_ok && red_ok
+    });
+
+    let mut selected = vec![robust];
 
     while selected.len() < max_scenarios && !featured.is_empty() {
         let (farthest_idx, _) = featured
