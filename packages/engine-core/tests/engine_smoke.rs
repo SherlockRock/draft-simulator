@@ -495,10 +495,10 @@ fn compute_errs_invalid_input_on_reverse_fill_pair_force() {
 
 #[test]
 fn compute_reports_nodes_evaluated_and_pruning_rate() {
-    // Role-diverse pool so feasibility prune doesn't fire (which would add to
-    // nodes_pruned and break the no-ab pruning_rate == 0.0 assertion). Two
-    // champs per role (10 total, 5 per team) keeps the pool large enough that
-    // feasibility never fires across all 4 depth levels with branch_width=5.
+    // Role-diverse pool (2 champs per role, 10 total) so that early search
+    // levels don't trip the feasibility prune. Note: feasibility still fires
+    // at deeper levels where the per-side pool tightens — see the comment on
+    // the no-ab pruning_rate assertion below.
     let mut state = DraftState::default();
     fast_forward_to_slot(&mut state, 6);
 
@@ -573,8 +573,11 @@ fn compute_reports_nodes_evaluated_and_pruning_rate() {
     assert!(resp_no_ab.nodes_evaluated > 0);
     // Alpha-beta produces meaningful pruning (feasibility + cutoffs combined).
     assert!(resp_ab.pruning_rate > 0.05);
-    // No-ab disables alpha-beta cuts; no-ab must explore at least as many
-    // nodes as ab (feasibility may still prune both, but ab prunes extra).
+    // No-ab disables alpha-beta cuts; feasibility prune still fires at deeper
+    // search levels where the role-coverage envelope tightens, so we can't
+    // assert pruning_rate == 0. Verify instead that no-ab explores at least as
+    // many nodes as ab (feasibility prune affects both runs identically; only
+    // alpha-beta cuts differ).
     assert!(resp_no_ab.nodes_evaluated >= resp_ab.nodes_evaluated);
 }
 
