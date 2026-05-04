@@ -80,13 +80,8 @@ pub fn solve(champion_ids: &[&str], meta: &HashMap<String, ChampionMeta>) -> Vec
     }
     let champs: Vec<&ChampionMeta> = champion_ids
         .iter()
-        .filter_map(|id| meta.get(*id))
+        .map(|id| meta.get(*id).expect("unknown champion id"))
         .collect();
-    if champs.len() != 5 {
-        // One or more champions not found in meta (e.g., filler IDs in tests).
-        // Return empty rather than panicking — callers treat empty as "no data".
-        return Vec::new();
-    }
 
     let mut weighted = Vec::with_capacity(120);
     permutations(&[0, 1, 2, 3, 4], &mut Vec::new(), &mut |perm| {

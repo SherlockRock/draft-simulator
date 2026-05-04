@@ -255,6 +255,15 @@ fn flex_retention_for(_champion_id: &str, ctx: &EvalContext) -> f64 {
         // Pre-resolved partial comp — flex is high by construction.
         return 1.0;
     }
+    // role_solver::solve panics on unknown champion ids; guard at call site
+    // so terminal-state evals over filler IDs (test fixtures) don't crash.
+    if ctx
+        .our_picks
+        .iter()
+        .any(|id| !ctx.champion_meta.contains_key(id.as_str()))
+    {
+        return 1.0;
+    }
     let ids: Vec<&str> = ctx.our_picks.iter().map(|s| s.as_str()).collect();
     let assignments = solve(&ids, &ctx.champion_meta);
     let n = assignments.len() as f64;
