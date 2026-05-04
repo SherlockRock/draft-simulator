@@ -168,7 +168,10 @@ fn pair_start_yields_pair_children() {
     fast_forward_to_slot(&mut state, 7);
     assert!(TURN_SEQUENCE[state.turn_index()].pair_start);
 
-    let ctx = ctx_with_pool(&["A", "B", "C", "D"]);
+    // Five champs cycling through all 5 roles (Top/JG/Mid/Adc/Sup) so the
+    // feasibility filter passes: any pair leaves 3 champs in pool and 3
+    // picks remaining, enough to cover all uncovered roles.
+    let ctx = ctx_with_pool(&["A", "B", "C", "D", "E"]);
     let params = SearchParams {
         branch_width: 3,
         pair_branch_width: 3,
@@ -950,10 +953,15 @@ fn leaf_eval_rewards_whole_comp_role_coverage() {
 
 #[test]
 fn pick2_pair_three_missing_roles_seeds_all_unordered_pair_shapes() {
-    // Reproduces 1a: blue's 3 picks all sit in TOP/MID — so JG, ADC, SUP are
-    // all missing at threshold 0.9. A complete fix should seed bucket-2 pairs
-    // for ALL three unordered missing-role combinations: (JG×ADC), (JG×SUP),
-    // (ADC×SUP). Pre-fix, only the first combination is built.
+    // Reproduces 1a: blue's 3 picks sit in TOP/MID/JG — so ADC and SUP are
+    // missing at threshold 0.9. A complete fix should seed bucket-2 pairs for
+    // the missing-role combination: (ADC×SUP). Specialists must enter via
+    // bucket-2 since bucket-1's top_k is dominated by high-WR filler.
+    //
+    // (Previously the test had 3 missing roles but with 2 pair picks remaining
+    // no pair can fill all 3 missing roles, so all pairs are infeasible. The
+    // test now uses 2 missing roles so the feasibility filter passes for
+    // role-completing pairs.)
     //
     // Construction note: specialists score lower than fillers via the
     // win-rate gradient (specialists 0.30, fillers 0.50). At Pick2 the
@@ -977,12 +985,12 @@ fn pick2_pair_three_missing_roles_seeds_all_unordered_pair_shapes() {
         }
     }
 
-    // Slot 17: blue_picks=3 (all TOP/MID), red_picks=4. Missing for blue:
-    // JG, ADC, SUP — 3 missing roles.
+    // Slot 17: blue_picks=3 (TOP/MID/JG), red_picks=4. Missing for blue:
+    // ADC, SUP — 2 missing roles that the pair must fill.
     let mut state = DraftState::default();
     state.blue_bans = vec!["B1".into(), "B2".into(), "B3".into(), "B4".into(), "B5".into()];
     state.red_bans = vec!["R1".into(), "R2".into(), "R3".into(), "R4".into(), "R5".into()];
-    state.blue_picks = vec!["GarenTop".into(), "AurelionMid".into(), "AmbessaTop".into()];
+    state.blue_picks = vec!["GarenTop".into(), "AurelionMid".into(), "AmbessaJg".into()];
     state.red_picks = vec!["Re1".into(), "Re2".into(), "Re3".into(), "Re4".into()];
 
     let mut meta_map: HashMap<String, ChampionMeta> = HashMap::new();
@@ -991,7 +999,7 @@ fn pick2_pair_three_missing_roles_seeds_all_unordered_pair_shapes() {
     for (id, pos) in [
         ("GarenTop", vec![Role::Top]),
         ("AurelionMid", vec![Role::Middle]),
-        ("AmbessaTop", vec![Role::Top]),
+        ("AmbessaJg", vec![Role::Jungle]),
         ("Re1", vec![Role::Top]),
         ("Re2", vec![Role::Jungle]),
         ("Re3", vec![Role::Middle]),
@@ -1005,7 +1013,7 @@ fn pick2_pair_three_missing_roles_seeds_all_unordered_pair_shapes() {
     }
 
     // Filler TOP / MID candidates dominate bucket-1's single_top_k by sheer
-    // count at high win-rate. Specialists (JG, ADC, SUP) live at low win-rate
+    // count at high win-rate. Specialists (ADC, SUP) live at low win-rate
     // and must enter via bucket-2 only.
     let mut filler_pool: Vec<String> = Vec::new();
     for i in 0..40 {
@@ -1021,13 +1029,10 @@ fn pick2_pair_three_missing_roles_seeds_all_unordered_pair_shapes() {
         filler_pool.push(id);
     }
 
-    let jg_specialists = vec!["JgA".to_string(), "JgB".to_string()];
     let adc_specialists = vec!["AdcA".to_string(), "AdcB".to_string()];
     let sup_specialists = vec!["SupA".to_string(), "SupB".to_string()];
-    for id in jg_specialists.iter().chain(adc_specialists.iter()).chain(sup_specialists.iter()) {
-        let role = if jg_specialists.contains(id) { Role::Jungle }
-            else if adc_specialists.contains(id) { Role::Adc }
-            else { Role::Support };
+    for id in adc_specialists.iter().chain(sup_specialists.iter()) {
+        let role = if adc_specialists.contains(id) { Role::Adc } else { Role::Support };
         meta_map.insert(id.clone(), champ(id, vec![role]));
         win_rates.insert(id.clone(), 0.30);
     }
@@ -1035,14 +1040,13 @@ fn pick2_pair_three_missing_roles_seeds_all_unordered_pair_shapes() {
     let our_pool = TeamPool {
         display: RolePoolMap {
             top: filler_pool.iter().filter(|n| n.starts_with("FillTop")).cloned().collect(),
-            jungle: jg_specialists.clone(),
+            jungle: vec![],
             middle: filler_pool.iter().filter(|n| n.starts_with("FillMid")).cloned().collect(),
             adc: adc_specialists.clone(),
             support: sup_specialists.clone(),
         },
         search: {
             let mut s = filler_pool.clone();
-            s.extend(jg_specialists.clone());
             s.extend(adc_specialists.clone());
             s.extend(sup_specialists.clone());
             s
@@ -1097,16 +1101,15 @@ fn pick2_pair_three_missing_roles_seeds_all_unordered_pair_shapes() {
         in_a && in_b
     };
 
-    let has_jg_adc = pair_children.iter().any(|c| pair_has_roles(c, &jg_specialists, &adc_specialists));
-    let has_jg_sup = pair_children.iter().any(|c| pair_has_roles(c, &jg_specialists, &sup_specialists));
     let has_adc_sup = pair_children.iter().any(|c| pair_has_roles(c, &adc_specialists, &sup_specialists));
 
     assert!(
-        has_jg_adc && has_jg_sup && has_adc_sup,
-        "All three missing-role pair shapes (JG×ADC, JG×SUP, ADC×SUP) must be \
-         seeded into bucket-2 when 3+ roles are missing. Got: jg×adc={}, \
-         jg×sup={}, adc×sup={}.",
-        has_jg_adc, has_jg_sup, has_adc_sup,
+        has_adc_sup,
+        "The missing-role pair shape (ADC×SUP) must be seeded into bucket-2 \
+         when ADC and SUP are both missing. Got: adc×sup={}. \
+         Pair children: {:?}",
+        has_adc_sup,
+        pair_children.iter().map(|c| &c.champion_ids).collect::<Vec<_>>(),
     );
 }
 
@@ -1267,22 +1270,15 @@ fn pick2_pair_role_balanced_outscores_high_winrate_mismatch() {
 
 #[test]
 fn pick2_pair_three_missing_top_pair_must_fill_two_missing_roles() {
-    // Reproduces 1b combined with 1a: at slot 17 with THREE missing roles
-    // (JG, ADC, SUP — blue picks all sit in TOP/MID), every role-completing
-    // pair fills exactly 2 of the 3 missing roles, leaving the comp with one
-    // strict-missing role. Bucket-1 high-WR (SUP×TOP) pairs fill only 1
-    // missing role (SUP), leaving TWO strict-missing.
+    // At slot 17 with TWO missing roles (ADC and SUP — blue picks sit in
+    // TOP/MID/JG), the role-completing bucket-2 pair (ADC×SUP) must rank above
+    // the bucket-1 high-WR pair (SUP×TOP) that fills only SUP and leaves ADC
+    // still missing. Coverage weight drives the bucket-2 pair to the top.
     //
-    // Coverage gap (current geometric formula):
-    //   bucket-2 pair (1 missing remaining): coverage_score ≈ 0.398
-    //   bucket-1 SUP×TOP (2 missing remaining): coverage_score ≈ 0.158
-    //   gap × weight = 0.240 × 0.6 = 0.144
-    // Win-rate gap (bucket-1 high-WR 0.60 vs bucket-2 specialist 0.50):
-    //   2 picks × 0.10 × 0.8 = 0.160
-    //
-    // 0.160 > 0.144 → bucket-1 SUP×TOP pair beats bucket-2 specialist pair on
-    // back-prop composite. The top-ranked pair leaves the comp with TWO
-    // missing roles instead of one.
+    // (Previously the test had 3 missing roles but the feasibility filter now
+    // prunes pairs that can't complete the comp — with only 2 pair picks and
+    // 3 missing roles, all pairs are infeasible. Reduced to 2 missing roles
+    // so feasibility passes for the role-completing ADC×SUP pair.)
     use engine_core::role_solver::{
         CcProfile, ChampionMeta, ChampionTags, DamageProfile, ScalingProfile,
     };
@@ -1301,8 +1297,8 @@ fn pick2_pair_three_missing_top_pair_must_fill_two_missing_roles() {
     let mut state = DraftState::default();
     state.blue_bans = vec!["B1".into(), "B2".into(), "B3".into(), "B4".into(), "B5".into()];
     state.red_bans = vec!["R1".into(), "R2".into(), "R3".into(), "R4".into(), "R5".into()];
-    // 3 picks all in TOP/MID — JG, ADC, SUP all missing.
-    state.blue_picks = vec!["GarenTop".into(), "AurelionMid".into(), "AmbessaTop".into()];
+    // 3 picks covering TOP/MID/JG — ADC and SUP are missing.
+    state.blue_picks = vec!["GarenTop".into(), "AurelionMid".into(), "AmbessaJg".into()];
     state.red_picks = vec!["Re1".into(), "Re2".into(), "Re3".into(), "Re4".into()];
 
     let mut meta_map: HashMap<String, ChampionMeta> = HashMap::new();
@@ -1311,7 +1307,7 @@ fn pick2_pair_three_missing_top_pair_must_fill_two_missing_roles() {
     for (id, pos) in [
         ("GarenTop", vec![Role::Top]),
         ("AurelionMid", vec![Role::Middle]),
-        ("AmbessaTop", vec![Role::Top]),
+        ("AmbessaJg", vec![Role::Jungle]),
         ("Re1", vec![Role::Top]),
         ("Re2", vec![Role::Jungle]),
         ("Re3", vec![Role::Middle]),
@@ -1325,10 +1321,10 @@ fn pick2_pair_three_missing_top_pair_must_fill_two_missing_roles() {
     }
 
     // High-WR bucket-1 candidates (TOP-primary and SUP-primary at WR 0.60).
-    // The 0.10 WR advantage over specialists mimics a meta where flex-TOP
-    // and flex-SUP champions out-of-meta-tier the dedicated JG/ADC/SUP
-    // specialists. Each high-WR pick contributes ≈ +0.10 × 0.8 = 0.08 to the
-    // per-pick composite sum vs a specialist swap.
+    // SUP×TOP pair fills only SUP, leaving ADC still missing — infeasible
+    // pairs are pruned by the feasibility filter so bucket-1 TOP-primary picks
+    // can't appear in final children. The surviving feasible high-WR pair would
+    // need to include an ADC pick.
     let bucket1_top: Vec<String> = (0..5).map(|i| format!("HighTop{}", i)).collect();
     let bucket1_sup: Vec<String> = (0..5).map(|i| format!("HighSup{}", i)).collect();
     for id in &bucket1_top {
@@ -1340,19 +1336,9 @@ fn pick2_pair_three_missing_top_pair_must_fill_two_missing_roles() {
         win_rates.insert(id.clone(), 0.60);
     }
 
-    // Specialists at JG, ADC, SUP at WR 0.30 — punished tier in this meta.
-    // Per-pick comp_strength: 0.8 × 0.30 = 0.24. Their bucket-1 single score
-    // gets a small marginal-gain bonus when scored against blue's incomplete
-    // comp, but it's far below high-WR singles. This forces the engine to
-    // rely on bucket-2 enumeration AND a sufficiently steep leaf-coverage
-    // signal to surface them in the top pair.
-    let jg_specialists: Vec<String> = (0..3).map(|i| format!("JgSpec{}", i)).collect();
+    // Specialists at ADC and SUP at WR 0.30 — lower WR tier but role-completing.
     let adc_specialists: Vec<String> = (0..3).map(|i| format!("AdcSpec{}", i)).collect();
     let sup_specialists: Vec<String> = (0..3).map(|i| format!("SupSpec{}", i)).collect();
-    for id in &jg_specialists {
-        meta_map.insert(id.clone(), champ(id, vec![Role::Jungle]));
-        win_rates.insert(id.clone(), 0.30);
-    }
     for id in &adc_specialists {
         meta_map.insert(id.clone(), champ(id, vec![Role::Adc]));
         win_rates.insert(id.clone(), 0.30);
@@ -1376,7 +1362,7 @@ fn pick2_pair_three_missing_top_pair_must_fill_two_missing_roles() {
     let our_pool = TeamPool {
         display: RolePoolMap {
             top: bucket1_top.clone(),
-            jungle: jg_specialists.clone(),
+            jungle: vec![],
             middle: filler_mid.clone(),
             adc: adc_specialists.clone(),
             support: { let mut s = bucket1_sup.clone(); s.extend(sup_specialists.clone()); s },
@@ -1384,7 +1370,6 @@ fn pick2_pair_three_missing_top_pair_must_fill_two_missing_roles() {
         search: {
             let mut s = bucket1_top.clone();
             s.extend(bucket1_sup.clone());
-            s.extend(jg_specialists.clone());
             s.extend(adc_specialists.clone());
             s.extend(sup_specialists.clone());
             s.extend(filler_mid.clone());
@@ -1431,27 +1416,26 @@ fn pick2_pair_three_missing_top_pair_must_fill_two_missing_roles() {
     let top_pair = tree.children.first()
         .expect("must have at least one pair child");
 
-    // Count distinct missing roles (JG, ADC, SUP) the top pair fills, by
-    // ANY champion of that role (specialist or high-WR doesn't matter — the
-    // role coverage is what counts).
+    // The top-ranked pair must fill both missing roles (ADC + SUP). Pairs
+    // that leave any missing role uncovered are pruned by the feasibility
+    // filter, so all surviving pairs must include both an ADC and a SUP.
     let pair_roles: Vec<Role> = top_pair.champion_ids.iter().filter_map(|id| {
-        if jg_specialists.contains(id) { Some(Role::Jungle) }
-        else if adc_specialists.contains(id) { Some(Role::Adc) }
+        if adc_specialists.contains(id) { Some(Role::Adc) }
         else if sup_specialists.contains(id) || bucket1_sup.contains(id) { Some(Role::Support) }
         else if bucket1_top.contains(id) { Some(Role::Top) }
         else if filler_mid.contains(id) { Some(Role::Middle) }
         else { None }
     }).collect();
 
-    let missing_roles_set = [Role::Jungle, Role::Adc, Role::Support];
+    let missing_roles_set = [Role::Adc, Role::Support];
     let filled_count = missing_roles_set.iter()
         .filter(|r| pair_roles.contains(r))
         .count();
 
     assert!(
         filled_count >= 2,
-        "Top-ranked pair at slot 17/18 with 3 missing roles (JG, ADC, SUP) \
-         must fill 2 of them. Got top pair {:?} with roles {:?} (composite={}, \
+        "Top-ranked pair at slot 17/18 with 2 missing roles (ADC, SUP) \
+         must fill both of them. Got top pair {:?} with roles {:?} (composite={}, \
          fills {} missing role/s). Top-8 children: {:?}",
         top_pair.champion_ids,
         pair_roles,
@@ -2114,4 +2098,78 @@ fn search_at_pick1_applies_feasibility_check() {
             tree.children.len()
         );
     }
+}
+
+/// Slot 17 is Blue's Pick2 pair_start (B4-B5). Blue already has 3 locked picks
+/// covering TOP/JG/MID. Blue's remaining pool has exactly 3 champs: 1 ADC and
+/// 2 SUP specialists. The pair must cover ADC+SUP — a (SUP, SUP) pair would
+/// leave ADC permanently uncovered and must be pruned. Only (ADC, SUP) or
+/// (SUP, ADC) pairs are feasible.
+///
+/// State at slot 17: fast_forward produces 3 blue_picks, 4 red_picks,
+/// 5 blue_bans, 5 red_bans. We override blue_picks with role-typed champs.
+#[test]
+fn search_prunes_infeasible_pair_pick_branches() {
+    let mut state = DraftState::default();
+    // Advance to slot 17 (Blue Pick2 pair_start — B4+B5).
+    fast_forward_to_slot(&mut state, 17);
+    // Override blue picks so Blue has TOP/JG/MID covered (3 picks, same count).
+    state.blue_picks = vec!["BlueTop".into(), "BlueJg".into(), "BlueMid".into()];
+    // Override red picks so Red has 4 picks covering diverse roles.
+    state.red_picks = vec![
+        "RedTop".into(),
+        "RedJg".into(),
+        "RedMid".into(),
+        "RedAdc".into(),
+    ];
+
+    // Blue pool: 1 ADC + 2 SUP specialists — (SUP, SUP) pair is infeasible.
+    let blue_champs: &[(&str, Vec<Role>)] = &[
+        ("BlueAdc", vec![Role::Adc]),
+        ("BlueSup1", vec![Role::Support]),
+        ("BlueSup2", vec![Role::Support]),
+    ];
+    // Red pool: diverse enough that Red's own feasibility holds for slot 19.
+    let red_champs: &[(&str, Vec<Role>)] = &[
+        ("RedTop2", vec![Role::Top]),
+        ("RedJg2", vec![Role::Jungle]),
+        ("RedMid2", vec![Role::Middle]),
+        ("RedAdc2", vec![Role::Adc]),
+        ("RedSup2", vec![Role::Support]),
+    ];
+
+    let mut ctx = ctx_with_typed_pool(Side::Blue, Phase::Pick2, blue_champs, red_champs);
+    // Register locked picks with known roles so the feasibility bipartite check
+    // sees the correct role masks for both sides.
+    for (name, role) in [
+        ("BlueTop", Role::Top), ("BlueJg", Role::Jungle), ("BlueMid", Role::Middle),
+        ("RedTop", Role::Top), ("RedJg", Role::Jungle), ("RedMid", Role::Middle), ("RedAdc", Role::Adc),
+    ] {
+        ctx.champion_meta.insert(name.into(), ChampionMeta { id: name.into(), positions: vec![role], ..Default::default() });
+    }
+
+    let params = SearchParams {
+        branch_width: 500,
+        pair_branch_width: 500,
+        max_depth: 1,
+        disable_alpha_beta: true,
+        forced_branches: vec![],
+    };
+    let cancel = CancelHandle::new();
+    let tree = search(&state, &params, &ctx, &cancel).unwrap();
+
+    // Every child pair must include at least one ADC (BlueAdc) — (SUP, SUP)
+    // leaves ADC permanently uncovered and must have been pruned.
+    for child in &tree.children {
+        let ids = &child.champion_ids;
+        assert!(
+            ids.contains(&"BlueAdc".to_string()),
+            "(SUP, SUP) pair must be pruned; surviving child had ids: {:?}",
+            ids
+        );
+    }
+    assert!(
+        !tree.children.is_empty(),
+        "At least one feasible (ADC, SUP) pair must survive; got 0 children"
+    );
 }

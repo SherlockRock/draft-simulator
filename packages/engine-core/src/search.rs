@@ -458,6 +458,51 @@ fn feasibility_filter_singles(
     original_count - ranked.len()
 }
 
+/// Drops pair candidates whose hypothetical post-pick state leaves the
+/// picking side unable to complete a 5-role comp from the remaining pool.
+/// Returns the number of pairs pruned. Pair turns are always Pick (no Ban
+/// pair turns exist in TURN_SEQUENCE), so we only check the picking side.
+fn feasibility_filter_pairs(
+    scored_pairs: &mut Vec<(String, String, f64)>,
+    state: &DraftState,
+    turn: TurnInfo,
+    eval_ctx: &EvalContext,
+) -> usize {
+    let original_count = scored_pairs.len();
+
+    let side_pool_full: Vec<String> = pool_for(turn.side, eval_ctx)
+        .search
+        .iter()
+        .filter(|c| !is_taken(c, state))
+        .cloned()
+        .collect();
+
+    scored_pairs.retain(|(first, second, _value)| {
+        let first_str = first.as_str();
+        let second_str = second.as_str();
+        let cand_pool: Vec<String> = side_pool_full
+            .iter()
+            .filter(|c| c.as_str() != first_str && c.as_str() != second_str)
+            .cloned()
+            .collect();
+        let mut hypothetical_locked = match turn.side {
+            Side::Blue => state.blue_picks.clone(),
+            Side::Red => state.red_picks.clone(),
+        };
+        hypothetical_locked.push(first.clone());
+        hypothetical_locked.push(second.clone());
+        let remaining = picks_remaining(state, turn.side).saturating_sub(2);
+        can_complete_roles(
+            &hypothetical_locked,
+            &cand_pool,
+            remaining,
+            &eval_ctx.champion_meta,
+        )
+    });
+
+    original_count - scored_pairs.len()
+}
+
 /// Returns the candidate list to actually expand at this single-slot turn,
 /// after applying any matching forced branches. Also returns the set of
 /// champion IDs that were injected by force (for `user_injected`).
@@ -715,13 +760,14 @@ fn expand_pair(
         buckets
     };
 
-    let scored_pairs = build_pair_candidates(
+    let mut scored_pairs = build_pair_candidates(
         &scored_singles,
         &pair_force,
         params.pair_branch_width,
         our_turn,
         &role_bucket_pairs,
     );
+    accum.nodes_pruned += feasibility_filter_pairs(&mut scored_pairs, state, turn, eval_ctx);
 
     let mut children: Vec<TreeNode> = Vec::with_capacity(scored_pairs.len());
     let mut best_value = if our_turn {
