@@ -50,6 +50,21 @@ pub struct MetaData {
     pub counters: HashMap<String, HashMap<String, f64>>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct SideValues {
+    pub blue: f64,
+    pub red: f64,
+}
+
+impl SideValues {
+    pub fn for_side(&self, side: Side) -> f64 {
+        match side {
+            Side::Blue => self.blue,
+            Side::Red => self.red,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct EvalContext {
     pub side: Side,
@@ -69,10 +84,43 @@ pub struct EvalContext {
     pub reveal_cost_weight: f64,
 }
 
+impl EvalContext {
+    /// Returns a clone with all per-perspective fields swapped to score from
+    /// `target_side`'s perspective. Picks come from the projected `state`
+    /// (NOT from the root snapshot's picks/opp_picks fields).
+    pub fn for_perspective(&self, target_side: Side, state: &DraftState, phase: Phase) -> Self {
+        let mut next = self.clone();
+        next.side = target_side;
+        next.phase = phase;
+        match target_side {
+            Side::Blue => {
+                next.our_pool = self.pool_for(Side::Blue);
+                next.opp_pool = self.pool_for(Side::Red);
+                next.our_picks = state.blue_picks.clone();
+                next.opp_picks = state.red_picks.clone();
+            }
+            Side::Red => {
+                next.our_pool = self.pool_for(Side::Red);
+                next.opp_pool = self.pool_for(Side::Blue);
+                next.our_picks = state.red_picks.clone();
+                next.opp_picks = state.blue_picks.clone();
+            }
+        }
+        next
+    }
+
+    /// Returns the pool for `side` based on the CURRENT context's perspective.
+    /// `our_pool` corresponds to `self.side`; `opp_pool` to the opposite.
+    fn pool_for(&self, side: Side) -> TeamPool {
+        if side == self.side { self.our_pool.clone() } else { self.opp_pool.clone() }
+    }
+}
+
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ScoreSet {
-    pub composite: f64,
+    pub composite: f64,                 // Backward compat with projection.rs:282, 332. Set to composite_per_side.for_side(eval_ctx.side).
+    pub composite_per_side: SideValues, // The load-bearing value.
     pub compStrength: f64,
     pub informationValue: f64,
     pub flexRetention: f64,
@@ -114,6 +162,10 @@ pub fn score_pick(
 
     ScoreSet {
         composite: raw_composite * multiplier,
+        composite_per_side: SideValues {
+            blue: if ctx.side == Side::Blue { raw_composite * multiplier } else { 0.0 },
+            red:  if ctx.side == Side::Red  { raw_composite * multiplier } else { 0.0 },
+        },
         compStrength: comp_strength,
         informationValue: information_value,
         flexRetention: flex_retention,

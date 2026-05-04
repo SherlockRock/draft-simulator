@@ -1,5 +1,5 @@
 use engine_core::draft_state::{ActionType, Phase, Side};
-use engine_core::evaluator::ScoreSet;
+use engine_core::evaluator::{ScoreSet, SideValues};
 use engine_core::pools::Role;
 use engine_core::role_solver::{
     CcProfile, ChampionMeta, ChampionTags, DamageProfile, ScalingProfile,
@@ -20,6 +20,7 @@ fn node(
         champion_ids: champion_ids.iter().map(|id| (*id).to_string()).collect(),
         scores: ScoreSet {
             composite,
+            composite_per_side: SideValues { blue: composite, red: 0.0 },
             ..Default::default()
         },
         side,

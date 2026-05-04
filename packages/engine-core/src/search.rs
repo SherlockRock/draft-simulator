@@ -3,7 +3,7 @@ use crate::coverage::{coverage_score, missing_roles};
 use crate::draft_state::{is_taken, picks_remaining, ActionType, DraftState, Phase, Side, TurnInfo, TURN_SEQUENCE};
 use crate::engine::EngineError;
 use crate::feasibility::can_complete_roles;
-use crate::evaluator::{phase_weight_for, score_pick, EvalContext, ScoreSet};
+use crate::evaluator::{phase_weight_for, score_pick, EvalContext, ScoreSet, SideValues};
 use crate::forced_branches::{resolve_path, ForcedBranch, ForcedMode, PathMatch};
 use crate::pair_filter::{seed_pair_candidates, PairFilterConfig};
 use crate::pools::{Role, TeamPool};
@@ -178,11 +178,12 @@ fn search_recursive(
 
     // Terminal or depth-bound: produce a leaf node carrying a static evaluation.
     if turn_opt.is_none() || remaining_depth == 0 {
-        let value = eval_state(state, eval_ctx);
+        let value: SideValues = eval_state(state, eval_ctx);
         let leaf = TreeNode {
             champion_ids: vec![],
             scores: ScoreSet {
-                composite: value,
+                composite: value.for_side(eval_ctx.side),
+                composite_per_side: value,
                 ..Default::default()
             },
             side: turn_opt.map(|t| t.side),
@@ -286,6 +287,7 @@ fn search_recursive(
     } else {
         f64::INFINITY
     };
+    let mut best_value_pair = SideValues::default();
 
     for (idx, (champ, _static_score)) in forced_set.iter().enumerate() {
         ensure_not_cancelled(cancel)?;
@@ -308,11 +310,13 @@ fn search_recursive(
         )?;
         lineage.pop();
         let child_value = child_tree.scores.composite;
+        let child_value_pair: SideValues = child_tree.scores.composite_per_side;
 
         let branch_node = TreeNode {
             champion_ids: vec![champ.clone()],
             scores: ScoreSet {
                 composite: child_value,
+                composite_per_side: child_value_pair,
                 ..Default::default()
             },
             side: Some(turn.side),
@@ -327,6 +331,7 @@ fn search_recursive(
         if our_turn {
             if child_value > best_value {
                 best_value = child_value;
+                best_value_pair = child_value_pair;
             }
             if best_value > alpha {
                 alpha = best_value;
@@ -334,6 +339,7 @@ fn search_recursive(
         } else {
             if child_value < best_value {
                 best_value = child_value;
+                best_value_pair = child_value_pair;
             }
             if best_value < beta {
                 beta = best_value;
@@ -347,7 +353,8 @@ fn search_recursive(
 
     if children.is_empty() {
         // No legal candidates (e.g., depleted pool). Treat as terminal.
-        best_value = eval_state(state, eval_ctx);
+        best_value_pair = eval_state(state, eval_ctx);
+        best_value = best_value_pair.for_side(eval_ctx.side);
     }
 
     // Sort children by composite descending so tree-builders/UI see best-first.
@@ -362,6 +369,7 @@ fn search_recursive(
         champion_ids: vec![],
         scores: ScoreSet {
             composite: best_value,
+            composite_per_side: best_value_pair,
             ..Default::default()
         },
         side: Some(turn.side),
@@ -562,9 +570,9 @@ fn state_cache_key(state: &DraftState, remaining_depth: usize) -> StateHash {
     StateHash::from_u64(hasher.finish())
 }
 
-/// Static evaluation of a draft state from `ctx.side`'s perspective. Sums
-/// composite score of each of our locked-in picks at their primary role,
-/// then adds a whole-comp role-coverage signal once.
+/// Static evaluation of a draft state from both sides' perspectives. Returns
+/// a `SideValues` containing each side's composite score independently, using
+/// per-side phase and pool context so neither perspective is conflated.
 ///
 /// The per-pick `role_coverage` component returned by `score_pick` is 0 here
 /// by construction: `coverage_marginal_gain` is called with `picks` already
@@ -573,12 +581,28 @@ fn state_cache_key(state: &DraftState, remaining_depth: usize) -> StateHash {
 /// terminal/leaf states, so we add `weights.coverage * coverage_score(picks)`
 /// once here. Without this, the back-propagated minimax value is coverage-
 /// blind and prefers raw-win-rate-greedy comps over role-balanced ones.
-fn eval_state(state: &DraftState, ctx: &EvalContext) -> f64 {
-    let our_picks = if ctx.side == Side::Blue {
-        &state.blue_picks
-    } else {
-        &state.red_picks
-    };
+fn eval_state(state: &DraftState, ctx: &EvalContext) -> SideValues {
+    let blue_phase = phase_for_state(state, Side::Blue);
+    let red_phase = phase_for_state(state, Side::Red);
+
+    let blue_ctx = ctx.for_perspective(Side::Blue, state, blue_phase);
+    let red_ctx = ctx.for_perspective(Side::Red, state, red_phase);
+
+    SideValues {
+        blue: side_total(state, &state.blue_picks.clone(), &blue_ctx),
+        red: side_total(state, &state.red_picks.clone(), &red_ctx),
+    }
+}
+
+/// Mirror engine.rs:128 — derive phase from state.current_turn().
+/// Falls back to Pick2 only at terminal (no current turn). The `_side`
+/// parameter is kept for API symmetry; future side-asymmetric phase
+/// handling could use it.
+fn phase_for_state(state: &DraftState, _side: Side) -> Phase {
+    state.current_turn().map(|t| t.phase).unwrap_or(Phase::Pick2)
+}
+
+fn side_total(state: &DraftState, our_picks: &[String], ctx: &EvalContext) -> f64 {
     let mut total = 0.0;
     for champ in our_picks {
         let role = primary_role(champ, &ctx.champion_meta).unwrap_or(Role::Top);
@@ -775,6 +799,7 @@ fn expand_pair(
     } else {
         f64::INFINITY
     };
+    let mut best_value_pair = SideValues::default();
 
     let injected = pair_force.is_some();
 
@@ -800,11 +825,13 @@ fn expand_pair(
         )?;
         lineage.pop();
         let child_value = child_tree.scores.composite;
+        let child_value_pair: SideValues = child_tree.scores.composite_per_side;
 
         children.push(TreeNode {
             champion_ids: vec![first.clone(), second.clone()],
             scores: ScoreSet {
                 composite: child_value,
+                composite_per_side: child_value_pair,
                 ..Default::default()
             },
             side: Some(turn.side),
@@ -818,6 +845,7 @@ fn expand_pair(
         if our_turn {
             if child_value > best_value {
                 best_value = child_value;
+                best_value_pair = child_value_pair;
             }
             if best_value > alpha {
                 alpha = best_value;
@@ -825,6 +853,7 @@ fn expand_pair(
         } else {
             if child_value < best_value {
                 best_value = child_value;
+                best_value_pair = child_value_pair;
             }
             if best_value < beta {
                 beta = best_value;
@@ -837,7 +866,8 @@ fn expand_pair(
     }
 
     if children.is_empty() {
-        best_value = eval_state(state, eval_ctx);
+        best_value_pair = eval_state(state, eval_ctx);
+        best_value = best_value_pair.for_side(eval_ctx.side);
     }
     children.sort_by(|a, b| {
         b.scores
@@ -850,6 +880,7 @@ fn expand_pair(
         champion_ids: vec![],
         scores: ScoreSet {
             composite: best_value,
+            composite_per_side: best_value_pair,
             ..Default::default()
         },
         side: Some(turn.side),
