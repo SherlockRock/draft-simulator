@@ -224,6 +224,28 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     const [selectedScenarioIndex, setSelectedScenarioIndex] = createSignal<number | null>(
         null
     );
+
+    // Auto-select scenarios[0] (Robust) when a snapshot arrives with scenarios
+    // but no current selection. Keyed on snapshot.id (per-snapshot UUID set by
+    // backend) — NOT navigator_draft_id (stable per-draft, won't change across
+    // recomputes). Cache snapshots use id="cache" which still triggers correctly.
+    //
+    // Effect ordering: snapshot-update events run remapSelectedScenarioIndex
+    // synchronously inside the handler, so this effect always sees post-remap
+    // selection state. The "only set when null" guard preserves user clicks
+    // (and remap's name-match results) across recomputes.
+    const currentSnapshotId = createMemo(
+        () => navigatorContext().snapshot?.id ?? null
+    );
+    createEffect(() => {
+        const snapId = currentSnapshotId();
+        if (snapId === null) return;
+        const scenarios = navigatorContext().snapshot?.scenarios ?? [];
+        if (scenarios.length === 0) return;
+        if (selectedScenarioIndex() === null) {
+            setSelectedScenarioIndex(0);
+        }
+    });
     const [panRequest, setPanRequest] = createSignal<NavigatorPanRequest | null>(null);
     const [manualExpansionKeys, setManualExpansionKeysSignal] = createSignal<
         ReadonlySet<string>
