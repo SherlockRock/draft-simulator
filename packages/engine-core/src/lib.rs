@@ -5,6 +5,7 @@ pub mod coverage;
 pub mod draft_state;
 pub mod engine;
 pub mod evaluator;
+pub mod feasibility;
 pub mod forced_branches;
 pub mod iterative_deepening;
 pub mod pair_filter;
