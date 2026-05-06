@@ -22,7 +22,7 @@ pub enum FeasibilityMode {
 }
 
 /// Plays out from `state` to terminal, returns the completed DraftState.
-/// Caller scores it via `terminal_score`.
+/// Caller scores it via `terminal_eval`.
 pub fn play_to_terminal(
     state: &mut DraftState,
     fixture: &SpikeFixture,

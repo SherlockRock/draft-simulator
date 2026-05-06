@@ -167,3 +167,47 @@ fn uncached_feasibility_also_works() {
     }
     assert!(mcts.total_iterations() > 0);
 }
+
+#[test]
+fn reroot_preserves_subtree_visits() {
+    let fixture = small_fixture();
+    let mut mcts = Mcts::new(
+        &fixture,
+        DraftState::default(),
+        McTsConfig {
+            policy: RolloutPolicy::UniformFeasible,
+            feasibility_mode: FeasibilityMode::Cached,
+            seed: 42,
+        },
+    );
+    for _ in 0..500 {
+        mcts.iterate();
+    }
+    let dist = mcts.root_visit_distribution();
+    let top_move = dist[0].0.clone();
+    let inherited = dist[0].1;
+    assert!(inherited > 0, "top child should have visits");
+
+    mcts.reroot_to(&top_move).expect("reroot to known top move");
+    assert_eq!(
+        mcts.total_iterations(),
+        inherited,
+        "active root visits should equal pre-reroot child visits"
+    );
+    assert_eq!(mcts.inherited_visits_at_reroot(), inherited);
+
+    for _ in 0..200 {
+        mcts.iterate();
+    }
+    assert!(mcts.total_iterations() > inherited, "new visits accumulated");
+
+    mcts.uproot().expect("uproot back to original root");
+    let post_dist = mcts.root_visit_distribution();
+    assert!(!post_dist.is_empty(), "original root has children visible");
+    let top_after_uproot = &post_dist[0];
+    assert_eq!(top_after_uproot.0, top_move, "top move stable after uproot");
+    assert!(
+        top_after_uproot.1 >= inherited,
+        "top child still carries pre-reroot + new visits"
+    );
+}

@@ -30,11 +30,15 @@ pub struct Mcts<'a> {
     active_root: NodeId,
     /// Projected state at `active_root`. Cloned per iteration in `select`.
     active_root_state: DraftState,
-    /// Snapshot of `active_root.visits` taken the moment we last rerooted.
-    /// Surfaced into the trajectory CSV as `inherited_visits`.
+    /// Visit count of the current `active_root` snapshotted at the moment
+    /// of the most recent reroot — i.e. iterations carried over from the
+    /// parent's prior search. Surfaced into the trajectory CSV as
+    /// `inherited_visits`.
     inherited_visits_at_reroot: u32,
-    /// Stack of (active_root, state, inherited_visits_snapshot) frames
-    /// pushed at each reroot. `uproot()` pops to walk back up.
+    /// Stack of (prev_active_root, prev_state, prev_inherited_visits)
+    /// frames pushed at each reroot. `uproot()` pops to walk back up.
+    /// The `u32` is the popped frame's `inherited_visits_at_reroot`,
+    /// not the new one being entered.
     history: Vec<(NodeId, DraftState, u32)>,
     tree: Tree,
 }
@@ -172,6 +176,52 @@ impl<'a> Mcts<'a> {
 
     pub fn total_iterations(&self) -> u32 {
         self.tree.get(self.active_root).visits
+    }
+
+    /// Promote a child of the current active root to be the new active root.
+    /// Tree storage is unchanged — only the logical root moves. Snapshots the
+    /// inherited visit count for trajectory instrumentation.
+    pub fn reroot_to(&mut self, mv: &MoveId) -> Result<(), &'static str> {
+        let root = self.tree.get(self.active_root);
+        let child = root
+            .children
+            .iter()
+            .find(|(m, _)| m == mv)
+            .map(|(_, id)| *id);
+        let Some(child_id) = child else {
+            return Err("move not found among active root's children");
+        };
+        let prev_state = self.active_root_state.clone();
+        let prev_active = self.active_root;
+        let prev_inherited = self.inherited_visits_at_reroot;
+        self.history
+            .push((prev_active, prev_state.clone(), prev_inherited));
+
+        let mut new_state = prev_state;
+        apply_move(&mut new_state, mv);
+        self.active_root = child_id;
+        self.active_root_state = new_state;
+        self.inherited_visits_at_reroot = self.tree.get(child_id).visits;
+        Ok(())
+    }
+
+    /// Walk back to the previous active root. Errors if we're already at the
+    /// original root (no history to pop).
+    pub fn uproot(&mut self) -> Result<(), &'static str> {
+        let Some((prev_active, prev_state, prev_inherited)) = self.history.pop() else {
+            return Err("already at original root — no uproot frame to pop");
+        };
+        self.active_root = prev_active;
+        self.active_root_state = prev_state;
+        self.inherited_visits_at_reroot = prev_inherited;
+        Ok(())
+    }
+
+    /// Snapshot of the new active_root's visit count at the moment of the
+    /// most recent reroot (i.e. iterations carried over from the parent's
+    /// prior search). Reset to 0 at construction.
+    pub fn inherited_visits_at_reroot(&self) -> u32 {
+        self.inherited_visits_at_reroot
     }
 }
 
