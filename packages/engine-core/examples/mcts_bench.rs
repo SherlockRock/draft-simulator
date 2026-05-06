@@ -144,7 +144,7 @@ fn run_trajectory(
     let mut mcts = Mcts::new(
         fixture,
         state,
-        McTsConfig { policy, feasibility_mode: fmode, seed },
+        McTsConfig { policy, feasibility_mode: fmode, seed, root_shortlist_k: None },
     );
 
     let start = Instant::now();

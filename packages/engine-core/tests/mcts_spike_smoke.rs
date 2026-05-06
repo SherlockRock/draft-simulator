@@ -84,6 +84,7 @@ fn runs_without_panic_from_empty_draft() {
             policy: RolloutPolicy::UniformFeasible,
             feasibility_mode: FeasibilityMode::Cached,
             seed: 42,
+            root_shortlist_k: None,
         },
     );
     for _ in 0..200 {
@@ -107,6 +108,7 @@ fn winrate_weighted_policy_completes() {
             policy: RolloutPolicy::WinrateWeightedFeasible,
             feasibility_mode: FeasibilityMode::Cached,
             seed: 7,
+            root_shortlist_k: None,
         },
     );
     for _ in 0..100 {
@@ -141,6 +143,7 @@ fn from_mid_draft_position() {
             policy: RolloutPolicy::UniformFeasible,
             feasibility_mode: FeasibilityMode::Cached,
             seed: 1,
+            root_shortlist_k: None,
         },
     );
     for _ in 0..150 {
@@ -160,6 +163,7 @@ fn uncached_feasibility_also_works() {
             policy: RolloutPolicy::UniformFeasible,
             feasibility_mode: FeasibilityMode::Uncached,
             seed: 99,
+            root_shortlist_k: None,
         },
     );
     for _ in 0..50 {
@@ -178,6 +182,7 @@ fn reroot_preserves_subtree_visits() {
             policy: RolloutPolicy::UniformFeasible,
             feasibility_mode: FeasibilityMode::Cached,
             seed: 42,
+            root_shortlist_k: None,
         },
     );
     for _ in 0..500 {
@@ -210,6 +215,38 @@ fn reroot_preserves_subtree_visits() {
         top_after_uproot.1 >= inherited,
         "top child still carries pre-reroot + new visits"
     );
+}
+
+#[test]
+fn root_shortlist_trims_breadth() {
+    let fixture = small_fixture();
+    let mut mcts_full = Mcts::new(
+        &fixture,
+        DraftState::default(),
+        McTsConfig {
+            policy: RolloutPolicy::UniformFeasible,
+            feasibility_mode: FeasibilityMode::Cached,
+            seed: 1,
+            root_shortlist_k: None,
+        },
+    );
+    let mut mcts_short = Mcts::new(
+        &fixture,
+        DraftState::default(),
+        McTsConfig {
+            policy: RolloutPolicy::UniformFeasible,
+            feasibility_mode: FeasibilityMode::Cached,
+            seed: 1,
+            root_shortlist_k: Some(8),
+        },
+    );
+
+    // Burn one iteration each so root_shortlist_size includes any expansion.
+    mcts_full.iterate();
+    mcts_short.iterate();
+
+    assert!(mcts_short.root_shortlist_size() <= 8);
+    assert!(mcts_full.root_shortlist_size() > mcts_short.root_shortlist_size());
 }
 
 #[test]

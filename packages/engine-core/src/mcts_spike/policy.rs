@@ -15,6 +15,11 @@ pub struct McTsConfig {
     pub policy: RolloutPolicy,
     pub feasibility_mode: FeasibilityMode,
     pub seed: u64,
+    /// Optional root-level shortlist size. `None` keeps the full
+    /// feasibility-filtered move list (v1 behavior). `Some(k)` truncates
+    /// the root's `untried` to the top-k by static-eval prior, then
+    /// intersected with the feasibility-legal set.
+    pub root_shortlist_k: Option<usize>,
 }
 
 pub struct Mcts<'a> {
@@ -56,7 +61,33 @@ impl<'a> Mcts<'a> {
             value_sum: ValueVector::zero(),
             side_to_move: side_to_move(&root_state),
         };
-        root_node.untried = legal_moves(&root_state, fixture, &cache, cfg.feasibility_mode);
+        let mut full_legal = legal_moves(&root_state, fixture, &cache, cfg.feasibility_mode);
+        if let Some(k) = cfg.root_shortlist_k {
+            if let Some(turn) = root_state.current_turn() {
+                use super::prior::{shortlist_top_k, ShortlistInput};
+                let priored = shortlist_top_k(
+                    &root_state,
+                    fixture,
+                    ShortlistInput { side: turn.side, action_type: turn.action_type },
+                    k,
+                );
+                // Intersect with the feasibility-legal set (prior may rank
+                // champs that fail feasibility — `legal_moves` already pruned
+                // those; we keep only priored moves that are also legal).
+                let legal_set: std::collections::HashSet<&MoveId> = full_legal.iter().collect();
+                let mut intersected: Vec<MoveId> = priored
+                    .into_iter()
+                    .filter(|mv| legal_set.contains(mv))
+                    .collect();
+                if intersected.is_empty() {
+                    // Defensive: fall back to full legal moves if intersection
+                    // collapses (e.g. impossible feasibility/prior interaction).
+                    intersected = full_legal.clone();
+                }
+                full_legal = intersected;
+            }
+        }
+        root_node.untried = full_legal;
         let tree = Tree::new(root_node);
         let active_root = tree.root();
         Self {
@@ -222,6 +253,16 @@ impl<'a> Mcts<'a> {
     /// prior search). Reset to 0 at construction.
     pub fn inherited_visits_at_reroot(&self) -> u32 {
         self.inherited_visits_at_reroot
+    }
+
+    /// Number of root-level untried-or-explored moves. Equals
+    /// `cfg.root_shortlist_k` when shortlisting was applied, else the full
+    /// feasibility-filtered count seeded at construction. After iterations
+    /// have run, `untried` shrinks as moves expand into children — this sum
+    /// gives the total breadth seeded at the root.
+    pub fn root_shortlist_size(&self) -> usize {
+        let root = self.tree.get(self.active_root);
+        root.children.len() + root.untried.len()
     }
 }
 
