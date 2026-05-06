@@ -10,6 +10,7 @@
 //! production code style. `unwrap()` is fine. Throw away after measurement.
 
 pub mod feasibility_cache;
+pub mod pareto;
 pub mod policy;
 pub mod prior;
 pub mod rng;

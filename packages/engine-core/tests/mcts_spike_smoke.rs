@@ -285,3 +285,44 @@ fn shortlist_caps_to_k() {
     );
     assert_eq!(shortlisted.len(), 10, "shortlist trims to K");
 }
+
+#[test]
+fn dominance_basic() {
+    use engine_core::mcts_spike::ValueVector;
+    let a = ValueVector { winrate: 1.0, coverage: 1.0, flex: 1.0 };
+    let b = ValueVector { winrate: 0.5, coverage: 0.5, flex: 0.5 };
+    let c = ValueVector { winrate: 0.5, coverage: 1.0, flex: 1.0 };
+    assert!(a.dominates(&b));
+    assert!(!b.dominates(&a));
+    assert!(!a.dominates(&a));
+    assert!(a.dominates(&c)); // 1>0.5, 1>=1, 1>=1 → all_ge && any_gt
+    assert!(!c.dominates(&a));
+}
+
+#[test]
+fn pareto_frontier_at_root_has_at_least_one() {
+    let fixture = small_fixture();
+    let mut mcts = Mcts::new(
+        &fixture,
+        DraftState::default(),
+        McTsConfig {
+            policy: RolloutPolicy::UniformFeasible,
+            feasibility_mode: FeasibilityMode::Cached,
+            seed: 5,
+            root_shortlist_k: Some(20),
+        },
+    );
+    for _ in 0..1000 {
+        mcts.iterate();
+    }
+    let frontier = engine_core::mcts_spike::pareto::root_pareto_frontier(&mcts);
+    assert!(!frontier.is_empty(), "frontier should always have at least one entry");
+    // Every member is non-dominated by every other member.
+    for (i, a) in frontier.iter().enumerate() {
+        for (j, b) in frontier.iter().enumerate() {
+            if i == j { continue; }
+            assert!(!a.mean_value.dominates(&b.mean_value),
+                "frontier member {} dominates {}", i, j);
+        }
+    }
+}
