@@ -11,6 +11,7 @@
 
 pub mod feasibility_cache;
 pub mod policy;
+pub mod prior;
 pub mod rng;
 pub mod rollout;
 pub mod tree;

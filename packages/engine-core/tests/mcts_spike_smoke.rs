@@ -211,3 +211,40 @@ fn reroot_preserves_subtree_visits() {
         "top child still carries pre-reroot + new visits"
     );
 }
+
+#[test]
+fn prior_ranks_higher_winrate_above_lower() {
+    use engine_core::draft_state::ActionType;
+    use engine_core::mcts_spike::prior::{compute_prior_scores, ShortlistInput};
+
+    let mut fixture = small_fixture();
+    fixture.winrates.insert("Garen".into(), 0.60);
+    fixture.winrates.insert("Darius".into(), 0.45);
+
+    let state = DraftState::default();
+    let scores = compute_prior_scores(
+        &state,
+        &fixture,
+        ShortlistInput { side: engine_core::draft_state::Side::Blue, action_type: ActionType::Pick },
+    );
+    let garen = scores.iter().find(|(mv, _)| mv.champion == "Garen").unwrap();
+    let darius = scores.iter().find(|(mv, _)| mv.champion == "Darius").unwrap();
+    assert!(garen.1 > darius.1, "higher winrate champ should score higher");
+}
+
+#[test]
+fn shortlist_caps_to_k() {
+    use engine_core::mcts_spike::prior::shortlist_top_k;
+    use engine_core::draft_state::ActionType;
+    use engine_core::mcts_spike::prior::ShortlistInput;
+
+    let fixture = small_fixture();
+    let state = DraftState::default();
+    let shortlisted = shortlist_top_k(
+        &state,
+        &fixture,
+        ShortlistInput { side: engine_core::draft_state::Side::Blue, action_type: ActionType::Pick },
+        10,
+    );
+    assert_eq!(shortlisted.len(), 10, "shortlist trims to K");
+}
