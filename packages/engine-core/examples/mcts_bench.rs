@@ -1,23 +1,26 @@
-//! MCTS spike benchmark harness.
+//! MCTS spike v2 trajectory bench.
 //!
 //! Run with: cargo run --release --example mcts_bench
 //!
-//! Emits CSV to stdout. Each row is one (position, budget, policy, feasibility_mode, seed) run.
+//! Emits CSV to stdout. Each row is one (position, seed, sample-checkpoint)
+//! observation — sub-1s checkpoints support the streaming-UI claim.
 
 use engine_core::draft_state::DraftState;
 use engine_core::mcts_spike::policy::{McTsConfig, Mcts};
 use engine_core::mcts_spike::rollout::{FeasibilityMode, RolloutPolicy};
-use engine_core::mcts_spike::SpikeFixture;
+use engine_core::mcts_spike::tree::MoveId;
+use engine_core::mcts_spike::{SpikeFixture, ValueVector};
 use engine_core::pools::Role;
 use engine_core::role_solver::ChampionMeta;
 use std::collections::HashMap;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+
+const SAMPLE_SCHEDULE_MS: &[u128] = &[
+    100, 250, 500, 1_000, 2_000, 5_000, 10_000, 30_000, 60_000,
+];
 
 fn build_fixture() -> SpikeFixture {
-    // Procedurally generate ~80 champions across roles, with some flex.
-    // Names are synthetic but role distribution is roughly LoL-shaped.
     let role_layout: &[(Role, &[Role], usize)] = &[
-        // (primary, optional flex, count)
         (Role::Top, &[Role::Middle], 16),
         (Role::Jungle, &[Role::Top], 16),
         (Role::Middle, &[Role::Top], 16),
@@ -40,7 +43,6 @@ fn build_fixture() -> SpikeFixture {
     for (primary, flex_opts, count) in role_layout {
         for i in 0..*count {
             let id = format!("{}{:02}", role_letter(*primary), i);
-            // Every 4th champion of a role gets a flex secondary.
             let positions = if i % 4 == 0 && !flex_opts.is_empty() {
                 vec![*primary, flex_opts[0]]
             } else {
@@ -54,26 +56,18 @@ fn build_fixture() -> SpikeFixture {
                     ..Default::default()
                 },
             );
-            // Spread winrates 0.46..0.54 deterministically.
             let wr = 0.46 + (((i * 7) % 9) as f64) / 100.0;
             winrates.insert(id.clone(), wr);
             all_champions.push(id);
         }
     }
 
-    SpikeFixture {
-        meta,
-        winrates,
-        all_champions,
-    }
+    SpikeFixture { meta, winrates, all_champions }
 }
 
-fn position_empty() -> DraftState {
-    DraftState::default()
-}
+fn position_empty() -> DraftState { DraftState::default() }
 
 fn position_after_bans1() -> DraftState {
-    // Six bans done — about to start Pick 1.
     DraftState {
         blue_bans: vec!["T00".into(), "J04".into(), "M08".into()],
         red_bans: vec!["A00".into(), "S00".into(), "M00".into()],
@@ -82,7 +76,6 @@ fn position_after_bans1() -> DraftState {
 }
 
 fn position_mid_pick1() -> DraftState {
-    // Six bans + first three Pick 1 actions: B1, R1+R2 (pair), B2 (start of pair).
     DraftState {
         blue_bans: vec!["T00".into(), "J04".into(), "M08".into()],
         red_bans: vec!["A00".into(), "S00".into(), "M00".into()],
@@ -93,16 +86,10 @@ fn position_mid_pick1() -> DraftState {
 }
 
 fn position_late() -> DraftState {
-    // Through Pick1 + Ban2 + first Pick2 — two picks remaining (B5, R5).
     DraftState {
         blue_bans: vec!["T00".into(), "J04".into(), "M08".into(), "T08".into()],
         red_bans: vec!["A00".into(), "S00".into(), "M00".into(), "J08".into()],
-        blue_picks: vec![
-            "T01".into(),
-            "M01".into(),
-            "J01".into(),
-            "A01".into(),
-        ],
+        blue_picks: vec!["T01".into(), "M01".into(), "J01".into(), "A01".into()],
         red_picks: vec![
             "J00".into(),
             "M04".into(),
@@ -134,133 +121,122 @@ fn make_position(idx: usize) -> DraftState {
     }
 }
 
-fn policy_label(p: RolloutPolicy) -> &'static str {
-    match p {
-        RolloutPolicy::UniformFeasible => "uniform",
-        RolloutPolicy::WinrateWeightedFeasible => "winrate",
-    }
+fn move_label(mv: &MoveId) -> String {
+    format!("{}:{}", if mv.is_pick { "P" } else { "B" }, mv.champion)
 }
 
-fn fmode_label(f: FeasibilityMode) -> &'static str {
-    match f {
-        FeasibilityMode::Cached => "cached",
-        FeasibilityMode::Uncached => "uncached",
-    }
+fn topk_label(dist: &[(MoveId, u32, ValueVector)], k: usize) -> String {
+    dist.iter()
+        .take(k)
+        .map(|(mv, _, _)| move_label(mv))
+        .collect::<Vec<_>>()
+        .join("|")
 }
 
-fn run_one(
+fn run_trajectory(
     fixture: &SpikeFixture,
     state: DraftState,
-    budget: u32,
     policy: RolloutPolicy,
     fmode: FeasibilityMode,
     seed: u64,
-) -> (u128, String, u32, f64, String, f64) {
+    position: &str,
+) {
     let mut mcts = Mcts::new(
         fixture,
         state,
-        McTsConfig {
-            policy,
-            feasibility_mode: fmode,
-            seed,
-        },
+        McTsConfig { policy, feasibility_mode: fmode, seed },
     );
-    let start = Instant::now();
-    for _ in 0..budget {
-        mcts.iterate();
-    }
-    let wall_ms = start.elapsed().as_millis();
 
-    let dist = mcts.root_visit_distribution();
-    let total: u32 = dist.iter().map(|(_, v, _)| *v).sum();
-    if dist.is_empty() {
-        return (wall_ms, "<none>".into(), 0, 0.0, "<none>".into(), 0.0);
+    let start = Instant::now();
+    let mut next_sample_idx = 0usize;
+    let mut last_iters: u32 = 0;
+    let mut last_sample_at = start;
+
+    while next_sample_idx < SAMPLE_SCHEDULE_MS.len() {
+        let elapsed = start.elapsed().as_millis();
+        let target = SAMPLE_SCHEDULE_MS[next_sample_idx];
+        if elapsed >= target {
+            let iters = mcts.total_iterations();
+            let window_secs = last_sample_at.elapsed().as_secs_f64().max(1e-6);
+            let ips_window = (iters - last_iters) as f64 / window_secs;
+            last_iters = iters;
+            last_sample_at = Instant::now();
+
+            let dist = mcts.root_visit_distribution();
+            let total_root_visits: u32 = dist.iter().map(|(_, v, _)| *v).sum();
+            let top1_share = if total_root_visits > 0 && !dist.is_empty() {
+                dist[0].1 as f64 / total_root_visits as f64
+            } else {
+                0.0
+            };
+            let top1_value = dist
+                .first()
+                .map(|(_, _, v)| *v)
+                .unwrap_or(ValueVector::zero());
+            let top1_move = dist
+                .first()
+                .map(|(mv, _, _)| move_label(mv))
+                .unwrap_or_else(|| "<none>".into());
+            let top1_visits = dist.first().map(|(_, v, _)| *v).unwrap_or(0);
+
+            // Pareto + shortlist columns reserved; filled by Task 11.
+            let pareto_size = 0u32;
+            let pareto_moves = String::new();
+            let visits_per_frontier_member = String::new();
+            let shortlist_size = 0u32;
+
+            println!(
+                "{},{},{},{},{:.0},{},{},{:.4},{},{},{},{},{},{:.4},{:.4},{:.4},{}",
+                position,
+                seed,
+                elapsed,
+                iters,
+                ips_window,
+                top1_move,
+                top1_visits,
+                top1_share,
+                topk_label(&dist, 3),
+                topk_label(&dist, 5),
+                pareto_size,
+                pareto_moves,
+                visits_per_frontier_member,
+                top1_value.winrate,
+                top1_value.coverage,
+                top1_value.flex,
+                shortlist_size,
+            );
+            next_sample_idx += 1;
+            continue;
+        }
+        // Iterate until next checkpoint OR the budget expires.
+        let deadline = start + Duration::from_millis(target as u64);
+        while Instant::now() < deadline {
+            mcts.iterate();
+        }
     }
-    let top = &dist[0];
-    let top1_share = if total > 0 {
-        top.1 as f64 / total as f64
-    } else {
-        0.0
-    };
-    let top3: Vec<String> = dist
-        .iter()
-        .take(3)
-        .map(|(mv, _, _)| {
-            format!(
-                "{}:{}",
-                if mv.is_pick { "P" } else { "B" },
-                mv.champion
-            )
-        })
-        .collect();
-    let top3_set = top3.join("|");
-    (
-        wall_ms,
-        format!(
-            "{}:{}",
-            if top.0.is_pick { "P" } else { "B" },
-            top.0.champion
-        ),
-        top.1,
-        top1_share,
-        top3_set,
-        top.2.composite(),
-    )
 }
 
 fn main() {
     let fixture = build_fixture();
-
-    // Budget grid kept tight; uncached at high budgets blows out.
-    // Spike-time matrix; widen if any cell looks promising and we want more
-    // resolution.
-    let cached_budgets = [2_000u32, 20_000];
-    let uncached_budgets = [1_000u32];
-    let policies = [
-        RolloutPolicy::UniformFeasible,
-        RolloutPolicy::WinrateWeightedFeasible,
-    ];
-    let seeds = [1u64, 42];
-    let position_count = 4;
+    let policies = [RolloutPolicy::UniformFeasible];
+    let fmodes = [FeasibilityMode::Cached];
+    let seeds = [1u64, 42, 1337];
+    let positions = 4usize;
 
     println!(
-        "position,budget,policy,feasibility_mode,seed,wall_ms,iters_per_sec,top1_move,top1_visits,top1_share,top3_set,top1_value"
+        "position,seed,elapsed_ms,iters_completed,iter_per_sec_window,\
+         top1_move,top1_visits,top1_share,top3_set,top5_set,\
+         pareto_frontier_size,pareto_frontier_moves,visits_per_frontier_member,\
+         top1_value_winrate,top1_value_coverage,top1_value_flex,shortlist_size"
     );
 
-    for pos_idx in 0..position_count {
+    for pos_idx in 0..positions {
         let label = position_label(pos_idx);
-        for &fmode in &[FeasibilityMode::Cached, FeasibilityMode::Uncached] {
-            let budgets: &[u32] = match fmode {
-                FeasibilityMode::Cached => &cached_budgets,
-                FeasibilityMode::Uncached => &uncached_budgets,
-            };
-            for &budget in budgets {
-                for &policy in &policies {
-                    for &seed in &seeds {
-                        let state = make_position(pos_idx);
-                        let (wall_ms, top1, top1_visits, top1_share, top3_set, top1_value) =
-                            run_one(&fixture, state, budget, policy, fmode, seed);
-                        let ips = if wall_ms > 0 {
-                            (budget as f64) * 1000.0 / (wall_ms as f64)
-                        } else {
-                            f64::INFINITY
-                        };
-                        println!(
-                            "{},{},{},{},{},{},{:.0},{},{},{:.3},{},{:.4}",
-                            label,
-                            budget,
-                            policy_label(policy),
-                            fmode_label(fmode),
-                            seed,
-                            wall_ms,
-                            ips,
-                            top1,
-                            top1_visits,
-                            top1_share,
-                            top3_set,
-                            top1_value,
-                        );
-                    }
+        for &fmode in &fmodes {
+            for &policy in &policies {
+                for &seed in &seeds {
+                    let state = make_position(pos_idx);
+                    run_trajectory(&fixture, state, policy, fmode, seed, label);
                 }
             }
         }
