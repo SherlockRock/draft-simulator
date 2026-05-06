@@ -8,7 +8,6 @@
 use engine_core::draft_state::DraftState;
 use engine_core::mcts_spike::policy::{McTsConfig, Mcts};
 use engine_core::mcts_spike::rollout::{FeasibilityMode, RolloutPolicy};
-use engine_core::mcts_spike::tree::MoveId;
 use engine_core::mcts_spike::{SpikeFixture, ValueVector};
 use engine_core::pools::Role;
 use engine_core::role_solver::ChampionMeta;
@@ -121,18 +120,6 @@ fn make_position(idx: usize) -> DraftState {
     }
 }
 
-fn move_label(mv: &MoveId) -> String {
-    format!("{}:{}", if mv.is_pick { "P" } else { "B" }, mv.champion)
-}
-
-fn topk_label(dist: &[(MoveId, u32, ValueVector)], k: usize) -> String {
-    dist.iter()
-        .take(k)
-        .map(|(mv, _, _)| move_label(mv))
-        .collect::<Vec<_>>()
-        .join("|")
-}
-
 fn run_trajectory(
     fixture: &SpikeFixture,
     state: DraftState,
@@ -140,11 +127,19 @@ fn run_trajectory(
     fmode: FeasibilityMode,
     seed: u64,
     position: &str,
+    shortlist_k: Option<usize>,
 ) {
+    use engine_core::mcts_spike::trajectory::{capture, entries_label, frontier_label, frontier_visits_summary};
+
     let mut mcts = Mcts::new(
         fixture,
         state,
-        McTsConfig { policy, feasibility_mode: fmode, seed, root_shortlist_k: None },
+        McTsConfig {
+            policy,
+            feasibility_mode: fmode,
+            seed,
+            root_shortlist_k: shortlist_k,
+        },
     );
 
     let start = Instant::now();
@@ -162,28 +157,22 @@ fn run_trajectory(
             last_iters = iters;
             last_sample_at = Instant::now();
 
-            let dist = mcts.root_visit_distribution();
-            let total_root_visits: u32 = dist.iter().map(|(_, v, _)| *v).sum();
-            let top1_share = if total_root_visits > 0 && !dist.is_empty() {
-                dist[0].1 as f64 / total_root_visits as f64
+            let sample = capture(&mcts, elapsed, ips_window);
+            let top1_share = if sample.root_total_visits > 0 {
+                sample.top1.as_ref().map(|t| t.visits).unwrap_or(0) as f64
+                    / sample.root_total_visits as f64
             } else {
                 0.0
             };
-            let top1_value = dist
-                .first()
-                .map(|(_, _, v)| *v)
-                .unwrap_or(ValueVector::zero());
-            let top1_move = dist
-                .first()
-                .map(|(mv, _, _)| move_label(mv))
-                .unwrap_or_else(|| "<none>".into());
-            let top1_visits = dist.first().map(|(_, v, _)| *v).unwrap_or(0);
-
-            // Pareto + shortlist columns reserved; filled by Task 11.
-            let pareto_size = 0u32;
-            let pareto_moves = String::new();
-            let visits_per_frontier_member = String::new();
-            let shortlist_size = 0u32;
+            let (t1_label, t1_visits, t1_value) = sample
+                .top1
+                .as_ref()
+                .map(|t| (
+                    format!("{}:{}", if t.mv.is_pick { "P" } else { "B" }, t.mv.champion),
+                    t.visits,
+                    t.mean_value,
+                ))
+                .unwrap_or_else(|| ("<none>".into(), 0, ValueVector::zero()));
 
             println!(
                 "{},{},{},{},{:.0},{},{},{:.4},{},{},{},{},{},{:.4},{:.4},{:.4},{}",
@@ -192,23 +181,22 @@ fn run_trajectory(
                 elapsed,
                 iters,
                 ips_window,
-                top1_move,
-                top1_visits,
+                t1_label,
+                t1_visits,
                 top1_share,
-                topk_label(&dist, 3),
-                topk_label(&dist, 5),
-                pareto_size,
-                pareto_moves,
-                visits_per_frontier_member,
-                top1_value.winrate,
-                top1_value.coverage,
-                top1_value.flex,
-                shortlist_size,
+                entries_label(&sample.top3),
+                entries_label(&sample.top5),
+                sample.frontier.len(),
+                frontier_label(&sample.frontier),
+                frontier_visits_summary(&sample.frontier),
+                t1_value.winrate,
+                t1_value.coverage,
+                t1_value.flex,
+                sample.shortlist_size,
             );
             next_sample_idx += 1;
             continue;
         }
-        // Iterate until next checkpoint OR the budget expires.
         let deadline = start + Duration::from_millis(target as u64);
         while Instant::now() < deadline {
             mcts.iterate();
@@ -236,7 +224,7 @@ fn main() {
             for &policy in &policies {
                 for &seed in &seeds {
                     let state = make_position(pos_idx);
-                    run_trajectory(&fixture, state, policy, fmode, seed, label);
+                    run_trajectory(&fixture, state, policy, fmode, seed, label, Some(20));
                 }
             }
         }

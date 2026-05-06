@@ -15,6 +15,7 @@ pub mod policy;
 pub mod prior;
 pub mod rng;
 pub mod rollout;
+pub mod trajectory;
 pub mod tree;
 
 use crate::draft_state::{DraftState, Side};
