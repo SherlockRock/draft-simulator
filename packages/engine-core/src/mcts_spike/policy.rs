@@ -6,7 +6,7 @@ use super::feasibility_cache::FeasibilityCache;
 use super::rng::SplitMix64;
 use super::rollout::{play_to_terminal, FeasibilityMode, RolloutPolicy};
 use super::tree::{MoveId, Node, NodeId, Tree};
-use super::{side_to_move, terminal_score, SpikeFixture};
+use super::{side_to_move, terminal_eval, SpikeFixture, ValueVector};
 
 const UCT_C: f64 = std::f64::consts::SQRT_2;
 
@@ -22,7 +22,20 @@ pub struct Mcts<'a> {
     cache: FeasibilityCache,
     cfg: McTsConfig,
     rng: SplitMix64,
-    root_state: DraftState,
+    /// The original root state. Kept for diagnostics / re-derivation; not
+    /// used in the hot path after `active_root` was introduced.
+    original_root_state: DraftState,
+    /// Logical root for the current iteration. Reroot moves this down to a
+    /// child; uproot moves it back up. Tree storage is unchanged.
+    active_root: NodeId,
+    /// Projected state at `active_root`. Cloned per iteration in `select`.
+    active_root_state: DraftState,
+    /// Snapshot of `active_root.visits` taken the moment we last rerooted.
+    /// Surfaced into the trajectory CSV as `inherited_visits`.
+    inherited_visits_at_reroot: u32,
+    /// Stack of (active_root, state, inherited_visits_snapshot) frames
+    /// pushed at each reroot. `uproot()` pops to walk back up.
+    history: Vec<(NodeId, DraftState, u32)>,
     tree: Tree,
 }
 
@@ -36,18 +49,23 @@ impl<'a> Mcts<'a> {
             children: Vec::new(),
             untried: Vec::new(),
             visits: 0,
-            value_sum: 0.0,
+            value_sum: ValueVector::zero(),
             side_to_move: side_to_move(&root_state),
         };
-        // Seed root's untried moves.
         root_node.untried = legal_moves(&root_state, fixture, &cache, cfg.feasibility_mode);
+        let tree = Tree::new(root_node);
+        let active_root = tree.root();
         Self {
             fixture,
             cache,
             cfg,
             rng,
-            root_state,
-            tree: Tree::new(root_node),
+            original_root_state: root_state.clone(),
+            active_root,
+            active_root_state: root_state,
+            inherited_visits_at_reroot: 0,
+            history: Vec::new(),
+            tree,
         }
     }
 
@@ -80,23 +98,23 @@ impl<'a> Mcts<'a> {
             self.cfg.feasibility_mode,
             &mut self.rng,
         );
-        let value = terminal_score(&state, self.fixture);
+        let value = terminal_eval(&state, self.fixture);
 
-        // 4. Backprop: walk parent links, accumulate value.
+        // 4. Backprop: walk parent links, accumulate vector value.
         let mut path_with_leaf = path;
         path_with_leaf.push(leaf);
         for node_id in path_with_leaf.into_iter().rev() {
             let node = self.tree.get_mut(node_id);
             node.visits += 1;
-            node.value_sum += value;
+            node.value_sum.add_assign(value);
         }
     }
 
     /// (visited_path_excluding_leaf, projected_state_at_leaf, leaf_id)
     fn select(&mut self) -> (Vec<NodeId>, DraftState, NodeId) {
         let mut path = Vec::new();
-        let mut current = self.tree.root();
-        let mut state = self.root_state.clone();
+        let mut current = self.active_root;
+        let mut state = self.active_root_state.clone();
 
         loop {
             let node = self.tree.get(current);
@@ -117,8 +135,8 @@ impl<'a> Mcts<'a> {
             for (i, (_, child_id)) in node.children.iter().enumerate() {
                 let child = self.tree.get(*child_id);
                 let visits = child.visits.max(1) as f64;
-                let mean = child.value_sum / visits;
-                let oriented = if maximize { mean } else { -mean };
+                let mean_composite = child.value_sum.composite() / visits;
+                let oriented = if maximize { mean_composite } else { -mean_composite };
                 let exploration = UCT_C * (parent_visits.ln() / visits).sqrt();
                 let score = oriented + exploration;
                 if score > best_score {
@@ -132,18 +150,18 @@ impl<'a> Mcts<'a> {
         }
     }
 
-    /// (move, visits, mean_value), sorted by visits desc.
-    pub fn root_visit_distribution(&self) -> Vec<(MoveId, u32, f64)> {
-        let root = self.tree.get(self.tree.root());
-        let mut out: Vec<(MoveId, u32, f64)> = root
+    /// (move, visits, mean_value_vector), sorted by visits desc.
+    pub fn root_visit_distribution(&self) -> Vec<(MoveId, u32, ValueVector)> {
+        let root = self.tree.get(self.active_root);
+        let mut out: Vec<(MoveId, u32, ValueVector)> = root
             .children
             .iter()
             .map(|(mv, id)| {
                 let n = self.tree.get(*id);
                 let mean = if n.visits == 0 {
-                    0.0
+                    ValueVector::zero()
                 } else {
-                    n.value_sum / n.visits as f64
+                    n.value_sum.mean(n.visits)
                 };
                 (mv.clone(), n.visits, mean)
             })
@@ -153,7 +171,7 @@ impl<'a> Mcts<'a> {
     }
 
     pub fn total_iterations(&self) -> u32 {
-        self.tree.get(self.tree.root()).visits
+        self.tree.get(self.active_root).visits
     }
 }
 

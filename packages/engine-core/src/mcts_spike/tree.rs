@@ -2,6 +2,7 @@
 //! borrow checker out of our way during recursive descent.
 
 use crate::draft_state::Side;
+use super::ValueVector;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NodeId(pub u32);
@@ -21,7 +22,10 @@ pub struct Node {
     pub children: Vec<(MoveId, NodeId)>,
     pub untried: Vec<MoveId>,
     pub visits: u32,
-    pub value_sum: f64, // sum of terminal scores (blue - red)
+    /// Sum of terminal `ValueVector` evaluations propagated through this
+    /// node. Each dim is `blue - red`; UCT and Pareto extraction divide by
+    /// `visits` to get means.
+    pub value_sum: ValueVector,
     pub side_to_move: Option<Side>,
 }
 
@@ -55,7 +59,7 @@ impl Tree {
             children: Vec::new(),
             untried: Vec::new(),
             visits: 0,
-            value_sum: 0.0,
+            value_sum: ValueVector::zero(),
             side_to_move,
         });
         self.get_mut(parent).children.push((mv, new_id));

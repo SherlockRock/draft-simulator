@@ -29,20 +29,41 @@ pub struct SpikeFixture {
     pub all_champions: Vec<String>,
 }
 
-/// Sum of winrates over picks. Returns blue minus red so positive favors blue.
-/// Side-perspective scaling happens in backprop.
-pub fn terminal_score(state: &DraftState, fixture: &SpikeFixture) -> f64 {
-    let blue: f64 = state
+/// Terminal eval over the 3 spike axes. All axes are `blue - red`.
+///
+/// - `winrate`: sum of per-pick winrates (0.5 default for unknown). Same as v1.
+/// - `coverage`: `coverage::coverage_score` (geometric mean of per-role max
+///   position factors) per side. Picks are 5-long at terminal.
+/// - `flex`: count of side's picks with ≥2 playable roles. Range -5..5.
+pub fn terminal_eval(state: &DraftState, fixture: &SpikeFixture) -> ValueVector {
+    let blue_wr: f64 = state
         .blue_picks
         .iter()
         .map(|c| fixture.winrates.get(c).copied().unwrap_or(0.5))
         .sum();
-    let red: f64 = state
+    let red_wr: f64 = state
         .red_picks
         .iter()
         .map(|c| fixture.winrates.get(c).copied().unwrap_or(0.5))
         .sum();
-    blue - red
+    let blue_cov = crate::coverage::coverage_score(&state.blue_picks, &fixture.meta);
+    let red_cov = crate::coverage::coverage_score(&state.red_picks, &fixture.meta);
+    let blue_flex = flex_count(&state.blue_picks, &fixture.meta) as f64;
+    let red_flex = flex_count(&state.red_picks, &fixture.meta) as f64;
+    ValueVector {
+        winrate: blue_wr - red_wr,
+        coverage: blue_cov - red_cov,
+        flex: blue_flex - red_flex,
+    }
+}
+
+/// Spike flex proxy: count of picks with ≥2 listed playable roles.
+fn flex_count(picks: &[String], meta: &std::collections::HashMap<String, ChampionMeta>) -> usize {
+    picks
+        .iter()
+        .filter_map(|c| meta.get(c))
+        .filter(|m| m.positions.len() >= 2)
+        .count()
 }
 
 /// Whether the to-move side at this state is blue.
@@ -58,6 +79,62 @@ pub fn pool_from_state(state: &DraftState, fixture: &SpikeFixture) -> Vec<String
         .filter(|c| !crate::draft_state::is_taken(c, state))
         .cloned()
         .collect()
+}
+
+/// 3 truly-independent backup axes. Sign convention: every dimension is
+/// `blue - red` so existing UCT side-flipping logic in `policy.rs` carries
+/// over unchanged by negating the whole vector for red-to-move.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ValueVector {
+    pub winrate: f64,
+    pub coverage: f64,
+    pub flex: f64,
+}
+
+impl ValueVector {
+    pub fn zero() -> Self {
+        Self::default()
+    }
+
+    pub fn add_assign(&mut self, other: ValueVector) {
+        self.winrate += other.winrate;
+        self.coverage += other.coverage;
+        self.flex += other.flex;
+    }
+
+    pub fn neg(self) -> Self {
+        Self {
+            winrate: -self.winrate,
+            coverage: -self.coverage,
+            flex: -self.flex,
+        }
+    }
+
+    pub fn mean(self, visits: u32) -> Self {
+        let n = visits.max(1) as f64;
+        Self {
+            winrate: self.winrate / n,
+            coverage: self.coverage / n,
+            flex: self.flex / n,
+        }
+    }
+
+    /// Equal-weight composite. UCT mean+exploration uses this scalar so
+    /// existing selection semantics survive vector backup.
+    pub fn composite(&self) -> f64 {
+        self.winrate + self.coverage + self.flex
+    }
+
+    /// Pareto dominance (strict): self ≥ other on every axis and > on at least one.
+    pub fn dominates(&self, other: &Self) -> bool {
+        let all_ge = self.winrate >= other.winrate
+            && self.coverage >= other.coverage
+            && self.flex >= other.flex;
+        let any_gt = self.winrate > other.winrate
+            || self.coverage > other.coverage
+            || self.flex > other.flex;
+        all_ge && any_gt
+    }
 }
 
 /// Approximate playable-roles bitmask (used by feasibility_cache; production

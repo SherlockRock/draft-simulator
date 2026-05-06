@@ -204,7 +204,7 @@ fn run_one(
         top.1,
         top1_share,
         top3_set,
-        top.2,
+        top.2.composite(),
     )
 }
 
