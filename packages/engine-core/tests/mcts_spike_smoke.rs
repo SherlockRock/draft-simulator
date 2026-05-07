@@ -251,7 +251,8 @@ fn root_shortlist_trims_breadth() {
 
 #[test]
 fn prior_ranks_higher_winrate_above_lower() {
-    use engine_core::draft_state::ActionType;
+    use engine_core::draft_state::{ActionType, Side};
+    use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx;
     use engine_core::mcts_spike::prior::{compute_prior_scores, ShortlistInput};
 
     let mut fixture = small_fixture();
@@ -259,10 +260,12 @@ fn prior_ranks_higher_winrate_above_lower() {
     fixture.winrates.insert("Darius".into(), 0.45);
 
     let state = DraftState::default();
+    let ctx = build_spike_eval_ctx(&fixture, &state, Side::Blue);
     let scores = compute_prior_scores(
         &state,
         &fixture,
-        ShortlistInput { side: engine_core::draft_state::Side::Blue, action_type: ActionType::Pick },
+        &ctx,
+        ShortlistInput { side: Side::Blue, action_type: ActionType::Pick },
     );
     let garen = scores.iter().find(|(mv, _)| mv.champion == "Garen").unwrap();
     let darius = scores.iter().find(|(mv, _)| mv.champion == "Darius").unwrap();
@@ -271,16 +274,18 @@ fn prior_ranks_higher_winrate_above_lower() {
 
 #[test]
 fn shortlist_caps_to_k() {
-    use engine_core::mcts_spike::prior::shortlist_top_k;
-    use engine_core::draft_state::ActionType;
-    use engine_core::mcts_spike::prior::ShortlistInput;
+    use engine_core::draft_state::{ActionType, Side};
+    use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx;
+    use engine_core::mcts_spike::prior::{shortlist_top_k, ShortlistInput};
 
     let fixture = small_fixture();
     let state = DraftState::default();
+    let ctx = build_spike_eval_ctx(&fixture, &state, Side::Blue);
     let shortlisted = shortlist_top_k(
         &state,
         &fixture,
-        ShortlistInput { side: engine_core::draft_state::Side::Blue, action_type: ActionType::Pick },
+        &ctx,
+        ShortlistInput { side: Side::Blue, action_type: ActionType::Pick },
         10,
     );
     assert_eq!(shortlisted.len(), 10, "shortlist trims to K");
@@ -325,4 +330,71 @@ fn pareto_frontier_at_root_has_at_least_one() {
                 "frontier member {} dominates {}", i, j);
         }
     }
+}
+
+#[test]
+fn prior_top5_overlaps_with_ab_top5() {
+    // v3 alignment hypothesis check: the new score_pick-based prior should
+    // produce a top-5 that overlaps significantly with production AB's
+    // singleton-aggregated top-5 at empty draft. v2's stripped prior had
+    // 0.67/5 overlap on average. v3 expects >=3/5.
+    use engine_core::cancellation::CancelHandle;
+    use engine_core::draft_state::{ActionType, Side};
+    use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx;
+    use engine_core::mcts_spike::prior::{shortlist_top_k, ShortlistInput};
+    use engine_core::search::{search, SearchParams};
+    use std::collections::HashMap;
+
+    let fixture = small_fixture();
+    let state = DraftState::default();
+    let our_side = state.current_turn().map(|t| t.side).unwrap_or(Side::Blue);
+    let ctx = build_spike_eval_ctx(&fixture, &state, our_side);
+
+    // Empty draft starts with B1 ban. is_pick=false from prior side; AB tree
+    // emits ban children with action_type=Ban. Both must agree.
+    let prior_top5: Vec<String> = shortlist_top_k(
+        &state,
+        &fixture,
+        &ctx,
+        ShortlistInput { side: our_side, action_type: ActionType::Ban },
+        5,
+    )
+    .iter()
+    .map(|mv| mv.champion.clone())
+    .collect();
+
+    let params = SearchParams {
+        branch_width: 5,
+        pair_branch_width: 200,
+        max_depth: 4,
+        disable_alpha_beta: false,
+        forced_branches: Vec::new(),
+    };
+    let cancel = CancelHandle::new();
+    let tree = search(&state, &params, &ctx, &cancel).expect("ab search ok");
+
+    // Aggregate pair-pick children to lead champion using mean (v3 alignment).
+    let mut bucket: HashMap<String, Vec<f64>> = HashMap::new();
+    for child in &tree.children {
+        if let Some(c) = child.champion_ids.first() {
+            bucket.entry(c.clone()).or_default().push(child.scores.composite);
+        }
+    }
+    let mut by_mean: Vec<(String, f64)> = bucket
+        .into_iter()
+        .map(|(c, scores)| {
+            let m = scores.iter().sum::<f64>() / (scores.len() as f64);
+            (c, m)
+        })
+        .collect();
+    by_mean.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let ab_top5: Vec<String> = by_mean.into_iter().take(5).map(|(c, _)| c).collect();
+
+    let overlap = prior_top5.iter().filter(|c| ab_top5.contains(c)).count();
+    assert!(
+        overlap >= 3,
+        "v3 prior top5 vs AB mean top5 overlap = {}/5 - expected >=3. \
+         prior={:?} ab={:?}",
+        overlap, prior_top5, ab_top5
+    );
 }
