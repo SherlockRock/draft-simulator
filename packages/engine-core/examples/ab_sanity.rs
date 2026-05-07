@@ -148,8 +148,13 @@ fn ab_top_k_dual(
     let ctx = build_spike_eval_ctx(fixture, &state, our_side);
     let params = SearchParams {
         branch_width: k.max(5),
-        // v3: bump from k.max(5)*4 = 20 to 200 so per-lead mean has signal.
-        pair_branch_width: 200,
+        // v2 baseline. Higher (60+) made depth=6 search explode beyond 10 min
+        // on positions with reachable pair turns. With pair_branch_width=20,
+        // dedup-by-lead at mid_pick1 yielded only 2 unique leads in v2 — but
+        // that's a cardinality issue, not a sample-size issue: each lead has
+        // ~10 partner samples for a meaningful mean. The aggregation function
+        // (mean vs max) is the actual v3 alignment fix.
+        pair_branch_width: 20,
         max_depth: 6,
         disable_alpha_beta: false,
         forced_branches: Vec::new(),
