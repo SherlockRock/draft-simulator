@@ -9,12 +9,10 @@
 
 use engine_core::draft_state::DraftState;
 use engine_core::mcts_spike::policy::{McTsConfig, Mcts};
+use engine_core::mcts_spike::procedural_fixture::procedural_fixture;
 use engine_core::mcts_spike::rollout::{FeasibilityMode, RolloutPolicy};
 use engine_core::mcts_spike::tree::MoveId;
 use engine_core::mcts_spike::{SpikeFixture, ValueVector};
-use engine_core::pools::Role;
-use engine_core::role_solver::ChampionMeta;
-use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 const BUDGET_MS: u64 = 60_000;
@@ -31,44 +29,6 @@ fn variant_label(v: RerootVariant) -> &'static str {
         RerootVariant::Top1 => "top1",
         RerootVariant::Top3Random => "top3_random",
     }
-}
-
-fn build_fixture() -> SpikeFixture {
-    let role_layout: &[(Role, &[Role], usize)] = &[
-        (Role::Top, &[Role::Middle], 16),
-        (Role::Jungle, &[Role::Top], 16),
-        (Role::Middle, &[Role::Top], 16),
-        (Role::Adc, &[Role::Middle], 14),
-        (Role::Support, &[Role::Middle], 14),
-    ];
-    let mut meta: HashMap<String, ChampionMeta> = HashMap::new();
-    let mut winrates: HashMap<String, f64> = HashMap::new();
-    let mut all_champions: Vec<String> = Vec::new();
-    let role_letter = |r: Role| match r {
-        Role::Top => "T",
-        Role::Jungle => "J",
-        Role::Middle => "M",
-        Role::Adc => "A",
-        Role::Support => "S",
-    };
-    for (primary, flex_opts, count) in role_layout {
-        for i in 0..*count {
-            let id = format!("{}{:02}", role_letter(*primary), i);
-            let positions = if i % 4 == 0 && !flex_opts.is_empty() {
-                vec![*primary, flex_opts[0]]
-            } else {
-                vec![*primary]
-            };
-            meta.insert(
-                id.clone(),
-                ChampionMeta { id: id.clone(), positions, ..Default::default() },
-            );
-            let wr = 0.46 + (((i * 7) % 9) as f64) / 100.0;
-            winrates.insert(id.clone(), wr);
-            all_champions.push(id);
-        }
-    }
-    SpikeFixture { meta, winrates, all_champions }
 }
 
 fn move_label(mv: &MoveId) -> String {
@@ -181,7 +141,7 @@ fn run_one(seed: u64, variant: RerootVariant, fixture: &SpikeFixture) {
 }
 
 fn main() {
-    let fixture = build_fixture();
+    let fixture = procedural_fixture();
     let seeds = [1u64, 42, 1337];
     let variants = [RerootVariant::Top1, RerootVariant::Top3Random];
 

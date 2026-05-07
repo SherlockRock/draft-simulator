@@ -1,7 +1,12 @@
-//! Post-process MCTS trajectory CSV + AB sanity CSV (dual aggregation:
-//! max-by-lead AND mean-by-lead) into a comparison row per (position, seed).
-//! Reads from docs/spikes/v3-data/. Run after mcts_bench AND ab_sanity have
-//! produced their outputs.
+//! v4 sanity comparison: joins MCTS trajectory CSV with AB sanity CSV into
+//! a per-(position, seed) row of overlap metrics. Reads from
+//! `docs/spikes/v4-data/`. Run after both `mcts_bench` and `ab_sanity` have
+//! produced outputs.
+//!
+//! Drops v3's max-by-lead/mean-by-lead aggregation: with v4's pair-aware
+//! MCTS, both engines produce the same shape of top-K (singletons or pairs
+//! depending on turn type) and labels match `MoveId::label()` exactly. The
+//! comparison is direct set-overlap over `top1` / `top3` / `top5`.
 
 use std::collections::HashMap;
 use std::fs;
@@ -16,12 +21,9 @@ struct McsTopK {
 
 #[derive(Default, Clone, Debug)]
 struct AbTopK {
-    max_top1: String,
-    max_top3: Vec<String>,
-    max_top5: Vec<String>,
-    mean_top1: String,
-    mean_top3: Vec<String>,
-    mean_top5: Vec<String>,
+    top1: String,
+    top3: Vec<String>,
+    top5: Vec<String>,
 }
 
 fn parse_pipe_set(s: &str) -> Vec<String> {
@@ -30,6 +32,9 @@ fn parse_pipe_set(s: &str) -> Vec<String> {
     }
     s.split('|')
         .map(|p| {
+            // Trajectory entries are `P:label:visits` — strip the trailing
+            // `:visits` so the label matches AB's `P:label`. AB sanity rows
+            // have only `P:label` to begin with so the strip is a no-op.
             let parts: Vec<&str> = p.split(':').collect();
             if parts.len() >= 2 {
                 format!("{}:{}", parts[0], parts[1])
@@ -41,37 +46,35 @@ fn parse_pipe_set(s: &str) -> Vec<String> {
 }
 
 fn main() {
-    let traj = fs::read_to_string("docs/spikes/v3-data/2026-05-06-mcts-bench-trajectory.csv")
+    let traj = fs::read_to_string("docs/spikes/v4-data/2026-05-07-mcts-bench-trajectory.csv")
         .expect("trajectory csv missing — run mcts_bench first");
-    let ab = fs::read_to_string("docs/spikes/v3-data/2026-05-06-ab-sanity.csv")
+    let ab = fs::read_to_string("docs/spikes/v4-data/2026-05-07-ab-sanity.csv")
         .expect("ab sanity csv missing — run ab_sanity first");
 
-    // AB CSV: position, ab_max_top1, ab_max_top3, ab_max_top5,
-    //         ab_mean_top1, ab_mean_top3, ab_mean_top5
+    // AB CSV: position, ab_top1, ab_top3, ab_top5
     let mut ab_top: HashMap<String, AbTopK> = HashMap::new();
     for (i, line) in ab.lines().enumerate() {
         if i == 0 || line.is_empty() {
             continue;
         }
         let cols: Vec<&str> = line.split(',').collect();
-        if cols.len() < 7 {
+        if cols.len() < 4 {
             continue;
         }
         ab_top.insert(
             cols[0].to_string(),
             AbTopK {
-                max_top1: cols[1].to_string(),
-                max_top3: parse_pipe_set(cols[2]),
-                max_top5: parse_pipe_set(cols[3]),
-                mean_top1: cols[4].to_string(),
-                mean_top3: parse_pipe_set(cols[5]),
-                mean_top5: parse_pipe_set(cols[6]),
+                top1: cols[1].to_string(),
+                top3: parse_pipe_set(cols[2]),
+                top5: parse_pipe_set(cols[3]),
             },
         );
     }
 
-    // MCTS trajectory: keep latest sample per (position, seed). Same column
-    // layout as v2 (mcts_bench unchanged except new sample checkpoints).
+    // MCTS trajectory: keep latest sample per (position, seed). Trajectory
+    // CSV layout (mcts_bench): position,seed,elapsed_ms,iters,ips_window,
+    // top1_label,top1_visits,top1_share,top3_set,top5_set,
+    // pareto_*,top1_value_*,shortlist_size
     let mut mcts_latest: HashMap<(String, String), (u128, McsTopK)> = HashMap::new();
     for (i, line) in traj.lines().enumerate() {
         if i == 0 || line.is_empty() {
@@ -88,12 +91,7 @@ fn main() {
         let top3 = parse_pipe_set(cols[8]);
         let top5 = parse_pipe_set(cols[9]);
         let shortlist_size: usize = cols[16].parse().unwrap_or(0);
-        let entry = McsTopK {
-            top1: top1_label,
-            top3,
-            top5,
-            shortlist_size,
-        };
+        let entry = McsTopK { top1: top1_label, top3, top5, shortlist_size };
         let key = (position, seed);
         let existing = mcts_latest.get(&key).map(|(e, _)| *e).unwrap_or(0);
         if elapsed >= existing {
@@ -103,12 +101,9 @@ fn main() {
 
     println!(
         "position,seed,mcts_top1,mcts_top3,mcts_top5,\
-         ab_max_top1,ab_max_top3,ab_max_top5,\
-         ab_mean_top1,ab_mean_top3,ab_mean_top5,\
-         max_top1_match,max_top3_overlap,max_top5_overlap,\
-         mean_top1_match,mean_top3_overlap,mean_top5_overlap,\
-         shortlist_recall_vs_ab_max5,shortlist_recall_vs_ab_mean5,\
-         shortlist_size"
+         ab_top1,ab_top3,ab_top5,\
+         top1_match,top3_overlap,top5_overlap,\
+         shortlist_recall_vs_ab_top5,shortlist_size"
     );
 
     let mut keys: Vec<(String, String)> = mcts_latest.keys().cloned().collect();
@@ -119,36 +114,25 @@ fn main() {
             continue;
         };
 
-        let max_top1_match = if mcts.top1 == ab.max_top1 { 1 } else { 0 };
-        let mean_top1_match = if mcts.top1 == ab.mean_top1 { 1 } else { 0 };
-        let max_top3_overlap = mcts.top3.iter().filter(|m| ab.max_top3.contains(m)).count();
-        let mean_top3_overlap = mcts.top3.iter().filter(|m| ab.mean_top3.contains(m)).count();
-        let max_top5_overlap = mcts.top5.iter().filter(|m| ab.max_top5.contains(m)).count();
-        let mean_top5_overlap = mcts.top5.iter().filter(|m| ab.mean_top5.contains(m)).count();
-        let recall_max = ab.max_top5.iter().filter(|m| mcts.top5.contains(*m)).count();
-        let recall_mean = ab.mean_top5.iter().filter(|m| mcts.top5.contains(*m)).count();
+        let top1_match = if mcts.top1 == ab.top1 { 1 } else { 0 };
+        let top3_overlap = mcts.top3.iter().filter(|m| ab.top3.contains(m)).count();
+        let top5_overlap = mcts.top5.iter().filter(|m| ab.top5.contains(m)).count();
+        let recall = ab.top5.iter().filter(|m| mcts.top5.contains(*m)).count();
 
         println!(
-            "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{}",
             position,
             seed,
             mcts.top1,
             mcts.top3.join("|"),
             mcts.top5.join("|"),
-            ab.max_top1,
-            ab.max_top3.join("|"),
-            ab.max_top5.join("|"),
-            ab.mean_top1,
-            ab.mean_top3.join("|"),
-            ab.mean_top5.join("|"),
-            max_top1_match,
-            max_top3_overlap,
-            max_top5_overlap,
-            mean_top1_match,
-            mean_top3_overlap,
-            mean_top5_overlap,
-            recall_max,
-            recall_mean,
+            ab.top1,
+            ab.top3.join("|"),
+            ab.top5.join("|"),
+            top1_match,
+            top3_overlap,
+            top5_overlap,
+            recall,
             mcts.shortlist_size,
         );
     }
