@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 
 const SAMPLE_SCHEDULE_MS: &[u128] = &[
     100, 250, 500, 1_000, 2_000, 5_000, 10_000, 30_000, 60_000,
+    120_000, 180_000, 300_000,
 ];
 
 fn build_fixture() -> SpikeFixture {
