@@ -64,10 +64,13 @@ impl<'a> Mcts<'a> {
         let mut full_legal = legal_moves(&root_state, fixture, &cache, cfg.feasibility_mode);
         if let Some(k) = cfg.root_shortlist_k {
             if let Some(turn) = root_state.current_turn() {
+                use super::eval_ctx::build_spike_eval_ctx;
                 use super::prior::{shortlist_top_k, ShortlistInput};
+                let ctx = build_spike_eval_ctx(fixture, &root_state, turn.side);
                 let priored = shortlist_top_k(
                     &root_state,
                     fixture,
+                    &ctx,
                     ShortlistInput { side: turn.side, action_type: turn.action_type },
                     k,
                 );
