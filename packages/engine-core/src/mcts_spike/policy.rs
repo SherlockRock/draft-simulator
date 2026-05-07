@@ -1,8 +1,11 @@
 //! UCT selection + the public Mcts entry point.
 
 use crate::draft_state::{is_taken, picks_remaining, ActionType, DraftState, Side};
+use crate::evaluator::EvalContext;
 
+use super::eval_ctx::build_spike_eval_ctx;
 use super::feasibility_cache::FeasibilityCache;
+use super::prior::{enumerate_pair_candidates, shortlist_top_k, ShortlistInput};
 use super::rng::SplitMix64;
 use super::rollout::{play_to_terminal, FeasibilityMode, RolloutPolicy};
 use super::tree::{MoveId, Node, NodeId, Tree};
@@ -27,9 +30,9 @@ pub struct Mcts<'a> {
     cache: FeasibilityCache,
     cfg: McTsConfig,
     rng: SplitMix64,
-    /// The original root state. Kept for diagnostics / re-derivation; not
-    /// used in the hot path after `active_root` was introduced.
-    original_root_state: DraftState,
+    /// EvalContext built once from the fixture. Per-node scoring swaps
+    /// perspective via `ctx.for_perspective(turn.side, state, turn.phase)`.
+    ctx: EvalContext,
     /// Logical root for the current iteration. Reroot moves this down to a
     /// child; uproot moves it back up. Tree storage is unchanged.
     active_root: NodeId,
@@ -42,8 +45,6 @@ pub struct Mcts<'a> {
     inherited_visits_at_reroot: u32,
     /// Stack of (prev_active_root, prev_state, prev_inherited_visits)
     /// frames pushed at each reroot. `uproot()` pops to walk back up.
-    /// The `u32` is the popped frame's `inherited_visits_at_reroot`,
-    /// not the new one being entered.
     history: Vec<(NodeId, DraftState, u32)>,
     tree: Tree,
 }
@@ -52,6 +53,11 @@ impl<'a> Mcts<'a> {
     pub fn new(fixture: &'a SpikeFixture, root_state: DraftState, cfg: McTsConfig) -> Self {
         let cache = FeasibilityCache::build(&fixture.meta);
         let rng = SplitMix64::new(cfg.seed);
+        let our_side = root_state
+            .current_turn()
+            .map(|t| t.side)
+            .unwrap_or(Side::Blue);
+        let ctx = build_spike_eval_ctx(fixture, &root_state, our_side);
         let mut root_node = Node {
             parent: None,
             move_from_parent: None,
@@ -61,16 +67,15 @@ impl<'a> Mcts<'a> {
             value_sum: ValueVector::zero(),
             side_to_move: side_to_move(&root_state),
         };
-        let mut full_legal = legal_moves(&root_state, fixture, &cache, cfg.feasibility_mode);
+        let mut full_legal =
+            legal_moves(&root_state, fixture, &cache, cfg.feasibility_mode, &ctx);
         if let Some(k) = cfg.root_shortlist_k {
             if let Some(turn) = root_state.current_turn() {
-                use super::eval_ctx::build_spike_eval_ctx;
-                use super::prior::{shortlist_top_k, ShortlistInput};
-                let ctx = build_spike_eval_ctx(fixture, &root_state, turn.side);
+                let sub_ctx = ctx.for_perspective(turn.side, &root_state, turn.phase);
                 let priored = shortlist_top_k(
                     &root_state,
                     fixture,
-                    &ctx,
+                    &sub_ctx,
                     ShortlistInput { side: turn.side, action_type: turn.action_type },
                     k,
                 );
@@ -98,7 +103,7 @@ impl<'a> Mcts<'a> {
             cache,
             cfg,
             rng,
-            original_root_state: root_state.clone(),
+            ctx,
             active_root,
             active_root_state: root_state,
             inherited_visits_at_reroot: 0,
@@ -120,8 +125,13 @@ impl<'a> Mcts<'a> {
                 self.tree.get_mut(leaf).untried.remove(pick_idx);
                 apply_move(&mut state, &mv);
                 let child_id = self.tree.add_child(leaf, mv, side_to_move(&state));
-                let untried_for_child =
-                    legal_moves(&state, self.fixture, &self.cache, self.cfg.feasibility_mode);
+                let untried_for_child = legal_moves(
+                    &state,
+                    self.fixture,
+                    &self.cache,
+                    self.cfg.feasibility_mode,
+                    &self.ctx,
+                );
                 self.tree.get_mut(child_id).untried = untried_for_child;
                 leaf = child_id;
             }
@@ -213,8 +223,9 @@ impl<'a> Mcts<'a> {
     }
 
     /// Promote a child of the current active root to be the new active root.
-    /// Tree storage is unchanged — only the logical root moves. Snapshots the
-    /// inherited visit count for trajectory instrumentation.
+    /// For pair moves the child is matched by full canonical MoveId equality
+    /// (champion_ids in canonical order + is_pick) — partial-pair reroot is
+    /// out of scope (deferred to v5).
     pub fn reroot_to(&mut self, mv: &MoveId) -> Result<(), &'static str> {
         let root = self.tree.get(self.active_root);
         let child = root
@@ -287,15 +298,37 @@ pub(crate) fn apply_move(state: &mut DraftState, mv: &MoveId) {
     }
 }
 
+/// Legal moves at this turn. Singleton (most turns): one MoveId per legal
+/// champion, feasibility-filtered for picks. Pair_start (slots 7, 9, 17):
+/// pair candidates via `enumerate_pair_candidates` — already feasibility-
+/// filtered there.
 fn legal_moves(
     state: &DraftState,
     fixture: &SpikeFixture,
     cache: &FeasibilityCache,
     fmode: FeasibilityMode,
+    ctx: &EvalContext,
 ) -> Vec<MoveId> {
     let Some(turn) = state.current_turn() else {
         return Vec::new();
     };
+
+    if turn.action_type == ActionType::Pick && turn.pair_start {
+        let sub_ctx = ctx.for_perspective(turn.side, state, turn.phase);
+        let pairs = enumerate_pair_candidates(
+            state,
+            fixture,
+            &sub_ctx,
+            turn.action_type,
+            turn.side,
+            turn.phase,
+        );
+        return pairs
+            .into_iter()
+            .map(|(first, second, _)| MoveId::pair(first, second))
+            .collect();
+    }
+
     let is_pick = turn.action_type == ActionType::Pick;
     let mut out: Vec<MoveId> = fixture
         .all_champions
