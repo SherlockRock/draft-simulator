@@ -333,6 +333,173 @@ fn pareto_frontier_at_root_has_at_least_one() {
 }
 
 #[test]
+fn pair_prior_at_late_emits_pair_moves() {
+    // v4 sanity: at slot 17 (late, B4 pair_start), the prior must emit
+    // PAIR MoveIds (champion_ids.len() == 2), not singletons. The 4 blue
+    // picks cover [T,M,J,A] so Support is the missing role; Support champs
+    // dominate the additive proxy and the top pairs should be Support-
+    // containing.
+    use engine_core::draft_state::{ActionType, DraftState, Side};
+    use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx;
+    use engine_core::mcts_spike::prior::{compute_prior_scores, ShortlistInput};
+    use engine_core::mcts_spike::procedural_fixture::procedural_fixture;
+
+    let fixture = procedural_fixture();
+    let state = DraftState {
+        blue_bans: vec!["T00".into(), "J04".into(), "M08".into(), "T08".into()],
+        red_bans: vec!["A00".into(), "S00".into(), "M00".into(), "J08".into()],
+        blue_picks: vec!["T01".into(), "M01".into(), "J01".into(), "A01".into()],
+        red_picks: vec![
+            "J00".into(),
+            "M04".into(),
+            "T04".into(),
+            "A04".into(),
+            "S04".into(),
+        ],
+        ..Default::default()
+    };
+    let turn = state.current_turn().expect("late should have current turn");
+    assert!(turn.pair_start, "slot 17 should be pair_start");
+    assert_eq!(turn.side, Side::Blue);
+
+    let ctx = build_spike_eval_ctx(&fixture, &state, turn.side);
+    let scored = compute_prior_scores(
+        &state,
+        &fixture,
+        &ctx,
+        ShortlistInput { side: turn.side, action_type: ActionType::Pick },
+    );
+
+    assert!(!scored.is_empty(), "prior produced no candidates at late");
+    for (mv, _) in &scored {
+        assert_eq!(
+            mv.champion_ids.len(),
+            2,
+            "expected pair MoveId at pair_start; got {:?}",
+            mv.champion_ids
+        );
+        assert!(mv.is_pick, "pair_start moves are always picks");
+    }
+
+    // Expect the top-5 to be Support-containing. Anything less is the v3
+    // structural bug (AB-style adc-into-adc) leaking into pair selection.
+    let mut sorted = scored.clone();
+    sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let support_in_top5 = sorted
+        .iter()
+        .take(5)
+        .filter(|(mv, _)| mv.champion_ids.iter().any(|c| c.starts_with('S')))
+        .count();
+    assert_eq!(
+        support_in_top5, 5,
+        "top-5 pair-prior should all contain Support at late; got {:?}",
+        sorted.iter().take(5).map(|(m, _)| m.label()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn pair_prior_shortlist_covers_ab_top5_at_late() {
+    // v4 shortlist-coverage check at the late position. AB's top-5 pairs
+    // (by depth-4 minimax value) MUST appear inside MCTS's full pair-prior
+    // shortlist (top-200, the same `seed_pair_candidates` budget as the
+    // bench). If the shortlist excludes AB's top, MCTS's UCT cannot
+    // converge to it.
+    //
+    // We deliberately do NOT assert the prior's TOP-5 matches AB's top-5:
+    // the additive proxy `score(first) + score(second)` is order-blind and
+    // double-counts coverage, so it ranks (S, S) above (S, X) pairs while
+    // depth-4 minimax sees the second-Support contributes nothing
+    // marginal. UCT exploration during MCTS evaluates rollouts via
+    // `terminal_eval` and refines that initial seeding. The value of this
+    // smoke test is verifying the seed CONTAINS the right candidates, not
+    // that the seed RANKS them right.
+    use engine_core::cancellation::CancelHandle;
+    use engine_core::draft_state::{ActionType, DraftState};
+    use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx;
+    use engine_core::mcts_spike::prior::{shortlist_top_k, ShortlistInput};
+    use engine_core::mcts_spike::procedural_fixture::procedural_fixture;
+    use engine_core::search::{search, SearchParams};
+
+    let fixture = procedural_fixture();
+    let state = DraftState {
+        blue_bans: vec!["T00".into(), "J04".into(), "M08".into(), "T08".into()],
+        red_bans: vec!["A00".into(), "S00".into(), "M00".into(), "J08".into()],
+        blue_picks: vec!["T01".into(), "M01".into(), "J01".into(), "A01".into()],
+        red_picks: vec![
+            "J00".into(),
+            "M04".into(),
+            "T04".into(),
+            "A04".into(),
+            "S04".into(),
+        ],
+        ..Default::default()
+    };
+    let turn = state.current_turn().unwrap();
+    let ctx = build_spike_eval_ctx(&fixture, &state, turn.side);
+
+    let prior_top200: Vec<(String, String)> = shortlist_top_k(
+        &state,
+        &fixture,
+        &ctx,
+        ShortlistInput { side: turn.side, action_type: ActionType::Pick },
+        200,
+    )
+    .iter()
+    .map(|mv| {
+        assert_eq!(mv.champion_ids.len(), 2, "expected pair MoveId");
+        (mv.champion_ids[0].clone(), mv.champion_ids[1].clone())
+    })
+    .collect();
+
+    let params = SearchParams {
+        branch_width: 5,
+        pair_branch_width: 200,
+        max_depth: 4,
+        disable_alpha_beta: false,
+        forced_branches: Vec::new(),
+    };
+    let cancel = CancelHandle::new();
+    let tree = search(&state, &params, &ctx, &cancel).expect("ab search ok");
+    let mut ab_pairs: Vec<(String, String, f64)> = tree
+        .children
+        .iter()
+        .filter(|child| child.champion_ids.len() == 2)
+        .map(|child| {
+            let mut a = child.champion_ids[0].clone();
+            let mut b = child.champion_ids[1].clone();
+            if a > b {
+                std::mem::swap(&mut a, &mut b);
+            }
+            (a, b, child.scores.composite)
+        })
+        .collect();
+    ab_pairs.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+    let ab_top5: Vec<(String, String)> = ab_pairs
+        .iter()
+        .take(5)
+        .map(|(a, b, _)| (a.clone(), b.clone()))
+        .collect();
+
+    assert!(
+        !ab_top5.is_empty(),
+        "AB tree should have pair children at slot 17"
+    );
+
+    let coverage = ab_top5.iter().filter(|p| prior_top200.contains(p)).count();
+    assert!(
+        coverage >= 4,
+        "AB's top-5 pairs not covered by MCTS shortlist (top-200): {}/5. \
+         shortlist would need to include these for UCT to converge there. \
+         missing={:?}",
+        coverage,
+        ab_top5
+            .iter()
+            .filter(|p| !prior_top200.contains(p))
+            .collect::<Vec<_>>(),
+    );
+}
+
+#[test]
 fn prior_top5_overlaps_with_ab_top5() {
     // v3 alignment hypothesis check: the new score_pick-based prior should
     // produce a top-5 that overlaps significantly with production AB's

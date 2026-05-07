@@ -14,6 +14,7 @@ pub mod feasibility_cache;
 pub mod pareto;
 pub mod policy;
 pub mod prior;
+pub mod procedural_fixture;
 pub mod rng;
 pub mod rollout;
 pub mod trajectory;
