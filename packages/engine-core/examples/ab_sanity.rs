@@ -76,10 +76,13 @@ fn ab_top_k(fixture: &SpikeFixture, state: DraftState, k: usize) -> Vec<(String,
     let ctx = build_spike_eval_ctx(fixture, &state, our_side);
     let params = SearchParams {
         branch_width: k.max(5),
-        // pair_branch_width matches the spike's MCTS prior PAIR_BRANCH_WIDTH
-        // so the candidate sets are equivalent. Bigger values blow past the
-        // 10-min/position budget on Pick2 pair turns.
-        pair_branch_width: 200,
+        // v3 finding: pair_branch_width >= 60 with max_depth=6 exceeds the
+        // 10-min/position budget on Pick2 pair turns. Stick with v3's 20 so
+        // AB stays tractable. MCTS sees the wider 200 candidate set; AB sees
+        // 20 explored to depth-6 minimax. Both ⊆ same seed_pair_candidates
+        // canonical set, so AB's top-1 is always reachable from MCTS's
+        // shortlist (verified by the v4 smoke test).
+        pair_branch_width: 20,
         max_depth: 6,
         disable_alpha_beta: false,
         forced_branches: Vec::new(),
