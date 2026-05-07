@@ -1,17 +1,19 @@
-//! Alpha-beta sanity comparison wrapper for the MCTS v2 spike. Calls the
-//! production `search` against the same `SpikeFixture` shape used by
-//! `mcts_bench.rs`, extracts top-K root candidates by composite score, and
-//! emits a CSV row per position.
+//! Alpha-beta sanity comparison wrapper for the MCTS v3 spike. Calls the
+//! production `search` against the same EvalContext shape as the MCTS
+//! prior (via shared `mcts_spike::eval_ctx::build_spike_eval_ctx`),
+//! extracts top-K root candidates per-champion-as-first-pick (singleton
+//! ranking), and emits a CSV row per position.
 //!
-//! Pair-pick caveat: production search expands pair turns; the spike treats
-//! every move as a singleton. AB output here is the production view; MCTS
-//! output is the singleton view. Mismatch is documented in the writeup.
+//! v3 alignment fix: pair-pick children get aggregated to per-champion
+//! singleton scores via MEAN-BY-LEAD (the v2 wrapper used max-by-lead).
+//! Both aggregations are emitted so the writeup can compare. `pair_branch_width`
+//! bumped to 200 so the per-lead aggregate has a meaningful sample size.
 
 use engine_core::cancellation::CancelHandle;
-use engine_core::draft_state::{ActionType, DraftState, Phase, Side};
-use engine_core::evaluator::{EvalContext, MetaData, PhaseWeights, PhaseWeightTable};
+use engine_core::draft_state::{ActionType, DraftState, Side};
+use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx;
 use engine_core::mcts_spike::SpikeFixture;
-use engine_core::pools::{Penalties, Role, RolePoolMap, TeamPool};
+use engine_core::pools::Role;
 use engine_core::role_solver::ChampionMeta;
 use engine_core::search::{search, SearchParams, TreeNode};
 use std::collections::HashMap;
@@ -52,67 +54,6 @@ fn build_fixture() -> SpikeFixture {
         }
     }
     SpikeFixture { meta, winrates, all_champions }
-}
-
-fn make_pool_for_side(fixture: &SpikeFixture, _side: Side) -> TeamPool {
-    let mut top = Vec::new();
-    let mut jg = Vec::new();
-    let mut mid = Vec::new();
-    let mut adc = Vec::new();
-    let mut sup = Vec::new();
-    for (id, m) in &fixture.meta {
-        for r in &m.positions {
-            match r {
-                Role::Top => top.push(id.clone()),
-                Role::Jungle => jg.push(id.clone()),
-                Role::Middle => mid.push(id.clone()),
-                Role::Adc => adc.push(id.clone()),
-                Role::Support => sup.push(id.clone()),
-            }
-        }
-    }
-    TeamPool {
-        display: RolePoolMap { top, jungle: jg, middle: mid, adc, support: sup },
-        search: fixture.all_champions.clone(),
-    }
-}
-
-fn neutral_phase_weights() -> PhaseWeightTable {
-    let w = PhaseWeights { info: 0.0, comp: 1.0, coverage: 1.0 };
-    PhaseWeightTable { ban1: w, pick1: w, ban2: w, pick2: w }
-}
-
-fn build_eval_ctx(fixture: &SpikeFixture, state: &DraftState, our_side: Side) -> EvalContext {
-    let phase = state
-        .current_turn()
-        .map(|t| t.phase)
-        .unwrap_or(Phase::Pick2);
-    let (our_picks, opp_picks) = if our_side == Side::Blue {
-        (state.blue_picks.clone(), state.red_picks.clone())
-    } else {
-        (state.red_picks.clone(), state.blue_picks.clone())
-    };
-    EvalContext {
-        side: our_side,
-        phase,
-        our_pool: make_pool_for_side(fixture, our_side),
-        opp_pool: make_pool_for_side(fixture, our_side.opposite()),
-        our_picks,
-        opp_picks,
-        penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
-        champion_meta: fixture.meta.clone(),
-        meta: MetaData {
-            win_rates: fixture.winrates.clone(),
-            synergies: Vec::new(),
-            counters: HashMap::new(),
-        },
-        phase_weights_blue: neutral_phase_weights(),
-        phase_weights_red: neutral_phase_weights(),
-        synergy_multiplier: 0.0,
-        counter_multiplier: 0.0,
-        flex_retention_weight: 0.0,
-        reveal_cost_weight: 0.0,
-    }
 }
 
 fn position_label(idx: usize) -> &'static str {
@@ -157,12 +98,58 @@ fn make_position(idx: usize) -> DraftState {
     }
 }
 
-fn ab_top_k(fixture: &SpikeFixture, state: DraftState, k: usize) -> Vec<(String, bool, f64)> {
+#[derive(Clone, Debug)]
+struct Aggregated {
+    champion: String,
+    is_pick: bool,
+    max_score: f64,
+    mean_score: f64,
+    sample_count: usize,
+}
+
+/// Aggregate AB tree's children into per-champion-as-first-pick singletons.
+/// Production search emits singleton children with `champion_ids = [c]` and
+/// pair children with `champion_ids = [first, second]`. We aggregate by
+/// `champion_ids[0]` (the lead) under both is_pick variants, keeping max
+/// AND mean across partners. Mean is the v3 alignment metric.
+fn aggregate_singletons(tree: &TreeNode) -> Vec<Aggregated> {
+    let mut bucket: HashMap<(String, bool), Vec<f64>> = HashMap::new();
+    for child in &tree.children {
+        let Some(c) = child.champion_ids.first() else { continue };
+        let key = (c.clone(), matches!(child.action_type, ActionType::Pick));
+        bucket
+            .entry(key)
+            .or_default()
+            .push(child.scores.composite);
+    }
+    bucket
+        .into_iter()
+        .map(|((c, is_pick), scores)| {
+            let n = scores.len();
+            let max_s = scores.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            let mean_s = scores.iter().sum::<f64>() / (n.max(1) as f64);
+            Aggregated {
+                champion: c,
+                is_pick,
+                max_score: max_s,
+                mean_score: mean_s,
+                sample_count: n,
+            }
+        })
+        .collect()
+}
+
+fn ab_top_k_dual(
+    fixture: &SpikeFixture,
+    state: DraftState,
+    k: usize,
+) -> (Vec<Aggregated>, Vec<Aggregated>) {
     let our_side = state.current_turn().map(|t| t.side).unwrap_or(Side::Blue);
-    let ctx = build_eval_ctx(fixture, &state, our_side);
+    let ctx = build_spike_eval_ctx(fixture, &state, our_side);
     let params = SearchParams {
         branch_width: k.max(5),
-        pair_branch_width: k.max(5) * 4,
+        // v3: bump from k.max(5)*4 = 20 to 200 so per-lead mean has signal.
+        pair_branch_width: 200,
         max_depth: 6,
         disable_alpha_beta: false,
         forced_branches: Vec::new(),
@@ -170,49 +157,68 @@ fn ab_top_k(fixture: &SpikeFixture, state: DraftState, k: usize) -> Vec<(String,
     let cancel = CancelHandle::new();
     let tree: TreeNode = search(&state, &params, &ctx, &cancel).expect("ab search ok");
 
-    // Dedupe by lead champion: production search emits one child per pair,
-    // so multiple children can share the same first champion. Keep the
-    // highest-scoring entry per (champion, is_pick) before truncating to K.
-    let mut best: HashMap<(String, bool), f64> = HashMap::new();
-    for child in &tree.children {
-        let Some(c) = child.champion_ids.first() else { continue };
-        let key = (c.clone(), matches!(child.action_type, ActionType::Pick));
-        let score = child.scores.composite;
-        best.entry(key)
-            .and_modify(|v| {
-                if score > *v {
-                    *v = score;
-                }
-            })
-            .or_insert(score);
-    }
-    let mut out: Vec<(String, bool, f64)> = best
-        .into_iter()
-        .map(|((c, p), s)| (c, p, s))
-        .collect();
-    out.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
-    out.truncate(k);
-    out
+    let aggregated = aggregate_singletons(&tree);
+
+    let mut by_max = aggregated.clone();
+    by_max.sort_by(|a, b| {
+        b.max_score
+            .partial_cmp(&a.max_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    by_max.truncate(k);
+
+    let mut by_mean = aggregated;
+    by_mean.sort_by(|a, b| {
+        b.mean_score
+            .partial_cmp(&a.mean_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    by_mean.truncate(k);
+
+    (by_max, by_mean)
 }
 
 fn move_label(c: &str, is_pick: bool) -> String {
     format!("{}:{}", if is_pick { "P" } else { "B" }, c)
 }
 
+fn label_top1(rows: &[Aggregated]) -> String {
+    rows.first()
+        .map(|r| move_label(&r.champion, r.is_pick))
+        .unwrap_or_else(|| "<none>".into())
+}
+
+fn label_set(rows: &[Aggregated], n: usize) -> String {
+    if rows.is_empty() {
+        return "<none>".into();
+    }
+    rows.iter()
+        .take(n)
+        .map(|r| move_label(&r.champion, r.is_pick))
+        .collect::<Vec<_>>()
+        .join("|")
+}
+
 fn main() {
     let fixture = build_fixture();
-    println!("position,ab_top1,ab_top3_set,ab_top5_set");
+    println!(
+        "position,\
+         ab_max_top1,ab_max_top3_set,ab_max_top5_set,\
+         ab_mean_top1,ab_mean_top3_set,ab_mean_top5_set"
+    );
     for pos_idx in 0..4 {
         let label = position_label(pos_idx);
         let state = make_position(pos_idx);
-        let top = ab_top_k(&fixture, state, 5);
-        if top.is_empty() {
-            println!("{},<none>,<none>,<none>", label);
-            continue;
-        }
-        let t1 = move_label(&top[0].0, top[0].1);
-        let t3: Vec<String> = top.iter().take(3).map(|(c, p, _)| move_label(c, *p)).collect();
-        let t5: Vec<String> = top.iter().take(5).map(|(c, p, _)| move_label(c, *p)).collect();
-        println!("{},{},{},{}", label, t1, t3.join("|"), t5.join("|"));
+        let (by_max, by_mean) = ab_top_k_dual(&fixture, state, 5);
+        println!(
+            "{},{},{},{},{},{},{}",
+            label,
+            label_top1(&by_max),
+            label_set(&by_max, 3),
+            label_set(&by_max, 5),
+            label_top1(&by_mean),
+            label_set(&by_mean, 3),
+            label_set(&by_mean, 5),
+        );
     }
 }
