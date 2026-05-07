@@ -72,7 +72,7 @@ fn build_fixture() -> SpikeFixture {
 }
 
 fn move_label(mv: &MoveId) -> String {
-    format!("{}:{}", if mv.is_pick { "P" } else { "B" }, mv.champion)
+    mv.label()
 }
 
 fn pick_chosen(
@@ -131,7 +131,7 @@ fn run_one(seed: u64, variant: RerootVariant, fixture: &SpikeFixture) {
         let frontier_size = frontier.len();
         let frontier_label = frontier
             .iter()
-            .map(|f| format!("{}:{}", if f.mv.is_pick { "P" } else { "B" }, f.mv.champion))
+            .map(|f| f.mv.label())
             .collect::<Vec<_>>()
             .join("|");
         let frontier_visits_avg: u32 = if frontier.is_empty() {

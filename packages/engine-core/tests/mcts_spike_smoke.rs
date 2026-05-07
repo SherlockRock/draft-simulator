@@ -267,8 +267,8 @@ fn prior_ranks_higher_winrate_above_lower() {
         &ctx,
         ShortlistInput { side: Side::Blue, action_type: ActionType::Pick },
     );
-    let garen = scores.iter().find(|(mv, _)| mv.champion == "Garen").unwrap();
-    let darius = scores.iter().find(|(mv, _)| mv.champion == "Darius").unwrap();
+    let garen = scores.iter().find(|(mv, _)| mv.first() == "Garen").unwrap();
+    let darius = scores.iter().find(|(mv, _)| mv.first() == "Darius").unwrap();
     assert!(garen.1 > darius.1, "higher winrate champ should score higher");
 }
 
@@ -360,7 +360,7 @@ fn prior_top5_overlaps_with_ab_top5() {
         5,
     )
     .iter()
-    .map(|mv| mv.champion.clone())
+    .map(|mv| mv.first().to_string())
     .collect();
 
     let params = SearchParams {

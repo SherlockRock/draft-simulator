@@ -269,15 +269,21 @@ impl<'a> Mcts<'a> {
     }
 }
 
-fn apply_move(state: &mut DraftState, mv: &MoveId) {
+/// Apply a move to `state`. Singleton: push 1 champion at the current turn.
+/// Pair: push BOTH champions to the same side, advancing 2 slots. Pair turns
+/// are always picks and always same-side (slots 7-8, 9-10, 17-18 in
+/// TURN_SEQUENCE), so pushing both to `turn.side` is correct.
+pub(crate) fn apply_move(state: &mut DraftState, mv: &MoveId) {
     let Some(turn) = state.current_turn() else {
         return;
     };
-    match (turn.side, mv.is_pick) {
-        (Side::Blue, true) => state.blue_picks.push(mv.champion.clone()),
-        (Side::Red, true) => state.red_picks.push(mv.champion.clone()),
-        (Side::Blue, false) => state.blue_bans.push(mv.champion.clone()),
-        (Side::Red, false) => state.red_bans.push(mv.champion.clone()),
+    for c in &mv.champion_ids {
+        match (turn.side, mv.is_pick) {
+            (Side::Blue, true) => state.blue_picks.push(c.clone()),
+            (Side::Red, true) => state.red_picks.push(c.clone()),
+            (Side::Blue, false) => state.blue_bans.push(c.clone()),
+            (Side::Red, false) => state.red_bans.push(c.clone()),
+        }
     }
 }
 
@@ -295,10 +301,7 @@ fn legal_moves(
         .all_champions
         .iter()
         .filter(|c| !is_taken(c, state))
-        .map(|c| MoveId {
-            champion: c.clone(),
-            is_pick,
-        })
+        .map(|c| MoveId::single(c.clone(), is_pick))
         .collect();
     if !is_pick {
         return out;
@@ -309,12 +312,13 @@ fn legal_moves(
     };
     let remaining_after = picks_remaining(state, turn.side).saturating_sub(1);
     out.retain(|mv| {
+        let cand = mv.first();
         let mut hypo_locked = locked.clone();
-        hypo_locked.push(mv.champion.clone());
+        hypo_locked.push(cand.to_string());
         let pool: Vec<String> = fixture
             .all_champions
             .iter()
-            .filter(|c| !is_taken(c, state) && *c != &mv.champion)
+            .filter(|c| !is_taken(c, state) && c.as_str() != cand)
             .cloned()
             .collect();
         match fmode {

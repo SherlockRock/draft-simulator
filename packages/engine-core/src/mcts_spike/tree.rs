@@ -7,12 +7,44 @@ use super::ValueVector;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NodeId(pub u32);
 
-/// One move = one (champion_id, action_kind) for the spike. Pair picks are
-/// out of scope; the rollout treats each turn slot independently.
+/// A move at one MCTS turn. `champion_ids` carries 1 element for singleton
+/// moves (bans + non-pair-start picks) and 2 elements for pair-pick moves
+/// (both halves of the pair, in canonical alphabetical order, both pushed
+/// to the same side). Mirrors production `TreeNode::champion_ids`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MoveId {
-    pub champion: String,
+    pub champion_ids: Vec<String>,
     pub is_pick: bool, // false => ban
+}
+
+impl MoveId {
+    pub fn single(champion: impl Into<String>, is_pick: bool) -> Self {
+        Self { champion_ids: vec![champion.into()], is_pick }
+    }
+
+    /// Build a pair move in canonical alphabetical order. Both halves are
+    /// pushed to the same side at apply time.
+    pub fn pair(a: impl Into<String>, b: impl Into<String>) -> Self {
+        let a = a.into();
+        let b = b.into();
+        let champion_ids = if a <= b { vec![a, b] } else { vec![b, a] };
+        Self { champion_ids, is_pick: true }
+    }
+
+    pub fn is_pair(&self) -> bool {
+        self.champion_ids.len() == 2
+    }
+
+    /// First champion in the move. Always present — `champion_ids` is never empty.
+    pub fn first(&self) -> &str {
+        self.champion_ids.first().expect("MoveId has no champions").as_str()
+    }
+
+    /// `P:Garen` or `B:Darius` for singletons; `P:Garen+Sett` for pairs.
+    pub fn label(&self) -> String {
+        let prefix = if self.is_pick { "P" } else { "B" };
+        format!("{}:{}", prefix, self.champion_ids.join("+"))
+    }
 }
 
 #[derive(Clone, Debug)]

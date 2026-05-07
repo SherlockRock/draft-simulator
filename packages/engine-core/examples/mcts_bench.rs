@@ -168,11 +168,7 @@ fn run_trajectory(
             let (t1_label, t1_visits, t1_value) = sample
                 .top1
                 .as_ref()
-                .map(|t| (
-                    format!("{}:{}", if t.mv.is_pick { "P" } else { "B" }, t.mv.champion),
-                    t.visits,
-                    t.mean_value,
-                ))
+                .map(|t| (t.mv.label(), t.visits, t.mean_value))
                 .unwrap_or_else(|| ("<none>".into(), 0, ValueVector::zero()));
 
             println!(

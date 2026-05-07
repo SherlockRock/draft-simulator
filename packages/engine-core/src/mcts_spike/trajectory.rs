@@ -56,14 +56,7 @@ pub fn capture(mcts: &Mcts, elapsed_ms: u128, iter_per_sec_window: f64) -> Traje
 pub fn entries_label(entries: &[MoveEntry]) -> String {
     entries
         .iter()
-        .map(|e| {
-            format!(
-                "{}:{}:{}",
-                if e.mv.is_pick { "P" } else { "B" },
-                e.mv.champion,
-                e.visits
-            )
-        })
+        .map(|e| format!("{}:{}", e.mv.label(), e.visits))
         .collect::<Vec<_>>()
         .join("|")
 }
@@ -71,14 +64,7 @@ pub fn entries_label(entries: &[MoveEntry]) -> String {
 pub fn frontier_label(frontier: &[ParetoFrontierEntry]) -> String {
     frontier
         .iter()
-        .map(|f| {
-            format!(
-                "{}:{}:{}",
-                if f.mv.is_pick { "P" } else { "B" },
-                f.mv.champion,
-                f.visits
-            )
-        })
+        .map(|f| format!("{}:{}", f.mv.label(), f.visits))
         .collect::<Vec<_>>()
         .join("|")
 }

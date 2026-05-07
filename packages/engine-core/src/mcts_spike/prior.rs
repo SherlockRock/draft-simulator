@@ -63,7 +63,7 @@ pub fn compute_prior_scores(
         .map(|c| {
             let role = primary_role(c, &fixture.meta);
             let scores = score_pick(c, role, state, ctx, input.action_type);
-            let mv = MoveId { champion: c.clone(), is_pick };
+            let mv = MoveId::single(c.clone(), is_pick);
             (mv, scores.composite)
         })
         .collect()
