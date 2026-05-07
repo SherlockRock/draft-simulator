@@ -26,4 +26,4 @@ packages/engine-node/index.d.ts
 packages/engine-protocol/schema.json
 packages/engine-protocol/dist/
 packages/engine-core/src/protocol_types.rs
-docs/spikes/v2-data/
+docs/spikes/v*-data/
