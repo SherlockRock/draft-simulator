@@ -21,6 +21,7 @@ pub mod rng;
 pub mod rollout;
 pub mod trajectory;
 pub mod tree;
+pub mod v5_states;
 
 use crate::draft_state::{DraftState, Side};
 use crate::pools::{Role, RolePoolMap, TeamPool};
