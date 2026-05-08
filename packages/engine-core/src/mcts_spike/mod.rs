@@ -9,6 +9,7 @@
 //! pair-pick handling, forced branches, transpositions, cancellation,
 //! production code style. `unwrap()` is fine. Throw away after measurement.
 
+pub mod eval;
 pub mod eval_ctx;
 pub mod feasibility_cache;
 pub mod pareto;
