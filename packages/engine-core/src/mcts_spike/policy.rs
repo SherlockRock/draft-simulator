@@ -9,7 +9,7 @@ use super::prior::{enumerate_pair_candidates, shortlist_top_k, ShortlistInput};
 use super::rng::SplitMix64;
 use super::rollout::{play_to_terminal, FeasibilityMode, RolloutPolicy};
 use super::tree::{MoveId, Node, NodeId, Tree};
-use super::{side_to_move, terminal_eval, SpikeFixture, ValueVector};
+use super::{side_to_move, terminal_eval, PoolContext, SpikeFixture, ValueVector};
 
 const UCT_C: f64 = std::f64::consts::SQRT_2;
 
@@ -50,14 +50,27 @@ pub struct Mcts<'a> {
 }
 
 impl<'a> Mcts<'a> {
+    /// Convenience constructor: full pool for both sides (v1-v4 behavior).
     pub fn new(fixture: &'a SpikeFixture, root_state: DraftState, cfg: McTsConfig) -> Self {
+        let pools = PoolContext::full(fixture);
+        Self::with_pools(fixture, root_state, &pools, cfg)
+    }
+
+    /// Pool-aware constructor: candidate enumeration scopes to the picking
+    /// side's `pool.search` at every turn. Use this for v5 phase 1+ runs.
+    pub fn with_pools(
+        fixture: &'a SpikeFixture,
+        root_state: DraftState,
+        pools: &PoolContext,
+        cfg: McTsConfig,
+    ) -> Self {
         let cache = FeasibilityCache::build(&fixture.meta);
         let rng = SplitMix64::new(cfg.seed);
         let our_side = root_state
             .current_turn()
             .map(|t| t.side)
             .unwrap_or(Side::Blue);
-        let ctx = build_spike_eval_ctx(fixture, &root_state, our_side);
+        let ctx = build_spike_eval_ctx(fixture, &root_state, our_side, pools);
         let mut root_node = Node {
             parent: None,
             move_from_parent: None,
@@ -330,8 +343,13 @@ fn legal_moves(
     }
 
     let is_pick = turn.action_type == ActionType::Pick;
-    let mut out: Vec<MoveId> = fixture
-        .all_champions
+    // Picking-side pool: candidate enumeration must scope to it (v5 phase 1).
+    // Bans use the same pool as picks — production's `collect_candidates`
+    // does the same; ban targeting from outside one's own pool isn't a
+    // concept the spike supports today.
+    let sub_ctx = ctx.for_perspective(turn.side, state, turn.phase);
+    let pool_search: &[String] = &sub_ctx.our_pool.search;
+    let mut out: Vec<MoveId> = pool_search
         .iter()
         .filter(|c| !is_taken(c, state))
         .map(|c| MoveId::single(c.clone(), is_pick))
@@ -348,8 +366,10 @@ fn legal_moves(
         let cand = mv.first();
         let mut hypo_locked = locked.clone();
         hypo_locked.push(cand.to_string());
-        let pool: Vec<String> = fixture
-            .all_champions
+        // Feasibility pool: champs the picking side can fill remaining roles
+        // with. Scoped to picking-side pool, minus already-taken and the
+        // hypothetical pick itself.
+        let pool: Vec<String> = pool_search
             .iter()
             .filter(|c| !is_taken(c, state) && c.as_str() != cand)
             .cloned()

@@ -64,15 +64,16 @@ fn primary_role(champion: &str, meta: &HashMap<String, ChampionMeta>) -> Role {
 }
 
 /// Score every legal champion at this state via production `score_pick`.
-/// Returns (champion, score) pairs, unsorted. Excludes already-taken champs.
+/// Returns (champion, score) pairs, unsorted. Excludes already-taken champs
+/// and champs outside the picking-side pool (v5 phase 1).
 fn score_singles(
     state: &DraftState,
     fixture: &SpikeFixture,
     ctx: &EvalContext,
     action_type: ActionType,
 ) -> Vec<(String, f64)> {
-    fixture
-        .all_champions
+    ctx.our_pool
+        .search
         .iter()
         .filter(|c| !is_taken(c, state))
         .map(|c| {
@@ -83,7 +84,10 @@ fn score_singles(
         .collect()
 }
 
-/// Top-K champions in `role_pool` by score, scored at `role`.
+/// Top-K champions for `role` by score within the picking-side pool. Filters
+/// to `pool.search`, drops champs whose `position_factor(role)` < 0.4, scores
+/// the survivors, sorts, truncates to K. v5 phase 1 — was full-fixture
+/// enumeration in v4.
 fn top_k_for_role_spike(
     role: Role,
     state: &DraftState,
@@ -92,8 +96,9 @@ fn top_k_for_role_spike(
     action_type: ActionType,
     k: usize,
 ) -> Vec<String> {
-    let mut scored: Vec<(String, f64)> = fixture
-        .all_champions
+    let mut scored: Vec<(String, f64)> = ctx
+        .our_pool
+        .search
         .iter()
         .filter(|c| !is_taken(c, state))
         .filter(|c| {
@@ -200,9 +205,12 @@ pub(crate) fn enumerate_pair_candidates(
     scored_pairs.truncate(PAIR_BRANCH_WIDTH);
 
     // Feasibility-filter: push both, ensure remaining picks can fill roles.
+    // Pool scoped to the picking side per v5 phase 1 — feasibility cares
+    // about *our* remaining roles, so the pool must be our pool.
     use crate::draft_state::picks_remaining;
-    let pool_full: Vec<String> = fixture
-        .all_champions
+    let pool_full: Vec<String> = ctx
+        .our_pool
+        .search
         .iter()
         .filter(|c| !is_taken(c, state))
         .cloned()
@@ -256,8 +264,10 @@ pub fn compute_prior_scores(
             .collect();
     }
 
-    fixture
-        .all_champions
+    // Singletons: scope to picking-side pool. ctx is already perspective-
+    // swapped by the caller (Mcts::new -> shortlist_top_k uses sub_ctx).
+    ctx.our_pool
+        .search
         .iter()
         .filter(|c| !is_taken(c, state))
         .map(|c| {

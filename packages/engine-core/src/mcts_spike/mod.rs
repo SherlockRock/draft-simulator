@@ -15,13 +15,14 @@ pub mod pareto;
 pub mod policy;
 pub mod prior;
 pub mod procedural_fixture;
+pub mod real_data_fixture;
 pub mod rng;
 pub mod rollout;
 pub mod trajectory;
 pub mod tree;
 
 use crate::draft_state::{DraftState, Side};
-use crate::pools::Role;
+use crate::pools::{Role, RolePoolMap, TeamPool};
 use crate::role_solver::ChampionMeta;
 use std::collections::HashMap;
 
@@ -32,6 +33,68 @@ pub struct SpikeFixture {
     pub meta: HashMap<String, ChampionMeta>,
     pub winrates: HashMap<String, f64>,
     pub all_champions: Vec<String>,
+}
+
+/// Per-side champion pools (analog of production's blue/red TeamPool). Spike-
+/// only — production uses `EvalContext.our_pool`/`opp_pool` after perspective
+/// swap. The PoolContext is the root-side-anchored pair from which
+/// `eval_ctx::build_spike_eval_ctx` builds the EvalContext.
+///
+/// v5 phase 1 — both engines must scope candidate enumeration to the picking
+/// side's `pool.search`. `PoolContext::full(fixture)` reproduces v1-v4
+/// behavior (both sides see every champion) for backward compatibility with
+/// existing smoke tests and the procedural fixture comparisons.
+#[derive(Clone, Debug)]
+pub struct PoolContext {
+    pub blue: TeamPool,
+    pub red: TeamPool,
+}
+
+impl PoolContext {
+    /// Both sides see every champion in the fixture. Preserves v1-v4
+    /// candidate enumeration behavior.
+    pub fn full(fixture: &SpikeFixture) -> Self {
+        let pool = make_full_team_pool(fixture);
+        Self { blue: pool.clone(), red: pool }
+    }
+
+    /// Side-asymmetric construction: blue and red can carry different pools.
+    pub fn new(blue: TeamPool, red: TeamPool) -> Self {
+        Self { blue, red }
+    }
+
+    pub fn for_side(&self, side: Side) -> &TeamPool {
+        match side {
+            Side::Blue => &self.blue,
+            Side::Red => &self.red,
+        }
+    }
+}
+
+/// Build a TeamPool covering every champion in the fixture: each champ
+/// appears under each of their listed playable roles in `display`, and all
+/// champs land in `search`. This is the "full pool" baseline.
+pub fn make_full_team_pool(fixture: &SpikeFixture) -> TeamPool {
+    let mut top = Vec::new();
+    let mut jg = Vec::new();
+    let mut mid = Vec::new();
+    let mut adc = Vec::new();
+    let mut sup = Vec::new();
+    for (id, m) in &fixture.meta {
+        for r in &m.positions {
+            match r {
+                Role::Top => top.push(id.clone()),
+                Role::Jungle => jg.push(id.clone()),
+                Role::Middle => mid.push(id.clone()),
+                Role::Adc => adc.push(id.clone()),
+                Role::Support => sup.push(id.clone()),
+            }
+        }
+    }
+    TeamPool {
+        display: RolePoolMap { top, jungle: jg, middle: mid, adc, support: sup },
+        search: fixture.all_champions.clone(),
+    }
 }
 
 /// Terminal eval over the 3 spike axes. All axes are `blue - red`.

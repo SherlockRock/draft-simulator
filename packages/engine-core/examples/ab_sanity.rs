@@ -10,7 +10,7 @@
 
 use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::{ActionType, DraftState, Side};
-use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx;
+use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx_full_pool as build_spike_eval_ctx;
 use engine_core::mcts_spike::procedural_fixture::procedural_fixture;
 use engine_core::mcts_spike::SpikeFixture;
 use engine_core::search::{search, SearchParams, TreeNode};

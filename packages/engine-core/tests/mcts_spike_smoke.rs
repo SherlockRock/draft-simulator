@@ -4,8 +4,8 @@
 use engine_core::draft_state::DraftState;
 use engine_core::mcts_spike::policy::{McTsConfig, Mcts};
 use engine_core::mcts_spike::rollout::{FeasibilityMode, RolloutPolicy};
-use engine_core::mcts_spike::SpikeFixture;
-use engine_core::pools::Role;
+use engine_core::mcts_spike::{PoolContext, SpikeFixture};
+use engine_core::pools::{Role, RolePoolMap, TeamPool};
 use engine_core::role_solver::ChampionMeta;
 use std::collections::HashMap;
 
@@ -252,7 +252,7 @@ fn root_shortlist_trims_breadth() {
 #[test]
 fn prior_ranks_higher_winrate_above_lower() {
     use engine_core::draft_state::{ActionType, Side};
-    use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx;
+    use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx_full_pool as build_spike_eval_ctx;
     use engine_core::mcts_spike::prior::{compute_prior_scores, ShortlistInput};
 
     let mut fixture = small_fixture();
@@ -275,7 +275,7 @@ fn prior_ranks_higher_winrate_above_lower() {
 #[test]
 fn shortlist_caps_to_k() {
     use engine_core::draft_state::{ActionType, Side};
-    use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx;
+    use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx_full_pool as build_spike_eval_ctx;
     use engine_core::mcts_spike::prior::{shortlist_top_k, ShortlistInput};
 
     let fixture = small_fixture();
@@ -340,7 +340,7 @@ fn pair_prior_at_late_emits_pair_moves() {
     // dominate the additive proxy and the top pairs should be Support-
     // containing.
     use engine_core::draft_state::{ActionType, DraftState, Side};
-    use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx;
+    use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx_full_pool as build_spike_eval_ctx;
     use engine_core::mcts_spike::prior::{compute_prior_scores, ShortlistInput};
     use engine_core::mcts_spike::procedural_fixture::procedural_fixture;
 
@@ -415,7 +415,7 @@ fn pair_prior_shortlist_covers_ab_top5_at_late() {
     // that the seed RANKS them right.
     use engine_core::cancellation::CancelHandle;
     use engine_core::draft_state::{ActionType, DraftState};
-    use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx;
+    use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx_full_pool as build_spike_eval_ctx;
     use engine_core::mcts_spike::prior::{shortlist_top_k, ShortlistInput};
     use engine_core::mcts_spike::procedural_fixture::procedural_fixture;
     use engine_core::search::{search, SearchParams};
@@ -507,7 +507,7 @@ fn prior_top5_overlaps_with_ab_top5() {
     // 0.67/5 overlap on average. v3 expects >=3/5.
     use engine_core::cancellation::CancelHandle;
     use engine_core::draft_state::{ActionType, Side};
-    use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx;
+    use engine_core::mcts_spike::eval_ctx::build_spike_eval_ctx_full_pool as build_spike_eval_ctx;
     use engine_core::mcts_spike::prior::{shortlist_top_k, ShortlistInput};
     use engine_core::search::{search, SearchParams};
     use std::collections::HashMap;
@@ -563,5 +563,203 @@ fn prior_top5_overlaps_with_ab_top5() {
         "v3 prior top5 vs AB mean top5 overlap = {}/5 - expected >=3. \
          prior={:?} ab={:?}",
         overlap, prior_top5, ab_top5
+    );
+}
+
+/// v5 phase 1: pool support — at every turn, MCTS must only enumerate
+/// candidates inside the picking-side pool. Build a deliberately-narrow
+/// pool (3 champs per role per side, no overlap with the other side) and
+/// run a short search; verify root children's champion ids are all members
+/// of the picking-side pool.
+fn narrow_pool_for_blue() -> TeamPool {
+    TeamPool {
+        display: RolePoolMap {
+            top: vec!["Garen".into(), "Darius".into(), "Sett".into()],
+            jungle: vec!["LeeSin".into(), "Graves".into(), "Viego".into()],
+            middle: vec!["Ahri".into(), "Syndra".into(), "Akali".into()],
+            adc: vec!["Jinx".into(), "Caitlyn".into(), "Lucian".into()],
+            support: vec!["Sona".into(), "Thresh".into(), "Karma".into()],
+        },
+        search: vec![
+            "Garen".into(), "Darius".into(), "Sett".into(),
+            "LeeSin".into(), "Graves".into(), "Viego".into(),
+            "Ahri".into(), "Syndra".into(), "Akali".into(),
+            "Jinx".into(), "Caitlyn".into(), "Lucian".into(),
+            "Sona".into(), "Thresh".into(), "Karma".into(),
+        ],
+    }
+}
+
+fn narrow_pool_for_red() -> TeamPool {
+    TeamPool {
+        display: RolePoolMap {
+            top: vec!["Aatrox".into(), "Renekton".into(), "Camille".into()],
+            jungle: vec!["Kindred".into(), "Nidalee".into(), "Hecarim".into()],
+            middle: vec!["Orianna".into(), "Yasuo".into(), "Azir".into()],
+            adc: vec!["Aphelios".into(), "Ezreal".into(), "Kaisa".into()],
+            support: vec!["Nautilus".into(), "Lulu".into(), "Pyke".into()],
+        },
+        search: vec![
+            "Aatrox".into(), "Renekton".into(), "Camille".into(),
+            "Kindred".into(), "Nidalee".into(), "Hecarim".into(),
+            "Orianna".into(), "Yasuo".into(), "Azir".into(),
+            "Aphelios".into(), "Ezreal".into(), "Kaisa".into(),
+            "Nautilus".into(), "Lulu".into(), "Pyke".into(),
+        ],
+    }
+}
+
+#[test]
+fn pool_support_filters_candidates_to_picking_side_pool() {
+    let fixture = small_fixture();
+    let pools = PoolContext::new(narrow_pool_for_blue(), narrow_pool_for_red());
+
+    // Empty draft — first turn is Ban1 Blue. Blue's pool only contains 15
+    // champions; the red-side pool's 15 are disjoint. Verify root children
+    // are all in blue's pool (since blue is picking).
+    let mut mcts = Mcts::with_pools(
+        &fixture,
+        DraftState::default(),
+        &pools,
+        McTsConfig {
+            policy: RolloutPolicy::UniformFeasible,
+            feasibility_mode: FeasibilityMode::Cached,
+            seed: 7,
+            root_shortlist_k: None,
+        },
+    );
+    // Just enough iterations to expand multiple root children.
+    for _ in 0..200 {
+        mcts.iterate();
+    }
+    let dist = mcts.root_visit_distribution();
+    assert!(!dist.is_empty(), "root should have visited children");
+    let blue_pool: std::collections::HashSet<&str> = pools
+        .blue
+        .search
+        .iter()
+        .map(String::as_str)
+        .collect();
+    let red_pool: std::collections::HashSet<&str> = pools
+        .red
+        .search
+        .iter()
+        .map(String::as_str)
+        .collect();
+    for (mv, _, _) in &dist {
+        for cand in &mv.champion_ids {
+            assert!(
+                blue_pool.contains(cand.as_str()),
+                "root child {:?} contains {} which is OUTSIDE blue's pool. \
+                 (Was it from red's pool? {})",
+                mv.label(),
+                cand,
+                red_pool.contains(cand.as_str())
+            );
+        }
+    }
+}
+
+#[test]
+fn pool_support_filters_pair_turn_candidates() {
+    let fixture = small_fixture();
+    let pools = PoolContext::new(narrow_pool_for_blue(), narrow_pool_for_red());
+
+    // Land at slot 9 = Blue's pair_start (Pick1, pair_start=true). State:
+    // 6 bans done + 1 Blue pick (slot 6) + 2 Red picks (slots 7-8 — red's
+    // pair). Per TURN_SEQUENCE, slot 9 is Blue's pair_start.
+    let state = DraftState {
+        blue_bans: vec!["Aatrox".into(), "Kindred".into(), "Orianna".into()],
+        red_bans: vec!["Aphelios".into(), "Nautilus".into(), "Yasuo".into()],
+        blue_picks: vec!["Garen".into()],
+        red_picks: vec!["Hecarim".into(), "Azir".into()],
+        ..Default::default()
+    };
+    let mut mcts = Mcts::with_pools(
+        &fixture,
+        state,
+        &pools,
+        McTsConfig {
+            policy: RolloutPolicy::UniformFeasible,
+            feasibility_mode: FeasibilityMode::Cached,
+            seed: 1,
+            root_shortlist_k: Some(20),
+        },
+    );
+    for _ in 0..400 {
+        mcts.iterate();
+    }
+    let dist = mcts.root_visit_distribution();
+    assert!(!dist.is_empty(), "pair-turn root should have visited children");
+    let blue_pool: std::collections::HashSet<&str> = pools
+        .blue
+        .search
+        .iter()
+        .map(String::as_str)
+        .collect();
+    let red_pool: std::collections::HashSet<&str> = pools
+        .red
+        .search
+        .iter()
+        .map(String::as_str)
+        .collect();
+    for (mv, _, _) in &dist {
+        assert_eq!(
+            mv.champion_ids.len(),
+            2,
+            "expected pair MoveId at pair_start, got {:?}",
+            mv.label()
+        );
+        for cand in &mv.champion_ids {
+            assert!(
+                blue_pool.contains(cand.as_str()),
+                "pair-turn root child {:?} contains {} which is OUTSIDE blue's pool. \
+                 (red_pool would have it? {})",
+                mv.label(),
+                cand,
+                red_pool.contains(cand.as_str())
+            );
+        }
+    }
+}
+
+#[test]
+fn pool_support_full_pool_matches_v4_behavior() {
+    // Sanity: PoolContext::full(fixture) should reproduce the same root
+    // visit distribution as the legacy `Mcts::new` constructor (which today
+    // delegates to with_pools(PoolContext::full(...))).
+    let fixture = small_fixture();
+    let state = DraftState::default();
+    let cfg = McTsConfig {
+        policy: RolloutPolicy::UniformFeasible,
+        feasibility_mode: FeasibilityMode::Cached,
+        seed: 99,
+        root_shortlist_k: None,
+    };
+
+    let mut mcts_default = Mcts::new(&fixture, state.clone(), cfg.clone());
+    let mut mcts_full = Mcts::with_pools(
+        &fixture,
+        state,
+        &PoolContext::full(&fixture),
+        cfg,
+    );
+    for _ in 0..200 {
+        mcts_default.iterate();
+        mcts_full.iterate();
+    }
+    let dist_default: Vec<(String, u32)> = mcts_default
+        .root_visit_distribution()
+        .into_iter()
+        .map(|(mv, v, _)| (mv.label(), v))
+        .collect();
+    let dist_full: Vec<(String, u32)> = mcts_full
+        .root_visit_distribution()
+        .into_iter()
+        .map(|(mv, v, _)| (mv.label(), v))
+        .collect();
+    assert_eq!(
+        dist_default, dist_full,
+        "Mcts::new (defaults to full pool) should equal with_pools(PoolContext::full)"
     );
 }
