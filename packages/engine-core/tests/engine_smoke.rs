@@ -710,3 +710,82 @@ fn compute_scenarios_perspective_first_is_robust() {
 
     assert_eq!(resp.scenarios[0].perspective, Perspective::Robust);
 }
+
+fn role_diverse_pick1_request(state: DraftState) -> ComputeRequest {
+    let mut req = default_request(state);
+    req.our_pool = pool_with(&["A", "B", "C", "D", "E"]);
+    req.opp_pool = pool_with(&["A", "B", "C", "D", "E"]);
+    // budget=0 deterministically triggers the `elapsed >= budget` bail at the
+    // top of iter 2 (any non-zero elapsed time satisfies it). Without the
+    // pair-start floor, depth_reached would be exactly 1.
+    req.latency_budget_ms = 0;
+    req.search_params.max_depth = 4;
+    req.search_params.branch_width = 3;
+    req.search_params.pair_branch_width = 4;
+    req.meta_overrides = Some(MetaData {
+        win_rates: HashMap::from([
+            ("A".to_string(), 0.95),
+            ("B".to_string(), 0.70),
+            ("C".to_string(), 0.50),
+            ("D".to_string(), 0.35),
+            ("E".to_string(), 0.20),
+        ]),
+        ..Default::default()
+    });
+    req.champion_meta = HashMap::from([
+        ("A".to_string(), ChampionMeta { id: "A".to_string(), positions: vec![Role::Top],     ..Default::default() }),
+        ("B".to_string(), ChampionMeta { id: "B".to_string(), positions: vec![Role::Jungle],  ..Default::default() }),
+        ("C".to_string(), ChampionMeta { id: "C".to_string(), positions: vec![Role::Middle],  ..Default::default() }),
+        ("D".to_string(), ChampionMeta { id: "D".to_string(), positions: vec![Role::Adc],     ..Default::default() }),
+        ("E".to_string(), ChampionMeta { id: "E".to_string(), positions: vec![Role::Support], ..Default::default() }),
+    ]);
+    req
+}
+
+#[test]
+fn pair_start_root_forces_depth_two_under_zero_budget() {
+    // Regression for the slot-17 R5-missing bug. At pair-start roots, a
+    // depth-1 result has every pair child terminating at the pair's other
+    // slot (rem=0 leaf), so collect_leaves surfaces scenarios missing the
+    // next decision. engine.rs::compute now passes min_completed_depth=2 to
+    // iterative_deepening at pair-start states, forcing depth 2 to complete
+    // even when the budget heuristic would otherwise bail.
+    //
+    // Slot 7 is R1 Pick1 pair_start (B2-B3 — wait, R1-R2). Use it instead of
+    // slot 17 because the test pool stays small.
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 7);
+
+    let req = role_diverse_pick1_request(state);
+    let engine = Engine::new(MetaData::default(), HashMap::new());
+    let cancel = CancelHandle::new();
+    let resp = engine.compute(req, &cancel).unwrap();
+
+    assert!(
+        resp.depth_reached >= 2,
+        "pair-start root must reach depth >= 2 even at zero budget; got {}",
+        resp.depth_reached
+    );
+    assert!(!resp.cancelled, "budget exhaustion is not a cancellation");
+}
+
+#[test]
+fn non_pair_start_root_stops_at_depth_one_under_zero_budget() {
+    // Pair test for the above. Slot 6 is Blue Pick1 (single, NOT pair_start).
+    // The min_completed_depth floor must be 1 here, so the budget bail at top
+    // of iter 2 fires and we stop at depth 1. This proves the policy is
+    // conditional on pair_start, not always-2.
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 6);
+
+    let req = role_diverse_pick1_request(state);
+    let engine = Engine::new(MetaData::default(), HashMap::new());
+    let cancel = CancelHandle::new();
+    let resp = engine.compute(req, &cancel).unwrap();
+
+    assert_eq!(
+        resp.depth_reached, 1,
+        "non-pair-start root with zero budget must stop at depth 1; got {}",
+        resp.depth_reached
+    );
+}

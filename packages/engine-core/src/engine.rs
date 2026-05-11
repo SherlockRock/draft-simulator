@@ -151,6 +151,17 @@ impl Engine {
             flex_retention_weight,
             reveal_cost_weight,
         };
+        // At pair-start root states, the slot-17-class invariant: a tree with
+        // remaining_depth=1 has every pair child hit the rem=0 terminal at the
+        // pair's other slot, so `collect_leaves` produces scenarios that are
+        // missing the next decision (e.g. R5 after a B4-B5 pair). Force the
+        // deepening loop to complete at least depth 2 from these states even
+        // when the budget heuristic would otherwise bail. Capped by max_depth.
+        let min_completed_depth: usize = state
+            .current_turn()
+            .map(|t| if t.pair_start { 2 } else { 1 })
+            .unwrap_or(1);
+
         let mut latest_stats = None;
         let result = iterative_deepening::deepen(
             |depth, handle| {
@@ -167,6 +178,7 @@ impl Engine {
             },
             search_params.max_depth,
             Duration::from_millis(latency_budget_ms),
+            min_completed_depth,
             cancel,
         );
 
@@ -197,7 +209,14 @@ impl Engine {
                     depth_reached: result.depth,
                     transpositions_found: stats.transpositions_found,
                     forced_branches_dropped: stats.forced_branches_dropped,
-                    cancelled: result.partial,
+                    // `result.partial` is true for both timeout-partial AND
+                    // external-cancel-with-best (per iterative_deepening). The
+                    // protocol's `cancelled` field gates the backend's
+                    // swallow-vs-persist decision and should ONLY be true for
+                    // external supersession cancels. Distinguish via the cancel
+                    // handle's actual state: timeout returns Ok without tripping
+                    // the handle, external cancel trips it before returning.
+                    cancelled: cancel.is_cancelled(),
                 })
             }
             Err(EngineError::Cancelled) => Err(EngineError::Cancelled),
