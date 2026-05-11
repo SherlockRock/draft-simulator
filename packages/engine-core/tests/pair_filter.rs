@@ -15,7 +15,7 @@ fn bucket_global_top_k() {
         per_role_top: 0,
         max_pairs: 100,
     };
-    let pairs = seed_pair_candidates(&scored, &[], &[], None, &cfg);
+    let pairs = seed_pair_candidates(&scored, &[], None, &cfg);
     // C(3,2) = 3 pairs from top-3 globally
     assert_eq!(pairs.len(), 3);
 }
@@ -30,7 +30,8 @@ fn bucket_per_role_pairs() {
         per_role_top: 5,
         max_pairs: 100,
     };
-    let pairs = seed_pair_candidates(&scored, &role_a, &role_b, None, &cfg);
+    let buckets = vec![(role_a, role_b)];
+    let pairs = seed_pair_candidates(&scored, &buckets, None, &cfg);
     // 2 × 1 = 2 (A,B) (C,B)
     assert_eq!(pairs.len(), 2);
 }
@@ -43,7 +44,7 @@ fn bucket_forced_partner() {
         per_role_top: 0,
         max_pairs: 100,
     };
-    let pairs = seed_pair_candidates(&scored, &[], &[], Some("A"), &cfg);
+    let pairs = seed_pair_candidates(&scored, &[], Some("A"), &cfg);
     // forced=A pairs with every other candidate: (A,B), (A,C)
     assert_eq!(pairs.len(), 2);
     assert!(pairs.iter().all(|p| p.first == "A" || p.second == "A"));
@@ -59,7 +60,8 @@ fn buckets_dedup() {
         per_role_top: 5,
         max_pairs: 100,
     };
-    let pairs = seed_pair_candidates(&scored, &role_a, &role_b, None, &cfg);
+    let buckets = vec![(role_a, role_b)];
+    let pairs = seed_pair_candidates(&scored, &buckets, None, &cfg);
     let unique: HashSet<_> = pairs
         .iter()
         .map(|p| (p.first.clone(), p.second.clone()))
@@ -78,7 +80,7 @@ fn pair_count_under_1000_at_171_pool() {
         per_role_top: 8,
         max_pairs: 1000,
     };
-    let pairs = seed_pair_candidates(&scored_refs, &[], &[], None, &cfg);
+    let pairs = seed_pair_candidates(&scored_refs, &[], None, &cfg);
     assert!(
         pairs.len() <= 1000,
         "Pair seed must stay under 1000 with single_top_k=32: got {}",
@@ -89,4 +91,23 @@ fn pair_count_under_1000_at_171_pool() {
         "Pair seed must beat the JS baseline 14535: got {}",
         pairs.len()
     );
+}
+
+#[test]
+fn role_buckets_union_dedups_across_groups() {
+    // Two missing-role groups that share a champion ("A" appears in both
+    // role_a slots): the union should still dedup to a single instance per
+    // unordered pair.
+    let scored: Vec<(&str, f64)> = vec![("A", 0.9), ("B", 0.5), ("C", 0.4), ("D", 0.3)];
+    let group_1 = (vec!["A"], vec!["B"]);
+    let group_2 = (vec!["A", "C"], vec!["D"]);
+    // group_1 produces (A,B); group_2 produces (A,D), (C,D). 3 unique pairs.
+    let buckets = vec![group_1, group_2];
+    let cfg = PairFilterConfig {
+        single_top_k: 0,
+        per_role_top: 5,
+        max_pairs: 100,
+    };
+    let pairs = seed_pair_candidates(&scored, &buckets, None, &cfg);
+    assert_eq!(pairs.len(), 3);
 }

@@ -107,6 +107,7 @@ fn run_and_print(label: &str, start_slot: usize, max_depth: usize, branch_width:
     let (state, ctx) = fixture(start_slot);
     let params = SearchParams {
         branch_width,
+        pair_branch_width: branch_width,
         max_depth,
         disable_alpha_beta: !ab,
         forced_branches: vec![],
@@ -185,6 +186,7 @@ fn run_with_budget(
     let (state, ctx) = fixture(start_slot);
     let params = SearchParams {
         branch_width,
+        pair_branch_width: branch_width,
         max_depth,
         disable_alpha_beta: !ab,
         forced_branches: vec![],
