@@ -41,13 +41,13 @@
           "ban1": { "info": 0.65, "comp": 0.35, "coverage": 0.0 },
           "pick1": { "info": 0.5, "comp": 0.5, "coverage": 0.3 },
           "ban2": { "info": 0.4, "comp": 0.6, "coverage": 0.4 },
-          "pick2": { "info": 0.2, "comp": 0.8, "coverage": 0.6 }
+          "pick2": { "info": 0.2, "comp": 0.8, "coverage": 1.5 }
         },
         "red": {
           "ban1": { "info": 0.7, "comp": 0.3, "coverage": 0.0 },
           "pick1": { "info": 0.6, "comp": 0.4, "coverage": 0.3 },
           "ban2": { "info": 0.5, "comp": 0.5, "coverage": 0.4 },
-          "pick2": { "info": 0.2, "comp": 0.8, "coverage": 0.6 }
+          "pick2": { "info": 0.2, "comp": 0.8, "coverage": 1.5 }
         }
       },
       "penalties": { "outOfRole": 0.25, "outOfPool": 0.75 },
