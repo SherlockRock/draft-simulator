@@ -128,8 +128,12 @@ export function nodeKeyPathToIndices(
 }
 
 export interface ReconcilePriority {
-    /** Node-key path of the selected scenario (or null). */
-    selectedScenarioKeyPath: NodeKeyPath | null;
+    /** Node-key paths of every scenario emitted by the engine for this
+     *  snapshot. `trimChildrenByPriority` keeps every child whose key is the
+     *  matching segment of any of these paths at the current depth, so all
+     *  scenario lanes survive the merge-time `branchWidth` trim — not just
+     *  the auto-selected one. */
+    scenarioKeyPaths: ReadonlyArray<NodeKeyPath>;
     /** Node-key paths the user has manually expanded. */
     manualExpansionKeyPaths: ReadonlySet<NodeKeyPath>;
 }

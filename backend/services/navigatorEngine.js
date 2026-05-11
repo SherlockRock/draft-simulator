@@ -39,18 +39,26 @@ const TURN_SEQUENCE = [
 ];
 
 // Default rev-4 phase weights, ported from packages/engine-proto/src/weights.ts.
+//
+// Pick2 coverage bumped from 0.6 → 1.5 to overcome high-WR mismatch dominance
+// at 3-missing-role pair turns. Detail: the coverage_score gap between a
+// 1-missing-role comp (≈0.398) and a 2-missing-role comp (≈0.158) is bounded
+// to 0.24 by the geometric-mean formula. With weight 0.6, that's a 0.144
+// signal — smaller than the per-pick win-rate sum gap when 2 high-WR singles
+// out-tier 2 specialists by ≈0.10 WR each. Weight 1.5 puts the coverage
+// signal at ≈0.36, which dominates realistic WR gaps.
 const DEFAULT_PHASE_WEIGHTS = {
   blue: {
     ban1: { comp: 0.35, info: 0.65, coverage: 0.0 },
     pick1: { comp: 0.5, info: 0.5, coverage: 0.3 },
     ban2: { comp: 0.6, info: 0.4, coverage: 0.4 },
-    pick2: { comp: 0.8, info: 0.2, coverage: 0.6 },
+    pick2: { comp: 0.8, info: 0.2, coverage: 1.5 },
   },
   red: {
     ban1: { comp: 0.3, info: 0.7, coverage: 0.0 },
     pick1: { comp: 0.4, info: 0.6, coverage: 0.3 },
     ban2: { comp: 0.5, info: 0.5, coverage: 0.4 },
-    pick2: { comp: 0.8, info: 0.2, coverage: 0.6 },
+    pick2: { comp: 0.8, info: 0.2, coverage: 1.5 },
   },
 };
 
@@ -116,7 +124,23 @@ const EMPTY_POOL = {
   search: [],
 };
 
-async function buildEngineRequest(session, events, exclusions, forcedBranches = []) {
+// v5 phase 4: dev-only experimental engine toggle. Production never sets
+// algorithm; setting it requires both the env-var gate AND a per-request flag
+// from the frontend. The env var lets us harden against accidental rollout
+// while still letting dev/staging environments expose the toggle.
+const MCTS_TOGGLE_ENABLED = process.env.NAV_ENGINE_TOGGLE_ENABLED === "1"
+  || process.env.NAV_ENGINE_TOGGLE_ENABLED === "true";
+
+function resolveAlgorithm(requestedAlgorithm) {
+  if (!MCTS_TOGGLE_ENABLED) return undefined;
+  if (requestedAlgorithm !== "mcts" && requestedAlgorithm !== "ab") return undefined;
+  // Pass through "ab" too so the engine-node side can log dispatched algorithm
+  // explicitly. Setting "ab" is equivalent to omitting the field per the
+  // schema's optional-with-default semantics, but it keeps round-trip parity.
+  return requestedAlgorithm;
+}
+
+async function buildEngineRequest(session, events, exclusions, forcedBranches = [], algorithm) {
   const orderedEvents = sortEvents(events);
   const realEvents = orderedEvents.filter(isRealDraftEvent);
   const bans = [];
@@ -144,7 +168,7 @@ async function buildEngineRequest(session, events, exclusions, forcedBranches = 
   const blue = toProtocolTeamPool(session.blue_pool || EMPTY_POOL, excluded);
   const red = toProtocolTeamPool(session.red_pool || EMPTY_POOL, excluded);
 
-  return {
+  const request = {
     protocolVersion: "1.0.0",
     draftState: {
       format: "standard",
@@ -187,6 +211,13 @@ async function buildEngineRequest(session, events, exclusions, forcedBranches = 
       forcedBranches,
     },
   };
+
+  const resolvedAlgorithm = resolveAlgorithm(algorithm);
+  if (resolvedAlgorithm) {
+    request.algorithm = resolvedAlgorithm;
+  }
+
+  return request;
 }
 
 function getLastEventId(events) {
@@ -250,6 +281,7 @@ async function computeForDraft(navigatorDraft, session, events, version, io, opt
     events,
     exclusions,
     options.forcedBranches || [],
+    options.algorithm,
   );
   const lastEventId = getLastEventId(events);
 
@@ -311,4 +343,5 @@ module.exports = {
   computeForDraft,
   getEngineStatus,
   shutdownEngine,
+  isMctsToggleEnabled: () => MCTS_TOGGLE_ENABLED,
 };

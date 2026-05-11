@@ -2,12 +2,25 @@ const NavigatorSession = require("../models/NavigatorSession");
 const NavigatorDraft = require("../models/NavigatorDraft");
 const NavigatorEvent = require("../models/NavigatorEvent");
 const NavigatorSnapshot = require("../models/NavigatorSnapshot");
-const { computeForDraft } = require("../services/navigatorEngine");
+const {
+  computeForDraft,
+  isMctsToggleEnabled,
+} = require("../services/navigatorEngine");
 const { getOurSideForGame } = require("../utils/navigatorSide");
 
 // Per-session engine job version. Bumped on every pick/ban/undo. Results whose
 // job version is behind the session's current version are dropped.
 const sessionVersions = new Map();
+
+// v5 phase 4: per-session algorithm preference. Set via `navigatorSetAlgorithm`
+// when the dev toggle is enabled; honored on every subsequent recompute. Not
+// persisted (in-memory by design — toggle is dev-only and survival across
+// restarts is not a goal). Defaults to undefined (= αβ).
+const sessionAlgorithms = new Map();
+
+function getSessionAlgorithm(sessionId) {
+  return sessionAlgorithms.get(sessionId);
+}
 
 function bumpVersion(sessionId) {
   const next = (sessionVersions.get(sessionId) || 0) + 1;
@@ -172,7 +185,13 @@ async function emitDraftUpdate(io, sessionId, payload) {
 async function recomputeAndBroadcast(io, socket, session, draft, events, version, options = {}) {
   void socket;
   try {
-    const result = await computeForDraft(draft, session, events, version, io, options);
+    // Inject the session's current dev-toggled algorithm preference unless an
+    // explicit override was passed (forced-branch dispatchers don't override;
+    // they go through the same algorithm choice as picks/bans/undo).
+    const mergedOptions = options.algorithm !== undefined
+      ? options
+      : { ...options, algorithm: getSessionAlgorithm(session.id) };
+    const result = await computeForDraft(draft, session, events, version, io, mergedOptions);
 
     // Cancellation-driven swallow (engine.cancelled or meta.cancelled === true).
     // Newer compute will broadcast its own snapshot — drop silently.
@@ -245,6 +264,11 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
         events,
         snapshot: toClientSnapshot(snapshot),
         completedGames,
+        // v5 phase 4: dev-only signal so the frontend knows whether to render
+        // the experimental engine toggle. Always false in production builds
+        // (env var unset). When false, the frontend hides the toggle entirely.
+        engineToggleEnabled: isMctsToggleEnabled(),
+        currentAlgorithm: getSessionAlgorithm(sessionId) || "ab",
       });
     } catch (error) {
       console.error("Error in navigatorJoin:", error);
@@ -531,6 +555,53 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
     } catch (error) {
       console.error("Error in navigatorNextGame:", error);
       emitNavigatorError(socket, "Failed to create next navigator draft");
+    }
+  });
+
+  wrap("navigatorSetAlgorithm", async (data = {}) => {
+    try {
+      const { sessionId, algorithm } = data;
+
+      if (!sessionId) {
+        emitNavigatorError(socket, "sessionId is required");
+        return;
+      }
+
+      if (!isMctsToggleEnabled()) {
+        // Production: silently ignore. Dev gate prevents the UI from emitting
+        // this event in production builds, but defense-in-depth: if it somehow
+        // arrives, drop it without acknowledgement.
+        return;
+      }
+
+      if (algorithm !== "ab" && algorithm !== "mcts") {
+        emitNavigatorError(socket, "Invalid algorithm; expected \"ab\" or \"mcts\"");
+        return;
+      }
+
+      const session = await findOwnedSession(sessionId, socket);
+      if (!session) {
+        return;
+      }
+
+      sessionAlgorithms.set(sessionId, algorithm);
+
+      // Trigger a recompute on the current draft so the user sees the new
+      // engine's output without having to click anything else. If there's no
+      // active draft or no events yet, just acknowledge the preference.
+      const draft = await findCurrentDraft(sessionId);
+      if (!draft) {
+        return;
+      }
+      const events = await listDraftEvents(draft.id);
+      if (events.length === 0) {
+        return;
+      }
+      const version = bumpVersion(sessionId);
+      await recomputeAndBroadcast(io, socket, session, draft, events, version);
+    } catch (error) {
+      console.error("Error in navigatorSetAlgorithm:", error);
+      emitNavigatorError(socket, "Failed to set algorithm");
     }
   });
 

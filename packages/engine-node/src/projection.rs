@@ -144,10 +144,12 @@ fn convert_pool_red(p: &proto::EngineRequestPoolsRed) -> TeamPool {
 
 fn build_search_params(req: &proto::EngineRequest) -> Result<SearchParams, EngineError> {
     let branch_width = req.config.search.branch_width.max(1) as usize;
+    let pair_branch_width = req.config.search.pair_branch_width.max(1) as usize;
     let max_depth = req.config.search.max_depth.max(0) as usize;
     let forced_branches = convert_forced_branches(&req.config.forced_branches)?;
     Ok(SearchParams {
         branch_width,
+        pair_branch_width,
         max_depth,
         disable_alpha_beta: false,
         forced_branches,
@@ -209,6 +211,24 @@ fn phase_table_red(r: &proto::EngineRequestConfigWeightsPhaseWeightsRed) -> Phas
 
 pub fn core_to_response(resp: ComputeResponse) -> proto::EngineResponse {
     let scenarios = resp.scenarios.iter().map(to_protocol_scenario).collect();
+    // Build per-scenario must-keep paths so wire-tree truncation never drops
+    // a child the scenarios reference. Each path is a sequence of
+    // sorted-championIds vectors (the same content-addressing the frontend's
+    // `pathStepsToIndexPath` uses).
+    let must_keep_paths: Vec<Vec<Vec<String>>> = resp
+        .scenarios
+        .iter()
+        .map(|s| {
+            s.tree_path
+                .iter()
+                .map(|step| {
+                    let mut ids = step.champion_ids.clone();
+                    ids.sort();
+                    ids
+                })
+                .collect()
+        })
+        .collect();
     proto::EngineResponse {
         engine_id: ENGINE_ID.to_string(),
         protocol_version: PROTOCOL_VERSION.to_string(),
@@ -221,13 +241,92 @@ pub fn core_to_response(resp: ComputeResponse) -> proto::EngineResponse {
             nodes_evaluated: resp.nodes_evaluated as i64,
             pruning_rate: resp.pruning_rate.clamp(0.0, 1.0),
             transpositions_found: resp.transpositions_found as i64,
+            // αβ never sets MCTS-specific metadata; field carries through
+            // serde with `skip_serializing_if = "Option::is_none"`.
+            mcts_meta: None,
         },
         scenarios,
-        tree: to_protocol_tree(&resp.tree),
+        tree: to_protocol_tree(&resp.tree, &must_keep_paths),
     }
 }
 
-fn to_protocol_tree(node: &TreeNode) -> proto::TreeNode {
+/// Maximum children emitted per node in the rendered tree. The engine search
+/// runs at full `pair_branch_width` (e.g. 500) for quality, but the frontend
+/// renders one node per child — at 500 siblings the tree becomes unreadable.
+/// `expand_pair` already sorts `children` DESC by composite, so taking the
+/// top-K here keeps the strongest candidates and discards the long tail.
+/// Single-pick turns naturally have ≤ `branch_width` children (default 5),
+/// so this cap only meaningfully truncates pair turns.
+///
+/// Set higher than the 5-scenario count so Likely scenarios picked by
+/// feature-distance (not top-by-composite) usually fall inside this window
+/// and the frontend's `pathStepsToIndexPath` walk succeeds. The clean fix
+/// is a scenario-aware "must-keep" set in `core_to_response`; this is a
+/// blunter knob.
+const TREE_DISPLAY_WIDTH: usize = 32;
+
+/// Project an internal `TreeNode` to its wire form, capping each level's
+/// children at `TREE_DISPLAY_WIDTH`. `must_keep_paths` carries scenarios'
+/// content-addressed paths through this node — children whose championIds
+/// match the head of any must-keep path are unconditionally preserved (in
+/// addition to top-K by composite). For each kept child, the must-keep
+/// paths that match it are filtered to their tails and threaded into the
+/// recursive call so deeper levels also stay protected.
+///
+/// Why this is needed: scenarios are picked from leaves by leaf composite,
+/// but the wire tree's children are sorted by back-propagated parent
+/// composite. Under self-optimization those metrics diverge — so a
+/// scenario-referenced pair-child can sit far outside the top-K and the
+/// frontend's `pathStepsToIndexPath` walk would fail mid-path. Pass `&[]`
+/// for callers that don't need protection (tests, raw projection).
+fn to_protocol_tree(
+    node: &TreeNode,
+    must_keep_paths: &[Vec<Vec<String>>],
+) -> proto::TreeNode {
+    let must_keep_at_level: std::collections::HashSet<Vec<String>> = must_keep_paths
+        .iter()
+        .filter_map(|p| p.first().cloned())
+        .collect();
+
+    let mut included: std::collections::HashSet<Vec<String>> =
+        std::collections::HashSet::new();
+    let mut kept: Vec<&TreeNode> = Vec::with_capacity(TREE_DISPLAY_WIDTH);
+
+    // Top-K-by-score (children are pre-sorted DESC by composite).
+    for child in node.children.iter().take(TREE_DISPLAY_WIDTH) {
+        let key = sorted_ids(&child.champion_ids);
+        included.insert(key);
+        kept.push(child);
+    }
+    // Plus must-keep children not already in top-K.
+    for child in node.children.iter().skip(TREE_DISPLAY_WIDTH) {
+        let key = sorted_ids(&child.champion_ids);
+        if must_keep_at_level.contains(&key) && !included.contains(&key) {
+            included.insert(key);
+            kept.push(child);
+        }
+    }
+
+    let proto_children: Vec<proto::TreeNode> = kept
+        .iter()
+        .map(|child| {
+            let child_key = sorted_ids(&child.champion_ids);
+            // Filter must-keep paths to those starting at this child, pass tails.
+            let next_paths: Vec<Vec<Vec<String>>> = must_keep_paths
+                .iter()
+                .filter_map(|p| {
+                    let head = p.first()?;
+                    if *head == child_key {
+                        Some(p[1..].to_vec())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            to_protocol_tree(child, &next_paths)
+        })
+        .collect();
+
     proto::TreeNode {
         action_type: match node.action_type {
             ActionType::Ban => proto::TreeNodeActionType::Ban,
@@ -237,13 +336,22 @@ fn to_protocol_tree(node: &TreeNode) -> proto::TreeNode {
         // it lives only on Scenario.{blue,red}_likely_assignments. Frontend reads scenarios.
         assignment_distribution: vec![],
         champion_ids: node.champion_ids.clone(),
-        children: node.children.iter().map(to_protocol_tree).collect(),
+        children: proto_children,
         phase: convert_phase(node.phase),
         scores: tree_scores(&node.scores),
         side: node.side.map(convert_side_to_treenode),
         slots: node.slots.iter().map(|s| *s as i64).collect(),
         user_injected: node.user_injected,
+        // αβ never emits MCTS metadata; the spike's mcts_dispatch path
+        // populates this on the parallel branch.
+        mcts_extras: None,
     }
+}
+
+fn sorted_ids(ids: &[String]) -> Vec<String> {
+    let mut v = ids.to_vec();
+    v.sort();
+    v
 }
 
 fn convert_phase(p: Phase) -> proto::TreeNodePhase {
@@ -409,13 +517,13 @@ mod tests {
                             "ban1": { "comp": 0.5, "info": 0.5, "coverage": 0.0 },
                             "pick1": { "comp": 0.6, "info": 0.4, "coverage": 0.3 },
                             "ban2": { "comp": 0.5, "info": 0.5, "coverage": 0.4 },
-                            "pick2": { "comp": 0.7, "info": 0.3, "coverage": 0.6 },
+                            "pick2": { "comp": 0.7, "info": 0.3, "coverage": 1.5 },
                         },
                         "red": {
                             "ban1": { "comp": 0.5, "info": 0.5, "coverage": 0.0 },
                             "pick1": { "comp": 0.6, "info": 0.4, "coverage": 0.3 },
                             "ban2": { "comp": 0.5, "info": 0.5, "coverage": 0.4 },
-                            "pick2": { "comp": 0.7, "info": 0.3, "coverage": 0.6 },
+                            "pick2": { "comp": 0.7, "info": 0.3, "coverage": 1.5 },
                         },
                     },
                     "penalties": { "outOfPool": 0.75, "outOfRole": 0.25 },
@@ -436,6 +544,7 @@ mod tests {
         let req = sample_request();
         let core = request_to_core(&req, HashMap::new()).expect("projection ok");
         assert_eq!(core.search_params.branch_width, 4);
+        assert_eq!(core.search_params.pair_branch_width, 8);
         assert_eq!(core.search_params.max_depth, 2);
         assert!(!core.search_params.disable_alpha_beta);
         assert_eq!(core.latency_budget_ms, 500);
@@ -487,7 +596,7 @@ mod tests {
             user_injected: false,
             children: vec![leaf],
         };
-        let proto_root = to_protocol_tree(&root);
+        let proto_root = to_protocol_tree(&root, &[]);
         assert_eq!(proto_root.children.len(), 1);
         assert_eq!(proto_root.children[0].champion_ids, vec!["A".to_string()]);
         assert!(matches!(
@@ -497,6 +606,189 @@ mod tests {
         // assignment_distribution must be empty in v1
         assert!(proto_root.assignment_distribution.is_empty());
         assert!(proto_root.children[0].assignment_distribution.is_empty());
+    }
+
+    #[test]
+    fn to_protocol_tree_truncates_wide_children_to_display_width() {
+        // expand_pair can produce up to pair_branch_width (~500) children at a
+        // pair-pick turn. The wire payload caps at TREE_DISPLAY_WIDTH so the
+        // frontend doesn't render hundreds of siblings.
+        use engine_core::evaluator::ScoreSet;
+        let mut wide_children: Vec<TreeNode> = Vec::new();
+        for i in 0..200 {
+            wide_children.push(TreeNode {
+                champion_ids: vec![format!("Champ{}", i), format!("Other{}", i)],
+                scores: ScoreSet { composite: -(i as f64), ..Default::default() },
+                side: Some(Side::Blue),
+                slots: vec![17, 18],
+                action_type: ActionType::Pick,
+                phase: Phase::Pick2,
+                user_injected: false,
+                children: vec![],
+            });
+        }
+        let root = TreeNode {
+            champion_ids: vec![],
+            scores: ScoreSet::default(),
+            side: Some(Side::Blue),
+            slots: vec![17, 18],
+            action_type: ActionType::Pick,
+            phase: Phase::Pick2,
+            user_injected: false,
+            children: wide_children,
+        };
+        let projected = to_protocol_tree(&root, &[]);
+        assert_eq!(
+            projected.children.len(),
+            TREE_DISPLAY_WIDTH,
+            "wire tree must cap children at TREE_DISPLAY_WIDTH; got {}",
+            projected.children.len()
+        );
+        // The first 8 (top-K, since input was already in DESC order) survive.
+        assert_eq!(projected.children[0].champion_ids, vec!["Champ0".to_string(), "Other0".to_string()]);
+        assert_eq!(projected.children[7].champion_ids, vec!["Champ7".to_string(), "Other7".to_string()]);
+    }
+
+    #[test]
+    fn to_protocol_tree_keeps_must_keep_children_outside_top_k() {
+        // Regression for the slot-17 R5-missing-from-tree bug. Scenarios
+        // pick leaves by leaf-composite, but the wire tree truncates by
+        // back-propagated parent composite — the two metrics diverge under
+        // self-optimization, so scenario-referenced pair-children can sit
+        // far outside the top-`TREE_DISPLAY_WIDTH`. Must-keep paths
+        // unconditionally preserve those children.
+        use engine_core::evaluator::ScoreSet;
+        let mut wide_children: Vec<TreeNode> = Vec::new();
+        for i in 0..200 {
+            wide_children.push(TreeNode {
+                champion_ids: vec![format!("Champ{}", i), format!("Other{}", i)],
+                scores: ScoreSet { composite: -(i as f64), ..Default::default() },
+                side: Some(Side::Blue),
+                slots: vec![17, 18],
+                action_type: ActionType::Pick,
+                phase: Phase::Pick2,
+                user_injected: false,
+                children: vec![],
+            });
+        }
+        let root = TreeNode {
+            champion_ids: vec![],
+            scores: ScoreSet::default(),
+            side: Some(Side::Blue),
+            slots: vec![17, 18],
+            action_type: ActionType::Pick,
+            phase: Phase::Pick2,
+            user_injected: false,
+            children: wide_children,
+        };
+        // A scenario that picks Champ150/Other150 — well outside top-32.
+        let must_keep_paths: Vec<Vec<Vec<String>>> = vec![vec![
+            vec!["Champ150".to_string(), "Other150".to_string()],
+        ]];
+        let projected = to_protocol_tree(&root, &must_keep_paths);
+        // Top-K survives + the one must-keep child = 33 children.
+        assert_eq!(projected.children.len(), TREE_DISPLAY_WIDTH + 1);
+        let kept_keys: Vec<Vec<String>> = projected
+            .children
+            .iter()
+            .map(|c| {
+                let mut ids = c.champion_ids.clone();
+                ids.sort();
+                ids
+            })
+            .collect();
+        let target = {
+            let mut ids = vec!["Champ150".to_string(), "Other150".to_string()];
+            ids.sort();
+            ids
+        };
+        assert!(
+            kept_keys.contains(&target),
+            "must-keep child must survive truncation; got {:?}",
+            kept_keys,
+        );
+    }
+
+    #[test]
+    fn to_protocol_tree_must_keep_recurses_into_kept_children() {
+        // Must-keep paths longer than 1 protect the corresponding child at
+        // each level. Even though `branch_width=5 < TREE_DISPLAY_WIDTH=32`
+        // means deeper levels usually pass through unscathed, the recursive
+        // contract is what makes slot-7-class states (where the second
+        // pair-fanout sits at depth 1 of the engine tree) safe.
+        use engine_core::evaluator::ScoreSet;
+        // Build a 2-level wide tree: 100 children at depth 1, each with 100
+        // grandchildren at depth 2.
+        let mut grandchildren: Vec<TreeNode> = Vec::new();
+        for j in 0..100 {
+            grandchildren.push(TreeNode {
+                champion_ids: vec![format!("R{}", j)],
+                scores: ScoreSet { composite: -(j as f64), ..Default::default() },
+                side: Some(Side::Red),
+                slots: vec![19],
+                action_type: ActionType::Pick,
+                phase: Phase::Pick2,
+                user_injected: false,
+                children: vec![],
+            });
+        }
+        let mut children: Vec<TreeNode> = Vec::new();
+        for i in 0..100 {
+            children.push(TreeNode {
+                champion_ids: vec![format!("B{}", i)],
+                scores: ScoreSet { composite: -(i as f64), ..Default::default() },
+                side: Some(Side::Blue),
+                slots: vec![17, 18],
+                action_type: ActionType::Pick,
+                phase: Phase::Pick2,
+                user_injected: false,
+                children: grandchildren.clone(),
+            });
+        }
+        let root = TreeNode {
+            champion_ids: vec![],
+            scores: ScoreSet::default(),
+            side: Some(Side::Blue),
+            slots: vec![17, 18],
+            action_type: ActionType::Pick,
+            phase: Phase::Pick2,
+            user_injected: false,
+            children,
+        };
+        // Scenario goes through B80 (outside depth-1 top-32) → R90 (outside
+        // depth-2 top-32). Both must survive their respective truncations.
+        let must_keep_paths: Vec<Vec<Vec<String>>> = vec![vec![
+            vec!["B80".to_string()],
+            vec!["R90".to_string()],
+        ]];
+        let projected = to_protocol_tree(&root, &must_keep_paths);
+        let b80 = projected
+            .children
+            .iter()
+            .find(|c| c.champion_ids == vec!["B80".to_string()])
+            .expect("B80 must be kept at depth 1");
+        let r90_kept = b80
+            .children
+            .iter()
+            .any(|c| c.champion_ids == vec!["R90".to_string()]);
+        assert!(r90_kept, "R90 must be kept under B80 at depth 2");
+        // Sibling kept-but-not-on-the-must-keep-path B0 must NOT pass R90 down
+        // (only the matching path does).
+        let b0 = projected
+            .children
+            .iter()
+            .find(|c| c.champion_ids == vec!["B0".to_string()])
+            .expect("B0 must be kept at depth 1 (top-K)");
+        let b0_has_r90 = b0
+            .children
+            .iter()
+            .any(|c| c.champion_ids == vec!["R90".to_string()]);
+        assert!(
+            !b0_has_r90,
+            "B0 (not on must-keep path) should not include R90; must-keep is path-scoped"
+        );
+        // B0's children should be top-K only (32).
+        assert_eq!(b0.children.len(), TREE_DISPLAY_WIDTH);
     }
 
     #[test]

@@ -90,6 +90,13 @@ const ForcedBranchSchema = z.object({
   mode: z.enum(["sole", "include"]),
 });
 
+// v5 phase 4: optional dev-only engine selection. Omitted (or "ab") routes the
+// request to the production alpha-beta engine (default behavior). "mcts" routes
+// to the experimental MCTS spike via `engine-node`'s mcts_dispatch module.
+// Production callers should never set this; the navigator's dev toggle wires
+// it through behind a frontend env-var gate.
+const AlgorithmSchema = z.enum(["ab", "mcts"]);
+
 export const EngineRequestSchema = z.object({
   protocolVersion: z.string(),
   draftState: DraftStateInputSchema,
@@ -102,6 +109,7 @@ export const EngineRequestSchema = z.object({
     profile: z.string(),
     forcedBranches: z.array(ForcedBranchSchema),
   }),
+  algorithm: AlgorithmSchema.optional(),
 });
 
 export type EngineRequest = z.infer<typeof EngineRequestSchema>;

@@ -22,6 +22,14 @@ export interface NavigatorWeightedAssignment {
     weight: number;
 }
 
+/** v5 phase 4: optional MCTS-only per-node metadata. Populated only when the
+ *  current snapshot was produced by the experimental MCTS engine. αβ never
+ *  emits this. */
+export interface NavigatorMctsExtras {
+    visits: number;
+    visitShare: number;
+}
+
 export interface NavigatorTreeNode {
     championIds: string[];
     actionType: "ban" | "pick";
@@ -38,6 +46,7 @@ export interface NavigatorTreeNode {
      *  projected (or the node is on the spine where everything is confirmed by
      *  position). */
     confirmedChampionIds?: string[];
+    mctsExtras?: NavigatorMctsExtras;
 }
 
 /** Content-addressed path step matching `engine-protocol`'s `PathStep`.
@@ -117,6 +126,15 @@ export interface NavigatorEventData {
     createdAt: string;
 }
 
+/** v5 phase 4: optional metadata returned only when the snapshot was produced
+ *  by the experimental MCTS engine. UI uses `algorithm` to decide whether to
+ *  render the MCTS banner / per-node visit annotations. */
+export interface NavigatorMctsMeta {
+    algorithm: "mcts";
+    iterations: number;
+    isExperimental: true;
+}
+
 export interface NavigatorSnapshotData {
     id: string;
     navigator_draft_id: string;
@@ -129,6 +147,7 @@ export interface NavigatorSnapshotData {
         pruningRate: number;
         depthReached: number;
         transpositionsFound: number;
+        mctsMeta?: NavigatorMctsMeta;
     } | null;
     createdAt: string;
 }
@@ -142,8 +161,15 @@ export interface NodeLayoutOverride {
     angle: number;
 }
 
+export type NavigatorAlgorithm = "ab" | "mcts";
+
 export interface NavigatorWorkflowContextValue {
     navigatorContext: Accessor<NavigatorSessionState>;
+    /** v5 phase 4: dev-only experimental MCTS toggle. False in production
+     *  (env var unset on backend). When false, the toggle is hidden. */
+    engineToggleEnabled: Accessor<boolean>;
+    currentAlgorithm: Accessor<NavigatorAlgorithm>;
+    setAlgorithm: (algorithm: NavigatorAlgorithm) => void;
     syntheticTree: Accessor<NavigatorTreeNode | null>;
     isComputing: Accessor<boolean>;
     joinSession: (sessionId: string) => void;

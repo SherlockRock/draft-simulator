@@ -477,23 +477,39 @@ function trimChildrenByPriority(
     priority: ReconcilePriority,
     branchWidth: number
 ): NavigatorTreeNode[] {
-    if (children.length <= branchWidth) return children;
-    const selectedSegments = priority.selectedScenarioKeyPath
-        ? priority.selectedScenarioKeyPath.split(">")
-        : [];
-    const selectedAtDepth = selectedSegments[keyPath.length] ?? null;
+    // Build the set of nodeKeys that must survive the trim because some
+    // scenario's path passes through them at this depth. Engine-side wire
+    // truncation already keeps these (see `to_protocol_tree`'s must-keep
+    // paths in projection.rs); the frontend trim must mirror that contract
+    // so rendered scenario lanes match the engine's emitted scenarios.
+    const scenarioSegmentsAtDepth = new Set<string>();
+    for (const path of priority.scenarioKeyPaths) {
+        if (path === "") continue;
+        const segs = path.split(">");
+        const seg = segs[keyPath.length];
+        if (seg !== undefined) scenarioSegmentsAtDepth.add(seg);
+    }
 
     type Ranked = { child: NavigatorTreeNode; rank: number; score: number };
     const ranked: Ranked[] = children.map((child) => {
         const key = nodeKey(child);
         const thisPath = [...keyPath, key].join(">");
         let rank = 3;
-        if (selectedAtDepth === key) rank = 0;
+        if (scenarioSegmentsAtDepth.has(key)) rank = 0;
         else if (priority.manualExpansionKeyPaths.has(thisPath)) rank = 1;
         return { child, rank, score: child.scores.composite };
     });
-    ranked.sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : b.score - a.score));
-    return ranked.slice(0, branchWidth).map((entry) => entry.child);
+
+    // Keep every rank-0 child unconditionally (scenario lanes are
+    // load-bearing). `branchWidth` is the floor on total kept children, not
+    // a hard ceiling — fill remaining slots from rank-1 then rank-3 by
+    // score, but never drop a scenario-referenced child.
+    const rankZero = ranked.filter((r) => r.rank === 0);
+    const rest = ranked
+        .filter((r) => r.rank !== 0)
+        .sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : b.score - a.score));
+    const fillCount = Math.max(0, branchWidth - rankZero.length);
+    return [...rankZero, ...rest.slice(0, fillCount)].map((entry) => entry.child);
 }
 
 /**

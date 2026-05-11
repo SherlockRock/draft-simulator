@@ -11,6 +11,7 @@ import DecisionTree from "./DecisionTree";
 import ScenarioLanes from "./ScenarioLanes";
 import { SeriesTabStrip } from "./SeriesTabStrip";
 import { BetweenGamesPanel } from "./BetweenGamesPanel";
+import EngineToggle from "./EngineToggle";
 
 const NavigatorDrafting: Component = () => {
     const {
@@ -400,8 +401,8 @@ const NavigatorDrafting: Component = () => {
                             onOpenBranch={handleOpenBranch}
                         />
 
-                        <Show when={isStale()}>
-                            <div class="pointer-events-none absolute right-4 top-4 flex items-center gap-2">
+                        <div class="pointer-events-none absolute right-4 top-4 flex items-center gap-2">
+                            <Show when={isStale()}>
                                 <span class="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-amber-300">
                                     Stale
                                 </span>
@@ -412,6 +413,21 @@ const NavigatorDrafting: Component = () => {
                                 >
                                     Retry
                                 </button>
+                            </Show>
+                            <EngineToggle />
+                        </div>
+
+                        <Show
+                            when={
+                                navigatorContext().snapshot?.meta?.mctsMeta?.algorithm ===
+                                "mcts"
+                            }
+                        >
+                            <div class="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full border border-purple-500/40 bg-purple-500/15 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-purple-200">
+                                Experimental MCTS engine ·{" "}
+                                {navigatorContext().snapshot?.meta?.mctsMeta?.iterations ??
+                                    0}{" "}
+                                iters
                             </div>
                         </Show>
 

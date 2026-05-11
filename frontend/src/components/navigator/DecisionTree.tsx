@@ -707,6 +707,48 @@ const TreeNodeComponent: Component<{
                     />
                 </g>
             </Show>
+            {/* v5 phase 4: MCTS visit-share badge. Renders below the node when
+                the engine attached visit metadata. Color-coded purple to match
+                the engine-toggle and banner. Only shown on non-root nodes. */}
+            <Show
+                when={
+                    !isRoot() &&
+                    props.node.data.mctsExtras !== undefined
+                }
+            >
+                <g
+                    transform={`translate(0 ${badgeOffsetY() + 14})`}
+                    class="pointer-events-none"
+                >
+                    <rect
+                        x="-22"
+                        y="-8"
+                        width="44"
+                        height="16"
+                        rx="8"
+                        ry="8"
+                        fill="#0f172a"
+                        stroke="#a855f7"
+                        stroke-width="1"
+                        opacity="0.9"
+                    />
+                    <text
+                        x="0"
+                        y="3"
+                        text-anchor="middle"
+                        font-size="9"
+                        font-weight="700"
+                        fill="#e9d5ff"
+                    >
+                        {(() => {
+                            const x = props.node.data.mctsExtras;
+                            if (!x) return "";
+                            const pct = Math.round(x.visitShare * 100);
+                            return `${pct}% · ${x.visits}`;
+                        })()}
+                    </text>
+                </g>
+            </Show>
             {/* Expand/collapse badge */}
             <Show when={isCollapsed()}>
                 <g

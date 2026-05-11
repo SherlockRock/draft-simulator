@@ -12,6 +12,7 @@ import { z } from "zod";
 import toast from "solid-toast";
 import { TeamPoolSchema, type TeamPool } from "@draft-sim/shared-types";
 import {
+    NavigatorAlgorithm,
     NavigatorEventData,
     NavigatorPanRequest,
     NavigatorScenario,
@@ -104,6 +105,11 @@ const NavigatorWeightedAssignmentSchema = z.object({
     weight: z.number()
 });
 
+const NavigatorMctsExtrasSchema = z.object({
+    visits: z.number().int().nonnegative(),
+    visitShare: z.number().min(0).max(1)
+});
+
 const NavigatorTreeNodeSchema: z.ZodType<NavigatorTreeNode> = z.lazy(() =>
     z.object({
         championIds: z.array(z.string()),
@@ -115,7 +121,8 @@ const NavigatorTreeNodeSchema: z.ZodType<NavigatorTreeNode> = z.lazy(() =>
         slots: z.array(z.number()),
         userInjected: z.boolean(),
         children: z.array(NavigatorTreeNodeSchema),
-        confirmedChampionIds: z.array(z.string()).optional()
+        confirmedChampionIds: z.array(z.string()).optional(),
+        mctsExtras: NavigatorMctsExtrasSchema.optional()
     })
 );
 
@@ -143,6 +150,12 @@ const NavigatorScenarioSchema: z.ZodType<NavigatorScenario> = z.object({
     indicators: z.array(z.string())
 });
 
+const NavigatorMctsMetaSchema = z.object({
+    algorithm: z.literal("mcts"),
+    iterations: z.number().int().nonnegative(),
+    isExperimental: z.literal(true)
+});
+
 const NavigatorSnapshotDataSchema = z.object({
     id: z.string(),
     navigator_draft_id: z.string(),
@@ -155,7 +168,8 @@ const NavigatorSnapshotDataSchema = z.object({
             computeTimeMs: z.number(),
             pruningRate: z.number(),
             depthReached: z.number(),
-            transpositionsFound: z.number()
+            transpositionsFound: z.number(),
+            mctsMeta: NavigatorMctsMetaSchema.optional()
         })
         .nullable(),
     createdAt: z.string()
@@ -173,7 +187,9 @@ const NavigatorJoinResponseSchema = z.object({
     draft: NavigatorDraftDataSchema.nullable().optional(),
     events: z.array(NavigatorEventDataSchema).optional(),
     snapshot: NavigatorSnapshotDataSchema.nullable().optional(),
-    completedGames: z.array(NavigatorCompletedGameSchema).optional()
+    completedGames: z.array(NavigatorCompletedGameSchema).optional(),
+    engineToggleEnabled: z.boolean().optional(),
+    currentAlgorithm: z.enum(["ab", "mcts"]).optional()
 });
 
 const NavigatorDraftUpdateSchema = z.object({
@@ -262,6 +278,14 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     const [viewingGameNumber, setViewingGameNumberSignal] = createSignal<number | null>(
         null
     );
+
+    // v5 phase 4: dev-only experimental engine toggle. Gated behind the
+    // backend's NAV_ENGINE_TOGGLE_ENABLED env var — when off, the engineToggleEnabled
+    // accessor is false and the toggle UI is hidden. Frontend emits
+    // `navigatorSetAlgorithm` on user toggle and the backend recomputes.
+    const [engineToggleEnabled, setEngineToggleEnabled] = createSignal(false);
+    const [currentAlgorithm, setCurrentAlgorithmSignal] =
+        createSignal<NavigatorAlgorithm>("ab");
 
     interface CachedResult {
         tree: NavigatorTreeNode;
@@ -441,6 +465,10 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                 : null
         );
         setCurrentSessionId(response.session.id);
+        setEngineToggleEnabled(response.engineToggleEnabled === true);
+        if (response.currentAlgorithm) {
+            setCurrentAlgorithmSignal(response.currentAlgorithm);
+        }
         setPendingJoin(null);
     };
 
@@ -523,7 +551,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             const confirmedTurns = eventsToConfirmedTurns(nextEvents);
             const spineLength = spineNodeCount(confirmedTurns);
             const draftState = draftEventsToState(nextEvents);
-            const priority = buildPriority(nextSynthetic, prevSnapshot);
+            const priority = buildPriority(nextSynthetic, prevSnapshot, spineLength);
             const tailTurn = confirmedTurns.at(-1);
             const isPairPending = tailTurn?.pairState === "pair-pending";
 
@@ -687,17 +715,33 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
 
     function buildPriority(
         currentSynthetic: NavigatorTreeNode | null,
-        snapshot: NavigatorSessionState["snapshot"]
+        snapshot: NavigatorSessionState["snapshot"],
+        spineLength: number
     ): ReconcilePriority {
-        const idx = untrack(selectedScenarioIndex);
-        const selectedScenario =
-            idx !== null && snapshot ? (snapshot.scenarios[idx] ?? null) : null;
-        const selectedKeyPath =
-            selectedScenario && currentSynthetic
-                ? pathStepsToNodeKeyPath(currentSynthetic, selectedScenario.treePath)
-                : null;
+        // Resolve every scenario's content-addressed treePath to a nodeKey
+        // path, dropping ones that don't resolve against the current
+        // synthetic. `trimChildrenByPriority` rank-0-protects each, so all
+        // surviving lanes render in the tree visualization (not just the
+        // auto-selected one).
+        //
+        // `mergeChildren` passes `keyPath` relative to the fanout parent
+        // (starts empty, grows as recursion descends past the fanout). The
+        // scenarios' nodeKey paths come back from `pathStepsToNodeKeyPath`
+        // relative to the synthetic ROOT, so the first `spineLength` keys
+        // are the confirmed-turn spine. Slice those off so the path the
+        // trim sees aligns with `keyPath.length` at each merge level.
+        const scenarioKeyPaths: string[] = [];
+        if (currentSynthetic && snapshot) {
+            for (const scenario of snapshot.scenarios) {
+                const keyPath = pathStepsToNodeKeyPath(currentSynthetic, scenario.treePath);
+                if (keyPath === null) continue;
+                const segs = keyPath === "" ? [] : keyPath.split(">");
+                const fanoutRelativeSegs = segs.slice(spineLength);
+                scenarioKeyPaths.push(fanoutRelativeSegs.join(">"));
+            }
+        }
         return {
-            selectedScenarioKeyPath: selectedKeyPath,
+            scenarioKeyPaths,
             manualExpansionKeyPaths: untrack(manualExpansionKeys)
         };
     }
@@ -999,8 +1043,24 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         });
     };
 
+    const setAlgorithm = (algorithm: NavigatorAlgorithm) => {
+        if (!engineToggleEnabled()) return;
+        const sock = currentSocket();
+        const sessionId = getActiveSessionId();
+        if (!sock || !sessionId) return;
+        // Optimistic local set so UI flips immediately; backend confirms via
+        // the recompute that follows. If the backend rejects (env-var off, bad
+        // value) it silently ignores; the next snapshot will still show the
+        // prior engine's output, which is the correct visual signal.
+        setCurrentAlgorithmSignal(algorithm);
+        sock.emit("navigatorSetAlgorithm", { sessionId, algorithm });
+    };
+
     const contextValue: NavigatorWorkflowContextValue = {
         navigatorContext,
+        engineToggleEnabled,
+        currentAlgorithm,
+        setAlgorithm,
         syntheticTree: syntheticTreeSignal,
         isComputing,
         joinSession,

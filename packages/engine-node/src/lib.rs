@@ -2,13 +2,16 @@
 
 mod data_loader;
 mod error;
+mod mcts_dispatch;
 mod projection;
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::path::PathBuf;
+use std::sync::{Arc, OnceLock};
 
 use engine_core::cancellation::CancelHandle;
 use engine_core::engine::Engine as CoreEngine;
+use engine_core::mcts_spike::SpikeFixture;
 use engine_core::protocol_types as proto;
 use engine_core::role_solver::ChampionMeta;
 use napi_derive::napi;
@@ -54,14 +57,23 @@ pub struct CreateEngineOptions {
 pub struct Engine {
     inner: Arc<CoreEngine>,
     champion_meta: Arc<HashMap<String, ChampionMeta>>,
+    /// Path to champion-meta.json captured at construction so the lazy MCTS
+    /// fixture loader can find the sibling `winrates.json` without a second
+    /// option flowing through `CreateEngineOptions`.
+    champion_meta_path: PathBuf,
+    /// Lazily-built spike fixture. Loaded on first MCTS dispatch and reused
+    /// across requests. Wrapped in `Arc` so the spike `Mcts<'_>` can borrow
+    /// it through a clone without needing the Engine to outlive the search.
+    spike_fixture: Arc<OnceLock<Arc<SpikeFixture>>>,
 }
 
 #[napi]
 impl Engine {
     #[napi(factory)]
     pub fn create(options: CreateEngineOptions) -> napi::Result<Self> {
+        let champion_meta_path = PathBuf::from(&options.champion_meta_path);
         let (meta, champion_meta) = data_loader::load_engine_data(
-            std::path::Path::new(&options.champion_meta_path),
+            &champion_meta_path,
             std::path::Path::new(&options.matchup_data_path),
         )
         .map_err(error::map_load_error)?;
@@ -70,7 +82,22 @@ impl Engine {
         Ok(Self {
             inner: Arc::new(core),
             champion_meta: Arc::new(champion_meta),
+            champion_meta_path,
+            spike_fixture: Arc::new(OnceLock::new()),
         })
+    }
+
+    /// Lazily resolve (or load) the MCTS spike fixture. Idempotent across
+    /// calls; first hit on the MCTS path pays the load cost.
+    fn get_or_load_spike_fixture(&self) -> napi::Result<Arc<SpikeFixture>> {
+        if let Some(f) = self.spike_fixture.get() {
+            return Ok(f.clone());
+        }
+        let fixture = mcts_dispatch::load_spike_fixture(&self.champion_meta_path)?;
+        // get_or_init avoids the racy `set` path; whichever caller wins gets
+        // their fixture cached, the loser's load is dropped.
+        let cell = self.spike_fixture.clone();
+        Ok(cell.get_or_init(|| Arc::new(fixture)).clone())
     }
 
     #[napi]
@@ -81,6 +108,24 @@ impl Engine {
     ) -> napi::Result<String> {
         let proto_request: proto::EngineRequest = serde_json::from_str(&request_json)
             .map_err(|e| error::invalid_input(vec![], format!("request parse failed: {}", e)))?;
+
+        // v5 phase 4: optional dev-only MCTS dispatch. Routed only when the
+        // request explicitly asks for it; default (`None`) and `"ab"` both
+        // route through the production αβ engine.
+        if matches!(
+            proto_request.algorithm,
+            Some(proto::EngineRequestAlgorithm::Mcts)
+        ) {
+            let fixture = self.get_or_load_spike_fixture()?;
+            let token_handle = token.inner.clone();
+            let proto_response = tokio::task::spawn_blocking(move || {
+                mcts_dispatch::compute_mcts(&proto_request, fixture, &token_handle)
+            })
+            .await
+            .map_err(|e| error::internal(format!("join error: {}", e)))??;
+            return serde_json::to_string(&proto_response)
+                .map_err(|e| error::internal(format!("response serialize: {}", e)));
+        }
 
         let champion_meta = (*self.champion_meta).clone();
         let core_request = projection::request_to_core(&proto_request, champion_meta)

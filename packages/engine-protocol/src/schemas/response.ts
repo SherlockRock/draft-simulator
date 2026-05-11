@@ -24,6 +24,15 @@ const WeightedAssignmentSchema = z.object({
   weight: z.number(),
 });
 
+// v5 phase 4: optional MCTS-specific per-node metadata. Populated only when
+// the request was dispatched to the MCTS engine (algorithm="mcts"); αβ never
+// emits this field. Phase 7 will extend this with `paretoRank` alongside the
+// 3-axis ValueVector surface.
+const McTsExtrasSchema = z.object({
+  visits: z.number().int().nonnegative(),
+  visitShare: z.number().min(0).max(1),
+});
+
 const baseTreeNode = z.object({
   championIds: z.array(z.string()),
   scores: ScoreSetSchema,
@@ -33,6 +42,7 @@ const baseTreeNode = z.object({
   actionType: ActionTypeSchema,
   phase: PhaseSchema,
   userInjected: z.boolean(),
+  mctsExtras: McTsExtrasSchema.optional(),
 });
 type TreeNodeShape = z.infer<typeof baseTreeNode> & {
   children: TreeNodeShape[];
@@ -67,6 +77,15 @@ const ScenarioSchema = z.object({
   ),
 });
 
+// v5 phase 4: optional dev-only metadata returned only when the request was
+// dispatched to the experimental MCTS engine. Surfaces a banner-trigger flag
+// for the navigator UI so the toggle is visible from the response shape alone.
+const McTsMetaSchema = z.object({
+  algorithm: z.literal("mcts"),
+  iterations: z.number().int().nonnegative(),
+  isExperimental: z.literal(true),
+});
+
 const ComputeMetaSchema = z.object({
   nodesEvaluated: z.number().int().nonnegative(),
   computeTimeMs: z.number().nonnegative(),
@@ -75,6 +94,7 @@ const ComputeMetaSchema = z.object({
   transpositionsFound: z.number().int().nonnegative(),
   forcedBranchesDropped: z.number().int().nonnegative(),
   cancelled: z.boolean(),
+  mctsMeta: McTsMetaSchema.optional(),
 });
 
 export const EngineResponseSchema = z.object({
