@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, Debug)]
 pub struct PairFilterConfig {
@@ -44,8 +44,10 @@ impl PairCandidate {
 /// downstream value-sort cannot reconstruct.
 ///
 /// Bucket-1 is the open-ended bucket; its surplus is what `max_pairs` caps.
-/// The cap applies *after* dedup against the protected set, sorted lexically
-/// for determinism.
+/// The cap applies *after* dedup against the protected set, sorted by additive
+/// single-score (DESC) with lex tie-break — lex-only truncation biases against
+/// high-scoring champions whose IDs sort late alphabetically when
+/// `max_pairs < C(single_top_k, 2)`.
 pub fn seed_pair_candidates<'a>(
     scored_singles: &[(&'a str, f64)],
     role_buckets: &[(Vec<&'a str>, Vec<&'a str>)],
@@ -99,8 +101,21 @@ pub fn seed_pair_candidates<'a>(
 
     let bucket_1_budget = cfg.max_pairs.saturating_sub(protected.len());
 
+    // Truncate bucket-1 by additive single-score DESC (lex tie-break for
+    // determinism). Lex-only truncation would silently evict high-scoring
+    // pairs whose champion IDs sort late alphabetically whenever
+    // `bucket_1_budget < bucket_1.len()`.
+    let score_lookup: HashMap<&str, f64> = scored_singles.iter().copied().collect();
+    let pair_score = |p: &PairCandidate| -> f64 {
+        score_lookup.get(p.first.as_str()).copied().unwrap_or(0.0)
+            + score_lookup.get(p.second.as_str()).copied().unwrap_or(0.0)
+    };
     let mut bucket_1_sorted: Vec<PairCandidate> = bucket_1.into_iter().collect();
-    bucket_1_sorted.sort();
+    bucket_1_sorted.sort_by(|a, b| {
+        pair_score(b)
+            .total_cmp(&pair_score(a))
+            .then_with(|| a.cmp(b))
+    });
     bucket_1_sorted.truncate(bucket_1_budget);
 
     let mut out: Vec<PairCandidate> = protected.into_iter().collect();
