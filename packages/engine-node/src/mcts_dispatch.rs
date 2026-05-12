@@ -167,6 +167,7 @@ pub fn compute_mcts(
         ));
     }
 
+    let scenarios = extract_scenarios(&state, &wire_children);
     let root_node = build_wire_root(&state, wire_children);
 
     Ok(proto::EngineResponse {
@@ -187,9 +188,10 @@ pub fn compute_mcts(
                 iterations: root_total_iter_for_meta as i64,
             }),
         },
-        // Spike does not extract scenarios — the navigator UI hides scenario
-        // chrome when the array is empty (see frontend handleDraftUpdate).
-        scenarios: Vec::new(),
+        // Phase 4 polish: emit one synthetic scenario per top-K root child so
+        // the navigator UI's `expandForPaths` walks each top line and the
+        // depth-2 tree auto-expands. Empty would re-collapse on every snapshot.
+        scenarios,
         tree: root_node,
     })
 }
@@ -240,6 +242,125 @@ fn state_after_move(base: &DraftState, mv: &MoveId) -> DraftState {
             (Side::Red, true) => next.red_picks.push(c.clone()),
             (Side::Blue, false) => next.blue_bans.push(c.clone()),
             (Side::Red, false) => next.red_bans.push(c.clone()),
+        }
+    }
+    next
+}
+
+/// Maximum depth a synthetic MCTS scenario walks from the root child. Phase 4
+/// emits depth-2 trees (root → child → grandchild), so the scenario tree path
+/// covers at most 2 steps. Bumping this when Phase 7 deepens the tree walks
+/// further automatically — no other code changes required.
+const SCENARIO_DEPTH_CAP: usize = 2;
+
+/// Build synthetic scenarios — one per top-K root child — so the navigator UI
+/// auto-expands the depth-2 tree along each top line. Each scenario walks the
+/// highest-visit descendant of its root child down to `SCENARIO_DEPTH_CAP` and
+/// accumulates the projected pick/ban state at the leaf.
+///
+/// Why a synthetic scenario per child: αβ emits scenarios that
+/// `DecisionTree::expandForPaths` uses to seed the `expanded` set on the
+/// frontend tree. Without them MCTS would render only the root with its
+/// children collapsed — every fresh snapshot would re-collapse.
+fn extract_scenarios(
+    parent_state: &DraftState,
+    wire_children: &[proto::TreeNode],
+) -> Vec<proto::EngineResponseScenariosItem> {
+    wire_children
+        .iter()
+        .enumerate()
+        .map(|(idx, child)| {
+            let rank = idx + 1;
+            let (tree_path, leaf_state) =
+                walk_deepest_path(child, parent_state, SCENARIO_DEPTH_CAP);
+            let extras = child.mcts_extras.as_ref();
+            let visits = extras.map(|e| e.visits).unwrap_or(0);
+            let visit_share = extras.map(|e| e.visit_share).unwrap_or(0.0);
+            let pct = (visit_share * 100.0).round() as i64;
+            proto::EngineResponseScenariosItem {
+                blue_bans: leaf_state.blue_bans.clone(),
+                blue_picks: leaf_state.blue_picks.clone(),
+                description: format!("Top by visit count: {}% · {} visits", pct, visits),
+                indicators: Vec::new(),
+                blue_likely_assignments: Vec::new(),
+                red_likely_assignments: Vec::new(),
+                name: format!("MCTS #{}", rank),
+                // Reusing `Likely` rather than minting an `MctsTop` variant —
+                // that'd cascade through zod-to-json-schema + typify regen +
+                // frontend zod for purely cosmetic value. See design doc.
+                perspective: proto::EngineResponseScenariosItemPerspective::Likely,
+                red_bans: leaf_state.red_bans.clone(),
+                red_picks: leaf_state.red_picks.clone(),
+                scores: proto::EngineResponseScenariosItemScores {
+                    comp_strength: 0.0,
+                    composite: child.scores.composite,
+                    information_value: 0.0,
+                    role_coverage: 0.0,
+                },
+                tree_path,
+            }
+        })
+        .collect()
+}
+
+/// Walk from `root_child` down the highest-visit descendant at each level
+/// until a leaf or `depth_cap`. Returns the flat tree path along with the
+/// projected draft state at the leaf (parent_state + each applied move).
+///
+/// "Highest-visit" relies on the spike's `root_visit_distribution` returning
+/// children in DESC visit order — `build_wire_node` builds grandchildren in
+/// that same order, so `children[0]` is the top-visit descendant.
+///
+/// Defensive: returns an empty path / unchanged state if the root child has
+/// no champion_ids (shouldn't happen, but covers malformed input rather than
+/// panicking).
+fn walk_deepest_path(
+    root_child: &proto::TreeNode,
+    parent_state: &DraftState,
+    depth_cap: usize,
+) -> (Vec<proto::EngineResponseScenariosItemTreePathItem>, DraftState) {
+    let mut path = Vec::with_capacity(depth_cap);
+    let mut cursor_state = parent_state.clone();
+    let mut cursor_node = root_child;
+
+    for depth in 0..depth_cap {
+        if cursor_node.champion_ids.is_empty() {
+            break;
+        }
+        let slot = cursor_state.turn_index() as i64;
+        path.push(proto::EngineResponseScenariosItemTreePathItem {
+            slot,
+            champion_ids: cursor_node.champion_ids.clone(),
+        });
+        cursor_state = state_after_ids(&cursor_state, &cursor_node.champion_ids);
+        if depth + 1 >= depth_cap {
+            break;
+        }
+        match cursor_node.children.first() {
+            Some(next) => cursor_node = next,
+            None => break,
+        }
+    }
+
+    (path, cursor_state)
+}
+
+/// Apply a sequence of champion IDs to `base` using the turn at `base`'s
+/// current turn index. Pair moves stay on the same side+action (e.g. R2+R3
+/// pair pick), so we read the turn once before pushing. Mirrors the dispatch
+/// logic in `state_after_move` but accepts a champion-id slice rather than a
+/// MoveId — convenient for walking a wire `TreeNode`.
+fn state_after_ids(base: &DraftState, champion_ids: &[String]) -> DraftState {
+    let mut next = base.clone();
+    let Some(turn) = next.current_turn() else {
+        return next;
+    };
+    for c in champion_ids {
+        match (turn.side, turn.action_type) {
+            (Side::Blue, ActionType::Pick) => next.blue_picks.push(c.clone()),
+            (Side::Red, ActionType::Pick) => next.red_picks.push(c.clone()),
+            (Side::Blue, ActionType::Ban) => next.blue_bans.push(c.clone()),
+            (Side::Red, ActionType::Ban) => next.red_bans.push(c.clone()),
         }
     }
     next
@@ -507,4 +628,125 @@ fn sibling_winrates_path(champion_meta_path: &Path) -> PathBuf {
         .parent()
         .map(|p| p.join("winrates.json"))
         .unwrap_or_else(|| PathBuf::from("winrates.json"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use engine_core::mcts_spike::real_data_fixture::real_data_fixture;
+
+    /// Build a mid-state request: all six ban1 picks complete, blue to make B1
+    /// (turn_index = 6). Empty pools trigger the full-pool fallback in
+    /// `build_pool_context`. A 200ms latency budget is enough to populate
+    /// top-K root children with a few visits each on the real-data fixture.
+    fn mid_state_request() -> proto::EngineRequest {
+        let raw = serde_json::json!({
+            "protocolVersion": "1.0.0",
+            "draftState": {
+                "format": "standard",
+                "bans": [
+                    { "championId": "Aatrox",  "side": "blue", "slot": 0 },
+                    { "championId": "Ahri",    "side": "red",  "slot": 1 },
+                    { "championId": "Akali",   "side": "blue", "slot": 2 },
+                    { "championId": "Alistar", "side": "red",  "slot": 3 },
+                    { "championId": "Amumu",   "side": "blue", "slot": 4 },
+                    { "championId": "Anivia",  "side": "red",  "slot": 5 },
+                ],
+                "picks": [],
+                "currentPhase": "pick1",
+                "currentSlot": 6,
+                "currentSide": "blue",
+            },
+            "pools": {
+                "ourSide": "blue",
+                "blue": {
+                    "display": { "TOP": [], "JUNGLE": [], "MIDDLE": [], "ADC": [], "SUPPORT": [] },
+                    "search": [],
+                },
+                "red": {
+                    "display": { "TOP": [], "JUNGLE": [], "MIDDLE": [], "ADC": [], "SUPPORT": [] },
+                    "search": [],
+                },
+                "crossGameExclusions": [],
+            },
+            "opponentModel": { "type": "meta", "weights": {} },
+            "playerModel": {
+                "championTiers": { "core": [], "playable": [], "emergency": [] },
+                "weights": {},
+            },
+            "config": {
+                "search": {
+                    "branchWidth": 5,
+                    "pairBranchWidth": 500,
+                    "singlePairTopK": 32,
+                    "maxDepth": 8,
+                    "broadDepth": 8,
+                    "extensionTurnThreshold": 8,
+                    "latencyBudgetMs": 200,
+                },
+                "weights": {
+                    "phaseWeights": {
+                        "blue": {
+                            "ban1":  { "comp": 0.35, "info": 0.65, "coverage": 0.0 },
+                            "pick1": { "comp": 0.5,  "info": 0.5,  "coverage": 0.3 },
+                            "ban2":  { "comp": 0.6,  "info": 0.4,  "coverage": 0.4 },
+                            "pick2": { "comp": 0.8,  "info": 0.2,  "coverage": 1.5 },
+                        },
+                        "red": {
+                            "ban1":  { "comp": 0.3, "info": 0.7, "coverage": 0.0 },
+                            "pick1": { "comp": 0.4, "info": 0.6, "coverage": 0.3 },
+                            "ban2":  { "comp": 0.5, "info": 0.5, "coverage": 0.4 },
+                            "pick2": { "comp": 0.8, "info": 0.2, "coverage": 1.5 },
+                        },
+                    },
+                    "penalties": { "outOfPool": 0.75, "outOfRole": 0.25 },
+                    "synergyMultiplier": 1.0,
+                    "counterMultiplier": 1.0,
+                    "flexRetentionWeight": 1.0,
+                    "revealCostWeight": 1.0,
+                },
+                "profile": "firstpick-default-v1",
+                "forcedBranches": [],
+            },
+        });
+        serde_json::from_value(raw).expect("mid_state_request parses")
+    }
+
+    #[test]
+    fn compute_mcts_emits_synthetic_scenarios() {
+        let req = mid_state_request();
+        let fixture = Arc::new(real_data_fixture());
+        let cancel = CancelHandle::new();
+        let resp = compute_mcts(&req, fixture, &cancel).expect("compute_mcts ok");
+        assert!(
+            !resp.scenarios.is_empty(),
+            "expected synthetic scenarios per top-K root child, got 0"
+        );
+        let first = &resp.scenarios[0];
+        assert!(
+            first.name.starts_with("MCTS #"),
+            "expected MCTS #N name, got {:?}",
+            first.name
+        );
+        assert!(
+            !first.tree_path.is_empty(),
+            "expected at least 1 tree_path step per scenario"
+        );
+        let root_step = &first.tree_path[0];
+        assert_eq!(
+            root_step.slot, 6,
+            "first step slot should be the current turn index (B1 = 6)"
+        );
+        assert!(
+            !root_step.champion_ids.is_empty(),
+            "tree_path step must carry champion_ids"
+        );
+        // Projected pick state reflects accumulated path. With B1 (single pick)
+        // as the first step, bluePicks should have exactly 1 entry (or 2 if
+        // the path also walked into the grandchild, which is on red's turn).
+        assert!(
+            !first.blue_picks.is_empty(),
+            "expected projected blue picks after walking the path"
+        );
+    }
 }

@@ -15,6 +15,11 @@ const MATCHUP_DATA_PATH = path.resolve(
 
 const EXPECTED_PROTOCOL_MAJOR = 1;
 
+// Phase 4 polish (2026-05-11): bumped from 2000ms → 5000ms so MCTS gets enough
+// budget to populate depth-2 grandchildren beyond 1 visit. αβ self-regulates
+// via cancellation on settled states. Anytime/streaming termination is Phase 7.
+const LATENCY_BUDGET_MS = 5000;
+
 const TURN_SEQUENCE = [
   { side: "blue", type: "ban", phase: "ban1" },
   { side: "red", type: "ban", phase: "ban1" },
@@ -197,7 +202,7 @@ async function buildEngineRequest(session, events, exclusions, forcedBranches = 
         maxDepth: 8,
         broadDepth: 8,
         extensionTurnThreshold: 8,
-        latencyBudgetMs: 2000,
+        latencyBudgetMs: LATENCY_BUDGET_MS,
       },
       weights: {
         phaseWeights: DEFAULT_PHASE_WEIGHTS,
