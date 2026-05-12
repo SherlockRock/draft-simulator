@@ -250,26 +250,35 @@ fn information_value_for(_champion_id: &str, _role: Role, ctx: &EvalContext) -> 
 }
 
 fn flex_retention_for(_champion_id: &str, ctx: &EvalContext) -> f64 {
+    flex_retention_for_picks(&ctx.our_picks, &ctx.champion_meta)
+}
+
+/// Public entry to αβ's flex_retention for callers that don't have an
+/// `EvalContext` (e.g. the MCTS spike's terminal eval). Returns the
+/// entropy-normalized flex score for `picks`. Returns the 1.0 baseline if
+/// the comp has fewer than 5 picks or contains unknown champion ids; 0.0
+/// when the role-solver collapses to a single assignment; otherwise the
+/// normalized entropy of valid assignments in `[0.0, 1.0]`.
+pub fn flex_retention_for_picks(
+    picks: &[String],
+    champion_meta: &HashMap<String, ChampionMeta>,
+) -> f64 {
     use crate::role_solver::solve;
     // Phase 3 of the role-parity plan relaxes solve() to accept partial picks,
     // but flex_retention's semantic (info-value baseline at incomplete comp)
     // intentionally returns 1.0 until the comp is complete. Lifting this guard
     // would silently shift informationValue mid-draft and propagate into
     // composite scores throughout Phase 2's leaf evals.
-    if ctx.our_picks.len() < 5 {
+    if picks.len() < 5 {
         return 1.0;
     }
     // role_solver::solve panics on unknown champion ids; guard at call site
     // so terminal-state evals over filler IDs (test fixtures) don't crash.
-    if ctx
-        .our_picks
-        .iter()
-        .any(|id| !ctx.champion_meta.contains_key(id.as_str()))
-    {
+    if picks.iter().any(|id| !champion_meta.contains_key(id.as_str())) {
         return 1.0;
     }
-    let ids: Vec<&str> = ctx.our_picks.iter().map(|s| s.as_str()).collect();
-    let assignments = solve(&ids, &ctx.champion_meta);
+    let ids: Vec<&str> = picks.iter().map(|s| s.as_str()).collect();
+    let assignments = solve(&ids, champion_meta);
     let n = assignments.len() as f64;
     if n <= 1.0 {
         return 0.0;

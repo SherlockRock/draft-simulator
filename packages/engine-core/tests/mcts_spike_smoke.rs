@@ -775,12 +775,18 @@ fn pool_support_full_pool_matches_v4_behavior() {
     );
 }
 
-/// v5 phase 6 (Step 1): `flex_weight` is wired into UCT selection. The
-/// knob should be consumed by the per-iteration UCT site without panicking,
-/// and both weight values should yield well-formed visit distributions at
-/// the root. Behavioral measurement (whether the knob *moves* selection)
-/// lives in `examples/mcts_bench.rs` — asserting divergence in a smoke test
-/// is brittle at low budgets on small fixtures.
+/// v5 phase 6: `flex_weight` is wired into UCT selection. The knob should
+/// be consumed by the per-iteration UCT site without panicking, and both
+/// weight values should yield well-formed visit distributions at the root.
+///
+/// Phase 6 (Option C): `flex` is now sourced from
+/// `evaluator::flex_retention_for_picks` (entropy of role-solver
+/// assignments), not the legacy `flex_count`. The behavioral measurement of
+/// whether the knob *moves* selection lives in `examples/mcts_bench.rs` —
+/// asserting divergence in a smoke test is brittle because at low budgets
+/// on small fixtures the rollout-derived flex axis can be uniformly 0
+/// across all candidates (every random rollout terminates at single-role
+/// comps with flex_retention = 0).
 #[test]
 fn flex_weight_knob_is_wired_into_uct() {
     let fixture = small_fixture();

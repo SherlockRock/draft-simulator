@@ -104,7 +104,10 @@ pub fn make_full_team_pool(fixture: &SpikeFixture) -> TeamPool {
 /// - `winrate`: sum of per-pick winrates (0.5 default for unknown). Same as v1.
 /// - `coverage`: `coverage::coverage_score` (geometric mean of per-role max
 ///   position factors) per side. Picks are 5-long at terminal.
-/// - `flex`: count of side's picks with ≥2 playable roles. Range -5..5.
+/// - `flex`: αβ's `flex_retention` (entropy of role-solver assignments)
+///   per side, ∈ [0, 1]. Range -1..1. Phase 6 unified the spike's flex
+///   axis on the same formulation production αβ uses (see Phase 6 decision
+///   doc at docs/spikes/2026-05-12-v5-phase-6-flex-decision.md).
 pub fn terminal_eval(state: &DraftState, fixture: &SpikeFixture) -> ValueVector {
     let blue_wr: f64 = state
         .blue_picks
@@ -118,22 +121,13 @@ pub fn terminal_eval(state: &DraftState, fixture: &SpikeFixture) -> ValueVector 
         .sum();
     let blue_cov = crate::coverage::coverage_score(&state.blue_picks, &fixture.meta);
     let red_cov = crate::coverage::coverage_score(&state.red_picks, &fixture.meta);
-    let blue_flex = flex_count(&state.blue_picks, &fixture.meta) as f64;
-    let red_flex = flex_count(&state.red_picks, &fixture.meta) as f64;
+    let blue_flex = crate::evaluator::flex_retention_for_picks(&state.blue_picks, &fixture.meta);
+    let red_flex = crate::evaluator::flex_retention_for_picks(&state.red_picks, &fixture.meta);
     ValueVector {
         winrate: blue_wr - red_wr,
         coverage: blue_cov - red_cov,
         flex: blue_flex - red_flex,
     }
-}
-
-/// Spike flex proxy: count of picks with ≥2 listed playable roles.
-fn flex_count(picks: &[String], meta: &std::collections::HashMap<String, ChampionMeta>) -> usize {
-    picks
-        .iter()
-        .filter_map(|c| meta.get(c))
-        .filter(|m| m.positions.len() >= 2)
-        .count()
 }
 
 /// Whether the to-move side at this state is blue.
@@ -154,6 +148,13 @@ pub fn pool_from_state(state: &DraftState, fixture: &SpikeFixture) -> Vec<String
 /// 3 truly-independent backup axes. Sign convention: every dimension is
 /// `blue - red` so existing UCT side-flipping logic in `policy.rs` carries
 /// over unchanged by negating the whole vector for red-to-move.
+///
+/// Phase 6: `flex` is now sourced from `evaluator::flex_retention_for_picks`
+/// (entropy of role-solver assignments), per-side ∈ [0, 1], so the difference
+/// is bounded in [-1, 1]. Pre-Phase-6 it was `flex_count` (count of multi-role
+/// picks), bounded in [-5, 5]. The narrower range means `composite()` weights
+/// flex less aggressively now relative to winrate (sum, ~±0.5–1.0) and
+/// coverage (geometric-mean diff, ~±0.1–0.3).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ValueVector {
     pub winrate: f64,

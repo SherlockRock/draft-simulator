@@ -64,7 +64,12 @@ pub fn build_spike_eval_ctx(
         phase_weights_red: neutral_phase_weights(),
         synergy_multiplier: 0.0,
         counter_multiplier: 0.0,
-        flex_retention_weight: 0.0,
+        // Phase 6 (Option C): align spike's αβ-derived prior with the new
+        // value formulation by honoring flex_retention. Mid-draft this is
+        // the 1.0 baseline (no-op for ranking among candidates), but
+        // late-rollout terminal score_pick calls now incorporate flex —
+        // matching `terminal_eval`'s own flex axis.
+        flex_retention_weight: 1.0,
         reveal_cost_weight: 0.0,
     }
 }
