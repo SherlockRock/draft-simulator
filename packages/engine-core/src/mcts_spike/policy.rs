@@ -23,6 +23,13 @@ pub struct McTsConfig {
     /// the root's `untried` to the top-k by static-eval prior, then
     /// intersected with the feasibility-legal set.
     pub root_shortlist_k: Option<usize>,
+    /// Weight on the spike's `flex` axis when computing the UCT-selection
+    /// composite. Default 1.0 preserves v4 behavior (equal-weight
+    /// winrate + coverage + flex). 0.0 disables the flex axis at selection.
+    /// Phase 6 measurement knob — see docs/plans/2026-05-11-mcts-phase-6.
+    /// Note: `ValueVector::composite()` is unchanged (still equal-weight)
+    /// so Pareto-front and trajectory CSV consume the canonical composite.
+    pub flex_weight: f64,
 }
 
 pub struct Mcts<'a> {
@@ -196,7 +203,11 @@ impl<'a> Mcts<'a> {
             for (i, (_, child_id)) in node.children.iter().enumerate() {
                 let child = self.tree.get(*child_id);
                 let visits = child.visits.max(1) as f64;
-                let mean_composite = child.value_sum.composite() / visits;
+                let mean_winrate = child.value_sum.winrate / visits;
+                let mean_coverage = child.value_sum.coverage / visits;
+                let mean_flex = child.value_sum.flex / visits;
+                let mean_composite =
+                    mean_winrate + mean_coverage + self.cfg.flex_weight * mean_flex;
                 let oriented = if maximize { mean_composite } else { -mean_composite };
                 let exploration = UCT_C * (parent_visits.ln() / visits).sqrt();
                 let score = oriented + exploration;

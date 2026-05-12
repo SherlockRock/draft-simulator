@@ -2,11 +2,14 @@
 //!
 //! Run with: cargo run --release --example mcts_bench
 //!
-//! Env config (v5 phase 1):
+//! Env config (v5 phase 1+):
 //!   SPIKE_FIXTURE=procedural|real    (default: procedural)
 //!   SPIKE_POOL=full|narrow           (default: full)
 //!   SPIKE_MAX_BUDGET_MS=<u64>        (default: 300000 — i.e. v4's 5 min)
 //!   SPIKE_OUT=<path>                 (default: stdout)
+//!   SPIKE_FLEX_WEIGHT=<f64>          (default: 1.0 — phase 6 flex-axis knob;
+//!                                    weights the spike's flex axis at the
+//!                                    UCT-selection composite. 0.0 disables.)
 //!
 //! Emits CSV. Each row is one (position, seed, sample-checkpoint) observation.
 //! Real-data positions use real champion ids from champion-meta.json.
@@ -227,6 +230,7 @@ fn run_trajectory(
     pool_name: &str,
     position: &str,
     shortlist_k: Option<usize>,
+    flex_weight: f64,
     schedule: &[u128],
     out: &mut dyn Write,
 ) {
@@ -241,6 +245,7 @@ fn run_trajectory(
             feasibility_mode: fmode,
             seed,
             root_shortlist_k: shortlist_k,
+            flex_weight,
         },
     );
 
@@ -274,7 +279,7 @@ fn run_trajectory(
 
             writeln!(
                 out,
-                "{},{},{},{},{},{},{:.0},{},{},{:.4},{},{},{},{},{},{:.4},{:.4},{:.4},{}",
+                "{},{},{},{},{},{},{:.0},{},{},{:.4},{},{},{},{},{},{:.4},{:.4},{:.4},{},{:.2}",
                 fixture_name,
                 pool_name,
                 position,
@@ -294,6 +299,7 @@ fn run_trajectory(
                 t1_value.coverage,
                 t1_value.flex,
                 sample.shortlist_size,
+                flex_weight,
             )
             .unwrap();
             next_sample_idx += 1;
@@ -314,6 +320,10 @@ fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(300_000);
     let out_path = std::env::var("SPIKE_OUT").ok();
+    let flex_weight: f64 = std::env::var("SPIKE_FLEX_WEIGHT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1.0);
 
     // Truncate the sample schedule to fit max_budget_ms; always include the
     // final cap point so we get a budget-respecting endpoint sample.
@@ -342,7 +352,8 @@ fn main() {
         "fixture,pool,position,seed,elapsed_ms,iters_completed,iter_per_sec_window,\
          top1_move,top1_visits,top1_share,top3_set,top5_set,\
          pareto_frontier_size,pareto_frontier_moves,visits_per_frontier_member,\
-         top1_value_winrate,top1_value_coverage,top1_value_flex,shortlist_size"
+         top1_value_winrate,top1_value_coverage,top1_value_flex,shortlist_size,\
+         flex_weight"
     )
     .unwrap();
 
@@ -363,6 +374,7 @@ fn main() {
                         &pool_name,
                         label,
                         Some(20),
+                        flex_weight,
                         &schedule,
                         writer.as_mut(),
                     );

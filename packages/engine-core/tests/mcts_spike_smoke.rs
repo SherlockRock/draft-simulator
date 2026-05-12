@@ -85,6 +85,7 @@ fn runs_without_panic_from_empty_draft() {
             feasibility_mode: FeasibilityMode::Cached,
             seed: 42,
             root_shortlist_k: None,
+            flex_weight: 1.0,
         },
     );
     for _ in 0..200 {
@@ -109,6 +110,7 @@ fn winrate_weighted_policy_completes() {
             feasibility_mode: FeasibilityMode::Cached,
             seed: 7,
             root_shortlist_k: None,
+            flex_weight: 1.0,
         },
     );
     for _ in 0..100 {
@@ -144,6 +146,7 @@ fn from_mid_draft_position() {
             feasibility_mode: FeasibilityMode::Cached,
             seed: 1,
             root_shortlist_k: None,
+            flex_weight: 1.0,
         },
     );
     for _ in 0..150 {
@@ -164,6 +167,7 @@ fn uncached_feasibility_also_works() {
             feasibility_mode: FeasibilityMode::Uncached,
             seed: 99,
             root_shortlist_k: None,
+            flex_weight: 1.0,
         },
     );
     for _ in 0..50 {
@@ -183,6 +187,7 @@ fn reroot_preserves_subtree_visits() {
             feasibility_mode: FeasibilityMode::Cached,
             seed: 42,
             root_shortlist_k: None,
+            flex_weight: 1.0,
         },
     );
     for _ in 0..500 {
@@ -228,6 +233,7 @@ fn root_shortlist_trims_breadth() {
             feasibility_mode: FeasibilityMode::Cached,
             seed: 1,
             root_shortlist_k: None,
+            flex_weight: 1.0,
         },
     );
     let mut mcts_short = Mcts::new(
@@ -238,6 +244,7 @@ fn root_shortlist_trims_breadth() {
             feasibility_mode: FeasibilityMode::Cached,
             seed: 1,
             root_shortlist_k: Some(8),
+            flex_weight: 1.0,
         },
     );
 
@@ -315,6 +322,7 @@ fn pareto_frontier_at_root_has_at_least_one() {
             feasibility_mode: FeasibilityMode::Cached,
             seed: 5,
             root_shortlist_k: Some(20),
+            flex_weight: 1.0,
         },
     );
     for _ in 0..1000 {
@@ -626,6 +634,7 @@ fn pool_support_filters_candidates_to_picking_side_pool() {
             feasibility_mode: FeasibilityMode::Cached,
             seed: 7,
             root_shortlist_k: None,
+            flex_weight: 1.0,
         },
     );
     // Just enough iterations to expand multiple root children.
@@ -684,6 +693,7 @@ fn pool_support_filters_pair_turn_candidates() {
             feasibility_mode: FeasibilityMode::Cached,
             seed: 1,
             root_shortlist_k: Some(20),
+            flex_weight: 1.0,
         },
     );
     for _ in 0..400 {
@@ -735,6 +745,7 @@ fn pool_support_full_pool_matches_v4_behavior() {
         feasibility_mode: FeasibilityMode::Cached,
         seed: 99,
         root_shortlist_k: None,
+        flex_weight: 1.0,
     };
 
     let mut mcts_default = Mcts::new(&fixture, state.clone(), cfg.clone());
@@ -762,4 +773,37 @@ fn pool_support_full_pool_matches_v4_behavior() {
         dist_default, dist_full,
         "Mcts::new (defaults to full pool) should equal with_pools(PoolContext::full)"
     );
+}
+
+/// v5 phase 6 (Step 1): `flex_weight` is wired into UCT selection. The
+/// knob should be consumed by the per-iteration UCT site without panicking,
+/// and both weight values should yield well-formed visit distributions at
+/// the root. Behavioral measurement (whether the knob *moves* selection)
+/// lives in `examples/mcts_bench.rs` — asserting divergence in a smoke test
+/// is brittle at low budgets on small fixtures.
+#[test]
+fn flex_weight_knob_is_wired_into_uct() {
+    let fixture = small_fixture();
+    for &flex_weight in &[0.0_f64, 1.0_f64] {
+        let mut mcts = Mcts::new(
+            &fixture,
+            DraftState::default(),
+            McTsConfig {
+                policy: RolloutPolicy::UniformFeasible,
+                feasibility_mode: FeasibilityMode::Cached,
+                seed: 42,
+                root_shortlist_k: Some(20),
+                flex_weight,
+            },
+        );
+        for _ in 0..400 {
+            mcts.iterate();
+        }
+        let dist = mcts.root_visit_distribution();
+        assert!(
+            !dist.is_empty(),
+            "root distribution should be non-empty at flex_weight={}",
+            flex_weight
+        );
+    }
 }

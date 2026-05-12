@@ -66,6 +66,7 @@ fn run_one(seed: u64, variant: RerootVariant, fixture: &SpikeFixture) {
             feasibility_mode: FeasibilityMode::Cached,
             seed,
             root_shortlist_k: Some(SHORTLIST_K),
+            flex_weight: 1.0,
         },
     );
 

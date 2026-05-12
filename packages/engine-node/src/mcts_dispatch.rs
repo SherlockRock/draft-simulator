@@ -90,6 +90,7 @@ pub fn compute_mcts(
         // candidates we'll surface in the tree. Spike's `mcts_full_draft`
         // shows the search converges much faster with shortlist than without.
         root_shortlist_k: Some(top_k.max(20).min(40)),
+        flex_weight: 1.0,
     };
 
     if state.is_complete() {
