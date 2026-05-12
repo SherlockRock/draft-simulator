@@ -214,32 +214,68 @@ fn arg_value(args: &[String], flag: &str) -> Option<String> {
 }
 
 fn glob_resolve(pattern: &str) -> Vec<std::path::PathBuf> {
-    // Cheap glob: support trailing `*` only. The v5 capture set has fixed
-    // suffixes (procedural-full/narrow, real-full/narrow); a real glob
-    // crate isn't worth a dependency here.
-    if let Some(prefix) = pattern.strip_suffix("*.csv") {
-        let dir_idx = prefix.rfind('/').unwrap_or(0);
-        let (dir, file_prefix) = prefix.split_at(dir_idx + 1);
-        let dir = if dir.is_empty() { "." } else { dir };
-        let entries = match fs::read_dir(dir) {
-            Ok(e) => e,
-            Err(_) => return Vec::new(),
-        };
-        let mut out = Vec::new();
-        for entry in entries.flatten() {
-            let p = entry.path();
-            if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
-                if name.starts_with(file_prefix) && name.ends_with(".csv") {
-                    out.push(p);
-                }
-            }
-        }
-        out.sort();
-        out
-    } else {
-        // Treat as literal path.
-        vec![std::path::PathBuf::from(pattern)]
+    // Cheap glob: supports `*` wildcards inside the filename portion only
+    // (directory portion must be literal). Multiple `*`s in the filename
+    // are allowed — each acts as `[^/]*`. v5-data captures use names like
+    // `2026-05-12-mcts-bench-real-*-flex1.csv` (mid-filename `*`).
+    let dir_idx = pattern.rfind('/').unwrap_or(0);
+    let (dir_part, name_part) = pattern.split_at(dir_idx + 1);
+    let dir = if dir_part.is_empty() { "." } else { dir_part };
+
+    if !name_part.contains('*') {
+        // Literal path — return as-is.
+        return vec![std::path::PathBuf::from(pattern)];
     }
+
+    let segments: Vec<&str> = name_part.split('*').collect();
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return Vec::new(),
+    };
+    let mut out = Vec::new();
+    for entry in entries.flatten() {
+        let p = entry.path();
+        let Some(name) = p.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if !matches_segments(name, &segments) {
+            continue;
+        }
+        out.push(p);
+    }
+    out.sort();
+    out
+}
+
+/// `name` matches the `*`-split `segments` when each segment appears in the
+/// name, in order, with the first segment being a prefix and the last a
+/// suffix. Empty segments (consecutive `*`s, leading/trailing `*`) are
+/// treated as zero-width matches.
+fn matches_segments(name: &str, segments: &[&str]) -> bool {
+    if segments.is_empty() {
+        return true;
+    }
+    if !name.starts_with(segments[0]) {
+        return false;
+    }
+    if !name.ends_with(segments[segments.len() - 1]) {
+        return false;
+    }
+    // Greedy left-to-right match for middle segments.
+    let mut cursor = segments[0].len();
+    for seg in &segments[1..segments.len().saturating_sub(1)] {
+        if seg.is_empty() {
+            continue;
+        }
+        let Some(found) = name[cursor..].find(seg) else {
+            return false;
+        };
+        cursor += found + seg.len();
+    }
+    // Final segment must fit at/after cursor (its end is already verified
+    // by ends_with above).
+    let last = segments[segments.len() - 1];
+    name.len() >= cursor + last.len()
 }
 
 fn main() {
