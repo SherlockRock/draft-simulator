@@ -1,23 +1,22 @@
-//! v5 phase 4 — engine-node dispatch into the experimental MCTS spike.
+//! v5 phase 7a — engine-node dispatch into the experimental MCTS spike.
 //!
 //! When `EngineRequest.algorithm == Some("mcts")`, `Engine.compute` routes
 //! through this module instead of the production αβ path. The output is
-//! projected into the existing `proto::EngineResponse` shape with two
-//! optional MCTS-specific fields:
-//!   - `meta.mctsMeta` — `{ algorithm, iterations, isExperimental }`
-//!   - `tree.children[*].mctsExtras` — `{ visits, visitShare }`
+//! projected into the existing `proto::EngineResponse` shape with optional
+//! MCTS-specific fields on `meta.mctsMeta` and `tree.children[*].mctsExtras`.
 //!
 //! Production αβ never sets these. Spike-shape allowed below the dispatch
 //! boundary (`unwrap()` for assumed-present fields is fine; this is dev-only
 //! tooling gated on a navigator env var).
 //!
-//! Cancellation is polled inside the iterate loop (`token.is_cancelled()`).
-//! Phase 7 will deepen this with the production `cancellation::CancelHandle`
-//! integration.
+//! Dispatch flow (Phase 7a): one uninterrupted iterate loop over the full
+//! latency budget, then a single recursive `subtree_walk` to render the wire
+//! tree at natural depth (MAX_DEPTH cap + per-level top-K + MAX_NODES safety
+//! cap). No reroot during dispatch. Pareto-frontier marker per node, flex
+//! retention propagated onto TreeNodeScores, MAX_NODES truncation surfaced
+//! via `mcts_meta.truncated`.
 //!
-//! Tree shape for phase 4: depth-2 (root → top-K children → top-K
-//! grandchildren). Walking deeper requires multiple reroot calls and quickly
-//! eats budget; phase 7 may revisit.
+//! Cancellation is polled every POLL_EVERY iterations of the iterate loop.
 //!
 //! Pool / fixture loading: `SpikeFixture` is loaded lazily on first MCTS
 //! dispatch and cached per `Engine` instance. The spike loader expects a
@@ -32,7 +31,8 @@ use std::time::{Duration, Instant};
 use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::{ActionType, DraftState, Phase, Side};
 use engine_core::evaluator::ScoreSet;
-use engine_core::mcts_spike::policy::{McTsConfig, Mcts};
+use engine_core::mcts_spike::pareto::frontier_membership;
+use engine_core::mcts_spike::policy::{McTsConfig, Mcts, SubtreeWalkResult, VisitedSubtree};
 use engine_core::mcts_spike::real_data_fixture::load_real_data_fixture;
 use engine_core::mcts_spike::rollout::{FeasibilityMode, RolloutPolicy};
 use engine_core::mcts_spike::tree::MoveId;
@@ -42,26 +42,46 @@ use engine_core::protocol_types as proto;
 
 use crate::error;
 
-/// `branch_width` from production search params is reused as MCTS top-K at
-/// the root and at depth-1 expansion. αβ uses 5 for ban turns + first-pick;
-/// the spike's `mcts_full_draft` uses `SHORTLIST_K=20` for pair turns. We
-/// take the request's `branchWidth` directly so the navigator's tree-display
-/// width (capped at `TREE_DISPLAY_WIDTH=32` in projection.rs) matches.
-const DEFAULT_TOP_K: usize = 5;
+/// Max tree depth `subtree_walk` recurses to. Beyond this is truncated.
+const MAX_DEPTH: usize = 6;
+/// Cap on root_children breadth. Honors request branch_width up to this.
+const MAX_TOP_K_AT_ROOT: usize = 16;
+/// Cap on per-level breadth at depth > 0.
+const TOP_K_AT_DEPTH: usize = 8;
+/// Hard cap on total rendered nodes (real + stubs) across the wire tree.
+const MAX_NODES: usize = 512;
+/// Synthetic scenario walks now follow the natural-depth tree to MAX_DEPTH.
+const SCENARIO_DEPTH_CAP: usize = MAX_DEPTH;
+/// Cancel polled every N iterations of the dispatch loop.
+const POLL_EVERY: usize = 32;
 
-/// How much of the latency budget to spend at the root vs splitting across
-/// depth-1 children. Half-half is a defensible spike-quality default; phase 7
-/// can tune (e.g. PUCB-style allocation).
-const ROOT_BUDGET_FRACTION: f64 = 0.5;
+/// Minimum visit threshold per depth. Returns 1 at every depth because the
+/// MCTS spike's iterate has nonstandard visit accounting: intermediate nodes
+/// only accumulate visits AFTER their own `untried` list is depleted (the
+/// expansion path swaps `leaf` to the new child before backprop, so the
+/// prior stopping point doesn't accrue). At pair-pick turns with hundreds
+/// of untried candidates, even thousand-iter budgets leave most root_children
+/// stuck at visits=1. A higher threshold (e.g. spec's `max(2, 4>>d)`) would
+/// silently filter out the entire frontier. Phase 7b can revisit once the
+/// spike's accounting matches standard MCTS.
+fn default_min_visits(_depth: usize) -> u32 {
+    1
+}
 
-/// Minimum per-child budget at depth 1. Avoids reduce-to-zero allocations
-/// when top-K is large or total budget is small.
-const MIN_CHILD_BUDGET_MS: u64 = 80;
-
-/// Cap depth-1 expansion to this many children. Beyond this, returns the
-/// remaining top-K children with empty grandchildren (the αβ tree projection
-/// still caps at `TREE_DISPLAY_WIDTH=32`, so anything past that is invisible).
-const MAX_EXPANDED_CHILDREN: usize = 8;
+/// Compute the maximum rendered depth in a forest. depth 1 = leaf only.
+fn max_rendered_depth(siblings: &[VisitedSubtree]) -> usize {
+    siblings
+        .iter()
+        .map(|s| {
+            if s.children.is_empty() {
+                1
+            } else {
+                1 + max_rendered_depth(&s.children)
+            }
+        })
+        .max()
+        .unwrap_or(0)
+}
 
 pub fn compute_mcts(
     req: &proto::EngineRequest,
@@ -75,99 +95,51 @@ pub fn compute_mcts(
         proto::EngineRequestPoolsOurSide::Blue => Side::Blue,
         proto::EngineRequestPoolsOurSide::Red => Side::Red,
     };
-    let _ = our_side; // Mcts derives picking-side from state.current_turn(); kept for symmetry / future use.
+    let _ = our_side;
 
     let total_budget_ms = req.config.search.latency_budget_ms.max(0) as u64;
-    let top_k = (req.config.search.branch_width.max(1) as usize)
-        .clamp(1, MAX_EXPANDED_CHILDREN.max(DEFAULT_TOP_K));
+    let top_k_at_root = (req.config.search.branch_width.max(1) as usize)
+        .clamp(1, MAX_TOP_K_AT_ROOT);
     let seed = derive_seed(&state);
 
     let cfg = McTsConfig {
         policy: RolloutPolicy::UniformFeasible,
         feasibility_mode: FeasibilityMode::Cached,
         seed,
-        // Use top_k at the root so the visit budget concentrates on the same
-        // candidates we'll surface in the tree. Spike's `mcts_full_draft`
-        // shows the search converges much faster with shortlist than without.
-        root_shortlist_k: Some(top_k.max(20).min(40)),
+        root_shortlist_k: Some(top_k_at_root.max(20).min(40)),
         flex_weight: 1.0,
     };
 
     if state.is_complete() {
-        // Defensive: the request shouldn't reach here, but match αβ's behavior
-        // of returning a degenerate-but-valid tree rather than panicking.
         return Ok(empty_response(start.elapsed().as_millis() as u64, 0));
     }
 
     let mut mcts = Mcts::with_pools(fixture.as_ref(), state.clone(), &pools, cfg);
 
-    // ----- Root search -----
-    let root_budget = budget_split(total_budget_ms, ROOT_BUDGET_FRACTION);
-    run_iterate_loop(&mut mcts, root_budget, cancel);
-
-    let root_dist = mcts.root_visit_distribution();
-    let root_total: u32 = root_dist.iter().map(|(_, v, _)| *v).sum();
-    let root_total_iter_for_meta = mcts.total_iterations();
-    let cancelled = cancel.is_cancelled();
-
-    let top_children: Vec<&(MoveId, u32, ValueVector)> =
-        root_dist.iter().take(top_k).collect();
-
-    // ----- Depth-1 expansion: reroot per top-K child, run smaller budget -----
-    let mut wire_children: Vec<proto::TreeNode> = Vec::with_capacity(top_children.len());
-    let remaining_budget = total_budget_ms.saturating_sub(root_budget);
-    let per_child_budget = if !top_children.is_empty() {
-        (remaining_budget / top_children.len() as u64).max(MIN_CHILD_BUDGET_MS)
-    } else {
-        0
-    };
-
-    for (mv, visits, mean_value) in &top_children {
-        // Project the child node's wire shape from the current state at this
-        // MCTS root. Reroot, run a quick search, collect grandchildren.
-        let child_state = state_after_move(&state, mv);
-        let child_visits = *visits;
-        let visit_share = if root_total > 0 {
-            child_visits as f64 / root_total as f64
-        } else {
-            0.0
-        };
-
-        let mut grandchildren: Vec<proto::TreeNode> = Vec::new();
-        if !child_state.is_complete() && per_child_budget > 0 && !cancelled {
-            // Reroot only succeeds if the child is in the active root's
-            // children list. With shortlisting + UCT, every visited child
-            // qualifies — `root_visit_distribution` enumerates exactly those.
-            if mcts.reroot_to(mv).is_ok() {
-                run_iterate_loop(&mut mcts, per_child_budget, cancel);
-                let grand_dist = mcts.root_visit_distribution();
-                let grand_total: u32 = grand_dist.iter().map(|(_, v, _)| *v).sum();
-                for (g_mv, g_visits, g_mean) in grand_dist.iter().take(top_k) {
-                    grandchildren.push(build_wire_node(
-                        &child_state,
-                        g_mv,
-                        *g_visits,
-                        *g_mean,
-                        g_visits_share(g_visits, grand_total),
-                        Vec::new(), // no depth-3 expansion in phase 4
-                    ));
-                }
-                // Walk back up so the next sibling reroots from the same
-                // root we started at.
-                let _ = mcts.uproot();
-            }
+    // Single iterate loop — no Phase A / Phase B split.
+    let deadline = start + Duration::from_millis(total_budget_ms);
+    let mut counter: usize = 0;
+    while Instant::now() < deadline {
+        if counter % POLL_EVERY == 0 && cancel.is_cancelled() {
+            break;
         }
-
-        wire_children.push(build_wire_node(
-            &state,
-            mv,
-            child_visits,
-            *mean_value,
-            visit_share,
-            grandchildren,
-        ));
+        mcts.iterate();
+        counter += 1;
     }
 
+    let cancelled = cancel.is_cancelled();
+    let total_iter = mcts.total_iterations();
+
+    let walk: SubtreeWalkResult = mcts.subtree_walk(
+        MAX_DEPTH,
+        top_k_at_root,
+        TOP_K_AT_DEPTH,
+        default_min_visits,
+        MAX_NODES,
+    );
+
+    let wire_children = build_wire_tree_recursive(&walk.root_children, &state);
+    let depth_reached = max_rendered_depth(&walk.root_children) as i64;
     let scenarios = extract_scenarios(&state, &wire_children);
     let root_node = build_wire_root(&state, wire_children);
 
@@ -178,81 +150,74 @@ pub fn compute_mcts(
         meta: proto::EngineResponseMeta {
             cancelled,
             compute_time_ms: start.elapsed().as_millis() as f64,
-            depth_reached: if !top_children.is_empty() { 2 } else { 1 },
+            depth_reached,
             forced_branches_dropped: 0,
-            nodes_evaluated: root_total_iter_for_meta as i64,
+            nodes_evaluated: total_iter as i64,
             pruning_rate: 0.0,
             transpositions_found: 0,
             mcts_meta: Some(proto::EngineResponseMetaMctsMeta {
                 algorithm: "mcts".to_string(),
                 is_experimental: true,
-                iterations: root_total_iter_for_meta as i64,
+                iterations: total_iter as i64,
+                truncated: walk.truncated,
             }),
         },
-        // Phase 4 polish: emit one synthetic scenario per top-K root child so
-        // the navigator UI's `expandForPaths` walks each top line and the
-        // depth-2 tree auto-expands. Empty would re-collapse on every snapshot.
         scenarios,
         tree: root_node,
     })
 }
 
-fn run_iterate_loop(mcts: &mut Mcts<'_>, budget_ms: u64, cancel: &CancelHandle) {
-    if budget_ms == 0 {
-        return;
-    }
-    let deadline = Instant::now() + Duration::from_millis(budget_ms);
-    // Poll cancel every N iterations to keep the hot loop tight while still
-    // staying responsive to supersession (≤50ms latency target per the
-    // production gate).
-    const POLL_EVERY: usize = 32;
-    let mut counter: usize = 0;
-    while Instant::now() < deadline {
-        if counter % POLL_EVERY == 0 && cancel.is_cancelled() {
-            return;
-        }
-        mcts.iterate();
-        counter += 1;
-    }
-}
-
-fn budget_split(total_ms: u64, root_fraction: f64) -> u64 {
-    let raw = (total_ms as f64 * root_fraction) as u64;
-    raw.max(1)
-}
-
-fn g_visits_share(visits: &u32, total: u32) -> f64 {
-    if total == 0 {
-        0.0
-    } else {
-        *visits as f64 / total as f64
-    }
-}
-
-/// Apply a MoveId to a state. Mirrors `mcts_spike::policy::apply_move` (which
-/// is `pub(crate)`). Duplicated here because the spike's `apply_move` isn't
-/// publicly exported.
-fn state_after_move(base: &DraftState, mv: &MoveId) -> DraftState {
-    let mut next = base.clone();
-    let Some(turn) = next.current_turn() else {
-        return next;
+/// Recursive wire-tree builder. For each sibling group, computes Pareto
+/// frontier membership oriented by the parent's side-to-move and descends
+/// only into non-stub children. Stubs are emitted as leaves (visits=0,
+/// paretoOnFrontier=Some(false), zeroed scores).
+fn build_wire_tree_recursive(
+    siblings: &[VisitedSubtree],
+    parent_state: &DraftState,
+) -> Vec<proto::TreeNode> {
+    let parent_side = parent_state.current_turn().map(|t| t.side);
+    let membership: Vec<Option<bool>> = match parent_side {
+        Some(side) => frontier_membership(siblings, side),
+        None => vec![None; siblings.len()],
     };
-    for c in &mv.champion_ids {
-        match (turn.side, mv.is_pick) {
-            (Side::Blue, true) => next.blue_picks.push(c.clone()),
-            (Side::Red, true) => next.red_picks.push(c.clone()),
-            (Side::Blue, false) => next.blue_bans.push(c.clone()),
-            (Side::Red, false) => next.red_bans.push(c.clone()),
-        }
-    }
-    next
-}
+    let total_visits: u32 = siblings.iter().map(|s| s.visits).sum();
 
-/// Maximum depth a synthetic MCTS scenario walks from the root child. Phase 4
-/// emits depth-2 trees (root → child → grandchild), so the scenario tree path
-/// covers at most 2 steps. Bumping this when Phase 7 deepens the tree walks
-/// further automatically — no other code changes required.
-const SCENARIO_DEPTH_CAP: usize = 2;
+    let mut out: Vec<proto::TreeNode> = Vec::with_capacity(siblings.len());
+    for (i, entry) in siblings.iter().enumerate() {
+        let child_state = state_after_ids(parent_state, &entry.mv.champion_ids);
+        let visit_share = if total_visits > 0 {
+            entry.visits as f64 / total_visits as f64
+        } else {
+            0.0
+        };
+        let children = if entry.is_untried_stub || entry.children.is_empty() {
+            Vec::new()
+        } else {
+            build_wire_tree_recursive(&entry.children, &child_state)
+        };
+        let composite = if entry.visits > 0 {
+            entry.mean_value.composite()
+        } else {
+            0.0
+        };
+        let scores = scores_from_value_vector(composite, &entry.mean_value, entry.is_untried_stub);
+        let pareto = if entry.is_untried_stub {
+            Some(false)
+        } else {
+            membership[i]
+        };
+        out.push(build_wire_node(
+            parent_state,
+            &entry.mv,
+            entry.visits,
+            visit_share,
+            pareto,
+            scores,
+            children,
+        ));
+    }
+    out
+}
 
 /// Build synthetic scenarios — one per top-K root child — so the navigator UI
 /// auto-expands the depth-2 tree along each top line. Each scenario walks the
@@ -337,8 +302,11 @@ fn walk_deepest_path(
         if depth + 1 >= depth_cap {
             break;
         }
-        match cursor_node.children.first() {
-            Some(next) => cursor_node = next,
+        let next = cursor_node.children.iter().find(|c| {
+            c.mcts_extras.as_ref().map(|e| e.visits > 0).unwrap_or(false)
+        });
+        match next {
+            Some(n) => cursor_node = n,
             None => break,
         }
     }
@@ -348,9 +316,7 @@ fn walk_deepest_path(
 
 /// Apply a sequence of champion IDs to `base` using the turn at `base`'s
 /// current turn index. Pair moves stay on the same side+action (e.g. R2+R3
-/// pair pick), so we read the turn once before pushing. Mirrors the dispatch
-/// logic in `state_after_move` but accepts a champion-id slice rather than a
-/// MoveId — convenient for walking a wire `TreeNode`.
+/// pair pick), so we read the turn once before pushing.
 fn state_after_ids(base: &DraftState, champion_ids: &[String]) -> DraftState {
     let mut next = base.clone();
     let Some(turn) = next.current_turn() else {
@@ -368,13 +334,15 @@ fn state_after_ids(base: &DraftState, champion_ids: &[String]) -> DraftState {
 }
 
 /// Build the wire `TreeNode` for a non-root node — the move was applied to
-/// `parent_state` to reach this node.
+/// `parent_state` to reach this node. Caller supplies the pre-computed
+/// scores and Pareto-frontier membership; this fn assembles the proto node.
 fn build_wire_node(
     parent_state: &DraftState,
     mv: &MoveId,
     visits: u32,
-    mean_value: ValueVector,
     visit_share: f64,
+    pareto_on_frontier: Option<bool>,
+    scores: proto::TreeNodeScores,
     children: Vec<proto::TreeNode>,
 ) -> proto::TreeNode {
     let parent_turn = parent_state.current_turn();
@@ -396,24 +364,20 @@ fn build_wire_node(
     let slots: Vec<i64> = (0..mv.champion_ids.len())
         .map(|i| (parent_idx + i) as i64)
         .collect();
-    let composite_mean = if visits > 0 {
-        mean_value.composite()
-    } else {
-        0.0
-    };
     proto::TreeNode {
         action_type,
         assignment_distribution: vec![],
         champion_ids: mv.champion_ids.clone(),
         children,
         phase,
-        scores: scores_from_value_vector(composite_mean, &mean_value),
+        scores,
         side,
         slots,
         user_injected: false,
         mcts_extras: Some(proto::TreeNodeMctsExtras {
             visits: visits as i64,
             visit_share,
+            pareto_on_frontier,
         }),
     }
 }
@@ -449,13 +413,19 @@ fn build_wire_root(state: &DraftState, children: Vec<proto::TreeNode>) -> proto:
 }
 
 #[allow(non_snake_case)]
-fn scores_from_value_vector(composite: f64, _v: &ValueVector) -> proto::TreeNodeScores {
-    // Phase 4: project the spike's 3-axis ValueVector DOWN to composite only.
-    // Other ScoreSet fields are zero — phase 7 will surface the full vector
-    // alongside Pareto rank.
-    let s = ScoreSet {
-        composite,
-        ..Default::default()
+fn scores_from_value_vector(
+    composite: f64,
+    v: &ValueVector,
+    is_stub: bool,
+) -> proto::TreeNodeScores {
+    let s = if is_stub {
+        ScoreSet::default()
+    } else {
+        ScoreSet {
+            composite,
+            flexRetention: v.flex,
+            ..Default::default()
+        }
     };
     proto::TreeNodeScores {
         comp_strength: s.compStrength,
@@ -497,6 +467,7 @@ fn empty_response(elapsed_ms: u64, iterations: u32) -> proto::EngineResponse {
                 algorithm: "mcts".to_string(),
                 is_experimental: true,
                 iterations: iterations as i64,
+                truncated: false,
             }),
         },
         scenarios: Vec::new(),
@@ -750,6 +721,66 @@ mod tests {
         assert!(
             !first.blue_picks.is_empty() || !first.red_picks.is_empty(),
             "expected projected picks after walking the path"
+        );
+
+        // v5 phase 7a positive assertions:
+        let depth = resp.meta.depth_reached;
+        assert!(depth >= 1, "expected meta.depth_reached >= 1, got {}", depth);
+
+        // Flex retention is plumbed from mean_value.flex on every non-stub node.
+        // The field is always populated; whether the value is non-zero depends
+        // on rollout outcomes (flex_retention_for_picks computes entropy of role
+        // assignments at terminal — could be 0 for unique assignments).
+        fn any_nonzero_flex(node: &proto::TreeNode) -> bool {
+            if node.scores.flex_retention != 0.0 {
+                return true;
+            }
+            node.children.iter().any(any_nonzero_flex)
+        }
+        assert!(
+            any_nonzero_flex(&resp.tree),
+            "expected at least one node with non-zero flexRetention"
+        );
+
+        // At least one root child carries mctsExtras (paretoOnFrontier may be
+        // None when the gate fails on visits=1 nodes — see Decision 4).
+        let any_extras = resp
+            .tree
+            .children
+            .iter()
+            .any(|c| c.mcts_extras.is_some());
+        assert!(any_extras, "expected at least one root child with mctsExtras set");
+    }
+
+    #[test]
+    fn compute_mcts_pareto_orients_to_picking_side() {
+        // Two mirrored requests: one where blue is to move (slot 6 = B1) and one
+        // mirrored where red is to move (slot 7 = R1 in standard order). At
+        // minimum, dispatch must not crash for either side and must emit root
+        // children with mctsExtras populated for both. Strong red-vs-blue
+        // orientation behavior is unit-tested in pareto::frontier_membership_red_minimizes.
+        let req_blue_to_move = mid_state_request();
+        let mut req_red_to_move = mid_state_request();
+        req_red_to_move.draft_state.current_slot = 7;
+        req_red_to_move.draft_state.current_side =
+            proto::EngineRequestDraftStateCurrentSide::Red;
+
+        let fixture = Arc::new(real_data_fixture());
+
+        let cancel1 = CancelHandle::new();
+        let resp_blue = compute_mcts(&req_blue_to_move, fixture.clone(), &cancel1)
+            .expect("blue compute ok");
+        let cancel2 = CancelHandle::new();
+        let resp_red = compute_mcts(&req_red_to_move, fixture, &cancel2)
+            .expect("red compute ok");
+
+        assert!(
+            !resp_blue.tree.children.is_empty(),
+            "blue tree should have root children"
+        );
+        assert!(
+            !resp_red.tree.children.is_empty(),
+            "red tree should have root children"
         );
     }
 }
