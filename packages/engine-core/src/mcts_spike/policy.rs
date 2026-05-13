@@ -302,6 +302,158 @@ impl<'a> Mcts<'a> {
         let root = self.tree.get(self.active_root);
         root.children.len() + root.untried.len()
     }
+
+    /// Walk the active root's subtree recursively.
+    ///
+    /// - `depth_cap`: maximum nesting depth (depth 1 = root_children only,
+    ///   depth 2 = root_children + their children, etc.).
+    /// - `top_k_at_root`: cap on root_children breadth.
+    /// - `top_k_at_depth`: cap on breadth at every depth > 0.
+    /// - `min_visits_fn(depth)`: required visits for a child to be included
+    ///   at that depth. Depth 0 = root_children, depth 1 = their children, etc.
+    /// - `max_nodes`: hard cap on total nodes (real + stubs). Pre-push check;
+    ///   visit-desc iteration ensures the lowest-visit siblings get truncated
+    ///   first.
+    pub fn subtree_walk(
+        &self,
+        depth_cap: usize,
+        top_k_at_root: usize,
+        top_k_at_depth: usize,
+        min_visits_fn: impl Fn(usize) -> u32,
+        max_nodes: usize,
+    ) -> SubtreeWalkResult {
+        let mut state = SubtreeWalkState {
+            node_count: 0,
+            truncated: false,
+            max_nodes,
+        };
+        let root_children = self.walk_children(
+            self.active_root,
+            0,
+            depth_cap,
+            top_k_at_root,
+            top_k_at_depth,
+            &min_visits_fn,
+            &mut state,
+        );
+        SubtreeWalkResult { root_children, truncated: state.truncated }
+    }
+
+    fn walk_children(
+        &self,
+        node_id: NodeId,
+        depth: usize,
+        depth_cap: usize,
+        top_k_at_root: usize,
+        top_k_at_depth: usize,
+        min_visits_fn: &impl Fn(usize) -> u32,
+        state: &mut SubtreeWalkState,
+    ) -> Vec<VisitedSubtree> {
+        if depth >= depth_cap || state.truncated {
+            return Vec::new();
+        }
+        let node = self.tree.get(node_id);
+        let top_k = if depth == 0 { top_k_at_root } else { top_k_at_depth };
+        let min_visits = min_visits_fn(depth);
+
+        // Collect (child_id, mv, visits, mean) for children meeting min_visits, sorted visit-desc.
+        let mut qualifying: Vec<(NodeId, &MoveId, u32, ValueVector)> = node
+            .children
+            .iter()
+            .filter_map(|(mv, id)| {
+                let n = self.tree.get(*id);
+                if n.visits >= min_visits {
+                    let mean = if n.visits == 0 {
+                        ValueVector::zero()
+                    } else {
+                        n.value_sum.mean(n.visits)
+                    };
+                    Some((*id, mv, n.visits, mean))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        qualifying.sort_by(|a, b| b.2.cmp(&a.2));
+        qualifying.truncate(top_k);
+
+        let mut result: Vec<VisitedSubtree> = Vec::with_capacity(qualifying.len());
+
+        // Stub gate: parent only needs to have been visited at all. The depth-
+        // indexed `min_visits_fn` filters *children*, so requiring it on the
+        // parent would silently swallow stubs the test relies on. Docstring
+        // intent: "a node that has visits but no qualifying children".
+        if qualifying.is_empty() && node.visits >= 1 && !node.untried.is_empty() {
+            // Decision 2 — emit a single stub from the first remaining untried move.
+            if state.node_count + 1 > state.max_nodes {
+                state.truncated = true;
+                return result;
+            }
+            state.node_count += 1;
+            let stub_mv = node.untried[0].clone();
+            result.push(VisitedSubtree {
+                mv: stub_mv,
+                visits: 0,
+                mean_value: ValueVector::zero(),
+                children: Vec::new(),
+                is_untried_stub: true,
+            });
+            return result;
+        }
+
+        for (child_id, mv, visits, mean) in qualifying {
+            if state.node_count + 1 > state.max_nodes {
+                state.truncated = true;
+                break;
+            }
+            state.node_count += 1;
+            let children = self.walk_children(
+                child_id,
+                depth + 1,
+                depth_cap,
+                top_k_at_root,
+                top_k_at_depth,
+                min_visits_fn,
+                state,
+            );
+            result.push(VisitedSubtree {
+                mv: mv.clone(),
+                visits,
+                mean_value: mean,
+                children,
+                is_untried_stub: false,
+            });
+        }
+        result
+    }
+}
+
+/// One node in a recursive tree walk of the MCTS arena. Visit-desc ordered
+/// at each level. Stub entries (`is_untried_stub = true`) represent "this is
+/// what would be expanded next" for a node that has visits but no children
+/// meeting the per-depth min_visits gate. Stubs carry `visits = 0`,
+/// `mean_value = ValueVector::zero()`, and never recurse.
+#[derive(Clone, Debug)]
+pub struct VisitedSubtree {
+    pub mv: MoveId,
+    pub visits: u32,
+    pub mean_value: ValueVector,
+    pub children: Vec<VisitedSubtree>,
+    pub is_untried_stub: bool,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SubtreeWalkResult {
+    /// Top-K *children of the active root*, not roots-of-walk. Visit-desc ordered.
+    pub root_children: Vec<VisitedSubtree>,
+    /// True when the `max_nodes` cap fired during traversal.
+    pub truncated: bool,
+}
+
+struct SubtreeWalkState {
+    node_count: usize,
+    truncated: bool,
+    max_nodes: usize,
 }
 
 /// Apply a move to `state`. Singleton: push 1 champion at the current turn.

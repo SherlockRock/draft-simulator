@@ -813,3 +813,92 @@ fn flex_weight_knob_is_wired_into_uct() {
         );
     }
 }
+
+use engine_core::mcts_spike::policy::{SubtreeWalkResult, VisitedSubtree};
+
+/// Helper: run a fresh `Mcts` for N iterations against the existing
+/// `small_fixture` and return the walk result with the given knobs.
+fn walk_after(
+    iters: usize,
+    depth_cap: usize,
+    top_k_at_root: usize,
+    top_k_at_depth: usize,
+    min_visits_fn: impl Fn(usize) -> u32,
+    max_nodes: usize,
+) -> SubtreeWalkResult {
+    let fixture = small_fixture();
+    let pool = PoolContext::full(&fixture);
+    let state = DraftState::default();
+    let cfg = McTsConfig {
+        policy: RolloutPolicy::UniformFeasible,
+        feasibility_mode: FeasibilityMode::Cached,
+        seed: 7,
+        root_shortlist_k: Some(8),
+        flex_weight: 1.0,
+    };
+    let mut mcts = Mcts::with_pools(&fixture, state, &pool, cfg);
+    for _ in 0..iters {
+        mcts.iterate();
+    }
+    mcts.subtree_walk(depth_cap, top_k_at_root, top_k_at_depth, min_visits_fn, max_nodes)
+}
+
+#[test]
+fn subtree_walk_returns_visit_desc_ordered_top_k_at_root() {
+    let walk = walk_after(200, 1, 4, 4, |_| 1, 64);
+    assert!(walk.root_children.len() <= 4, "top_k_at_root caps breadth");
+    for pair in walk.root_children.windows(2) {
+        assert!(pair[0].visits >= pair[1].visits, "visit-desc ordering");
+    }
+}
+
+#[test]
+fn subtree_walk_prunes_below_min_visits() {
+    let walk = walk_after(50, 1, 8, 8, |_| 10, 256);
+    for child in &walk.root_children {
+        // Either it has visits >= 10, or it's an untried-stub at the root level
+        // (only possible if the root itself had visits but children couldn't pass).
+        assert!(child.visits >= 10 || child.is_untried_stub);
+    }
+}
+
+#[test]
+fn subtree_walk_depth_cap_limits_recursion() {
+    let walk = walk_after(500, 1, 4, 4, |_| 1, 256);
+    for child in &walk.root_children {
+        assert!(
+            child.children.is_empty(),
+            "depth_cap=1 means top-level children should have no recursed grandchildren"
+        );
+    }
+}
+
+#[test]
+fn subtree_walk_emits_untried_stubs_for_visited_node_with_no_qualifying_children() {
+    // Force a node into the "visited but no qualifying children" state by demanding
+    // unreasonably high min_visits at deep levels. 50 iters keeps root_children's
+    // untried list populated (each starts with ~29 legal moves at slot 1, far more
+    // than the 50-iter budget can deplete), so the stub-emission code path is
+    // exercised rather than the empty-untried fallthrough.
+    let walk = walk_after(50, 3, 8, 8, |d| if d == 0 { 1 } else { 999 }, 256);
+    let has_stub = walk
+        .root_children
+        .iter()
+        .any(|c| c.children.iter().any(|gc| gc.is_untried_stub));
+    assert!(
+        has_stub,
+        "expected at least one untried-stub grandchild given the demanding min_visits"
+    );
+}
+
+#[test]
+fn subtree_walk_truncates_at_max_nodes() {
+    let walk = walk_after(2000, 6, 16, 8, |_| 1, 4);
+    assert!(walk.truncated, "expected truncation at max_nodes=4");
+    let count: usize = walk.root_children.iter().map(count_nodes).sum();
+    assert!(count <= 4, "node count must not exceed max_nodes");
+}
+
+fn count_nodes(s: &VisitedSubtree) -> usize {
+    1 + s.children.iter().map(count_nodes).sum::<usize>()
+}
