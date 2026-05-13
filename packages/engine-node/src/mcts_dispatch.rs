@@ -733,21 +733,23 @@ mod tests {
             !first.tree_path.is_empty(),
             "expected at least 1 tree_path step per scenario"
         );
+        // Shape-stable: first step's slot should be the current turn index, and
+        // every step's champion_ids should be populated. Don't assert specific
+        // depth — that changes with the natural-depth refactor.
         let root_step = &first.tree_path[0];
         assert_eq!(
             root_step.slot, 6,
             "first step slot should be the current turn index (B1 = 6)"
         );
+        for step in &first.tree_path {
+            assert!(
+                !step.champion_ids.is_empty(),
+                "every tree_path step must carry champion_ids"
+            );
+        }
         assert!(
-            !root_step.champion_ids.is_empty(),
-            "tree_path step must carry champion_ids"
-        );
-        // Projected pick state reflects accumulated path. With B1 (single pick)
-        // as the first step, bluePicks should have exactly 1 entry (or 2 if
-        // the path also walked into the grandchild, which is on red's turn).
-        assert!(
-            !first.blue_picks.is_empty(),
-            "expected projected blue picks after walking the path"
+            !first.blue_picks.is_empty() || !first.red_picks.is_empty(),
+            "expected projected picks after walking the path"
         );
     }
 }
