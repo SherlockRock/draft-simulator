@@ -24,13 +24,13 @@ const WeightedAssignmentSchema = z.object({
   weight: z.number(),
 });
 
-// v5 phase 4: optional MCTS-specific per-node metadata. Populated only when
+// v5 phase 7a: optional MCTS-specific per-node metadata. Populated only when
 // the request was dispatched to the MCTS engine (algorithm="mcts"); αβ never
-// emits this field. Phase 7 will extend this with `paretoRank` alongside the
-// 3-axis ValueVector surface.
+// emits this field.
 const McTsExtrasSchema = z.object({
   visits: z.number().int().nonnegative(),
   visitShare: z.number().min(0).max(1),
+  paretoOnFrontier: z.boolean().optional(),
 });
 
 const baseTreeNode = z.object({
@@ -78,12 +78,14 @@ const ScenarioSchema = z.object({
 });
 
 // v5 phase 4: optional dev-only metadata returned only when the request was
-// dispatched to the experimental MCTS engine. Surfaces a banner-trigger flag
-// for the navigator UI so the toggle is visible from the response shape alone.
+// dispatched to the experimental MCTS engine.
+// v5 phase 7a: `truncated` indicates the rendered tree was capped by
+// MAX_NODES during subtree_walk; defaulted to false for older snapshots.
 const McTsMetaSchema = z.object({
   algorithm: z.literal("mcts"),
   iterations: z.number().int().nonnegative(),
   isExperimental: z.literal(true),
+  truncated: z.boolean().default(false),
 });
 
 const ComputeMetaSchema = z.object({
