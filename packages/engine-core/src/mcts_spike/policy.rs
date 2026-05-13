@@ -380,11 +380,7 @@ impl<'a> Mcts<'a> {
 
         let mut result: Vec<VisitedSubtree> = Vec::with_capacity(qualifying.len());
 
-        // Stub gate: parent only needs to have been visited at all. The depth-
-        // indexed `min_visits_fn` filters *children*, so requiring it on the
-        // parent would silently swallow stubs the test relies on. Docstring
-        // intent: "a node that has visits but no qualifying children".
-        if qualifying.is_empty() && node.visits >= 1 && !node.untried.is_empty() {
+        if qualifying.is_empty() && node.visits >= min_visits_fn(depth) && !node.untried.is_empty() {
             // Decision 2 — emit a single stub from the first remaining untried move.
             if state.node_count + 1 > state.max_nodes {
                 state.truncated = true;

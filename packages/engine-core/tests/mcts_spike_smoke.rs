@@ -897,12 +897,17 @@ fn subtree_walk_depth_cap_limits_recursion() {
 
 #[test]
 fn subtree_walk_emits_untried_stubs_for_visited_node_with_no_qualifying_children() {
-    // Force a node into the "visited but no qualifying children" state by demanding
-    // unreasonably high min_visits at deep levels. 50 iters keeps root_children's
-    // untried list populated (each starts with ~29 legal moves at slot 1, far more
-    // than the 50-iter budget can deplete), so the stub-emission code path is
-    // exercised rather than the empty-untried fallthrough.
-    let walk = walk_after(50, 3, 8, 8, |d| if d == 0 { 1 } else { 999 }, 256);
+    // Stub-emit at depth=1 requires root_child.visits >= min_visits_fn(1) AND
+    // every grandchild.visits < min_visits_fn(1). Set the threshold low enough
+    // that root_children clear it (each gets many iters under UCT) but high
+    // enough that most grandchildren — sharing the budget across ~29 untried
+    // moves per root_child — don't reach it. depth=2 stays at 999 to prevent
+    // accidental deeper recursion if a grandchild slipped through.
+    let walk = walk_after(200, 3, 8, 8, |d| match d {
+        0 => 1,
+        1 => 10,
+        _ => 999,
+    }, 256);
     let has_stub = walk
         .root_children
         .iter()
