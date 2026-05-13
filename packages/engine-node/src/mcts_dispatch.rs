@@ -783,4 +783,25 @@ mod tests {
             "red tree should have root children"
         );
     }
+
+    #[test]
+    fn compute_mcts_reaches_natural_depth_on_real_data() {
+        // Realistic 1s budget on real-data fixture. Asserts the natural-depth
+        // walk produces a tree with rendered depth >= 3. Guards against
+        // default_min_visits choices that silently starve deep levels.
+        let mut req = mid_state_request();
+        req.config.search.latency_budget_ms = 1000;
+
+        let fixture = Arc::new(real_data_fixture());
+        let cancel = CancelHandle::new();
+        let resp = compute_mcts(&req, fixture, &cancel).expect("compute_mcts ok");
+
+        let depth = resp.meta.depth_reached;
+        assert!(
+            depth >= 3,
+            "expected natural-depth tree to reach >= 3 on a 1s real-data budget, got {}. \
+             Consider tuning default_min_visits if this regresses.",
+            depth
+        );
+    }
 }
