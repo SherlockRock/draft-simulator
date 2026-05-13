@@ -24,10 +24,14 @@ export interface NavigatorWeightedAssignment {
 
 /** v5 phase 4: optional MCTS-only per-node metadata. Populated only when the
  *  current snapshot was produced by the experimental MCTS engine. αβ never
- *  emits this. */
+ *  emits this.
+ *  v5 phase 7a: `paretoOnFrontier` set when the node sits on its sibling
+ *  Pareto frontier across (winrate, coverage, flex). Absent or false → no
+ *  marker. */
 export interface NavigatorMctsExtras {
     visits: number;
     visitShare: number;
+    paretoOnFrontier?: boolean;
 }
 
 export interface NavigatorTreeNode {
@@ -128,11 +132,14 @@ export interface NavigatorEventData {
 
 /** v5 phase 4: optional metadata returned only when the snapshot was produced
  *  by the experimental MCTS engine. UI uses `algorithm` to decide whether to
- *  render the MCTS banner / per-node visit annotations. */
+ *  render the MCTS banner / per-node visit annotations.
+ *  v5 phase 7a: `truncated` indicates the rendered tree was capped by
+ *  MAX_NODES during subtree_walk; defaults to false. */
 export interface NavigatorMctsMeta {
     algorithm: "mcts";
     iterations: number;
     isExperimental: true;
+    truncated: boolean;
 }
 
 export interface NavigatorSnapshotData {

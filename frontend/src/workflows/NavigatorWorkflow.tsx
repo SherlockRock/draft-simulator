@@ -107,7 +107,8 @@ const NavigatorWeightedAssignmentSchema = z.object({
 
 const NavigatorMctsExtrasSchema = z.object({
     visits: z.number().int().nonnegative(),
-    visitShare: z.number().min(0).max(1)
+    visitShare: z.number().min(0).max(1),
+    paretoOnFrontier: z.boolean().optional()
 });
 
 const NavigatorTreeNodeSchema: z.ZodType<NavigatorTreeNode> = z.lazy(() =>
@@ -153,7 +154,8 @@ const NavigatorScenarioSchema: z.ZodType<NavigatorScenario> = z.object({
 const NavigatorMctsMetaSchema = z.object({
     algorithm: z.literal("mcts"),
     iterations: z.number().int().nonnegative(),
-    isExperimental: z.literal(true)
+    isExperimental: z.literal(true),
+    truncated: z.boolean().default(false)
 });
 
 const NavigatorSnapshotDataSchema = z.object({
