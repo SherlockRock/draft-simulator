@@ -749,6 +749,41 @@ const TreeNodeComponent: Component<{
                     </text>
                 </g>
             </Show>
+            {/* v5 phase 7a: Pareto frontier marker. Renders when this node
+                lies on its sibling Pareto frontier across (wr, coverage, flex).
+                Anchored to the right of the visit-share badge in the same
+                transform group (y-offset badgeOffsetY() + 14).
+                Stubs receive paretoOnFrontier: false so this never fires for them. */}
+            <Show
+                when={
+                    !isRoot() &&
+                    props.node.data.mctsExtras?.paretoOnFrontier === true
+                }
+            >
+                <g
+                    transform={`translate(28 ${badgeOffsetY() + 14})`}
+                    class="pointer-events-none"
+                >
+                    <circle
+                        cx="0"
+                        cy="0"
+                        r="6"
+                        fill="#fde68a"
+                        stroke="#fbbf24"
+                        stroke-width="1"
+                    />
+                    <text
+                        x="0"
+                        y="2.2"
+                        text-anchor="middle"
+                        font-size="8"
+                        font-weight="700"
+                        fill="#92400e"
+                    >
+                        ★
+                    </text>
+                </g>
+            </Show>
             {/* Expand/collapse badge */}
             <Show when={isCollapsed()}>
                 <g
