@@ -902,3 +902,96 @@ fn subtree_walk_truncates_at_max_nodes() {
 fn count_nodes(s: &VisitedSubtree) -> usize {
     1 + s.children.iter().map(count_nodes).sum::<usize>()
 }
+
+use engine_core::draft_state::Side;
+use engine_core::mcts_spike::pareto::{frontier_membership, MIN_PARETO_VISITS};
+use engine_core::mcts_spike::ValueVector;
+
+fn stub() -> VisitedSubtree {
+    VisitedSubtree {
+        mv: engine_core::mcts_spike::tree::MoveId::single("Stub", true),
+        visits: 0,
+        mean_value: ValueVector::zero(),
+        children: Vec::new(),
+        is_untried_stub: true,
+    }
+}
+
+fn real(name: &str, visits: u32, wr: f64, cov: f64, flex: f64) -> VisitedSubtree {
+    VisitedSubtree {
+        mv: engine_core::mcts_spike::tree::MoveId::single(name, true),
+        visits,
+        mean_value: ValueVector { winrate: wr, coverage: cov, flex },
+        children: Vec::new(),
+        is_untried_stub: false,
+    }
+}
+
+#[test]
+fn frontier_membership_returns_none_when_fewer_than_two_eligible() {
+    let siblings = vec![real("A", 100, 0.5, 0.3, 0.2)];
+    let result = frontier_membership(&siblings, Side::Blue);
+    assert_eq!(result, vec![None]);
+}
+
+#[test]
+fn frontier_membership_returns_none_when_min_visits_below_gate() {
+    let v = MIN_PARETO_VISITS - 1;
+    let siblings = vec![real("A", v, 0.5, 0.3, 0.2), real("B", 100, 0.4, 0.2, 0.1)];
+    let result = frontier_membership(&siblings, Side::Blue);
+    assert_eq!(result, vec![None, None]);
+}
+
+#[test]
+fn frontier_membership_stubs_always_some_false_when_gate_passes() {
+    let v = MIN_PARETO_VISITS;
+    let siblings = vec![
+        real("A", v, 0.5, 0.3, 0.2),
+        real("B", v, 0.4, 0.4, 0.1),
+        stub(),
+    ];
+    let result = frontier_membership(&siblings, Side::Blue);
+    assert_eq!(result.len(), 3);
+    assert_eq!(result[2], Some(false), "stub gets Some(false) when gate passes");
+}
+
+#[test]
+fn frontier_membership_stubs_some_false_even_when_gate_fails() {
+    // Gate-failing case: only one non-stub eligible.
+    let siblings = vec![real("A", MIN_PARETO_VISITS, 0.5, 0.3, 0.2), stub()];
+    let result = frontier_membership(&siblings, Side::Blue);
+    assert_eq!(result, vec![None, Some(false)]);
+}
+
+#[test]
+fn frontier_membership_blue_maximizes() {
+    let v = MIN_PARETO_VISITS;
+    // A dominates B on every axis -> A on frontier, B not on frontier.
+    let siblings = vec![
+        real("A", v, 0.5, 0.3, 0.2),
+        real("B", v, 0.4, 0.2, 0.1),
+        real("C", v, 0.3, 0.4, 0.0), // C wins on coverage but loses on wr+flex -> still on frontier
+    ];
+    let result = frontier_membership(&siblings, Side::Blue);
+    assert_eq!(result[0], Some(true), "A should be on frontier");
+    assert_eq!(result[1], Some(false), "B is dominated by A");
+    assert_eq!(result[2], Some(true), "C should be on frontier (best on coverage)");
+}
+
+#[test]
+fn frontier_membership_red_minimizes() {
+    let v = MIN_PARETO_VISITS;
+    // Same numbers as blue test; red-orientation flips them.
+    let siblings = vec![
+        real("A", v, 0.5, 0.3, 0.2),
+        real("B", v, 0.4, 0.2, 0.1),
+        real("C", v, 0.3, 0.4, 0.0),
+    ];
+    let result = frontier_membership(&siblings, Side::Red);
+    // Negation flips: A's vector becomes (-0.5,-0.3,-0.2). Now B (-0.4,-0.2,-0.1)
+    // dominates A on every negated axis. C (-0.3,-0.4,0.0) wins on negated wr+flex
+    // but loses on negated coverage. So B is on frontier, C is on frontier, A is not.
+    assert_eq!(result[0], Some(false), "A should not be on red-perspective frontier");
+    assert_eq!(result[1], Some(true), "B should be on red-perspective frontier");
+    assert_eq!(result[2], Some(true), "C should be on red-perspective frontier");
+}
