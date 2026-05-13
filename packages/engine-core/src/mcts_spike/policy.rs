@@ -134,7 +134,7 @@ impl<'a> Mcts<'a> {
 
     pub fn iterate(&mut self) {
         // 1. Selection: descend via UCT until a node with untried moves OR terminal.
-        let (path, mut state, mut leaf) = self.select();
+        let (mut path, mut state, mut leaf) = self.select();
 
         // 2. Expansion: if not terminal, pop one untried move and create a child.
         if !state.is_complete() {
@@ -153,6 +153,7 @@ impl<'a> Mcts<'a> {
                     &self.ctx,
                 );
                 self.tree.get_mut(child_id).untried = untried_for_child;
+                path.push(leaf);
                 leaf = child_id;
             }
         }

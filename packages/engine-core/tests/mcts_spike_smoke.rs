@@ -100,6 +100,28 @@ fn runs_without_panic_from_empty_draft() {
 }
 
 #[test]
+fn iterate_intermediate_node_accrues_visits_under_expansion() {
+    let fixture = small_fixture();
+    let mut mcts = Mcts::new(
+        &fixture,
+        DraftState::default(),
+        McTsConfig {
+            policy: RolloutPolicy::UniformFeasible,
+            feasibility_mode: FeasibilityMode::Cached,
+            seed: 42,
+            root_shortlist_k: None,
+            flex_weight: 1.0,
+        },
+    );
+    for _ in 0..300 {
+        mcts.iterate();
+    }
+    let dist = mcts.root_visit_distribution();
+    let top = &dist[0];
+    assert!(top.1 > 5, "top root_child visits should accumulate, got {}", top.1);
+}
+
+#[test]
 fn winrate_weighted_policy_completes() {
     let fixture = small_fixture();
     let mut mcts = Mcts::new(
