@@ -277,6 +277,38 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
     }
   });
 
+  // Phase 7b T12. DecisionTree reroot affordance: client requests the MCTS
+  // session refocus its iterate budget on a deeper sub-branch (Decision 7).
+  // rerootStep is a delta path of championId tuples (one tuple per slot since
+  // the cached root) that the Rust side replays via Mcts::reroot_to. Engine
+  // rejections (e.g. session already finished) come back as { ok: false,
+  // reason } and are surfaced verbatim to the client.
+  wrap("navigatorReroot", async (data = {}) => {
+    const { sessionId, draftId, rerootId, rerootStep } = data;
+    if (
+      !sessionId ||
+      !draftId ||
+      typeof rerootId !== "number" ||
+      !Array.isArray(rerootStep)
+    ) {
+      emitNavigatorError(
+        socket,
+        "sessionId, draftId, rerootId, rerootStep required",
+      );
+      return;
+    }
+    const session = await findOwnedSession(sessionId, socket);
+    if (!session) return;
+    const result = await navigatorEngine.rerootNavigatorSession(
+      sessionId,
+      rerootId,
+      rerootStep,
+    );
+    if (!result.ok) {
+      emitNavigatorError(socket, `Reroot failed: ${result.reason}`);
+    }
+  });
+
   // Phase 7b T11. User clicks the Stop button → end the MCTS session early
   // and let the resolved promise persist the current best snapshot
   // (stopReason='user' fires the persist + broadcast branch in
