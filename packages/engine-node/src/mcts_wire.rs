@@ -43,6 +43,18 @@ pub(crate) const FIRST_EMIT_THRESHOLD: u32 = 1024;
 #[allow(dead_code)]
 pub(crate) const MIN_EMIT_INTERVAL_MS: u64 = 100;
 
+/// Phase 7c T3: build_response options bundled into a struct to avoid
+/// positional-arg sprawl. `session_root_path` plumbs the cumulative
+/// reroot lineage (initialized to `initial_root_path` from the request,
+/// appended on each successful in-session reroot — see
+/// `navigator_session::iterate_loop`).
+pub struct BuildResponseOptions<'a> {
+    pub cancelled: bool,
+    pub persist_on_pause: bool,
+    pub top_k_at_root: usize,
+    pub session_root_path: &'a [Vec<String>],
+}
+
 /// Minimum visit threshold per depth: max(2, 4 >> depth).
 /// depth 0 = 4, depth >= 1 = 2. Phase 7b §Decision 5.
 pub(crate) fn default_min_visits(depth: usize) -> u32 {
@@ -357,17 +369,16 @@ pub(crate) fn zero_scores() -> proto::TreeNodeScores {
 /// Caller-provided `cancelled` so the persistence matrix is honored:
 /// dispatch sets it from `cancel.is_cancelled()`, the session path sets it
 /// to `false` on a stop-initiated exit and `cancel.is_cancelled()` otherwise.
-pub(crate) fn build_response(
+pub fn build_response(
     mcts: &Mcts<'_>,
     state: &DraftState,
     elapsed: Duration,
-    cancelled: bool,
-    top_k_at_root: usize,
+    opts: BuildResponseOptions,
 ) -> proto::EngineResponse {
     let total_iter = mcts.total_iterations();
     let walk: SubtreeWalkResult = mcts.subtree_walk(
         MAX_DEPTH,
-        top_k_at_root,
+        opts.top_k_at_root,
         TOP_K_AT_DEPTH,
         default_min_visits,
         MAX_NODES,
@@ -382,7 +393,7 @@ pub(crate) fn build_response(
         protocol_version: crate::projection::PROTOCOL_VERSION.to_string(),
         request_id: None,
         meta: proto::EngineResponseMeta {
-            cancelled,
+            cancelled: opts.cancelled,
             compute_time_ms: elapsed.as_millis() as f64,
             depth_reached,
             forced_branches_dropped: 0,
@@ -395,11 +406,9 @@ pub(crate) fn build_response(
                 iterations: total_iter as i64,
                 truncated: walk.truncated,
             }),
-            // Phase 7b Decision 6/7: T9 will plumb session-supplied values
-            // through here. For T8 the schema additions are wired but the
-            // call sites still default — partial=None (final), root_path empty.
             partial: None,
-            root_path: Vec::new(),
+            persist_on_pause: if opts.persist_on_pause { Some(true) } else { None },
+            root_path: opts.session_root_path.to_vec(),
         },
         scenarios,
         tree: root_node,
@@ -429,6 +438,7 @@ pub(crate) fn empty_response(elapsed_ms: u64, iterations: u32) -> proto::EngineR
             // is a final snapshot with no reroot, so partial=None and
             // root_path stays empty.
             partial: None,
+            persist_on_pause: None,
             root_path: Vec::new(),
         },
         scenarios: Vec::new(),

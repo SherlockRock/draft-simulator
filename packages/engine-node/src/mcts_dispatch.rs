@@ -38,7 +38,7 @@ use engine_core::pools::{RolePoolMap, TeamPool};
 use engine_core::protocol_types as proto;
 
 use crate::error;
-use crate::mcts_wire::{build_response, empty_response, MAX_TOP_K_AT_ROOT, POLL_EVERY};
+use crate::mcts_wire::{build_response, empty_response, BuildResponseOptions, MAX_TOP_K_AT_ROOT, POLL_EVERY};
 
 pub fn compute_mcts(
     req: &proto::EngineRequest,
@@ -85,13 +85,13 @@ pub fn compute_mcts(
     }
 
     let cancelled = cancel.is_cancelled();
-    Ok(build_response(
-        &mcts,
-        &state,
-        start.elapsed(),
+    let opts = BuildResponseOptions {
         cancelled,
+        persist_on_pause: false,
         top_k_at_root,
-    ))
+        session_root_path: &[],
+    };
+    Ok(build_response(&mcts, &state, start.elapsed(), opts))
 }
 
 pub(crate) fn build_draft_state(

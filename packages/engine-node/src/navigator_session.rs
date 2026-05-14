@@ -440,12 +440,17 @@ pub(crate) fn iterate_loop(
             && last_emit_at.elapsed() >= Duration::from_millis(mcts_wire::MIN_EMIT_INTERVAL_MS);
 
         if should_emit_first || should_emit_double {
+            let opts = mcts_wire::BuildResponseOptions {
+                cancelled: false,
+                persist_on_pause: false,
+                top_k_at_root: meta.top_k_at_root,
+                session_root_path: &[],
+            };
             let partial = mcts_wire::build_response(
                 &mcts,
                 mcts.active_root_state(),
                 start.elapsed(),
-                false,
-                meta.top_k_at_root,
+                opts,
             );
             let json = serde_json::to_string(&partial)
                 .map_err(|e| error::internal(format!("partial serialize: {}", e)))?;
@@ -465,12 +470,17 @@ pub(crate) fn iterate_loop(
     // got the snapshot they asked for); cancel-flag exits set cancelled=true
     // (caller may discard).
     let cancelled = !stop_requested && cancel.is_cancelled();
+    let opts = mcts_wire::BuildResponseOptions {
+        cancelled,
+        persist_on_pause: false,
+        top_k_at_root: meta.top_k_at_root,
+        session_root_path: &[],
+    };
     let resp = mcts_wire::build_response(
         &mcts,
         mcts.active_root_state(),
         start.elapsed(),
-        cancelled,
-        meta.top_k_at_root,
+        opts,
     );
     serde_json::to_string(&resp).map_err(|e| error::internal(format!("final serialize: {}", e)))
 }

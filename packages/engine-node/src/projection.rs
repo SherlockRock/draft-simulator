@@ -247,6 +247,7 @@ pub fn core_to_response(resp: ComputeResponse) -> proto::EngineResponse {
             // Phase 7b Decision 6/7: streaming-only fields. αβ is one-shot, so
             // `partial` is always None and `root_path` stays empty.
             partial: None,
+            persist_on_pause: None,
             root_path: Vec::new(),
         },
         scenarios,
