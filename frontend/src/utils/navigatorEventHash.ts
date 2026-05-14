@@ -34,10 +34,7 @@ export function hashNavigatorEvents(events: NavigatorEventData[]): string {
     return hashTuples(tuples);
 }
 
-export function hashAfterAppend(
-    events: NavigatorEventData[],
-    next: EventTuple
-): string {
+export function hashAfterAppend(events: NavigatorEventData[], next: EventTuple): string {
     const tuples: EventTuple[] = [];
     for (const event of events) {
         const tuple = toTuple(event);

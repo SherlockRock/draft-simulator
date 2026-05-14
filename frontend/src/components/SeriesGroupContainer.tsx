@@ -45,17 +45,15 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
     const screenPos = () => worldToScreen(props.group.positionX, props.group.positionY);
 
     const sortedDrafts = createMemo(() => {
-        return [...props.drafts].sort(
-            (a, b) => {
-                const aIndex = a.Draft.seriesIndex;
-                const bIndex = b.Draft.seriesIndex;
-                if (aIndex === null || aIndex === undefined) {
-                    return bIndex === null || bIndex === undefined ? 0 : 1;
-                }
-                if (bIndex === null || bIndex === undefined) return -1;
-                return aIndex - bIndex;
+        return [...props.drafts].sort((a, b) => {
+            const aIndex = a.Draft.seriesIndex;
+            const bIndex = b.Draft.seriesIndex;
+            if (aIndex === null || aIndex === undefined) {
+                return bIndex === null || bIndex === undefined ? 0 : 1;
             }
-        );
+            if (bIndex === null || bIndex === undefined) return -1;
+            return aIndex - bIndex;
+        });
     });
 
     const groupDimensions = createMemo(() =>
@@ -101,9 +99,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
     });
 
     const supportsLiveSeries = createMemo(
-        () =>
-            props.group.versus_draft_id &&
-            props.group.metadata.origin !== "manual"
+        () => props.group.versus_draft_id && props.group.metadata.origin !== "manual"
     );
     const isManualSeries = createMemo(() => props.group.metadata.origin === "manual");
 

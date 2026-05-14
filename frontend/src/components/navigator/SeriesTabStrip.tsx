@@ -27,8 +27,8 @@ interface TabInfo {
 
 const STATUS_GLYPH: Record<TabStatus, string> = {
     "not-started": "○", // ○
-    active: "●",         // ●
-    completed: "✓"       // ✓
+    active: "●", // ●
+    completed: "✓" // ✓
 };
 
 const sideClass = (side: "blue" | "red" | null): string => {
@@ -42,9 +42,7 @@ export const SeriesTabStrip: Component<SeriesTabStripProps> = (props) => {
         const out: TabInfo[] = [];
         const activeGame = props.activeDraft?.game_number ?? null;
         for (let n = 1; n <= props.session.series_length; n++) {
-            const completed = props.completedGames.find(
-                (c) => c.draft.game_number === n
-            );
+            const completed = props.completedGames.find((c) => c.draft.game_number === n);
             let status: TabStatus;
             let side: "blue" | "red" | null = null;
 
@@ -109,11 +107,7 @@ export const SeriesTabStrip: Component<SeriesTabStripProps> = (props) => {
                             Game {tab.gameNumber}
                         </span>
                         <span class={`text-xs font-medium ${sideClass(tab.side)}`}>
-                            {tab.side
-                                ? tab.side === "blue"
-                                    ? "Blue"
-                                    : "Red"
-                                : "TBD"}
+                            {tab.side ? (tab.side === "blue" ? "Blue" : "Red") : "TBD"}
                         </span>
                         <span class="text-[11px] uppercase tracking-[0.14em] text-slate-500">
                             {tab.status === "active"

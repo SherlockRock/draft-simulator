@@ -6,8 +6,7 @@ import { useNavigatorContext } from "../../contexts/NavigatorContext";
  *  builds never see this UI). When enabled, lets the user flip between αβ
  *  and the MCTS spike on the active draft state. */
 const EngineToggle: Component = () => {
-    const { engineToggleEnabled, currentAlgorithm, setAlgorithm } =
-        useNavigatorContext();
+    const { engineToggleEnabled, currentAlgorithm, setAlgorithm } = useNavigatorContext();
 
     return (
         <Show when={engineToggleEnabled()}>

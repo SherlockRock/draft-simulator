@@ -550,8 +550,7 @@ function radialTreeLayoutWithConfig<T extends LayoutNode>(
         keyPathSegments: string[]
     ): void {
         const selfKeyPath = nodeKeyPath(keyPathSegments);
-        const override =
-            selfKeyPath === "" ? undefined : getOverrideAngle?.(selfKeyPath);
+        const override = selfKeyPath === "" ? undefined : getOverrideAngle?.(selfKeyPath);
         if (override !== undefined && measured.depth > 0) {
             centerAngle = override;
         }
@@ -577,10 +576,7 @@ function radialTreeLayoutWithConfig<T extends LayoutNode>(
                 availableSpan,
                 Math.max(child.minSpan, child.preferredSpan)
             );
-            const childKeyPath = nodeKeyPath([
-                ...keyPathSegments,
-                nodeKey(child.data)
-            ]);
+            const childKeyPath = nodeKeyPath([...keyPathSegments, nodeKey(child.data)]);
             const childOverride = getOverrideAngle?.(childKeyPath);
             const childAngle =
                 childOverride !== undefined && child.depth > 0
@@ -646,10 +642,7 @@ function radialTreeLayoutWithConfig<T extends LayoutNode>(
             }
             const childSector = Math.min(child.preferredSpan, child.minSpan + bonus);
             const childCenter = cursor + childSector / 2;
-            const childKeyPath = nodeKeyPath([
-                ...keyPathSegments,
-                nodeKey(child.data)
-            ]);
+            const childKeyPath = nodeKeyPath([...keyPathSegments, nodeKey(child.data)]);
             const childOverride = getOverrideAngle?.(childKeyPath);
             const childAngle =
                 childOverride !== undefined && child.depth > 0

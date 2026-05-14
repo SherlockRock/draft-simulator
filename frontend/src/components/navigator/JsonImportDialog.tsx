@@ -81,9 +81,7 @@ export const JsonImportDialog: Component<JsonImportDialogProps> = (props) => {
         };
         const allUnresolved: string[] = [];
         for (const role of ROLES) {
-            const { resolved, unresolved } = resolveChampionNames(
-                input.champions[role]
-            );
+            const { resolved, unresolved } = resolveChampionNames(input.champions[role]);
             resolvedMap[role] = Array.from(new Set(resolved));
             for (const u of unresolved) allUnresolved.push(`${role}:${u}`);
         }
@@ -105,7 +103,8 @@ export const JsonImportDialog: Component<JsonImportDialogProps> = (props) => {
     const saveOnly = async () => {
         const p = preview();
         if (!p) return;
-        const proposedName = p.name.trim() || `Imported ${new Date().toISOString().slice(0, 10)}`;
+        const proposedName =
+            p.name.trim() || `Imported ${new Date().toISOString().slice(0, 10)}`;
         setIsSaving(true);
         try {
             const created = await createSavedPool({
@@ -125,7 +124,8 @@ export const JsonImportDialog: Component<JsonImportDialogProps> = (props) => {
     const saveAndApply = async () => {
         const p = preview();
         if (!p || !props.onApply) return;
-        const proposedName = p.name.trim() || `Imported ${new Date().toISOString().slice(0, 10)}`;
+        const proposedName =
+            p.name.trim() || `Imported ${new Date().toISOString().slice(0, 10)}`;
         setIsSaving(true);
         try {
             const created = await createSavedPool({

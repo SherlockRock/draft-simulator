@@ -387,8 +387,8 @@ const DraftInputPanel: Component<DraftInputPanelProps> = (props) => {
                                             const gn = excludedGame();
                                             if (gn === null) return champion.name;
                                             const mode =
-                                                navigatorContext().session
-                                                    ?.draft_mode === "ironman"
+                                                navigatorContext().session?.draft_mode ===
+                                                "ironman"
                                                     ? "ironman"
                                                     : "fearless";
                                             return `${champion.name} — picked in Game ${gn} (${mode})`;
@@ -412,15 +412,14 @@ const DraftInputPanel: Component<DraftInputPanelProps> = (props) => {
                                                               "blue"
                                                                 ? "border-blue-400 hover:-translate-y-0.5"
                                                                 : "border-red-400 hover:-translate-y-0.5"
-                                                            : state() ===
-                                                                "other-team"
+                                                            : state() === "other-team"
                                                               ? currentTurn()?.side ===
                                                                 "blue"
                                                                   ? "border-red-400/60 hover:-translate-y-0.5"
                                                                   : "border-blue-400/60 hover:-translate-y-0.5"
                                                               : state() === "shared"
                                                                 ? "border-purple-400 hover:-translate-y-0.5"
-                                                                : "border-slate-600 hover:border-slate-400 hover:-translate-y-0.5"
+                                                                : "border-slate-600 hover:-translate-y-0.5 hover:border-slate-400"
                                                 }`}
                                             >
                                                 <ChampionPortrait
@@ -441,7 +440,9 @@ const DraftInputPanel: Component<DraftInputPanelProps> = (props) => {
                     <button
                         type="button"
                         onClick={handleUndo}
-                        disabled={draftEvents().length === 0 || !navigatorContext().draft?.id}
+                        disabled={
+                            draftEvents().length === 0 || !navigatorContext().draft?.id
+                        }
                         class="mt-auto flex items-center justify-center gap-2 rounded-lg border border-slate-700/50 bg-slate-900 px-4 py-3 text-sm font-medium text-slate-300 transition-colors hover:border-slate-600 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                         <Undo2 size={16} />

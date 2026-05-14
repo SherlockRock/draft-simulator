@@ -1,4 +1,12 @@
-import { Component, For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import {
+    Component,
+    For,
+    Show,
+    createEffect,
+    createMemo,
+    createSignal,
+    onCleanup
+} from "solid-js";
 import { X } from "lucide-solid";
 import { FilterBar } from "./FilterBar";
 import { RoleFilter } from "./RoleFilter";
@@ -187,18 +195,17 @@ const ChampionPicker: Component<ChampionPickerProps> = (props) => {
 
                     {/* Grid */}
                     <div class="custom-scrollbar max-h-[360px] overflow-y-auto px-3 py-3">
-                        <div
-                            ref={gridRef}
-                            class={`grid grid-cols-${GRID_COLS} gap-1.5`}
-                        >
+                        <div ref={gridRef} class={`grid grid-cols-${GRID_COLS} gap-1.5`}>
                             <For each={filterState.filteredItems()}>
                                 {({ item: champion }, index) => {
                                     const state = () =>
-                                        props.championColoring?.(champion.id) ?? "neutral";
+                                        props.championColoring?.(champion.id) ??
+                                        "neutral";
                                     const disabled = () =>
                                         props.disabledChampionIds?.has(champion.id) ??
                                         false;
-                                    const highlighted = () => highlightedIndex() === index();
+                                    const highlighted = () =>
+                                        highlightedIndex() === index();
                                     return (
                                         <button
                                             type="button"
@@ -207,7 +214,9 @@ const ChampionPicker: Component<ChampionPickerProps> = (props) => {
                                                 if (disabled()) return;
                                                 props.onSelect(champion.id);
                                             }}
-                                            onMouseEnter={() => setHighlightedIndex(index())}
+                                            onMouseEnter={() =>
+                                                setHighlightedIndex(index())
+                                            }
                                             disabled={disabled()}
                                             title={champion.name}
                                             class={`relative aspect-square overflow-hidden rounded border-2 transition-all ${borderClassFor(

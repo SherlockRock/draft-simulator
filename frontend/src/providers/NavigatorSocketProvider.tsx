@@ -127,9 +127,7 @@ export function NavigatorSocketProvider(props: { children: JSX.Element }) {
 export function useNavigatorSocket(): SocketContextValue {
     const context = useContext(NavigatorSocketContext);
     if (!context) {
-        throw new Error(
-            "useNavigatorSocket must be used within NavigatorSocketProvider"
-        );
+        throw new Error("useNavigatorSocket must be used within NavigatorSocketProvider");
     }
     return context;
 }

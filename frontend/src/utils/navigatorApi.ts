@@ -31,9 +31,7 @@ export async function createNavigatorSession(data: {
     return response.json();
 }
 
-export async function fetchNavigatorSession(
-    id: string
-): Promise<NavigatorSessionData> {
+export async function fetchNavigatorSession(id: string): Promise<NavigatorSessionData> {
     const response = await fetchWithRefresh(`${API_BASE}/api/navigator/${id}`, {
         credentials: "include"
     });
@@ -67,9 +65,7 @@ export async function updateNavigatorSession(
     return response.json();
 }
 
-export async function deleteNavigatorSession(
-    id: string
-): Promise<{ success?: boolean }> {
+export async function deleteNavigatorSession(id: string): Promise<{ success?: boolean }> {
     const response = await fetchWithRefresh(`${API_BASE}/api/navigator/${id}`, {
         method: "DELETE",
         credentials: "include"
