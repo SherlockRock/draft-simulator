@@ -106,6 +106,44 @@ function isRealDraftEvent(event) {
   return event && (event.event_type === "ban" || event.event_type === "pick");
 }
 
+// Phase 7c T8: walks a rerootStep (string[][]) and produces the augmented
+// bans/picks that, when concatenated with current events' bans/picks,
+// represent the rerooted draft state. Returns `nextSlot` so the caller
+// (buildEngineRequestWithReroot) can set `currentSlot` correctly — pair-pick
+// steps consume 2 slots per single step entry (v3 B3 fix).
+function applyRerootStepToEvents(currentEvents, rerootStep, turnSequence) {
+  // Match buildEngineRequest's filtering to keep slot accounting consistent.
+  const realEvents = currentEvents.filter(isRealDraftEvent);
+  let slot = realEvents.length;
+  const augmentedBans = [];
+  const augmentedPicks = [];
+  for (const stepIds of rerootStep) {
+    const turn = turnSequence[slot];
+    if (!turn) throw new Error(`reroot step at slot ${slot} past TURN_SEQUENCE`);
+    if (stepIds.length === 1) {
+      const entry = { championId: stepIds[0], side: turn.side, slot };
+      if (turn.type === "ban") augmentedBans.push(entry);
+      else augmentedPicks.push(entry);
+      slot += 1;
+    } else if (stepIds.length === 2) {
+      if (turn.type !== "pick") throw new Error(`pair step at non-pick slot ${slot}`);
+      const turn2 = turnSequence[slot + 1];
+      if (!turn2 || turn2.side !== turn.side || turn2.type !== "pick") {
+        throw new Error(`pair step at slot ${slot} but slot+1 isn't a same-side pick`);
+      }
+      augmentedPicks.push({ championId: stepIds[0], side: turn.side, slot });
+      augmentedPicks.push({ championId: stepIds[1], side: turn.side, slot: slot + 1 });
+      slot += 2;
+    } else {
+      throw new Error(`invalid step length ${stepIds.length}`);
+    }
+  }
+  if (slot > turnSequence.length) {
+    throw new Error(`reroot completes draft (nextSlot=${slot} > ${turnSequence.length})`);
+  }
+  return { augmentedBans, augmentedPicks, nextSlot: slot };
+}
+
 function sortEvents(events) {
   return [...(Array.isArray(events) ? events : [])].sort((a, b) => {
     const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -237,6 +275,31 @@ async function buildEngineRequest(session, events, exclusions, forcedBranches = 
   }
 
   return request;
+}
+
+// Phase 7c T8: variant that bakes a rerootStep into the engine request.
+// Used by rerootNavigatorSession's fresh-session-fallback path (Decision 6).
+// Throws engine.invalid_input on slot-bound or pair-validation errors.
+async function buildEngineRequestWithReroot(session, events, exclusions, forcedBranches, algorithm, rerootStep) {
+  const baseRequest = await buildEngineRequest(session, events, exclusions, forcedBranches, algorithm);
+  if (!rerootStep || rerootStep.length === 0) return baseRequest;
+  try {
+    const augmented = applyRerootStepToEvents(events, rerootStep, TURN_SEQUENCE);
+    baseRequest.draftState.bans = [...baseRequest.draftState.bans, ...augmented.augmentedBans];
+    baseRequest.draftState.picks = [...baseRequest.draftState.picks, ...augmented.augmentedPicks];
+    baseRequest.draftState.currentSlot = augmented.nextSlot;
+    if (augmented.nextSlot >= TURN_SEQUENCE.length) {
+      throw new Error("reroot extends to complete draft");
+    }
+    baseRequest.draftState.currentSide = TURN_SEQUENCE[augmented.nextSlot].side;
+    baseRequest.draftState.currentPhase = TURN_SEQUENCE[augmented.nextSlot].phase;
+    baseRequest.initialRootPath = rerootStep;
+    return baseRequest;
+  } catch (e) {
+    const error = new Error(e.message);
+    error.code = "engine.invalid_input";
+    throw error;
+  }
 }
 
 function getLastEventId(events) {
@@ -406,11 +469,13 @@ async function startNavigatorSession(navigatorDraft, sess, events, version, io, 
     version,
     session: napiSession,
     promise: null,
-    rootPathCache: [],
+    pausePersistPromise: null,           // v3 — tracks in-flight pause persist
+    lastPersistedPauseSnapshotId: null,  // v4 R4-BLOCKING — for stale-row delete on supersession
+    rootPathCache: [],                    // existing — diagnostic only
     afterEventId,
+    draft: navigatorDraft,                // v3 — full Sequelize model
     draftId: navigatorDraft.id,
     stopReason: null,
-    pendingReroots: new Map(),
     socketId: options.socketId || null,
   };
   activeSessions.set(sess.id, entry);
@@ -482,12 +547,78 @@ function handlePartialOrError(entry, io, jsonStr) {
   }
 }
 
-// Set stopReason BEFORE calling end() so the resolving promise's
-// closure-captured reason is correct (Decision 9 sequencing).
-async function stopNavigatorSession(sessionId, reason = "user") {
+// Phase 7c T8: user-Stop click. Pauses the iterate thread (Mcts arena
+// retained), persists the snapshot inline via napiSession.pause(), and
+// broadcasts navigatorDraftUpdate. The IIFE pattern lets supersedePriorCompute
+// coordinate via entry.pausePersistPromise.
+async function pauseNavigatorSession(sessionId, io) {
   const entry = activeSessions.get(sessionId);
-  if (!entry || !entry.session.isActive()) return { ok: false };
-  entry.stopReason = reason;
+  if (!entry) return { ok: false, reason: "no-active-session" };
+  // v4 R3-1: 'supersede' short-circuits; 'disconnect' is allowed through.
+  if (entry.stopReason === "supersede") {
+    return { ok: false, reason: "session-superseded" };
+  }
+  if (entry.pausePersistPromise) {
+    // Idempotent — return prior result with idempotent flag (v4 R3-N3).
+    let priorResult;
+    try { priorResult = await entry.pausePersistPromise; }
+    catch (e) { priorResult = { ok: false, reason: "prior-pause-rejected", error: e }; }
+    return { ...priorResult, idempotent: true };
+  }
+
+  const pendingIIFE = (async () => {
+    let json;
+    try {
+      json = await entry.session.pause();
+    } catch (e) {
+      return { ok: false, reason: "pause-rejected", error: e };
+    }
+    if (entry.stopReason === "supersede") {
+      return { ok: false, reason: "superseded-mid-pause" };
+    }
+    let parsed;
+    try { parsed = JSON.parse(json); }
+    catch (e) { return { ok: false, reason: "snapshot-parse-failed", error: e }; }
+    assertProtocolMajor(parsed.protocolVersion);
+    const shaped = shapeSnapshot(entry.draft, entry.afterEventId, parsed);
+    const persisted = await persistSnapshot(shaped);
+
+    if (entry.stopReason === "supersede") {
+      // v4 R3-1 in-flight race: stale row written. Delete it.
+      try {
+        await NavigatorSnapshot.destroy({ where: { id: persisted.id } });
+        return { ok: true, supersededDuringPersist: true, staleRowDeleted: true };
+      } catch (deleteErr) {
+        console.error("[nav] failed to delete stale paused row:", deleteErr);
+        return { ok: true, supersededDuringPersist: true, staleDeleteFailed: true, staleRowId: persisted.id };
+      }
+    }
+
+    // v4 R4-BLOCKING: track id for supersedePriorCompute's later delete.
+    entry.lastPersistedPauseSnapshotId = persisted.id;
+
+    io.to(`navigator:${sessionId}`).emit("navigatorDraftUpdate", { snapshot: persisted });
+    return { ok: true, persisted };
+  })();
+
+  // v4 R4-N6 stylistic: capture currentPromise explicitly to make the
+  // .finally closure-ordering invariant obvious.
+  const currentPromise = pendingIIFE.finally(() => {
+    if (entry.pausePersistPromise === currentPromise) {
+      entry.pausePersistPromise = null;
+    }
+  });
+  entry.pausePersistPromise = currentPromise;
+
+  return await currentPromise;
+}
+
+// Phase 7c T8: teardown via cancel-flag (replaces Phase 7b's stopNavigatorSession).
+// Used by supersedePriorCompute, disconnect handler, shutdownEngine.
+async function endNavigatorSession(sessionId, reason = "end") {
+  const entry = activeSessions.get(sessionId);
+  if (!entry) return { ok: false };
+  if (entry.stopReason === null) entry.stopReason = reason;
   entry.session.end();
   return { ok: true };
 }
@@ -532,8 +663,9 @@ module.exports = {
   shapeSnapshot,
   persistSnapshot,
   startNavigatorSession,
-  stopNavigatorSession,
-  rerootNavigatorSession,
+  pauseNavigatorSession,                // new — was stopNavigatorSession
+  endNavigatorSession,                   // new
+  rerootNavigatorSession,                // T10 will replace body, but export stays
   forEachActiveSession,
   isMctsToggleEnabled: () => MCTS_TOGGLE_ENABLED,
   __setEngineForTests,
