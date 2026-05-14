@@ -18,6 +18,7 @@ const NavigatorDrafting: Component = () => {
         joinSession,
         navigatorContext,
         syntheticTree,
+        effectiveScenarios,
         isComputing: isComputingFromContext,
         selectedScenarioIndex,
         setSelectedScenarioIndex,
@@ -135,7 +136,9 @@ const NavigatorDrafting: Component = () => {
     const scenarios = createMemo(() => {
         const archive = viewingArchive();
         if (archive) return archive.snapshot?.scenarios ?? [];
-        return navigatorContext().snapshot?.scenarios ?? [];
+        // Phase 7b T14 (Decision 11): use the overlay so MCTS partial frames
+        // surface their streaming scenarios without waiting for the final.
+        return effectiveScenarios();
     });
 
     const confirmedDepth = createMemo(() => {

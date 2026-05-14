@@ -180,6 +180,13 @@ export interface NavigatorWorkflowContextValue {
     currentAlgorithm: Accessor<NavigatorAlgorithm>;
     setAlgorithm: (algorithm: NavigatorAlgorithm) => void;
     syntheticTree: Accessor<NavigatorTreeNode | null>;
+    /** Phase 7b T14 (Decision 11): partial-snapshot fast-path overlay for
+     *  scenarios. Returns the streaming partial's scenarios when an MCTS
+     *  partial is active, else falls through to the persisted snapshot's
+     *  scenarios. Consumers should prefer this over reading
+     *  `navigatorContext().snapshot?.scenarios` directly so partial frames
+     *  bypass the synthesize/merge/prune pipeline. */
+    effectiveScenarios: Accessor<NavigatorScenario[]>;
     isComputing: Accessor<boolean>;
     joinSession: (sessionId: string) => void;
     leaveSession: () => void;

@@ -5,6 +5,7 @@ import {
     createMemo,
     onCleanup,
     untrack,
+    batch,
     JSX
 } from "solid-js";
 import { RouteSectionProps, useLocation, useParams } from "@solidjs/router";
@@ -310,16 +311,15 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
 
     // Phase 7b T13: streaming partial snapshot wiring. `partialSnapshot` is
     // the latest envelope-delivered (incomplete) tree from the MCTS engine;
-    // T14 will layer overlay precedence so the canvas prefers `partialSnapshot`
-    // over the persisted final snapshot while a compute is active.
+    // T14 layers overlay precedence (below) so the canvas prefers
+    // `partialSnapshot` over the persisted final snapshot while a compute
+    // is active.
     // `displayedRootPath` is the path the UI has optimistically rerooted to;
     // engine confirmation arrives in subsequent partials' meta.rootPath. The
     // `pendingReroots` map tracks in-flight reroot requests so a server-side
     // rejection can roll back the optimistic state (Decision 8).
-    // The accessor and `nextRerootId` are declared here but consumed in
-    // T14 (overlay precedence) and T15/T16 (stop button + reroot UX); the
-    // disable is removed when those tasks land.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    // `nextRerootId` is consumed in T16 (reroot UX); the disable is removed
+    // when that task lands.
     const [partialSnapshot, setPartialSnapshot] =
         createSignal<NavigatorSnapshotData | null>(null);
     const [latestVersionSeen, setLatestVersionSeen] = createSignal<number>(0);
@@ -684,10 +684,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             );
         }
 
-        if (nextSynthetic !== prevSynthetic) {
-            setSyntheticTreeSignal(nextSynthetic);
-        }
-
         const finalSnapshot = nextSnapshot
             ? { ...nextSnapshot, scenarios: nextScenarios }
             : prevSnapshot;
@@ -726,15 +722,39 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             }
         }
 
-        setNavigatorContext((p) => ({
-            session: data.session ?? p.session,
-            draft: data.draft === undefined ? p.draft : data.draft,
-            events: nextEvents,
-            snapshot: finalSnapshot ?? null,
-            completedGames: nextCompletedGames,
-            connected: true,
-            error: null
-        }));
+        // Phase 7b T14 (Opus R2-NIT-5): wrap final-snapshot state updates in
+        // `batch` so the partial → final transition lands in a single frame.
+        // Without batch, the tree memo would briefly reactively re-evaluate
+        // between `setPartialSnapshot(null)` (overlay clear) and
+        // `setNavigatorContext(...)` (new authoritative snapshot installed),
+        // flashing the previous final's tree.
+        // T15 will extend this batch with `setIsStopping(false)`.
+        batch(() => {
+            if (nextSynthetic !== prevSynthetic) {
+                setSyntheticTreeSignal(nextSynthetic);
+            }
+            setNavigatorContext((p) => ({
+                session: data.session ?? p.session,
+                draft: data.draft === undefined ? p.draft : data.draft,
+                events: nextEvents,
+                snapshot: finalSnapshot ?? null,
+                completedGames: nextCompletedGames,
+                connected: true,
+                error: null
+            }));
+            setLastEventIdSeen(
+                nextEvents.length > 0 ? nextEvents[nextEvents.length - 1].id : null
+            );
+            if (snapshotChanged) {
+                // Authoritative final arrived for the active compute — clear
+                // the streaming overlay and mark the session inactive so the
+                // next user trigger can flip it back on. Gated on
+                // `snapshotChanged` because `handleDraftUpdate` also fires on
+                // event-only updates that don't supersede the partial.
+                setPartialSnapshot(null);
+                setIsSessionActive(false);
+            }
+        });
 
         if (finalSnapshot && (data.session ?? untrack(navigatorContext).session)) {
             const sess = data.session ?? untrack(navigatorContext).session;
@@ -748,10 +768,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                 );
             }
         }
-
-        setLastEventIdSeen(
-            nextEvents.length > 0 ? nextEvents[nextEvents.length - 1].id : null
-        );
 
         if (snapshotChanged && prevSnapshot && finalSnapshot) {
             remapSelectedScenarioIndex(prevSnapshot.scenarios, finalSnapshot.scenarios);
@@ -1047,6 +1063,10 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             applyCacheEntry(entry, nextEvents);
         }
 
+        // Phase 7b T14: any compute-triggering user action opens the gate
+        // for streaming partials. The handler's existing guards (session,
+        // draft, version, rootPath) still reject stale envelopes.
+        setIsSessionActive(true);
         sock.emit("navigatorPick", {
             sessionId,
             draftId,
@@ -1102,6 +1122,8 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             applyCacheEntry(entry, nextEvents);
         }
 
+        // Phase 7b T14: see emitPick — opens the streaming-partial gate.
+        setIsSessionActive(true);
         sock.emit("navigatorBan", {
             sessionId,
             draftId,
@@ -1121,6 +1143,8 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             applyCacheEntry(entry, nextEvents);
         }
 
+        // Phase 7b T14: undo retriggers compute; open the partial gate.
+        setIsSessionActive(true);
         sock.emit("navigatorUndo", {
             sessionId,
             draftId
@@ -1183,15 +1207,38 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         // value) it silently ignores; the next snapshot will still show the
         // prior engine's output, which is the correct visual signal.
         setCurrentAlgorithmSignal(algorithm);
+        // Phase 7b T14: switching algorithms supersedes the prior compute and
+        // triggers a new one — open the partial gate so MCTS partials are
+        // accepted as they arrive.
+        setIsSessionActive(true);
         sock.emit("navigatorSetAlgorithm", { sessionId, algorithm });
     };
+
+    // Phase 7b T14 (Decision 11): partial fast-path. Partials arrive ~5-10 Hz
+    // and are already full trees (meta.partial=true), so running the
+    // synthesizeFullTree / mergeEngineTree / pruneInvalidProjection pipeline
+    // on every partial would cause reactive churn that [contain:content]
+    // paint isolation can't hide. Bypass synthesis when a partial is present;
+    // fall through to the existing pipeline output (syntheticTreeSignal) on
+    // finals or when no MCTS session is streaming.
+    const effectiveTree = createMemo(() => {
+        const partial = partialSnapshot();
+        if (partial) return partial.tree;
+        return syntheticTreeSignal();
+    });
+    const effectiveScenarios = createMemo<NavigatorScenario[]>(() => {
+        const partial = partialSnapshot();
+        if (partial) return partial.scenarios;
+        return navigatorContext().snapshot?.scenarios ?? [];
+    });
 
     const contextValue: NavigatorWorkflowContextValue = {
         navigatorContext,
         engineToggleEnabled,
         currentAlgorithm,
         setAlgorithm,
-        syntheticTree: syntheticTreeSignal,
+        syntheticTree: effectiveTree,
+        effectiveScenarios,
         isComputing,
         joinSession,
         leaveSession,
