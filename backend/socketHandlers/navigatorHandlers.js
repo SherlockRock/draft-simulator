@@ -205,6 +205,14 @@ async function recomputeAndBroadcast(io, socket, session, draft, events, version
       return null;
     }
 
+    // v4 R3-3: MCTS session is in-flight (synchronous startNavigatorSession
+    // return). The session emits its own partials and eventually a
+    // pause-on-pause navigatorDraftUpdate. Don't emit snapshot:null which
+    // would erase the frontend's prior tree until the first partial.
+    if (result.sessionStarted && !result.snapshot) {
+      return null;
+    }
+
     const currentVersion = getCurrentVersion(session.id);
     if (result.version !== currentVersion) {
       console.log(

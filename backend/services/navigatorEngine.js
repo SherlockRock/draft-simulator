@@ -627,13 +627,34 @@ async function endNavigatorSession(sessionId, reason = "end") {
   return { ok: true };
 }
 
-async function rerootNavigatorSession(sessionId, rerootId, rerootStep) {
-  const entry = activeSessions.get(sessionId);
-  if (!entry || !entry.session.isActive()) {
-    return { ok: false, reason: "no-active-session" };
+// Phase 7c T10: user-Resume click. Live entry → resume the existing Mcts
+// arena (visits preserved). No live entry (post-reload) → fall back to
+// fresh session at current state (visits lost but affordance works).
+async function resumeNavigatorSession(navigatorDraft, sess, events, version, io, options = {}) {
+  const entry = activeSessions.get(sess.id);
+  if (entry && entry.session.isActive()) {
+    // v4 R3-2: clear pausePersistPromise so next pause doesn't hit the
+    // idempotent branch and skip persisting the new arena state.
+    entry.pausePersistPromise = null;
+    entry.session.resume();
+    return { ok: true, freshSession: false };
   }
-  entry.session.reroot(BigInt(rerootId), JSON.stringify(rerootStep));
-  return { ok: true };
+  // No live entry — fresh session at current state.
+  return startNavigatorSession(navigatorDraft, sess, events, version, io, options);
+}
+
+// Phase 7c T10: live entry → reroot in place (works in both Active and
+// Paused — Rust state machine handles auto-resume from Paused). No live
+// entry → fresh session with initialRootPath baked into the request.
+async function rerootNavigatorSession(navigatorDraft, sess, events, rerootId, rerootStep, version, io, options = {}) {
+  const entry = activeSessions.get(sess.id);
+  if (entry && entry.session.isActive()) {
+    entry.session.reroot(BigInt(rerootId), JSON.stringify(rerootStep));
+    return { ok: true, freshSession: false };
+  }
+  // No live entry — fresh session with initialRootPath.
+  const augmentedOptions = { ...options, initialRootPath: rerootStep };
+  return startNavigatorSession(navigatorDraft, sess, events, version, io, augmentedOptions);
 }
 
 function getEngineStatus() {
@@ -669,7 +690,8 @@ module.exports = {
   startNavigatorSession,
   pauseNavigatorSession,                // new — was stopNavigatorSession
   endNavigatorSession,                   // new
-  rerootNavigatorSession,                // T10 will replace body, but export stays
+  resumeNavigatorSession,                // NEW from T10
+  rerootNavigatorSession,                // body replaced, export stays
   forEachActiveSession,
   isMctsToggleEnabled: () => MCTS_TOGGLE_ENABLED,
   __setEngineForTests,
