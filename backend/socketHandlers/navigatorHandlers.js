@@ -248,17 +248,33 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
   const wrap = (eventName, handler) =>
     wrapSocketHandler(socket, eventName, handler, "navigator");
 
-  // Phase 7b T12.5 (Codex R1-#16 / Opus R1-#7). On socket disconnect, stop
-  // every MCTS session this socket owns with reason='disconnect' — Decision 9
-  // routes that reason through the no-persist / no-broadcast branch in
-  // startNavigatorSession's finalizer. We match on entry.socketId rather than
-  // relying on a per-socket map so the cleanup composes with supersession
-  // (which may have replaced the slot mid-flight).
   socket.on("disconnect", () => {
     navigatorEngine.forEachActiveSession((entry) => {
-      if (entry.socketId === socket.id) {
-        navigatorEngine.stopNavigatorSession(entry.sessionId, "disconnect");
-      }
+      if (entry.socketId !== socket.id) return;
+      // Each session's disconnect runs in its own async IIFE so multiple
+      // sessions can be torn down in parallel.
+      (async () => {
+        try {
+          // v4 R3 B1: set stopReason BEFORE pause. pauseNavigatorSession's
+          // pre-await guard allows 'disconnect' through (only 'supersede'
+          // short-circuits). Persist-on-pause path runs inline; broadcasts
+          // via io.to(...).emit so any other sockets in the room get the
+          // snapshot.
+          if (entry.stopReason === null) {
+            entry.stopReason = "disconnect";
+          }
+          await navigatorEngine.pauseNavigatorSession(entry.sessionId, io);
+        } catch (e) {
+          console.error("[nav] disconnect-pause failed:", e);
+        }
+        // Teardown via cancel-flag. iterate_loop's Paused state recv()
+        // unblocks on the queued Stop command.
+        try {
+          await navigatorEngine.endNavigatorSession(entry.sessionId, "disconnect");
+        } catch (e) {
+          console.error("[nav] disconnect-end failed:", e);
+        }
+      })();
     });
   });
 
@@ -304,44 +320,50 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
     }
   });
 
-  // Phase 7b T12. DecisionTree reroot affordance: client requests the MCTS
-  // session refocus its iterate budget on a deeper sub-branch (Decision 7).
-  // rerootStep is a delta path of championId tuples (one tuple per slot since
-  // the cached root) that the Rust side replays via Mcts::reroot_to. Engine
-  // rejections (e.g. session already finished) come back as { ok: false,
-  // reason } and are surfaced verbatim to the client.
   wrap("navigatorReroot", async (data = {}) => {
     const { sessionId, draftId, rerootId, rerootStep } = data;
     if (
       !sessionId ||
       !draftId ||
       typeof rerootId !== "number" ||
-      !Array.isArray(rerootStep)
+      !Array.isArray(rerootStep) ||
+      rerootStep.length === 0    // v4 R3-N9: empty rerootStep is invalid.
     ) {
       emitNavigatorError(
         socket,
-        "sessionId, draftId, rerootId, rerootStep required",
+        "sessionId, draftId, rerootId, non-empty rerootStep required",
       );
       return;
     }
     const session = await findOwnedSession(sessionId, socket);
     if (!session) return;
-    const result = await navigatorEngine.rerootNavigatorSession(
-      sessionId,
-      rerootId,
-      rerootStep,
-    );
-    if (!result.ok) {
-      emitNavigatorError(socket, `Reroot failed: ${result.reason}`);
+    const draft = await findSessionDraft(sessionId, draftId);
+    if (!draft) {
+      emitNavigatorError(socket, "Navigator draft not found");
+      return;
+    }
+    const events = await listDraftEvents(draftId);
+    const version = bumpVersion(sessionId);
+    try {
+      const result = await navigatorEngine.rerootNavigatorSession(
+        draft, session, events, rerootId, rerootStep, version, io, {
+          socketId: socket.id,
+          algorithm: getSessionAlgorithm(sessionId),
+        },
+      );
+      if (!result.ok) {
+        emitNavigatorError(socket, `Reroot failed: ${result.reason}`);
+      }
+    } catch (err) {
+      if (err && err.code === "engine.invalid_input") {
+        emitNavigatorError(socket, `Reroot invalid: ${err.message}`);
+      } else {
+        console.error("Error in navigatorReroot:", err);
+        emitNavigatorError(socket, "Reroot failed");
+      }
     }
   });
 
-  // Phase 7b T11. User clicks the Stop button → end the MCTS session early
-  // and let the resolved promise persist the current best snapshot
-  // (stopReason='user' fires the persist + broadcast branch in
-  // startNavigatorSession). Validation + auth gate are identical to the rest
-  // of the navigator surface; missing/forbidden sessions return without
-  // touching the engine.
   wrap("navigatorStopCompute", async (data = {}) => {
     const { sessionId } = data;
     if (!sessionId) {
@@ -349,8 +371,39 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       return;
     }
     const session = await findOwnedSession(sessionId, socket);
-    if (!session) return; // findOwnedSession emits its own error
-    await navigatorEngine.stopNavigatorSession(sessionId, "user");
+    if (!session) return;
+    const result = await navigatorEngine.pauseNavigatorSession(sessionId, io);
+    // Treat expected outcomes as silent — these aren't user-visible errors.
+    if (!result.ok
+        && result.reason !== "superseded-mid-pause"
+        && result.reason !== "session-superseded"
+        && result.reason !== "no-active-session") {
+      emitNavigatorError(socket, `Stop failed: ${result.reason}`);
+    }
+  });
+
+  // Phase 7c T11: user-Resume click. Calls resumeNavigatorSession which
+  // dispatches to napi.resume() if a live entry exists, or falls back to
+  // startNavigatorSession at current state otherwise.
+  wrap("navigatorResumeCompute", async (data = {}) => {
+    const { sessionId } = data;
+    if (!sessionId) {
+      emitNavigatorError(socket, "sessionId is required");
+      return;
+    }
+    const session = await findOwnedSession(sessionId, socket);
+    if (!session) return;
+    const draft = await findCurrentDraft(sessionId);
+    if (!draft) {
+      emitNavigatorError(socket, "No current draft");
+      return;
+    }
+    const events = await listDraftEvents(draft.id);
+    const version = bumpVersion(sessionId);
+    await navigatorEngine.resumeNavigatorSession(draft, session, events, version, io, {
+      socketId: socket.id,
+      algorithm: getSessionAlgorithm(sessionId),
+    });
   });
 
   async function handleDraftInput(data, eventType) {
