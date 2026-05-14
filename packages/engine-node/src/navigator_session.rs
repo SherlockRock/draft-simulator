@@ -5,9 +5,10 @@
 //! Arc-wrapped fixture + pools) so iteration can outlive any single napi call
 //! and absorb mid-flight reroot commands.
 //!
-//! Task 5 lands `start()` + the iterate loop core. No cadence emit yet (that
-//! arrives in T6) and no reroot dispatch (T7) — `Reroot` commands are
-//! silently dropped so the channel doesn't error if JS jumps the gun.
+//! T5 landed `start()` + the iterate loop core, T6 the visit-doubling cadence
+//! emit, T7 the reroot command path — `SessionCommand::Reroot` now invokes
+//! `Mcts::reroot_to` between iterations and resets the cadence segment on
+//! success (or emits a JSON error payload on failure).
 
 use std::sync::atomic::AtomicBool;
 #[cfg(not(test))]
@@ -17,8 +18,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use engine_core::cancellation::CancelHandle;
-use engine_core::draft_state::DraftState;
+use engine_core::draft_state::{ActionType, DraftState};
 use engine_core::mcts_spike::policy::{McTsConfig, Mcts};
+use engine_core::mcts_spike::tree::MoveId;
 use engine_core::mcts_spike::{PoolContext, SpikeFixture};
 use napi::bindgen_prelude::*;
 #[cfg(not(test))]
@@ -46,7 +48,6 @@ const TSF_QUEUE_SIZE: usize = 4;
 /// the originating JS request without round-tripping the full path.
 pub(crate) enum SessionCommand {
     Stop,
-    #[allow(dead_code)] // T7 wires reroot dispatch; T5 only ignores the variant.
     Reroot {
         reroot_id: u64,
         champion_ids_path: Vec<Vec<String>>,
@@ -262,33 +263,46 @@ impl NavigatorSession {
     }
 
     /// Re-root the in-flight MCTS to a descendant identified by
-    /// `champion_ids_path`. T7 wires the command through the channel so the
-    /// iterate thread invokes `Mcts::reroot_to` between iterations. T5 ships
-    /// the napi signature + BigInt validation so JS can be type-checked
-    /// against the eventual surface.
+    /// `champion_ids_path`. The path is JSON-encoded (a `string[][]` —
+    /// each step is 1 champion id for single moves or 2 for pair-pick moves).
+    /// Dispatch is fire-and-forget: the command is queued on the mpsc channel
+    /// and applied by the iterate loop between iterations via `Mcts::reroot_to`.
+    /// Errors surface through the partial-emit channel as a JSON payload
+    /// `{ rerootError, rerootId, attemptedPath }` (Decision 8) — that's why
+    /// this method only validates the surface and never blocks waiting for
+    /// the apply result.
     ///
     /// `reroot_id` is a JS `bigint` (monotonic per session) — using `BigInt`
     /// avoids the 53-bit float coercion that `u32` -> JS `number` would
     /// inflict on long-lived sessions with many reroots.
     #[napi]
     pub fn reroot(&self, reroot_id: BigInt, path_json: String) -> napi::Result<()> {
-        let (signed, _value, _lossless) = reroot_id.get_u64();
+        let (signed, value, _lossless) = reroot_id.get_u64();
         if signed {
             return Err(error::invalid_input(
                 vec!["rerootId"],
                 "rerootId must be non-negative",
             ));
         }
-        // Parse the path here even though we don't dispatch yet: this keeps
-        // the napi error surface stable across T5 -> T7 (JS sees the same
-        // invalid-input error shape for malformed paths regardless of
-        // whether the session is mid-iteration).
-        let _path: Vec<Vec<String>> = serde_json::from_str(&path_json).map_err(|e| {
+        let path: Vec<Vec<String>> = serde_json::from_str(&path_json).map_err(|e| {
             error::invalid_input(vec!["path"], format!("reroot path parse: {}", e))
         })?;
-        Err(error::internal(
-            "NavigatorSession::reroot not implemented (Phase 7b Task 7)",
-        ))
+        let guard = self
+            .cmd_tx
+            .lock()
+            .map_err(|_| error::internal("cmd_tx mutex poisoned"))?;
+        // Late reroot after the iterate loop has already cleaned up its sender
+        // is benign: nothing to apply. JS clients should check `is_active()`
+        // before reroot if they care, but a race between `reroot()` and the
+        // final-snapshot resolve must not raise.
+        if let Some(tx) = guard.as_ref() {
+            tx.send(SessionCommand::Reroot {
+                reroot_id: value,
+                champion_ids_path: path,
+            })
+            .map_err(|e| error::internal(format!("reroot send: {}", e)))?;
+        }
+        Ok(())
     }
 
     /// `true` while the iterate thread is running — equivalently, while the
@@ -339,15 +353,13 @@ pub(crate) fn iterate_loop(
     let mut counter: usize = 0;
     let mut stop_requested = false;
 
-    // Segment-local cadence state (Decision 4 v3 / Codex R2-#1). T7 mutates
-    // `iters_at_segment_start` + `segment_start` when applying a reroot so
-    // cumulative iters from inherited subtrees don't push the next information
-    // event past the segment-relative doubling; for T6 they're write-once.
-    #[allow(unused_mut)] // T7 reassigns on reroot.
+    // Segment-local cadence state (Decision 4 v3 / Codex R2-#1). All four are
+    // reset when `apply_reroot` succeeds so cumulative iters from inherited
+    // subtrees don't push the next information event past the segment-relative
+    // doubling — each reroot starts a fresh emit segment.
     let mut iters_at_segment_start: u32 = 0;
     let mut segment_threshold_delta: u32 = meta.first_emit_threshold;
     let mut first_emit_done = false;
-    #[allow(unused_mut)] // T7 reassigns on reroot.
     let mut segment_start = start;
     let mut last_emit_at = start;
 
@@ -360,10 +372,40 @@ pub(crate) fn iterate_loop(
                 Ok(SessionCommand::Stop) => {
                     stop_requested = true;
                 }
+                Ok(SessionCommand::Reroot {
+                    reroot_id,
+                    champion_ids_path,
+                }) if !stop_requested => match apply_reroot(&mut mcts, &champion_ids_path) {
+                    Ok(()) => {
+                        // Segment reset (Decision 4 v3): each reroot starts a
+                        // fresh emit segment with the floor + base threshold
+                        // re-armed. Inherited visits don't count toward the
+                        // segment-relative doubling.
+                        iters_at_segment_start = mcts.total_iterations();
+                        segment_threshold_delta = meta.first_emit_threshold;
+                        first_emit_done = false;
+                        let now = Instant::now();
+                        segment_start = now;
+                        last_emit_at = now;
+                    }
+                    Err(e) => {
+                        // Surface the failure to JS through the same partial
+                        // channel — Decision 8: backend `handlePartialOrError`
+                        // (T10) parses JSON and branches on `rerootError`
+                        // presence rather than relying on a separate channel.
+                        let err_payload = serde_json::json!({
+                            "rerootError": e,
+                            "rerootId": reroot_id,
+                            "attemptedPath": champion_ids_path,
+                        });
+                        emit(err_payload.to_string());
+                    }
+                },
                 Ok(SessionCommand::Reroot { .. }) => {
-                    // T7 wires reroot dispatch. T5 drops the command rather
-                    // than erroring so a JS client racing reroot against the
-                    // first emit doesn't tear the session down.
+                    // Stop already drained earlier in this batch — drop the
+                    // reroot rather than applying it to a soon-to-exit loop
+                    // (Opus R2-NIT-6). Continuing to drain so the channel
+                    // doesn't back up.
                 }
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
@@ -431,6 +473,47 @@ pub(crate) fn iterate_loop(
         meta.top_k_at_root,
     );
     serde_json::to_string(&resp).map_err(|e| error::internal(format!("final serialize: {}", e)))
+}
+
+/// Walk `path` step-by-step and reroot the MCTS to each child. Each path step
+/// is the canonical `champion_ids` of a single move: 1 entry for bans and
+/// non-pair-start picks, 2 entries for pair-pick moves.
+///
+/// `Mcts::reroot_to` advances `active_root_state` internally — we read
+/// `current_turn()` *before* each step to detect whether the upcoming move is a
+/// pick or ban, then build the matching `MoveId`. No parallel local state copy
+/// (Decision 10).
+///
+/// `pub(crate)` so the test module can drive a single reroot directly without
+/// spinning up an `iterate_loop` thread — keeps the pair-pick reroot test from
+/// needing a synthetic plumbing path to inspect `active_root_state`.
+pub(crate) fn apply_reroot(
+    mcts: &mut Mcts<'_>,
+    path: &[Vec<String>],
+) -> std::result::Result<(), String> {
+    for step_ids in path {
+        // Pair-pick turns are always picks per TURN_SEQUENCE; bans are always
+        // single-id. `MoveId::pair` hardcodes is_pick=true (tree.rs:27), so a
+        // 2-id step at a non-pick turn is structurally invalid and must error
+        // before reroot_to is called.
+        let is_pick = mcts
+            .active_root_state()
+            .current_turn()
+            .map(|t| t.action_type == ActionType::Pick)
+            .unwrap_or(true);
+        let mv = match step_ids.len() {
+            1 => MoveId::single(step_ids[0].clone(), is_pick),
+            2 => {
+                if !is_pick {
+                    return Err(format!("two-id step at non-pick turn: {:?}", step_ids));
+                }
+                MoveId::pair(step_ids[0].clone(), step_ids[1].clone())
+            }
+            n => return Err(format!("invalid path step length: {}", n)),
+        };
+        mcts.reroot_to(&mv).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -688,6 +771,311 @@ mod tests {
             gap,
             upper_bound
         );
+    }
+
+    /// Slot-7 mid-state (Red R2/R3 pair_start). One blue pick, zero red picks
+    /// — `turn_index == 7` so `current_turn()` returns the first pair-pick
+    /// turn. Used by the pair-reroot test to validate two-id path steps.
+    fn pair_start_test_state() -> DraftState {
+        DraftState {
+            blue_bans: vec!["Aatrox".into(), "Akali".into(), "Amumu".into()],
+            red_bans: vec!["Ahri".into(), "Alistar".into(), "Anivia".into()],
+            blue_picks: vec!["Garen".into()],
+            red_picks: vec![],
+        }
+    }
+
+    /// Opus R1-#17 invariant. After a reroot, the active root's visit count
+    /// must equal the inherited subtree size at minimum (arena retention) and
+    /// grow when iteration continues (the reroot didn't sever the search).
+    ///
+    /// Drive iterate_loop with closure-seam emit. Wait for the first partial,
+    /// pick the top-visit root child A, send Reroot. Continue iterating long
+    /// enough that root.visits ticks up, then Stop. Final response's
+    /// `meta.nodes_evaluated` must exceed A's pre-reroot visits.
+    #[test]
+    fn navigator_session_reroot_preserves_and_extends_visits() {
+        let fixture = Arc::new(real_data_fixture());
+        let pools = Arc::new(PoolContext::full(&fixture));
+        let initial_state = cadence_test_state();
+        let cfg = test_cfg();
+        let meta = RequestMeta {
+            latency_budget_ms: 100,
+            top_k_at_root: 5,
+            first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
+        };
+        let cancel = CancelHandle::new();
+        let (tx, rx) = mpsc::channel::<SessionCommand>();
+
+        let received: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let received_for_emit = received.clone();
+        let emit: Box<dyn Fn(String) + Send + Sync> =
+            Box::new(move |json| received_for_emit.lock().unwrap().push(json));
+
+        // Driver thread: poll for first partial, send Reroot, sleep ~400ms for
+        // continued iter, then Stop. Keeps the test deterministic without
+        // depending on a second cadence emit.
+        let received_for_watch = received.clone();
+        let driver = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_millis(2000);
+            let first_partial = loop {
+                {
+                    let lock = received_for_watch.lock().unwrap();
+                    if !lock.is_empty() {
+                        break Some(lock[0].clone());
+                    }
+                }
+                if Instant::now() >= deadline {
+                    break None;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            };
+            let first_partial = first_partial.expect("first partial emitted within deadline");
+            let parsed: proto::EngineResponse =
+                serde_json::from_str(&first_partial).expect("first partial parses");
+            // Find the top-visit root child. cadence_test_state is at slot 11
+            // (single pick), so champion_ids has exactly one element.
+            let (champ_id, inherited_visits) = parsed
+                .tree
+                .children
+                .iter()
+                .filter_map(|c| {
+                    let extras = c.mcts_extras.as_ref()?;
+                    let id = c.champion_ids.first()?.clone();
+                    Some((id, extras.visits))
+                })
+                .max_by_key(|(_, v)| *v)
+                .expect("expected at least one expanded root child");
+
+            let _ = tx.send(SessionCommand::Reroot {
+                reroot_id: 1,
+                champion_ids_path: vec![vec![champ_id]],
+            });
+            // Slack for the iterate loop to drain + run at least one more
+            // iteration on the new active root. 150ms is comfortably above
+            // a single POLL_EVERY tick (32 iters at ~200 iter/sec) on a
+            // loaded runner; keeps total test CPU low to avoid starving the
+            // wall-clock-sensitive `compute_mcts_emits_synthetic_scenarios`.
+            std::thread::sleep(Duration::from_millis(150));
+            let _ = tx.send(SessionCommand::Stop);
+            inherited_visits
+        });
+
+        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
+            .expect("iterate_loop ok");
+        let inherited_visits = driver.join().expect("driver thread completes");
+
+        let parsed: proto::EngineResponse =
+            serde_json::from_str(&result).expect("final response parses");
+        // Arena retention: total iters at the new root >= the count captured
+        // before reroot. Strict `>` proves iteration continued post-reroot.
+        assert!(
+            parsed.meta.nodes_evaluated > inherited_visits,
+            "expected post-reroot iterations ({}) > inherited visits ({})",
+            parsed.meta.nodes_evaluated,
+            inherited_visits
+        );
+        // Stop-initiated exit: cancelled=false (Decision 5).
+        assert!(!parsed.meta.cancelled);
+    }
+
+    /// Opus R1-#18 invariant. Pair-pick reroot (two-id path step) applies
+    /// both champions to the same side at apply_move time. Exercises
+    /// `apply_reroot` directly so we can inspect `active_root_state` without
+    /// routing through the iterate_loop's JSON final response (which doesn't
+    /// surface the projected state in a structured way).
+    ///
+    /// Iterates a few times first so the chosen pair is in `root.children`
+    /// (otherwise `reroot_to` errors with "move not found"). Picks the
+    /// top-visit pair child from `root_visit_distribution` rather than a
+    /// hardcoded pair so the test stays stable against rollout-RNG shifts.
+    #[test]
+    fn navigator_session_pair_reroot() {
+        let fixture = real_data_fixture();
+        let pools = PoolContext::full(&fixture);
+        let initial_state = pair_start_test_state();
+        // Sanity: the chosen state actually triggers a pair-pick turn.
+        let turn = initial_state
+            .current_turn()
+            .expect("pair_start_test_state has a current turn");
+        assert!(turn.pair_start, "slot 7 must be pair_start");
+
+        let mut mcts = Mcts::with_pools(&fixture, initial_state, &pools, test_cfg());
+        // Burn enough iterations to expand at least one pair-pick child.
+        // Empirically ~30 suffices; we run 100 for headroom on a loaded runner.
+        for _ in 0..100 {
+            mcts.iterate();
+        }
+        let dist = mcts.root_visit_distribution();
+        let (mv, _visits, _mean) = dist
+            .into_iter()
+            .find(|(m, v, _)| m.is_pair() && *v > 0)
+            .expect("expected at least one expanded pair child after 100 iterates");
+        // Sanity: a pair MoveId has exactly 2 champion_ids.
+        assert_eq!(mv.champion_ids.len(), 2);
+        let path = vec![mv.champion_ids.clone()];
+
+        apply_reroot(&mut mcts, &path).expect("apply_reroot ok for valid pair");
+        let new_state = mcts.active_root_state();
+        // Both champions were applied to red_picks (pair-pick at slot 7 = Red).
+        assert_eq!(
+            new_state.red_picks.len(),
+            2,
+            "expected 2 red picks after pair reroot; got {:?}",
+            new_state.red_picks
+        );
+        for c in &mv.champion_ids {
+            assert!(
+                new_state.red_picks.contains(c),
+                "expected red_picks to contain {}; got {:?}",
+                c,
+                new_state.red_picks
+            );
+        }
+    }
+
+    /// Decision 8 surface. Invalid reroot (champion not in current active
+    /// root's children) emits a JSON error payload with the canonical
+    /// `{rerootError, rerootId, attemptedPath}` shape; the iterate loop must
+    /// continue rather than tear down.
+    #[test]
+    fn navigator_session_invalid_reroot_emits_error() {
+        let fixture = Arc::new(real_data_fixture());
+        let pools = Arc::new(PoolContext::full(&fixture));
+        let initial_state = cadence_test_state();
+        let cfg = test_cfg();
+        let meta = RequestMeta {
+            latency_budget_ms: 100,
+            top_k_at_root: 5,
+            first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
+        };
+        let cancel = CancelHandle::new();
+        let (tx, rx) = mpsc::channel::<SessionCommand>();
+
+        let received: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let received_for_emit = received.clone();
+        let emit: Box<dyn Fn(String) + Send + Sync> =
+            Box::new(move |json| received_for_emit.lock().unwrap().push(json));
+
+        // Drive: wait for first partial (proves the loop is alive), send a
+        // garbage reroot, wait for the error emit, then Stop. The error and
+        // first partial both land on the same emit channel — we look past
+        // the first valid EngineResponse for the JSON error envelope.
+        let received_for_watch = received.clone();
+        let driver = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_millis(2000);
+            loop {
+                if !received_for_watch.lock().unwrap().is_empty() {
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            // "DefinitelyNotAChampion" is not a champion id in the fixture,
+            // so it can't appear in the root's expanded children list.
+            let _ = tx.send(SessionCommand::Reroot {
+                reroot_id: 42,
+                champion_ids_path: vec![vec!["DefinitelyNotAChampion".into()]],
+            });
+            // Wait for the error emit to land on the channel before stopping.
+            let error_deadline = Instant::now() + Duration::from_millis(2000);
+            loop {
+                let has_error = received_for_watch
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|s| s.contains("\"rerootError\""));
+                if has_error || Instant::now() >= error_deadline {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            let _ = tx.send(SessionCommand::Stop);
+        });
+
+        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
+            .expect("iterate_loop ok (must not tear down on invalid reroot)");
+        driver.join().expect("driver thread completes");
+
+        let emits = received.lock().unwrap().clone();
+        let err_str = emits
+            .iter()
+            .find(|s| s.contains("\"rerootError\""))
+            .expect("expected at least one error-shaped emit");
+        // Validate envelope shape — the backend's handlePartialOrError keys
+        // off these three field names (Decision 8).
+        let payload: serde_json::Value =
+            serde_json::from_str(err_str).expect("error payload parses as JSON");
+        assert!(payload.get("rerootError").is_some(), "missing rerootError");
+        assert_eq!(payload.get("rerootId").and_then(|v| v.as_u64()), Some(42));
+        let attempted = payload
+            .get("attemptedPath")
+            .expect("missing attemptedPath")
+            .as_array()
+            .expect("attemptedPath is an array");
+        assert_eq!(attempted.len(), 1);
+
+        // Loop continued past the invalid reroot — the final snapshot must
+        // still parse and reflect a stop-initiated exit.
+        let parsed: proto::EngineResponse =
+            serde_json::from_str(&result).expect("final response parses");
+        assert!(!parsed.meta.cancelled);
+    }
+
+    /// Opus R2-NIT-6. Stop and Reroot queued in order before the next drain
+    /// tick: the drain loop must see Stop first, set `stop_requested`, and
+    /// then drop the queued Reroot rather than applying it to a soon-to-exit
+    /// loop. Verified by the absence of a `rerootError` emit (a successful
+    /// apply emits nothing; a failed apply would emit the error envelope —
+    /// either way, *if* Reroot ran with a bogus path we'd see the envelope).
+    #[test]
+    fn navigator_session_reroot_after_stop_dropped() {
+        let fixture = Arc::new(real_data_fixture());
+        let pools = Arc::new(PoolContext::full(&fixture));
+        let initial_state = cadence_test_state();
+        let cfg = test_cfg();
+        let meta = RequestMeta {
+            // Generous floor so iterate_loop doesn't fire a partial before
+            // the driver queues its commands — we want the FIRST drain tick
+            // to see both messages already enqueued.
+            latency_budget_ms: 5_000,
+            top_k_at_root: 5,
+            first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
+        };
+        let cancel = CancelHandle::new();
+        let (tx, rx) = mpsc::channel::<SessionCommand>();
+
+        let received: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let received_for_emit = received.clone();
+        let emit: Box<dyn Fn(String) + Send + Sync> =
+            Box::new(move |json| received_for_emit.lock().unwrap().push(json));
+
+        // Queue Stop then a bogus-path Reroot atomically before the loop
+        // starts so the very first drain sees both. mpsc preserves send order.
+        tx.send(SessionCommand::Stop).expect("stop send");
+        tx.send(SessionCommand::Reroot {
+            reroot_id: 99,
+            champion_ids_path: vec![vec!["DefinitelyNotAChampion".into()]],
+        })
+        .expect("reroot send");
+
+        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
+            .expect("iterate_loop ok");
+
+        let emits = received.lock().unwrap().clone();
+        // Reroot was dropped, so the bogus-path apply never ran — no error
+        // envelope on the wire. If the post-stop drop logic regressed, the
+        // invalid champion would have triggered an emit here.
+        assert!(
+            emits.iter().all(|s| !s.contains("\"rerootError\"")),
+            "expected no rerootError emit when Reroot is queued after Stop; got {:?}",
+            emits
+        );
+        let parsed: proto::EngineResponse =
+            serde_json::from_str(&result).expect("final response parses");
+        assert!(!parsed.meta.cancelled);
     }
 
     /// Asserts the `cancelled=true` branch of the persistence matrix:
