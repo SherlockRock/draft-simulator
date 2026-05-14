@@ -34,6 +34,15 @@ use napi_derive::napi;
 use crate::error;
 use crate::mcts_wire;
 
+/// Phase 7c T6: iterate-loop state machine. Active = iterating with
+/// cadence emits. Paused = blocked on rx.recv() with Mcts arena retained.
+/// Ending = main loop has broken, drain-and-reject runs next.
+enum LoopState {
+    Active,
+    Paused,
+    Ending,
+}
+
 /// Bounded queue size for the partial-emit TSF. Decision 5 / Codex R1-#5 —
 /// finite + NonBlocking gives drop-on-backpressure semantics. `FromNapiValue`
 /// on `ThreadsafeFunction` hardcodes `0` (unbounded) in napi-rs 2.16, so
@@ -373,13 +382,11 @@ pub(crate) fn iterate_loop(
     // request's initial_root_path; appended on each successful in-session
     // reroot (T6). Passed to mcts_wire::build_response via BuildResponseOptions.
     let mut session_root_path: Vec<Vec<String>> = initial_root_path;
-    let mut counter: usize = 0;
-    let mut stop_requested = false;
 
-    // Segment-local cadence state (Decision 4 v3 / Codex R2-#1). All four are
-    // reset when `apply_reroot` succeeds so cumulative iters from inherited
-    // subtrees don't push the next information event past the segment-relative
-    // doubling — each reroot starts a fresh emit segment.
+    let mut state = LoopState::Active;
+    let mut counter: usize = 0;
+
+    // Cadence state — reset at each Active-entry segment boundary.
     let mut iters_at_segment_start: u32 = 0;
     let mut segment_threshold_delta: u32 = meta.first_emit_threshold;
     let mut first_emit_done = false;
@@ -387,127 +394,192 @@ pub(crate) fn iterate_loop(
     let mut last_emit_at = start;
 
     loop {
-        // Drain pending commands. We intentionally drain to empty per turn
-        // so a stop posted between polls doesn't wait a full POLL_EVERY
-        // cycle.
-        loop {
-            match rx.try_recv() {
-                Ok(SessionCommand::Pause { .. }) | Ok(SessionCommand::Resume) => {
-                    // T5 plumbs the variants; T6 implements state-machine handling.
+        match state {
+            LoopState::Active => {
+                // Try-recv drain (non-blocking) for incoming commands.
+                loop {
+                    match rx.try_recv() {
+                        Ok(SessionCommand::Pause { resolve }) => {
+                            let opts = mcts_wire::BuildResponseOptions {
+                                cancelled: false,
+                                persist_on_pause: true,
+                                top_k_at_root: meta.top_k_at_root,
+                                session_root_path: &session_root_path,
+                            };
+                            let resp = mcts_wire::build_response(&mcts, mcts.active_root_state(), start.elapsed(), opts);
+                            match serde_json::to_string(&resp) {
+                                Ok(json) => resolve(Ok(json)),
+                                Err(e) => resolve(Err(error::internal(format!("pause snapshot serialize: {}", e)))),
+                            }
+                            state = LoopState::Paused;
+                        }
+                        Ok(SessionCommand::Resume) => {
+                            // Drop — already Active.
+                        }
+                        Ok(SessionCommand::Stop) => {
+                            state = LoopState::Ending;
+                        }
+                        Ok(SessionCommand::Reroot { reroot_id, champion_ids_path }) => {
+                            match apply_reroot(&mut mcts, &champion_ids_path) {
+                                Ok(()) => {
+                                    // v4 R3-N1: append on success only.
+                                    session_root_path.extend(champion_ids_path.clone());
+                                    // Reset cadence (Decision 4 v3).
+                                    iters_at_segment_start = mcts.total_iterations();
+                                    segment_threshold_delta = meta.first_emit_threshold;
+                                    first_emit_done = false;
+                                    let now = Instant::now();
+                                    segment_start = now;
+                                    last_emit_at = now;
+                                }
+                                Err(e) => {
+                                    let err_payload = serde_json::json!({
+                                        "rerootError": e,
+                                        "rerootId": reroot_id,
+                                        "attemptedPath": champion_ids_path,
+                                    });
+                                    emit(err_payload.to_string());
+                                }
+                            }
+                        }
+                        Err(TryRecvError::Empty) => break,
+                        Err(TryRecvError::Disconnected) => {
+                            state = LoopState::Ending;
+                            break;
+                        }
+                    }
+                    if matches!(state, LoopState::Ending | LoopState::Paused) { break; }
                 }
-                Ok(SessionCommand::Stop) => {
-                    stop_requested = true;
+
+                if matches!(state, LoopState::Ending) { break; }
+                if matches!(state, LoopState::Paused) { continue; }
+
+                // POLL_EVERY cancel-flag check.
+                if counter % mcts_wire::POLL_EVERY == 0 && cancel.is_cancelled() {
+                    state = LoopState::Ending;
+                    break;
                 }
-                Ok(SessionCommand::Reroot {
-                    reroot_id,
-                    champion_ids_path,
-                }) if !stop_requested => match apply_reroot(&mut mcts, &champion_ids_path) {
-                    Ok(()) => {
-                        // Segment reset (Decision 4 v3): each reroot starts a
-                        // fresh emit segment with the floor + base threshold
-                        // re-armed. Inherited visits don't count toward the
-                        // segment-relative doubling.
+
+                mcts.iterate();
+                counter += 1;
+
+                // Cadence emit (unchanged from Phase 7b, but uses BuildResponseOptions).
+                let total = mcts.total_iterations();
+                let threshold = iters_at_segment_start.saturating_add(segment_threshold_delta);
+                let elapsed_segment_ms = segment_start.elapsed().as_millis() as u64;
+                let should_emit_first = !first_emit_done && elapsed_segment_ms >= meta.latency_budget_ms;
+                let should_emit_double = first_emit_done
+                    && total >= threshold
+                    && last_emit_at.elapsed() >= Duration::from_millis(mcts_wire::MIN_EMIT_INTERVAL_MS);
+
+                if should_emit_first || should_emit_double {
+                    let opts = mcts_wire::BuildResponseOptions {
+                        cancelled: false,
+                        persist_on_pause: false,
+                        top_k_at_root: meta.top_k_at_root,
+                        session_root_path: &session_root_path,
+                    };
+                    let partial = mcts_wire::build_response(&mcts, mcts.active_root_state(), start.elapsed(), opts);
+                    let json = serde_json::to_string(&partial)
+                        .map_err(|e| error::internal(format!("partial serialize: {}", e)))?;
+                    emit(json);
+                    first_emit_done = true;
+                    last_emit_at = Instant::now();
+                    if should_emit_double {
+                        segment_threshold_delta = segment_threshold_delta.saturating_mul(2);
+                    }
+                }
+            }
+            LoopState::Paused => {
+                // Unbounded recv — blocks until a command arrives. end()
+                // queues Stop alongside setting cancel, so this unblocks
+                // for teardown without polling.
+                match rx.recv() {
+                    Ok(SessionCommand::Pause { resolve }) => {
+                        // Idempotent — build snapshot from unchanged Mcts state.
+                        let opts = mcts_wire::BuildResponseOptions {
+                            cancelled: false,
+                            persist_on_pause: true,
+                            top_k_at_root: meta.top_k_at_root,
+                            session_root_path: &session_root_path,
+                        };
+                        let resp = mcts_wire::build_response(&mcts, mcts.active_root_state(), start.elapsed(), opts);
+                        match serde_json::to_string(&resp) {
+                            Ok(json) => resolve(Ok(json)),
+                            Err(e) => resolve(Err(error::internal(format!("pause snapshot serialize: {}", e)))),
+                        }
+                        // State stays Paused.
+                    }
+                    Ok(SessionCommand::Resume) => {
+                        // Reset cadence so first post-resume emit fires within budget.
                         iters_at_segment_start = mcts.total_iterations();
                         segment_threshold_delta = meta.first_emit_threshold;
                         first_emit_done = false;
                         let now = Instant::now();
                         segment_start = now;
                         last_emit_at = now;
+                        state = LoopState::Active;
                     }
-                    Err(e) => {
-                        // Surface the failure to JS through the same partial
-                        // channel — Decision 8: backend `handlePartialOrError`
-                        // (T10) parses JSON and branches on `rerootError`
-                        // presence rather than relying on a separate channel.
-                        let err_payload = serde_json::json!({
-                            "rerootError": e,
-                            "rerootId": reroot_id,
-                            "attemptedPath": champion_ids_path,
-                        });
-                        emit(err_payload.to_string());
+                    Ok(SessionCommand::Reroot { reroot_id, champion_ids_path }) => {
+                        match apply_reroot(&mut mcts, &champion_ids_path) {
+                            Ok(()) => {
+                                session_root_path.extend(champion_ids_path.clone());
+                                // Reset cadence + auto-resume.
+                                iters_at_segment_start = mcts.total_iterations();
+                                segment_threshold_delta = meta.first_emit_threshold;
+                                first_emit_done = false;
+                                let now = Instant::now();
+                                segment_start = now;
+                                last_emit_at = now;
+                                state = LoopState::Active;
+                            }
+                            Err(e) => {
+                                // v4 R3-Nit3: emit rerootError but stay Paused.
+                                let err_payload = serde_json::json!({
+                                    "rerootError": e,
+                                    "rerootId": reroot_id,
+                                    "attemptedPath": champion_ids_path,
+                                });
+                                emit(err_payload.to_string());
+                            }
+                        }
                     }
-                },
-                Ok(SessionCommand::Reroot { .. }) => {
-                    // Stop already drained earlier in this batch — drop the
-                    // reroot rather than applying it to a soon-to-exit loop
-                    // (Opus R2-NIT-6). Continuing to drain so the channel
-                    // doesn't back up.
+                    Ok(SessionCommand::Stop) => {
+                        state = LoopState::Ending;
+                    }
+                    Err(_) => {
+                        // Sender disconnected — treat as stop.
+                        state = LoopState::Ending;
+                    }
                 }
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => {
-                    // Sender dropped (e.g. NavigatorSession garbage-collected
-                    // mid-iterate). Treat as stop so we exit cleanly.
-                    stop_requested = true;
-                    break;
+                // Cancel-flag check on Paused-state wake (defense in depth — end()
+                // always queues Stop, so we'd see that, but flag could be set
+                // externally e.g. shutdownEngine).
+                if cancel.is_cancelled() {
+                    state = LoopState::Ending;
                 }
             }
-        }
-        if stop_requested {
-            break;
-        }
-
-        // POLL_EVERY-paced cancel check. Cheap (atomic load) but worth gating
-        // because the iterate hot path is ~50–200µs.
-        if counter % mcts_wire::POLL_EVERY == 0 && cancel.is_cancelled() {
-            break;
-        }
-
-        mcts.iterate();
-        counter += 1;
-
-        // Cadence emit (Decision 4 v3). Cast `as u128 → u64`: Duration spans
-        // ~584M years before wrapping, so sessions can't realistically overflow.
-        let total = mcts.total_iterations();
-        let threshold = iters_at_segment_start.saturating_add(segment_threshold_delta);
-        let elapsed_segment_ms = segment_start.elapsed().as_millis() as u64;
-        let should_emit_first = !first_emit_done && elapsed_segment_ms >= meta.latency_budget_ms;
-        let should_emit_double = first_emit_done
-            && total >= threshold
-            && last_emit_at.elapsed() >= Duration::from_millis(mcts_wire::MIN_EMIT_INTERVAL_MS);
-
-        if should_emit_first || should_emit_double {
-            let opts = mcts_wire::BuildResponseOptions {
-                cancelled: false,
-                persist_on_pause: false,
-                top_k_at_root: meta.top_k_at_root,
-                session_root_path: &session_root_path,
-            };
-            let partial = mcts_wire::build_response(
-                &mcts,
-                mcts.active_root_state(),
-                start.elapsed(),
-                opts,
-            );
-            let json = serde_json::to_string(&partial)
-                .map_err(|e| error::internal(format!("partial serialize: {}", e)))?;
-            emit(json);
-            first_emit_done = true;
-            last_emit_at = Instant::now();
-            // Only threshold-based emits double the delta. Floor emits leave
-            // it intact so the next information event still fires at
-            // iters_at_segment_start + FIRST_EMIT_THRESHOLD (Codex R2-#1).
-            if should_emit_double {
-                segment_threshold_delta = segment_threshold_delta.saturating_mul(2);
-            }
+            LoopState::Ending => break,
         }
     }
 
-    // Persistence matrix: stop-initiated exits set cancelled=false (the user
-    // got the snapshot they asked for); cancel-flag exits set cancelled=true
-    // (caller may discard).
-    let cancelled = !stop_requested && cancel.is_cancelled();
+    // v4 R3 M1: drain-and-reject any pending Pause commands so JS-side awaits
+    // don't hang.
+    while let Ok(cmd) = rx.try_recv() {
+        if let SessionCommand::Pause { resolve } = cmd {
+            resolve(Err(error::internal("session ended before pause processed")));
+        }
+    }
+
+    // Final snapshot for start() Promise. Backend discards under v3 Decision 8.
+    let cancelled = cancel.is_cancelled();
     let opts = mcts_wire::BuildResponseOptions {
         cancelled,
         persist_on_pause: false,
         top_k_at_root: meta.top_k_at_root,
         session_root_path: &session_root_path,
     };
-    let resp = mcts_wire::build_response(
-        &mcts,
-        mcts.active_root_state(),
-        start.elapsed(),
-        opts,
-    );
+    let resp = mcts_wire::build_response(&mcts, mcts.active_root_state(), start.elapsed(), opts);
     serde_json::to_string(&resp).map_err(|e| error::internal(format!("final serialize: {}", e)))
 }
 
