@@ -502,6 +502,15 @@ function getEngineStatus() {
   return { activeSessions: activeTokens.size + activeSessions.size };
 }
 
+// Iterator helper for callers that need to walk active MCTS sessions without
+// owning the raw Map (e.g. socket-disconnect cleanup matching on socketId).
+// Exposing this instead of the Map keeps the entry shape internal.
+function forEachActiveSession(cb) {
+  for (const entry of activeSessions.values()) {
+    cb(entry);
+  }
+}
+
 async function shutdownEngine() {
   for (const { token } of activeTokens.values()) {
     if (token && !token.isCancelled()) token.cancel();
@@ -522,6 +531,7 @@ module.exports = {
   startNavigatorSession,
   stopNavigatorSession,
   rerootNavigatorSession,
+  forEachActiveSession,
   isMctsToggleEnabled: () => MCTS_TOGGLE_ENABLED,
   __setEngineForTests,
   __activeSessionsForTests: activeSessions,

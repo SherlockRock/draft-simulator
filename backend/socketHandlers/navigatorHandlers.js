@@ -184,14 +184,19 @@ async function emitDraftUpdate(io, sessionId, payload) {
 }
 
 async function recomputeAndBroadcast(io, socket, session, draft, events, version, options = {}) {
-  void socket;
   try {
     // Inject the session's current dev-toggled algorithm preference unless an
     // explicit override was passed (forced-branch dispatchers don't override;
     // they go through the same algorithm choice as picks/bans/undo).
-    const mergedOptions = options.algorithm !== undefined
-      ? options
-      : { ...options, algorithm: getSessionAlgorithm(session.id) };
+    // socketId rides along on every compute so the MCTS session entry can be
+    // matched against the disconnecting socket in the cleanup handler below
+    // (T12.5).
+    const mergedOptions = {
+      ...(options.algorithm !== undefined
+        ? options
+        : { ...options, algorithm: getSessionAlgorithm(session.id) }),
+      socketId: socket.id,
+    };
     const result = await computeForDraft(draft, session, events, version, io, mergedOptions);
 
     // Cancellation-driven swallow (engine.cancelled or meta.cancelled === true).
@@ -234,6 +239,20 @@ async function recomputeAndBroadcast(io, socket, session, draft, events, version
 function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
   const wrap = (eventName, handler) =>
     wrapSocketHandler(socket, eventName, handler, "navigator");
+
+  // Phase 7b T12.5 (Codex R1-#16 / Opus R1-#7). On socket disconnect, stop
+  // every MCTS session this socket owns with reason='disconnect' — Decision 9
+  // routes that reason through the no-persist / no-broadcast branch in
+  // startNavigatorSession's finalizer. We match on entry.socketId rather than
+  // relying on a per-socket map so the cleanup composes with supersession
+  // (which may have replaced the slot mid-flight).
+  socket.on("disconnect", () => {
+    navigatorEngine.forEachActiveSession((entry) => {
+      if (entry.socketId === socket.id) {
+        navigatorEngine.stopNavigatorSession(entry.sessionId, "disconnect");
+      }
+    });
+  });
 
   wrap("navigatorJoin", async (data = {}) => {
     try {

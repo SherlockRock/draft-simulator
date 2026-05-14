@@ -198,3 +198,46 @@ describe("navigatorReroot (T12)", () => {
     });
   });
 });
+
+describe("disconnect cleanup (T12.5)", () => {
+  it("stops only the sessions owned by this socket with reason='disconnect'", () => {
+    const { socket, handlers } = buildFakeSocket({ id: "socket-A" });
+    installHandlers({ socket });
+
+    // Three mock entries: two owned by socket-A, one by socket-B. The
+    // disconnect handler must stop only the first two.
+    const entries = [
+      { sessionId: "sess-1", socketId: "socket-A" },
+      { sessionId: "sess-2", socketId: "socket-A" },
+      { sessionId: "sess-3", socketId: "socket-B" },
+    ];
+    vi.spyOn(navigatorEngine, "forEachActiveSession").mockImplementation(
+      (cb) => {
+        for (const entry of entries) cb(entry);
+      },
+    );
+    const stopSpy = vi
+      .spyOn(navigatorEngine, "stopNavigatorSession")
+      .mockResolvedValue({ ok: true });
+
+    handlers.get("disconnect")();
+
+    expect(stopSpy).toHaveBeenCalledTimes(2);
+    expect(stopSpy).toHaveBeenCalledWith("sess-1", "disconnect");
+    expect(stopSpy).toHaveBeenCalledWith("sess-2", "disconnect");
+    expect(stopSpy).not.toHaveBeenCalledWith("sess-3", expect.anything());
+  });
+
+  it("forEachActiveSession invokes its callback for each registered entry", () => {
+    const { __activeSessionsForTests, forEachActiveSession } = navigatorEngine;
+    __activeSessionsForTests.clear();
+    __activeSessionsForTests.set("a", { sessionId: "a", socketId: "s-1" });
+    __activeSessionsForTests.set("b", { sessionId: "b", socketId: "s-2" });
+
+    const seen = [];
+    forEachActiveSession((entry) => seen.push(entry.sessionId));
+
+    expect(seen).toEqual(["a", "b"]);
+    __activeSessionsForTests.clear();
+  });
+});
