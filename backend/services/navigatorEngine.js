@@ -69,16 +69,27 @@ const DEFAULT_PHASE_WEIGHTS = {
 
 // Engine.create is synchronous and parses JSON files at construction time.
 // Eager initialization keeps the first compute() call cold-cache-free.
-const engine = Engine.create({
+let engine = Engine.create({
   championMetaPath: CHAMPION_META_PATH,
   matchupDataPath: MATCHUP_DATA_PATH,
 });
 
-// Per-session active token, used for supersession cancellation. When a new
-// compute is dispatched for a session, the prior token (if any) is cancelled
-// so the in-flight Rust compute aborts within ~50ms (the cancellation latency
-// gate from Phase 8.3).
+// Test-only seam: swap the engine with a mock so the MCTS session path can be
+// unit-tested without spawning the native iterate loop. Production never
+// invokes this — the real engine is constructed at module load.
+function __setEngineForTests(mockEngine) {
+  engine = mockEngine;
+}
+
+// Per-session active token for the αβ supersession path. When a new compute
+// is dispatched for a session, the prior token (if any) is cancelled so the
+// in-flight Rust compute aborts within ~50ms (Phase 8.3 gate).
 const activeTokens = new Map();
+
+// Per-session active MCTS session (Decision 9). Entry schema:
+//   { sessionId, version, session (napi handle), promise, rootPathCache,
+//     afterEventId, draftId, stopReason, pendingReroots, socketId }
+const activeSessions = new Map();
 
 function decodeEngineError(err) {
   try {
@@ -281,15 +292,23 @@ function assertProtocolMajor(version) {
 
 // Cancel any prior in-flight compute for this session so the Rust engine
 // aborts (≤50ms via Phase 8.3 gate). The new compute then dispatches.
-function supersedePriorCompute(sessionId) {
-  const prior = activeTokens.get(sessionId);
-  if (prior && prior.token && !prior.token.isCancelled()) {
-    prior.token.cancel();
+// Handles both αβ (activeTokens) and MCTS (activeSessions) paths.
+async function supersedePriorCompute(sessionId, reason = "supersede") {
+  const priorToken = activeTokens.get(sessionId);
+  if (priorToken && priorToken.token && !priorToken.token.isCancelled()) {
+    priorToken.token.cancel();
+  }
+  const priorSession = activeSessions.get(sessionId);
+  if (priorSession) {
+    priorSession.stopReason = reason;
+    priorSession.session.stop();
+    if (priorSession.promise) {
+      try { await priorSession.promise; } catch { /* prior handles its own */ }
+    }
   }
 }
 
 async function computeForDraft(navigatorDraft, session, events, version, io, options = {}) {
-  void io;
   if (!navigatorDraft || !navigatorDraft.id) {
     throw new Error("navigatorDraft.id is required");
   }
@@ -299,7 +318,15 @@ async function computeForDraft(navigatorDraft, session, events, version, io, opt
   if (typeof version !== "number") {
     throw new Error("version is required");
   }
+  const algorithm = resolveAlgorithm(options.algorithm);
+  if (algorithm === "mcts") {
+    return startNavigatorSession(navigatorDraft, session, events, version, io, options);
+  }
+  return computeForDraftAB(navigatorDraft, session, events, version, io, options);
+}
 
+async function computeForDraftAB(navigatorDraft, session, events, version, io, options = {}) {
+  void io;
   const exclusions = await getCrossGameExclusions(session, navigatorDraft);
   const request = await buildEngineRequest(
     session,
@@ -310,7 +337,7 @@ async function computeForDraft(navigatorDraft, session, events, version, io, opt
   );
   const lastEventId = getLastEventId(events);
 
-  supersedePriorCompute(session.id);
+  await supersedePriorCompute(session.id);
   const token = new CancelToken();
   activeTokens.set(session.id, { version, token });
 
@@ -353,8 +380,126 @@ async function computeForDraft(navigatorDraft, session, events, version, io, opt
   return { version, snapshot };
 }
 
+// MCTS session path (Decision 9). Owns a NavigatorSession napi handle for the
+// session's lifetime, streams partials via onPartial, persists only on
+// user-stop. Closure-captures `entry` so the continuation reads stopReason
+// off the local var (never re-reads the map, which may have been replaced).
+async function startNavigatorSession(navigatorDraft, sess, events, version, io, options = {}) {
+  const exclusions = await getCrossGameExclusions(sess, navigatorDraft);
+  const request = await buildEngineRequest(
+    sess,
+    events,
+    exclusions,
+    options.forcedBranches || [],
+    options.algorithm,
+  );
+  const afterEventId = getLastEventId(events);
+
+  await supersedePriorCompute(sess.id, "supersede");
+
+  const napiSession = engine.createNavigatorSession(JSON.stringify(request));
+  const entry = {
+    sessionId: sess.id,
+    version,
+    session: napiSession,
+    promise: null,
+    rootPathCache: [],
+    afterEventId,
+    draftId: navigatorDraft.id,
+    stopReason: null,
+    pendingReroots: new Map(),
+    socketId: options.socketId || null,
+  };
+  activeSessions.set(sess.id, entry);
+
+  const onPartial = (jsonStr) => handlePartialOrError(entry, io, jsonStr);
+
+  // Hoist start() into try so a synchronous throw (e.g. TSF creation failure)
+  // still hits the identity-checked cleanup in finally (Codex R3-#1).
+  try {
+    const promise = napiSession.start(onPartial);
+    entry.promise = promise;
+    const finalJson = await promise;
+    const reason = entry.stopReason; // closure-captured, not map-read
+    if (reason === "supersede" || reason === "disconnect") {
+      return { version, snapshot: null, supersededOrDropped: true };
+    }
+    const response = JSON.parse(finalJson);
+    assertProtocolMajor(response.protocolVersion);
+    const shaped = shapeSnapshot(navigatorDraft, entry.afterEventId, response);
+    const persisted = await persistSnapshot(shaped);
+    io.to(`navigator:${sess.id}`).emit("navigatorSnapshot", {
+      session: sess,
+      draft: navigatorDraft,
+      events,
+      snapshot: persisted,
+    });
+    return { version, snapshot: persisted };
+  } finally {
+    if (activeSessions.get(sess.id) === entry) {
+      activeSessions.delete(sess.id);
+    }
+  }
+}
+
+// Identity-checked routing of TSF emits from the iterate loop. Drops late
+// partials/errors from a superseded session (Codex R2-#2). rootPath comes
+// from response.meta.rootPath (authoritative per Decision 7), NOT from the
+// backend's rootPathCache.
+function handlePartialOrError(entry, io, jsonStr) {
+  if (activeSessions.get(entry.sessionId) !== entry) return;
+  if (entry.stopReason !== null) return;
+
+  let parsed;
+  try { parsed = JSON.parse(jsonStr); } catch { return; }
+
+  if (parsed.rerootError !== undefined) {
+    io.to(`navigator:${entry.sessionId}`).emit("navigatorRerootError", {
+      sessionId: entry.sessionId,
+      draftId: entry.draftId,
+      rerootId: parsed.rerootId,
+      attemptedPath: parsed.attemptedPath,
+      error: parsed.rerootError,
+    });
+    return;
+  }
+
+  const shaped = shapeSnapshot({ id: entry.draftId }, entry.afterEventId, parsed);
+  shaped.id = "partial";
+  io.to(`navigator:${entry.sessionId}`).emit("navigatorPartialSnapshot", {
+    sessionId: entry.sessionId,
+    draftId: entry.draftId,
+    version: entry.version,
+    afterEventId: entry.afterEventId,
+    snapshot: shaped,
+  });
+
+  if (Array.isArray(parsed.meta?.rootPath)) {
+    entry.rootPathCache = parsed.meta.rootPath;
+  }
+}
+
+// Set stopReason BEFORE calling stop() so the resolving promise's
+// closure-captured reason is correct (Decision 9 sequencing).
+async function stopNavigatorSession(sessionId, reason = "user") {
+  const entry = activeSessions.get(sessionId);
+  if (!entry || !entry.session.isActive()) return { ok: false };
+  entry.stopReason = reason;
+  entry.session.stop();
+  return { ok: true };
+}
+
+async function rerootNavigatorSession(sessionId, rerootId, rerootStep) {
+  const entry = activeSessions.get(sessionId);
+  if (!entry || !entry.session.isActive()) {
+    return { ok: false, reason: "no-active-session" };
+  }
+  entry.session.reroot(BigInt(rerootId), JSON.stringify(rerootStep));
+  return { ok: true };
+}
+
 function getEngineStatus() {
-  return { activeSessions: activeTokens.size };
+  return { activeSessions: activeTokens.size + activeSessions.size };
 }
 
 async function shutdownEngine() {
@@ -362,6 +507,10 @@ async function shutdownEngine() {
     if (token && !token.isCancelled()) token.cancel();
   }
   activeTokens.clear();
+  for (const entry of activeSessions.values()) {
+    entry.stopReason = "supersede";
+    entry.session.stop();
+  }
 }
 
 module.exports = {
@@ -370,5 +519,11 @@ module.exports = {
   shutdownEngine,
   shapeSnapshot,
   persistSnapshot,
+  startNavigatorSession,
+  stopNavigatorSession,
+  rerootNavigatorSession,
   isMctsToggleEnabled: () => MCTS_TOGGLE_ENABLED,
+  __setEngineForTests,
+  __activeSessionsForTests: activeSessions,
+  __handlePartialOrErrorForTests: handlePartialOrError,
 };
