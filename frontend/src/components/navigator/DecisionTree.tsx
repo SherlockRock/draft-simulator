@@ -61,6 +61,10 @@ interface DecisionTreeProps {
     } | null;
     /** Phase 7b T15: invoked when the user clicks the Stop button. */
     onStop?: () => void;
+    /** Phase 7c T13: true when the session is paused — drives the Resume button visibility. */
+    hasPausedSession?: boolean;
+    /** Phase 7c T13: invoked when the user clicks the Resume button. */
+    onResume?: () => void;
     highlightedPath: number[] | null;
     scenarioPaths: TieredScenarioPath[];
     panRequest: { path: number[] } | null;
@@ -1497,7 +1501,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                 setContextMenuState({ x: e.pageX, y: e.pageY, target: "background" });
             }}
         >
-            <Show when={props.isComputing || props.isSessionActive}>
+            <Show when={props.isComputing || props.isSessionActive || props.hasPausedSession}>
                 {/* Phase 7b T15: indicator wrapper drops `pointer-events-none`
                     so the embedded Stop button is clickable. The button itself
                     is gated on `isSessionActive` — αβ never sets that flag, so
@@ -1511,7 +1515,13 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                         class="h-3 w-3 animate-spin rounded-full border-2 border-slate-600 border-t-sky-300"
                         aria-hidden="true"
                     />
-                    <span>{props.isStopping ? "Stopping…" : "Computing…"}</span>
+                    <span>
+                        {props.isStopping
+                            ? "Stopping…"
+                            : props.hasPausedSession
+                            ? "Paused"
+                            : "Computing…"}
+                    </span>
                     <Show when={props.indicatorMeta}>
                         {(metaAcc) => {
                             const m = metaAcc();
@@ -1552,6 +1562,21 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                             class="rounded-full border border-slate-600 bg-slate-800/80 px-2.5 py-0.5 text-[11px] font-medium text-slate-200 transition-colors hover:border-slate-500 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {props.isStopping ? "Stopping…" : "Stop"}
+                        </button>
+                    </Show>
+                    {/* Phase 7c T13: Resume button. Mutually exclusive with Stop via
+                        hasPausedSession's !isSessionActive term. Same styling as Stop. */}
+                    <Show when={props.hasPausedSession && props.onResume}>
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                props.onResume?.();
+                            }}
+                            disabled={props.isStopping}
+                            class="rounded-full border border-slate-600 bg-slate-800/80 px-2.5 py-0.5 text-[11px] font-medium text-slate-200 transition-colors hover:border-slate-500 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            Resume
                         </button>
                     </Show>
                 </div>

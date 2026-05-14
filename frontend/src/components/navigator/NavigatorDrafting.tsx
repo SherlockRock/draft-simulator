@@ -23,6 +23,8 @@ const NavigatorDrafting: Component = () => {
         isSessionActive,
         isStopping,
         onStop,
+        hasPausedSession,
+        onResume,
         onReroot,
         currentMeta,
         selectedScenarioIndex,
@@ -385,6 +387,12 @@ const NavigatorDrafting: Component = () => {
                             isStopping={isStopping()}
                             indicatorMeta={currentMeta()}
                             onStop={onStop}
+                            hasPausedSession={
+                                viewingGameNumber() === null
+                                    ? hasPausedSession()
+                                    : false
+                            }
+                            onResume={onResume}
                             highlightedPath={highlightedTreePath()}
                             confirmedDepth={confirmedDepth()}
                             scenarioPaths={(() => {
