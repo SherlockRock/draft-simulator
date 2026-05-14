@@ -366,11 +366,23 @@ async function supersedePriorCompute(sessionId, reason = "supersede") {
   }
   const priorSession = activeSessions.get(sessionId);
   if (priorSession) {
-    priorSession.stopReason = reason;
-    priorSession.session.end();
-    if (priorSession.promise) {
-      try { await priorSession.promise; } catch { /* prior handles its own */ }
+    priorSession.stopReason = reason; // BEFORE awaiting pause-persist.
+    // v3 B4: wait for any in-flight pause-persist before calling end().
+    if (priorSession.pausePersistPromise) {
+      try { await priorSession.pausePersistPromise; } catch {}
     }
+    // v4 R4-BLOCKING: handle completed-pause case — delete the persisted
+    // pause snapshot whose state has been invalidated by this supersession.
+    if (priorSession.lastPersistedPauseSnapshotId) {
+      try {
+        await NavigatorSnapshot.destroy({ where: { id: priorSession.lastPersistedPauseSnapshotId } });
+        priorSession.lastPersistedPauseSnapshotId = null;
+      } catch (e) {
+        console.error("[nav] failed to delete prior paused snapshot on supersession:", e);
+      }
+    }
+    priorSession.session.end();
+    // No await on priorSession.promise — .then() cleanup runs independently.
   }
 }
 
@@ -452,13 +464,9 @@ async function computeForDraftAB(navigatorDraft, session, events, version, io, o
 // off the local var (never re-reads the map, which may have been replaced).
 async function startNavigatorSession(navigatorDraft, sess, events, version, io, options = {}) {
   const exclusions = await getCrossGameExclusions(sess, navigatorDraft);
-  const request = await buildEngineRequest(
-    sess,
-    events,
-    exclusions,
-    options.forcedBranches || [],
-    options.algorithm,
-  );
+  const request = options.initialRootPath
+    ? await buildEngineRequestWithReroot(sess, events, exclusions, options.forcedBranches || [], options.algorithm, options.initialRootPath)
+    : await buildEngineRequest(sess, events, exclusions, options.forcedBranches || [], options.algorithm);
   const afterEventId = getLastEventId(events);
 
   await supersedePriorCompute(sess.id, "supersede");
@@ -469,11 +477,11 @@ async function startNavigatorSession(navigatorDraft, sess, events, version, io, 
     version,
     session: napiSession,
     promise: null,
-    pausePersistPromise: null,           // v3 — tracks in-flight pause persist
-    lastPersistedPauseSnapshotId: null,  // v4 R4-BLOCKING — for stale-row delete on supersession
-    rootPathCache: [],                    // existing — diagnostic only
+    pausePersistPromise: null,
+    lastPersistedPauseSnapshotId: null,
+    rootPathCache: [],
     afterEventId,
-    draft: navigatorDraft,                // v3 — full Sequelize model
+    draft: navigatorDraft,
     draftId: navigatorDraft.id,
     stopReason: null,
     socketId: options.socketId || null,
@@ -482,32 +490,28 @@ async function startNavigatorSession(navigatorDraft, sess, events, version, io, 
 
   const onPartial = (jsonStr) => handlePartialOrError(entry, io, jsonStr);
 
-  // Hoist start() into try so a synchronous throw (e.g. TSF creation failure)
-  // still hits the identity-checked cleanup in finally (Codex R3-#1).
   try {
     const promise = napiSession.start(onPartial);
     entry.promise = promise;
-    const finalJson = await promise;
-    const reason = entry.stopReason; // closure-captured, not map-read
-    if (reason === "supersede" || reason === "disconnect") {
-      return { version, snapshot: null, supersededOrDropped: true };
-    }
-    const response = JSON.parse(finalJson);
-    assertProtocolMajor(response.protocolVersion);
-    const shaped = shapeSnapshot(navigatorDraft, entry.afterEventId, response);
-    const persisted = await persistSnapshot(shaped);
-    io.to(`navigator:${sess.id}`).emit("navigatorSnapshot", {
-      session: sess,
-      draft: navigatorDraft,
-      events,
-      snapshot: persisted,
+    // v3 M2: fire-and-forget. .then() handler cleans up the entry on
+    // session-end. Persistence is inline via pauseNavigatorSession
+    // (or disconnect IIFE) — NOT here.
+    promise.catch(err => {
+      console.error(`[nav] session ${sess.id} promise rejected:`, err);
+    }).then(() => {
+      if (activeSessions.get(sess.id) === entry) {
+        activeSessions.delete(sess.id);
+      }
     });
-    return { version, snapshot: persisted };
-  } finally {
+  } catch (e) {
+    // Synchronous throw from start() (e.g. TSF creation failure).
     if (activeSessions.get(sess.id) === entry) {
       activeSessions.delete(sess.id);
     }
+    throw e;
   }
+
+  return { version, snapshot: null, sessionStarted: true };
 }
 
 // Identity-checked routing of TSF emits from the iterate loop. Drops late
