@@ -175,7 +175,8 @@ const NavigatorSnapshotDataSchema = z.object({
             transpositionsFound: z.number(),
             mctsMeta: NavigatorMctsMetaSchema.optional(),
             partial: z.boolean().optional(),
-            rootPath: z.array(z.array(z.string())).optional()
+            rootPath: z.array(z.array(z.string())).optional(),
+            persistOnPause: z.boolean().optional()
         })
         .nullable(),
     createdAt: z.string()
@@ -913,15 +914,27 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             const env = parsed.data;
             if (env.sessionId !== untrack(currentSessionId)) return;
             if (env.draftId !== untrack(navigatorContext).draft?.id) return;
-            if (!untrack(isSessionActive)) return;
             if (env.version < untrack(latestVersionSeen)) return;
             const envelopeRootPath = env.snapshot.meta?.rootPath ?? [];
             if (!pathsEqual(envelopeRootPath, untrack(displayedRootPath))) return;
+            if (!untrack(isSessionActive)) {
+                // v4 R4-M3 self-heal: a partial passed all other gates but session
+                // is "inactive". This happens for backend-driven recomputes that
+                // didn't go through emitPick/Ban/Undo/setAlgorithm/onReroot (e.g.
+                // a navigatorSetAlgorithm-triggered compute, or initial compute on
+                // an existing in-flight session via join). Self-heal so subsequent
+                // partials accept normally. Only on strictly-newer version + when
+                // not paused/stopping.
+                if (untrack(isStopping)) return;
+                if (env.version <= untrack(latestVersionSeen)) return;
+                const ctx = untrack(navigatorContext);
+                const paused = ctx.snapshot?.meta?.persistOnPause === true
+                    && ctx.snapshot?.after_event_id === (ctx.events.length > 0 ? ctx.events[ctx.events.length - 1].id : null);
+                if (paused) return;
+                setIsSessionActive(true);
+            }
             setLatestVersionSeen(env.version);
             setPartialSnapshot(env.snapshot);
-            // Decision 8: confirm any pending reroot whose priorPath +
-            // delta matches the engine-echoed root. Once confirmed, the
-            // optimistic bookkeeping is no longer needed.
             for (const [rerootId, pending] of pendingReroots) {
                 const expected = [...pending.priorPath, ...pending.delta];
                 if (pathsEqual(expected, envelopeRootPath)) {

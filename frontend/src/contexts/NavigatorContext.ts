@@ -157,6 +157,7 @@ export interface NavigatorSnapshotData {
         mctsMeta?: NavigatorMctsMeta;
         partial?: boolean;
         rootPath?: string[][];
+        persistOnPause?: boolean;
     } | null;
     createdAt: string;
 }
