@@ -230,24 +230,44 @@ function getLastEventId(events) {
   return ordered.length > 0 ? ordered[ordered.length - 1].id : null;
 }
 
-async function storeSnapshot(navigatorDraft, lastEventId, response) {
-  const snapshot = await NavigatorSnapshot.create({
+// Pure transformation: returns the in-memory wire shape used by both the
+// persistence path (finals) and the partial-emit path (T10). No DB write.
+// id/createdAt/updatedAt are nulled out here and filled in by persistSnapshot.
+function shapeSnapshot(navigatorDraft, lastEventId, response) {
+  return {
+    id: null,
     navigator_draft_id: navigatorDraft.id,
     after_event_id: lastEventId,
-    pruned_tree: response.tree,
+    tree: response.tree,
     scenarios: response.scenarios,
-    compute_meta: response.meta,
+    meta: response.meta,
+    createdAt: null,
+    updatedAt: null,
+  };
+}
+
+// Persists a shaped snapshot via the NavigatorSnapshot model and merges the
+// row's id/createdAt/updatedAt into the returned wire shape.
+async function persistSnapshot(shaped) {
+  const row = await NavigatorSnapshot.create({
+    navigator_draft_id: shaped.navigator_draft_id,
+    after_event_id: shaped.after_event_id,
+    pruned_tree: shaped.tree,
+    scenarios: shaped.scenarios,
+    compute_meta: shaped.meta,
   });
   return {
-    id: snapshot.id,
-    navigator_draft_id: snapshot.navigator_draft_id,
-    after_event_id: snapshot.after_event_id,
-    tree: snapshot.pruned_tree,
-    scenarios: snapshot.scenarios,
-    meta: snapshot.compute_meta,
-    createdAt: snapshot.createdAt,
-    updatedAt: snapshot.updatedAt,
+    ...shaped,
+    id: row.id,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
+}
+
+// Composition kept for existing callers (computeForDraft). T10's partial-emit
+// path will use shapeSnapshot directly without persisting.
+async function storeSnapshot(navigatorDraft, lastEventId, response) {
+  return persistSnapshot(shapeSnapshot(navigatorDraft, lastEventId, response));
 }
 
 function assertProtocolMajor(version) {
@@ -348,5 +368,7 @@ module.exports = {
   computeForDraft,
   getEngineStatus,
   shutdownEngine,
+  shapeSnapshot,
+  persistSnapshot,
   isMctsToggleEnabled: () => MCTS_TOGGLE_ENABLED,
 };
