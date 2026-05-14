@@ -242,6 +242,13 @@ export interface NavigatorWorkflowContextValue {
         targetSlot: number;
         newChampionId: string;
     }) => void;
+    /** Phase 7b T16 (Decision 8): optimistic reroot. `delta` is the sequence of
+     *  `championIds` tuples from the current `displayedRootPath` endpoint down
+     *  to the clicked node. Caller (DecisionTree) walks the rendered tree to
+     *  build this; this closure handles bookkeeping (monotonic rerootId,
+     *  pendingReroots map, optimistic displayedRootPath extension, partial
+     *  clear) and emits `navigatorReroot` over the active socket. */
+    onReroot: (delta: string[][]) => void;
 }
 
 export const NavigatorWorkflowContext = createContext<NavigatorWorkflowContextValue>();

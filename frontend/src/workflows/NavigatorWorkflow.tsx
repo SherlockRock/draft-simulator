@@ -272,9 +272,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     // synchronously inside the handler, so this effect always sees post-remap
     // selection state. The "only set when null" guard preserves user clicks
     // (and remap's name-match results) across recomputes.
-    const currentSnapshotId = createMemo(
-        () => navigatorContext().snapshot?.id ?? null
-    );
+    const currentSnapshotId = createMemo(() => navigatorContext().snapshot?.id ?? null);
     createEffect(() => {
         const snapId = currentSnapshotId();
         if (snapId === null) return;
@@ -318,8 +316,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     // engine confirmation arrives in subsequent partials' meta.rootPath. The
     // `pendingReroots` map tracks in-flight reroot requests so a server-side
     // rejection can roll back the optimistic state (Decision 8).
-    // `nextRerootId` is consumed in T16 (reroot UX); the disable is removed
-    // when that task lands.
+    // `nextRerootId` is consumed by `onReroot` (T16) as a monotonic counter.
     const [partialSnapshot, setPartialSnapshot] =
         createSignal<NavigatorSnapshotData | null>(null);
     const [latestVersionSeen, setLatestVersionSeen] = createSignal<number>(0);
@@ -334,7 +331,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         number,
         { delta: string[][]; priorPath: string[][] }
     >();
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars, prefer-const
+
     let nextRerootId = 0;
 
     interface CachedResult {
@@ -839,7 +836,10 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         const scenarioKeyPaths: string[] = [];
         if (currentSynthetic && snapshot) {
             for (const scenario of snapshot.scenarios) {
-                const keyPath = pathStepsToNodeKeyPath(currentSynthetic, scenario.treePath);
+                const keyPath = pathStepsToNodeKeyPath(
+                    currentSynthetic,
+                    scenario.treePath
+                );
                 if (keyPath === null) continue;
                 const segs = keyPath === "" ? [] : keyPath.split(">");
                 const fanoutRelativeSegs = segs.slice(spineLength);
@@ -1270,6 +1270,43 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         setIsStopping(true);
     };
 
+    // Phase 7b T16 (Decision 8): optimistic reroot. Caller (DecisionTree
+    // hover-button) builds `delta` by walking the rendered tree from its
+    // root down to the clicked node, collecting each step's championIds.
+    // Bookkeeping order matters: record into `pendingReroots` BEFORE
+    // mutating `displayedRootPath` so a hypothetical instantly-arriving
+    // partial-snapshot listener (same tick, different microtask) sees the
+    // pending entry. The partial gate also gets re-opened — a reroot
+    // triggers fresh iteration on the new subtree.
+    const onReroot = (delta: string[][]) => {
+        const sock = currentSocket();
+        const sid = currentSessionId();
+        const draftId = untrack(navigatorContext).draft?.id;
+        if (!sock || !sid || !draftId) return;
+        if (delta.length === 0) return;
+
+        const priorPath = displayedRootPath();
+        const rerootId = ++nextRerootId;
+        pendingReroots.set(rerootId, { delta, priorPath });
+        // Optimistic: extend the displayed root immediately so the next
+        // arriving partial whose meta.rootPath echoes priorPath + delta
+        // passes the identity gate in handleDraftUpdate's partial listener.
+        setDisplayedRootPath([...priorPath, ...delta]);
+        // Clear the prior root's streaming overlay — the next partial
+        // under the new root will replace it; until then, fall through to
+        // the persisted snapshot's tree (rooted at session start, so visually
+        // stale but never wrong).
+        setPartialSnapshot(null);
+        setIsSessionActive(true);
+
+        sock.emit("navigatorReroot", {
+            sessionId: sid,
+            draftId,
+            rerootId,
+            rerootStep: delta
+        });
+    };
+
     const contextValue: NavigatorWorkflowContextValue = {
         navigatorContext,
         engineToggleEnabled,
@@ -1306,7 +1343,8 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         setLayoutOverride,
         clearAllLayoutOverrides,
         swapChampion,
-        createBranch
+        createBranch,
+        onReroot
     };
 
     return (

@@ -23,6 +23,7 @@ const NavigatorDrafting: Component = () => {
         isSessionActive,
         isStopping,
         onStop,
+        onReroot,
         currentMeta,
         selectedScenarioIndex,
         setSelectedScenarioIndex,
@@ -379,9 +380,7 @@ const NavigatorDrafting: Component = () => {
                                     : false
                             }
                             isSessionActive={
-                                viewingGameNumber() === null
-                                    ? isSessionActive()
-                                    : false
+                                viewingGameNumber() === null ? isSessionActive() : false
                             }
                             isStopping={isStopping()}
                             indicatorMeta={currentMeta()}
@@ -414,6 +413,7 @@ const NavigatorDrafting: Component = () => {
                             onConfirmProjectedPick={handleConfirmProjectedPick}
                             onOpenSwap={handleOpenSwap}
                             onOpenBranch={handleOpenBranch}
+                            onReroot={onReroot}
                         />
 
                         <div class="pointer-events-none absolute right-4 top-4 flex items-center gap-2">
@@ -440,8 +440,8 @@ const NavigatorDrafting: Component = () => {
                         >
                             <div class="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full border border-purple-500/40 bg-purple-500/15 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-purple-200">
                                 Experimental MCTS engine ·{" "}
-                                {navigatorContext().snapshot?.meta?.mctsMeta?.iterations ??
-                                    0}{" "}
+                                {navigatorContext().snapshot?.meta?.mctsMeta
+                                    ?.iterations ?? 0}{" "}
                                 iters
                             </div>
                         </Show>

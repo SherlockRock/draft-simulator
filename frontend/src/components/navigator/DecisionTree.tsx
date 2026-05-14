@@ -70,6 +70,12 @@ interface DecisionTreeProps {
     onConfirmProjectedPick?: (path: number[]) => void;
     onOpenSwap?: (path: number[]) => void;
     onOpenBranch?: (path: number[]) => void;
+    /** Phase 7b T16: invoked when the user clicks the hover-revealed reroot
+     *  button on an MCTS node. `delta` is the sequence of championIds tuples
+     *  from the rendered tree's root down to the clicked node — i.e. the
+     *  steps the engine should push onto displayedRootPath. Optional because
+     *  consumers outside the navigator runtime (e.g. tests) may not wire it. */
+    onReroot?: (delta: string[][]) => void;
 }
 
 interface TreeNodeWithPath extends LayoutNode {
@@ -406,6 +412,10 @@ const TreeNodeComponent: Component<{
     isLineageHover: boolean;
     onHover: (path: number[] | null) => void;
     onContextMenu: (event: MouseEvent, path: number[]) => void;
+    /** Phase 7b T16: parent-supplied click handler for the hover-revealed
+     *  reroot button. Receives the node's path-of-indices into the rendered
+     *  tree; parent resolves to the championIds delta. */
+    onRerootClick: (indexPath: number[]) => void;
 }> = (props) => {
     const clipSeed = createUniqueId();
     const championIds = createMemo(() => props.node.data.championIds);
@@ -489,7 +499,11 @@ const TreeNodeComponent: Component<{
     return (
         <g
             data-tree-node="true"
-            class="transition-transform duration-200 ease-out"
+            // Phase 7b T16: `group` enables the nested reroot-button's
+            // `group-hover:opacity-100` to reveal on parent hover. Tailwind's
+            // group/group-hover utilities work on SVG <g> with the standard
+            // v3 config used by the project.
+            class="group transition-transform duration-200 ease-out"
             transform={`translate(${props.node.x} ${props.node.y})`}
             opacity={strokeOpacity()}
             onPointerDown={(e) => {
@@ -595,7 +609,10 @@ const TreeNodeComponent: Component<{
                                         preserveAspectRatio="xMidYMid slice"
                                         clip-path={`url(#${singleClipId()})`}
                                         class="pointer-events-none"
-                                        style="-webkit-user-drag: none; user-select: none"
+                                        style={{
+                                            "-webkit-user-drag": "none",
+                                            "user-select": "none"
+                                        }}
                                     />
                                 )}
                             </Show>
@@ -652,7 +669,10 @@ const TreeNodeComponent: Component<{
                                         clip-path={`url(#${pairClipLeftId()})`}
                                         opacity={halfOpacity}
                                         class="pointer-events-none transition-opacity duration-150"
-                                        style="-webkit-user-drag: none; user-select: none"
+                                        style={{
+                                            "-webkit-user-drag": "none",
+                                            "user-select": "none"
+                                        }}
                                     />
                                 );
                             }}
@@ -674,7 +694,10 @@ const TreeNodeComponent: Component<{
                                         clip-path={`url(#${pairClipRightId()})`}
                                         opacity={halfOpacity}
                                         class="pointer-events-none transition-opacity duration-150"
-                                        style="-webkit-user-drag: none; user-select: none"
+                                        style={{
+                                            "-webkit-user-drag": "none",
+                                            "user-select": "none"
+                                        }}
                                     />
                                 );
                             }}
@@ -727,12 +750,7 @@ const TreeNodeComponent: Component<{
             {/* v5 phase 4: MCTS visit-share badge. Renders below the node when
                 the engine attached visit metadata. Color-coded purple to match
                 the engine-toggle and banner. Only shown on non-root nodes. */}
-            <Show
-                when={
-                    !isRoot() &&
-                    props.node.data.mctsExtras !== undefined
-                }
-            >
+            <Show when={!isRoot() && props.node.data.mctsExtras !== undefined}>
                 <g
                     transform={`translate(0 ${badgeOffsetY() + 14})`}
                     class="pointer-events-none"
@@ -772,10 +790,7 @@ const TreeNodeComponent: Component<{
                 transform group (y-offset badgeOffsetY() + 14).
                 Stubs receive paretoOnFrontier: false so this never fires for them. */}
             <Show
-                when={
-                    !isRoot() &&
-                    props.node.data.mctsExtras?.paretoOnFrontier === true
-                }
+                when={!isRoot() && props.node.data.mctsExtras?.paretoOnFrontier === true}
             >
                 <g
                     transform={`translate(28 ${badgeOffsetY() + 14})`}
@@ -798,6 +813,47 @@ const TreeNodeComponent: Component<{
                         fill="#92400e"
                     >
                         ★
+                    </text>
+                </g>
+            </Show>
+            {/* Phase 7b T16 (Decision 8): hover-revealed reroot button. Sits
+                ~20px right of the Pareto chip (at x=28); skips the rendered
+                root (path.length === 0) since you can't reroot to where you
+                already are. Gated on mctsExtras so αβ-rendered nodes never
+                expose it (Opus R1-#26: overlay, not context menu). The
+                child <g> has pointer-events-auto on opacity-0 so the cursor
+                still hits it pre-hover — but it's invisible. Without that,
+                Chrome's compositor would briefly miss the click during the
+                opacity transition. */}
+            <Show when={!isRoot() && props.node.data.mctsExtras !== undefined}>
+                <g
+                    class="cursor-pointer opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                    transform={`translate(48 ${badgeOffsetY() + 14})`}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        props.onRerootClick(props.node.data.path);
+                    }}
+                    role="button"
+                    aria-label="Re-root navigator at this node"
+                >
+                    <circle
+                        cx="0"
+                        cy="0"
+                        r="8"
+                        fill="#1e3a8a"
+                        stroke="#3b82f6"
+                        stroke-width="1"
+                    />
+                    <text
+                        x="0"
+                        y="3"
+                        text-anchor="middle"
+                        font-size="10"
+                        font-weight="700"
+                        fill="#dbeafe"
+                        class="pointer-events-none"
+                    >
+                        ↳
                     </text>
                 </g>
             </Show>
@@ -896,8 +952,12 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         const tree = effectiveTreeData();
         if (!tree) return;
         const validPaths = collectNodeKeyPaths(tree);
-        setManualExpansionKeys((prev) => new Set([...prev].filter((k) => validPaths.has(k))));
-        setManualCollapseKeys((prev) => new Set([...prev].filter((k) => validPaths.has(k))));
+        setManualExpansionKeys(
+            (prev) => new Set([...prev].filter((k) => validPaths.has(k)))
+        );
+        setManualCollapseKeys(
+            (prev) => new Set([...prev].filter((k) => validPaths.has(k)))
+        );
         const overrides = layoutOverrides();
         for (const key of overrides.keys()) {
             if (!validPaths.has(key)) {
@@ -1021,6 +1081,27 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         return getNodeAtPath(tree, path);
     };
 
+    // Phase 7b T16: walk the rendered (annotated) tree from root down to the
+    // clicked node, collecting championIds at each step. The result is the
+    // delta to push onto displayedRootPath — the engine treats `rerootStep`
+    // as a sequence of MoveIds applied via Mcts::reroot_to in order. We use
+    // the annotated tree (not the pruned tree) so reroots still work on
+    // visible-but-collapsed branches; `node.data.path` is identical between
+    // the two for any node the user can actually click.
+    const handleReroot = (indexPath: number[]) => {
+        if (indexPath.length === 0) return;
+        const tree = annotatedTree();
+        if (!tree) return;
+        const delta: string[][] = [];
+        let current: TreeNodeWithPath | null = tree;
+        for (const idx of indexPath) {
+            current = current?.children[idx] ?? null;
+            if (!current) return;
+            delta.push([...current.championIds]);
+        }
+        props.onReroot?.(delta);
+    };
+
     const collapseSubtree = (path: number[]) => {
         const tree = effectiveTreeData();
         if (!tree) return;
@@ -1076,8 +1157,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         if (!node) return [];
 
         const isConfirmed = path.length < props.confirmedDepth;
-        const isDepthOneProjected =
-            !isConfirmed && path.length === props.confirmedDepth;
+        const isDepthOneProjected = !isConfirmed && path.length === props.confirmedDepth;
         const tree = effectiveTreeData();
         const nodeKeyPathString = tree ? pathIndicesToNodeKeyPath(tree, path) : null;
         const hasLayoutOverride =
@@ -1270,7 +1350,10 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
             const dx = moveEvent.pageX - current.startPageX;
             const dy = moveEvent.pageY - current.startPageY;
             const dist2 = dx * dx + dy * dy;
-            if (!current.startedDragging && dist2 < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) {
+            if (
+                !current.startedDragging &&
+                dist2 < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX
+            ) {
                 return;
             }
             if (!current.startedDragging) {
@@ -1623,6 +1706,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                                 )}
                                 onHover={setHoveredPath}
                                 onContextMenu={handleNodeContextMenu}
+                                onRerootClick={handleReroot}
                             />
                         )}
                     </For>
