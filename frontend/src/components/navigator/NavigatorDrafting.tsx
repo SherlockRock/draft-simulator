@@ -20,6 +20,10 @@ const NavigatorDrafting: Component = () => {
         syntheticTree,
         effectiveScenarios,
         isComputing: isComputingFromContext,
+        isSessionActive,
+        isStopping,
+        onStop,
+        currentMeta,
         selectedScenarioIndex,
         setSelectedScenarioIndex,
         panRequest,
@@ -374,6 +378,14 @@ const NavigatorDrafting: Component = () => {
                                     ? isComputingFromContext()
                                     : false
                             }
+                            isSessionActive={
+                                viewingGameNumber() === null
+                                    ? isSessionActive()
+                                    : false
+                            }
+                            isStopping={isStopping()}
+                            indicatorMeta={currentMeta()}
+                            onStop={onStop}
                             highlightedPath={highlightedTreePath()}
                             confirmedDepth={confirmedDepth()}
                             scenarioPaths={(() => {

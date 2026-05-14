@@ -325,6 +325,11 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     const [latestVersionSeen, setLatestVersionSeen] = createSignal<number>(0);
     const [displayedRootPath, setDisplayedRootPath] = createSignal<string[][]>([]);
     const [isSessionActive, setIsSessionActive] = createSignal<boolean>(false);
+    // Phase 7b T15: optimistic stopping state. Flipped true when the user
+    // clicks Stop (so the indicator can swap to "Stopping…" before the engine
+    // observes the cooperative cancel), cleared in the final-arrives batch
+    // alongside `isSessionActive` so a subsequent trigger starts fresh.
+    const [isStopping, setIsStopping] = createSignal<boolean>(false);
     const pendingReroots = new Map<
         number,
         { delta: string[][]; priorPath: string[][] }
@@ -751,8 +756,12 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                 // next user trigger can flip it back on. Gated on
                 // `snapshotChanged` because `handleDraftUpdate` also fires on
                 // event-only updates that don't supersede the partial.
+                // T15: also clear `isStopping` here — whether the final landed
+                // organically or because of a user Stop, the optimistic
+                // "Stopping…" state has served its purpose.
                 setPartialSnapshot(null);
                 setIsSessionActive(false);
+                setIsStopping(false);
             }
         });
 
@@ -969,6 +978,9 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         setLatestVersionSeen(0);
         setDisplayedRootPath([]);
         setIsSessionActive(false);
+        // T15: include the optimistic stopping flag so a session swap doesn't
+        // leave the next session indicating "Stopping…".
+        setIsStopping(false);
         pendingReroots.clear();
     });
 
@@ -1232,6 +1244,32 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         return navigatorContext().snapshot?.scenarios ?? [];
     });
 
+    // Phase 7b T15: meta block the Computing indicator should read for
+    // iter / elapsed counters. The streaming partial's meta is preferred
+    // because it carries the live-updating mctsMeta.iterations and
+    // computeTimeMs — the persisted snapshot's meta only refreshes on
+    // finals (and αβ snapshots never carry mctsMeta at all, in which case
+    // the readout gracefully renders nothing).
+    const currentMeta = createMemo<NavigatorSnapshotData["meta"]>(() => {
+        const partial = partialSnapshot();
+        if (partial) return partial.meta;
+        return navigatorContext().snapshot?.meta ?? null;
+    });
+
+    // Phase 7b T15: cooperative stop. Emit the socket event for the active
+    // session id; the backend's `navigatorStopCompute` handler short-circuits
+    // the iterate loop, which then produces a final snapshot that lands via
+    // `handleDraftUpdate` and clears `isStopping` in the batch. Setting
+    // `isStopping` here gives users immediate visual feedback during the
+    // latency_budget_ms gap before the final arrives.
+    const onStop = () => {
+        const sock = currentSocket();
+        const sid = currentSessionId();
+        if (!sock || !sid) return;
+        sock.emit("navigatorStopCompute", { sessionId: sid });
+        setIsStopping(true);
+    };
+
     const contextValue: NavigatorWorkflowContextValue = {
         navigatorContext,
         engineToggleEnabled,
@@ -1240,6 +1278,10 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         syntheticTree: effectiveTree,
         effectiveScenarios,
         isComputing,
+        isSessionActive,
+        isStopping,
+        onStop,
+        currentMeta,
         joinSession,
         leaveSession,
         emitPick,

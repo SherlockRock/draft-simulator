@@ -188,6 +188,23 @@ export interface NavigatorWorkflowContextValue {
      *  bypass the synthesize/merge/prune pipeline. */
     effectiveScenarios: Accessor<NavigatorScenario[]>;
     isComputing: Accessor<boolean>;
+    /** Phase 7b T15: true while an MCTS streaming session is iterating
+     *  (set on user-trigger, cleared in the final-arrives batch). Drives
+     *  the Stop button's visibility in the Computing indicator. αβ never
+     *  flips this on, so the button stays hidden for the synchronous
+     *  engine. */
+    isSessionActive: Accessor<boolean>;
+    /** Phase 7b T15: optimistic "Stopping…" state. Flipped true when the
+     *  user clicks Stop and back to false in the final-arrives batch. */
+    isStopping: Accessor<boolean>;
+    /** Phase 7b T15: emit `navigatorStopCompute` and flip `isStopping`
+     *  optimistically. No-op if there is no active socket / session. */
+    onStop: () => void;
+    /** Phase 7b T15: the meta block to show in the Computing readout.
+     *  Prefers the streaming partial's meta (live iter/elapsed counters)
+     *  and falls through to the persisted snapshot's meta when no partial
+     *  is active. Null when neither side has a meta block. */
+    currentMeta: Accessor<NavigatorSnapshotData["meta"]>;
     joinSession: (sessionId: string) => void;
     leaveSession: () => void;
     emitPick: (draftId: string, championId: string, slot: number) => void;
