@@ -201,6 +201,8 @@ export interface NavigatorWorkflowContextValue {
     /** Phase 7b T15: emit `navigatorStopCompute` and flip `isStopping`
      *  optimistically. No-op if there is no active socket / session. */
     onStop: () => void;
+    hasPausedSession: Accessor<boolean>;
+    onResume: () => void;
     /** Phase 7b T15: the meta block to show in the Computing readout.
      *  Prefers the streaming partial's meta (live iter/elapsed counters)
      *  and falls through to the persisted snapshot's meta when no partial

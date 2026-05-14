@@ -328,6 +328,20 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     // observes the cooperative cancel), cleared in the final-arrives batch
     // alongside `isSessionActive` so a subsequent trigger starts fresh.
     const [isStopping, setIsStopping] = createSignal<boolean>(false);
+    // Phase 7c T12: derived from the latest snapshot's meta.persistOnPause flag.
+    // Gated on (a) snapshot exists, (b) session is not currently active, (c)
+    // snapshot is fresh (its after_event_id matches the current latest event).
+    // The freshness check (v4 B4) prevents a stale paused snapshot — written
+    // by a superseded session — from surfacing as "paused" on reload.
+    const hasPausedSession = createMemo(() => {
+        const ctx = navigatorContext();
+        const snap = ctx.snapshot;
+        if (!snap?.meta) return false;
+        if (isSessionActive()) return false;
+        if (snap.meta.persistOnPause !== true) return false;
+        const latestEventId = ctx.events.length > 0 ? ctx.events[ctx.events.length - 1].id : null;
+        return snap.after_event_id === latestEventId;
+    });
     const pendingReroots = new Map<
         number,
         { delta: string[][]; priorPath: string[][] }
@@ -485,19 +499,40 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                   confirmedTurns
               )
             : [];
-        setNavigatorContext({
-            session: response.session,
-            draft: response.draft ?? null,
-            events: response.events ?? [],
-            snapshot: response.snapshot ? { ...response.snapshot, scenarios } : null,
-            completedGames: response.completedGames ?? [],
-            connected: true,
-            error: null
-        });
         const joinSynthetic = response.snapshot
             ? synthesizeFullTree(response.snapshot.tree, confirmedTurns)
             : null;
-        setSyntheticTreeSignal(joinSynthetic);
+        const session = response.session;
+        const snapshot = response.snapshot;
+        const events = response.events ?? [];
+        batch(() => {
+            // v4 M3 lifecycle reset — prevents stale active/stopping/version state
+            // from leaking across session joins or rejoins.
+            setPartialSnapshot(null);
+            setIsSessionActive(false);
+            setIsStopping(false);
+            setLatestVersionSeen(0);
+            setDisplayedRootPath([]);
+            pendingReroots.clear();
+            setNavigatorContext({
+                session,
+                draft: response.draft ?? null,
+                events,
+                snapshot: snapshot ? { ...snapshot, scenarios } : null,
+                completedGames: response.completedGames ?? [],
+                connected: true,
+                error: null
+            });
+            setSyntheticTreeSignal(joinSynthetic);
+            setLastEventIdSeen(
+                events.length > 0 ? events[events.length - 1].id : null
+            );
+            setCurrentSessionId(session.id);
+            setEngineToggleEnabled(response.engineToggleEnabled === true);
+            if (response.currentAlgorithm) {
+                setCurrentAlgorithmSignal(response.currentAlgorithm);
+            }
+        });
         if (response.snapshot && response.session) {
             writeCacheEntry(
                 response.session.config_version,
@@ -506,16 +541,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                 scenarios,
                 joinSynthetic
             );
-        }
-        setLastEventIdSeen(
-            response.events && response.events.length > 0
-                ? response.events[response.events.length - 1].id
-                : null
-        );
-        setCurrentSessionId(response.session.id);
-        setEngineToggleEnabled(response.engineToggleEnabled === true);
-        if (response.currentAlgorithm) {
-            setCurrentAlgorithmSignal(response.currentAlgorithm);
         }
         setPendingJoin(null);
     };
@@ -557,7 +582,13 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         const prevSynthetic = untrack(syntheticTreeSignal);
         const prevSnapshot = prev.snapshot;
 
-        const nextEvents = data.events ?? prevEvents;
+        // v4 R1 monotonic guard — defends against late persist-on-pause broadcasts
+        // rolling the event list backward. Under v4 these broadcasts don't carry
+        // events at all (omitted from payload), so this branch's truthy path is
+        // rare; the guard exists for defense-in-depth.
+        const nextEvents = data.events !== undefined
+            ? (data.events.length >= prevEvents.length ? data.events : prevEvents)
+            : prevEvents;
         const nextSnapshot = data.snapshot === undefined ? prevSnapshot : data.snapshot;
 
         const eventsChanged = nextEvents !== prevEvents;
@@ -725,6 +756,19 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             }
         }
 
+        // v4 M4 rootPath-aware cleanup of pendingReroots — confirm matching
+        // entries, rollback non-matching. Gated on:
+        //   - snapshotChanged (we have new data to evaluate)
+        //   - persistOnPause === true (this is a pause-finalize, not a transient partial)
+        //   - snapshot is fresh (after_event_id matches latest event — prevents a
+        //     stale paused broadcast from incorrectly rolling back live pending reroots)
+        //   - !isSessionActive (the engine isn't about to broadcast newer authoritative state)
+        const latestEventIdAtUpdate = nextEvents.length > 0
+            ? nextEvents[nextEvents.length - 1].id
+            : null;
+        const snapshotIsFresh = finalSnapshot?.after_event_id === latestEventIdAtUpdate;
+        const sessionIsIdle = !untrack(isSessionActive); // captured pre-batch reset
+
         // Phase 7b T14 (Opus R2-NIT-5): wrap final-snapshot state updates in
         // `batch` so the partial → final transition lands in a single frame.
         // Without batch, the tree memo would briefly reactively re-evaluate
@@ -760,6 +804,21 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                 setPartialSnapshot(null);
                 setIsSessionActive(false);
                 setIsStopping(false);
+            }
+            if (snapshotChanged
+                && finalSnapshot?.meta?.persistOnPause === true
+                && snapshotIsFresh
+                && sessionIsIdle) {
+                const authoritativeRootPath = finalSnapshot.meta.rootPath ?? [];
+                for (const [rerootId, pending] of pendingReroots) {
+                    const expected = [...pending.priorPath, ...pending.delta];
+                    if (pathsEqual(expected, authoritativeRootPath)) {
+                        pendingReroots.delete(rerootId);
+                    } else {
+                        rollbackReroot(rerootId);
+                    }
+                }
+                setDisplayedRootPath(authoritativeRootPath);
             }
         });
 
@@ -1283,6 +1342,18 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         setIsStopping(true);
     };
 
+    // Phase 7c T12: user-Resume click. Emits navigatorResumeCompute and
+    // flips isSessionActive optimistically. Backend either resumes the
+    // live Mcts arena (visit preservation) or creates a fresh session
+    // (post-reload fallback) — frontend doesn't distinguish.
+    const onResume = () => {
+        const sock = currentSocket();
+        const sid = currentSessionId();
+        if (!sock || !sid) return;
+        sock.emit("navigatorResumeCompute", { sessionId: sid });
+        setIsSessionActive(true);
+    };
+
     // Phase 7b T16 (Decision 8): optimistic reroot. Caller (DecisionTree
     // hover-button) builds `delta` by walking the rendered tree from its
     // root down to the clicked node, collecting each step's championIds.
@@ -1331,6 +1402,8 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         isSessionActive,
         isStopping,
         onStop,
+        hasPausedSession,
+        onResume,
         currentMeta,
         joinSession,
         leaveSession,
