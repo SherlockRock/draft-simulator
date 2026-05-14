@@ -88,6 +88,11 @@ const McTsMetaSchema = z.object({
   truncated: z.boolean().default(false),
 });
 
+// Phase 7b Decision 6: `partial` marks intermediate snapshots from the
+// streaming iterate loop so the frontend can distinguish them from the final
+// settled result. Decision 7: `rootPath` is the authoritative cumulative
+// reroot path from Rust; the frontend treats it as the source of truth and
+// reconciles any pending optimistic reroots against it.
 const ComputeMetaSchema = z.object({
   nodesEvaluated: z.number().int().nonnegative(),
   computeTimeMs: z.number().nonnegative(),
@@ -97,6 +102,8 @@ const ComputeMetaSchema = z.object({
   forcedBranchesDropped: z.number().int().nonnegative(),
   cancelled: z.boolean(),
   mctsMeta: McTsMetaSchema.optional(),
+  partial: z.boolean().optional(),
+  rootPath: z.array(z.array(z.string())).optional(),
 });
 
 export const EngineResponseSchema = z.object({

@@ -395,6 +395,11 @@ pub(crate) fn build_response(
                 iterations: total_iter as i64,
                 truncated: walk.truncated,
             }),
+            // Phase 7b Decision 6/7: T9 will plumb session-supplied values
+            // through here. For T8 the schema additions are wired but the
+            // call sites still default — partial=None (final), root_path empty.
+            partial: None,
+            root_path: Vec::new(),
         },
         scenarios,
         tree: root_node,
@@ -420,6 +425,11 @@ pub(crate) fn empty_response(elapsed_ms: u64, iterations: u32) -> proto::EngineR
                 iterations: iterations as i64,
                 truncated: false,
             }),
+            // Phase 7b: empty_response is the no-iterations short-circuit; it
+            // is a final snapshot with no reroot, so partial=None and
+            // root_path stays empty.
+            partial: None,
+            root_path: Vec::new(),
         },
         scenarios: Vec::new(),
         tree: proto::TreeNode {
