@@ -289,6 +289,51 @@ impl NavigatorSession {
         }
     }
 
+    /// Phase 7c T7: queue a Pause command. Returns a Promise that resolves
+    /// with the pause-snapshot JSON when the iterate thread processes the
+    /// command (in either Active or Paused state — both build a snapshot
+    /// and invoke the resolver). Idempotent in Paused state.
+    ///
+    /// The deferred is hidden behind a Box<dyn FnOnce + Send> closure
+    /// (v4 R3-4) so we don't have to name the generic resolver type. The
+    /// iterate thread invokes the closure directly; no tokio::spawn bridge.
+    #[cfg(not(test))]
+    #[napi]
+    pub fn pause(&self, env: Env) -> napi::Result<JsObject> {
+        let (deferred, promise) = env.create_deferred::<String, _>()?;
+        let resolve: Box<dyn FnOnce(napi::Result<String>) + Send> = Box::new(move |result| {
+            match result {
+                Ok(json) => deferred.resolve(move |_env| Ok(json)),
+                Err(e) => deferred.reject(e),
+            }
+        });
+        let guard = self
+            .cmd_tx
+            .lock()
+            .map_err(|_| error::internal("cmd_tx mutex poisoned"))?;
+        let cmd_tx = guard
+            .as_ref()
+            .ok_or_else(|| error::internal("session not started — pause() before start()"))?
+            .clone();
+        drop(guard);
+        cmd_tx
+            .send(SessionCommand::Pause { resolve })
+            .map_err(|e| error::internal(format!("pause send: {}", e)))?;
+        Ok(promise)
+    }
+
+    /// Queue SessionCommand::Resume. Silently no-ops if sender slot is None
+    /// (session not started yet, or iterate_loop has exited) — matches the
+    /// Phase 7b stop()/end() idempotency pattern (v4 R4-NIT1).
+    #[napi]
+    pub fn resume(&self) {
+        if let Ok(guard) = self.cmd_tx.lock() {
+            if let Some(tx) = guard.as_ref() {
+                let _ = tx.send(SessionCommand::Resume);
+            }
+        }
+    }
+
     /// Re-root the in-flight MCTS to a descendant identified by
     /// `champion_ids_path`. The path is JSON-encoded (a `string[][]` —
     /// each step is 1 champion id for single moves or 2 for pair-pick moves).
@@ -1230,5 +1275,179 @@ mod tests {
             parsed.meta.cancelled,
             "cancel-initiated exit should set meta.cancelled=true"
         );
+    }
+
+    /// Phase 7c T7: pause command path. Drive iterate_loop directly with a
+    /// boxed closure resolver that pushes the result into a thread-safe slot.
+    /// Assert the closure is invoked with a snapshot JSON whose
+    /// meta.persistOnPause === true.
+    #[test]
+    fn navigator_session_pause_returns_snapshot() {
+        let fixture = Arc::new(real_data_fixture());
+        let pools = Arc::new(PoolContext::full(&fixture));
+        let initial_state = cadence_test_state();
+        let cfg = test_cfg();
+        let meta = RequestMeta {
+            latency_budget_ms: 100,
+            top_k_at_root: 5,
+            first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
+            initial_root_path: vec![],
+        };
+        let cancel = CancelHandle::new();
+        let (tx, rx) = mpsc::channel::<SessionCommand>();
+        let emit: Box<dyn Fn(String) + Send + Sync> = Box::new(|_| {});
+
+        let captured: Arc<Mutex<Option<napi::Result<String>>>> = Arc::new(Mutex::new(None));
+        let captured_for_resolve = captured.clone();
+        let resolve: Box<dyn FnOnce(napi::Result<String>) + Send> = Box::new(move |result| {
+            *captured_for_resolve.lock().unwrap() = Some(result);
+        });
+
+        // Driver: after a short delay, send Pause then Stop. Iterate thread should
+        // process Pause first (build snapshot, invoke resolver, transition to Paused),
+        // then Stop (transition to Ending).
+        let driver = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            let _ = tx.send(SessionCommand::Pause { resolve });
+            std::thread::sleep(Duration::from_millis(50));
+            let _ = tx.send(SessionCommand::Stop);
+        });
+
+        let _ = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
+            .expect("iterate_loop ok");
+        driver.join().expect("driver done");
+
+        let captured_result = captured.lock().unwrap().take().expect("resolver was invoked");
+        let json = captured_result.expect("pause snapshot is Ok");
+        let parsed: proto::EngineResponse = serde_json::from_str(&json).expect("parses");
+        assert_eq!(parsed.meta.persist_on_pause, Some(true), "pause snapshot must have persistOnPause=true");
+    }
+
+    /// v4 R4-N7 slack: 250ms covers spawn_blocking scheduler latency.
+    #[test]
+    fn navigator_session_end_while_paused_exits_cleanly() {
+        let fixture = Arc::new(real_data_fixture());
+        let pools = Arc::new(PoolContext::full(&fixture));
+        let initial_state = cadence_test_state();
+        let cfg = test_cfg();
+        let meta = RequestMeta {
+            latency_budget_ms: 100,
+            top_k_at_root: 5,
+            first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
+            initial_root_path: vec![],
+        };
+        let cancel = CancelHandle::new();
+        let cancel_for_nudge = cancel.clone();
+        let (tx, rx) = mpsc::channel::<SessionCommand>();
+        let emit: Box<dyn Fn(String) + Send + Sync> = Box::new(|_| {});
+
+        let resolved: Arc<Mutex<Option<napi::Result<String>>>> = Arc::new(Mutex::new(None));
+        let resolved_for_resolve = resolved.clone();
+        let resolve: Box<dyn FnOnce(napi::Result<String>) + Send> = Box::new(move |result| {
+            *resolved_for_resolve.lock().unwrap() = Some(result);
+        });
+
+        let driver = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            let _ = tx.send(SessionCommand::Pause { resolve });
+            std::thread::sleep(Duration::from_millis(50));
+            // Set cancel + queue Stop (mirrors end()).
+            cancel_for_nudge.cancel();
+            let _ = tx.send(SessionCommand::Stop);
+        });
+
+        let start = Instant::now();
+        let result = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
+            .expect("iterate_loop ok");
+        let elapsed = start.elapsed();
+        driver.join().expect("driver done");
+
+        assert!(elapsed < Duration::from_millis(250), "end-while-paused should exit promptly; was {:?}", elapsed);
+        let parsed: proto::EngineResponse = serde_json::from_str(&result).expect("parses");
+        assert!(parsed.meta.cancelled, "end-via-cancel-flag should set cancelled=true");
+    }
+
+    /// Phase 7c T7: pause → resume → iterate. Assert post-resume nodes_evaluated > pre-pause.
+    #[test]
+    fn navigator_session_pause_resume_preserves_visits() {
+        let fixture = Arc::new(real_data_fixture());
+        let pools = Arc::new(PoolContext::full(&fixture));
+        let initial_state = cadence_test_state();
+        let cfg = test_cfg();
+        let meta = RequestMeta {
+            latency_budget_ms: 50,
+            top_k_at_root: 5,
+            first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
+            initial_root_path: vec![],
+        };
+        let cancel = CancelHandle::new();
+        let (tx, rx) = mpsc::channel::<SessionCommand>();
+        let emit: Box<dyn Fn(String) + Send + Sync> = Box::new(|_| {});
+
+        let pause_result: Arc<Mutex<Option<napi::Result<String>>>> = Arc::new(Mutex::new(None));
+        let pause_result_clone = pause_result.clone();
+        let resolve: Box<dyn FnOnce(napi::Result<String>) + Send> = Box::new(move |r| {
+            *pause_result_clone.lock().unwrap() = Some(r);
+        });
+
+        let driver = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(100));
+            let _ = tx.send(SessionCommand::Pause { resolve });
+            std::thread::sleep(Duration::from_millis(50));
+            let _ = tx.send(SessionCommand::Resume);
+            std::thread::sleep(Duration::from_millis(200));
+            let _ = tx.send(SessionCommand::Stop);
+        });
+
+        let final_json = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
+            .expect("iterate_loop ok");
+        driver.join().expect("driver done");
+
+        let pause_json = pause_result.lock().unwrap().take().expect("pause was resolved").expect("pause ok");
+        let pause_resp: proto::EngineResponse = serde_json::from_str(&pause_json).expect("pause parses");
+        let final_resp: proto::EngineResponse = serde_json::from_str(&final_json).expect("final parses");
+
+        assert!(
+            final_resp.meta.nodes_evaluated > pause_resp.meta.nodes_evaluated,
+            "post-resume iteration must extend pre-pause visits: pre={}, post={}",
+            pause_resp.meta.nodes_evaluated, final_resp.meta.nodes_evaluated
+        );
+    }
+
+    /// Phase 7c T7: drain-and-reject Pause deferreds on iterate_loop exit.
+    #[test]
+    fn navigator_session_drain_rejects_pending_pause_on_end() {
+        let fixture = Arc::new(real_data_fixture());
+        let pools = Arc::new(PoolContext::full(&fixture));
+        let initial_state = cadence_test_state();
+        let cfg = test_cfg();
+        let meta = RequestMeta {
+            latency_budget_ms: 50_000, // long — we'll exit via Stop, not budget
+            top_k_at_root: 5,
+            first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
+            initial_root_path: vec![],
+        };
+        let cancel = CancelHandle::new();
+        let cancel_for_nudge = cancel.clone();
+        let (tx, rx) = mpsc::channel::<SessionCommand>();
+        let emit: Box<dyn Fn(String) + Send + Sync> = Box::new(|_| {});
+
+        let resolved: Arc<Mutex<Option<napi::Result<String>>>> = Arc::new(Mutex::new(None));
+        let resolved_clone = resolved.clone();
+        let resolve: Box<dyn FnOnce(napi::Result<String>) + Send> = Box::new(move |r| {
+            *resolved_clone.lock().unwrap() = Some(r);
+        });
+
+        // Queue Stop FIRST so the iterate thread exits before draining the Pause.
+        // Then queue Pause so it's still in the channel when the loop breaks.
+        tx.send(SessionCommand::Stop).expect("stop send");
+        tx.send(SessionCommand::Pause { resolve }).expect("pause send");
+        cancel_for_nudge.cancel();
+
+        let _ = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
+            .expect("iterate_loop ok");
+
+        let r = resolved.lock().unwrap().take().expect("resolver invoked by drain");
+        assert!(r.is_err(), "drain-after-exit must reject pending Pause");
     }
 }
