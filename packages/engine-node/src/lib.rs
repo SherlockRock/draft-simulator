@@ -4,6 +4,7 @@ mod data_loader;
 mod error;
 mod mcts_dispatch;
 mod mcts_wire;
+mod navigator_session;
 mod projection;
 
 use std::collections::HashMap;
@@ -12,10 +13,15 @@ use std::sync::{Arc, OnceLock};
 
 use engine_core::cancellation::CancelHandle;
 use engine_core::engine::Engine as CoreEngine;
+use engine_core::mcts_spike::policy::McTsConfig;
+use engine_core::mcts_spike::rollout::{FeasibilityMode, RolloutPolicy};
 use engine_core::mcts_spike::SpikeFixture;
 use engine_core::protocol_types as proto;
 use engine_core::role_solver::ChampionMeta;
 use napi_derive::napi;
+
+use crate::mcts_wire::MAX_TOP_K_AT_ROOT;
+use crate::navigator_session::{NavigatorSession, RequestMeta};
 
 #[napi]
 pub fn engine_version() -> String {
@@ -144,5 +150,63 @@ impl Engine {
         let proto_response = projection::core_to_response(core_response);
         serde_json::to_string(&proto_response)
             .map_err(|e| error::internal(format!("response serialize: {}", e)))
+    }
+
+    /// Phase 7b factory: build a `NavigatorSession` from an MCTS-flagged
+    /// engine request. The returned handle owns the fixture/pools/state
+    /// across the session's lifetime; callers must explicitly drive iteration
+    /// via `session.start(...)` and (optionally) `session.reroot(...)`.
+    ///
+    /// Mirrors `mcts_dispatch::compute_mcts`'s setup but stops short of
+    /// constructing the `Mcts` — that's the iterate thread's job inside
+    /// `start()` so the search lifetime is bounded to the thread closure
+    /// (Decision 3).
+    #[napi]
+    pub fn create_navigator_session(
+        &self,
+        request_json: String,
+    ) -> napi::Result<NavigatorSession> {
+        let proto_request: proto::EngineRequest = serde_json::from_str(&request_json)
+            .map_err(|e| error::invalid_input(vec![], format!("request parse failed: {}", e)))?;
+
+        if !matches!(
+            proto_request.algorithm,
+            Some(proto::EngineRequestAlgorithm::Mcts)
+        ) {
+            return Err(error::invalid_input(
+                vec!["algorithm"],
+                "create_navigator_session requires algorithm = 'mcts'",
+            ));
+        }
+
+        let fixture = self.get_or_load_spike_fixture()?;
+        let initial_state = mcts_dispatch::build_draft_state(&proto_request.draft_state)?;
+        let pools = mcts_dispatch::build_pool_context(&proto_request.pools, fixture.as_ref())?;
+
+        let latency_budget_ms = proto_request.config.search.latency_budget_ms.max(0) as u64;
+        let top_k_at_root = (proto_request.config.search.branch_width.max(1) as usize)
+            .clamp(1, MAX_TOP_K_AT_ROOT);
+        let seed = mcts_dispatch::derive_seed(&initial_state);
+
+        let cfg = McTsConfig {
+            policy: RolloutPolicy::UniformFeasible,
+            feasibility_mode: FeasibilityMode::Cached,
+            seed,
+            root_shortlist_k: Some(top_k_at_root.max(20).min(40)),
+            flex_weight: 1.0,
+        };
+
+        let request_meta = RequestMeta {
+            latency_budget_ms,
+            top_k_at_root,
+        };
+
+        Ok(NavigatorSession::new(
+            fixture,
+            Arc::new(pools),
+            initial_state,
+            cfg,
+            request_meta,
+        ))
     }
 }

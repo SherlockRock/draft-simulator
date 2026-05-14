@@ -128,7 +128,9 @@ pub fn compute_mcts(
     })
 }
 
-fn build_draft_state(ds: &proto::EngineRequestDraftState) -> Result<DraftState, napi::Error> {
+pub(crate) fn build_draft_state(
+    ds: &proto::EngineRequestDraftState,
+) -> Result<DraftState, napi::Error> {
     if ds.format != "standard" {
         return Err(error::invalid_input(
             vec!["draftState", "format"],
@@ -165,7 +167,7 @@ fn build_draft_state(ds: &proto::EngineRequestDraftState) -> Result<DraftState, 
     })
 }
 
-fn build_pool_context(
+pub(crate) fn build_pool_context(
     pools: &proto::EngineRequestPools,
     fixture: &SpikeFixture,
 ) -> Result<PoolContext, napi::Error> {
@@ -214,7 +216,7 @@ fn build_team_pool(
 /// for a given input but vary across drafts. UCT is sensitive to seed at
 /// shallow visit counts; this avoids the "same first move, different draft"
 /// artifact that fixed seeding would produce.
-fn derive_seed(state: &DraftState) -> u64 {
+pub(crate) fn derive_seed(state: &DraftState) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     state.blue_bans.hash(&mut hasher);

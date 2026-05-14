@@ -247,6 +247,14 @@ impl<'a> Mcts<'a> {
         self.tree.get(self.active_root).visits
     }
 
+    /// Read-only access to the projected draft state at the active root.
+    /// Updated by `reroot_to` / `uproot`; used by external consumers
+    /// (e.g. engine-node's NavigatorSession iterate loop) that need the
+    /// projected state without maintaining a parallel copy.
+    pub fn active_root_state(&self) -> &DraftState {
+        &self.active_root_state
+    }
+
     /// Promote a child of the current active root to be the new active root.
     /// For pair moves the child is matched by full canonical MoveId equality
     /// (champion_ids in canonical order + is_pick) — partial-pair reroot is
