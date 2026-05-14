@@ -42,11 +42,12 @@ use crate::mcts_wire;
 #[cfg(not(test))]
 const TSF_QUEUE_SIZE: usize = 4;
 
-/// Commands posted from the napi-binding thread (stop/reroot) to the iterate
-/// thread that owns the `Mcts`. The reroot payload carries a monotonic
-/// `reroot_id` so the iterate loop can attribute reroot-error emits back to
-/// the originating JS request without round-tripping the full path.
+/// Commands posted from the napi-binding thread to the iterate thread.
+/// `Pause` carries a boxed closure resolver that captures the napi
+/// JsDeferred by move — see Decision 3 / 4 of the design spec.
 pub(crate) enum SessionCommand {
+    Pause { resolve: Box<dyn FnOnce(napi::Result<String>) + Send> },
+    Resume,
     Stop,
     Reroot {
         reroot_id: u64,
@@ -65,6 +66,11 @@ pub(crate) struct RequestMeta {
     /// the floor-skip regression test passes a smaller value so it can cross
     /// the threshold inside a few-second budget on real-data iterate rates.
     pub first_emit_threshold: u32,
+    /// Phase 7c T5: prefix of the cumulative reroot path applied at
+    /// session construction (from `request.initial_root_path`). The
+    /// iterate-loop owned `session_root_path` is initialized to this
+    /// value and appended on each successful in-session reroot.
+    pub initial_root_path: Vec<Vec<String>>,
 }
 
 #[napi]
@@ -109,6 +115,9 @@ pub struct NavigatorSession {
     pools: Arc<PoolContext>,
     #[cfg_attr(test, allow(dead_code))]
     initial_state: DraftState,
+    /// Phase 7c T5: prefix of cumulative reroot path. See RequestMeta.
+    #[cfg_attr(test, allow(dead_code))]
+    initial_root_path: Vec<Vec<String>>,
     #[cfg_attr(test, allow(dead_code))]
     cfg: McTsConfig,
     #[cfg_attr(test, allow(dead_code))]
@@ -125,6 +134,7 @@ impl NavigatorSession {
         fixture: Arc<SpikeFixture>,
         pools: Arc<PoolContext>,
         initial_state: DraftState,
+        initial_root_path: Vec<Vec<String>>,
         cfg: McTsConfig,
         request_meta: RequestMeta,
     ) -> Self {
@@ -139,6 +149,7 @@ impl NavigatorSession {
             fixture,
             pools,
             initial_state,
+            initial_root_path,
             cfg,
             request_meta,
         }
@@ -211,11 +222,13 @@ impl NavigatorSession {
         let fixture = self.fixture.clone();
         let pools = self.pools.clone();
         let initial_state = self.initial_state.clone();
+        let initial_root_path = self.initial_root_path.clone();
         let cfg = self.cfg.clone();
         let meta = RequestMeta {
             latency_budget_ms: self.request_meta.latency_budget_ms,
             top_k_at_root: self.request_meta.top_k_at_root,
             first_emit_threshold: self.request_meta.first_emit_threshold,
+            initial_root_path: self.request_meta.initial_root_path.clone(),
         };
         let cancel = self.cancel.clone();
 
@@ -233,7 +246,7 @@ impl NavigatorSession {
 
         tokio::task::spawn_blocking(move || {
             let result =
-                iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit);
+                iterate_loop(&fixture, &pools, initial_state, initial_root_path, cfg, meta, cancel, rx, emit);
             // Cleanup before resolving: drops the TSF (cancels the napi ref
             // back to the JS callback) and the sender (so stop/reroot become
             // no-ops post-exit).
@@ -341,6 +354,7 @@ pub(crate) fn iterate_loop(
     fixture: &SpikeFixture,
     pools: &PoolContext,
     initial_state: DraftState,
+    initial_root_path: Vec<Vec<String>>,
     cfg: McTsConfig,
     meta: RequestMeta,
     cancel: CancelHandle,
@@ -355,6 +369,10 @@ pub(crate) fn iterate_loop(
     }
 
     let mut mcts = Mcts::with_pools(fixture, initial_state.clone(), pools, cfg.clone());
+    // Phase 7c T5: session-owned cumulative reroot path. Initialized to the
+    // request's initial_root_path; appended on each successful in-session
+    // reroot (T6). Passed to mcts_wire::build_response via BuildResponseOptions.
+    let mut session_root_path: Vec<Vec<String>> = initial_root_path;
     let mut counter: usize = 0;
     let mut stop_requested = false;
 
@@ -374,6 +392,9 @@ pub(crate) fn iterate_loop(
         // cycle.
         loop {
             match rx.try_recv() {
+                Ok(SessionCommand::Pause { .. }) | Ok(SessionCommand::Resume) => {
+                    // T5 plumbs the variants; T6 implements state-machine handling.
+                }
                 Ok(SessionCommand::Stop) => {
                     stop_requested = true;
                 }
@@ -449,7 +470,7 @@ pub(crate) fn iterate_loop(
                 cancelled: false,
                 persist_on_pause: false,
                 top_k_at_root: meta.top_k_at_root,
-                session_root_path: &[],
+                session_root_path: &session_root_path,
             };
             let partial = mcts_wire::build_response(
                 &mcts,
@@ -479,7 +500,7 @@ pub(crate) fn iterate_loop(
         cancelled,
         persist_on_pause: false,
         top_k_at_root: meta.top_k_at_root,
-        session_root_path: &[],
+        session_root_path: &session_root_path,
     };
     let resp = mcts_wire::build_response(
         &mcts,
@@ -580,8 +601,9 @@ mod tests {
             latency_budget_ms: 200,
             top_k_at_root: 5,
             first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
+            initial_root_path: vec![],
         };
-        let session = NavigatorSession::new(fixture, pools, initial_state, test_cfg(), request_meta);
+        let session = NavigatorSession::new(fixture, pools, initial_state, vec![], test_cfg(), request_meta);
         assert!(
             !session.is_active(),
             "fresh session must report inactive before start()"
@@ -608,6 +630,7 @@ mod tests {
             latency_budget_ms: 100,
             top_k_at_root: 5,
             first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
+            initial_root_path: vec![],
         };
         let cancel = CancelHandle::new();
         let (tx, rx) = mpsc::channel::<SessionCommand>();
@@ -622,7 +645,7 @@ mod tests {
             let _ = tx.send(SessionCommand::Stop);
         });
 
-        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
+        let result = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
             .expect("iterate_loop ok");
         stop_thread.join().expect("stop nudge completes");
 
@@ -663,6 +686,7 @@ mod tests {
             latency_budget_ms: 200,
             top_k_at_root: 5,
             first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
+            initial_root_path: vec![],
         };
         let cancel = CancelHandle::new();
         let (tx, rx) = mpsc::channel::<SessionCommand>();
@@ -690,7 +714,7 @@ mod tests {
             let _ = tx.send(SessionCommand::Stop);
         });
 
-        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
+        let result = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
             .expect("iterate_loop ok");
         stop_thread.join().expect("stop nudge completes");
 
@@ -730,6 +754,7 @@ mod tests {
             latency_budget_ms: 50,
             top_k_at_root: 5,
             first_emit_threshold,
+            initial_root_path: vec![],
         };
         let cancel = CancelHandle::new();
         let (tx, rx) = mpsc::channel::<SessionCommand>();
@@ -758,7 +783,7 @@ mod tests {
             let _ = tx.send(SessionCommand::Stop);
         });
 
-        let _ = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
+        let _ = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
             .expect("iterate_loop ok");
         stop_thread.join().expect("stop nudge completes");
 
@@ -818,6 +843,7 @@ mod tests {
             latency_budget_ms: 100,
             top_k_at_root: 5,
             first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
+            initial_root_path: vec![],
         };
         let cancel = CancelHandle::new();
         let (tx, rx) = mpsc::channel::<SessionCommand>();
@@ -876,7 +902,7 @@ mod tests {
             inherited_visits
         });
 
-        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
+        let result = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
             .expect("iterate_loop ok");
         let inherited_visits = driver.join().expect("driver thread completes");
 
@@ -963,6 +989,7 @@ mod tests {
             latency_budget_ms: 100,
             top_k_at_root: 5,
             first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
+            initial_root_path: vec![],
         };
         let cancel = CancelHandle::new();
         let (tx, rx) = mpsc::channel::<SessionCommand>();
@@ -1010,7 +1037,7 @@ mod tests {
             let _ = tx.send(SessionCommand::Stop);
         });
 
-        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
+        let result = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
             .expect("iterate_loop ok (must not tear down on invalid reroot)");
         driver.join().expect("driver thread completes");
 
@@ -1058,6 +1085,7 @@ mod tests {
             latency_budget_ms: 5_000,
             top_k_at_root: 5,
             first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
+            initial_root_path: vec![],
         };
         let cancel = CancelHandle::new();
         let (tx, rx) = mpsc::channel::<SessionCommand>();
@@ -1076,7 +1104,7 @@ mod tests {
         })
         .expect("reroot send");
 
-        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
+        let result = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
             .expect("iterate_loop ok");
 
         let emits = received.lock().unwrap().clone();
@@ -1108,6 +1136,7 @@ mod tests {
             latency_budget_ms: 100,
             top_k_at_root: 5,
             first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
+            initial_root_path: vec![],
         };
         let cancel = CancelHandle::new();
         let cancel_for_nudge = cancel.clone();
@@ -1119,7 +1148,7 @@ mod tests {
             cancel_for_nudge.cancel();
         });
 
-        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
+        let result = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
             .expect("iterate_loop ok");
         nudge.join().expect("cancel nudge completes");
 
