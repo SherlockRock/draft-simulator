@@ -18,6 +18,7 @@ import {
     NavigatorScenario,
     NavigatorScenarioPathStep,
     NavigatorSessionState,
+    NavigatorSnapshotData,
     NavigatorTreeNode,
     NavigatorWorkflowContext,
     NavigatorWorkflowContextValue,
@@ -171,10 +172,28 @@ const NavigatorSnapshotDataSchema = z.object({
             pruningRate: z.number(),
             depthReached: z.number(),
             transpositionsFound: z.number(),
-            mctsMeta: NavigatorMctsMetaSchema.optional()
+            mctsMeta: NavigatorMctsMetaSchema.optional(),
+            partial: z.boolean().optional(),
+            rootPath: z.array(z.array(z.string())).optional()
         })
         .nullable(),
     createdAt: z.string()
+});
+
+const NavigatorPartialSnapshotEnvelopeSchema = z.object({
+    sessionId: z.string(),
+    draftId: z.string(),
+    version: z.number().int().nonnegative(),
+    afterEventId: z.string().nullable(),
+    snapshot: NavigatorSnapshotDataSchema
+});
+
+const NavigatorRerootErrorSchema = z.object({
+    sessionId: z.string(),
+    draftId: z.string(),
+    rerootId: z.number().int().nonnegative(),
+    attemptedPath: z.array(z.array(z.string())),
+    error: z.string()
 });
 
 const NavigatorCompletedGameSchema = z.object({
@@ -288,6 +307,30 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     const [engineToggleEnabled, setEngineToggleEnabled] = createSignal(false);
     const [currentAlgorithm, setCurrentAlgorithmSignal] =
         createSignal<NavigatorAlgorithm>("ab");
+
+    // Phase 7b T13: streaming partial snapshot wiring. `partialSnapshot` is
+    // the latest envelope-delivered (incomplete) tree from the MCTS engine;
+    // T14 will layer overlay precedence so the canvas prefers `partialSnapshot`
+    // over the persisted final snapshot while a compute is active.
+    // `displayedRootPath` is the path the UI has optimistically rerooted to;
+    // engine confirmation arrives in subsequent partials' meta.rootPath. The
+    // `pendingReroots` map tracks in-flight reroot requests so a server-side
+    // rejection can roll back the optimistic state (Decision 8).
+    // The accessor and `nextRerootId` are declared here but consumed in
+    // T14 (overlay precedence) and T15/T16 (stop button + reroot UX); the
+    // disable is removed when those tasks land.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [partialSnapshot, setPartialSnapshot] =
+        createSignal<NavigatorSnapshotData | null>(null);
+    const [latestVersionSeen, setLatestVersionSeen] = createSignal<number>(0);
+    const [displayedRootPath, setDisplayedRootPath] = createSignal<string[][]>([]);
+    const [isSessionActive, setIsSessionActive] = createSignal<boolean>(false);
+    const pendingReroots = new Map<
+        number,
+        { delta: string[][]; priorPath: string[][] }
+    >();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, prefer-const
+    let nextRerootId = 0;
 
     interface CachedResult {
         tree: NavigatorTreeNode;
@@ -715,6 +758,42 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         }
     };
 
+    // Phase 7b T13: deep equality for path-of-path-steps (each outer entry is
+    // a turn's championIds tuple). Used to gate stale partials and to confirm
+    // pending reroots once the engine echoes the new root in meta.rootPath.
+    function pathsEqual(a: string[][], b: string[][]): boolean {
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) {
+            if (a[i].length !== b[i].length) return false;
+            for (let j = 0; j < a[i].length; j++) {
+                if (a[i][j] !== b[i][j]) return false;
+            }
+        }
+        return true;
+    }
+
+    // Phase 7b T13 / Decision 8: optimistic reroot rollback. Called when the
+    // backend reports `navigatorRerootError` for an in-flight reroot. Only
+    // rolls back when `displayedRootPath` still ends with the pending delta —
+    // a subsequent successful reroot or a session change may have moved past
+    // this point, in which case the bookkeeping is dropped silently.
+    function rollbackReroot(rerootId: number) {
+        const pending = pendingReroots.get(rerootId);
+        if (!pending) return;
+        const cur = displayedRootPath();
+        const startIdx = pending.priorPath.length;
+        const stillPresent = pending.delta.every(
+            (step, i) =>
+                cur[startIdx + i] !== undefined &&
+                step.length === cur[startIdx + i].length &&
+                step.every((id, j) => id === cur[startIdx + i][j])
+        );
+        if (stillPresent && cur.length === startIdx + pending.delta.length) {
+            setDisplayedRootPath(pending.priorPath);
+        }
+        pendingReroots.delete(rerootId);
+    }
+
     function buildPriority(
         currentSynthetic: NavigatorTreeNode | null,
         snapshot: NavigatorSessionState["snapshot"],
@@ -798,6 +877,41 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         sock.on("navigatorDraftUpdate", handleDraftUpdate);
         sock.on("navigatorError", handleError);
 
+        // Phase 7b T13: streaming partial snapshots from the MCTS engine
+        // arrive on `navigatorPartialSnapshot`. Stale guards (session,
+        // draft, active flag, monotonic version, root identity) prevent
+        // late-arriving partials from clobbering a fresh session or
+        // overwriting a different rerooted view.
+        sock.on("navigatorPartialSnapshot", (raw) => {
+            const parsed = NavigatorPartialSnapshotEnvelopeSchema.safeParse(raw);
+            if (!parsed.success) return;
+            const env = parsed.data;
+            if (env.sessionId !== untrack(currentSessionId)) return;
+            if (env.draftId !== untrack(navigatorContext).draft?.id) return;
+            if (!untrack(isSessionActive)) return;
+            if (env.version < untrack(latestVersionSeen)) return;
+            const envelopeRootPath = env.snapshot.meta?.rootPath ?? [];
+            if (!pathsEqual(envelopeRootPath, untrack(displayedRootPath))) return;
+            setLatestVersionSeen(env.version);
+            setPartialSnapshot(env.snapshot);
+            // Decision 8: confirm any pending reroot whose priorPath +
+            // delta matches the engine-echoed root. Once confirmed, the
+            // optimistic bookkeeping is no longer needed.
+            for (const [rerootId, pending] of pendingReroots) {
+                const expected = [...pending.priorPath, ...pending.delta];
+                if (pathsEqual(expected, envelopeRootPath)) {
+                    pendingReroots.delete(rerootId);
+                }
+            }
+        });
+
+        sock.on("navigatorRerootError", (raw) => {
+            const parsed = NavigatorRerootErrorSchema.safeParse(raw);
+            if (!parsed.success) return;
+            if (parsed.data.sessionId !== untrack(currentSessionId)) return;
+            rollbackReroot(parsed.data.rerootId);
+        });
+
         socketWithListeners = sock;
 
         onCleanup(() => {
@@ -808,6 +922,8 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             sock.off("navigatorJoinResponse");
             sock.off("navigatorDraftUpdate");
             sock.off("navigatorError");
+            sock.off("navigatorPartialSnapshot");
+            sock.off("navigatorRerootError");
         });
     });
 
@@ -826,6 +942,18 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         }
 
         setCurrentSessionId(sessionId);
+    });
+
+    // Phase 7b T13 (Opus R1-#24): reset all streaming/reroot bookkeeping
+    // when the session changes. Prevents partials and pending-reroot state
+    // from one session leaking into the next.
+    createEffect(() => {
+        currentSessionId();
+        setPartialSnapshot(null);
+        setLatestVersionSeen(0);
+        setDisplayedRootPath([]);
+        setIsSessionActive(false);
+        pendingReroots.clear();
     });
 
     createEffect(() => {

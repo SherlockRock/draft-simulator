@@ -155,6 +155,8 @@ export interface NavigatorSnapshotData {
         depthReached: number;
         transpositionsFound: number;
         mctsMeta?: NavigatorMctsMeta;
+        partial?: boolean;
+        rootPath?: string[][];
     } | null;
     createdAt: string;
 }
