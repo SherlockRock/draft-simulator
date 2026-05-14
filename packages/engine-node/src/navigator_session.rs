@@ -14,7 +14,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::DraftState;
@@ -57,9 +57,13 @@ pub(crate) enum SessionCommand {
 /// construction so cadence + final-snapshot rendering can use them without
 /// re-parsing the request JSON.
 pub(crate) struct RequestMeta {
-    #[allow(dead_code)] // Consumed by T6 cadence.
     pub latency_budget_ms: u64,
     pub top_k_at_root: usize,
+    /// Initial value of the segment-local threshold delta for the cadence
+    /// emit (Decision 4 v3). Production passes `mcts_wire::FIRST_EMIT_THRESHOLD`;
+    /// the floor-skip regression test passes a smaller value so it can cross
+    /// the threshold inside a few-second budget on real-data iterate rates.
+    pub first_emit_threshold: u32,
 }
 
 #[napi]
@@ -210,6 +214,7 @@ impl NavigatorSession {
         let meta = RequestMeta {
             latency_budget_ms: self.request_meta.latency_budget_ms,
             top_k_at_root: self.request_meta.top_k_at_root,
+            first_emit_threshold: self.request_meta.first_emit_threshold,
         };
         let cancel = self.cancel.clone();
 
@@ -321,7 +326,7 @@ pub(crate) fn iterate_loop(
     meta: RequestMeta,
     cancel: CancelHandle,
     rx: Receiver<SessionCommand>,
-    _emit: Box<dyn Fn(String) + Send + Sync>,
+    emit: Box<dyn Fn(String) + Send + Sync>,
 ) -> napi::Result<String> {
     let start = Instant::now();
     if initial_state.is_complete() {
@@ -333,6 +338,18 @@ pub(crate) fn iterate_loop(
     let mut mcts = Mcts::with_pools(fixture, initial_state.clone(), pools, cfg.clone());
     let mut counter: usize = 0;
     let mut stop_requested = false;
+
+    // Segment-local cadence state (Decision 4 v3 / Codex R2-#1). T7 mutates
+    // `iters_at_segment_start` + `segment_start` when applying a reroot so
+    // cumulative iters from inherited subtrees don't push the next information
+    // event past the segment-relative doubling; for T6 they're write-once.
+    #[allow(unused_mut)] // T7 reassigns on reroot.
+    let mut iters_at_segment_start: u32 = 0;
+    let mut segment_threshold_delta: u32 = meta.first_emit_threshold;
+    let mut first_emit_done = false;
+    #[allow(unused_mut)] // T7 reassigns on reroot.
+    let mut segment_start = start;
+    let mut last_emit_at = start;
 
     loop {
         // Drain pending commands. We intentionally drain to empty per turn
@@ -369,6 +386,37 @@ pub(crate) fn iterate_loop(
 
         mcts.iterate();
         counter += 1;
+
+        // Cadence emit (Decision 4 v3). Cast `as u128 → u64`: Duration spans
+        // ~584M years before wrapping, so sessions can't realistically overflow.
+        let total = mcts.total_iterations();
+        let threshold = iters_at_segment_start.saturating_add(segment_threshold_delta);
+        let elapsed_segment_ms = segment_start.elapsed().as_millis() as u64;
+        let should_emit_first = !first_emit_done && elapsed_segment_ms >= meta.latency_budget_ms;
+        let should_emit_double = first_emit_done
+            && total >= threshold
+            && last_emit_at.elapsed() >= Duration::from_millis(mcts_wire::MIN_EMIT_INTERVAL_MS);
+
+        if should_emit_first || should_emit_double {
+            let partial = mcts_wire::build_response(
+                &mcts,
+                mcts.active_root_state(),
+                start.elapsed(),
+                false,
+                meta.top_k_at_root,
+            );
+            let json = serde_json::to_string(&partial)
+                .map_err(|e| error::internal(format!("partial serialize: {}", e)))?;
+            emit(json);
+            first_emit_done = true;
+            last_emit_at = Instant::now();
+            // Only threshold-based emits double the delta. Floor emits leave
+            // it intact so the next information event still fires at
+            // iters_at_segment_start + FIRST_EMIT_THRESHOLD (Codex R2-#1).
+            if should_emit_double {
+                segment_threshold_delta = segment_threshold_delta.saturating_mul(2);
+            }
+        }
     }
 
     // Persistence matrix: stop-initiated exits set cancelled=false (the user
@@ -403,6 +451,22 @@ mod tests {
         }
     }
 
+    /// Slot-11 mid-phase state (R3 Pick1). Picked so the floor-skip test can
+    /// distinguish "delta == FIRST_EMIT_THRESHOLD" from "delta doubled by
+    /// floor": at this iterate rate the threshold gate (not the 100ms rate
+    /// gate) is the binding constraint on the second emit. The default empty
+    /// state would also work but burns ~200ms of release-build CPU per test,
+    /// starving sibling tests; this state is materially cheaper.
+    fn cadence_test_state() -> DraftState {
+        DraftState {
+            blue_bans: vec!["Aatrox".into(), "Akali".into(), "Amumu".into()],
+            red_bans: vec!["Ahri".into(), "Alistar".into(), "Anivia".into()],
+            blue_picks: vec!["Garen".into(), "LeeSin".into(), "Lux".into()],
+            red_picks: vec!["Camille".into(), "Yasuo".into()],
+        }
+    }
+
+
     /// Verifies the freshly-constructed session reports inactive — no
     /// `start()` has fired, so `cmd_tx` is `None` and the cancel flag is
     /// unset. Covers the constructor path (`NavigatorSession::new`) that
@@ -417,6 +481,7 @@ mod tests {
         let request_meta = RequestMeta {
             latency_budget_ms: 200,
             top_k_at_root: 5,
+            first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
         };
         let session = NavigatorSession::new(fixture, pools, initial_state, test_cfg(), request_meta);
         assert!(
@@ -444,6 +509,7 @@ mod tests {
         let meta = RequestMeta {
             latency_budget_ms: 100,
             top_k_at_root: 5,
+            first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
         };
         let cancel = CancelHandle::new();
         let (tx, rx) = mpsc::channel::<SessionCommand>();
@@ -481,6 +547,149 @@ mod tests {
         );
     }
 
+    /// Drives `iterate_loop` with a 200ms latency budget and asserts the floor
+    /// fires at least one partial. Uses the closure seam (no TSF) so we can
+    /// collect emit calls into a thread-safe Vec; the stop nudge polls for
+    /// the first emit and exits early to minimize release-test CPU.
+    ///
+    /// The plan's third T6 test (`partials_carry_partial_flag`) is deferred to
+    /// T8 — `meta.partial` isn't in the protocol yet, so we can only assert
+    /// the partial parses as `EngineResponse` here. T8 strengthens it.
+    #[test]
+    fn navigator_session_emits_partial_after_floor() {
+        let fixture = Arc::new(real_data_fixture());
+        let pools = Arc::new(PoolContext::full(&fixture));
+        let initial_state = cadence_test_state();
+        let cfg = test_cfg();
+        let meta = RequestMeta {
+            latency_budget_ms: 200,
+            top_k_at_root: 5,
+            first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
+        };
+        let cancel = CancelHandle::new();
+        let (tx, rx) = mpsc::channel::<SessionCommand>();
+
+        let received: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let received_for_emit = received.clone();
+        let emit: Box<dyn Fn(String) + Send + Sync> =
+            Box::new(move |json| received_for_emit.lock().unwrap().push(json));
+
+        // Poll for the first emit and stop early to keep release-test CPU
+        // contention low (Opus R1-#16 + sibling-test isolation). 1000ms
+        // deadline = 200ms floor + 800ms slack on a loaded runner.
+        let received_for_watch = received.clone();
+        let stop_thread = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_millis(1000);
+            loop {
+                if !received_for_watch.lock().unwrap().is_empty() {
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            let _ = tx.send(SessionCommand::Stop);
+        });
+
+        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
+            .expect("iterate_loop ok");
+        stop_thread.join().expect("stop nudge completes");
+
+        let emits = received.lock().unwrap().clone();
+        assert!(
+            !emits.is_empty(),
+            "expected at least one partial emit within 1000ms deadline (200ms floor + slack)"
+        );
+        let _first: proto::EngineResponse = serde_json::from_str(&emits[0])
+            .expect("first partial parses as EngineResponse");
+
+        // Sanity: final snapshot is also intact (stop-initiated, cancelled=false).
+        let parsed: proto::EngineResponse =
+            serde_json::from_str(&result).expect("final response parses as EngineResponse");
+        assert!(!parsed.meta.cancelled);
+    }
+
+    /// Codex R1-#3 regression guard. A floor-based emit must NOT double the
+    /// segment-local threshold delta — if it did, the next information event
+    /// would fire at `2 * threshold` after the floor instead of `threshold`,
+    /// skipping a doubling.
+    ///
+    /// Uses a small test threshold (16) plumbed through `RequestMeta` so the
+    /// invariant under test ("floor emit doesn't double the segment delta") is
+    /// independent of the production constant value (1024). The slot-11 state
+    /// chosen for `cadence_test_state` runs the iterate hot path slow enough
+    /// (~200–500/sec) that crossing 16 iters takes longer than the 100ms rate
+    /// gate, making the threshold check the binding constraint on emit #2.
+    #[test]
+    fn navigator_session_floor_emit_does_not_skip_threshold() {
+        let fixture = Arc::new(real_data_fixture());
+        let pools = Arc::new(PoolContext::full(&fixture));
+        let initial_state = cadence_test_state();
+        let cfg = test_cfg();
+        let first_emit_threshold: u32 = 16;
+        let meta = RequestMeta {
+            latency_budget_ms: 50,
+            top_k_at_root: 5,
+            first_emit_threshold,
+        };
+        let cancel = CancelHandle::new();
+        let (tx, rx) = mpsc::channel::<SessionCommand>();
+
+        let received: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let received_for_emit = received.clone();
+        let emit: Box<dyn Fn(String) + Send + Sync> =
+            Box::new(move |json| received_for_emit.lock().unwrap().push(json));
+
+        // Poll for the second emit and stop early to keep total CPU time
+        // low — long-running release tests on a shared runner can starve
+        // sibling tests (e.g. compute_mcts_emits_synthetic_scenarios's
+        // pareto-min-visits assertion is wall-clock sensitive).
+        let received_for_watch = received.clone();
+        let stop_thread = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_millis(2000);
+            loop {
+                if received_for_watch.lock().unwrap().len() >= 2 {
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            let _ = tx.send(SessionCommand::Stop);
+        });
+
+        let _ = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
+            .expect("iterate_loop ok");
+        stop_thread.join().expect("stop nudge completes");
+
+        let emits = received.lock().unwrap().clone();
+        assert!(
+            emits.len() >= 2,
+            "expected ≥ 2 emits (floor + threshold) within 2000ms deadline; got {}",
+            emits.len()
+        );
+
+        let first: proto::EngineResponse =
+            serde_json::from_str(&emits[0]).expect("first partial parses");
+        let second: proto::EngineResponse =
+            serde_json::from_str(&emits[1]).expect("second partial parses");
+
+        let gap = second.meta.nodes_evaluated - first.meta.nodes_evaluated;
+        // If the floor had doubled the delta, gap would be ≥ 2*threshold = 32.
+        // We assert strictly less than that. Slack budget for the 100ms rate
+        // gate at observed iterate rates (~50/sec on default state) is ~5
+        // iters — well inside the 2x bound.
+        let upper_bound = i64::from(first_emit_threshold).saturating_mul(2);
+        assert!(
+            gap < upper_bound,
+            "floor emit must not double segment delta — second-vs-first iter gap was {} (expected < {})",
+            gap,
+            upper_bound
+        );
+    }
+
     /// Asserts the `cancelled=true` branch of the persistence matrix:
     /// flipping the cancel flag (without sending Stop) exits the loop and
     /// surfaces cancelled=true in the final response. Mirrors the napi
@@ -495,6 +704,7 @@ mod tests {
         let meta = RequestMeta {
             latency_budget_ms: 100,
             top_k_at_root: 5,
+            first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
         };
         let cancel = CancelHandle::new();
         let cancel_for_nudge = cancel.clone();

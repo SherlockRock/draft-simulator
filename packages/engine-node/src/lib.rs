@@ -199,6 +199,7 @@ impl Engine {
         let request_meta = RequestMeta {
             latency_budget_ms,
             top_k_at_root,
+            first_emit_threshold: crate::mcts_wire::FIRST_EMIT_THRESHOLD,
         };
 
         Ok(NavigatorSession::new(
