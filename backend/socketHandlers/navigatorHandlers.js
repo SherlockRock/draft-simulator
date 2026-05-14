@@ -2,10 +2,11 @@ const NavigatorSession = require("../models/NavigatorSession");
 const NavigatorDraft = require("../models/NavigatorDraft");
 const NavigatorEvent = require("../models/NavigatorEvent");
 const NavigatorSnapshot = require("../models/NavigatorSnapshot");
+const navigatorEngine = require("../services/navigatorEngine");
 const {
   computeForDraft,
   isMctsToggleEnabled,
-} = require("../services/navigatorEngine");
+} = navigatorEngine;
 const { getOurSideForGame } = require("../utils/navigatorSide");
 
 // Per-session engine job version. Bumped on every pick/ban/undo. Results whose
@@ -274,6 +275,23 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       console.error("Error in navigatorJoin:", error);
       emitNavigatorError(socket, "Failed to join navigator session");
     }
+  });
+
+  // Phase 7b T11. User clicks the Stop button → end the MCTS session early
+  // and let the resolved promise persist the current best snapshot
+  // (stopReason='user' fires the persist + broadcast branch in
+  // startNavigatorSession). Validation + auth gate are identical to the rest
+  // of the navigator surface; missing/forbidden sessions return without
+  // touching the engine.
+  wrap("navigatorStopCompute", async (data = {}) => {
+    const { sessionId } = data;
+    if (!sessionId) {
+      emitNavigatorError(socket, "sessionId is required");
+      return;
+    }
+    const session = await findOwnedSession(sessionId, socket);
+    if (!session) return; // findOwnedSession emits its own error
+    await navigatorEngine.stopNavigatorSession(sessionId, "user");
   });
 
   async function handleDraftInput(data, eventType) {
