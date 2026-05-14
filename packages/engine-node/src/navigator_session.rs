@@ -248,12 +248,17 @@ impl NavigatorSession {
         Ok(promise)
     }
 
-    /// Signal the iterate thread to exit. Sets the cancel flag (which the
-    /// POLL_EVERY check inside the loop observes) and pushes a `Stop` command
-    /// so the drain loop wakes immediately even between polls. Idempotent —
-    /// calling `stop()` before `start()` or after the loop exits is a no-op.
+    /// Signal the iterate thread to exit and resolve the start() Promise.
+    /// Sets the cancel flag (which the POLL_EVERY check inside the loop
+    /// observes) and pushes a `Stop` command so the drain loop wakes
+    /// immediately even between polls. Idempotent — calling end() before
+    /// start() or after the loop exits is a no-op.
+    ///
+    /// v3+ rename: was `stop()` in Phase 7b. User-facing Stop is now
+    /// `pause()` (T7); end() is reserved for supersession/disconnect
+    /// teardown — the cancel-flag path that resolves start()'s Promise.
     #[napi]
-    pub fn stop(&self) {
+    pub fn end(&self) {
         self.cancel.cancel();
         if let Ok(guard) = self.cmd_tx.lock() {
             if let Some(tx) = guard.as_ref() {

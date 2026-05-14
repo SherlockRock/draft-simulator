@@ -304,7 +304,7 @@ async function supersedePriorCompute(sessionId, reason = "supersede") {
   const priorSession = activeSessions.get(sessionId);
   if (priorSession) {
     priorSession.stopReason = reason;
-    priorSession.session.stop();
+    priorSession.session.end();
     if (priorSession.promise) {
       try { await priorSession.promise; } catch { /* prior handles its own */ }
     }
@@ -482,13 +482,13 @@ function handlePartialOrError(entry, io, jsonStr) {
   }
 }
 
-// Set stopReason BEFORE calling stop() so the resolving promise's
+// Set stopReason BEFORE calling end() so the resolving promise's
 // closure-captured reason is correct (Decision 9 sequencing).
 async function stopNavigatorSession(sessionId, reason = "user") {
   const entry = activeSessions.get(sessionId);
   if (!entry || !entry.session.isActive()) return { ok: false };
   entry.stopReason = reason;
-  entry.session.stop();
+  entry.session.end();
   return { ok: true };
 }
 
@@ -521,7 +521,7 @@ async function shutdownEngine() {
   activeTokens.clear();
   for (const entry of activeSessions.values()) {
     entry.stopReason = "supersede";
-    entry.session.stop();
+    entry.session.end();
   }
 }
 
