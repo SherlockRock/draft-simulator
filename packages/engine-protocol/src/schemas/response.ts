@@ -104,6 +104,7 @@ const ComputeMetaSchema = z.object({
   mctsMeta: McTsMetaSchema.optional(),
   partial: z.boolean().optional(),
   rootPath: z.array(z.array(z.string())).optional(),
+  persistOnPause: z.boolean().optional(),
 });
 
 export const EngineResponseSchema = z.object({
