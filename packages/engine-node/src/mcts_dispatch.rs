@@ -30,7 +30,7 @@ use std::time::{Duration, Instant};
 
 use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::{DraftState, Side};
-use engine_core::mcts_spike::policy::{McTsConfig, Mcts, SubtreeWalkResult};
+use engine_core::mcts_spike::policy::{McTsConfig, Mcts};
 use engine_core::mcts_spike::real_data_fixture::load_real_data_fixture;
 use engine_core::mcts_spike::rollout::{FeasibilityMode, RolloutPolicy};
 use engine_core::mcts_spike::{PoolContext, SpikeFixture};
@@ -38,11 +38,7 @@ use engine_core::pools::{RolePoolMap, TeamPool};
 use engine_core::protocol_types as proto;
 
 use crate::error;
-use crate::mcts_wire::{
-    build_wire_root, build_wire_tree_recursive, default_min_visits, empty_response,
-    extract_scenarios, max_rendered_depth, MAX_DEPTH, MAX_NODES, MAX_TOP_K_AT_ROOT, POLL_EVERY,
-    TOP_K_AT_DEPTH,
-};
+use crate::mcts_wire::{build_response, empty_response, MAX_TOP_K_AT_ROOT, POLL_EVERY};
 
 pub fn compute_mcts(
     req: &proto::EngineRequest,
@@ -89,43 +85,13 @@ pub fn compute_mcts(
     }
 
     let cancelled = cancel.is_cancelled();
-    let total_iter = mcts.total_iterations();
-
-    let walk: SubtreeWalkResult = mcts.subtree_walk(
-        MAX_DEPTH,
+    Ok(build_response(
+        &mcts,
+        &state,
+        start.elapsed(),
+        cancelled,
         top_k_at_root,
-        TOP_K_AT_DEPTH,
-        default_min_visits,
-        MAX_NODES,
-    );
-
-    let wire_children = build_wire_tree_recursive(&walk.root_children, &state);
-    let depth_reached = max_rendered_depth(&walk.root_children) as i64;
-    let scenarios = extract_scenarios(&state, &wire_children);
-    let root_node = build_wire_root(&state, wire_children);
-
-    Ok(proto::EngineResponse {
-        engine_id: format!("{}-mcts-spike", crate::projection::ENGINE_ID),
-        protocol_version: crate::projection::PROTOCOL_VERSION.to_string(),
-        request_id: None,
-        meta: proto::EngineResponseMeta {
-            cancelled,
-            compute_time_ms: start.elapsed().as_millis() as f64,
-            depth_reached,
-            forced_branches_dropped: 0,
-            nodes_evaluated: total_iter as i64,
-            pruning_rate: 0.0,
-            transpositions_found: 0,
-            mcts_meta: Some(proto::EngineResponseMetaMctsMeta {
-                algorithm: "mcts".to_string(),
-                is_experimental: true,
-                iterations: total_iter as i64,
-                truncated: walk.truncated,
-            }),
-        },
-        scenarios,
-        tree: root_node,
-    })
+    ))
 }
 
 pub(crate) fn build_draft_state(

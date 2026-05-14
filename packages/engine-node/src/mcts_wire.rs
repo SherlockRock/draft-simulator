@@ -9,10 +9,12 @@
 //! assumed-present fields is fine; this is dev-only tooling gated on a
 //! navigator env var).
 
+use std::time::Duration;
+
 use engine_core::draft_state::{ActionType, DraftState, Phase, Side};
 use engine_core::evaluator::ScoreSet;
 use engine_core::mcts_spike::pareto::frontier_membership;
-use engine_core::mcts_spike::policy::VisitedSubtree;
+use engine_core::mcts_spike::policy::{Mcts, SubtreeWalkResult, VisitedSubtree};
 use engine_core::mcts_spike::tree::MoveId;
 use engine_core::mcts_spike::ValueVector;
 use engine_core::protocol_types as proto;
@@ -342,6 +344,60 @@ pub(crate) fn zero_scores() -> proto::TreeNodeScores {
         information_value: s.informationValue,
         reveal_cost: s.revealCost,
         role_coverage: s.roleCoverage,
+    }
+}
+
+/// Render an `Mcts` snapshot into the wire `EngineResponse` shape used by
+/// both `mcts_dispatch::compute_mcts` (one-shot) and `NavigatorSession`'s
+/// iterate loop (final snapshot). `state` is the projected draft state at
+/// the active root — callers pass `mcts.active_root_state()` for the session
+/// path and the constant root state for the one-shot path (they coincide
+/// when no reroot has occurred).
+///
+/// Caller-provided `cancelled` so the persistence matrix is honored:
+/// dispatch sets it from `cancel.is_cancelled()`, the session path sets it
+/// to `false` on a stop-initiated exit and `cancel.is_cancelled()` otherwise.
+pub(crate) fn build_response(
+    mcts: &Mcts<'_>,
+    state: &DraftState,
+    elapsed: Duration,
+    cancelled: bool,
+    top_k_at_root: usize,
+) -> proto::EngineResponse {
+    let total_iter = mcts.total_iterations();
+    let walk: SubtreeWalkResult = mcts.subtree_walk(
+        MAX_DEPTH,
+        top_k_at_root,
+        TOP_K_AT_DEPTH,
+        default_min_visits,
+        MAX_NODES,
+    );
+    let wire_children = build_wire_tree_recursive(&walk.root_children, state);
+    let depth_reached = max_rendered_depth(&walk.root_children) as i64;
+    let scenarios = extract_scenarios(state, &wire_children);
+    let root_node = build_wire_root(state, wire_children);
+
+    proto::EngineResponse {
+        engine_id: format!("{}-mcts-spike", crate::projection::ENGINE_ID),
+        protocol_version: crate::projection::PROTOCOL_VERSION.to_string(),
+        request_id: None,
+        meta: proto::EngineResponseMeta {
+            cancelled,
+            compute_time_ms: elapsed.as_millis() as f64,
+            depth_reached,
+            forced_branches_dropped: 0,
+            nodes_evaluated: total_iter as i64,
+            pruning_rate: 0.0,
+            transpositions_found: 0,
+            mcts_meta: Some(proto::EngineResponseMetaMctsMeta {
+                algorithm: "mcts".to_string(),
+                is_experimental: true,
+                iterations: total_iter as i64,
+                truncated: walk.truncated,
+            }),
+        },
+        scenarios,
+        tree: root_node,
     }
 }
 

@@ -5,25 +5,40 @@
 //! Arc-wrapped fixture + pools) so iteration can outlive any single napi call
 //! and absorb mid-flight reroot commands.
 //!
-//! Task 4 lands the scaffolding only: struct, `SessionCommand` enum,
-//! `RequestMeta`, and stub method impls. `start()` and `reroot()` return
-//! "not implemented yet" errors — T5 fills `start()` (spawn the iterate
-//! loop + final snapshot), T6 adds the visit-doubling cadence, T7 wires
-//! `reroot()` through the command channel.
+//! Task 5 lands `start()` + the iterate loop core. No cadence emit yet (that
+//! arrives in T6) and no reroot dispatch (T7) — `Reroot` commands are
+//! silently dropped so the channel doesn't error if JS jumps the gun.
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::Sender;
+use std::sync::atomic::AtomicBool;
+#[cfg(not(test))]
+use std::sync::atomic::Ordering;
+use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::DraftState;
-use engine_core::mcts_spike::policy::McTsConfig;
+use engine_core::mcts_spike::policy::{McTsConfig, Mcts};
 use engine_core::mcts_spike::{PoolContext, SpikeFixture};
 use napi::bindgen_prelude::*;
-use napi::threadsafe_function::{ErrorStrategy, ThreadsafeFunction};
+#[cfg(not(test))]
+use napi::threadsafe_function::{
+    ErrorStrategy, ThreadSafeCallContext, ThreadsafeFunction, ThreadsafeFunctionCallMode,
+};
+#[cfg(not(test))]
+use napi::{Env, JsFunction, JsObject};
 use napi_derive::napi;
 
 use crate::error;
+use crate::mcts_wire;
+
+/// Bounded queue size for the partial-emit TSF. Decision 5 / Codex R1-#5 —
+/// finite + NonBlocking gives drop-on-backpressure semantics. `FromNapiValue`
+/// on `ThreadsafeFunction` hardcodes `0` (unbounded) in napi-rs 2.16, so
+/// `start()` takes the raw `JsFunction` and constructs the TSF here to keep
+/// this invariant.
+#[cfg(not(test))]
+const TSF_QUEUE_SIZE: usize = 4;
 
 /// Commands posted from the napi-binding thread (stop/reroot) to the iterate
 /// thread that owns the `Mcts`. The reroot payload carries a monotonic
@@ -31,7 +46,7 @@ use crate::error;
 /// the originating JS request without round-tripping the full path.
 pub(crate) enum SessionCommand {
     Stop,
-    #[allow(dead_code)] // T7 wires reroot dispatch; T4 only ships the enum.
+    #[allow(dead_code)] // T7 wires reroot dispatch; T5 only ignores the variant.
     Reroot {
         reroot_id: u64,
         champion_ids_path: Vec<Vec<String>>,
@@ -42,9 +57,8 @@ pub(crate) enum SessionCommand {
 /// construction so cadence + final-snapshot rendering can use them without
 /// re-parsing the request JSON.
 pub(crate) struct RequestMeta {
-    #[allow(dead_code)] // Consumed by T6 cadence + T5 final snapshot.
+    #[allow(dead_code)] // Consumed by T6 cadence.
     pub latency_budget_ms: u64,
-    #[allow(dead_code)] // Consumed by T5 final snapshot / scenario rendering.
     pub top_k_at_root: usize,
 }
 
@@ -52,42 +66,47 @@ pub(crate) struct RequestMeta {
 pub struct NavigatorSession {
     /// Idempotency guard for `start()` — sessions are single-use (Decision 5,
     /// Codex R1-#17). Set on the first `start()` call, never reset.
+    #[cfg_attr(test, allow(dead_code))]
     started: AtomicBool,
     /// Sender side of the command channel. Populated by `start()` when the
     /// iterate thread is spawned; `None` until then (and after the loop
-    /// exits). Wrapped in `Mutex<Option<_>>` so `stop()` / `reroot()` can
-    /// take `&self`.
-    cmd_tx: Mutex<Option<Sender<SessionCommand>>>,
+    /// exits). `Arc<Mutex<...>>` so the spawned task can clone a handle and
+    /// clear the slot post-loop without holding `&self`.
+    cmd_tx: Arc<Mutex<Option<Sender<SessionCommand>>>>,
     /// Cancellation flag shared with the iterate thread. Flipped by `stop()`
     /// and polled inside the iterate loop's POLL_EVERY check.
     cancel: CancelHandle,
     /// Threadsafe function for partial emits. Populated by `start()` from the
-    /// JS callback; `None` until then. Held in a `Mutex<Option<_>>` so the
+    /// JS callback; `None` until then. Held in `Arc<Mutex<...>>` so the
     /// post-loop cleanup path can drop it (avoiding pinning the JS closure).
     ///
     /// Gated `#[cfg(not(test))]` because `ThreadsafeFunction`'s `Drop` impl
     /// pulls in `napi_release_threadsafe_function`, a Node-supplied dynamic
     /// symbol unresolvable when building the test binary as a plain ELF
     /// executable (the `cdylib` non-test build links inside Node so the
-    /// symbol resolves at runtime). T5 will remove this gate when the
-    /// iterate-loop wiring actually populates and reads the field — by
-    /// that point `cargo test -p engine-node` will be driven through
-    /// integration tests under `tests/` that load the cdylib via Node,
-    /// rather than the lib-internal `#[test]` path used here.
+    /// symbol resolves at runtime). T5's Rust unit test exercises
+    /// `iterate_loop` directly with a noop emit closure, never touching this
+    /// field; full TSF coverage moves to JS-side integration testing.
     #[cfg(not(test))]
-    #[allow(dead_code)] // Populated by T5 start() impl.
-    on_partial: Mutex<Option<ThreadsafeFunction<String, ErrorStrategy::Fatal>>>,
+    on_partial: Arc<Mutex<Option<ThreadsafeFunction<String, ErrorStrategy::Fatal>>>>,
+    /// One-shot backpressure-drop log gate. Flipped on the first `tsf.call`
+    /// non-OK status so we don't spam stderr if a slow JS handler causes
+    /// repeated drops. Shared with the emit closure via `Arc` clone.
+    #[cfg(not(test))]
+    backpressure_logged: Arc<AtomicBool>,
     /// Captured at construction so the spawned iterate thread can borrow them
     /// for the `Mcts` lifetime without keeping the napi `Engine` alive.
-    #[allow(dead_code)] // Consumed by T5 iterate-thread spawn.
+    /// Test mode never reads these (it calls `iterate_loop` directly), so the
+    /// dead-code gate keeps the warning surface clean.
+    #[cfg_attr(test, allow(dead_code))]
     fixture: Arc<SpikeFixture>,
-    #[allow(dead_code)] // Consumed by T5 iterate-thread spawn.
+    #[cfg_attr(test, allow(dead_code))]
     pools: Arc<PoolContext>,
-    #[allow(dead_code)] // Consumed by T5 iterate-thread spawn.
+    #[cfg_attr(test, allow(dead_code))]
     initial_state: DraftState,
-    #[allow(dead_code)] // Consumed by T5 iterate-thread spawn.
+    #[cfg_attr(test, allow(dead_code))]
     cfg: McTsConfig,
-    #[allow(dead_code)] // Consumed by T5 iterate-thread spawn.
+    #[cfg_attr(test, allow(dead_code))]
     request_meta: RequestMeta,
 }
 
@@ -106,10 +125,12 @@ impl NavigatorSession {
     ) -> Self {
         Self {
             started: AtomicBool::new(false),
-            cmd_tx: Mutex::new(None),
+            cmd_tx: Arc::new(Mutex::new(None)),
             cancel: CancelHandle::new(),
             #[cfg(not(test))]
-            on_partial: Mutex::new(None),
+            on_partial: Arc::new(Mutex::new(None)),
+            #[cfg(not(test))]
+            backpressure_logged: Arc::new(AtomicBool::new(false)),
             fixture,
             pools,
             initial_state,
@@ -121,33 +142,104 @@ impl NavigatorSession {
 
 #[napi]
 impl NavigatorSession {
-    /// Spawn the MCTS iterate loop. T5 fills the implementation: build a
-    /// `ThreadsafeFunction` from `on_partial`, install the command-channel
-    /// sender, `tokio::task::spawn_blocking` the iterate loop, and resolve
-    /// with the final-snapshot JSON when the loop exits (stop / cancel /
-    /// terminal). T4 ships only the napi signature so the JS side can be
-    /// type-checked against the eventual surface.
+    /// Spawn the MCTS iterate loop. Returns a Promise that resolves with the
+    /// final-snapshot JSON when the loop exits (stop / cancel / terminal).
+    ///
+    /// **Deviation from plan-text §"navigator_session.rs skeleton" line 732:**
+    /// the plan declared `async fn start(&self, on_partial: JsFunction)`. That
+    /// signature won't compile — napi-rs's async-fn wrapper requires the
+    /// future be `Send`, but `JsFunction: !Send` (it carries a thread-local
+    /// `napi_env` handle). Taking `ThreadsafeFunction` directly (T4's
+    /// short-lived approach) silently loses the queue-size invariant because
+    /// `FromNapiValue` for TSF passes `max_queue_size = 0` (unbounded) in
+    /// napi-rs 2.16.17. We instead build the TSF *inside* `start()` from the
+    /// raw `JsFunction` with `TSF_QUEUE_SIZE = 4`, use `Env::create_deferred`
+    /// to mint a Promise, and resolve it from the spawned blocking task. The
+    /// resulting JS API (`session.start(cb): Promise<string>`) matches the
+    /// plan's intent; only the Rust signature differs.
+    #[cfg(not(test))]
     #[napi]
-    pub async fn start(
-        &self,
-        _on_partial: ThreadsafeFunction<String, ErrorStrategy::Fatal>,
-    ) -> napi::Result<String> {
-        // napi-rs idiosyncrasy: `JsFunction` is `!Send`, so we can't take it
-        // as a parameter on an async `#[napi]` method (the wrapper future
-        // would fail the `Send` bound). napi-rs's `ThreadsafeFunction<R>`
-        // implements `FromNapiValue`, so we accept it directly — the napi
-        // bridge constructs the TSF from the JS callback on the way in.
-        // T5 will store this on `self.on_partial` before spawning the
-        // iterate thread.
+    pub fn start(&self, env: Env, on_partial: JsFunction) -> napi::Result<JsObject> {
         if self.started.swap(true, Ordering::SeqCst) {
             return Err(error::invalid_input(
                 vec!["start"],
                 "NavigatorSession::start called twice — sessions are single-use",
             ));
         }
-        Err(error::internal(
-            "NavigatorSession::start not implemented (Phase 7b Task 5)",
-        ))
+
+        // Bounded queue (Decision 5): finite + NonBlocking = drop on
+        // backpressure. The TSF marshals each emit's String into a JS string
+        // argument before invoking the user callback.
+        let tsf: ThreadsafeFunction<String, ErrorStrategy::Fatal> = on_partial
+            .create_threadsafe_function(TSF_QUEUE_SIZE, |ctx: ThreadSafeCallContext<String>| {
+                ctx.env.create_string(&ctx.value).map(|s| vec![s])
+            })?;
+        *self.on_partial.lock().expect("on_partial mutex poisoned") = Some(tsf.clone());
+
+        let (tx, rx) = mpsc::channel::<SessionCommand>();
+        *self.cmd_tx.lock().expect("cmd_tx mutex poisoned") = Some(tx);
+
+        // Emit closure (test-friendly seam, Codex R1-#14): production wraps
+        // tsf.call(NonBlocking); the Rust unit-test path swaps in a Box that
+        // pushes into a Vec or no-ops entirely.
+        let emit: Box<dyn Fn(String) + Send + Sync> = {
+            let tsf_for_emit = tsf.clone();
+            let bp_logged = self.backpressure_logged.clone();
+            Box::new(move |json| {
+                // ErrorStrategy::Fatal: call() takes T directly, not Result<T>.
+                let status = tsf_for_emit.call(json, ThreadsafeFunctionCallMode::NonBlocking);
+                if status != napi::Status::Ok && !bp_logged.swap(true, Ordering::Relaxed) {
+                    // One-shot log: emit-on-backpressure is expected when JS
+                    // is slow; we don't want to spam stderr per-drop.
+                    eprintln!(
+                        "navigator_session: TSF backpressure drop (status={:?}); \
+                         subsequent drops in this session will be silent",
+                        status
+                    );
+                }
+            })
+        };
+
+        // Capture session inputs as owned values for the blocking task. Arc
+        // clones keep the fixture/pools alive across the closure boundary so
+        // the engine can free its handles without breaking the spawned Mcts.
+        let fixture = self.fixture.clone();
+        let pools = self.pools.clone();
+        let initial_state = self.initial_state.clone();
+        let cfg = self.cfg.clone();
+        let meta = RequestMeta {
+            latency_budget_ms: self.request_meta.latency_budget_ms,
+            top_k_at_root: self.request_meta.top_k_at_root,
+        };
+        let cancel = self.cancel.clone();
+
+        // Slots for post-loop cleanup (Opus R1-#20): drop the TSF + sender so
+        // the JS callback closure isn't pinned across session idle. Cloned
+        // Arcs let the spawned task reach in without borrowing `&self`.
+        let on_partial_slot = self.on_partial.clone();
+        let cmd_tx_slot = self.cmd_tx.clone();
+
+        // create_deferred returns a (deferred, promise) pair. We hand the
+        // promise back to JS synchronously and resolve/reject from the
+        // blocking task. JsDeferred is Send (the napi-rs impl asserts this
+        // via unsafe Send impl) so it can cross the spawn_blocking boundary.
+        let (deferred, promise) = env.create_deferred::<String, _>()?;
+
+        tokio::task::spawn_blocking(move || {
+            let result =
+                iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit);
+            // Cleanup before resolving: drops the TSF (cancels the napi ref
+            // back to the JS callback) and the sender (so stop/reroot become
+            // no-ops post-exit).
+            *on_partial_slot.lock().expect("on_partial mutex poisoned") = None;
+            *cmd_tx_slot.lock().expect("cmd_tx mutex poisoned") = None;
+            match result {
+                Ok(json) => deferred.resolve(move |_env| Ok(json)),
+                Err(e) => deferred.reject(e),
+            }
+        });
+
+        Ok(promise)
     }
 
     /// Signal the iterate thread to exit. Sets the cancel flag (which the
@@ -166,7 +258,7 @@ impl NavigatorSession {
 
     /// Re-root the in-flight MCTS to a descendant identified by
     /// `champion_ids_path`. T7 wires the command through the channel so the
-    /// iterate thread invokes `Mcts::reroot_to` between iterations. T4 ships
+    /// iterate thread invokes `Mcts::reroot_to` between iterations. T5 ships
     /// the napi signature + BigInt validation so JS can be type-checked
     /// against the eventual surface.
     ///
@@ -183,7 +275,7 @@ impl NavigatorSession {
             ));
         }
         // Parse the path here even though we don't dispatch yet: this keeps
-        // the napi error surface stable across T4 -> T7 (JS sees the same
+        // the napi error surface stable across T5 -> T7 (JS sees the same
         // invalid-input error shape for malformed paths regardless of
         // whether the session is mid-iteration).
         let _path: Vec<Vec<String>> = serde_json::from_str(&path_json).map_err(|e| {
@@ -209,11 +301,107 @@ impl NavigatorSession {
     }
 }
 
+/// MCTS iterate loop core (Decision 3 / 4 v3 skeleton, minus cadence and
+/// reroot — those land in T6 and T7).
+///
+/// `emit` is the abstract emit seam: production wraps a TSF call,
+/// Rust unit tests pass a Box that collects into a Vec or no-ops. The Box
+/// pre-shaping keeps T6's cadence implementation drop-in.
+///
+/// Returns the JSON-serialized final `EngineResponse`. The `cancelled` flag
+/// in the response honors the Decision 5 persistence matrix: `false` when
+/// the loop exits via a `Stop` command (the canonical "user clicked stop"
+/// path), `true` when the cancel flag was flipped directly (e.g. by the
+/// napi runtime on supersession).
+pub(crate) fn iterate_loop(
+    fixture: &SpikeFixture,
+    pools: &PoolContext,
+    initial_state: DraftState,
+    cfg: McTsConfig,
+    meta: RequestMeta,
+    cancel: CancelHandle,
+    rx: Receiver<SessionCommand>,
+    _emit: Box<dyn Fn(String) + Send + Sync>,
+) -> napi::Result<String> {
+    let start = Instant::now();
+    if initial_state.is_complete() {
+        let resp = mcts_wire::empty_response(start.elapsed().as_millis() as u64, 0);
+        return serde_json::to_string(&resp)
+            .map_err(|e| error::internal(format!("empty serialize: {}", e)));
+    }
+
+    let mut mcts = Mcts::with_pools(fixture, initial_state.clone(), pools, cfg.clone());
+    let mut counter: usize = 0;
+    let mut stop_requested = false;
+
+    loop {
+        // Drain pending commands. We intentionally drain to empty per turn
+        // so a stop posted between polls doesn't wait a full POLL_EVERY
+        // cycle.
+        loop {
+            match rx.try_recv() {
+                Ok(SessionCommand::Stop) => {
+                    stop_requested = true;
+                }
+                Ok(SessionCommand::Reroot { .. }) => {
+                    // T7 wires reroot dispatch. T5 drops the command rather
+                    // than erroring so a JS client racing reroot against the
+                    // first emit doesn't tear the session down.
+                }
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    // Sender dropped (e.g. NavigatorSession garbage-collected
+                    // mid-iterate). Treat as stop so we exit cleanly.
+                    stop_requested = true;
+                    break;
+                }
+            }
+        }
+        if stop_requested {
+            break;
+        }
+
+        // POLL_EVERY-paced cancel check. Cheap (atomic load) but worth gating
+        // because the iterate hot path is ~50–200µs.
+        if counter % mcts_wire::POLL_EVERY == 0 && cancel.is_cancelled() {
+            break;
+        }
+
+        mcts.iterate();
+        counter += 1;
+    }
+
+    // Persistence matrix: stop-initiated exits set cancelled=false (the user
+    // got the snapshot they asked for); cancel-flag exits set cancelled=true
+    // (caller may discard).
+    let cancelled = !stop_requested && cancel.is_cancelled();
+    let resp = mcts_wire::build_response(
+        &mcts,
+        mcts.active_root_state(),
+        start.elapsed(),
+        cancelled,
+        meta.top_k_at_root,
+    );
+    serde_json::to_string(&resp).map_err(|e| error::internal(format!("final serialize: {}", e)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use engine_core::mcts_spike::real_data_fixture::real_data_fixture;
     use engine_core::mcts_spike::rollout::{FeasibilityMode, RolloutPolicy};
+    use engine_core::protocol_types as proto;
+    use std::time::Duration;
+
+    fn test_cfg() -> McTsConfig {
+        McTsConfig {
+            policy: RolloutPolicy::UniformFeasible,
+            feasibility_mode: FeasibilityMode::Cached,
+            seed: 1,
+            root_shortlist_k: Some(20),
+            flex_weight: 1.0,
+        }
+    }
 
     /// Verifies the freshly-constructed session reports inactive — no
     /// `start()` has fired, so `cmd_tx` is `None` and the cancel flag is
@@ -226,21 +414,107 @@ mod tests {
         let fixture = Arc::new(real_data_fixture());
         let pools = Arc::new(PoolContext::full(&fixture));
         let initial_state = DraftState::default();
-        let cfg = McTsConfig {
-            policy: RolloutPolicy::UniformFeasible,
-            feasibility_mode: FeasibilityMode::Cached,
-            seed: 1,
-            root_shortlist_k: Some(20),
-            flex_weight: 1.0,
-        };
         let request_meta = RequestMeta {
             latency_budget_ms: 200,
             top_k_at_root: 5,
         };
-        let session = NavigatorSession::new(fixture, pools, initial_state, cfg, request_meta);
+        let session = NavigatorSession::new(fixture, pools, initial_state, test_cfg(), request_meta);
         assert!(
             !session.is_active(),
             "fresh session must report inactive before start()"
+        );
+    }
+
+    /// Drives `iterate_loop` directly with a noop emit, sends `Stop` after a
+    /// short delay, and asserts the resolved JSON parses as an `EngineResponse`
+    /// with a usable tree (root has children, iterations > 0). Bypasses the
+    /// TSF / Promise plumbing — the napi-side wiring is exercised manually in
+    /// T17 because constructing a real TSF inside `cargo test` would link the
+    /// Node-only release symbol unresolvable in a plain ELF binary.
+    ///
+    /// `std::thread::sleep` (not `tokio::time::sleep`) because the workspace
+    /// tokio profile drops the `time` feature; the test runs synchronously
+    /// against the blocking `iterate_loop` anyway.
+    #[test]
+    fn navigator_session_stop_resolves_with_final_snapshot() {
+        let fixture = Arc::new(real_data_fixture());
+        let pools = Arc::new(PoolContext::full(&fixture));
+        let initial_state = DraftState::default();
+        let cfg = test_cfg();
+        let meta = RequestMeta {
+            latency_budget_ms: 100,
+            top_k_at_root: 5,
+        };
+        let cancel = CancelHandle::new();
+        let (tx, rx) = mpsc::channel::<SessionCommand>();
+        let emit: Box<dyn Fn(String) + Send + Sync> = Box::new(|_| {});
+
+        // Background nudge: send Stop after 100ms so iterate_loop has time
+        // to accrue a meaningful number of iterations and expand at least
+        // one root child. Kept short enough that the parallel-test scheduler
+        // doesn't starve the wall-clock-dependent dispatch tests.
+        let stop_thread = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(100));
+            let _ = tx.send(SessionCommand::Stop);
+        });
+
+        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
+            .expect("iterate_loop ok");
+        stop_thread.join().expect("stop nudge completes");
+
+        let parsed: proto::EngineResponse =
+            serde_json::from_str(&result).expect("final response parses as EngineResponse");
+
+        // Stop-initiated exit: persistence matrix says cancelled=false.
+        assert!(
+            !parsed.meta.cancelled,
+            "stop-initiated exit should leave cancelled=false"
+        );
+        // Sanity: iterations advanced and root has children to render.
+        assert!(
+            parsed.meta.nodes_evaluated > 0,
+            "expected iterations > 0 over 200ms budget"
+        );
+        assert!(
+            !parsed.tree.children.is_empty(),
+            "expected root_children populated after iterating from default state"
+        );
+    }
+
+    /// Asserts the `cancelled=true` branch of the persistence matrix:
+    /// flipping the cancel flag (without sending Stop) exits the loop and
+    /// surfaces cancelled=true in the final response. Mirrors the napi
+    /// runtime's supersession behavior, where a new compute supersedes an
+    /// in-flight one by cancelling its handle.
+    #[test]
+    fn navigator_session_cancel_flag_marks_response_cancelled() {
+        let fixture = Arc::new(real_data_fixture());
+        let pools = Arc::new(PoolContext::full(&fixture));
+        let initial_state = DraftState::default();
+        let cfg = test_cfg();
+        let meta = RequestMeta {
+            latency_budget_ms: 100,
+            top_k_at_root: 5,
+        };
+        let cancel = CancelHandle::new();
+        let cancel_for_nudge = cancel.clone();
+        let (_tx, rx) = mpsc::channel::<SessionCommand>();
+        let emit: Box<dyn Fn(String) + Send + Sync> = Box::new(|_| {});
+
+        let nudge = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            cancel_for_nudge.cancel();
+        });
+
+        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
+            .expect("iterate_loop ok");
+        nudge.join().expect("cancel nudge completes");
+
+        let parsed: proto::EngineResponse =
+            serde_json::from_str(&result).expect("final response parses as EngineResponse");
+        assert!(
+            parsed.meta.cancelled,
+            "cancel-initiated exit should set meta.cancelled=true"
         );
     }
 }
