@@ -159,7 +159,7 @@ export interface NavigatorSnapshotData {
         rootPath?: string[][];
         persistOnPause?: boolean;
     } | null;
-    createdAt: string;
+    createdAt: string | null;
 }
 
 export interface NavigatorPanRequest {

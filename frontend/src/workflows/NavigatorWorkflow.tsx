@@ -179,7 +179,7 @@ const NavigatorSnapshotDataSchema = z.object({
             persistOnPause: z.boolean().optional()
         })
         .nullable(),
-    createdAt: z.string()
+    createdAt: z.string().nullable()
 });
 
 const NavigatorPartialSnapshotEnvelopeSchema = z.object({
