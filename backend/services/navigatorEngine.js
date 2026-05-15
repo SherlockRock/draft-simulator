@@ -639,8 +639,10 @@ async function resumeNavigatorSession(navigatorDraft, sess, events, version, io,
     entry.session.resume();
     return { ok: true, freshSession: false };
   }
-  // No live entry — fresh session at current state.
-  return startNavigatorSession(navigatorDraft, sess, events, version, io, options);
+  // No live entry — fresh session at current state. Wrap with ok:true so
+  // socket-handler !result.ok checks don't fire a false-positive toast.
+  const startResult = await startNavigatorSession(navigatorDraft, sess, events, version, io, options);
+  return { ok: true, freshSession: true, ...startResult };
 }
 
 // Phase 7c T10: live entry → reroot in place (works in both Active and
@@ -652,9 +654,11 @@ async function rerootNavigatorSession(navigatorDraft, sess, events, rerootId, re
     entry.session.reroot(BigInt(rerootId), JSON.stringify(rerootStep));
     return { ok: true, freshSession: false };
   }
-  // No live entry — fresh session with initialRootPath.
+  // No live entry — fresh session with initialRootPath. Wrap with ok:true so
+  // navigatorReroot's !result.ok check doesn't render "Reroot failed: undefined".
   const augmentedOptions = { ...options, initialRootPath: rerootStep };
-  return startNavigatorSession(navigatorDraft, sess, events, version, io, augmentedOptions);
+  const startResult = await startNavigatorSession(navigatorDraft, sess, events, version, io, augmentedOptions);
+  return { ok: true, freshSession: true, ...startResult };
 }
 
 function getEngineStatus() {

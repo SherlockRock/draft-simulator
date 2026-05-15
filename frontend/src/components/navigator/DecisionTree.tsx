@@ -1511,10 +1511,20 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                     role="status"
                     aria-live="polite"
                 >
-                    <span
-                        class="h-3 w-3 animate-spin rounded-full border-2 border-slate-600 border-t-sky-300"
-                        aria-hidden="true"
-                    />
+                    <Show
+                        when={!props.hasPausedSession}
+                        fallback={
+                            <span
+                                class="h-3 w-3 rounded-full bg-slate-500"
+                                aria-hidden="true"
+                            />
+                        }
+                    >
+                        <span
+                            class="h-3 w-3 animate-spin rounded-full border-2 border-slate-600 border-t-sky-300"
+                            aria-hidden="true"
+                        />
+                    </Show>
                     <span>
                         {props.isStopping
                             ? "Stopping…"

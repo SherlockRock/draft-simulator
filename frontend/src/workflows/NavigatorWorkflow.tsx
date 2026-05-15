@@ -801,7 +801,15 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                 // T15: also clear `isStopping` here — whether the final landed
                 // organically or because of a user Stop, the optimistic
                 // "Stopping…" state has served its purpose.
-                setPartialSnapshot(null);
+                // Phase 7c: skip the partialSnapshot clear when the new snapshot
+                // is a pause-finalize (persistOnPause). The Mcts arena is still
+                // alive and Resume continues against it; clearing the partial
+                // would fall effectiveTree back to syntheticTreeSignal (confirmed
+                // events only) and the rich MCTS tree visually collapses to the
+                // spine until Resume restores partials.
+                if (finalSnapshot?.meta?.persistOnPause !== true) {
+                    setPartialSnapshot(null);
+                }
                 setIsSessionActive(false);
                 setIsStopping(false);
             }
