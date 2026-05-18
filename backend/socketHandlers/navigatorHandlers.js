@@ -474,8 +474,9 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
       // Warm-restart fast path: championIds match a top-level projected child
       // → reuse the in-flight Mcts via napi applyPick. Falls through to cold
-      // restart on engine notProjected error (championIds slipped out of top-K
-      // between partial emit and pick arrival).
+      // restart on applyPick.notProjected (championIds slipped out of top-K
+      // between partial emit and pick arrival) or applyPick.sessionEnded
+      // (iterate thread exited between mirror-update and pick arrival).
       const entry = navigatorEngine.activeSessions.get(sessionId);
       const key = championIds.join("|");
       const afterEventId = navigatorEngine.getLastEventId(events);
@@ -553,7 +554,7 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
       // Warm-restart fast path: championId matches a top-level projected child
       // (Set key is the bare championId for single-id moves). Falls through to
-      // cold restart on engine notProjected error.
+      // cold restart on applyPick.notProjected / applyPick.sessionEnded.
       const entry = navigatorEngine.activeSessions.get(sessionId);
       const afterEventId = navigatorEngine.getLastEventId(events);
       if (

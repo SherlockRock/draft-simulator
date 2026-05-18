@@ -352,9 +352,15 @@ impl NavigatorSession {
         };
         let cmd_tx = tx.clone();
         drop(guard);
+        // Channel send-failure means the iterate thread has exited — surface the
+        // same `applyPick.sessionEnded` code as the empty-sender path so JS's
+        // warm-path handler treats both consistently (silent fallthrough to cold
+        // restart, not a noisy unexpected-error log).
         cmd_tx
             .send(SessionCommand::ApplyPick { champion_ids, resolve })
-            .map_err(|e| error::internal(format!("applyPick send: {}", e)))?;
+            .map_err(|_| {
+                napi::Error::new(napi::Status::GenericFailure, "applyPick.sessionEnded")
+            })?;
         Ok(promise)
     }
 

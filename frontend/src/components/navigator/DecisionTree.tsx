@@ -493,11 +493,7 @@ const TreeNodeComponent: Component<{
     return (
         <g
             data-tree-node="true"
-            // Phase 7b T16: `group` enables the nested reroot-button's
-            // `group-hover:opacity-100` to reveal on parent hover. Tailwind's
-            // group/group-hover utilities work on SVG <g> with the standard
-            // v3 config used by the project.
-            class="group transition-transform duration-200 ease-out"
+            class="transition-transform duration-200 ease-out"
             transform={`translate(${props.node.x} ${props.node.y})`}
             opacity={strokeOpacity()}
             onPointerDown={(e) => {
