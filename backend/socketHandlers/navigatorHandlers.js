@@ -3,10 +3,11 @@ const NavigatorDraft = require("../models/NavigatorDraft");
 const NavigatorEvent = require("../models/NavigatorEvent");
 const NavigatorSnapshot = require("../models/NavigatorSnapshot");
 const navigatorEngine = require("../services/navigatorEngine");
-const {
-  computeForDraft,
-  isMctsToggleEnabled,
-} = navigatorEngine;
+const { isMctsToggleEnabled } = navigatorEngine;
+// Note: computeForDraft is accessed via navigatorEngine.* (not destructured)
+// so test-time spies on navigatorEngine.computeForDraft are honoured. Other
+// engine functions (pauseNavigatorSession, resumeNavigatorSession, etc.) are
+// referenced the same way for the same reason.
 const { getOurSideForGame } = require("../utils/navigatorSide");
 
 // Per-session engine job version. Bumped on every pick/ban/undo. Results whose
@@ -234,7 +235,7 @@ async function recomputeAndBroadcast(io, socket, session, draft, events, version
         : { ...options, algorithm: getSessionAlgorithm(session.id) }),
       socketId: socket.id,
     };
-    const result = await computeForDraft(draft, session, events, version, io, mergedOptions);
+    const result = await navigatorEngine.computeForDraft(draft, session, events, version, io, mergedOptions);
 
     // Cancellation-driven swallow (engine.cancelled or meta.cancelled === true).
     // Newer compute will broadcast its own snapshot — drop silently.
