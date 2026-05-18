@@ -185,17 +185,20 @@ async function emitDraftUpdate(io, sessionId, payload) {
 }
 
 // Warm-restart helper shared by navigatorPick and navigatorBan. Caller has
-// already verified `entry.projectedChildren.has(key)` for the move's key.
+// already verified `entry.projectedChildren.has(key)` for the move's key and
+// has the post-move event list (for afterEventId) and bumped version on hand.
 //
 // Waits for any in-flight pause-persist (so applyPick doesn't race a snapshot
-// write referencing the pre-move root), then attempts napi applyPick. Returns
-// true if the warm path succeeded (caller should return without cold restart);
-// false if applyPick failed with notProjected/sessionEnded or threw unexpectedly
-// (caller should fall through to cold recompute).
+// write referencing the pre-move root), then attempts napi applyPick. On
+// success, advances entry.afterEventId + entry.version so future partials and
+// pause-finalize snapshots carry the post-move identifiers — otherwise a Stop
+// after a warm pick persists a snapshot with a stale after_event_id and the
+// frontend's hasPausedSession freshness gate trips.
 //
-// On success, invalidates any persisted paused snapshot — its tree referenced
-// the pre-move root and would restore stale state on later refresh.
-async function tryWarmApplyPick(entry, championIds) {
+// Returns true if the warm path succeeded (caller should return without cold
+// restart); false if applyPick failed with notProjected/sessionEnded or threw
+// unexpectedly (caller should fall through to cold recompute).
+async function tryWarmApplyPick(entry, championIds, { afterEventId, version }) {
   if (entry.pausePersistPromise) {
     try { await entry.pausePersistPromise; } catch (_) {}
   }
@@ -204,11 +207,12 @@ async function tryWarmApplyPick(entry, championIds) {
   } catch (e) {
     const msg = String(e?.message || "");
     if (!msg.includes("applyPick.notProjected") && !msg.includes("applyPick.sessionEnded")) {
-      // Unexpected error — log and treat as cold-fallthrough.
       console.error("[nav] applyPick warm path threw:", e);
     }
     return false;
   }
+  entry.afterEventId = afterEventId;
+  entry.version = version;
   if (entry.lastPersistedPauseSnapshotId) {
     const stale = entry.lastPersistedPauseSnapshotId;
     entry.lastPersistedPauseSnapshotId = null;
@@ -474,7 +478,11 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       // between partial emit and pick arrival).
       const entry = navigatorEngine.activeSessions.get(sessionId);
       const key = championIds.join("|");
-      if (entry?.projectedChildren?.has(key) && await tryWarmApplyPick(entry, championIds)) {
+      const afterEventId = navigatorEngine.getLastEventId(events);
+      if (
+        entry?.projectedChildren?.has(key) &&
+        await tryWarmApplyPick(entry, championIds, { afterEventId, version })
+      ) {
         return;
       }
 
@@ -547,7 +555,11 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       // (Set key is the bare championId for single-id moves). Falls through to
       // cold restart on engine notProjected error.
       const entry = navigatorEngine.activeSessions.get(sessionId);
-      if (entry?.projectedChildren?.has(championId) && await tryWarmApplyPick(entry, [championId])) {
+      const afterEventId = navigatorEngine.getLastEventId(events);
+      if (
+        entry?.projectedChildren?.has(championId) &&
+        await tryWarmApplyPick(entry, [championId], { afterEventId, version })
+      ) {
         return;
       }
 

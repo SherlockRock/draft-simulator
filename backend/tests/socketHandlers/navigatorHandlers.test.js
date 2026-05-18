@@ -353,6 +353,39 @@ describe("navigatorPick warm path", () => {
     expect(computeSpy).not.toHaveBeenCalled();
   });
 
+  it("advances entry.afterEventId + entry.version after warm restart", async () => {
+    setupHappyMocks();
+    // listDraftEvents (NavigatorEvent.findAll) returns the post-pick events;
+    // the warm path must mirror the latest id onto the entry so that a Stop
+    // after the warm pick persists a snapshot whose after_event_id matches
+    // the latest NavigatorEvent (driving frontend hasPausedSession freshness).
+    vi.spyOn(NavigatorEvent, "findAll").mockResolvedValue([
+      { id: "ev-pre", event_type: "pick", slot: 5, side: "red", champion_id: "Pre", createdAt: "2026-05-18T00:00:00Z" },
+      { id: "ev-warm", event_type: "pick", slot: 6, side: "blue", champion_id: "Kalista", createdAt: "2026-05-18T00:00:01Z" },
+    ]);
+    const entry = buildEntry({
+      projectedChildren: new Set(["Kalista"]),
+    });
+    entry.afterEventId = "ev-pre";
+    entry.version = 7;
+    navigatorEngine.activeSessions.set("sess-1", entry);
+    vi.spyOn(navigatorEngine, "computeForDraft").mockResolvedValue({ version: 1, snapshot: null });
+
+    const { socket, handlers } = buildFakeSocket();
+    installHandlers({ socket });
+
+    await handlers.get("navigatorPick")({
+      sessionId: "sess-1",
+      draftId: "draft-1",
+      championIds: ["Kalista"],
+      firstSlot: 6,
+    });
+
+    expect(entry.afterEventId).toBe("ev-warm");
+    expect(entry.version).not.toBe(7);
+    expect(typeof entry.version).toBe("number");
+  });
+
   it("warm-restarts pair when championIds matches a pair projected child", async () => {
     setupHappyMocks();
     const applyPickSpy = vi.fn().mockResolvedValue(undefined);

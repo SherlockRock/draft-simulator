@@ -628,6 +628,7 @@ module.exports = {
   resumeNavigatorSession,                // NEW from T10
   forEachActiveSession,
   activeSessions,
+  getLastEventId,
   isMctsToggleEnabled: () => MCTS_TOGGLE_ENABLED,
   __setEngineForTests,
   __activeSessionsForTests: activeSessions,
