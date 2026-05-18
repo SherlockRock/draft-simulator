@@ -117,7 +117,7 @@ describe("engine-node boundary", () => {
     const token = new CancelToken();
     const json = await engine.compute(makeRequest(), token);
     const r = JSON.parse(json);
-    expect(r.protocolVersion).toBe("1.0.0");
+    expect(r.protocolVersion).toBe("1.1.0");
     expect(r.engineId).toBe("firstpick/v1.0.0");
     expect(r.tree).toBeDefined();
     expect(Array.isArray(r.scenarios)).toBe(true);
