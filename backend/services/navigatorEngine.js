@@ -627,6 +627,7 @@ module.exports = {
   endNavigatorSession,                   // new
   resumeNavigatorSession,                // NEW from T10
   forEachActiveSession,
+  activeSessions,
   isMctsToggleEnabled: () => MCTS_TOGGLE_ENABLED,
   __setEngineForTests,
   __activeSessionsForTests: activeSessions,

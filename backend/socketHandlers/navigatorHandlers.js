@@ -422,7 +422,114 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
   wrap("navigatorPick", async (data = {}) => {
     try {
-      await handleDraftInput(data, "pick");
+      const { sessionId, draftId, championIds, firstSlot } = data;
+      if (
+        !sessionId ||
+        !draftId ||
+        !Array.isArray(championIds) ||
+        championIds.length < 1 ||
+        championIds.length > 2 ||
+        !championIds.every((c) => typeof c === "string" && c.length > 0) ||
+        typeof firstSlot !== "number" ||
+        firstSlot < 0
+      ) {
+        emitNavigatorError(
+          socket,
+          "sessionId, draftId, championIds (1 or 2 strings), and numeric firstSlot are required",
+        );
+        return;
+      }
+
+      const session = await findOwnedSession(sessionId, socket);
+      if (!session) return;
+
+      const draft = await findSessionDraft(sessionId, draftId);
+      if (!draft) {
+        emitNavigatorError(socket, "Navigator draft not found");
+        return;
+      }
+
+      // Validate each slot is a pick turn.
+      for (let i = 0; i < championIds.length; i++) {
+        const slot = firstSlot + i;
+        const turn = TURN_SEQUENCE[slot];
+        if (!turn) {
+          emitNavigatorError(socket, `Invalid draft slot ${slot}`);
+          return;
+        }
+        if (turn.type !== "pick") {
+          emitNavigatorError(socket, `Slot ${slot} does not accept a pick`);
+          return;
+        }
+      }
+
+      // Persist 1 or 2 NavigatorEvent rows for this turn.
+      for (let i = 0; i < championIds.length; i++) {
+        const slot = firstSlot + i;
+        const turn = TURN_SEQUENCE[slot];
+        await NavigatorEvent.create({
+          navigator_draft_id: draftId,
+          event_type: "pick",
+          slot,
+          side: turn.side,
+          champion_id: championIds[i],
+          user_injected: false,
+        });
+      }
+
+      const events = await listDraftEvents(draft.id);
+
+      if (events.length >= TOTAL_TURNS && draft.status !== "completed") {
+        draft.status = "completed";
+        await draft.save();
+      }
+
+      await emitDraftUpdate(io, sessionId, { draft, events });
+
+      const version = bumpVersion(sessionId);
+
+      // Warm-restart fast path: championIds match a top-level projected child
+      // → reuse the in-flight Mcts via napi applyPick. Falls through to cold
+      // restart on engine notProjected error (championIds slipped out of top-K
+      // between partial emit and pick arrival).
+      const entry = navigatorEngine.activeSessions.get(sessionId);
+      const key = championIds.join("|");
+      if (entry && entry.projectedChildren && entry.projectedChildren.has(key)) {
+        // Wait for any in-flight pause-persist to settle so we don't race
+        // applyPick against a snapshot-write referencing the pre-pick root.
+        if (entry.pausePersistPromise) {
+          try { await entry.pausePersistPromise; } catch (_) {}
+        }
+        let warmOk = false;
+        try {
+          await entry.session.applyPick(championIds);
+          warmOk = true;
+        } catch (e) {
+          const msg = String(e?.message || "");
+          if (!msg.includes("applyPick.notProjected") && !msg.includes("applyPick.sessionEnded")) {
+            // Unexpected error — surface as cold-fallthrough.
+            console.error("[nav] applyPick warm path threw:", e);
+          }
+          // Otherwise: fall through to cold path silently.
+        }
+        if (warmOk) {
+          // Paused snapshot (if any) is now invalid — its tree referenced the
+          // pre-pick root. Delete it so a later refresh doesn't restore stale state.
+          if (entry.lastPersistedPauseSnapshotId) {
+            const stale = entry.lastPersistedPauseSnapshotId;
+            entry.lastPersistedPauseSnapshotId = null;
+            try {
+              await NavigatorSnapshot.destroy({ where: { id: stale } });
+            } catch (delErr) {
+              console.error("[nav] failed to delete stale paused snapshot after warm pick:", delErr);
+            }
+          }
+          return;
+        }
+      }
+
+      // Cold restart: full recompute + broadcast (existing path).
+      await recomputeAndBroadcast(io, socket, session, draft, events, version);
     } catch (error) {
       console.error("Error in navigatorPick:", error);
       emitNavigatorError(socket, "Failed to record pick");
