@@ -453,7 +453,7 @@ pub(crate) fn iterate_loop(
                             }
                             resolve(result.map_err(|msg| napi::Error::new(
                                 napi::Status::GenericFailure,
-                                format!("applyPick.notProjected: {}", msg),
+                                apply_pick_error_code(&msg),
                             )));
                         }
                         Err(TryRecvError::Empty) => break,
@@ -547,7 +547,7 @@ pub(crate) fn iterate_loop(
                         }
                         resolve(result.map_err(|msg| napi::Error::new(
                             napi::Status::GenericFailure,
-                            format!("applyPick.notProjected: {}", msg),
+                            apply_pick_error_code(&msg),
                         )));
                     }
                     Ok(SessionCommand::Stop) => {
@@ -600,16 +600,16 @@ pub(crate) fn iterate_loop(
 /// Apply a single warm-restart step to the MCTS arena. Reads the current
 /// turn's action_type to decide pick vs ban, builds the canonical MoveId,
 /// and delegates to `Mcts::reroot_to`. 1-id step is a single move; 2-id
-/// step is a pair pick (errors at non-pick turns).
+/// step is a pair pick (errors at non-pick turns or at a complete draft).
 fn apply_pick_to_mcts(
     mcts: &mut Mcts<'_>,
     champion_ids: &[String],
 ) -> std::result::Result<(), String> {
-    let is_pick = mcts
+    let turn = mcts
         .active_root_state()
         .current_turn()
-        .map(|t| t.action_type == ActionType::Pick)
-        .unwrap_or(true);
+        .ok_or_else(|| "applyPick at complete draft (no current turn)".to_string())?;
+    let is_pick = turn.action_type == ActionType::Pick;
     let mv = match champion_ids.len() {
         1 => MoveId::single(champion_ids[0].clone(), is_pick),
         2 => {
@@ -621,6 +621,19 @@ fn apply_pick_to_mcts(
         n => return Err(format!("invalid step length: {}", n)),
     };
     mcts.reroot_to(&mv).map_err(|e| e.to_string())
+}
+
+/// Map an `apply_pick_to_mcts` error string to the stable napi error code the
+/// JS warm-path handler matches on. "move not found" → `applyPick.notProjected`
+/// (the expected race-loss case where championIds slipped out of top-K
+/// between partial emit and pick arrival); anything else → `applyPick.error`
+/// (defensive — shouldn't happen with today's Mcts::reroot_to surface).
+fn apply_pick_error_code(msg: &str) -> String {
+    if msg.contains("move not found") {
+        "applyPick.notProjected".to_string()
+    } else {
+        format!("applyPick.error: {}", msg)
+    }
 }
 
 #[cfg(test)]

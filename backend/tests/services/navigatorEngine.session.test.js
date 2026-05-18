@@ -84,7 +84,6 @@ function makeEngineResponseJson(overrides = {}) {
       nodesEvaluated: 100,
       computeTimeMs: 50,
       cancelled: false,
-      rootPath: [],
       ...overrides.meta,
     },
     ...overrides,
@@ -129,7 +128,7 @@ describe("startNavigatorSession — partial emits", () => {
       protocolVersion: "1.0.0",
       tree: { championIds: ["X"], children: [] },
       scenarios: [],
-      meta: { nodesEvaluated: 10, computeTimeMs: 5, partial: true, rootPath: [["X"]] },
+      meta: { nodesEvaluated: 10, computeTimeMs: 5, partial: true },
     }));
 
     expect(to).toHaveBeenCalledWith("navigator:sess-1");
@@ -143,13 +142,12 @@ describe("startNavigatorSession — partial emits", () => {
           id: "partial",
           navigator_draft_id: "draft-1",
           tree: { championIds: ["X"], children: [] },
-          meta: expect.objectContaining({ rootPath: [["X"]] }),
         }),
       }),
     );
 
     // Resolve to let startNavigatorSession complete and clean up.
-    mockNapiSession._resolve(makeEngineResponseJson({ meta: { nodesEvaluated: 100, computeTimeMs: 50, cancelled: false, rootPath: [["X"]] } }));
+    mockNapiSession._resolve(makeEngineResponseJson({ meta: { nodesEvaluated: 100, computeTimeMs: 50, cancelled: false } }));
     await startPromise;
   });
 
@@ -235,7 +233,7 @@ describe("handlePartialOrError — identity + stopReason guards (Codex R2-#2)", 
       protocolVersion: "1.0.0",
       tree: { championIds: [], children: [] },
       scenarios: [],
-      meta: { partial: true, rootPath: [] },
+      meta: { partial: true },
     }));
 
     expect(emit).not.toHaveBeenCalled();
@@ -253,7 +251,7 @@ describe("handlePartialOrError — identity + stopReason guards (Codex R2-#2)", 
       protocolVersion: "1.0.0",
       tree: { championIds: [], children: [] },
       scenarios: [],
-      meta: { partial: true, rootPath: [] },
+      meta: { partial: true },
     }));
 
     expect(emit).not.toHaveBeenCalled();

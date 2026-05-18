@@ -194,7 +194,7 @@ async function buildEngineRequest(session, events, exclusions, forcedBranches = 
   const red = toProtocolTeamPool(session.red_pool || EMPTY_POOL, excluded);
 
   const request = {
-    protocolVersion: "1.0.0",
+    protocolVersion: "1.1.0",
     draftState: {
       format: "standard",
       bans,
@@ -475,8 +475,9 @@ async function startNavigatorSession(navigatorDraft, sess, events, version, io, 
 }
 
 // Identity-checked routing of TSF emits from the iterate loop. Drops late
-// partials/errors from a superseded session (Codex R2-#2). rootPath comes
-// from response.meta.rootPath (authoritative per Decision 7).
+// partials from a superseded session (Codex R2-#2), shapes the envelope, and
+// mirrors the top-level projected children onto the entry so the pick/ban
+// warm-restart fast path can match against them (see ADR-0005).
 function handlePartialOrError(entry, io, jsonStr) {
   if (activeSessions.get(entry.sessionId) !== entry) return;
   if (entry.stopReason !== null) return;

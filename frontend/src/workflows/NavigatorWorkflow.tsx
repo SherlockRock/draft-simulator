@@ -1047,9 +1047,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                 side,
                 champion_id: cid,
                 user_injected: false,
-                // Distinct createdAt per synthetic so ordering is stable when
-                // the cache key includes time. +i ms keeps within reasonable
-                // bounds while guaranteeing order.
                 createdAt: new Date(Date.now() + i).toISOString()
             };
         });
