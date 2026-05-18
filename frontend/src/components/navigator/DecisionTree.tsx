@@ -74,12 +74,6 @@ interface DecisionTreeProps {
     onConfirmProjectedPick?: (path: number[]) => void;
     onOpenSwap?: (path: number[]) => void;
     onOpenBranch?: (path: number[]) => void;
-    /** Phase 7b T16: invoked when the user clicks the hover-revealed reroot
-     *  button on an MCTS node. `delta` is the sequence of championIds tuples
-     *  from the rendered tree's root down to the clicked node — i.e. the
-     *  steps the engine should push onto displayedRootPath. Optional because
-     *  consumers outside the navigator runtime (e.g. tests) may not wire it. */
-    onReroot?: (delta: string[][]) => void;
 }
 
 interface TreeNodeWithPath extends LayoutNode {
@@ -416,10 +410,6 @@ const TreeNodeComponent: Component<{
     isLineageHover: boolean;
     onHover: (path: number[] | null) => void;
     onContextMenu: (event: MouseEvent, path: number[]) => void;
-    /** Phase 7b T16: parent-supplied click handler for the hover-revealed
-     *  reroot button. Receives the node's path-of-indices into the rendered
-     *  tree; parent resolves to the championIds delta. */
-    onRerootClick: (indexPath: number[]) => void;
 }> = (props) => {
     const clipSeed = createUniqueId();
     const championIds = createMemo(() => props.node.data.championIds);
@@ -820,47 +810,6 @@ const TreeNodeComponent: Component<{
                     </text>
                 </g>
             </Show>
-            {/* Phase 7b T16 (Decision 8): hover-revealed reroot button. Sits
-                ~20px right of the Pareto chip (at x=28); skips the rendered
-                root (path.length === 0) since you can't reroot to where you
-                already are. Gated on mctsExtras so αβ-rendered nodes never
-                expose it (Opus R1-#26: overlay, not context menu). The
-                child <g> has pointer-events-auto on opacity-0 so the cursor
-                still hits it pre-hover — but it's invisible. Without that,
-                Chrome's compositor would briefly miss the click during the
-                opacity transition. */}
-            <Show when={!isRoot() && props.node.data.mctsExtras !== undefined}>
-                <g
-                    class="cursor-pointer opacity-0 transition-opacity duration-150 group-hover:opacity-100"
-                    transform={`translate(48 ${badgeOffsetY() + 14})`}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        props.onRerootClick(props.node.data.path);
-                    }}
-                    role="button"
-                    aria-label="Re-root navigator at this node"
-                >
-                    <circle
-                        cx="0"
-                        cy="0"
-                        r="8"
-                        fill="#1e3a8a"
-                        stroke="#3b82f6"
-                        stroke-width="1"
-                    />
-                    <text
-                        x="0"
-                        y="3"
-                        text-anchor="middle"
-                        font-size="10"
-                        font-weight="700"
-                        fill="#dbeafe"
-                        class="pointer-events-none"
-                    >
-                        ↳
-                    </text>
-                </g>
-            </Show>
             {/* Expand/collapse badge */}
             <Show when={isCollapsed()}>
                 <g
@@ -1083,27 +1032,6 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         const tree = annotatedTree();
         if (!tree) return null;
         return getNodeAtPath(tree, path);
-    };
-
-    // Phase 7b T16: walk the rendered (annotated) tree from root down to the
-    // clicked node, collecting championIds at each step. The result is the
-    // delta to push onto displayedRootPath — the engine treats `rerootStep`
-    // as a sequence of MoveIds applied via Mcts::reroot_to in order. We use
-    // the annotated tree (not the pruned tree) so reroots still work on
-    // visible-but-collapsed branches; `node.data.path` is identical between
-    // the two for any node the user can actually click.
-    const handleReroot = (indexPath: number[]) => {
-        if (indexPath.length === 0) return;
-        const tree = annotatedTree();
-        if (!tree) return;
-        const delta: string[][] = [];
-        let current: TreeNodeWithPath | null = tree;
-        for (const idx of indexPath) {
-            current = current?.children[idx] ?? null;
-            if (!current) return;
-            delta.push([...current.championIds]);
-        }
-        props.onReroot?.(delta);
     };
 
     const collapseSubtree = (path: number[]) => {
@@ -1741,7 +1669,6 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                                 )}
                                 onHover={setHoveredPath}
                                 onContextMenu={handleNodeContextMenu}
-                                onRerootClick={handleReroot}
                             />
                         )}
                     </For>

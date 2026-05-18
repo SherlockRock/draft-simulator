@@ -25,7 +25,6 @@ const NavigatorDrafting: Component = () => {
         onStop,
         hasPausedSession,
         onResume,
-        onReroot,
         currentMeta,
         selectedScenarioIndex,
         setSelectedScenarioIndex,
@@ -418,7 +417,6 @@ const NavigatorDrafting: Component = () => {
                             onConfirmProjectedPick={handleConfirmProjectedPick}
                             onOpenSwap={handleOpenSwap}
                             onOpenBranch={handleOpenBranch}
-                            onReroot={onReroot}
                         />
 
                         <div class="pointer-events-none absolute right-4 top-4 flex items-center gap-2">
