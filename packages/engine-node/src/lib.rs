@@ -155,7 +155,7 @@ impl Engine {
     /// Phase 7b factory: build a `NavigatorSession` from an MCTS-flagged
     /// engine request. The returned handle owns the fixture/pools/state
     /// across the session's lifetime; callers must explicitly drive iteration
-    /// via `session.start(...)` and (optionally) `session.reroot(...)`.
+    /// via `session.start(...)` and (optionally) `session.apply_pick(...)`.
     ///
     /// Mirrors `mcts_dispatch::compute_mcts`'s setup but stops short of
     /// constructing the `Mcts` — that's the iterate thread's job inside

@@ -22,7 +22,6 @@ use engine_core::draft_state::{ActionType, DraftState};
 use engine_core::mcts_spike::policy::{McTsConfig, Mcts};
 use engine_core::mcts_spike::tree::MoveId;
 use engine_core::mcts_spike::{PoolContext, SpikeFixture};
-use napi::bindgen_prelude::*;
 #[cfg(not(test))]
 use napi::threadsafe_function::{
     ErrorStrategy, ThreadSafeCallContext, ThreadsafeFunction, ThreadsafeFunctionCallMode,

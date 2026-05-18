@@ -31,7 +31,7 @@ function buildMockNapiSession() {
       });
     }),
     stop: vi.fn(),
-    reroot: vi.fn(),
+    applyPick: vi.fn().mockResolvedValue(undefined),
     isActive: vi.fn().mockReturnValue(true),
   };
   return handle;
