@@ -30,7 +30,7 @@ const NavigatorDrafting: Component = () => {
         selectedScenarioIndex,
         setSelectedScenarioIndex,
         panRequest,
-        emitPick,
+        emitPickStep,
         emitBan,
         swapChampion,
         createBranch,
@@ -267,11 +267,8 @@ const NavigatorDrafting: Component = () => {
         ).length;
 
         if (current.actionType === "pick") {
-            // Pair-pick nodes carry two champions across two adjacent slots; emit both.
-            emitPick(draftId, championIds[0], turnIndex);
-            if (championIds.length > 1) {
-                emitPick(draftId, championIds[1], turnIndex + 1);
-            }
+            // Pair-pick nodes carry two champions across two adjacent slots; emit atomically.
+            emitPickStep(draftId, championIds, turnIndex);
         } else {
             emitBan(draftId, championIds[0], turnIndex);
         }

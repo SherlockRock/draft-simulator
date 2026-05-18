@@ -106,7 +106,7 @@ interface DraftInputPanelProps {
 }
 
 const DraftInputPanel: Component<DraftInputPanelProps> = (props) => {
-    const { navigatorContext, emitBan, emitPick, emitUndo } = useNavigatorContext();
+    const { navigatorContext, emitBan, emitPickStep, emitUndo } = useNavigatorContext();
 
     const resolvedMode = () => props.mode ?? "active";
 
@@ -209,7 +209,7 @@ const DraftInputPanel: Component<DraftInputPanelProps> = (props) => {
         }
 
         if (turn.type === "pick") {
-            emitPick(draftId, championId, turnIndex());
+            emitPickStep(draftId, [championId], turnIndex());
             return;
         }
 
