@@ -245,6 +245,27 @@ const NavigatorWorkflow: Component<RouteSectionProps> = (props) => {
 };
 
 const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
+    if (typeof window !== "undefined" && !(window as unknown as { __r2bErrorHookInstalled?: boolean }).__r2bErrorHookInstalled) {
+        (window as unknown as { __r2bErrorHookInstalled: boolean }).__r2bErrorHookInstalled = true;
+        window.addEventListener("error", (ev) => {
+            console.log("[DEBUG-r2b] window error", {
+                message: ev.message,
+                filename: ev.filename,
+                lineno: ev.lineno,
+                colno: ev.colno,
+                errorName: ev.error?.name,
+                errorStack: ev.error?.stack?.split("\n").slice(0, 20).join("\n")
+            });
+        });
+        window.addEventListener("unhandledrejection", (ev) => {
+            const reason = ev.reason;
+            console.log("[DEBUG-r2b] unhandledrejection", {
+                reasonName: reason?.name,
+                reasonMessage: reason?.message,
+                reasonStack: reason?.stack?.split("\n").slice(0, 20).join("\n")
+            });
+        });
+    }
     const params = useParams();
     const location = useLocation();
     const {
@@ -1131,6 +1152,40 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         return { entry: snapshotCache.get(key), nextEvents };
     };
 
+    const lookupCachePickStep = (
+        championIds: string[],
+        firstSlot: number,
+        eventType: "pick"
+    ): {
+        entry: CachedResult | undefined;
+        nextEvents: NavigatorEventData[];
+    } => {
+        const ctx = untrack(navigatorContext);
+        const session = ctx.session;
+        if (!session) return { entry: undefined, nextEvents: ctx.events };
+        const syntheticEvents: NavigatorEventData[] = championIds.map((cid, i) => {
+            const slot = firstSlot + i;
+            const turn = TURN_SEQUENCE[slot];
+            const side = turn ? turn.side : "blue";
+            return {
+                id: `optimistic-${slot}`,
+                navigator_draft_id: ctx.draft?.id ?? "",
+                event_type: eventType,
+                slot,
+                side,
+                champion_id: cid,
+                user_injected: false,
+                // Distinct createdAt per synthetic so ordering is stable when
+                // the cache key includes time. +i ms keeps within reasonable
+                // bounds while guaranteeing order.
+                createdAt: new Date(Date.now() + i).toISOString()
+            };
+        });
+        const nextEvents = [...ctx.events, ...syntheticEvents];
+        const key = makeCacheKey(session.config_version, hashNavigatorEvents(nextEvents));
+        return { entry: snapshotCache.get(key), nextEvents };
+    };
+
     const lookupCacheUndo = (): {
         entry: CachedResult | undefined;
         nextEvents: NavigatorEventData[];
@@ -1144,13 +1199,14 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         return { entry: snapshotCache.get(key), nextEvents };
     };
 
-    const emitPick = (draftId: string, championId: string, slot: number) => {
+    const emitPickStep = (draftId: string, championIds: string[], firstSlot: number) => {
         const sock = currentSocket();
         const sessionId = getActiveSessionId();
 
         if (!sock || !sessionId) return;
+        if (championIds.length < 1 || championIds.length > 2) return;
 
-        const { entry, nextEvents } = lookupCachePick(championId, slot, "pick");
+        const { entry, nextEvents } = lookupCachePickStep(championIds, firstSlot, "pick");
         if (entry) {
             applyCacheEntry(entry, nextEvents);
         }
@@ -1162,8 +1218,8 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         sock.emit("navigatorPick", {
             sessionId,
             draftId,
-            championId,
-            slot
+            championIds,
+            firstSlot
         });
     };
 
@@ -1374,22 +1430,41 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         const sock = currentSocket();
         const sid = currentSessionId();
         const draftId = untrack(navigatorContext).draft?.id;
-        if (!sock || !sid || !draftId) return;
-        if (delta.length === 0) return;
+        console.log("[DEBUG-r2b] NavigatorWorkflow.onReroot entry", {
+            deltaLength: delta.length,
+            delta,
+            hasSock: !!sock,
+            sid,
+            draftId,
+            isSessionActive: isSessionActive(),
+            hasPausedSession: hasPausedSession()
+        });
+        if (!sock || !sid || !draftId) {
+            console.log("[DEBUG-r2b] onReroot bail: missing sock/sid/draftId");
+            return;
+        }
+        if (delta.length === 0) {
+            console.log("[DEBUG-r2b] onReroot bail: delta empty");
+            return;
+        }
 
         const priorPath = displayedRootPath();
         const rerootId = ++nextRerootId;
         pendingReroots.set(rerootId, { delta, priorPath });
-        // Optimistic: extend the displayed root immediately so the next
-        // arriving partial whose meta.rootPath echoes priorPath + delta
-        // passes the identity gate in handleDraftUpdate's partial listener.
-        setDisplayedRootPath([...priorPath, ...delta]);
-        // Clear the prior root's streaming overlay — the next partial
-        // under the new root will replace it; until then, fall through to
-        // the persisted snapshot's tree (rooted at session start, so visually
-        // stale but never wrong).
-        setPartialSnapshot(null);
-        setIsSessionActive(true);
+        try {
+            console.log("[DEBUG-r2b] onReroot: setDisplayedRootPath start");
+            setDisplayedRootPath([...priorPath, ...delta]);
+            console.log("[DEBUG-r2b] onReroot: setDisplayedRootPath done");
+            console.log("[DEBUG-r2b] onReroot: setPartialSnapshot(null) start");
+            setPartialSnapshot(null);
+            console.log("[DEBUG-r2b] onReroot: setPartialSnapshot(null) done");
+            console.log("[DEBUG-r2b] onReroot: setIsSessionActive(true) start");
+            setIsSessionActive(true);
+            console.log("[DEBUG-r2b] onReroot: setIsSessionActive(true) done");
+        } catch (e) {
+            console.log("[DEBUG-r2b] onReroot SYNC ERROR caught", e);
+            throw e;
+        }
 
         sock.emit("navigatorReroot", {
             sessionId: sid,
@@ -1415,7 +1490,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         currentMeta,
         joinSession,
         leaveSession,
-        emitPick,
+        emitPickStep,
         emitBan,
         emitUndo,
         startDraft,

@@ -210,7 +210,7 @@ export interface NavigatorWorkflowContextValue {
     currentMeta: Accessor<NavigatorSnapshotData["meta"]>;
     joinSession: (sessionId: string) => void;
     leaveSession: () => void;
-    emitPick: (draftId: string, championId: string, slot: number) => void;
+    emitPickStep: (draftId: string, championIds: string[], firstSlot: number) => void;
     emitBan: (draftId: string, championId: string, slot: number) => void;
     emitUndo: (draftId: string) => void;
     startDraft: () => void;
