@@ -236,27 +236,6 @@ const NavigatorWorkflow: Component<RouteSectionProps> = (props) => {
 };
 
 const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) => {
-    if (typeof window !== "undefined" && !(window as unknown as { __r2bErrorHookInstalled?: boolean }).__r2bErrorHookInstalled) {
-        (window as unknown as { __r2bErrorHookInstalled: boolean }).__r2bErrorHookInstalled = true;
-        window.addEventListener("error", (ev) => {
-            console.log("[DEBUG-r2b] window error", {
-                message: ev.message,
-                filename: ev.filename,
-                lineno: ev.lineno,
-                colno: ev.colno,
-                errorName: ev.error?.name,
-                errorStack: ev.error?.stack?.split("\n").slice(0, 20).join("\n")
-            });
-        });
-        window.addEventListener("unhandledrejection", (ev) => {
-            const reason = ev.reason;
-            console.log("[DEBUG-r2b] unhandledrejection", {
-                reasonName: reason?.name,
-                reasonMessage: reason?.message,
-                reasonStack: reason?.stack?.split("\n").slice(0, 20).join("\n")
-            });
-        });
-    }
     const params = useParams();
     const location = useLocation();
     const {
