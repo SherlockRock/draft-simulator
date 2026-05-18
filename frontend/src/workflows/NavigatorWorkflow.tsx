@@ -175,7 +175,6 @@ const NavigatorSnapshotDataSchema = z.object({
             transpositionsFound: z.number(),
             mctsMeta: NavigatorMctsMetaSchema.optional(),
             partial: z.boolean().optional(),
-            rootPath: z.array(z.array(z.string())).optional(),
             persistOnPause: z.boolean().optional()
         })
         .nullable(),
@@ -188,14 +187,6 @@ const NavigatorPartialSnapshotEnvelopeSchema = z.object({
     version: z.number().int().nonnegative(),
     afterEventId: z.string().nullable(),
     snapshot: NavigatorSnapshotDataSchema
-});
-
-const NavigatorRerootErrorSchema = z.object({
-    sessionId: z.string(),
-    draftId: z.string(),
-    rerootId: z.number().int().nonnegative(),
-    attemptedPath: z.array(z.array(z.string())),
-    error: z.string()
 });
 
 const NavigatorCompletedGameSchema = z.object({
@@ -334,15 +325,9 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     // T14 layers overlay precedence (below) so the canvas prefers
     // `partialSnapshot` over the persisted final snapshot while a compute
     // is active.
-    // `displayedRootPath` is the path the UI has optimistically rerooted to;
-    // engine confirmation arrives in subsequent partials' meta.rootPath. The
-    // `pendingReroots` map tracks in-flight reroot requests so a server-side
-    // rejection can roll back the optimistic state (Decision 8).
-    // `nextRerootId` is consumed by `onReroot` (T16) as a monotonic counter.
     const [partialSnapshot, setPartialSnapshot] =
         createSignal<NavigatorSnapshotData | null>(null);
     const [latestVersionSeen, setLatestVersionSeen] = createSignal<number>(0);
-    const [displayedRootPath, setDisplayedRootPath] = createSignal<string[][]>([]);
     const [isSessionActive, setIsSessionActive] = createSignal<boolean>(false);
     // Phase 7b T15: optimistic stopping state. Flipped true when the user
     // clicks Stop (so the indicator can swap to "Stopping…" before the engine
@@ -363,13 +348,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         const latestEventId = ctx.events.length > 0 ? ctx.events[ctx.events.length - 1].id : null;
         return snap.after_event_id === latestEventId;
     });
-    const pendingReroots = new Map<
-        number,
-        { delta: string[][]; priorPath: string[][] }
-    >();
-
-    let nextRerootId = 0;
-
     interface CachedResult {
         tree: NavigatorTreeNode;
         scenarios: NavigatorScenario[];
@@ -533,8 +511,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             setIsSessionActive(false);
             setIsStopping(false);
             setLatestVersionSeen(0);
-            setDisplayedRootPath([]);
-            pendingReroots.clear();
             setNavigatorContext({
                 session,
                 draft: response.draft ?? null,
@@ -777,19 +753,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             }
         }
 
-        // v4 M4 rootPath-aware cleanup of pendingReroots — confirm matching
-        // entries, rollback non-matching. Gated on:
-        //   - snapshotChanged (we have new data to evaluate)
-        //   - persistOnPause === true (this is a pause-finalize, not a transient partial)
-        //   - snapshot is fresh (after_event_id matches latest event — prevents a
-        //     stale paused broadcast from incorrectly rolling back live pending reroots)
-        //   - !isSessionActive (the engine isn't about to broadcast newer authoritative state)
-        const latestEventIdAtUpdate = nextEvents.length > 0
-            ? nextEvents[nextEvents.length - 1].id
-            : null;
-        const snapshotIsFresh = finalSnapshot?.after_event_id === latestEventIdAtUpdate;
-        const sessionIsIdle = !untrack(isSessionActive); // captured pre-batch reset
-
         // Phase 7b T14 (Opus R2-NIT-5): wrap final-snapshot state updates in
         // `batch` so the partial → final transition lands in a single frame.
         // Without batch, the tree memo would briefly reactively re-evaluate
@@ -834,21 +797,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                 setIsSessionActive(false);
                 setIsStopping(false);
             }
-            if (snapshotChanged
-                && finalSnapshot?.meta?.persistOnPause === true
-                && snapshotIsFresh
-                && sessionIsIdle) {
-                const authoritativeRootPath = finalSnapshot.meta.rootPath ?? [];
-                for (const [rerootId, pending] of pendingReroots) {
-                    const expected = [...pending.priorPath, ...pending.delta];
-                    if (pathsEqual(expected, authoritativeRootPath)) {
-                        pendingReroots.delete(rerootId);
-                    } else {
-                        rollbackReroot(rerootId);
-                    }
-                }
-                setDisplayedRootPath(authoritativeRootPath);
-            }
         });
 
         if (finalSnapshot && (data.session ?? untrack(navigatorContext).session)) {
@@ -868,42 +816,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             remapSelectedScenarioIndex(prevSnapshot.scenarios, finalSnapshot.scenarios);
         }
     };
-
-    // Phase 7b T13: deep equality for path-of-path-steps (each outer entry is
-    // a turn's championIds tuple). Used to gate stale partials and to confirm
-    // pending reroots once the engine echoes the new root in meta.rootPath.
-    function pathsEqual(a: string[][], b: string[][]): boolean {
-        if (a.length !== b.length) return false;
-        for (let i = 0; i < a.length; i++) {
-            if (a[i].length !== b[i].length) return false;
-            for (let j = 0; j < a[i].length; j++) {
-                if (a[i][j] !== b[i][j]) return false;
-            }
-        }
-        return true;
-    }
-
-    // Phase 7b T13 / Decision 8: optimistic reroot rollback. Called when the
-    // backend reports `navigatorRerootError` for an in-flight reroot. Only
-    // rolls back when `displayedRootPath` still ends with the pending delta —
-    // a subsequent successful reroot or a session change may have moved past
-    // this point, in which case the bookkeeping is dropped silently.
-    function rollbackReroot(rerootId: number) {
-        const pending = pendingReroots.get(rerootId);
-        if (!pending) return;
-        const cur = displayedRootPath();
-        const startIdx = pending.priorPath.length;
-        const stillPresent = pending.delta.every(
-            (step, i) =>
-                cur[startIdx + i] !== undefined &&
-                step.length === cur[startIdx + i].length &&
-                step.every((id, j) => id === cur[startIdx + i][j])
-        );
-        if (stillPresent && cur.length === startIdx + pending.delta.length) {
-            setDisplayedRootPath(pending.priorPath);
-        }
-        pendingReroots.delete(rerootId);
-    }
 
     function buildPriority(
         currentSynthetic: NavigatorTreeNode | null,
@@ -993,9 +905,8 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
 
         // Phase 7b T13: streaming partial snapshots from the MCTS engine
         // arrive on `navigatorPartialSnapshot`. Stale guards (session,
-        // draft, active flag, monotonic version, root identity) prevent
-        // late-arriving partials from clobbering a fresh session or
-        // overwriting a different rerooted view.
+        // draft, active flag, monotonic version) prevent late-arriving
+        // partials from clobbering a fresh session.
         sock.on("navigatorPartialSnapshot", (raw) => {
             const parsed = NavigatorPartialSnapshotEnvelopeSchema.safeParse(raw);
             if (!parsed.success) return;
@@ -1003,12 +914,10 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             if (env.sessionId !== untrack(currentSessionId)) return;
             if (env.draftId !== untrack(navigatorContext).draft?.id) return;
             if (env.version < untrack(latestVersionSeen)) return;
-            const envelopeRootPath = env.snapshot.meta?.rootPath ?? [];
-            if (!pathsEqual(envelopeRootPath, untrack(displayedRootPath))) return;
             if (!untrack(isSessionActive)) {
                 // v4 R4-M3 self-heal: a partial passed all other gates but session
                 // is "inactive". This happens for backend-driven recomputes that
-                // didn't go through emitPick/Ban/Undo/setAlgorithm/onReroot (e.g.
+                // didn't go through emitPick/Ban/Undo/setAlgorithm (e.g.
                 // a navigatorSetAlgorithm-triggered compute, or initial compute on
                 // an existing in-flight session via join). Self-heal so subsequent
                 // partials accept normally. Only on strictly-newer version + when
@@ -1023,19 +932,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             }
             setLatestVersionSeen(env.version);
             setPartialSnapshot(env.snapshot);
-            for (const [rerootId, pending] of pendingReroots) {
-                const expected = [...pending.priorPath, ...pending.delta];
-                if (pathsEqual(expected, envelopeRootPath)) {
-                    pendingReroots.delete(rerootId);
-                }
-            }
-        });
-
-        sock.on("navigatorRerootError", (raw) => {
-            const parsed = NavigatorRerootErrorSchema.safeParse(raw);
-            if (!parsed.success) return;
-            if (parsed.data.sessionId !== untrack(currentSessionId)) return;
-            rollbackReroot(parsed.data.rerootId);
         });
 
         socketWithListeners = sock;
@@ -1049,7 +945,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             sock.off("navigatorDraftUpdate");
             sock.off("navigatorError");
             sock.off("navigatorPartialSnapshot");
-            sock.off("navigatorRerootError");
         });
     });
 
@@ -1070,19 +965,17 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         setCurrentSessionId(sessionId);
     });
 
-    // Phase 7b T13 (Opus R1-#24): reset all streaming/reroot bookkeeping
-    // when the session changes. Prevents partials and pending-reroot state
-    // from one session leaking into the next.
+    // Phase 7b T13 (Opus R1-#24): reset all streaming bookkeeping when the
+    // session changes. Prevents partials from one session leaking into the
+    // next.
     createEffect(() => {
         currentSessionId();
         setPartialSnapshot(null);
         setLatestVersionSeen(0);
-        setDisplayedRootPath([]);
         setIsSessionActive(false);
         // T15: include the optimistic stopping flag so a session swap doesn't
         // leave the next session indicating "Stopping…".
         setIsStopping(false);
-        pendingReroots.clear();
     });
 
     createEffect(() => {
@@ -1213,7 +1106,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
 
         // Phase 7b T14: any compute-triggering user action opens the gate
         // for streaming partials. The handler's existing guards (session,
-        // draft, version, rootPath) still reject stale envelopes.
+        // draft, version) still reject stale envelopes.
         setIsSessionActive(true);
         sock.emit("navigatorPick", {
             sessionId,
@@ -1418,62 +1311,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         setIsSessionActive(true);
     };
 
-    // Phase 7b T16 (Decision 8): optimistic reroot. Caller (DecisionTree
-    // hover-button) builds `delta` by walking the rendered tree from its
-    // root down to the clicked node, collecting each step's championIds.
-    // Bookkeeping order matters: record into `pendingReroots` BEFORE
-    // mutating `displayedRootPath` so a hypothetical instantly-arriving
-    // partial-snapshot listener (same tick, different microtask) sees the
-    // pending entry. The partial gate also gets re-opened — a reroot
-    // triggers fresh iteration on the new subtree.
-    const onReroot = (delta: string[][]) => {
-        const sock = currentSocket();
-        const sid = currentSessionId();
-        const draftId = untrack(navigatorContext).draft?.id;
-        console.log("[DEBUG-r2b] NavigatorWorkflow.onReroot entry", {
-            deltaLength: delta.length,
-            delta,
-            hasSock: !!sock,
-            sid,
-            draftId,
-            isSessionActive: isSessionActive(),
-            hasPausedSession: hasPausedSession()
-        });
-        if (!sock || !sid || !draftId) {
-            console.log("[DEBUG-r2b] onReroot bail: missing sock/sid/draftId");
-            return;
-        }
-        if (delta.length === 0) {
-            console.log("[DEBUG-r2b] onReroot bail: delta empty");
-            return;
-        }
-
-        const priorPath = displayedRootPath();
-        const rerootId = ++nextRerootId;
-        pendingReroots.set(rerootId, { delta, priorPath });
-        try {
-            console.log("[DEBUG-r2b] onReroot: setDisplayedRootPath start");
-            setDisplayedRootPath([...priorPath, ...delta]);
-            console.log("[DEBUG-r2b] onReroot: setDisplayedRootPath done");
-            console.log("[DEBUG-r2b] onReroot: setPartialSnapshot(null) start");
-            setPartialSnapshot(null);
-            console.log("[DEBUG-r2b] onReroot: setPartialSnapshot(null) done");
-            console.log("[DEBUG-r2b] onReroot: setIsSessionActive(true) start");
-            setIsSessionActive(true);
-            console.log("[DEBUG-r2b] onReroot: setIsSessionActive(true) done");
-        } catch (e) {
-            console.log("[DEBUG-r2b] onReroot SYNC ERROR caught", e);
-            throw e;
-        }
-
-        sock.emit("navigatorReroot", {
-            sessionId: sid,
-            draftId,
-            rerootId,
-            rerootStep: delta
-        });
-    };
-
     const contextValue: NavigatorWorkflowContextValue = {
         navigatorContext,
         engineToggleEnabled,
@@ -1512,8 +1349,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         setLayoutOverride,
         clearAllLayoutOverrides,
         swapChampion,
-        createBranch,
-        onReroot
+        createBranch
     };
 
     return (
