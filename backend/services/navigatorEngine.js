@@ -90,8 +90,15 @@ function __setEngineForTests(mockEngine) {
 const activeTokens = new Map();
 
 // Per-session active MCTS session (Decision 9). Entry schema:
-//   { sessionId, version, session (napi handle), promise, rootPathCache,
-//     afterEventId, draftId, stopReason, pendingReroots, socketId }
+//   { sessionId, version, session (napi handle), promise,
+//     pausePersistPromise, lastPersistedPauseSnapshotId,
+//     afterEventId, draft, draftId, stopReason, socketId,
+//     projectedChildren: Set<string> }
+// projectedChildren keys: championIds.join("|") of each top-level
+// projected child in the latest emitted snapshot's tree. Read by the
+// navigatorPick/navigatorBan handlers to decide warm vs cold MCTS
+// restart (see ADR-0005). `rootPathCache` removed in this task —
+// reroot path-tracking was retired.
 const activeSessions = new Map();
 
 function decodeEngineError(err) {
@@ -347,6 +354,25 @@ async function storeSnapshot(navigatorDraft, lastEventId, response) {
   return persistSnapshot(shapeSnapshot(navigatorDraft, lastEventId, response));
 }
 
+// Mirror the latest emitted snapshot's top-level projected children onto
+// the entry, keyed by joined championIds. Read by the pick/ban handlers
+// to decide warm vs cold MCTS restart. See ADR-0005.
+function setProjectedChildren(entry, parsed) {
+  if (!entry) return;
+  const children = parsed?.tree?.children;
+  if (!Array.isArray(children)) {
+    entry.projectedChildren = new Set();
+    return;
+  }
+  const next = new Set();
+  for (const child of children) {
+    const ids = child?.championIds;
+    if (!Array.isArray(ids) || ids.length === 0) continue;
+    next.add(ids.join("|"));
+  }
+  entry.projectedChildren = next;
+}
+
 function assertProtocolMajor(version) {
   const major = parseInt(String(version || "0").split(".")[0], 10);
   if (!Number.isFinite(major) || major !== EXPECTED_PROTOCOL_MAJOR) {
@@ -485,6 +511,7 @@ async function startNavigatorSession(navigatorDraft, sess, events, version, io, 
     draftId: navigatorDraft.id,
     stopReason: null,
     socketId: options.socketId || null,
+    projectedChildren: new Set(),
   };
   activeSessions.set(sess.id, entry);
 
@@ -538,6 +565,7 @@ function handlePartialOrError(entry, io, jsonStr) {
 
   const shaped = shapeSnapshot({ id: entry.draftId }, entry.afterEventId, parsed);
   shaped.id = "partial";
+  setProjectedChildren(entry, parsed);
   io.to(`navigator:${entry.sessionId}`).emit("navigatorPartialSnapshot", {
     sessionId: entry.sessionId,
     draftId: entry.draftId,
@@ -585,6 +613,7 @@ async function pauseNavigatorSession(sessionId, io) {
     catch (e) { return { ok: false, reason: "snapshot-parse-failed", error: e }; }
     assertProtocolMajor(parsed.protocolVersion);
     const shaped = shapeSnapshot(entry.draft, entry.afterEventId, parsed);
+    setProjectedChildren(entry, parsed);
     const persisted = await persistSnapshot(shaped);
 
     if (entry.stopReason === "supersede") {
@@ -691,6 +720,7 @@ module.exports = {
   shutdownEngine,
   shapeSnapshot,
   persistSnapshot,
+  setProjectedChildren,
   startNavigatorSession,
   pauseNavigatorSession,                // new — was stopNavigatorSession
   endNavigatorSession,                   // new
