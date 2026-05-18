@@ -18,12 +18,8 @@ export {
 export type { Side, Phase, ActionType, Role } from "./schemas/types.js";
 
 export {
-  NavigatorRerootRequestSchema,
   NavigatorStopComputeRequestSchema,
-  NavigatorRerootErrorSchema,
 } from "./schemas/sockets.js";
 export type {
-  NavigatorRerootRequest,
   NavigatorStopComputeRequest,
-  NavigatorRerootError,
 } from "./schemas/sockets.js";

@@ -110,7 +110,6 @@ export const EngineRequestSchema = z.object({
     forcedBranches: z.array(ForcedBranchSchema),
   }),
   algorithm: AlgorithmSchema.optional(),
-  initialRootPath: z.array(z.array(z.string())).optional(),
 });
 
 export type EngineRequest = z.infer<typeof EngineRequestSchema>;
