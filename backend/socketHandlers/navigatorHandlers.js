@@ -320,50 +320,6 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
     }
   });
 
-  wrap("navigatorReroot", async (data = {}) => {
-    const { sessionId, draftId, rerootId, rerootStep } = data;
-    if (
-      !sessionId ||
-      !draftId ||
-      typeof rerootId !== "number" ||
-      !Array.isArray(rerootStep) ||
-      rerootStep.length === 0    // v4 R3-N9: empty rerootStep is invalid.
-    ) {
-      emitNavigatorError(
-        socket,
-        "sessionId, draftId, rerootId, non-empty rerootStep required",
-      );
-      return;
-    }
-    const session = await findOwnedSession(sessionId, socket);
-    if (!session) return;
-    const draft = await findSessionDraft(sessionId, draftId);
-    if (!draft) {
-      emitNavigatorError(socket, "Navigator draft not found");
-      return;
-    }
-    const events = await listDraftEvents(draftId);
-    const version = bumpVersion(sessionId);
-    try {
-      const result = await navigatorEngine.rerootNavigatorSession(
-        draft, session, events, rerootId, rerootStep, version, io, {
-          socketId: socket.id,
-          algorithm: getSessionAlgorithm(sessionId),
-        },
-      );
-      if (!result.ok) {
-        emitNavigatorError(socket, `Reroot failed: ${result.reason}`);
-      }
-    } catch (err) {
-      if (err && err.code === "engine.invalid_input") {
-        emitNavigatorError(socket, `Reroot invalid: ${err.message}`);
-      } else {
-        console.error("Error in navigatorReroot:", err);
-        emitNavigatorError(socket, "Reroot failed");
-      }
-    }
-  });
-
   wrap("navigatorStopCompute", async (data = {}) => {
     const { sessionId } = data;
     if (!sessionId) {
