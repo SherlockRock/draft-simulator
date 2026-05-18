@@ -44,15 +44,11 @@ pub(crate) const FIRST_EMIT_THRESHOLD: u32 = 1024;
 pub(crate) const MIN_EMIT_INTERVAL_MS: u64 = 100;
 
 /// Phase 7c T3: build_response options bundled into a struct to avoid
-/// positional-arg sprawl. `session_root_path` plumbs the cumulative
-/// reroot lineage (initialized to `initial_root_path` from the request,
-/// appended on each successful in-session reroot — see
-/// `navigator_session::iterate_loop`).
-pub struct BuildResponseOptions<'a> {
+/// positional-arg sprawl.
+pub struct BuildResponseOptions {
     pub cancelled: bool,
     pub persist_on_pause: bool,
     pub top_k_at_root: usize,
-    pub session_root_path: &'a [Vec<String>],
 }
 
 /// Minimum visit threshold per depth: max(2, 4 >> depth).
@@ -408,7 +404,6 @@ pub fn build_response(
             }),
             partial: None,
             persist_on_pause: if opts.persist_on_pause { Some(true) } else { None },
-            root_path: opts.session_root_path.to_vec(),
         },
         scenarios,
         tree: root_node,
@@ -435,11 +430,9 @@ pub(crate) fn empty_response(elapsed_ms: u64, iterations: u32) -> proto::EngineR
                 truncated: false,
             }),
             // Phase 7b: empty_response is the no-iterations short-circuit; it
-            // is a final snapshot with no reroot, so partial=None and
-            // root_path stays empty.
+            // is a final snapshot, so partial=None.
             partial: None,
             persist_on_pause: None,
-            root_path: Vec::new(),
         },
         scenarios: Vec::new(),
         tree: proto::TreeNode {

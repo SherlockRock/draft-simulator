@@ -89,7 +89,6 @@ pub fn compute_mcts(
         cancelled,
         persist_on_pause: false,
         top_k_at_root,
-        session_root_path: &[],
     };
     Ok(build_response(&mcts, &state, start.elapsed(), opts))
 }

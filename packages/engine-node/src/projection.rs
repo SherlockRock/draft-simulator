@@ -17,7 +17,7 @@ use engine_core::search::{SearchParams, TreeNode};
 
 use engine_core::protocol_types as proto;
 
-pub const PROTOCOL_VERSION: &str = "1.0.0";
+pub const PROTOCOL_VERSION: &str = "1.1.0";
 pub const ENGINE_ID: &str = "firstpick/v1.0.0";
 
 // ---- Request: protocol → internal ComputeRequest ---------------------------
@@ -244,11 +244,10 @@ pub fn core_to_response(resp: ComputeResponse) -> proto::EngineResponse {
             // αβ never sets MCTS-specific metadata; field carries through
             // serde with `skip_serializing_if = "Option::is_none"`.
             mcts_meta: None,
-            // Phase 7b Decision 6/7: streaming-only fields. αβ is one-shot, so
-            // `partial` is always None and `root_path` stays empty.
+            // Phase 7b Decision 6: streaming-only field. αβ is one-shot, so
+            // `partial` is always None.
             partial: None,
             persist_on_pause: None,
-            root_path: Vec::new(),
         },
         scenarios,
         tree: to_protocol_tree(&resp.tree, &must_keep_paths),

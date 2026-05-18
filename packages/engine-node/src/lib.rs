@@ -196,20 +196,16 @@ impl Engine {
             flex_weight: 1.0,
         };
 
-        let initial_root_path = proto_request.initial_root_path.clone();
-
         let request_meta = RequestMeta {
             latency_budget_ms,
             top_k_at_root,
             first_emit_threshold: crate::mcts_wire::FIRST_EMIT_THRESHOLD,
-            initial_root_path: initial_root_path.clone(),
         };
 
         Ok(NavigatorSession::new(
             fixture,
             Arc::new(pools),
             initial_state,
-            initial_root_path,
             cfg,
             request_meta,
         ))

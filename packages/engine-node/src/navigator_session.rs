@@ -6,9 +6,9 @@
 //! and absorb mid-flight reroot commands.
 //!
 //! T5 landed `start()` + the iterate loop core, T6 the visit-doubling cadence
-//! emit, T7 the reroot command path — `SessionCommand::Reroot` now invokes
-//! `Mcts::reroot_to` between iterations and resets the cadence segment on
-//! success (or emits a JSON error payload on failure).
+//! emit, T7 the warm-restart command path — `SessionCommand::ApplyPick` now
+//! invokes `Mcts::reroot_to` between iterations, resets the cadence segment
+//! on success, and rejects the caller's Promise on failure.
 
 use std::sync::atomic::AtomicBool;
 #[cfg(not(test))]
@@ -52,15 +52,15 @@ enum LoopState {
 const TSF_QUEUE_SIZE: usize = 4;
 
 /// Commands posted from the napi-binding thread to the iterate thread.
-/// `Pause` carries a boxed closure resolver that captures the napi
-/// JsDeferred by move — see Decision 3 / 4 of the design spec.
+/// `Pause` and `ApplyPick` carry a boxed closure resolver that captures the
+/// napi JsDeferred by move — see Decision 3 / 4 of the design spec.
 pub(crate) enum SessionCommand {
     Pause { resolve: Box<dyn FnOnce(napi::Result<String>) + Send> },
     Resume,
     Stop,
-    Reroot {
-        reroot_id: u64,
-        champion_ids_path: Vec<Vec<String>>,
+    ApplyPick {
+        champion_ids: Vec<String>,
+        resolve: Box<dyn FnOnce(napi::Result<()>) + Send>,
     },
 }
 
@@ -75,11 +75,6 @@ pub(crate) struct RequestMeta {
     /// the floor-skip regression test passes a smaller value so it can cross
     /// the threshold inside a few-second budget on real-data iterate rates.
     pub first_emit_threshold: u32,
-    /// Phase 7c T5: prefix of the cumulative reroot path applied at
-    /// session construction (from `request.initial_root_path`). The
-    /// iterate-loop owned `session_root_path` is initialized to this
-    /// value and appended on each successful in-session reroot.
-    pub initial_root_path: Vec<Vec<String>>,
 }
 
 #[napi]
@@ -124,9 +119,6 @@ pub struct NavigatorSession {
     pools: Arc<PoolContext>,
     #[cfg_attr(test, allow(dead_code))]
     initial_state: DraftState,
-    /// Phase 7c T5: prefix of cumulative reroot path. See RequestMeta.
-    #[cfg_attr(test, allow(dead_code))]
-    initial_root_path: Vec<Vec<String>>,
     #[cfg_attr(test, allow(dead_code))]
     cfg: McTsConfig,
     #[cfg_attr(test, allow(dead_code))]
@@ -143,7 +135,6 @@ impl NavigatorSession {
         fixture: Arc<SpikeFixture>,
         pools: Arc<PoolContext>,
         initial_state: DraftState,
-        initial_root_path: Vec<Vec<String>>,
         cfg: McTsConfig,
         request_meta: RequestMeta,
     ) -> Self {
@@ -158,7 +149,6 @@ impl NavigatorSession {
             fixture,
             pools,
             initial_state,
-            initial_root_path,
             cfg,
             request_meta,
         }
@@ -231,13 +221,11 @@ impl NavigatorSession {
         let fixture = self.fixture.clone();
         let pools = self.pools.clone();
         let initial_state = self.initial_state.clone();
-        let initial_root_path = self.initial_root_path.clone();
         let cfg = self.cfg.clone();
         let meta = RequestMeta {
             latency_budget_ms: self.request_meta.latency_budget_ms,
             top_k_at_root: self.request_meta.top_k_at_root,
             first_emit_threshold: self.request_meta.first_emit_threshold,
-            initial_root_path: self.request_meta.initial_root_path.clone(),
         };
         let cancel = self.cancel.clone();
 
@@ -255,7 +243,7 @@ impl NavigatorSession {
 
         tokio::task::spawn_blocking(move || {
             let result =
-                iterate_loop(&fixture, &pools, initial_state, initial_root_path, cfg, meta, cancel, rx, emit);
+                iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit);
             // Cleanup before resolving: drops the TSF (cancels the napi ref
             // back to the JS callback) and the sender (so stop/reroot become
             // no-ops post-exit).
@@ -334,47 +322,41 @@ impl NavigatorSession {
         }
     }
 
-    /// Re-root the in-flight MCTS to a descendant identified by
-    /// `champion_ids_path`. The path is JSON-encoded (a `string[][]` —
-    /// each step is 1 champion id for single moves or 2 for pair-pick moves).
-    /// Dispatch is fire-and-forget: the command is queued on the mpsc channel
-    /// and applied by the iterate loop between iterations via `Mcts::reroot_to`.
-    /// Errors surface through the partial-emit channel as a JSON payload
-    /// `{ rerootError, rerootId, attemptedPath }` (Decision 8) — that's why
-    /// this method only validates the surface and never blocks waiting for
-    /// the apply result.
-    ///
-    /// `reroot_id` is a JS `bigint` (monotonic per session) — using `BigInt`
-    /// avoids the 53-bit float coercion that `u32` -> JS `number` would
-    /// inflict on long-lived sessions with many reroots.
+    /// Apply a single move (1 champion for ban or non-pair pick, 2 for pair
+    /// pick) to the in-flight MCTS root. Returns a Promise that resolves with
+    /// `()` on successful reroot (warm restart preserves the matching subtree)
+    /// or rejects with `applyPick.notProjected` if the move is not among the
+    /// active root's children. Auto-resumes if the session was paused.
+    #[cfg(not(test))]
     #[napi]
-    pub fn reroot(&self, reroot_id: BigInt, path_json: String) -> napi::Result<()> {
-        let (signed, value, _lossless) = reroot_id.get_u64();
-        if signed {
+    pub fn apply_pick(&self, env: Env, champion_ids: Vec<String>) -> napi::Result<JsObject> {
+        if champion_ids.is_empty() || champion_ids.len() > 2 {
             return Err(error::invalid_input(
-                vec!["rerootId"],
-                "rerootId must be non-negative",
+                vec!["championIds"],
+                format!("championIds must be 1 or 2 entries; got {}", champion_ids.len()),
             ));
         }
-        let path: Vec<Vec<String>> = serde_json::from_str(&path_json).map_err(|e| {
-            error::invalid_input(vec!["path"], format!("reroot path parse: {}", e))
-        })?;
+        let (deferred, promise) = env.create_deferred::<(), _>()?;
+        let resolve: Box<dyn FnOnce(napi::Result<()>) + Send> = Box::new(move |result| match result {
+            Ok(()) => deferred.resolve(move |_env| Ok(())),
+            Err(e) => deferred.reject(e),
+        });
         let guard = self
             .cmd_tx
             .lock()
             .map_err(|_| error::internal("cmd_tx mutex poisoned"))?;
-        // Late reroot after the iterate loop has already cleaned up its sender
-        // is benign: nothing to apply. JS clients should check `is_active()`
-        // before reroot if they care, but a race between `reroot()` and the
-        // final-snapshot resolve must not raise.
-        if let Some(tx) = guard.as_ref() {
-            tx.send(SessionCommand::Reroot {
-                reroot_id: value,
-                champion_ids_path: path,
-            })
-            .map_err(|e| error::internal(format!("reroot send: {}", e)))?;
-        }
-        Ok(())
+        let Some(tx) = guard.as_ref() else {
+            return Err(napi::Error::new(
+                napi::Status::GenericFailure,
+                "applyPick.sessionEnded",
+            ));
+        };
+        let cmd_tx = tx.clone();
+        drop(guard);
+        cmd_tx
+            .send(SessionCommand::ApplyPick { champion_ids, resolve })
+            .map_err(|e| error::internal(format!("applyPick send: {}", e)))?;
+        Ok(promise)
     }
 
     /// `true` while the iterate thread is running — equivalently, while the
@@ -408,7 +390,6 @@ pub(crate) fn iterate_loop(
     fixture: &SpikeFixture,
     pools: &PoolContext,
     initial_state: DraftState,
-    initial_root_path: Vec<Vec<String>>,
     cfg: McTsConfig,
     meta: RequestMeta,
     cancel: CancelHandle,
@@ -423,10 +404,6 @@ pub(crate) fn iterate_loop(
     }
 
     let mut mcts = Mcts::with_pools(fixture, initial_state.clone(), pools, cfg.clone());
-    // Phase 7c T5: session-owned cumulative reroot path. Initialized to the
-    // request's initial_root_path; appended on each successful in-session
-    // reroot (T6). Passed to mcts_wire::build_response via BuildResponseOptions.
-    let mut session_root_path: Vec<Vec<String>> = initial_root_path;
 
     let mut state = LoopState::Active;
     let mut counter: usize = 0;
@@ -449,7 +426,6 @@ pub(crate) fn iterate_loop(
                                 cancelled: false,
                                 persist_on_pause: true,
                                 top_k_at_root: meta.top_k_at_root,
-                                session_root_path: &session_root_path,
                             };
                             let resp = mcts_wire::build_response(&mcts, mcts.active_root_state(), start.elapsed(), opts);
                             match serde_json::to_string(&resp) {
@@ -464,28 +440,22 @@ pub(crate) fn iterate_loop(
                         Ok(SessionCommand::Stop) => {
                             state = LoopState::Ending;
                         }
-                        Ok(SessionCommand::Reroot { reroot_id, champion_ids_path }) => {
-                            match apply_reroot(&mut mcts, &champion_ids_path) {
-                                Ok(()) => {
-                                    // v4 R3-N1: append on success only.
-                                    session_root_path.extend(champion_ids_path.clone());
-                                    // Reset cadence (Decision 4 v3).
-                                    iters_at_segment_start = mcts.total_iterations();
-                                    segment_threshold_delta = meta.first_emit_threshold;
-                                    first_emit_done = false;
-                                    let now = Instant::now();
-                                    segment_start = now;
-                                    last_emit_at = now;
-                                }
-                                Err(e) => {
-                                    let err_payload = serde_json::json!({
-                                        "rerootError": e,
-                                        "rerootId": reroot_id,
-                                        "attemptedPath": champion_ids_path,
-                                    });
-                                    emit(err_payload.to_string());
-                                }
+                        Ok(SessionCommand::ApplyPick { champion_ids, resolve }) => {
+                            let result = apply_pick_to_mcts(&mut mcts, &champion_ids);
+                            if result.is_ok() {
+                                // Reset cadence (Decision 4 v3) so next emit fires at a meaningful
+                                // visit count after warm restart.
+                                iters_at_segment_start = mcts.total_iterations();
+                                segment_threshold_delta = meta.first_emit_threshold;
+                                first_emit_done = false;
+                                let now = Instant::now();
+                                segment_start = now;
+                                last_emit_at = now;
                             }
+                            resolve(result.map_err(|msg| napi::Error::new(
+                                napi::Status::GenericFailure,
+                                format!("applyPick.notProjected: {}", msg),
+                            )));
                         }
                         Err(TryRecvError::Empty) => break,
                         Err(TryRecvError::Disconnected) => {
@@ -522,7 +492,6 @@ pub(crate) fn iterate_loop(
                         cancelled: false,
                         persist_on_pause: false,
                         top_k_at_root: meta.top_k_at_root,
-                        session_root_path: &session_root_path,
                     };
                     let partial = mcts_wire::build_response(&mcts, mcts.active_root_state(), start.elapsed(), opts);
                     let json = serde_json::to_string(&partial)
@@ -546,7 +515,6 @@ pub(crate) fn iterate_loop(
                             cancelled: false,
                             persist_on_pause: true,
                             top_k_at_root: meta.top_k_at_root,
-                            session_root_path: &session_root_path,
                         };
                         let resp = mcts_wire::build_response(&mcts, mcts.active_root_state(), start.elapsed(), opts);
                         match serde_json::to_string(&resp) {
@@ -565,29 +533,23 @@ pub(crate) fn iterate_loop(
                         last_emit_at = now;
                         state = LoopState::Active;
                     }
-                    Ok(SessionCommand::Reroot { reroot_id, champion_ids_path }) => {
-                        match apply_reroot(&mut mcts, &champion_ids_path) {
-                            Ok(()) => {
-                                session_root_path.extend(champion_ids_path.clone());
-                                // Reset cadence + auto-resume.
-                                iters_at_segment_start = mcts.total_iterations();
-                                segment_threshold_delta = meta.first_emit_threshold;
-                                first_emit_done = false;
-                                let now = Instant::now();
-                                segment_start = now;
-                                last_emit_at = now;
-                                state = LoopState::Active;
-                            }
-                            Err(e) => {
-                                // v4 R3-Nit3: emit rerootError but stay Paused.
-                                let err_payload = serde_json::json!({
-                                    "rerootError": e,
-                                    "rerootId": reroot_id,
-                                    "attemptedPath": champion_ids_path,
-                                });
-                                emit(err_payload.to_string());
-                            }
+                    Ok(SessionCommand::ApplyPick { champion_ids, resolve }) => {
+                        let result = apply_pick_to_mcts(&mut mcts, &champion_ids);
+                        if result.is_ok() {
+                            // Auto-resume: paused + successful warm restart → re-enter Active
+                            // to continue MCTS on the new root.
+                            state = LoopState::Active;
+                            iters_at_segment_start = mcts.total_iterations();
+                            segment_threshold_delta = meta.first_emit_threshold;
+                            first_emit_done = false;
+                            let now = Instant::now();
+                            segment_start = now;
+                            last_emit_at = now;
                         }
+                        resolve(result.map_err(|msg| napi::Error::new(
+                            napi::Status::GenericFailure,
+                            format!("applyPick.notProjected: {}", msg),
+                        )));
                     }
                     Ok(SessionCommand::Stop) => {
                         state = LoopState::Ending;
@@ -608,11 +570,20 @@ pub(crate) fn iterate_loop(
         }
     }
 
-    // v4 R3 M1: drain-and-reject any pending Pause commands so JS-side awaits
-    // don't hang.
+    // v4 R3 M1: drain-and-reject any pending Pause / ApplyPick commands so
+    // JS-side awaits don't hang.
     while let Ok(cmd) = rx.try_recv() {
-        if let SessionCommand::Pause { resolve } = cmd {
-            resolve(Err(error::internal("session ended before pause processed")));
+        match cmd {
+            SessionCommand::Pause { resolve } => {
+                resolve(Err(error::internal("session ended before pause processed")));
+            }
+            SessionCommand::ApplyPick { resolve, .. } => {
+                resolve(Err(napi::Error::new(
+                    napi::Status::GenericFailure,
+                    "applyPick.sessionEnded",
+                )));
+            }
+            _ => {}
         }
     }
 
@@ -622,51 +593,35 @@ pub(crate) fn iterate_loop(
         cancelled,
         persist_on_pause: false,
         top_k_at_root: meta.top_k_at_root,
-        session_root_path: &session_root_path,
     };
     let resp = mcts_wire::build_response(&mcts, mcts.active_root_state(), start.elapsed(), opts);
     serde_json::to_string(&resp).map_err(|e| error::internal(format!("final serialize: {}", e)))
 }
 
-/// Walk `path` step-by-step and reroot the MCTS to each child. Each path step
-/// is the canonical `champion_ids` of a single move: 1 entry for bans and
-/// non-pair-start picks, 2 entries for pair-pick moves.
-///
-/// `Mcts::reroot_to` advances `active_root_state` internally — we read
-/// `current_turn()` *before* each step to detect whether the upcoming move is a
-/// pick or ban, then build the matching `MoveId`. No parallel local state copy
-/// (Decision 10).
-///
-/// `pub(crate)` so the test module can drive a single reroot directly without
-/// spinning up an `iterate_loop` thread — keeps the pair-pick reroot test from
-/// needing a synthetic plumbing path to inspect `active_root_state`.
-pub(crate) fn apply_reroot(
+/// Apply a single warm-restart step to the MCTS arena. Reads the current
+/// turn's action_type to decide pick vs ban, builds the canonical MoveId,
+/// and delegates to `Mcts::reroot_to`. 1-id step is a single move; 2-id
+/// step is a pair pick (errors at non-pick turns).
+fn apply_pick_to_mcts(
     mcts: &mut Mcts<'_>,
-    path: &[Vec<String>],
+    champion_ids: &[String],
 ) -> std::result::Result<(), String> {
-    for step_ids in path {
-        // Pair-pick turns are always picks per TURN_SEQUENCE; bans are always
-        // single-id. `MoveId::pair` hardcodes is_pick=true (tree.rs:27), so a
-        // 2-id step at a non-pick turn is structurally invalid and must error
-        // before reroot_to is called.
-        let is_pick = mcts
-            .active_root_state()
-            .current_turn()
-            .map(|t| t.action_type == ActionType::Pick)
-            .unwrap_or(true);
-        let mv = match step_ids.len() {
-            1 => MoveId::single(step_ids[0].clone(), is_pick),
-            2 => {
-                if !is_pick {
-                    return Err(format!("two-id step at non-pick turn: {:?}", step_ids));
-                }
-                MoveId::pair(step_ids[0].clone(), step_ids[1].clone())
+    let is_pick = mcts
+        .active_root_state()
+        .current_turn()
+        .map(|t| t.action_type == ActionType::Pick)
+        .unwrap_or(true);
+    let mv = match champion_ids.len() {
+        1 => MoveId::single(champion_ids[0].clone(), is_pick),
+        2 => {
+            if !is_pick {
+                return Err(format!("two-id step at non-pick turn: {:?}", champion_ids));
             }
-            n => return Err(format!("invalid path step length: {}", n)),
-        };
-        mcts.reroot_to(&mv).map_err(|e| e.to_string())?;
-    }
-    Ok(())
+            MoveId::pair(champion_ids[0].clone(), champion_ids[1].clone())
+        }
+        n => return Err(format!("invalid step length: {}", n)),
+    };
+    mcts.reroot_to(&mv).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -718,9 +673,8 @@ mod tests {
             latency_budget_ms: 200,
             top_k_at_root: 5,
             first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
-            initial_root_path: vec![],
         };
-        let session = NavigatorSession::new(fixture, pools, initial_state, vec![], test_cfg(), request_meta);
+        let session = NavigatorSession::new(fixture, pools, initial_state, test_cfg(), request_meta);
         assert!(
             !session.is_active(),
             "fresh session must report inactive before start()"
@@ -747,7 +701,6 @@ mod tests {
             latency_budget_ms: 100,
             top_k_at_root: 5,
             first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
-            initial_root_path: vec![],
         };
         let cancel = CancelHandle::new();
         let (tx, rx) = mpsc::channel::<SessionCommand>();
@@ -762,7 +715,7 @@ mod tests {
             let _ = tx.send(SessionCommand::Stop);
         });
 
-        let result = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
+        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
             .expect("iterate_loop ok");
         stop_thread.join().expect("stop nudge completes");
 
@@ -803,7 +756,6 @@ mod tests {
             latency_budget_ms: 200,
             top_k_at_root: 5,
             first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
-            initial_root_path: vec![],
         };
         let cancel = CancelHandle::new();
         let (tx, rx) = mpsc::channel::<SessionCommand>();
@@ -831,7 +783,7 @@ mod tests {
             let _ = tx.send(SessionCommand::Stop);
         });
 
-        let result = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
+        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
             .expect("iterate_loop ok");
         stop_thread.join().expect("stop nudge completes");
 
@@ -871,7 +823,6 @@ mod tests {
             latency_budget_ms: 50,
             top_k_at_root: 5,
             first_emit_threshold,
-            initial_root_path: vec![],
         };
         let cancel = CancelHandle::new();
         let (tx, rx) = mpsc::channel::<SessionCommand>();
@@ -900,7 +851,7 @@ mod tests {
             let _ = tx.send(SessionCommand::Stop);
         });
 
-        let _ = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
+        let _ = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
             .expect("iterate_loop ok");
         stop_thread.join().expect("stop nudge completes");
 
@@ -942,25 +893,28 @@ mod tests {
         }
     }
 
-    /// Opus R1-#17 invariant. After a reroot, the active root's visit count
-    /// must equal the inherited subtree size at minimum (arena retention) and
-    /// grow when iteration continues (the reroot didn't sever the search).
+    /// Opus R1-#17 invariant. After a warm-restart ApplyPick, the active
+    /// root's visit count must equal the inherited subtree size at minimum
+    /// (arena retention) and grow when iteration continues (the reroot didn't
+    /// sever the search).
     ///
     /// Drive iterate_loop with closure-seam emit. Wait for the first partial,
-    /// pick the top-visit root child A, send Reroot. Continue iterating long
+    /// pick the top-visit root child A, send ApplyPick. Continue iterating long
     /// enough that root.visits ticks up, then Stop. Final response's
     /// `meta.nodes_evaluated` must exceed A's pre-reroot visits.
     #[test]
-    fn navigator_session_reroot_preserves_and_extends_visits() {
+    fn navigator_session_apply_pick_preserves_and_extends_visits() {
         let fixture = Arc::new(real_data_fixture());
         let pools = Arc::new(PoolContext::full(&fixture));
         let initial_state = cadence_test_state();
         let cfg = test_cfg();
+        // Lower threshold so the partial fires with visits-on-real-children
+        // before the deadline (the production threshold needs ~1024 iters
+        // which is wall-clock-flaky on a loaded runner).
         let meta = RequestMeta {
             latency_budget_ms: 100,
             top_k_at_root: 5,
-            first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
-            initial_root_path: vec![],
+            first_emit_threshold: 16,
         };
         let cancel = CancelHandle::new();
         let (tx, rx) = mpsc::channel::<SessionCommand>();
@@ -970,58 +924,65 @@ mod tests {
         let emit: Box<dyn Fn(String) + Send + Sync> =
             Box::new(move |json| received_for_emit.lock().unwrap().push(json));
 
-        // Driver thread: poll for first partial, send Reroot, sleep ~400ms for
-        // continued iter, then Stop. Keeps the test deterministic without
-        // depending on a second cadence emit.
+        // Captures the ApplyPick resolver outcome so the test can assert it
+        // resolved Ok (the warm restart was projected).
+        let apply_result: Arc<Mutex<Option<napi::Result<()>>>> = Arc::new(Mutex::new(None));
+        let apply_result_clone = apply_result.clone();
+        let resolve: Box<dyn FnOnce(napi::Result<()>) + Send> = Box::new(move |r| {
+            *apply_result_clone.lock().unwrap() = Some(r);
+        });
+
         let received_for_watch = received.clone();
         let driver = std::thread::spawn(move || {
-            let deadline = Instant::now() + Duration::from_millis(2000);
-            let first_partial = loop {
-                {
-                    let lock = received_for_watch.lock().unwrap();
-                    if !lock.is_empty() {
-                        break Some(lock[0].clone());
-                    }
+            // Poll for a partial whose root has at least one non-stub child.
+            // Early partials at low iteration counts may render only stubs;
+            // we need an actually-visited child to drive a successful reroot.
+            let deadline = Instant::now() + Duration::from_millis(3000);
+            let (champ_id, inherited_visits) = loop {
+                let snapshot = received_for_watch.lock().unwrap().clone();
+                let found = snapshot.iter().find_map(|raw| {
+                    let parsed: proto::EngineResponse = serde_json::from_str(raw).ok()?;
+                    parsed
+                        .tree
+                        .children
+                        .iter()
+                        .filter_map(|c| {
+                            let extras = c.mcts_extras.as_ref()?;
+                            if extras.visits == 0 {
+                                return None;
+                            }
+                            let id = c.champion_ids.first()?.clone();
+                            Some((id, extras.visits))
+                        })
+                        .max_by_key(|(_, v)| *v)
+                });
+                if let Some(pair) = found {
+                    break pair;
                 }
                 if Instant::now() >= deadline {
-                    break None;
+                    panic!("no partial with a non-stub root child arrived within 3s");
                 }
                 std::thread::sleep(Duration::from_millis(25));
             };
-            let first_partial = first_partial.expect("first partial emitted within deadline");
-            let parsed: proto::EngineResponse =
-                serde_json::from_str(&first_partial).expect("first partial parses");
-            // Find the top-visit root child. cadence_test_state is at slot 11
-            // (single pick), so champion_ids has exactly one element.
-            let (champ_id, inherited_visits) = parsed
-                .tree
-                .children
-                .iter()
-                .filter_map(|c| {
-                    let extras = c.mcts_extras.as_ref()?;
-                    let id = c.champion_ids.first()?.clone();
-                    Some((id, extras.visits))
-                })
-                .max_by_key(|(_, v)| *v)
-                .expect("expected at least one expanded root child");
 
-            let _ = tx.send(SessionCommand::Reroot {
-                reroot_id: 1,
-                champion_ids_path: vec![vec![champ_id]],
+            let _ = tx.send(SessionCommand::ApplyPick {
+                champion_ids: vec![champ_id],
+                resolve,
             });
             // Slack for the iterate loop to drain + run at least one more
-            // iteration on the new active root. 150ms is comfortably above
-            // a single POLL_EVERY tick (32 iters at ~200 iter/sec) on a
-            // loaded runner; keeps total test CPU low to avoid starving the
-            // wall-clock-sensitive `compute_mcts_emits_synthetic_scenarios`.
+            // iteration on the new active root.
             std::thread::sleep(Duration::from_millis(150));
             let _ = tx.send(SessionCommand::Stop);
             inherited_visits
         });
 
-        let result = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
+        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
             .expect("iterate_loop ok");
         let inherited_visits = driver.join().expect("driver thread completes");
+
+        // ApplyPick must have resolved Ok — the warm restart was projected.
+        let apply_outcome = apply_result.lock().unwrap().take().expect("resolver invoked");
+        assert!(apply_outcome.is_ok(), "ApplyPick resolver should be Ok for a top-visit child");
 
         let parsed: proto::EngineResponse =
             serde_json::from_str(&result).expect("final response parses");
@@ -1039,16 +1000,16 @@ mod tests {
 
     /// Opus R1-#18 invariant. Pair-pick reroot (two-id path step) applies
     /// both champions to the same side at apply_move time. Exercises
-    /// `apply_reroot` directly so we can inspect `active_root_state` without
-    /// routing through the iterate_loop's JSON final response (which doesn't
-    /// surface the projected state in a structured way).
+    /// `apply_pick_to_mcts` directly so we can inspect `active_root_state`
+    /// without routing through the iterate_loop's JSON final response (which
+    /// doesn't surface the projected state in a structured way).
     ///
     /// Iterates a few times first so the chosen pair is in `root.children`
     /// (otherwise `reroot_to` errors with "move not found"). Picks the
     /// top-visit pair child from `root_visit_distribution` rather than a
     /// hardcoded pair so the test stays stable against rollout-RNG shifts.
     #[test]
-    fn navigator_session_pair_reroot() {
+    fn navigator_session_pair_apply_pick() {
         let fixture = real_data_fixture();
         let pools = PoolContext::full(&fixture);
         let initial_state = pair_start_test_state();
@@ -1071,9 +1032,8 @@ mod tests {
             .expect("expected at least one expanded pair child after 100 iterates");
         // Sanity: a pair MoveId has exactly 2 champion_ids.
         assert_eq!(mv.champion_ids.len(), 2);
-        let path = vec![mv.champion_ids.clone()];
 
-        apply_reroot(&mut mcts, &path).expect("apply_reroot ok for valid pair");
+        apply_pick_to_mcts(&mut mcts, &mv.champion_ids).expect("apply_pick_to_mcts ok for valid pair");
         let new_state = mcts.active_root_state();
         // Both champions were applied to red_picks (pair-pick at slot 7 = Red).
         assert_eq!(
@@ -1092,152 +1052,6 @@ mod tests {
         }
     }
 
-    /// Decision 8 surface. Invalid reroot (champion not in current active
-    /// root's children) emits a JSON error payload with the canonical
-    /// `{rerootError, rerootId, attemptedPath}` shape; the iterate loop must
-    /// continue rather than tear down.
-    #[test]
-    fn navigator_session_invalid_reroot_emits_error() {
-        let fixture = Arc::new(real_data_fixture());
-        let pools = Arc::new(PoolContext::full(&fixture));
-        let initial_state = cadence_test_state();
-        let cfg = test_cfg();
-        let meta = RequestMeta {
-            latency_budget_ms: 100,
-            top_k_at_root: 5,
-            first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
-            initial_root_path: vec![],
-        };
-        let cancel = CancelHandle::new();
-        let (tx, rx) = mpsc::channel::<SessionCommand>();
-
-        let received: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
-        let received_for_emit = received.clone();
-        let emit: Box<dyn Fn(String) + Send + Sync> =
-            Box::new(move |json| received_for_emit.lock().unwrap().push(json));
-
-        // Drive: wait for first partial (proves the loop is alive), send a
-        // garbage reroot, wait for the error emit, then Stop. The error and
-        // first partial both land on the same emit channel — we look past
-        // the first valid EngineResponse for the JSON error envelope.
-        let received_for_watch = received.clone();
-        let driver = std::thread::spawn(move || {
-            let deadline = Instant::now() + Duration::from_millis(2000);
-            loop {
-                if !received_for_watch.lock().unwrap().is_empty() {
-                    break;
-                }
-                if Instant::now() >= deadline {
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(25));
-            }
-            // "DefinitelyNotAChampion" is not a champion id in the fixture,
-            // so it can't appear in the root's expanded children list.
-            let _ = tx.send(SessionCommand::Reroot {
-                reroot_id: 42,
-                champion_ids_path: vec![vec!["DefinitelyNotAChampion".into()]],
-            });
-            // Wait for the error emit to land on the channel before stopping.
-            let error_deadline = Instant::now() + Duration::from_millis(2000);
-            loop {
-                let has_error = received_for_watch
-                    .lock()
-                    .unwrap()
-                    .iter()
-                    .any(|s| s.contains("\"rerootError\""));
-                if has_error || Instant::now() >= error_deadline {
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(25));
-            }
-            let _ = tx.send(SessionCommand::Stop);
-        });
-
-        let result = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
-            .expect("iterate_loop ok (must not tear down on invalid reroot)");
-        driver.join().expect("driver thread completes");
-
-        let emits = received.lock().unwrap().clone();
-        let err_str = emits
-            .iter()
-            .find(|s| s.contains("\"rerootError\""))
-            .expect("expected at least one error-shaped emit");
-        // Validate envelope shape — the backend's handlePartialOrError keys
-        // off these three field names (Decision 8).
-        let payload: serde_json::Value =
-            serde_json::from_str(err_str).expect("error payload parses as JSON");
-        assert!(payload.get("rerootError").is_some(), "missing rerootError");
-        assert_eq!(payload.get("rerootId").and_then(|v| v.as_u64()), Some(42));
-        let attempted = payload
-            .get("attemptedPath")
-            .expect("missing attemptedPath")
-            .as_array()
-            .expect("attemptedPath is an array");
-        assert_eq!(attempted.len(), 1);
-
-        // Loop continued past the invalid reroot — the final snapshot must
-        // still parse and reflect a stop-initiated exit.
-        let parsed: proto::EngineResponse =
-            serde_json::from_str(&result).expect("final response parses");
-        assert!(!parsed.meta.cancelled);
-    }
-
-    /// Opus R2-NIT-6. Stop and Reroot queued in order before the next drain
-    /// tick: the drain loop must see Stop first, set `stop_requested`, and
-    /// then drop the queued Reroot rather than applying it to a soon-to-exit
-    /// loop. Verified by the absence of a `rerootError` emit (a successful
-    /// apply emits nothing; a failed apply would emit the error envelope —
-    /// either way, *if* Reroot ran with a bogus path we'd see the envelope).
-    #[test]
-    fn navigator_session_reroot_after_stop_dropped() {
-        let fixture = Arc::new(real_data_fixture());
-        let pools = Arc::new(PoolContext::full(&fixture));
-        let initial_state = cadence_test_state();
-        let cfg = test_cfg();
-        let meta = RequestMeta {
-            // Generous floor so iterate_loop doesn't fire a partial before
-            // the driver queues its commands — we want the FIRST drain tick
-            // to see both messages already enqueued.
-            latency_budget_ms: 5_000,
-            top_k_at_root: 5,
-            first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
-            initial_root_path: vec![],
-        };
-        let cancel = CancelHandle::new();
-        let (tx, rx) = mpsc::channel::<SessionCommand>();
-
-        let received: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
-        let received_for_emit = received.clone();
-        let emit: Box<dyn Fn(String) + Send + Sync> =
-            Box::new(move |json| received_for_emit.lock().unwrap().push(json));
-
-        // Queue Stop then a bogus-path Reroot atomically before the loop
-        // starts so the very first drain sees both. mpsc preserves send order.
-        tx.send(SessionCommand::Stop).expect("stop send");
-        tx.send(SessionCommand::Reroot {
-            reroot_id: 99,
-            champion_ids_path: vec![vec!["DefinitelyNotAChampion".into()]],
-        })
-        .expect("reroot send");
-
-        let result = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
-            .expect("iterate_loop ok");
-
-        let emits = received.lock().unwrap().clone();
-        // Reroot was dropped, so the bogus-path apply never ran — no error
-        // envelope on the wire. If the post-stop drop logic regressed, the
-        // invalid champion would have triggered an emit here.
-        assert!(
-            emits.iter().all(|s| !s.contains("\"rerootError\"")),
-            "expected no rerootError emit when Reroot is queued after Stop; got {:?}",
-            emits
-        );
-        let parsed: proto::EngineResponse =
-            serde_json::from_str(&result).expect("final response parses");
-        assert!(!parsed.meta.cancelled);
-    }
-
     /// Asserts the `cancelled=true` branch of the persistence matrix:
     /// flipping the cancel flag (without sending Stop) exits the loop and
     /// surfaces cancelled=true in the final response. Mirrors the napi
@@ -1253,7 +1067,6 @@ mod tests {
             latency_budget_ms: 100,
             top_k_at_root: 5,
             first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
-            initial_root_path: vec![],
         };
         let cancel = CancelHandle::new();
         let cancel_for_nudge = cancel.clone();
@@ -1265,7 +1078,7 @@ mod tests {
             cancel_for_nudge.cancel();
         });
 
-        let result = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
+        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
             .expect("iterate_loop ok");
         nudge.join().expect("cancel nudge completes");
 
@@ -1291,7 +1104,6 @@ mod tests {
             latency_budget_ms: 100,
             top_k_at_root: 5,
             first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
-            initial_root_path: vec![],
         };
         let cancel = CancelHandle::new();
         let (tx, rx) = mpsc::channel::<SessionCommand>();
@@ -1313,7 +1125,7 @@ mod tests {
             let _ = tx.send(SessionCommand::Stop);
         });
 
-        let _ = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
+        let _ = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
             .expect("iterate_loop ok");
         driver.join().expect("driver done");
 
@@ -1334,7 +1146,6 @@ mod tests {
             latency_budget_ms: 100,
             top_k_at_root: 5,
             first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
-            initial_root_path: vec![],
         };
         let cancel = CancelHandle::new();
         let cancel_for_nudge = cancel.clone();
@@ -1357,7 +1168,7 @@ mod tests {
         });
 
         let start = Instant::now();
-        let result = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
+        let result = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
             .expect("iterate_loop ok");
         let elapsed = start.elapsed();
         driver.join().expect("driver done");
@@ -1378,7 +1189,6 @@ mod tests {
             latency_budget_ms: 50,
             top_k_at_root: 5,
             first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
-            initial_root_path: vec![],
         };
         let cancel = CancelHandle::new();
         let (tx, rx) = mpsc::channel::<SessionCommand>();
@@ -1399,7 +1209,7 @@ mod tests {
             let _ = tx.send(SessionCommand::Stop);
         });
 
-        let final_json = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
+        let final_json = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
             .expect("iterate_loop ok");
         driver.join().expect("driver done");
 
@@ -1425,7 +1235,6 @@ mod tests {
             latency_budget_ms: 50_000, // long — we'll exit via Stop, not budget
             top_k_at_root: 5,
             first_emit_threshold: mcts_wire::FIRST_EMIT_THRESHOLD,
-            initial_root_path: vec![],
         };
         let cancel = CancelHandle::new();
         let cancel_for_nudge = cancel.clone();
@@ -1444,7 +1253,7 @@ mod tests {
         tx.send(SessionCommand::Pause { resolve }).expect("pause send");
         cancel_for_nudge.cancel();
 
-        let _ = iterate_loop(&fixture, &pools, initial_state, vec![], cfg, meta, cancel, rx, emit)
+        let _ = iterate_loop(&fixture, &pools, initial_state, cfg, meta, cancel, rx, emit)
             .expect("iterate_loop ok");
 
         let r = resolved.lock().unwrap().take().expect("resolver invoked by drain");
