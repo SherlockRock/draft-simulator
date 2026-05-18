@@ -97,8 +97,7 @@ const activeTokens = new Map();
 // projectedChildren keys: championIds.join("|") of each top-level
 // projected child in the latest emitted snapshot's tree. Read by the
 // navigatorPick/navigatorBan handlers to decide warm vs cold MCTS
-// restart (see ADR-0005). `rootPathCache` removed in this task —
-// reroot path-tracking was retired.
+// restart (see ADR-0005).
 const activeSessions = new Map();
 
 function decodeEngineError(err) {
@@ -111,44 +110,6 @@ function decodeEngineError(err) {
 
 function isRealDraftEvent(event) {
   return event && (event.event_type === "ban" || event.event_type === "pick");
-}
-
-// Phase 7c T8: walks a rerootStep (string[][]) and produces the augmented
-// bans/picks that, when concatenated with current events' bans/picks,
-// represent the rerooted draft state. Returns `nextSlot` so the caller
-// (buildEngineRequestWithReroot) can set `currentSlot` correctly — pair-pick
-// steps consume 2 slots per single step entry (v3 B3 fix).
-function applyRerootStepToEvents(currentEvents, rerootStep, turnSequence) {
-  // Match buildEngineRequest's filtering to keep slot accounting consistent.
-  const realEvents = currentEvents.filter(isRealDraftEvent);
-  let slot = realEvents.length;
-  const augmentedBans = [];
-  const augmentedPicks = [];
-  for (const stepIds of rerootStep) {
-    const turn = turnSequence[slot];
-    if (!turn) throw new Error(`reroot step at slot ${slot} past TURN_SEQUENCE`);
-    if (stepIds.length === 1) {
-      const entry = { championId: stepIds[0], side: turn.side, slot };
-      if (turn.type === "ban") augmentedBans.push(entry);
-      else augmentedPicks.push(entry);
-      slot += 1;
-    } else if (stepIds.length === 2) {
-      if (turn.type !== "pick") throw new Error(`pair step at non-pick slot ${slot}`);
-      const turn2 = turnSequence[slot + 1];
-      if (!turn2 || turn2.side !== turn.side || turn2.type !== "pick") {
-        throw new Error(`pair step at slot ${slot} but slot+1 isn't a same-side pick`);
-      }
-      augmentedPicks.push({ championId: stepIds[0], side: turn.side, slot });
-      augmentedPicks.push({ championId: stepIds[1], side: turn.side, slot: slot + 1 });
-      slot += 2;
-    } else {
-      throw new Error(`invalid step length ${stepIds.length}`);
-    }
-  }
-  if (slot > turnSequence.length) {
-    throw new Error(`reroot completes draft (nextSlot=${slot} > ${turnSequence.length})`);
-  }
-  return { augmentedBans, augmentedPicks, nextSlot: slot };
 }
 
 function sortEvents(events) {
@@ -282,31 +243,6 @@ async function buildEngineRequest(session, events, exclusions, forcedBranches = 
   }
 
   return request;
-}
-
-// Phase 7c T8: variant that bakes a rerootStep into the engine request.
-// Used by rerootNavigatorSession's fresh-session-fallback path (Decision 6).
-// Throws engine.invalid_input on slot-bound or pair-validation errors.
-async function buildEngineRequestWithReroot(session, events, exclusions, forcedBranches, algorithm, rerootStep) {
-  const baseRequest = await buildEngineRequest(session, events, exclusions, forcedBranches, algorithm);
-  if (!rerootStep || rerootStep.length === 0) return baseRequest;
-  try {
-    const augmented = applyRerootStepToEvents(events, rerootStep, TURN_SEQUENCE);
-    baseRequest.draftState.bans = [...baseRequest.draftState.bans, ...augmented.augmentedBans];
-    baseRequest.draftState.picks = [...baseRequest.draftState.picks, ...augmented.augmentedPicks];
-    baseRequest.draftState.currentSlot = augmented.nextSlot;
-    if (augmented.nextSlot >= TURN_SEQUENCE.length) {
-      throw new Error("reroot extends to complete draft");
-    }
-    baseRequest.draftState.currentSide = TURN_SEQUENCE[augmented.nextSlot].side;
-    baseRequest.draftState.currentPhase = TURN_SEQUENCE[augmented.nextSlot].phase;
-    baseRequest.initialRootPath = rerootStep;
-    return baseRequest;
-  } catch (e) {
-    const error = new Error(e.message);
-    error.code = "engine.invalid_input";
-    throw error;
-  }
 }
 
 function getLastEventId(events) {
@@ -490,9 +426,7 @@ async function computeForDraftAB(navigatorDraft, session, events, version, io, o
 // off the local var (never re-reads the map, which may have been replaced).
 async function startNavigatorSession(navigatorDraft, sess, events, version, io, options = {}) {
   const exclusions = await getCrossGameExclusions(sess, navigatorDraft);
-  const request = options.initialRootPath
-    ? await buildEngineRequestWithReroot(sess, events, exclusions, options.forcedBranches || [], options.algorithm, options.initialRootPath)
-    : await buildEngineRequest(sess, events, exclusions, options.forcedBranches || [], options.algorithm);
+  const request = await buildEngineRequest(sess, events, exclusions, options.forcedBranches || [], options.algorithm);
   const afterEventId = getLastEventId(events);
 
   await supersedePriorCompute(sess.id, "supersede");
@@ -505,7 +439,6 @@ async function startNavigatorSession(navigatorDraft, sess, events, version, io, 
     promise: null,
     pausePersistPromise: null,
     lastPersistedPauseSnapshotId: null,
-    rootPathCache: [],
     afterEventId,
     draft: navigatorDraft,
     draftId: navigatorDraft.id,
@@ -543,25 +476,13 @@ async function startNavigatorSession(navigatorDraft, sess, events, version, io, 
 
 // Identity-checked routing of TSF emits from the iterate loop. Drops late
 // partials/errors from a superseded session (Codex R2-#2). rootPath comes
-// from response.meta.rootPath (authoritative per Decision 7), NOT from the
-// backend's rootPathCache.
+// from response.meta.rootPath (authoritative per Decision 7).
 function handlePartialOrError(entry, io, jsonStr) {
   if (activeSessions.get(entry.sessionId) !== entry) return;
   if (entry.stopReason !== null) return;
 
   let parsed;
   try { parsed = JSON.parse(jsonStr); } catch { return; }
-
-  if (parsed.rerootError !== undefined) {
-    io.to(`navigator:${entry.sessionId}`).emit("navigatorRerootError", {
-      sessionId: entry.sessionId,
-      draftId: entry.draftId,
-      rerootId: parsed.rerootId,
-      attemptedPath: parsed.attemptedPath,
-      error: parsed.rerootError,
-    });
-    return;
-  }
 
   const shaped = shapeSnapshot({ id: entry.draftId }, entry.afterEventId, parsed);
   shaped.id = "partial";
@@ -573,10 +494,6 @@ function handlePartialOrError(entry, io, jsonStr) {
     afterEventId: entry.afterEventId,
     snapshot: shaped,
   });
-
-  if (Array.isArray(parsed.meta?.rootPath)) {
-    entry.rootPathCache = parsed.meta.rootPath;
-  }
 }
 
 // Phase 7c T8: user-Stop click. Pauses the iterate thread (Mcts arena
@@ -674,22 +591,6 @@ async function resumeNavigatorSession(navigatorDraft, sess, events, version, io,
   return { ok: true, freshSession: true, ...startResult };
 }
 
-// Phase 7c T10: live entry → reroot in place (works in both Active and
-// Paused — Rust state machine handles auto-resume from Paused). No live
-// entry → fresh session with initialRootPath baked into the request.
-async function rerootNavigatorSession(navigatorDraft, sess, events, rerootId, rerootStep, version, io, options = {}) {
-  const entry = activeSessions.get(sess.id);
-  if (entry && entry.session.isActive()) {
-    entry.session.reroot(BigInt(rerootId), JSON.stringify(rerootStep));
-    return { ok: true, freshSession: false };
-  }
-  // No live entry — fresh session with initialRootPath. Wrap with ok:true so
-  // navigatorReroot's !result.ok check doesn't render "Reroot failed: undefined".
-  const augmentedOptions = { ...options, initialRootPath: rerootStep };
-  const startResult = await startNavigatorSession(navigatorDraft, sess, events, version, io, augmentedOptions);
-  return { ok: true, freshSession: true, ...startResult };
-}
-
 function getEngineStatus() {
   return { activeSessions: activeTokens.size + activeSessions.size };
 }
@@ -725,7 +626,6 @@ module.exports = {
   pauseNavigatorSession,                // new — was stopNavigatorSession
   endNavigatorSession,                   // new
   resumeNavigatorSession,                // NEW from T10
-  rerootNavigatorSession,                // body replaced, export stays
   forEachActiveSession,
   isMctsToggleEnabled: () => MCTS_TOGGLE_ENABLED,
   __setEngineForTests,

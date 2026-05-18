@@ -153,31 +153,6 @@ describe("startNavigatorSession — partial emits", () => {
     await startPromise;
   });
 
-  it("partial envelope uses response.meta.rootPath, not entry.rootPathCache (Decision 7)", async () => {
-    const { session, draft, events } = buildFixtures();
-    const { io, emit } = buildIo();
-
-    const startPromise = startNavigatorSession(draft, session, events, 1, io, {});
-    await flushAsyncSetup();
-
-    // Seed rootPathCache with stale value to prove the envelope ignores it.
-    const entry = __activeSessionsForTests.get("sess-1");
-    entry.rootPathCache = [["STALE"]];
-
-    mockNapiSession._onPartial(JSON.stringify({
-      protocolVersion: "1.0.0",
-      tree: { championIds: [], children: [] },
-      scenarios: [],
-      meta: { nodesEvaluated: 1, computeTimeMs: 1, partial: true, rootPath: [["FRESH"]] },
-    }));
-
-    const call = emit.mock.calls.find((c) => c[0] === "navigatorPartialSnapshot");
-    expect(call).toBeTruthy();
-    expect(call[1].snapshot.meta.rootPath).toEqual([["FRESH"]]);
-
-    mockNapiSession._resolve(makeEngineResponseJson());
-    await startPromise;
-  });
 });
 
 describe("startNavigatorSession — persistence policy", () => {
@@ -247,11 +222,11 @@ describe("handlePartialOrError — identity + stopReason guards (Codex R2-#2)", 
     // the slot with entryB to simulate supersession.
     const entryA = {
       sessionId: "sess-1", draftId: "draft-1", version: 1,
-      afterEventId: null, stopReason: null, rootPathCache: [],
+      afterEventId: null, stopReason: null,
     };
     const entryB = {
       sessionId: "sess-1", draftId: "draft-1", version: 2,
-      afterEventId: null, stopReason: null, rootPathCache: [],
+      afterEventId: null, stopReason: null,
     };
     __activeSessionsForTests.set("sess-1", entryA);
     __activeSessionsForTests.set("sess-1", entryB); // replace slot
@@ -270,7 +245,7 @@ describe("handlePartialOrError — identity + stopReason guards (Codex R2-#2)", 
     const { io, emit } = buildIo();
     const entry = {
       sessionId: "sess-1", draftId: "draft-1", version: 1,
-      afterEventId: null, stopReason: "user", rootPathCache: [],
+      afterEventId: null, stopReason: "user",
     };
     __activeSessionsForTests.set("sess-1", entry);
 
@@ -284,27 +259,4 @@ describe("handlePartialOrError — identity + stopReason guards (Codex R2-#2)", 
     expect(emit).not.toHaveBeenCalled();
   });
 
-  it("emits navigatorRerootError when payload carries rerootError", () => {
-    const { io, to, emit } = buildIo();
-    const entry = {
-      sessionId: "sess-1", draftId: "draft-1", version: 1,
-      afterEventId: null, stopReason: null, rootPathCache: [],
-    };
-    __activeSessionsForTests.set("sess-1", entry);
-
-    __handlePartialOrErrorForTests(entry, io, JSON.stringify({
-      rerootError: "path mismatch",
-      rerootId: 7,
-      attemptedPath: [["X"]],
-    }));
-
-    expect(to).toHaveBeenCalledWith("navigator:sess-1");
-    expect(emit).toHaveBeenCalledWith("navigatorRerootError", {
-      sessionId: "sess-1",
-      draftId: "draft-1",
-      rerootId: 7,
-      attemptedPath: [["X"]],
-      error: "path mismatch",
-    });
-  });
 });
