@@ -153,63 +153,31 @@ describe("startNavigatorSession — partial emits", () => {
 
 });
 
-describe("startNavigatorSession — persistence policy", () => {
-  it("persists + broadcasts navigatorSnapshot when stopReason='user'", async () => {
+describe("startNavigatorSession — fire-and-forget contract", () => {
+  it("returns sessionStarted synchronously and registers entry in activeSessions", async () => {
     const { session, draft, events } = buildFixtures();
-    const { io, to, emit } = buildIo();
+    const { io } = buildIo();
 
-    const startPromise = startNavigatorSession(draft, session, events, 1, io, {});
-    await flushAsyncSetup();
+    const result = await startNavigatorSession(draft, session, events, 1, io, {});
 
-    // Simulate user stop: sets stopReason BEFORE the final-snapshot resolves.
-    const entry = __activeSessionsForTests.get("sess-1");
-    entry.stopReason = "user";
-    mockNapiSession._resolve(makeEngineResponseJson());
-
-    const result = await startPromise;
-    expect(createSpy).toHaveBeenCalledTimes(1);
-    expect(result.snapshot).toMatchObject({
-      id: "snap-1",
-      navigator_draft_id: "draft-1",
-    });
-    expect(to).toHaveBeenCalledWith("navigator:sess-1");
-    const broadcast = emit.mock.calls.find((c) => c[0] === "navigatorSnapshot");
-    expect(broadcast).toBeTruthy();
-    expect(broadcast[1].snapshot.id).toBe("snap-1");
+    expect(result).toEqual({ version: 1, snapshot: null, sessionStarted: true });
+    expect(mockEngine.createNavigatorSession).toHaveBeenCalledTimes(1);
+    expect(mockNapiSession.start).toHaveBeenCalledTimes(1);
+    expect(__activeSessionsForTests.get("sess-1")).toBeTruthy();
+    expect(createSpy).not.toHaveBeenCalled();
   });
 
-  it("does NOT persist or broadcast when stopReason='supersede'", async () => {
+  it("removes entry from activeSessions when napi promise resolves", async () => {
     const { session, draft, events } = buildFixtures();
-    const { io, emit } = buildIo();
+    const { io } = buildIo();
 
-    const startPromise = startNavigatorSession(draft, session, events, 1, io, {});
-    await flushAsyncSetup();
-    const entry = __activeSessionsForTests.get("sess-1");
-    entry.stopReason = "supersede";
+    await startNavigatorSession(draft, session, events, 1, io, {});
+    expect(__activeSessionsForTests.get("sess-1")).toBeTruthy();
+
     mockNapiSession._resolve(makeEngineResponseJson());
-
-    const result = await startPromise;
-    expect(createSpy).not.toHaveBeenCalled();
-    expect(result).toEqual({ version: 1, snapshot: null, supersededOrDropped: true });
-    const broadcast = emit.mock.calls.find((c) => c[0] === "navigatorSnapshot");
-    expect(broadcast).toBeFalsy();
-  });
-
-  it("does NOT persist or broadcast when stopReason='disconnect'", async () => {
-    const { session, draft, events } = buildFixtures();
-    const { io, emit } = buildIo();
-
-    const startPromise = startNavigatorSession(draft, session, events, 1, io, {});
     await flushAsyncSetup();
-    const entry = __activeSessionsForTests.get("sess-1");
-    entry.stopReason = "disconnect";
-    mockNapiSession._resolve(makeEngineResponseJson());
 
-    const result = await startPromise;
-    expect(createSpy).not.toHaveBeenCalled();
-    expect(result).toEqual({ version: 1, snapshot: null, supersededOrDropped: true });
-    const broadcast = emit.mock.calls.find((c) => c[0] === "navigatorSnapshot");
-    expect(broadcast).toBeFalsy();
+    expect(__activeSessionsForTests.get("sess-1")).toBeUndefined();
   });
 });
 

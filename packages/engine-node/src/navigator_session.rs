@@ -710,6 +710,7 @@ mod tests {
     /// tokio profile drops the `time` feature; the test runs synchronously
     /// against the blocking `iterate_loop` anyway.
     #[test]
+    #[ignore = "MCTS-perf-sensitive; run: cargo test --release -- --ignored"]
     fn navigator_session_stop_resolves_with_final_snapshot() {
         let fixture = Arc::new(real_data_fixture());
         let pools = Arc::new(PoolContext::full(&fixture));
@@ -921,6 +922,7 @@ mod tests {
     /// enough that root.visits ticks up, then Stop. Final response's
     /// `meta.nodes_evaluated` must exceed A's pre-reroot visits.
     #[test]
+    #[ignore = "MCTS-perf-sensitive; run: cargo test --release -- --ignored"]
     fn navigator_session_apply_pick_preserves_and_extends_visits() {
         let fixture = Arc::new(real_data_fixture());
         let pools = Arc::new(PoolContext::full(&fixture));
