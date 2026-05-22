@@ -463,33 +463,59 @@ function mergeChildren(
         }
     }
 
+    // Preserve absent-from-fresh children only when they have a reason to stick
+    // around (scenario lane or user-pinned). Otherwise dropping out of the
+    // engine's top-K means the child is stale — keeping it lets ghost branches
+    // accumulate across successive emits.
+    const scenarioSegmentsAtDepth = scenarioSegmentsAt(
+        priority.scenarioKeyPaths,
+        keyPath.length
+    );
     for (const [key, preservedChild] of preservedByKey) {
         if (visited.has(key)) continue;
+        const thisPath = [...keyPath, key].join(">");
+        const isReferenced =
+            scenarioSegmentsAtDepth.has(key) ||
+            priority.manualExpansionKeyPaths.has(thisPath);
+        if (!isReferenced) continue;
         result.push(preservedChild);
     }
 
-    return trimChildrenByPriority(result, keyPath, priority, branchWidth);
+    return trimChildrenByPriority(
+        result,
+        keyPath,
+        priority,
+        branchWidth,
+        scenarioSegmentsAtDepth
+    );
+}
+
+/** Collect the nodeKeys that appear at `depth` across any scenario path.
+ *  Engine-side wire truncation keeps these (see `to_protocol_tree`'s
+ *  must-keep paths in projection.rs); the frontend trim/preserve logic must
+ *  mirror that contract so rendered scenario lanes match the engine's
+ *  emitted scenarios. */
+function scenarioSegmentsAt(paths: ReadonlyArray<string>, depth: number): Set<string> {
+    const result = new Set<string>();
+    for (const path of paths) {
+        if (path === "") continue;
+        const segs = path.split(">");
+        const seg = segs[depth];
+        if (seg !== undefined) result.add(seg);
+    }
+    return result;
 }
 
 function trimChildrenByPriority(
     children: NavigatorTreeNode[],
     keyPath: string[],
     priority: ReconcilePriority,
-    branchWidth: number
+    branchWidth: number,
+    scenarioSegmentsAtDepth: Set<string> = scenarioSegmentsAt(
+        priority.scenarioKeyPaths,
+        keyPath.length
+    )
 ): NavigatorTreeNode[] {
-    // Build the set of nodeKeys that must survive the trim because some
-    // scenario's path passes through them at this depth. Engine-side wire
-    // truncation already keeps these (see `to_protocol_tree`'s must-keep
-    // paths in projection.rs); the frontend trim must mirror that contract
-    // so rendered scenario lanes match the engine's emitted scenarios.
-    const scenarioSegmentsAtDepth = new Set<string>();
-    for (const path of priority.scenarioKeyPaths) {
-        if (path === "") continue;
-        const segs = path.split(">");
-        const seg = segs[keyPath.length];
-        if (seg !== undefined) scenarioSegmentsAtDepth.add(seg);
-    }
-
     type Ranked = { child: NavigatorTreeNode; rank: number; score: number };
     const ranked: Ranked[] = children.map((child) => {
         const key = nodeKey(child);
