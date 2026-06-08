@@ -11,7 +11,7 @@ const NavigatorDraft = require("../../models/NavigatorDraft");
 const NavigatorEvent = require("../../models/NavigatorEvent");
 const NavigatorSnapshot = require("../../models/NavigatorSnapshot");
 const navigatorEngine = require("../../services/navigatorEngine");
-const { setupNavigatorHandlers } = require("../../socketHandlers/navigatorHandlers");
+const { setupNavigatorHandlers, loadAuthorizedContext } = require("../../socketHandlers/navigatorHandlers");
 
 function buildFakeSocket(overrides = {}) {
   const handlers = new Map();
@@ -690,5 +690,93 @@ describe("setProjectedChildren", () => {
       },
     });
     expect(entry.projectedChildren).toEqual(new Set(["Lux"]));
+  });
+});
+
+describe("loadAuthorizedContext", () => {
+  let socket;
+  let emittedErrors;
+
+  beforeEach(() => {
+    emittedErrors = [];
+    socket = {
+      emit: vi.fn((event, payload) => {
+        if (event === "navigatorError") emittedErrors.push(payload.error);
+      }),
+      user: { id: "user-1" },
+    };
+  });
+
+  it("emits 'sessionId is required' and returns null when sessionId missing", async () => {
+    const ctx = await loadAuthorizedContext(socket, {});
+    expect(ctx).toBeNull();
+    expect(emittedErrors).toEqual(["sessionId is required"]);
+  });
+
+  it("returns null when session not found (findOwnedSession emits the error)", async () => {
+    vi.spyOn(NavigatorSession, "findByPk").mockResolvedValue(null);
+    const ctx = await loadAuthorizedContext(socket, { sessionId: "s-1" });
+    expect(ctx).toBeNull();
+    expect(emittedErrors).toEqual(["Navigator session not found"]);
+  });
+
+  it("returns { session, draft, events } when called with requireDraftId=false and a current draft exists", async () => {
+    const session = { id: "s-1", user_id: "user-1" };
+    const draft = { id: "d-1", session_id: "s-1", status: "active", game_number: 1 };
+    const events = [{ id: "e-1" }];
+    vi.spyOn(NavigatorSession, "findByPk").mockResolvedValue(session);
+    vi.spyOn(NavigatorDraft, "findOne").mockResolvedValue(draft);
+    vi.spyOn(NavigatorEvent, "findAll").mockResolvedValue(events);
+
+    const ctx = await loadAuthorizedContext(socket, { sessionId: "s-1" });
+    expect(ctx).toEqual({ session, draft, events });
+    expect(emittedErrors).toEqual([]);
+  });
+
+  it("returns { session, draft: null, events: [] } when no current draft", async () => {
+    const session = { id: "s-1", user_id: "user-1" };
+    vi.spyOn(NavigatorSession, "findByPk").mockResolvedValue(session);
+    vi.spyOn(NavigatorDraft, "findOne").mockResolvedValue(null);
+
+    const ctx = await loadAuthorizedContext(socket, { sessionId: "s-1" });
+    expect(ctx).toEqual({ session, draft: null, events: [] });
+  });
+
+  it("emits 'draftId is required' when requireDraftId=true and draftId missing", async () => {
+    const session = { id: "s-1", user_id: "user-1" };
+    vi.spyOn(NavigatorSession, "findByPk").mockResolvedValue(session);
+    const ctx = await loadAuthorizedContext(socket, { sessionId: "s-1" }, { requireDraftId: true });
+    expect(ctx).toBeNull();
+    expect(emittedErrors).toEqual(["draftId is required"]);
+  });
+
+  it("emits 'Navigator draft not found' when requireDraftId=true and the draft does not belong to the session", async () => {
+    const session = { id: "s-1", user_id: "user-1" };
+    vi.spyOn(NavigatorSession, "findByPk").mockResolvedValue(session);
+    vi.spyOn(NavigatorDraft, "findOne").mockResolvedValue(null);
+
+    const ctx = await loadAuthorizedContext(
+      socket,
+      { sessionId: "s-1", draftId: "d-missing" },
+      { requireDraftId: true }
+    );
+    expect(ctx).toBeNull();
+    expect(emittedErrors).toEqual(["Navigator draft not found"]);
+  });
+
+  it("skips listDraftEvents when fetchEvents=false", async () => {
+    const session = { id: "s-1", user_id: "user-1" };
+    const draft = { id: "d-1", session_id: "s-1", status: "active", game_number: 1 };
+    vi.spyOn(NavigatorSession, "findByPk").mockResolvedValue(session);
+    vi.spyOn(NavigatorDraft, "findOne").mockResolvedValue(draft);
+    const eventsSpy = vi.spyOn(NavigatorEvent, "findAll");
+
+    const ctx = await loadAuthorizedContext(
+      socket,
+      { sessionId: "s-1", draftId: "d-1" },
+      { requireDraftId: true, fetchEvents: false }
+    );
+    expect(ctx).toEqual({ session, draft, events: null });
+    expect(eventsSpy).not.toHaveBeenCalled();
   });
 });

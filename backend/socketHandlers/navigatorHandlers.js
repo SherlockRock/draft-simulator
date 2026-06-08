@@ -108,6 +108,61 @@ async function listDraftEvents(draftId) {
   });
 }
 
+// Consolidates the auth + draft-lookup + events-fetch preamble that most
+// navigator socket handlers open-code. Returns null and emits a navigatorError
+// to the socket on any failure step; otherwise returns { session, draft, events }.
+//
+// Options:
+//   requireDraftId  — when true, look up the draft by data.draftId (must match session_id).
+//                     when false (default), look up the current draft via findCurrentDraft.
+//   fetchEvents     — when true (default), listDraftEvents for the resolved draft (or [] if no draft).
+//                     when false, events: null.
+//   skipDraft       — when true, skip the draft lookup entirely; draft: null, events: null.
+//                     Use for session-only handlers (e.g. navigatorStopCompute).
+async function loadAuthorizedContext(socket, data, options = {}) {
+  const { requireDraftId = false, fetchEvents = true, skipDraft = false } = options;
+  const { sessionId, draftId } = data || {};
+
+  if (!sessionId) {
+    emitNavigatorError(socket, "sessionId is required");
+    return null;
+  }
+  if (requireDraftId && !draftId) {
+    emitNavigatorError(socket, "draftId is required");
+    return null;
+  }
+
+  const session = await findOwnedSession(sessionId, socket);
+  if (!session) return null;
+
+  // Session-only handlers (like navigatorStopCompute) don't need a draft lookup.
+  if (skipDraft) {
+    return { session, draft: null, events: null };
+  }
+
+  let draft;
+  if (requireDraftId) {
+    draft = await findSessionDraft(sessionId, draftId);
+    if (!draft) {
+      emitNavigatorError(socket, "Navigator draft not found");
+      return null;
+    }
+  } else {
+    draft = await findCurrentDraft(sessionId);
+  }
+
+  let events;
+  if (!fetchEvents) {
+    events = null;
+  } else if (draft) {
+    events = await listDraftEvents(draft.id);
+  } else {
+    events = [];
+  }
+
+  return { session, draft, events };
+}
+
 async function findLatestSnapshot(draftId) {
   return NavigatorSnapshot.findOne({
     where: { navigator_draft_id: draftId },
@@ -305,20 +360,10 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
   wrap("navigatorJoin", async (data = {}) => {
     try {
+      const ctx = await loadAuthorizedContext(socket, data);
+      if (!ctx) return;
+      const { session, draft, events } = ctx;
       const { sessionId } = data;
-
-      if (!sessionId) {
-        emitNavigatorError(socket, "sessionId is required");
-        return;
-      }
-
-      const session = await findOwnedSession(sessionId, socket);
-      if (!session) {
-        return;
-      }
-
-      const draft = await findCurrentDraft(sessionId);
-      const events = draft ? await listDraftEvents(draft.id) : [];
       const snapshot = draft ? await findLatestSnapshot(draft.id) : null;
       const completedGames = await listCompletedGames(
         sessionId,
@@ -346,13 +391,10 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
   });
 
   wrap("navigatorStopCompute", async (data = {}) => {
+    const ctx = await loadAuthorizedContext(socket, data, { skipDraft: true });
+    if (!ctx) return;
+    const { session } = ctx;
     const { sessionId } = data;
-    if (!sessionId) {
-      emitNavigatorError(socket, "sessionId is required");
-      return;
-    }
-    const session = await findOwnedSession(sessionId, socket);
-    if (!session) return;
     const result = await navigatorEngine.pauseNavigatorSession(sessionId, io);
     // Treat expected outcomes as silent — these aren't user-visible errors.
     if (!result.ok
@@ -367,19 +409,14 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
   // dispatches to napi.resume() if a live entry exists, or falls back to
   // startNavigatorSession at current state otherwise.
   wrap("navigatorResumeCompute", async (data = {}) => {
-    const { sessionId } = data;
-    if (!sessionId) {
-      emitNavigatorError(socket, "sessionId is required");
-      return;
-    }
-    const session = await findOwnedSession(sessionId, socket);
-    if (!session) return;
-    const draft = await findCurrentDraft(sessionId);
+    const ctx = await loadAuthorizedContext(socket, data);
+    if (!ctx) return;
+    const { session, draft, events } = ctx;
     if (!draft) {
       emitNavigatorError(socket, "No current draft");
       return;
     }
-    const events = await listDraftEvents(draft.id);
+    const { sessionId } = data;
     const version = bumpVersion(sessionId);
     await navigatorEngine.resumeNavigatorSession(draft, session, events, version, io, {
       socketId: socket.id,
@@ -389,10 +426,8 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
   wrap("navigatorPick", async (data = {}) => {
     try {
-      const { sessionId, draftId, championIds, firstSlot } = data;
+      const { championIds, firstSlot } = data;
       if (
-        !sessionId ||
-        !draftId ||
         !Array.isArray(championIds) ||
         championIds.length < 1 ||
         championIds.length > 2 ||
@@ -402,19 +437,18 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       ) {
         emitNavigatorError(
           socket,
-          "sessionId, draftId, championIds (1 or 2 strings), and numeric firstSlot are required",
+          "championIds (1 or 2 strings) and numeric firstSlot are required",
         );
         return;
       }
 
-      const session = await findOwnedSession(sessionId, socket);
-      if (!session) return;
-
-      const draft = await findSessionDraft(sessionId, draftId);
-      if (!draft) {
-        emitNavigatorError(socket, "Navigator draft not found");
-        return;
-      }
+      const ctx = await loadAuthorizedContext(socket, data, {
+        requireDraftId: true,
+        fetchEvents: false,
+      });
+      if (!ctx) return;
+      const { session, draft } = ctx;
+      const { sessionId, draftId } = data;
 
       // Validate each slot is a pick turn.
       for (let i = 0; i < championIds.length; i++) {
@@ -480,10 +514,8 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
   wrap("navigatorBan", async (data = {}) => {
     try {
-      const { sessionId, draftId, championId, slot } = data;
+      const { championId, slot } = data;
       if (
-        !sessionId ||
-        !draftId ||
         typeof championId !== "string" ||
         championId.length === 0 ||
         typeof slot !== "number" ||
@@ -491,19 +523,18 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       ) {
         emitNavigatorError(
           socket,
-          "sessionId, draftId, championId, and numeric slot are required",
+          "championId and numeric slot are required",
         );
         return;
       }
 
-      const session = await findOwnedSession(sessionId, socket);
-      if (!session) return;
-
-      const draft = await findSessionDraft(sessionId, draftId);
-      if (!draft) {
-        emitNavigatorError(socket, "Navigator draft not found");
-        return;
-      }
+      const ctx = await loadAuthorizedContext(socket, data, {
+        requireDraftId: true,
+        fetchEvents: false,
+      });
+      if (!ctx) return;
+      const { session, draft } = ctx;
+      const { sessionId, draftId } = data;
 
       const turn = getTurn(slot);
       if (!turn) {
@@ -563,11 +594,9 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
   function dispatchForcedBranch(eventName, mode) {
     return async (data = {}) => {
       try {
-        const { sessionId, draftId, path, targetSlot, championId } = data;
+        const { path, targetSlot, championId } = data;
 
         if (
-          !sessionId ||
-          !draftId ||
           !Array.isArray(path) ||
           typeof targetSlot !== "number" ||
           !championId
@@ -579,18 +608,12 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
           return;
         }
 
-        const session = await findOwnedSession(sessionId, socket);
-        if (!session) {
-          return;
-        }
-
-        const draft = await findSessionDraft(sessionId, draftId);
-        if (!draft) {
-          emitNavigatorError(socket, "Navigator draft not found");
-          return;
-        }
-
-        const events = await listDraftEvents(draft.id);
+        const ctx = await loadAuthorizedContext(socket, data, {
+          requireDraftId: true,
+        });
+        if (!ctx) return;
+        const { session, draft, events } = ctx;
+        const { sessionId } = data;
 
         // Append a single forcedBranches entry for this dispatch. The engine
         // produces a full tree with the forced node marked userInjected: true.
@@ -611,23 +634,13 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
   wrap("navigatorUndo", async (data = {}) => {
     try {
+      const ctx = await loadAuthorizedContext(socket, data, {
+        requireDraftId: true,
+        fetchEvents: false,
+      });
+      if (!ctx) return;
+      const { session, draft } = ctx;
       const { sessionId, draftId } = data;
-
-      if (!sessionId || !draftId) {
-        emitNavigatorError(socket, "sessionId and draftId are required");
-        return;
-      }
-
-      const session = await findOwnedSession(sessionId, socket);
-      if (!session) {
-        return;
-      }
-
-      const draft = await findSessionDraft(sessionId, draftId);
-      if (!draft) {
-        emitNavigatorError(socket, "Navigator draft not found");
-        return;
-      }
 
       const lastEvent = await NavigatorEvent.findOne({
         where: { navigator_draft_id: draftId },
@@ -660,25 +673,14 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
   wrap("navigatorStartDraft", async (data = {}) => {
     try {
-      const { sessionId } = data;
-
-      if (!sessionId) {
-        emitNavigatorError(socket, "sessionId is required");
-        return;
-      }
-
-      const session = await findOwnedSession(sessionId, socket);
-      if (!session) {
-        return;
-      }
+      const ctx = await loadAuthorizedContext(socket, data);
+      if (!ctx) return;
+      const { session, draft, events } = ctx;
 
       if (session.status === "setup") {
         session.status = "active";
         await session.save();
       }
-
-      const draft = await findCurrentDraft(sessionId);
-      const events = draft ? await listDraftEvents(draft.id) : [];
       const snapshot = draft ? await findLatestSnapshot(draft.id) : null;
 
       await emitDraftUpdate(io, sessionId, {
@@ -695,19 +697,13 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
   wrap("navigatorNextGame", async (data = {}) => {
     try {
-      const { sessionId, ourSideOverride } = data;
+      const { ourSideOverride } = data;
 
-      if (!sessionId) {
-        emitNavigatorError(socket, "sessionId is required");
-        return;
-      }
+      const ctx = await loadAuthorizedContext(socket, data, { fetchEvents: false });
+      if (!ctx) return;
+      const { session, draft: currentDraft } = ctx;
+      const { sessionId } = data;
 
-      const session = await findOwnedSession(sessionId, socket);
-      if (!session) {
-        return;
-      }
-
-      const currentDraft = await findCurrentDraft(sessionId);
       if (!currentDraft) {
         emitNavigatorError(socket, "No current draft for this session");
         return;
@@ -763,12 +759,7 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
   wrap("navigatorSetAlgorithm", async (data = {}) => {
     try {
-      const { sessionId, algorithm } = data;
-
-      if (!sessionId) {
-        emitNavigatorError(socket, "sessionId is required");
-        return;
-      }
+      const { algorithm } = data;
 
       if (!isMctsToggleEnabled()) {
         // Production: silently ignore. Dev gate prevents the UI from emitting
@@ -782,24 +773,18 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
         return;
       }
 
-      const session = await findOwnedSession(sessionId, socket);
-      if (!session) {
-        return;
-      }
+      const ctx = await loadAuthorizedContext(socket, data);
+      if (!ctx) return;
+      const { session, draft, events } = ctx;
+      const { sessionId } = data;
 
       sessionAlgorithms.set(sessionId, algorithm);
 
       // Trigger a recompute on the current draft so the user sees the new
       // engine's output without having to click anything else. If there's no
       // active draft or no events yet, just acknowledge the preference.
-      const draft = await findCurrentDraft(sessionId);
-      if (!draft) {
-        return;
-      }
-      const events = await listDraftEvents(draft.id);
-      if (events.length === 0) {
-        return;
-      }
+      if (!draft) return;
+      if (events.length === 0) return;
       const version = bumpVersion(sessionId);
       await recomputeAndBroadcast(io, socket, session, draft, events, version);
     } catch (error) {
@@ -851,4 +836,4 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
   });
 }
 
-module.exports = { setupNavigatorHandlers, toClientSnapshot };
+module.exports = { setupNavigatorHandlers, toClientSnapshot, loadAuthorizedContext };
