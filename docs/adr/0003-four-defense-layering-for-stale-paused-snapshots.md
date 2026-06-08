@@ -4,7 +4,7 @@ The "stale paused snapshot wins reload" failure mode has **four** distinct defen
 
 | # | Defense | Lives in | Window it covers |
 |---|---|---|---|
-| 1 | Pre-await guard on `stopReason === "supersede"` | `pauseNavigatorSession` start | Supersession already declared when user clicks Stop. Pause short-circuits with `session-superseded`. |
+| 1 | Pre-await guard on `endReason === "supersede"` | `pauseNavigatorSession` start | Supersession already declared when user clicks Stop. Pause short-circuits with `session-superseded`. |
 | 2 | Post-DB-await re-check + inline `NavigatorSnapshot.destroy` | `pauseNavigatorSession` after persist | Supersession lands during the DB write. Row gets written, then deleted before broadcast. |
 | 3 | `entry.lastPersistedPauseSnapshotId` tracking + `supersedePriorCompute` deletes it | `supersedePriorCompute` | Pause-persist completed and `.finally` cleared the promise, THEN supersession arrives. Defense 2 can't fire because the IIFE is done. |
 | 4 | Frontend `after_event_id === latestEventId` gate in `hasPausedSession` | `NavigatorWorkflow.tsx` | Anything that survives 1–3: a stale paused row that lands in DB and gets fetched on reload. Refuses to surface it as paused. |

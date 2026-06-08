@@ -182,18 +182,18 @@ describe("startNavigatorSession — fire-and-forget contract", () => {
   });
 });
 
-describe("handlePartialOrError — identity + stopReason guards (Codex R2-#2)", () => {
+describe("handlePartialOrError — identity + endReason guards (Codex R2-#2)", () => {
   it("drops late partials after the map slot has been replaced", () => {
     const { io, emit } = buildIo();
     // entryA is the "old" session. Register it in the map, then replace
     // the slot with entryB to simulate supersession.
     const entryA = {
       sessionId: "sess-1", draftId: "draft-1", version: 1,
-      afterEventId: null, stopReason: null,
+      afterEventId: null, endReason: null,
     };
     const entryB = {
       sessionId: "sess-1", draftId: "draft-1", version: 2,
-      afterEventId: null, stopReason: null,
+      afterEventId: null, endReason: null,
     };
     __activeSessionsForTests.set("sess-1", entryA);
     __activeSessionsForTests.set("sess-1", entryB); // replace slot
@@ -208,11 +208,11 @@ describe("handlePartialOrError — identity + stopReason guards (Codex R2-#2)", 
     expect(emit).not.toHaveBeenCalled();
   });
 
-  it("drops partials when entry.stopReason is set (stop in flight)", () => {
+  it("drops partials when entry.endReason is set (stop in flight)", () => {
     const { io, emit } = buildIo();
     const entry = {
       sessionId: "sess-1", draftId: "draft-1", version: 1,
-      afterEventId: null, stopReason: "user",
+      afterEventId: null, endReason: "user",
     };
     __activeSessionsForTests.set("sess-1", entry);
 
@@ -226,4 +226,32 @@ describe("handlePartialOrError — identity + stopReason guards (Codex R2-#2)", 
     expect(emit).not.toHaveBeenCalled();
   });
 
+});
+
+describe("markForEnd", () => {
+  let entry;
+  beforeEach(() => {
+    navigatorEngineService.__activeSessionsForTests.clear();
+    entry = {
+      sessionId: "sess-1",
+      endReason: null,
+      session: { end: vi.fn() },
+    };
+    navigatorEngineService.__activeSessionsForTests.set("sess-1", entry);
+  });
+
+  it("sets endReason when it was null", () => {
+    navigatorEngineService.markForEnd("sess-1", "disconnect");
+    expect(entry.endReason).toBe("disconnect");
+  });
+
+  it("does not overwrite a non-null endReason", () => {
+    entry.endReason = "supersede";
+    navigatorEngineService.markForEnd("sess-1", "disconnect");
+    expect(entry.endReason).toBe("supersede");
+  });
+
+  it("is a no-op when no entry exists for sessionId", () => {
+    expect(() => navigatorEngineService.markForEnd("sess-missing", "disconnect")).not.toThrow();
+  });
 });

@@ -70,7 +70,7 @@ const activeTokens = new Map();
 // Per-session active MCTS session (Decision 9). Entry schema:
 //   { sessionId, version, session (napi handle), promise,
 //     pausePersistPromise, lastPersistedPauseSnapshotId,
-//     afterEventId, draft, draftId, stopReason, socketId,
+//     afterEventId, draft, draftId, endReason, socketId,
 //     projectedChildren: Set<string> }
 // projectedChildren keys: championIds.join("|") of each top-level
 // projected child in the latest emitted snapshot's tree. Read by the
@@ -308,7 +308,7 @@ async function supersedePriorCompute(sessionId, reason = "supersede") {
   }
   const priorSession = activeSessions.get(sessionId);
   if (priorSession) {
-    priorSession.stopReason = reason; // BEFORE awaiting pause-persist.
+    priorSession.endReason = reason; // BEFORE awaiting pause-persist.
     // v3 B4: wait for any in-flight pause-persist before calling end().
     if (priorSession.pausePersistPromise) {
       try { await priorSession.pausePersistPromise; } catch {}
@@ -402,7 +402,7 @@ async function computeForDraftAB(navigatorDraft, session, events, version, io, o
 
 // MCTS session path (Decision 9). Owns a NavigatorSession napi handle for the
 // session's lifetime, streams partials via onPartial, persists only on
-// user-stop. Closure-captures `entry` so the continuation reads stopReason
+// user-stop. Closure-captures `entry` so the continuation reads endReason
 // off the local var (never re-reads the map, which may have been replaced).
 async function startNavigatorSession(navigatorDraft, sess, events, version, io, options = {}) {
   const exclusions = await getCrossGameExclusions(sess, navigatorDraft);
@@ -422,7 +422,7 @@ async function startNavigatorSession(navigatorDraft, sess, events, version, io, 
     afterEventId,
     draft: navigatorDraft,
     draftId: navigatorDraft.id,
-    stopReason: null,
+    endReason: null,
     socketId: options.socketId || null,
     projectedChildren: new Set(),
   };
@@ -460,7 +460,7 @@ async function startNavigatorSession(navigatorDraft, sess, events, version, io, 
 // warm-restart fast path can match against them (see ADR-0005).
 function handlePartialOrError(entry, io, jsonStr) {
   if (activeSessions.get(entry.sessionId) !== entry) return;
-  if (entry.stopReason !== null) return;
+  if (entry.endReason !== null) return;
 
   let parsed;
   try { parsed = JSON.parse(jsonStr); } catch { return; }
@@ -484,7 +484,7 @@ async function pauseNavigatorSession(sessionId, io) {
   const entry = activeSessions.get(sessionId);
   if (!entry) return { ok: false, reason: "no-active-session" };
   // v4 R3-1: 'supersede' short-circuits; 'disconnect' is allowed through.
-  if (entry.stopReason === "supersede") {
+  if (entry.endReason === "supersede") {
     return { ok: false, reason: "session-superseded" };
   }
   if (entry.pausePersistPromise) {
@@ -502,7 +502,7 @@ async function pauseNavigatorSession(sessionId, io) {
     } catch (e) {
       return { ok: false, reason: "pause-rejected", error: e };
     }
-    if (entry.stopReason === "supersede") {
+    if (entry.endReason === "supersede") {
       return { ok: false, reason: "superseded-mid-pause" };
     }
     let parsed;
@@ -513,7 +513,7 @@ async function pauseNavigatorSession(sessionId, io) {
     setProjectedChildren(entry, parsed);
     const persisted = await persistSnapshot(shaped);
 
-    if (entry.stopReason === "supersede") {
+    if (entry.endReason === "supersede") {
       // v4 R3-1 in-flight race: stale row written. Delete it.
       try {
         await NavigatorSnapshot.destroy({ where: { id: persisted.id } });
@@ -548,7 +548,7 @@ async function pauseNavigatorSession(sessionId, io) {
 async function endNavigatorSession(sessionId, reason = "end") {
   const entry = activeSessions.get(sessionId);
   if (!entry) return { ok: false };
-  if (entry.stopReason === null) entry.stopReason = reason;
+  if (entry.endReason === null) entry.endReason = reason;
   entry.session.end();
   return { ok: true };
 }
@@ -590,8 +590,19 @@ async function shutdownEngine() {
   }
   activeTokens.clear();
   for (const entry of activeSessions.values()) {
-    entry.stopReason = "supersede";
+    entry.endReason = "supersede";
     entry.session.end();
+  }
+}
+
+// Idempotent verb-method that records why a Compute is heading toward End,
+// without exposing the entry. Disconnect/supersede/end callers route through
+// this rather than mutating entry.endReason across the module boundary.
+function markForEnd(sessionId, reason) {
+  const entry = activeSessions.get(sessionId);
+  if (!entry) return;
+  if (entry.endReason === null) {
+    entry.endReason = reason;
   }
 }
 
@@ -607,6 +618,7 @@ module.exports = {
   endNavigatorSession,                   // new
   resumeNavigatorSession,                // NEW from T10
   forEachActiveSession,
+  markForEnd,
   activeSessions,
   getLastEventId,
   isMctsToggleEnabled: () => MCTS_TOGGLE_ENABLED,

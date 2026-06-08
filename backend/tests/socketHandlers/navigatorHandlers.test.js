@@ -277,9 +277,9 @@ describe("disconnect cleanup (T11)", () => {
     // Three mock entries: two owned by socket-A, one by socket-B. The
     // disconnect handler must run the pause+end IIFE only for the first two.
     const entries = [
-      { sessionId: "sess-1", socketId: "socket-A", stopReason: null },
-      { sessionId: "sess-2", socketId: "socket-A", stopReason: null },
-      { sessionId: "sess-3", socketId: "socket-B", stopReason: null },
+      { sessionId: "sess-1", socketId: "socket-A", endReason: null },
+      { sessionId: "sess-2", socketId: "socket-A", endReason: null },
+      { sessionId: "sess-3", socketId: "socket-B", endReason: null },
     ];
     vi.spyOn(navigatorEngine, "forEachActiveSession").mockImplementation(
       (cb) => {
@@ -292,6 +292,9 @@ describe("disconnect cleanup (T11)", () => {
     const endSpy = vi
       .spyOn(navigatorEngine, "endNavigatorSession")
       .mockResolvedValue({ ok: true });
+    const markForEndSpy = vi
+      .spyOn(navigatorEngine, "markForEnd")
+      .mockImplementation(() => {});
 
     handlers.get("disconnect")();
     await flushAsync();
@@ -307,11 +310,14 @@ describe("disconnect cleanup (T11)", () => {
     expect(pauseSpy).not.toHaveBeenCalledWith("sess-3", expect.anything());
     expect(endSpy).not.toHaveBeenCalledWith("sess-3", expect.anything());
 
-    // v4 R3 B1: stopReason set BEFORE pause so the pre-await guard recognises
-    // the disconnect path.
-    expect(entries[0].stopReason).toBe("disconnect");
-    expect(entries[1].stopReason).toBe("disconnect");
-    expect(entries[2].stopReason).toBe(null);
+    // v4 R3 B1: markForEnd called BEFORE pause so the pre-await guard recognises
+    // the disconnect path. Only called for sessions owned by this socket.
+    expect(markForEndSpy).toHaveBeenCalledTimes(2);
+    expect(markForEndSpy.mock.calls.map((c) => [c[0], c[1]]).sort()).toEqual([
+      ["sess-1", "disconnect"],
+      ["sess-2", "disconnect"],
+    ]);
+    expect(markForEndSpy).not.toHaveBeenCalledWith("sess-3", expect.anything());
   });
 
   it("forEachActiveSession invokes its callback for each registered entry", () => {
@@ -366,7 +372,7 @@ function buildEntry({
     pausePersistPromise: null,
     lastPersistedPauseSnapshotId,
     socketId: "socket-1",
-    stopReason: null,
+    endReason: null,
   };
 }
 

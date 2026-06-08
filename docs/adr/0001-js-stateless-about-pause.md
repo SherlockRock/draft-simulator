@@ -1,6 +1,6 @@
 # JS Compute layer is intentionally stateless about pause
 
-The JS-side `entry` in `activeSessions` deliberately omits any `state: 'active'|'paused'|'ending'` field. Pause-truth lives in Rust (`LoopState`, runtime) and in the persisted **Navigator Snapshot** (`meta.persistOnPause`, cross-process / reload). JS only tracks the in-flight pause-persist via `pausePersistPromise` and the End reason via `stopReason`.
+The JS-side `entry` in `activeSessions` deliberately omits any `state: 'active'|'paused'|'ending'` field. Pause-truth lives in Rust (`LoopState`, runtime) and in the persisted **Navigator Snapshot** (`meta.persistOnPause`, cross-process / reload). JS only tracks the in-flight pause-persist via `pausePersistPromise` and the End reason via `endReason` (renamed from `stopReason` on 2026-06; the three values `user`/`supersede`/`disconnect` are all End reasons, not Pause reasons).
 
 ## Why
 

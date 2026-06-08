@@ -54,7 +54,6 @@ A new **Compute** replacing a prior in-flight one for the same **Navigator Serie
 ## Flagged ambiguities
 
 - **"session"**: overloaded across three layers — (1) `NavigatorSession` DB model = the Series, (2) napi `NavigatorSession` struct = a single Compute, (3) "sessionId" in socket events / `activeSessions` map = the Series id. Canonical: call the DB row a **Navigator Series**, call the in-memory thread a **Compute**. Rust struct can keep its name (namespaced).
-- **`entry.stopReason`** on the JS Compute entry carries `"user" | "supersede" | "disconnect"` — all End reasons, none of which is a Pause. Worth renaming `endReason` on a future pass.
 - **"Stop" the button** vs. **`end()` the napi method** are deliberately mismatched: Stop is a Pause; End is permanent teardown. Local-only product (no users), so the asymmetry is cheap to keep.
 
 ## Example dialogue
@@ -66,3 +65,7 @@ A new **Compute** replacing a prior in-flight one for the same **Navigator Serie
 
 - Originally a **Compute** was scoped to one **Draft**. The multi-draft Series concept was layered in later, which is why the in-memory map is keyed by Series id with a `draft` field on the entry, rather than by Navigator Draft id directly.
 - **Draft** is shared with Canvas and Versus features, so the Navigator wraps it in **Navigator Draft** to carry navigator-only state without polluting the shared model.
+- `entry.stopReason` was renamed `entry.endReason` (2026-06): the three values
+  (`user`/`supersede`/`disconnect`) are all End reasons; the prior name implied a
+  Pause/Stop binding it never had. ADR-0001 line 3 and ADR-0003 row 1 updated
+  in the same change.

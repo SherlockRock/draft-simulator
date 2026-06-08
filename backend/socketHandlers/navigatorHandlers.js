@@ -335,14 +335,12 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       // sessions can be torn down in parallel.
       (async () => {
         try {
-          // v4 R3 B1: set stopReason BEFORE pause. pauseNavigatorSession's
+          // v4 R3 B1: mark endReason BEFORE pause. pauseNavigatorSession's
           // pre-await guard allows 'disconnect' through (only 'supersede'
           // short-circuits). Persist-on-pause path runs inline; broadcasts
           // via io.to(...).emit so any other sockets in the room get the
           // snapshot.
-          if (entry.stopReason === null) {
-            entry.stopReason = "disconnect";
-          }
+          navigatorEngine.markForEnd(entry.sessionId, "disconnect");
           await navigatorEngine.pauseNavigatorSession(entry.sessionId, io);
         } catch (e) {
           console.error("[nav] disconnect-pause failed:", e);
