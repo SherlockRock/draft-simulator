@@ -5,7 +5,8 @@ dist
 *.pem
 *.key
 *.local.md
-docs/
+docs/*
+!docs/adr/
 .worktrees
 .desloppify
 .superpowers
