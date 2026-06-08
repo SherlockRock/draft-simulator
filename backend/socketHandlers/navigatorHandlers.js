@@ -9,6 +9,7 @@ const { isMctsToggleEnabled } = navigatorEngine;
 // engine functions (pauseNavigatorSession, resumeNavigatorSession, etc.) are
 // referenced the same way for the same reason.
 const { getOurSideForGame } = require("../utils/navigatorSide");
+const { getTurn, TOTAL_TURNS } = require("../utils/navigatorTurns");
 
 // Per-session engine job version. Bumped on every pick/ban/undo. Results whose
 // job version is behind the session's current version are dropped.
@@ -33,31 +34,6 @@ function bumpVersion(sessionId) {
 function getCurrentVersion(sessionId) {
   return sessionVersions.get(sessionId) || 0;
 }
-
-const TURN_SEQUENCE = [
-  { side: "blue", type: "ban", phase: "ban1" },
-  { side: "red", type: "ban", phase: "ban1" },
-  { side: "blue", type: "ban", phase: "ban1" },
-  { side: "red", type: "ban", phase: "ban1" },
-  { side: "blue", type: "ban", phase: "ban1" },
-  { side: "red", type: "ban", phase: "ban1" },
-  { side: "blue", type: "pick", phase: "pick1" },
-  { side: "red", type: "pick", phase: "pick1" },
-  { side: "red", type: "pick", phase: "pick1" },
-  { side: "blue", type: "pick", phase: "pick1" },
-  { side: "blue", type: "pick", phase: "pick1" },
-  { side: "red", type: "pick", phase: "pick1" },
-  { side: "red", type: "ban", phase: "ban2" },
-  { side: "blue", type: "ban", phase: "ban2" },
-  { side: "red", type: "ban", phase: "ban2" },
-  { side: "blue", type: "ban", phase: "ban2" },
-  { side: "red", type: "pick", phase: "pick2" },
-  { side: "blue", type: "pick", phase: "pick2" },
-  { side: "blue", type: "pick", phase: "pick2" },
-  { side: "red", type: "pick", phase: "pick2" },
-];
-
-const TOTAL_TURNS = TURN_SEQUENCE.length; // 20
 
 function getSocketUserId(socket) {
   return socket.user?.id || socket.user?.dataValues?.id || null;
@@ -443,7 +419,7 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       // Validate each slot is a pick turn.
       for (let i = 0; i < championIds.length; i++) {
         const slot = firstSlot + i;
-        const turn = TURN_SEQUENCE[slot];
+        const turn = getTurn(slot);
         if (!turn) {
           emitNavigatorError(socket, `Invalid draft slot ${slot}`);
           return;
@@ -457,7 +433,7 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       // Persist 1 or 2 NavigatorEvent rows for this turn.
       for (let i = 0; i < championIds.length; i++) {
         const slot = firstSlot + i;
-        const turn = TURN_SEQUENCE[slot];
+        const turn = getTurn(slot);
         await NavigatorEvent.create({
           navigator_draft_id: draftId,
           event_type: "pick",
@@ -529,12 +505,12 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
         return;
       }
 
-      const currentTurn = TURN_SEQUENCE[slot];
-      if (!currentTurn) {
+      const turn = getTurn(slot);
+      if (!turn) {
         emitNavigatorError(socket, "Invalid draft slot");
         return;
       }
-      if (currentTurn.type !== "ban") {
+      if (turn.type !== "ban") {
         emitNavigatorError(socket, `Slot ${slot} does not accept a ban`);
         return;
       }
@@ -543,7 +519,7 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
         navigator_draft_id: draftId,
         event_type: "ban",
         slot,
-        side: currentTurn.side,
+        side: turn.side,
         champion_id: championId,
         user_injected: false,
       });

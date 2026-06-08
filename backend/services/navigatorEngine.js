@@ -3,6 +3,7 @@ const path = require("path");
 const NavigatorSnapshot = require("../models/NavigatorSnapshot");
 const { getCrossGameExclusions } = require("../utils/navigatorSeriesRestrictions");
 const { Engine, CancelToken } = require("@draft-sim/engine-node");
+const { currentTurn } = require("../utils/navigatorTurns");
 
 const CHAMPION_META_PATH = path.resolve(
   __dirname,
@@ -22,29 +23,6 @@ const EXPECTED_PROTOCOL_MAJOR = 1;
 //   (per Phase 7b T17 manual-smoke observation).
 const AB_COMPUTE_BUDGET_MS = 5000;
 const MCTS_FIRST_PARTIAL_MS = 1000;
-
-const TURN_SEQUENCE = [
-  { side: "blue", type: "ban", phase: "ban1" },
-  { side: "red", type: "ban", phase: "ban1" },
-  { side: "blue", type: "ban", phase: "ban1" },
-  { side: "red", type: "ban", phase: "ban1" },
-  { side: "blue", type: "ban", phase: "ban1" },
-  { side: "red", type: "ban", phase: "ban1" },
-  { side: "blue", type: "pick", phase: "pick1" },
-  { side: "red", type: "pick", phase: "pick1" },
-  { side: "red", type: "pick", phase: "pick1" },
-  { side: "blue", type: "pick", phase: "pick1" },
-  { side: "blue", type: "pick", phase: "pick1" },
-  { side: "red", type: "pick", phase: "pick1" },
-  { side: "red", type: "ban", phase: "ban2" },
-  { side: "blue", type: "ban", phase: "ban2" },
-  { side: "red", type: "ban", phase: "ban2" },
-  { side: "blue", type: "ban", phase: "ban2" },
-  { side: "red", type: "pick", phase: "pick2" },
-  { side: "blue", type: "pick", phase: "pick2" },
-  { side: "blue", type: "pick", phase: "pick2" },
-  { side: "red", type: "pick", phase: "pick2" },
-];
 
 // Default rev-4 phase weights, ported from packages/engine-proto/src/weights.ts.
 //
@@ -184,8 +162,8 @@ async function buildEngineRequest(session, events, exclusions, forcedBranches = 
   }
 
   const turnIndex = realEvents.length;
-  const currentTurn = TURN_SEQUENCE[turnIndex];
-  if (!currentTurn) {
+  const turn = currentTurn(realEvents.length);
+  if (!turn) {
     throw new Error("Cannot compute navigator snapshot: draft is complete");
   }
 
@@ -199,9 +177,9 @@ async function buildEngineRequest(session, events, exclusions, forcedBranches = 
       format: "standard",
       bans,
       picks,
-      currentPhase: currentTurn.phase,
+      currentPhase: turn.phase,
       currentSlot: turnIndex,
-      currentSide: currentTurn.side,
+      currentSide: turn.side,
     },
     pools: {
       ourSide: session.our_side === "red" ? "red" : "blue",
