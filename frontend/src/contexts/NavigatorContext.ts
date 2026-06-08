@@ -143,7 +143,8 @@ export interface NavigatorMctsMeta {
 }
 
 export interface NavigatorSnapshotData {
-    id: string;
+    source: "persisted" | "partial" | "cache";
+    id: string | null;
     navigator_draft_id: string;
     after_event_id: string | null;
     tree: NavigatorTreeNode;

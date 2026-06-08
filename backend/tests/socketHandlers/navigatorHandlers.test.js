@@ -56,6 +56,53 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("toClientSnapshot", () => {
+  const { toClientSnapshot } = require("../../socketHandlers/navigatorHandlers");
+
+  it("returns null for null input", () => {
+    expect(toClientSnapshot(null)).toBeNull();
+  });
+
+  it("passes through an already-wire-shaped snapshot (has source field)", () => {
+    const wire = {
+      source: "partial",
+      id: null,
+      navigator_draft_id: "nd-1",
+      after_event_id: "ev-1",
+      tree: { championIds: [] },
+      scenarios: [],
+      meta: null,
+      createdAt: null,
+      updatedAt: null,
+    };
+    expect(toClientSnapshot(wire)).toBe(wire);
+  });
+
+  it("converts a Sequelize DB row to wire shape with source='persisted'", () => {
+    const row = {
+      id: "snap-1",
+      navigator_draft_id: "nd-1",
+      after_event_id: "ev-1",
+      pruned_tree: { championIds: ["X"] },
+      scenarios: [{ name: "Robust" }],
+      compute_meta: { nodesEvaluated: 5 },
+      createdAt: "2026-05-13T00:00:00Z",
+      updatedAt: "2026-05-13T00:00:00Z",
+    };
+    expect(toClientSnapshot(row)).toEqual({
+      source: "persisted",
+      id: "snap-1",
+      navigator_draft_id: "nd-1",
+      after_event_id: "ev-1",
+      tree: { championIds: ["X"] },
+      scenarios: [{ name: "Robust" }],
+      meta: { nodesEvaluated: 5 },
+      createdAt: "2026-05-13T00:00:00Z",
+      updatedAt: "2026-05-13T00:00:00Z",
+    });
+  });
+});
+
 describe("navigatorStopCompute (T11)", () => {
   it("emits 'sessionId is required' when sessionId missing", async () => {
     const { socket, handlers } = buildFakeSocket();

@@ -161,7 +161,8 @@ const NavigatorMctsMetaSchema = z.object({
 });
 
 const NavigatorSnapshotDataSchema = z.object({
-    id: z.string(),
+    source: z.enum(["persisted", "partial", "cache"]),
+    id: z.string().nullable(),
     navigator_draft_id: z.string(),
     after_event_id: z.string().nullable(),
     tree: NavigatorTreeNodeSchema,
@@ -256,18 +257,24 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     );
 
     // Auto-select scenarios[0] (Robust) when a snapshot arrives with scenarios
-    // but no current selection. Keyed on snapshot.id (per-snapshot UUID set by
-    // backend) — NOT navigator_draft_id (stable per-draft, won't change across
-    // recomputes). Cache snapshots use id="cache" which still triggers correctly.
+    // but no current selection. Keyed on a composite (source + id-or-after_event_id)
+    // so partial/cache snapshots — whose id is null — still trigger the effect.
+    // (Pre-PR1: id was a magic string "partial"/"cache"/UUID and the effect
+    // triggered on string change. Post-PR1: id is null for partial/cache; we key
+    // on source plus a content-fingerprint instead.)
     //
     // Effect ordering: snapshot-update events run remapSelectedScenarioIndex
     // synchronously inside the handler, so this effect always sees post-remap
     // selection state. The "only set when null" guard preserves user clicks
     // (and remap's name-match results) across recomputes.
-    const currentSnapshotId = createMemo(() => navigatorContext().snapshot?.id ?? null);
+    const currentSnapshotKey = createMemo(() => {
+        const snap = navigatorContext().snapshot;
+        if (!snap) return null;
+        return `${snap.source}:${snap.id ?? snap.after_event_id ?? ""}`;
+    });
     createEffect(() => {
-        const snapId = currentSnapshotId();
-        if (snapId === null) return;
+        const key = currentSnapshotKey();
+        if (key === null) return;
         const scenarios = navigatorContext().snapshot?.scenarios ?? [];
         if (scenarios.length === 0) return;
         if (selectedScenarioIndex() === null) {
@@ -354,7 +361,8 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
 
     const applyCacheEntry = (entry: CachedResult, nextEvents: NavigatorEventData[]) => {
         const finalSnapshot: NavigatorSessionState["snapshot"] = {
-            id: "cache",
+            source: "cache",
+            id: null,
             navigator_draft_id:
                 untrack(navigatorContext).snapshot?.navigator_draft_id ?? "",
             after_event_id:

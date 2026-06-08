@@ -21,7 +21,8 @@ describe("shapeSnapshot", () => {
       scenarios: [],
       meta: { nodesEvaluated: 5, computeTimeMs: 100 },
     };
-    const shaped = shapeSnapshot({ id: "nd-1" }, "ev-1", mockResponse);
+    const shaped = shapeSnapshot("nd-1", "ev-1", mockResponse);
+    expect(shaped.source).toBe("partial");
     expect(shaped.id).toBeNull();
     expect(shaped.navigator_draft_id).toBe("nd-1");
     expect(shaped.after_event_id).toBe("ev-1");
@@ -61,6 +62,7 @@ describe("persistSnapshot", () => {
       scenarios: [],
       compute_meta: { nodesEvaluated: 5 },
     });
+    expect(result.source).toBe("persisted");
     expect(result.id).toBe("snap-1");
     expect(result.createdAt).toBe("2026-05-13T00:00:00Z");
     expect(result.updatedAt).toBe("2026-05-13T00:00:00Z");

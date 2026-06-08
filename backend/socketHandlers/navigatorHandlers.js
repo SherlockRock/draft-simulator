@@ -159,16 +159,23 @@ async function listCompletedGames(sessionId, currentDraftId) {
   return result;
 }
 
+// Normalizes navigator snapshots to wire shape for socket emission.
+// Accepts two input shapes:
+//   1. Sequelize DB row (has `pruned_tree`/`compute_meta` columns) — converts to wire shape.
+//   2. Already wire-shaped object (has `tree`/`meta` plus a `source` field) — passes through.
+// The polymorphism is deliberate: `findLatestSnapshot` returns DB rows while
+// `storeSnapshot`/`persistSnapshot` produce wire shape directly.
 function toClientSnapshot(snapshot) {
   if (!snapshot) {
     return null;
   }
 
-  if (snapshot.tree || snapshot.meta) {
+  if (snapshot.source) {
     return snapshot;
   }
 
   return {
+    source: "persisted",
     id: snapshot.id,
     navigator_draft_id: snapshot.navigator_draft_id,
     after_event_id: snapshot.after_event_id,
@@ -868,4 +875,4 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
   });
 }
 
-module.exports = { setupNavigatorHandlers };
+module.exports = { setupNavigatorHandlers, toClientSnapshot };

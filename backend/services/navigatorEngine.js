@@ -253,10 +253,11 @@ function getLastEventId(events) {
 // Pure transformation: returns the in-memory wire shape used by both the
 // persistence path (finals) and the partial-emit path (T10). No DB write.
 // id/createdAt/updatedAt are nulled out here and filled in by persistSnapshot.
-function shapeSnapshot(navigatorDraft, lastEventId, response) {
+function shapeSnapshot(navigatorDraftId, lastEventId, response) {
   return {
+    source: "partial",
     id: null,
-    navigator_draft_id: navigatorDraft.id,
+    navigator_draft_id: navigatorDraftId,
     after_event_id: lastEventId,
     tree: response.tree,
     scenarios: response.scenarios,
@@ -278,6 +279,7 @@ async function persistSnapshot(shaped) {
   });
   return {
     ...shaped,
+    source: "persisted",
     id: row.id,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -287,7 +289,7 @@ async function persistSnapshot(shaped) {
 // Composition kept for existing callers (computeForDraft). T10's partial-emit
 // path will use shapeSnapshot directly without persisting.
 async function storeSnapshot(navigatorDraft, lastEventId, response) {
-  return persistSnapshot(shapeSnapshot(navigatorDraft, lastEventId, response));
+  return persistSnapshot(shapeSnapshot(navigatorDraft.id, lastEventId, response));
 }
 
 // Mirror the latest emitted snapshot's top-level projected children onto
@@ -485,8 +487,7 @@ function handlePartialOrError(entry, io, jsonStr) {
   let parsed;
   try { parsed = JSON.parse(jsonStr); } catch { return; }
 
-  const shaped = shapeSnapshot({ id: entry.draftId }, entry.afterEventId, parsed);
-  shaped.id = "partial";
+  const shaped = shapeSnapshot(entry.draftId, entry.afterEventId, parsed);
   setProjectedChildren(entry, parsed);
   io.to(`navigator:${entry.sessionId}`).emit("navigatorPartialSnapshot", {
     sessionId: entry.sessionId,
@@ -530,7 +531,7 @@ async function pauseNavigatorSession(sessionId, io) {
     try { parsed = JSON.parse(json); }
     catch (e) { return { ok: false, reason: "snapshot-parse-failed", error: e }; }
     assertProtocolMajor(parsed.protocolVersion);
-    const shaped = shapeSnapshot(entry.draft, entry.afterEventId, parsed);
+    const shaped = shapeSnapshot(entry.draftId, entry.afterEventId, parsed);
     setProjectedChildren(entry, parsed);
     const persisted = await persistSnapshot(shaped);
 

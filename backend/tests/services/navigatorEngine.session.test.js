@@ -139,7 +139,8 @@ describe("startNavigatorSession — partial emits", () => {
         draftId: "draft-1",
         version: 1,
         snapshot: expect.objectContaining({
-          id: "partial",
+          source: "partial",
+          id: null,
           navigator_draft_id: "draft-1",
           tree: { championIds: ["X"], children: [] },
         }),
