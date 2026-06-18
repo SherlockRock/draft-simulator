@@ -11,7 +11,6 @@ import DecisionTree from "./DecisionTree";
 import ScenarioLanes from "./ScenarioLanes";
 import { SeriesTabStrip } from "./SeriesTabStrip";
 import { BetweenGamesPanel } from "./BetweenGamesPanel";
-import EngineToggle from "./EngineToggle";
 
 const NavigatorDrafting: Component = () => {
     const {
@@ -20,12 +19,6 @@ const NavigatorDrafting: Component = () => {
         syntheticTree,
         effectiveScenarios,
         isComputing: isComputingFromContext,
-        isSessionActive,
-        isStopping,
-        onStop,
-        hasPausedSession,
-        onResume,
-        currentMeta,
         selectedScenarioIndex,
         setSelectedScenarioIndex,
         panRequest,
@@ -142,8 +135,6 @@ const NavigatorDrafting: Component = () => {
     const scenarios = createMemo(() => {
         const archive = viewingArchive();
         if (archive) return archive.snapshot?.scenarios ?? [];
-        // Phase 7b T14 (Decision 11): use the overlay so MCTS partial frames
-        // surface their streaming scenarios without waiting for the final.
         return effectiveScenarios();
     });
 
@@ -377,18 +368,6 @@ const NavigatorDrafting: Component = () => {
                                     ? isComputingFromContext()
                                     : false
                             }
-                            isSessionActive={
-                                viewingGameNumber() === null ? isSessionActive() : false
-                            }
-                            isStopping={isStopping()}
-                            indicatorMeta={currentMeta()}
-                            onStop={onStop}
-                            hasPausedSession={
-                                viewingGameNumber() === null
-                                    ? hasPausedSession()
-                                    : false
-                            }
-                            onResume={onResume}
                             highlightedPath={highlightedTreePath()}
                             confirmedDepth={confirmedDepth()}
                             scenarioPaths={(() => {
@@ -432,22 +411,7 @@ const NavigatorDrafting: Component = () => {
                                     Retry
                                 </button>
                             </Show>
-                            <EngineToggle />
                         </div>
-
-                        <Show
-                            when={
-                                navigatorContext().snapshot?.meta?.mctsMeta?.algorithm ===
-                                "mcts"
-                            }
-                        >
-                            <div class="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full border border-purple-500/40 bg-purple-500/15 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-purple-200">
-                                Experimental MCTS engine ·{" "}
-                                {navigatorContext().snapshot?.meta?.mctsMeta
-                                    ?.iterations ?? 0}{" "}
-                                iters
-                            </div>
-                        </Show>
 
                         <Show when={viewingGameNumber() !== null}>
                             <div class="pointer-events-none absolute left-4 top-4 rounded-full border border-slate-500/40 bg-slate-900/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-200">

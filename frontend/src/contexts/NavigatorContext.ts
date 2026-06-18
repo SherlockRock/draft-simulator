@@ -22,18 +22,6 @@ export interface NavigatorWeightedAssignment {
     weight: number;
 }
 
-/** v5 phase 4: optional MCTS-only per-node metadata. Populated only when the
- *  current snapshot was produced by the experimental MCTS engine. αβ never
- *  emits this.
- *  v5 phase 7a: `paretoOnFrontier` set when the node sits on its sibling
- *  Pareto frontier across (winrate, coverage, flex). Absent or false → no
- *  marker. */
-export interface NavigatorMctsExtras {
-    visits: number;
-    visitShare: number;
-    paretoOnFrontier?: boolean;
-}
-
 export interface NavigatorTreeNode {
     championIds: string[];
     actionType: "ban" | "pick";
@@ -50,7 +38,6 @@ export interface NavigatorTreeNode {
      *  projected (or the node is on the spine where everything is confirmed by
      *  position). */
     confirmedChampionIds?: string[];
-    mctsExtras?: NavigatorMctsExtras;
 }
 
 /** Content-addressed path step matching `engine-protocol`'s `PathStep`.
@@ -130,20 +117,8 @@ export interface NavigatorEventData {
     createdAt: string;
 }
 
-/** v5 phase 4: optional metadata returned only when the snapshot was produced
- *  by the experimental MCTS engine. UI uses `algorithm` to decide whether to
- *  render the MCTS banner / per-node visit annotations.
- *  v5 phase 7a: `truncated` indicates the rendered tree was capped by
- *  MAX_NODES during subtree_walk; defaults to false. */
-export interface NavigatorMctsMeta {
-    algorithm: "mcts";
-    iterations: number;
-    isExperimental: true;
-    truncated: boolean;
-}
-
 export interface NavigatorSnapshotData {
-    source: "persisted" | "partial" | "cache";
+    source: "persisted" | "cache";
     id: string | null;
     navigator_draft_id: string;
     after_event_id: string | null;
@@ -155,9 +130,6 @@ export interface NavigatorSnapshotData {
         pruningRate: number;
         depthReached: number;
         transpositionsFound: number;
-        mctsMeta?: NavigatorMctsMeta;
-        partial?: boolean;
-        persistOnPause?: boolean;
     } | null;
     createdAt: string | null;
 }
@@ -171,42 +143,13 @@ export interface NodeLayoutOverride {
     angle: number;
 }
 
-export type NavigatorAlgorithm = "ab" | "mcts";
-
 export interface NavigatorWorkflowContextValue {
     navigatorContext: Accessor<NavigatorSessionState>;
-    /** v5 phase 4: dev-only experimental MCTS toggle. False in production
-     *  (env var unset on backend). When false, the toggle is hidden. */
-    engineToggleEnabled: Accessor<boolean>;
-    currentAlgorithm: Accessor<NavigatorAlgorithm>;
-    setAlgorithm: (algorithm: NavigatorAlgorithm) => void;
     syntheticTree: Accessor<NavigatorTreeNode | null>;
-    /** Phase 7b T14 (Decision 11): partial-snapshot fast-path overlay for
-     *  scenarios. Returns the streaming partial's scenarios when an MCTS
-     *  partial is active, else falls through to the persisted snapshot's
-     *  scenarios. Consumers should prefer this over reading
-     *  `navigatorContext().snapshot?.scenarios` directly so partial frames
-     *  bypass the synthesize/merge/prune pipeline. */
     effectiveScenarios: Accessor<NavigatorScenario[]>;
     isComputing: Accessor<boolean>;
-    /** Phase 7b T15: true while an MCTS streaming session is iterating
-     *  (set on user-trigger, cleared in the final-arrives batch). Drives
-     *  the Stop button's visibility in the Computing indicator. αβ never
-     *  flips this on, so the button stays hidden for the synchronous
-     *  engine. */
-    isSessionActive: Accessor<boolean>;
-    /** Phase 7b T15: optimistic "Stopping…" state. Flipped true when the
-     *  user clicks Stop and back to false in the final-arrives batch. */
-    isStopping: Accessor<boolean>;
-    /** Phase 7b T15: emit `navigatorStopCompute` and flip `isStopping`
-     *  optimistically. No-op if there is no active socket / session. */
-    onStop: () => void;
-    hasPausedSession: Accessor<boolean>;
-    onResume: () => void;
-    /** Phase 7b T15: the meta block to show in the Computing readout.
-     *  Prefers the streaming partial's meta (live iter/elapsed counters)
-     *  and falls through to the persisted snapshot's meta when no partial
-     *  is active. Null when neither side has a meta block. */
+    /** The meta block to show in the Computing readout. Reads the persisted
+     *  snapshot's meta. Null when there is no meta block. */
     currentMeta: Accessor<NavigatorSnapshotData["meta"]>;
     joinSession: (sessionId: string) => void;
     leaveSession: () => void;

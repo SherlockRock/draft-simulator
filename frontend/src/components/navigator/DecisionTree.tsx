@@ -44,27 +44,6 @@ export interface TieredScenarioPath {
 interface DecisionTreeProps {
     treeData: LayoutNode | null;
     isComputing: boolean;
-    /** Phase 7b T15: true while an MCTS streaming session is iterating.
-     *  Gates the Stop button (which only makes sense when there is a
-     *  cooperative-cancel-capable session in flight). */
-    isSessionActive?: boolean;
-    /** Phase 7b T15: optimistic "Stopping…" state. Swaps the button /
-     *  label copy after the user clicks Stop, until the final lands. */
-    isStopping?: boolean;
-    /** Phase 7b T15: meta block driving the iter / elapsed readout.
-     *  Iter is sourced from `meta.mctsMeta.iterations` (MCTS-only);
-     *  elapsed is `meta.computeTimeMs`. Null/missing fields render
-     *  no readout. */
-    indicatorMeta?: {
-        mctsMeta?: { iterations: number } | null;
-        computeTimeMs?: number | null;
-    } | null;
-    /** Phase 7b T15: invoked when the user clicks the Stop button. */
-    onStop?: () => void;
-    /** Phase 7c T13: true when the session is paused — drives the Resume button visibility. */
-    hasPausedSession?: boolean;
-    /** Phase 7c T13: invoked when the user clicks the Resume button. */
-    onResume?: () => void;
     highlightedPath: number[] | null;
     scenarioPaths: TieredScenarioPath[];
     panRequest: { path: number[] } | null;
@@ -737,75 +716,6 @@ const TreeNodeComponent: Component<{
                     />
                 </g>
             </Show>
-            {/* v5 phase 4: MCTS visit-share badge. Renders below the node when
-                the engine attached visit metadata. Color-coded purple to match
-                the engine-toggle and banner. Only shown on non-root nodes. */}
-            <Show when={!isRoot() && props.node.data.mctsExtras !== undefined}>
-                <g
-                    transform={`translate(0 ${badgeOffsetY() + 14})`}
-                    class="pointer-events-none"
-                >
-                    <rect
-                        x="-22"
-                        y="-8"
-                        width="44"
-                        height="16"
-                        rx="8"
-                        ry="8"
-                        fill="#0f172a"
-                        stroke="#a855f7"
-                        stroke-width="1"
-                        opacity="0.9"
-                    />
-                    <text
-                        x="0"
-                        y="3"
-                        text-anchor="middle"
-                        font-size="9"
-                        font-weight="700"
-                        fill="#e9d5ff"
-                    >
-                        {(() => {
-                            const x = props.node.data.mctsExtras;
-                            if (!x) return "";
-                            const pct = Math.round(x.visitShare * 100);
-                            return `${pct}% · ${x.visits}`;
-                        })()}
-                    </text>
-                </g>
-            </Show>
-            {/* v5 phase 7a: Pareto frontier marker. Renders when this node
-                lies on its sibling Pareto frontier across (wr, coverage, flex).
-                Anchored to the right of the visit-share badge in the same
-                transform group (y-offset badgeOffsetY() + 14).
-                Stubs receive paretoOnFrontier: false so this never fires for them. */}
-            <Show
-                when={!isRoot() && props.node.data.mctsExtras?.paretoOnFrontier === true}
-            >
-                <g
-                    transform={`translate(28 ${badgeOffsetY() + 14})`}
-                    class="pointer-events-none"
-                >
-                    <circle
-                        cx="0"
-                        cy="0"
-                        r="6"
-                        fill="#fde68a"
-                        stroke="#fbbf24"
-                        stroke-width="1"
-                    />
-                    <text
-                        x="0"
-                        y="2.2"
-                        text-anchor="middle"
-                        font-size="8"
-                        font-weight="700"
-                        fill="#92400e"
-                    >
-                        ★
-                    </text>
-                </g>
-            </Show>
             {/* Expand/collapse badge */}
             <Show when={isCollapsed()}>
                 <g
@@ -1425,94 +1335,17 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
                 setContextMenuState({ x: e.pageX, y: e.pageY, target: "background" });
             }}
         >
-            <Show when={props.isComputing || props.isSessionActive || props.hasPausedSession}>
-                {/* Phase 7b T15: indicator wrapper drops `pointer-events-none`
-                    so the embedded Stop button is clickable. The button itself
-                    is gated on `isSessionActive` — αβ never sets that flag, so
-                    αβ users see the original badge with no button. */}
+            <Show when={props.isComputing}>
                 <div
                     class="absolute right-3 top-3 z-10 flex items-center gap-2 rounded-full border border-slate-700/50 bg-slate-900/80 px-3 py-1 text-xs text-slate-300 backdrop-blur"
                     role="status"
                     aria-live="polite"
                 >
-                    <Show
-                        when={!props.hasPausedSession}
-                        fallback={
-                            <span
-                                class="h-3 w-3 rounded-full bg-slate-500"
-                                aria-hidden="true"
-                            />
-                        }
-                    >
-                        <span
-                            class="h-3 w-3 animate-spin rounded-full border-2 border-slate-600 border-t-sky-300"
-                            aria-hidden="true"
-                        />
-                    </Show>
-                    <span>
-                        {props.isStopping
-                            ? "Stopping…"
-                            : props.hasPausedSession
-                            ? "Paused"
-                            : "Computing…"}
-                    </span>
-                    <Show when={props.indicatorMeta}>
-                        {(metaAcc) => {
-                            const m = metaAcc();
-                            const iters = m.mctsMeta?.iterations ?? null;
-                            const elapsedMs = m.computeTimeMs ?? null;
-                            // Only render the readout when at least one
-                            // counter is present — keeps αβ snapshots (no
-                            // mctsMeta, no computeTimeMs while streaming)
-                            // from showing a noisy "Iter 0 · 0.0s".
-                            if (iters === null && elapsedMs === null) {
-                                return null;
-                            }
-                            const itersStr =
-                                iters !== null ? iters.toLocaleString() : "—";
-                            const elapsedStr =
-                                elapsedMs !== null
-                                    ? `${(elapsedMs / 1000).toFixed(1)}s`
-                                    : "—";
-                            return (
-                                <span class="text-slate-400">
-                                    Iter {itersStr} · {elapsedStr}
-                                </span>
-                            );
-                        }}
-                    </Show>
-                    {/* Plan §"Task 15": Stop button gated on isSessionActive
-                        (NOT partialSnapshot — Opus R1-#21) so users can stop
-                        during the latency_budget_ms floor before the first
-                        partial arrives. */}
-                    <Show when={props.isSessionActive && props.onStop}>
-                        <button
-                            type="button"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                props.onStop?.();
-                            }}
-                            disabled={props.isStopping}
-                            class="rounded-full border border-slate-600 bg-slate-800/80 px-2.5 py-0.5 text-[11px] font-medium text-slate-200 transition-colors hover:border-slate-500 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                            {props.isStopping ? "Stopping…" : "Stop"}
-                        </button>
-                    </Show>
-                    {/* Phase 7c T13: Resume button. Mutually exclusive with Stop via
-                        hasPausedSession's !isSessionActive term. Same styling as Stop. */}
-                    <Show when={props.hasPausedSession && props.onResume}>
-                        <button
-                            type="button"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                props.onResume?.();
-                            }}
-                            disabled={props.isStopping}
-                            class="rounded-full border border-slate-600 bg-slate-800/80 px-2.5 py-0.5 text-[11px] font-medium text-slate-200 transition-colors hover:border-slate-500 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                            Resume
-                        </button>
-                    </Show>
+                    <span
+                        class="h-3 w-3 animate-spin rounded-full border-2 border-slate-600 border-t-sky-300"
+                        aria-hidden="true"
+                    />
+                    <span>Computing…</span>
                 </div>
             </Show>
             <Show when={import.meta.env.DEV}>

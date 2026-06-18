@@ -17,12 +17,6 @@ export interface LayoutNode {
     };
     children: LayoutNode[];
     confirmedChampionIds?: string[];
-    /** v5 phase 4: optional MCTS-only metadata propagated from
-     *  NavigatorTreeNode through synthesis/reconciliation. Used by the
-     *  DecisionTree node renderer to display visit-share badges when the
-     *  current snapshot was produced by the MCTS engine.
-     *  v5 phase 7a: `paretoOnFrontier` drives the ★ frontier-marker chip. */
-    mctsExtras?: { visits: number; visitShare: number; paretoOnFrontier?: boolean };
     x?: number;
     y?: number;
     depth?: number;

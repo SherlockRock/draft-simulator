@@ -13,7 +13,6 @@ import { z } from "zod";
 import toast from "solid-toast";
 import { TeamPoolSchema, type TeamPool } from "@draft-sim/shared-types";
 import {
-    NavigatorAlgorithm,
     NavigatorEventData,
     NavigatorPanRequest,
     NavigatorScenario,
@@ -107,12 +106,6 @@ const NavigatorWeightedAssignmentSchema = z.object({
     weight: z.number()
 });
 
-const NavigatorMctsExtrasSchema = z.object({
-    visits: z.number().int().nonnegative(),
-    visitShare: z.number().min(0).max(1),
-    paretoOnFrontier: z.boolean().optional()
-});
-
 const NavigatorTreeNodeSchema: z.ZodType<NavigatorTreeNode> = z.lazy(() =>
     z.object({
         championIds: z.array(z.string()),
@@ -124,8 +117,7 @@ const NavigatorTreeNodeSchema: z.ZodType<NavigatorTreeNode> = z.lazy(() =>
         slots: z.array(z.number()),
         userInjected: z.boolean(),
         children: z.array(NavigatorTreeNodeSchema),
-        confirmedChampionIds: z.array(z.string()).optional(),
-        mctsExtras: NavigatorMctsExtrasSchema.optional()
+        confirmedChampionIds: z.array(z.string()).optional()
     })
 );
 
@@ -153,15 +145,8 @@ const NavigatorScenarioSchema: z.ZodType<NavigatorScenario> = z.object({
     indicators: z.array(z.string())
 });
 
-const NavigatorMctsMetaSchema = z.object({
-    algorithm: z.literal("mcts"),
-    iterations: z.number().int().nonnegative(),
-    isExperimental: z.literal(true),
-    truncated: z.boolean().default(false)
-});
-
 const NavigatorSnapshotDataSchema = z.object({
-    source: z.enum(["persisted", "partial", "cache"]),
+    source: z.enum(["persisted", "cache"]),
     id: z.string().nullable(),
     navigator_draft_id: z.string(),
     after_event_id: z.string().nullable(),
@@ -173,21 +158,10 @@ const NavigatorSnapshotDataSchema = z.object({
             computeTimeMs: z.number(),
             pruningRate: z.number(),
             depthReached: z.number(),
-            transpositionsFound: z.number(),
-            mctsMeta: NavigatorMctsMetaSchema.optional(),
-            partial: z.boolean().optional(),
-            persistOnPause: z.boolean().optional()
+            transpositionsFound: z.number()
         })
         .nullable(),
     createdAt: z.string().nullable()
-});
-
-const NavigatorPartialSnapshotEnvelopeSchema = z.object({
-    sessionId: z.string(),
-    draftId: z.string(),
-    version: z.number().int().nonnegative(),
-    afterEventId: z.string().nullable(),
-    snapshot: NavigatorSnapshotDataSchema
 });
 
 const NavigatorCompletedGameSchema = z.object({
@@ -202,9 +176,7 @@ const NavigatorJoinResponseSchema = z.object({
     draft: NavigatorDraftDataSchema.nullable().optional(),
     events: z.array(NavigatorEventDataSchema).optional(),
     snapshot: NavigatorSnapshotDataSchema.nullable().optional(),
-    completedGames: z.array(NavigatorCompletedGameSchema).optional(),
-    engineToggleEnabled: z.boolean().optional(),
-    currentAlgorithm: z.enum(["ab", "mcts"]).optional()
+    completedGames: z.array(NavigatorCompletedGameSchema).optional()
 });
 
 const NavigatorDraftUpdateSchema = z.object({
@@ -298,42 +270,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         null
     );
 
-    // v5 phase 4: dev-only experimental engine toggle. Gated behind the
-    // backend's NAV_ENGINE_TOGGLE_ENABLED env var — when off, the engineToggleEnabled
-    // accessor is false and the toggle UI is hidden. Frontend emits
-    // `navigatorSetAlgorithm` on user toggle and the backend recomputes.
-    const [engineToggleEnabled, setEngineToggleEnabled] = createSignal(false);
-    const [currentAlgorithm, setCurrentAlgorithmSignal] =
-        createSignal<NavigatorAlgorithm>("ab");
-
-    // Phase 7b T13: streaming partial snapshot wiring. `partialSnapshot` is
-    // the latest envelope-delivered (incomplete) tree from the MCTS engine;
-    // T14 layers overlay precedence (below) so the canvas prefers
-    // `partialSnapshot` over the persisted final snapshot while a compute
-    // is active.
-    const [partialSnapshot, setPartialSnapshot] =
-        createSignal<NavigatorSnapshotData | null>(null);
-    const [latestVersionSeen, setLatestVersionSeen] = createSignal<number>(0);
-    const [isSessionActive, setIsSessionActive] = createSignal<boolean>(false);
-    // Phase 7b T15: optimistic stopping state. Flipped true when the user
-    // clicks Stop (so the indicator can swap to "Stopping…" before the engine
-    // observes the cooperative cancel), cleared in the final-arrives batch
-    // alongside `isSessionActive` so a subsequent trigger starts fresh.
-    const [isStopping, setIsStopping] = createSignal<boolean>(false);
-    // Phase 7c T12: derived from the latest snapshot's meta.persistOnPause flag.
-    // Gated on (a) snapshot exists, (b) session is not currently active, (c)
-    // snapshot is fresh (its after_event_id matches the current latest event).
-    // The freshness check (v4 B4) prevents a stale paused snapshot — written
-    // by a superseded session — from surfacing as "paused" on reload.
-    const hasPausedSession = createMemo(() => {
-        const ctx = navigatorContext();
-        const snap = ctx.snapshot;
-        if (!snap?.meta) return false;
-        if (isSessionActive()) return false;
-        if (snap.meta.persistOnPause !== true) return false;
-        const latestEventId = ctx.events.length > 0 ? ctx.events[ctx.events.length - 1].id : null;
-        return snap.after_event_id === latestEventId;
-    });
     interface CachedResult {
         tree: NavigatorTreeNode;
         scenarios: NavigatorScenario[];
@@ -492,12 +428,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         const snapshot = response.snapshot;
         const events = response.events ?? [];
         batch(() => {
-            // v4 M3 lifecycle reset — prevents stale active/stopping/version state
-            // from leaking across session joins or rejoins.
-            setPartialSnapshot(null);
-            setIsSessionActive(false);
-            setIsStopping(false);
-            setLatestVersionSeen(0);
             setNavigatorContext({
                 session,
                 draft: response.draft ?? null,
@@ -508,14 +438,8 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                 error: null
             });
             setSyntheticTreeSignal(joinSynthetic);
-            setLastEventIdSeen(
-                events.length > 0 ? events[events.length - 1].id : null
-            );
+            setLastEventIdSeen(events.length > 0 ? events[events.length - 1].id : null);
             setCurrentSessionId(session.id);
-            setEngineToggleEnabled(response.engineToggleEnabled === true);
-            if (response.currentAlgorithm) {
-                setCurrentAlgorithmSignal(response.currentAlgorithm);
-            }
         });
         if (response.snapshot && response.session) {
             writeCacheEntry(
@@ -570,9 +494,12 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         // rolling the event list backward. Under v4 these broadcasts don't carry
         // events at all (omitted from payload), so this branch's truthy path is
         // rare; the guard exists for defense-in-depth.
-        const nextEvents = data.events !== undefined
-            ? (data.events.length >= prevEvents.length ? data.events : prevEvents)
-            : prevEvents;
+        const nextEvents =
+            data.events !== undefined
+                ? data.events.length >= prevEvents.length
+                    ? data.events
+                    : prevEvents
+                : prevEvents;
         const nextSnapshot = data.snapshot === undefined ? prevSnapshot : data.snapshot;
 
         const eventsChanged = nextEvents !== prevEvents;
@@ -740,13 +667,8 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             }
         }
 
-        // Phase 7b T14 (Opus R2-NIT-5): wrap final-snapshot state updates in
-        // `batch` so the partial → final transition lands in a single frame.
-        // Without batch, the tree memo would briefly reactively re-evaluate
-        // between `setPartialSnapshot(null)` (overlay clear) and
-        // `setNavigatorContext(...)` (new authoritative snapshot installed),
-        // flashing the previous final's tree.
-        // T15 will extend this batch with `setIsStopping(false)`.
+        // Wrap final-snapshot state updates in `batch` so the synthetic-tree
+        // swap and the authoritative snapshot install land in a single frame.
         batch(() => {
             if (nextSynthetic !== prevSynthetic) {
                 setSyntheticTreeSignal(nextSynthetic);
@@ -763,27 +685,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             setLastEventIdSeen(
                 nextEvents.length > 0 ? nextEvents[nextEvents.length - 1].id : null
             );
-            if (snapshotChanged) {
-                // Authoritative final arrived for the active compute — clear
-                // the streaming overlay and mark the session inactive so the
-                // next user trigger can flip it back on. Gated on
-                // `snapshotChanged` because `handleDraftUpdate` also fires on
-                // event-only updates that don't supersede the partial.
-                // T15: also clear `isStopping` here — whether the final landed
-                // organically or because of a user Stop, the optimistic
-                // "Stopping…" state has served its purpose.
-                // Phase 7c: skip the partialSnapshot clear when the new snapshot
-                // is a pause-finalize (persistOnPause). The Mcts arena is still
-                // alive and Resume continues against it; clearing the partial
-                // would fall effectiveTree back to syntheticTreeSignal (confirmed
-                // events only) and the rich MCTS tree visually collapses to the
-                // spine until Resume restores partials.
-                if (finalSnapshot?.meta?.persistOnPause !== true) {
-                    setPartialSnapshot(null);
-                }
-                setIsSessionActive(false);
-                setIsStopping(false);
-            }
         });
 
         if (finalSnapshot && (data.session ?? untrack(navigatorContext).session)) {
@@ -890,37 +791,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         sock.on("navigatorDraftUpdate", handleDraftUpdate);
         sock.on("navigatorError", handleError);
 
-        // Phase 7b T13: streaming partial snapshots from the MCTS engine
-        // arrive on `navigatorPartialSnapshot`. Stale guards (session,
-        // draft, active flag, monotonic version) prevent late-arriving
-        // partials from clobbering a fresh session.
-        sock.on("navigatorPartialSnapshot", (raw) => {
-            const parsed = NavigatorPartialSnapshotEnvelopeSchema.safeParse(raw);
-            if (!parsed.success) return;
-            const env = parsed.data;
-            if (env.sessionId !== untrack(currentSessionId)) return;
-            if (env.draftId !== untrack(navigatorContext).draft?.id) return;
-            if (env.version < untrack(latestVersionSeen)) return;
-            if (!untrack(isSessionActive)) {
-                // v4 R4-M3 self-heal: a partial passed all other gates but session
-                // is "inactive". This happens for backend-driven recomputes that
-                // didn't go through emitPick/Ban/Undo/setAlgorithm (e.g.
-                // a navigatorSetAlgorithm-triggered compute, or initial compute on
-                // an existing in-flight session via join). Self-heal so subsequent
-                // partials accept normally. Only on strictly-newer version + when
-                // not paused/stopping.
-                if (untrack(isStopping)) return;
-                if (env.version <= untrack(latestVersionSeen)) return;
-                const ctx = untrack(navigatorContext);
-                const paused = ctx.snapshot?.meta?.persistOnPause === true
-                    && ctx.snapshot?.after_event_id === (ctx.events.length > 0 ? ctx.events[ctx.events.length - 1].id : null);
-                if (paused) return;
-                setIsSessionActive(true);
-            }
-            setLatestVersionSeen(env.version);
-            setPartialSnapshot(env.snapshot);
-        });
-
         socketWithListeners = sock;
 
         onCleanup(() => {
@@ -931,7 +801,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             sock.off("navigatorJoinResponse");
             sock.off("navigatorDraftUpdate");
             sock.off("navigatorError");
-            sock.off("navigatorPartialSnapshot");
         });
     });
 
@@ -950,19 +819,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         }
 
         setCurrentSessionId(sessionId);
-    });
-
-    // Phase 7b T13 (Opus R1-#24): reset all streaming bookkeeping when the
-    // session changes. Prevents partials from one session leaking into the
-    // next.
-    createEffect(() => {
-        currentSessionId();
-        setPartialSnapshot(null);
-        setLatestVersionSeen(0);
-        setIsSessionActive(false);
-        // T15: include the optimistic stopping flag so a session swap doesn't
-        // leave the next session indicating "Stopping…".
-        setIsStopping(false);
     });
 
     createEffect(() => {
@@ -1088,10 +944,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             applyCacheEntry(entry, nextEvents);
         }
 
-        // Phase 7b T14: any compute-triggering user action opens the gate
-        // for streaming partials. The handler's existing guards (session,
-        // draft, version) still reject stale envelopes.
-        setIsSessionActive(true);
         sock.emit("navigatorPick", {
             sessionId,
             draftId,
@@ -1147,8 +999,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             applyCacheEntry(entry, nextEvents);
         }
 
-        // Phase 7b T14: see emitPick — opens the streaming-partial gate.
-        setIsSessionActive(true);
         sock.emit("navigatorBan", {
             sessionId,
             draftId,
@@ -1168,8 +1018,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             applyCacheEntry(entry, nextEvents);
         }
 
-        // Phase 7b T14: undo retriggers compute; open the partial gate.
-        setIsSessionActive(true);
         sock.emit("navigatorUndo", {
             sessionId,
             draftId
@@ -1222,92 +1070,22 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         });
     };
 
-    const setAlgorithm = (algorithm: NavigatorAlgorithm) => {
-        if (!engineToggleEnabled()) return;
-        const sock = currentSocket();
-        const sessionId = getActiveSessionId();
-        if (!sock || !sessionId) return;
-        // Optimistic local set so UI flips immediately; backend confirms via
-        // the recompute that follows. If the backend rejects (env-var off, bad
-        // value) it silently ignores; the next snapshot will still show the
-        // prior engine's output, which is the correct visual signal.
-        setCurrentAlgorithmSignal(algorithm);
-        // Phase 7b T14: switching algorithms supersedes the prior compute and
-        // triggers a new one — open the partial gate so MCTS partials are
-        // accepted as they arrive.
-        setIsSessionActive(true);
-        sock.emit("navigatorSetAlgorithm", { sessionId, algorithm });
-    };
-
-    // Phase 7b T14 (Decision 11): partial fast-path. Partials arrive ~5-10 Hz
-    // and are already full trees (meta.partial=true), so running the
-    // synthesizeFullTree / mergeEngineTree / pruneInvalidProjection pipeline
-    // on every partial would cause reactive churn that [contain:content]
-    // paint isolation can't hide. Bypass synthesis when a partial is present;
-    // fall through to the existing pipeline output (syntheticTreeSignal) on
-    // finals or when no MCTS session is streaming.
     const effectiveTree = createMemo(() => {
-        const partial = partialSnapshot();
-        if (partial) return partial.tree;
         return syntheticTreeSignal();
     });
     const effectiveScenarios = createMemo<NavigatorScenario[]>(() => {
-        const partial = partialSnapshot();
-        if (partial) return partial.scenarios;
         return navigatorContext().snapshot?.scenarios ?? [];
     });
 
-    // Phase 7b T15: meta block the Computing indicator should read for
-    // iter / elapsed counters. The streaming partial's meta is preferred
-    // because it carries the live-updating mctsMeta.iterations and
-    // computeTimeMs — the persisted snapshot's meta only refreshes on
-    // finals (and αβ snapshots never carry mctsMeta at all, in which case
-    // the readout gracefully renders nothing).
     const currentMeta = createMemo<NavigatorSnapshotData["meta"]>(() => {
-        const partial = partialSnapshot();
-        if (partial) return partial.meta;
         return navigatorContext().snapshot?.meta ?? null;
     });
 
-    // Phase 7b T15: cooperative stop. Emit the socket event for the active
-    // session id; the backend's `navigatorStopCompute` handler short-circuits
-    // the iterate loop, which then produces a final snapshot that lands via
-    // `handleDraftUpdate` and clears `isStopping` in the batch. Setting
-    // `isStopping` here gives users immediate visual feedback during the
-    // latency_budget_ms gap before the final arrives.
-    const onStop = () => {
-        const sock = currentSocket();
-        const sid = currentSessionId();
-        if (!sock || !sid) return;
-        sock.emit("navigatorStopCompute", { sessionId: sid });
-        setIsStopping(true);
-    };
-
-    // Phase 7c T12: user-Resume click. Emits navigatorResumeCompute and
-    // flips isSessionActive optimistically. Backend either resumes the
-    // live Mcts arena (visit preservation) or creates a fresh session
-    // (post-reload fallback) — frontend doesn't distinguish.
-    const onResume = () => {
-        const sock = currentSocket();
-        const sid = currentSessionId();
-        if (!sock || !sid) return;
-        sock.emit("navigatorResumeCompute", { sessionId: sid });
-        setIsSessionActive(true);
-    };
-
     const contextValue: NavigatorWorkflowContextValue = {
         navigatorContext,
-        engineToggleEnabled,
-        currentAlgorithm,
-        setAlgorithm,
         syntheticTree: effectiveTree,
         effectiveScenarios,
         isComputing,
-        isSessionActive,
-        isStopping,
-        onStop,
-        hasPausedSession,
-        onResume,
         currentMeta,
         joinSession,
         leaveSession,
