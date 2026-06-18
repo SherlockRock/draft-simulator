@@ -1,5 +1,7 @@
 # Pause uses a dedicated Promise channel, not the TSF stream
 
+> **⚠️ SUPERSEDED 2026-06 — dormant reference.** Describes the MCTS streaming engine (pause/resume/warm-restart), removed when the navigator moved to αβ one-shot. Retained as the reference design for a possible future αβ iterative-deepening streaming surface. Removed code is preserved in git tag `archive/mcts-spike`; decision arc in Obsidian `draft-simulator-mcts-spike`.
+
 The napi `pause()` method returns a `Promise<String>` carrying the pause snapshot. It does NOT emit the snapshot over the existing `ThreadsafeFunction` stream that carries partials and reroot errors.
 
 ## Why

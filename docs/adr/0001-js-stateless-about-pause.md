@@ -1,5 +1,7 @@
 # JS Compute layer is intentionally stateless about pause
 
+> **⚠️ SUPERSEDED 2026-06 — dormant reference.** Describes the MCTS streaming engine (pause/resume/warm-restart), removed when the navigator moved to αβ one-shot. Retained as the reference design for a possible future αβ iterative-deepening streaming surface. Removed code is preserved in git tag `archive/mcts-spike`; decision arc in Obsidian `draft-simulator-mcts-spike`.
+
 The JS-side `entry` in `activeSessions` deliberately omits any `state: 'active'|'paused'|'ending'` field. Pause-truth lives in Rust (`LoopState`, runtime) and in the persisted **Navigator Snapshot** (`meta.persistOnPause`, cross-process / reload). JS only tracks the in-flight pause-persist via `pausePersistPromise` and the End reason via `endReason` (renamed from `stopReason` on 2026-06; the three values `user`/`supersede`/`disconnect` are all End reasons, not Pause reasons).
 
 ## Why

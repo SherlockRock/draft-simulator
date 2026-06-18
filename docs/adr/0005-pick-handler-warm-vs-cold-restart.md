@@ -1,5 +1,7 @@
 # Pick handler chooses warm vs cold MCTS restart in JS
 
+> **⚠️ SUPERSEDED 2026-06 — dormant reference.** Describes the MCTS streaming engine (pause/resume/warm-restart), removed when the navigator moved to αβ one-shot. The pick handler now always cold-restarts (cancel + fresh Compute); the warm-restart branch is gone. Retained as the reference design for a possible future αβ iterative-deepening streaming surface. Removed code is preserved in git tag `archive/mcts-spike`; decision arc in Obsidian `draft-simulator-mcts-spike`.
+
 The backend `navigatorPick` and `navigatorBan` handlers decide whether to warm-restart the MCTS arena (via napi `applyPick`) or cold-restart it (via `supersedePriorCompute + startNavigatorSession`). The decision is made in JS, not Rust, by reading `entry.projectedChildren: Set<string>` — a per-session mirror of the latest-emitted snapshot's `tree.root.children[*].championIds`.
 
 ## Why JS-side

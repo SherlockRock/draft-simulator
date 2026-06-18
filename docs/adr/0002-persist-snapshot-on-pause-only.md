@@ -1,5 +1,7 @@
 # Persist Navigator Snapshot on Pause and disconnect only, not on End
 
+> **⚠️ SUPERSEDED 2026-06 — dormant reference.** Describes the MCTS streaming engine (pause/resume/warm-restart), removed when the navigator moved to αβ one-shot. The αβ persist-every-successful-response policy noted below is the surviving behavior. Removed code is preserved in git tag `archive/mcts-spike`; decision arc in Obsidian `draft-simulator-mcts-spike`.
+
 A **Navigator Snapshot** is persisted to the DB only when the user clicks Stop (Pause) or the socket disconnects. Natural End paths (supersession, shutdown) discard the final snapshot the iterate loop produces. αβ is a separate algorithm with a separate policy — αβ persists every successful response because αβ is one-shot, so "final" is a meaningful event there.
 
 ## Why

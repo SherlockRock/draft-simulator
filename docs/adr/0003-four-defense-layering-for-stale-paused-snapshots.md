@@ -1,5 +1,7 @@
 # Four layered defenses against stale paused Navigator Snapshots
 
+> **⚠️ SUPERSEDED 2026-06 — dormant reference.** Describes the MCTS streaming engine (pause/resume/warm-restart), removed when the navigator moved to αβ one-shot. αβ one-shot has no paused snapshots, so this failure mode no longer exists. Retained as the reference design for a possible future αβ iterative-deepening streaming surface. Removed code is preserved in git tag `archive/mcts-spike`; decision arc in Obsidian `draft-simulator-mcts-spike`.
+
 The "stale paused snapshot wins reload" failure mode has **four** distinct defenses. They are not redundant — each covers a different race window. Do not collapse them.
 
 | # | Defense | Lives in | Window it covers |
