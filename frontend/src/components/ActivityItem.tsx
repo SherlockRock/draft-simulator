@@ -26,6 +26,7 @@ import {
     editVersusDraft,
     deleteCanvas
 } from "../utils/actions";
+import { updateNavigatorSession, deleteNavigatorSession } from "../utils/navigatorApi";
 import { Activity } from "../utils/schemas";
 import { track } from "../utils/analytics";
 import toast from "solid-toast";
@@ -67,6 +68,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     const [editCompetitive, setEditCompetitive] = createSignal(false);
     const [editDisabledChampions, setEditDisabledChampions] = createSignal<string[]>([]);
     const [disabledExpanded, setDisabledExpanded] = createSignal(false);
+    const [confirmDeleteNavigator, setConfirmDeleteNavigator] = createSignal(false);
 
     let shareButtonRef: HTMLDivElement | undefined;
     let cardRef: HTMLDivElement | undefined;
@@ -124,6 +126,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
             setEditName(props.activity.resource_name);
             setEditDescription(props.activity.description || "");
             setEditIcon(props.activity.icon || "");
+            setConfirmDeleteNavigator(false);
             const v = versus();
             if (v) {
                 setEditBlueTeamName(v.blueTeamName || "Team 1");
@@ -235,6 +238,33 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
         },
         onError: (error: Error) => {
             toast.error(`Failed to delete canvas: ${error.message}`);
+        }
+    }));
+
+    const editNavigatorMutation = useMutation(() => ({
+        mutationFn: (data: { name: string }) =>
+            updateNavigatorSession(props.activity.resource_id, { name: data.name }),
+        onSuccess: () => {
+            setIsEditOpen(false);
+            toast.success("Navigator session updated");
+            queryClient.invalidateQueries({ queryKey: ["recentActivity"] });
+            queryClient.invalidateQueries({ queryKey: ["navigatorSessions"] });
+        },
+        onError: () => {
+            toast.error("Failed to update navigator session");
+        }
+    }));
+
+    const deleteNavigatorMutation = useMutation(() => ({
+        mutationFn: () => deleteNavigatorSession(props.activity.resource_id),
+        onSuccess: () => {
+            setIsEditOpen(false);
+            toast.success("Navigator session deleted");
+            queryClient.invalidateQueries({ queryKey: ["recentActivity"] });
+            queryClient.invalidateQueries({ queryKey: ["navigatorSessions"] });
+        },
+        onError: () => {
+            toast.error("Failed to delete navigator session");
         }
     }));
 
@@ -411,6 +441,8 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                 icon: editIcon(),
                 disabledChampions: editDisabledChampions()
             });
+        } else if (props.activity.resource_type === "navigator") {
+            editNavigatorMutation.mutate({ name: editName() });
         }
     };
 
@@ -743,62 +775,72 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                 class="w-full rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary focus:outline-none focus:ring-2 focus:ring-darius-ember"
                             />
                         </div>
-                        <div class="mb-4">
-                            <label class="mb-2 block text-sm font-medium text-darius-text-primary">
-                                Description (optional)
-                            </label>
-                            <textarea
-                                value={editDescription()}
-                                onInput={(e) => setEditDescription(e.currentTarget.value)}
-                                rows={3}
-                                class="w-full rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary focus:outline-none focus:ring-2 focus:ring-darius-ember"
-                            />
-                            <p class="mt-1 text-xs text-darius-text-secondary">
-                                {editDescription().length}/1000 characters
-                            </p>
-                        </div>
-                        <div class="mb-4">
-                            <label class="mb-2 block text-sm font-medium text-darius-text-primary">
-                                Icon (optional)
-                            </label>
-                            <button
-                                type="button"
-                                onClick={() => setShowIconPicker(true)}
-                                class="flex h-16 w-full items-center gap-3 rounded border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary hover:bg-darius-border"
-                            >
-                                <Show
-                                    when={editIcon()}
-                                    fallback={
-                                        <div class="flex h-12 w-12 items-center justify-center rounded bg-darius-card">
-                                            <Plus
-                                                size={24}
-                                                class="text-darius-text-secondary"
-                                            />
-                                        </div>
+                        <Show when={props.activity.resource_type !== "navigator"}>
+                            <div class="mb-4">
+                                <label class="mb-2 block text-sm font-medium text-darius-text-primary">
+                                    Description (optional)
+                                </label>
+                                <textarea
+                                    value={editDescription()}
+                                    onInput={(e) =>
+                                        setEditDescription(e.currentTarget.value)
                                     }
+                                    rows={3}
+                                    class="w-full rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary focus:outline-none focus:ring-2 focus:ring-darius-ember"
+                                />
+                                <p class="mt-1 text-xs text-darius-text-secondary">
+                                    {editDescription().length}/1000 characters
+                                </p>
+                            </div>
+                            <div class="mb-4">
+                                <label class="mb-2 block text-sm font-medium text-darius-text-primary">
+                                    Icon (optional)
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowIconPicker(true)}
+                                    class="flex h-16 w-full items-center gap-3 rounded border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary hover:bg-darius-border"
                                 >
-                                    <div class="flex h-12 w-12 items-center justify-center overflow-hidden rounded">
-                                        <Show
-                                            when={!isNaN(parseInt(editIcon()!))}
-                                            fallback={
-                                                <span class="text-3xl">{editIcon()}</span>
-                                            }
-                                        >
-                                            <img
-                                                src={champions[parseInt(editIcon()!)].img}
-                                                alt={
-                                                    champions[parseInt(editIcon()!)].name
+                                    <Show
+                                        when={editIcon()}
+                                        fallback={
+                                            <div class="flex h-12 w-12 items-center justify-center rounded bg-darius-card">
+                                                <Plus
+                                                    size={24}
+                                                    class="text-darius-text-secondary"
+                                                />
+                                            </div>
+                                        }
+                                    >
+                                        <div class="flex h-12 w-12 items-center justify-center overflow-hidden rounded">
+                                            <Show
+                                                when={!isNaN(parseInt(editIcon()!))}
+                                                fallback={
+                                                    <span class="text-3xl">
+                                                        {editIcon()}
+                                                    </span>
                                                 }
-                                                class="h-full w-full object-cover"
-                                            />
-                                        </Show>
-                                    </div>
-                                </Show>
-                                <span class="text-sm text-darius-text-secondary">
-                                    {editIcon() ? "Change icon" : "Select an icon"}
-                                </span>
-                            </button>
-                        </div>
+                                            >
+                                                <img
+                                                    src={
+                                                        champions[parseInt(editIcon()!)]
+                                                            .img
+                                                    }
+                                                    alt={
+                                                        champions[parseInt(editIcon()!)]
+                                                            .name
+                                                    }
+                                                    class="h-full w-full object-cover"
+                                                />
+                                            </Show>
+                                        </div>
+                                    </Show>
+                                    <span class="text-sm text-darius-text-secondary">
+                                        {editIcon() ? "Change icon" : "Select an icon"}
+                                    </span>
+                                </button>
+                            </div>
+                        </Show>
                         <Show when={props.activity.resource_type === "versus"}>
                             <div class="mb-4 grid grid-cols-2 gap-4">
                                 <div>
@@ -903,7 +945,45 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                 </div>
                             </Show>
                         </Show>
-                        <div class="flex justify-end gap-2">
+                        <div class="flex items-center justify-end gap-2">
+                            <Show when={props.activity.resource_type === "navigator"}>
+                                <Show
+                                    when={!confirmDeleteNavigator()}
+                                    fallback={
+                                        <div class="mr-auto flex items-center gap-2">
+                                            <span class="text-sm text-darius-text-secondary">
+                                                Delete?
+                                            </span>
+                                            <button
+                                                onClick={() =>
+                                                    deleteNavigatorMutation.mutate()
+                                                }
+                                                disabled={
+                                                    deleteNavigatorMutation.isPending
+                                                }
+                                                class="rounded-md bg-darius-crimson px-3 py-2 text-sm text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                            >
+                                                Confirm
+                                            </button>
+                                            <button
+                                                onClick={() =>
+                                                    setConfirmDeleteNavigator(false)
+                                                }
+                                                class="rounded-md bg-darius-card-hover px-3 py-2 text-sm text-darius-text-primary hover:bg-darius-border"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    }
+                                >
+                                    <button
+                                        onClick={() => setConfirmDeleteNavigator(true)}
+                                        class="mr-auto rounded-md px-4 py-2 text-darius-crimson hover:bg-darius-crimson/10"
+                                    >
+                                        Delete
+                                    </button>
+                                </Show>
+                            </Show>
                             <button
                                 onClick={() => setIsEditOpen(false)}
                                 class="rounded-md bg-darius-card-hover px-4 py-2 text-darius-text-primary hover:bg-darius-border"
