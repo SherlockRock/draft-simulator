@@ -488,9 +488,14 @@ const VersusActivitySchema = ActivityBaseSchema.extend({
   hasStarted: z.boolean(),
 });
 
+export const NavigatorActivitySchema = ActivityBaseSchema.extend({
+  resource_type: z.literal("navigator"),
+});
+
 export const ActivityItemSchema = z.discriminatedUnion("resource_type", [
   CanvasActivitySchema,
   VersusActivitySchema,
+  NavigatorActivitySchema,
 ]);
 
 export const ActivityResponseSchema = z.object({
