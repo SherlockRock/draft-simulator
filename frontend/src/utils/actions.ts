@@ -669,7 +669,7 @@ export const verifyShareCanvasLink = async (token: string) => {
 
 export const fetchRecentActivity = async (
     page: number = 0,
-    resourceType?: "draft" | "canvas" | "versus",
+    resourceType?: "draft" | "canvas" | "versus" | "navigator",
     search?: string,
     sort?: "recent" | "oldest" | "name_asc" | "name_desc"
 ) => {

@@ -21,7 +21,7 @@ type AccentColor = "neutral" | "orange" | "crimson" | "purple";
 
 interface ActivityListProps {
     queryKeyBase: string[];
-    resourceType?: "draft" | "canvas" | "versus";
+    resourceType?: "draft" | "canvas" | "versus" | "navigator";
     accentColor?: AccentColor;
     emptyMessage?: string;
     keyboardControls?: boolean;
