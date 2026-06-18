@@ -8,7 +8,6 @@ pub mod evaluator;
 pub mod feasibility;
 pub mod forced_branches;
 pub mod iterative_deepening;
-pub mod mcts_spike;
 pub mod pair_filter;
 pub mod pools;
 pub mod protocol_types;
