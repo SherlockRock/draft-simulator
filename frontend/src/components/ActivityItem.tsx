@@ -13,7 +13,8 @@ import {
     ChevronUp,
     LayoutDashboard,
     Swords,
-    FileText
+    FileText,
+    Compass
 } from "lucide-solid";
 import {
     generateVersusShareLink,
@@ -243,6 +244,8 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                 return <LayoutDashboard size={24} class="text-darius-purple-bright" />;
             case "versus":
                 return <Swords size={24} class="text-darius-crimson" />;
+            case "navigator":
+                return <Compass size={24} class="text-blue-400" />;
             default:
                 return <FileText size={24} class="text-darius-ember" />;
         }
@@ -267,6 +270,15 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                     iconRing: "ring-2 ring-inset ring-darius-crimson/50",
                     badge: "bg-darius-crimson/15 text-darius-crimson",
                     action: "text-darius-crimson"
+                };
+            case "navigator":
+                return {
+                    title: "text-blue-400",
+                    icon: "text-blue-400",
+                    iconBg: "bg-blue-500/25",
+                    iconRing: "ring-2 ring-inset ring-blue-400/50",
+                    badge: "bg-blue-500/15 text-blue-400",
+                    action: "text-blue-400"
                 };
             default:
                 return {
@@ -460,13 +472,21 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                 >
                                     <div ref={shareButtonRef} class="relative shrink-0">
                                         <div class="flex items-center gap-2">
-                                            <button
-                                                onClick={handleShare}
-                                                class={`${colors.action} transition-opacity hover:opacity-70`}
-                                                title="Share"
+                                            {/* Navigator has no share mechanism — omit its share button */}
+                                            <Show
+                                                when={
+                                                    props.activity.resource_type !==
+                                                    "navigator"
+                                                }
                                             >
-                                                <Share2 size={20} />
-                                            </button>
+                                                <button
+                                                    onClick={handleShare}
+                                                    class={`${colors.action} transition-opacity hover:opacity-70`}
+                                                    title="Share"
+                                                >
+                                                    <Share2 size={20} />
+                                                </button>
+                                            </Show>
                                             <button
                                                 onClick={handleEdit}
                                                 class={`${colors.action} transition-opacity hover:opacity-70`}
@@ -481,6 +501,11 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                             <Show when={props.activity.resource_type === "canvas"}>
                                 <div class="text-xs font-medium text-darius-text-secondary">
                                     Canvas
+                                </div>
+                            </Show>
+                            <Show when={props.activity.resource_type === "navigator"}>
+                                <div class="text-xs font-medium text-darius-text-secondary">
+                                    Navigator
                                 </div>
                             </Show>
                             {/* Team names row (versus only) */}
@@ -657,8 +682,8 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                         </div>
                     </Show>
 
-                    {/* For Versus/Draft - show single share link */}
-                    <Show when={props.activity.resource_type !== "canvas"}>
+                    {/* For Versus - show single share link (navigator has no share link) */}
+                    <Show when={props.activity.resource_type === "versus"}>
                         <Show
                             when={!shareLinkQuery.isPending}
                             fallback={
