@@ -254,7 +254,7 @@ fn flex_retention_for(_champion_id: &str, ctx: &EvalContext) -> f64 {
 }
 
 /// Public entry to αβ's flex_retention for callers that don't have an
-/// `EvalContext` (e.g. the MCTS spike's terminal eval). Returns the
+/// `EvalContext`. Returns the
 /// entropy-normalized flex score for `picks`. Returns the 1.0 baseline if
 /// the comp has fewer than 5 picks or contains unknown champion ids; 0.0
 /// when the role-solver collapses to a single assignment; otherwise the
