@@ -24,15 +24,6 @@ const WeightedAssignmentSchema = z.object({
   weight: z.number(),
 });
 
-// v5 phase 7a: optional MCTS-specific per-node metadata. Populated only when
-// the request was dispatched to the MCTS engine (algorithm="mcts"); αβ never
-// emits this field.
-const McTsExtrasSchema = z.object({
-  visits: z.number().int().nonnegative(),
-  visitShare: z.number().min(0).max(1),
-  paretoOnFrontier: z.boolean().optional(),
-});
-
 const baseTreeNode = z.object({
   championIds: z.array(z.string()),
   scores: ScoreSetSchema,
@@ -42,7 +33,6 @@ const baseTreeNode = z.object({
   actionType: ActionTypeSchema,
   phase: PhaseSchema,
   userInjected: z.boolean(),
-  mctsExtras: McTsExtrasSchema.optional(),
 });
 type TreeNodeShape = z.infer<typeof baseTreeNode> & {
   children: TreeNodeShape[];
@@ -77,20 +67,6 @@ const ScenarioSchema = z.object({
   ),
 });
 
-// v5 phase 4: optional dev-only metadata returned only when the request was
-// dispatched to the experimental MCTS engine.
-// v5 phase 7a: `truncated` indicates the rendered tree was capped by
-// MAX_NODES during subtree_walk; defaulted to false for older snapshots.
-const McTsMetaSchema = z.object({
-  algorithm: z.literal("mcts"),
-  iterations: z.number().int().nonnegative(),
-  isExperimental: z.literal(true),
-  truncated: z.boolean().default(false),
-});
-
-// Phase 7b Decision 6: `partial` marks intermediate snapshots from the
-// streaming iterate loop so the frontend can distinguish them from the final
-// settled result.
 const ComputeMetaSchema = z.object({
   nodesEvaluated: z.number().int().nonnegative(),
   computeTimeMs: z.number().nonnegative(),
@@ -99,9 +75,6 @@ const ComputeMetaSchema = z.object({
   transpositionsFound: z.number().int().nonnegative(),
   forcedBranchesDropped: z.number().int().nonnegative(),
   cancelled: z.boolean(),
-  mctsMeta: McTsMetaSchema.optional(),
-  partial: z.boolean().optional(),
-  persistOnPause: z.boolean().optional(),
 });
 
 export const EngineResponseSchema = z.object({

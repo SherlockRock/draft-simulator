@@ -16,10 +16,3 @@ export {
   RolePoolMapSchema,
 } from "./schemas/types.js";
 export type { Side, Phase, ActionType, Role } from "./schemas/types.js";
-
-export {
-  NavigatorStopComputeRequestSchema,
-} from "./schemas/sockets.js";
-export type {
-  NavigatorStopComputeRequest,
-} from "./schemas/sockets.js";

@@ -241,13 +241,6 @@ pub fn core_to_response(resp: ComputeResponse) -> proto::EngineResponse {
             nodes_evaluated: resp.nodes_evaluated as i64,
             pruning_rate: resp.pruning_rate.clamp(0.0, 1.0),
             transpositions_found: resp.transpositions_found as i64,
-            // αβ never sets MCTS-specific metadata; field carries through
-            // serde with `skip_serializing_if = "Option::is_none"`.
-            mcts_meta: None,
-            // Phase 7b Decision 6: streaming-only field. αβ is one-shot, so
-            // `partial` is always None.
-            partial: None,
-            persist_on_pause: None,
         },
         scenarios,
         tree: to_protocol_tree(&resp.tree, &must_keep_paths),
@@ -346,9 +339,6 @@ fn to_protocol_tree(
         side: node.side.map(convert_side_to_treenode),
         slots: node.slots.iter().map(|s| *s as i64).collect(),
         user_injected: node.user_injected,
-        // αβ never emits MCTS metadata; the spike's mcts_dispatch path
-        // populates this on the parallel branch.
-        mcts_extras: None,
     }
 }
 

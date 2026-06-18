@@ -2,26 +2,17 @@
 
 mod data_loader;
 mod error;
-mod mcts_dispatch;
-mod mcts_wire;
-mod navigator_session;
 mod projection;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use engine_core::cancellation::CancelHandle;
 use engine_core::engine::Engine as CoreEngine;
-use engine_core::mcts_spike::policy::McTsConfig;
-use engine_core::mcts_spike::rollout::{FeasibilityMode, RolloutPolicy};
-use engine_core::mcts_spike::SpikeFixture;
 use engine_core::protocol_types as proto;
 use engine_core::role_solver::ChampionMeta;
 use napi_derive::napi;
-
-use crate::mcts_wire::MAX_TOP_K_AT_ROOT;
-use crate::navigator_session::{NavigatorSession, RequestMeta};
 
 #[napi]
 pub fn engine_version() -> String {
@@ -64,14 +55,6 @@ pub struct CreateEngineOptions {
 pub struct Engine {
     inner: Arc<CoreEngine>,
     champion_meta: Arc<HashMap<String, ChampionMeta>>,
-    /// Path to champion-meta.json captured at construction so the lazy MCTS
-    /// fixture loader can find the sibling `winrates.json` without a second
-    /// option flowing through `CreateEngineOptions`.
-    champion_meta_path: PathBuf,
-    /// Lazily-built spike fixture. Loaded on first MCTS dispatch and reused
-    /// across requests. Wrapped in `Arc` so the spike `Mcts<'_>` can borrow
-    /// it through a clone without needing the Engine to outlive the search.
-    spike_fixture: Arc<OnceLock<Arc<SpikeFixture>>>,
 }
 
 #[napi]
@@ -89,22 +72,7 @@ impl Engine {
         Ok(Self {
             inner: Arc::new(core),
             champion_meta: Arc::new(champion_meta),
-            champion_meta_path,
-            spike_fixture: Arc::new(OnceLock::new()),
         })
-    }
-
-    /// Lazily resolve (or load) the MCTS spike fixture. Idempotent across
-    /// calls; first hit on the MCTS path pays the load cost.
-    fn get_or_load_spike_fixture(&self) -> napi::Result<Arc<SpikeFixture>> {
-        if let Some(f) = self.spike_fixture.get() {
-            return Ok(f.clone());
-        }
-        let fixture = mcts_dispatch::load_spike_fixture(&self.champion_meta_path)?;
-        // get_or_init avoids the racy `set` path; whichever caller wins gets
-        // their fixture cached, the loser's load is dropped.
-        let cell = self.spike_fixture.clone();
-        Ok(cell.get_or_init(|| Arc::new(fixture)).clone())
     }
 
     #[napi]
@@ -115,24 +83,6 @@ impl Engine {
     ) -> napi::Result<String> {
         let proto_request: proto::EngineRequest = serde_json::from_str(&request_json)
             .map_err(|e| error::invalid_input(vec![], format!("request parse failed: {}", e)))?;
-
-        // v5 phase 4: optional dev-only MCTS dispatch. Routed only when the
-        // request explicitly asks for it; default (`None`) and `"ab"` both
-        // route through the production αβ engine.
-        if matches!(
-            proto_request.algorithm,
-            Some(proto::EngineRequestAlgorithm::Mcts)
-        ) {
-            let fixture = self.get_or_load_spike_fixture()?;
-            let token_handle = token.inner.clone();
-            let proto_response = tokio::task::spawn_blocking(move || {
-                mcts_dispatch::compute_mcts(&proto_request, fixture, &token_handle)
-            })
-            .await
-            .map_err(|e| error::internal(format!("join error: {}", e)))??;
-            return serde_json::to_string(&proto_response)
-                .map_err(|e| error::internal(format!("response serialize: {}", e)));
-        }
 
         let champion_meta = (*self.champion_meta).clone();
         let core_request = projection::request_to_core(&proto_request, champion_meta)
@@ -150,64 +100,5 @@ impl Engine {
         let proto_response = projection::core_to_response(core_response);
         serde_json::to_string(&proto_response)
             .map_err(|e| error::internal(format!("response serialize: {}", e)))
-    }
-
-    /// Phase 7b factory: build a `NavigatorSession` from an MCTS-flagged
-    /// engine request. The returned handle owns the fixture/pools/state
-    /// across the session's lifetime; callers must explicitly drive iteration
-    /// via `session.start(...)` and (optionally) `session.apply_pick(...)`.
-    ///
-    /// Mirrors `mcts_dispatch::compute_mcts`'s setup but stops short of
-    /// constructing the `Mcts` — that's the iterate thread's job inside
-    /// `start()` so the search lifetime is bounded to the thread closure
-    /// (Decision 3).
-    #[napi]
-    pub fn create_navigator_session(
-        &self,
-        request_json: String,
-    ) -> napi::Result<NavigatorSession> {
-        let proto_request: proto::EngineRequest = serde_json::from_str(&request_json)
-            .map_err(|e| error::invalid_input(vec![], format!("request parse failed: {}", e)))?;
-
-        if !matches!(
-            proto_request.algorithm,
-            Some(proto::EngineRequestAlgorithm::Mcts)
-        ) {
-            return Err(error::invalid_input(
-                vec!["algorithm"],
-                "create_navigator_session requires algorithm = 'mcts'",
-            ));
-        }
-
-        let fixture = self.get_or_load_spike_fixture()?;
-        let initial_state = mcts_dispatch::build_draft_state(&proto_request.draft_state)?;
-        let pools = mcts_dispatch::build_pool_context(&proto_request.pools, fixture.as_ref())?;
-
-        let latency_budget_ms = proto_request.config.search.latency_budget_ms.max(0) as u64;
-        let top_k_at_root = (proto_request.config.search.branch_width.max(1) as usize)
-            .clamp(1, MAX_TOP_K_AT_ROOT);
-        let seed = mcts_dispatch::derive_seed(&initial_state);
-
-        let cfg = McTsConfig {
-            policy: RolloutPolicy::UniformFeasible,
-            feasibility_mode: FeasibilityMode::Cached,
-            seed,
-            root_shortlist_k: Some(top_k_at_root.max(20).min(40)),
-            flex_weight: 1.0,
-        };
-
-        let request_meta = RequestMeta {
-            latency_budget_ms,
-            top_k_at_root,
-            first_emit_threshold: crate::mcts_wire::FIRST_EMIT_THRESHOLD,
-        };
-
-        Ok(NavigatorSession::new(
-            fixture,
-            Arc::new(pools),
-            initial_state,
-            cfg,
-            request_meta,
-        ))
     }
 }
