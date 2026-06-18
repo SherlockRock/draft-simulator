@@ -3,27 +3,14 @@ const NavigatorDraft = require("../models/NavigatorDraft");
 const NavigatorEvent = require("../models/NavigatorEvent");
 const NavigatorSnapshot = require("../models/NavigatorSnapshot");
 const navigatorEngine = require("../services/navigatorEngine");
-const { isMctsToggleEnabled } = navigatorEngine;
 // Note: computeForDraft is accessed via navigatorEngine.* (not destructured)
-// so test-time spies on navigatorEngine.computeForDraft are honoured. Other
-// engine functions (pauseNavigatorSession, resumeNavigatorSession, etc.) are
-// referenced the same way for the same reason.
+// so test-time spies on navigatorEngine.computeForDraft are honoured.
 const { getOurSideForGame } = require("../utils/navigatorSide");
 const { getTurn, TOTAL_TURNS } = require("../utils/navigatorTurns");
 
 // Per-session engine job version. Bumped on every pick/ban/undo. Results whose
 // job version is behind the session's current version are dropped.
 const sessionVersions = new Map();
-
-// v5 phase 4: per-session algorithm preference. Set via `navigatorSetAlgorithm`
-// when the dev toggle is enabled; honored on every subsequent recompute. Not
-// persisted (in-memory by design — toggle is dev-only and survival across
-// restarts is not a goal). Defaults to undefined (= αβ).
-const sessionAlgorithms = new Map();
-
-function getSessionAlgorithm(sessionId) {
-  return sessionAlgorithms.get(sessionId);
-}
 
 function bumpVersion(sessionId) {
   const next = (sessionVersions.get(sessionId) || 0) + 1;
@@ -117,10 +104,8 @@ async function listDraftEvents(draftId) {
 //                     when false (default), look up the current draft via findCurrentDraft.
 //   fetchEvents     — when true (default), listDraftEvents for the resolved draft (or [] if no draft).
 //                     when false, events: null.
-//   skipDraft       — when true, skip the draft lookup entirely; draft: null, events: null.
-//                     Use for session-only handlers (e.g. navigatorStopCompute).
 async function loadAuthorizedContext(socket, data, options = {}) {
-  const { requireDraftId = false, fetchEvents = true, skipDraft = false } = options;
+  const { requireDraftId = false, fetchEvents = true } = options;
   const { sessionId, draftId } = data || {};
 
   if (!sessionId) {
@@ -134,11 +119,6 @@ async function loadAuthorizedContext(socket, data, options = {}) {
 
   const session = await findOwnedSession(sessionId, socket);
   if (!session) return null;
-
-  // Session-only handlers (like navigatorStopCompute) don't need a draft lookup.
-  if (skipDraft) {
-    return { session, draft: null, events: null };
-  }
 
   let draft;
   if (requireDraftId) {
@@ -222,74 +202,14 @@ async function emitDraftUpdate(io, sessionId, payload) {
   io.to(getRoomName(sessionId)).emit("navigatorDraftUpdate", payload);
 }
 
-// Warm-restart helper shared by navigatorPick and navigatorBan. Caller has
-// already verified `entry.projectedChildren.has(key)` for the move's key and
-// has the post-move event list (for afterEventId) and bumped version on hand.
-//
-// Waits for any in-flight pause-persist (so applyPick doesn't race a snapshot
-// write referencing the pre-move root), then attempts napi applyPick. On
-// success, advances entry.afterEventId + entry.version so future partials and
-// pause-finalize snapshots carry the post-move identifiers — otherwise a Stop
-// after a warm pick persists a snapshot with a stale after_event_id and the
-// frontend's hasPausedSession freshness gate trips.
-//
-// Returns true if the warm path succeeded (caller should return without cold
-// restart); false if applyPick failed with notProjected/sessionEnded or threw
-// unexpectedly (caller should fall through to cold recompute).
-async function tryWarmApplyPick(entry, championIds, { afterEventId, version }) {
-  if (entry.pausePersistPromise) {
-    try { await entry.pausePersistPromise; } catch (_) {}
-  }
-  try {
-    await entry.session.applyPick(championIds);
-  } catch (e) {
-    const msg = String(e?.message || "");
-    if (!msg.includes("applyPick.notProjected") && !msg.includes("applyPick.sessionEnded")) {
-      console.error("[nav] applyPick warm path threw:", e);
-    }
-    return false;
-  }
-  entry.afterEventId = afterEventId;
-  entry.version = version;
-  if (entry.lastPersistedPauseSnapshotId) {
-    const stale = entry.lastPersistedPauseSnapshotId;
-    entry.lastPersistedPauseSnapshotId = null;
-    try {
-      await NavigatorSnapshot.destroy({ where: { id: stale } });
-    } catch (delErr) {
-      console.error("[nav] failed to delete stale paused snapshot after warm applyPick:", delErr);
-    }
-  }
-  return true;
-}
-
 async function recomputeAndBroadcast(io, socket, session, draft, events, version, options = {}) {
   try {
-    // Inject the session's current dev-toggled algorithm preference unless an
-    // explicit override was passed (forced-branch dispatchers don't override;
-    // they go through the same algorithm choice as picks/bans/undo).
-    // socketId rides along on every compute so the MCTS session entry can be
-    // matched against the disconnecting socket in the cleanup handler below
-    // (T12.5).
-    const mergedOptions = {
-      ...(options.algorithm !== undefined
-        ? options
-        : { ...options, algorithm: getSessionAlgorithm(session.id) }),
-      socketId: socket.id,
-    };
+    const mergedOptions = { ...options, socketId: socket.id };
     const result = await navigatorEngine.computeForDraft(draft, session, events, version, io, mergedOptions);
 
     // Cancellation-driven swallow (engine.cancelled or meta.cancelled === true).
     // Newer compute will broadcast its own snapshot — drop silently.
     if (result.cancelled || (!result.snapshot && result.partial)) {
-      return null;
-    }
-
-    // v4 R3-3: MCTS session is in-flight (synchronous startNavigatorSession
-    // return). The session emits its own partials and eventually a
-    // pause-on-pause navigatorDraftUpdate. Don't emit snapshot:null which
-    // would erase the frontend's prior tree until the first partial.
-    if (result.sessionStarted && !result.snapshot) {
       return null;
     }
 
@@ -328,34 +248,6 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
   const wrap = (eventName, handler) =>
     wrapSocketHandler(socket, eventName, handler, "navigator");
 
-  socket.on("disconnect", () => {
-    navigatorEngine.forEachActiveSession((entry) => {
-      if (entry.socketId !== socket.id) return;
-      // Each session's disconnect runs in its own async IIFE so multiple
-      // sessions can be torn down in parallel.
-      (async () => {
-        try {
-          // v4 R3 B1: mark endReason BEFORE pause. pauseNavigatorSession's
-          // pre-await guard allows 'disconnect' through (only 'supersede'
-          // short-circuits). Persist-on-pause path runs inline; broadcasts
-          // via io.to(...).emit so any other sockets in the room get the
-          // snapshot.
-          navigatorEngine.markForEnd(entry.sessionId, "disconnect");
-          await navigatorEngine.pauseNavigatorSession(entry.sessionId, io);
-        } catch (e) {
-          console.error("[nav] disconnect-pause failed:", e);
-        }
-        // Teardown via cancel-flag. iterate_loop's Paused state recv()
-        // unblocks on the queued Stop command.
-        try {
-          await navigatorEngine.endNavigatorSession(entry.sessionId, "disconnect");
-        } catch (e) {
-          console.error("[nav] disconnect-end failed:", e);
-        }
-      })();
-    });
-  });
-
   wrap("navigatorJoin", async (data = {}) => {
     try {
       const ctx = await loadAuthorizedContext(socket, data);
@@ -376,50 +268,11 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
         events,
         snapshot: toClientSnapshot(snapshot),
         completedGames,
-        // v5 phase 4: dev-only signal so the frontend knows whether to render
-        // the experimental engine toggle. Always false in production builds
-        // (env var unset). When false, the frontend hides the toggle entirely.
-        engineToggleEnabled: isMctsToggleEnabled(),
-        currentAlgorithm: getSessionAlgorithm(sessionId) || "ab",
       });
     } catch (error) {
       console.error("Error in navigatorJoin:", error);
       emitNavigatorError(socket, "Failed to join navigator session");
     }
-  });
-
-  wrap("navigatorStopCompute", async (data = {}) => {
-    const ctx = await loadAuthorizedContext(socket, data, { skipDraft: true });
-    if (!ctx) return;
-    const { session } = ctx;
-    const { sessionId } = data;
-    const result = await navigatorEngine.pauseNavigatorSession(sessionId, io);
-    // Treat expected outcomes as silent — these aren't user-visible errors.
-    if (!result.ok
-        && result.reason !== "superseded-mid-pause"
-        && result.reason !== "session-superseded"
-        && result.reason !== "no-active-session") {
-      emitNavigatorError(socket, `Stop failed: ${result.reason}`);
-    }
-  });
-
-  // Phase 7c T11: user-Resume click. Calls resumeNavigatorSession which
-  // dispatches to napi.resume() if a live entry exists, or falls back to
-  // startNavigatorSession at current state otherwise.
-  wrap("navigatorResumeCompute", async (data = {}) => {
-    const ctx = await loadAuthorizedContext(socket, data);
-    if (!ctx) return;
-    const { session, draft, events } = ctx;
-    if (!draft) {
-      emitNavigatorError(socket, "No current draft");
-      return;
-    }
-    const { sessionId } = data;
-    const version = bumpVersion(sessionId);
-    await navigatorEngine.resumeNavigatorSession(draft, session, events, version, io, {
-      socketId: socket.id,
-      algorithm: getSessionAlgorithm(sessionId),
-    });
   });
 
   wrap("navigatorPick", async (data = {}) => {
@@ -487,22 +340,6 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
       const version = bumpVersion(sessionId);
 
-      // Warm-restart fast path: championIds match a top-level projected child
-      // → reuse the in-flight Mcts via napi applyPick. Falls through to cold
-      // restart on applyPick.notProjected (championIds slipped out of top-K
-      // between partial emit and pick arrival) or applyPick.sessionEnded
-      // (iterate thread exited between mirror-update and pick arrival).
-      const entry = navigatorEngine.activeSessions.get(sessionId);
-      const key = championIds.join("|");
-      const afterEventId = navigatorEngine.getLastEventId(events);
-      if (
-        entry?.projectedChildren?.has(key) &&
-        await tryWarmApplyPick(entry, championIds, { afterEventId, version })
-      ) {
-        return;
-      }
-
-      // Cold restart: full recompute + broadcast (existing path).
       await recomputeAndBroadcast(io, socket, session, draft, events, version);
     } catch (error) {
       console.error("Error in navigatorPick:", error);
@@ -564,19 +401,6 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
       const version = bumpVersion(sessionId);
 
-      // Warm-restart fast path: championId matches a top-level projected child
-      // (Set key is the bare championId for single-id moves). Falls through to
-      // cold restart on applyPick.notProjected / applyPick.sessionEnded.
-      const entry = navigatorEngine.activeSessions.get(sessionId);
-      const afterEventId = navigatorEngine.getLastEventId(events);
-      if (
-        entry?.projectedChildren?.has(championId) &&
-        await tryWarmApplyPick(entry, [championId], { afterEventId, version })
-      ) {
-        return;
-      }
-
-      // Cold restart: full recompute + broadcast (existing path).
       await recomputeAndBroadcast(io, socket, session, draft, events, version);
     } catch (error) {
       console.error("Error in navigatorBan:", error);
@@ -752,42 +576,6 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
     } catch (error) {
       console.error("Error in navigatorNextGame:", error);
       emitNavigatorError(socket, "Failed to create next navigator draft");
-    }
-  });
-
-  wrap("navigatorSetAlgorithm", async (data = {}) => {
-    try {
-      const { algorithm } = data;
-
-      if (!isMctsToggleEnabled()) {
-        // Production: silently ignore. Dev gate prevents the UI from emitting
-        // this event in production builds, but defense-in-depth: if it somehow
-        // arrives, drop it without acknowledgement.
-        return;
-      }
-
-      if (algorithm !== "ab" && algorithm !== "mcts") {
-        emitNavigatorError(socket, "Invalid algorithm; expected \"ab\" or \"mcts\"");
-        return;
-      }
-
-      const ctx = await loadAuthorizedContext(socket, data);
-      if (!ctx) return;
-      const { session, draft, events } = ctx;
-      const { sessionId } = data;
-
-      sessionAlgorithms.set(sessionId, algorithm);
-
-      // Trigger a recompute on the current draft so the user sees the new
-      // engine's output without having to click anything else. If there's no
-      // active draft or no events yet, just acknowledge the preference.
-      if (!draft) return;
-      if (events.length === 0) return;
-      const version = bumpVersion(sessionId);
-      await recomputeAndBroadcast(io, socket, session, draft, events, version);
-    } catch (error) {
-      console.error("Error in navigatorSetAlgorithm:", error);
-      emitNavigatorError(socket, "Failed to set algorithm");
     }
   });
 

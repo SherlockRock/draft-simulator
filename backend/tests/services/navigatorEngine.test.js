@@ -22,7 +22,7 @@ describe("shapeSnapshot", () => {
       meta: { nodesEvaluated: 5, computeTimeMs: 100 },
     };
     const shaped = shapeSnapshot("nd-1", "ev-1", mockResponse);
-    expect(shaped.source).toBe("partial");
+    expect(shaped.source).toBe("persisted");
     expect(shaped.id).toBeNull();
     expect(shaped.navigator_draft_id).toBe("nd-1");
     expect(shaped.after_event_id).toBe("ev-1");

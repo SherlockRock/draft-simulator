@@ -16,13 +16,8 @@ const MATCHUP_DATA_PATH = path.resolve(
 
 const EXPECTED_PROTOCOL_MAJOR = 1;
 
-// Phase 7c T0: split into per-algorithm budgets.
-// - αβ's 5000ms is the compute deadline (it's a one-shot algorithm).
-// - MCTS's 1000ms is the first-partial emit floor (anytime streaming).
-//   Without the split, the user sees nothing until 5s into MCTS iteration
-//   (per Phase 7b T17 manual-smoke observation).
+// αβ's 5000ms is the compute deadline (it's a one-shot algorithm).
 const AB_COMPUTE_BUDGET_MS = 5000;
-const MCTS_FIRST_PARTIAL_MS = 1000;
 
 // Default rev-4 phase weights, ported from packages/engine-proto/src/weights.ts.
 //
@@ -50,33 +45,15 @@ const DEFAULT_PHASE_WEIGHTS = {
 
 // Engine.create is synchronous and parses JSON files at construction time.
 // Eager initialization keeps the first compute() call cold-cache-free.
-let engine = Engine.create({
+const engine = Engine.create({
   championMetaPath: CHAMPION_META_PATH,
   matchupDataPath: MATCHUP_DATA_PATH,
 });
-
-// Test-only seam: swap the engine with a mock so the MCTS session path can be
-// unit-tested without spawning the native iterate loop. Production never
-// invokes this — the real engine is constructed at module load.
-function __setEngineForTests(mockEngine) {
-  engine = mockEngine;
-}
 
 // Per-session active token for the αβ supersession path. When a new compute
 // is dispatched for a session, the prior token (if any) is cancelled so the
 // in-flight Rust compute aborts within ~50ms (Phase 8.3 gate).
 const activeTokens = new Map();
-
-// Per-session active MCTS session (Decision 9). Entry schema:
-//   { sessionId, version, session (napi handle), promise,
-//     pausePersistPromise, lastPersistedPauseSnapshotId,
-//     afterEventId, draft, draftId, endReason, socketId,
-//     projectedChildren: Set<string> }
-// projectedChildren keys: championIds.join("|") of each top-level
-// projected child in the latest emitted snapshot's tree. Read by the
-// navigatorPick/navigatorBan handlers to decide warm vs cold MCTS
-// restart (see ADR-0005).
-const activeSessions = new Map();
 
 function decodeEngineError(err) {
   try {
@@ -127,23 +104,7 @@ const EMPTY_POOL = {
   search: [],
 };
 
-// v5 phase 4: dev-only experimental engine toggle. Production never sets
-// algorithm; setting it requires both the env-var gate AND a per-request flag
-// from the frontend. The env var lets us harden against accidental rollout
-// while still letting dev/staging environments expose the toggle.
-const MCTS_TOGGLE_ENABLED = process.env.NAV_ENGINE_TOGGLE_ENABLED === "1"
-  || process.env.NAV_ENGINE_TOGGLE_ENABLED === "true";
-
-function resolveAlgorithm(requestedAlgorithm) {
-  if (!MCTS_TOGGLE_ENABLED) return undefined;
-  if (requestedAlgorithm !== "mcts" && requestedAlgorithm !== "ab") return undefined;
-  // Pass through "ab" too so the engine-node side can log dispatched algorithm
-  // explicitly. Setting "ab" is equivalent to omitting the field per the
-  // schema's optional-with-default semantics, but it keeps round-trip parity.
-  return requestedAlgorithm;
-}
-
-async function buildEngineRequest(session, events, exclusions, forcedBranches = [], algorithm) {
+async function buildEngineRequest(session, events, exclusions, forcedBranches = []) {
   const orderedEvents = sortEvents(events);
   const realEvents = orderedEvents.filter(isRealDraftEvent);
   const bans = [];
@@ -200,7 +161,7 @@ async function buildEngineRequest(session, events, exclusions, forcedBranches = 
         maxDepth: 8,
         broadDepth: 8,
         extensionTurnThreshold: 8,
-        latencyBudgetMs: algorithm === "mcts" ? MCTS_FIRST_PARTIAL_MS : AB_COMPUTE_BUDGET_MS,
+        latencyBudgetMs: AB_COMPUTE_BUDGET_MS,
       },
       weights: {
         phaseWeights: DEFAULT_PHASE_WEIGHTS,
@@ -215,11 +176,6 @@ async function buildEngineRequest(session, events, exclusions, forcedBranches = 
     },
   };
 
-  const resolvedAlgorithm = resolveAlgorithm(algorithm);
-  if (resolvedAlgorithm) {
-    request.algorithm = resolvedAlgorithm;
-  }
-
   return request;
 }
 
@@ -228,12 +184,12 @@ function getLastEventId(events) {
   return ordered.length > 0 ? ordered[ordered.length - 1].id : null;
 }
 
-// Pure transformation: returns the in-memory wire shape used by both the
-// persistence path (finals) and the partial-emit path (T10). No DB write.
-// id/createdAt/updatedAt are nulled out here and filled in by persistSnapshot.
+// Pure transformation: returns the in-memory wire shape used by the αβ
+// one-shot persistence path. No DB write. id/createdAt/updatedAt are nulled
+// out here and filled in by persistSnapshot.
 function shapeSnapshot(navigatorDraftId, lastEventId, response) {
   return {
-    source: "partial",
+    source: "persisted",
     id: null,
     navigator_draft_id: navigatorDraftId,
     after_event_id: lastEventId,
@@ -270,25 +226,6 @@ async function storeSnapshot(navigatorDraft, lastEventId, response) {
   return persistSnapshot(shapeSnapshot(navigatorDraft.id, lastEventId, response));
 }
 
-// Mirror the latest emitted snapshot's top-level projected children onto
-// the entry, keyed by joined championIds. Read by the pick/ban handlers
-// to decide warm vs cold MCTS restart. See ADR-0005.
-function setProjectedChildren(entry, parsed) {
-  if (!entry) return;
-  const children = parsed?.tree?.children;
-  if (!Array.isArray(children)) {
-    entry.projectedChildren = new Set();
-    return;
-  }
-  const next = new Set();
-  for (const child of children) {
-    const ids = child?.championIds;
-    if (!Array.isArray(ids) || ids.length === 0) continue;
-    next.add(ids.join("|"));
-  }
-  entry.projectedChildren = next;
-}
-
 function assertProtocolMajor(version) {
   const major = parseInt(String(version || "0").split(".")[0], 10);
   if (!Number.isFinite(major) || major !== EXPECTED_PROTOCOL_MAJOR) {
@@ -300,31 +237,10 @@ function assertProtocolMajor(version) {
 
 // Cancel any prior in-flight compute for this session so the Rust engine
 // aborts (≤50ms via Phase 8.3 gate). The new compute then dispatches.
-// Handles both αβ (activeTokens) and MCTS (activeSessions) paths.
-async function supersedePriorCompute(sessionId, reason = "supersede") {
+function supersedePriorCompute(sessionId) {
   const priorToken = activeTokens.get(sessionId);
   if (priorToken && priorToken.token && !priorToken.token.isCancelled()) {
     priorToken.token.cancel();
-  }
-  const priorSession = activeSessions.get(sessionId);
-  if (priorSession) {
-    priorSession.endReason = reason; // BEFORE awaiting pause-persist.
-    // v3 B4: wait for any in-flight pause-persist before calling end().
-    if (priorSession.pausePersistPromise) {
-      try { await priorSession.pausePersistPromise; } catch {}
-    }
-    // v4 R4-BLOCKING: handle completed-pause case — delete the persisted
-    // pause snapshot whose state has been invalidated by this supersession.
-    if (priorSession.lastPersistedPauseSnapshotId) {
-      try {
-        await NavigatorSnapshot.destroy({ where: { id: priorSession.lastPersistedPauseSnapshotId } });
-        priorSession.lastPersistedPauseSnapshotId = null;
-      } catch (e) {
-        console.error("[nav] failed to delete prior paused snapshot on supersession:", e);
-      }
-    }
-    priorSession.session.end();
-    // No await on priorSession.promise — .then() cleanup runs independently.
   }
 }
 
@@ -338,10 +254,6 @@ async function computeForDraft(navigatorDraft, session, events, version, io, opt
   if (typeof version !== "number") {
     throw new Error("version is required");
   }
-  const algorithm = resolveAlgorithm(options.algorithm);
-  if (algorithm === "mcts") {
-    return startNavigatorSession(navigatorDraft, session, events, version, io, options);
-  }
   return computeForDraftAB(navigatorDraft, session, events, version, io, options);
 }
 
@@ -353,7 +265,6 @@ async function computeForDraftAB(navigatorDraft, session, events, version, io, o
     events,
     exclusions,
     options.forcedBranches || [],
-    options.algorithm,
   );
   const lastEventId = getLastEventId(events);
 
@@ -400,188 +311,8 @@ async function computeForDraftAB(navigatorDraft, session, events, version, io, o
   return { version, snapshot };
 }
 
-// MCTS session path (Decision 9). Owns a NavigatorSession napi handle for the
-// session's lifetime, streams partials via onPartial, persists only on
-// user-stop. Closure-captures `entry` so the continuation reads endReason
-// off the local var (never re-reads the map, which may have been replaced).
-async function startNavigatorSession(navigatorDraft, sess, events, version, io, options = {}) {
-  const exclusions = await getCrossGameExclusions(sess, navigatorDraft);
-  const request = await buildEngineRequest(sess, events, exclusions, options.forcedBranches || [], options.algorithm);
-  const afterEventId = getLastEventId(events);
-
-  await supersedePriorCompute(sess.id, "supersede");
-
-  const napiSession = engine.createNavigatorSession(JSON.stringify(request));
-  const entry = {
-    sessionId: sess.id,
-    version,
-    session: napiSession,
-    promise: null,
-    pausePersistPromise: null,
-    lastPersistedPauseSnapshotId: null,
-    afterEventId,
-    draft: navigatorDraft,
-    draftId: navigatorDraft.id,
-    endReason: null,
-    socketId: options.socketId || null,
-    projectedChildren: new Set(),
-  };
-  activeSessions.set(sess.id, entry);
-
-  const onPartial = (jsonStr) => handlePartialOrError(entry, io, jsonStr);
-
-  try {
-    const promise = napiSession.start(onPartial);
-    entry.promise = promise;
-    // v3 M2: fire-and-forget. .then() handler cleans up the entry on
-    // session-end. Persistence is inline via pauseNavigatorSession
-    // (or disconnect IIFE) — NOT here.
-    promise.catch(err => {
-      console.error(`[nav] session ${sess.id} promise rejected:`, err);
-    }).then(() => {
-      if (activeSessions.get(sess.id) === entry) {
-        activeSessions.delete(sess.id);
-      }
-    });
-  } catch (e) {
-    // Synchronous throw from start() (e.g. TSF creation failure).
-    if (activeSessions.get(sess.id) === entry) {
-      activeSessions.delete(sess.id);
-    }
-    throw e;
-  }
-
-  return { version, snapshot: null, sessionStarted: true };
-}
-
-// Identity-checked routing of TSF emits from the iterate loop. Drops late
-// partials from a superseded session (Codex R2-#2), shapes the envelope, and
-// mirrors the top-level projected children onto the entry so the pick/ban
-// warm-restart fast path can match against them (see ADR-0005).
-function handlePartialOrError(entry, io, jsonStr) {
-  if (activeSessions.get(entry.sessionId) !== entry) return;
-  if (entry.endReason !== null) return;
-
-  let parsed;
-  try { parsed = JSON.parse(jsonStr); } catch { return; }
-
-  const shaped = shapeSnapshot(entry.draftId, entry.afterEventId, parsed);
-  setProjectedChildren(entry, parsed);
-  io.to(`navigator:${entry.sessionId}`).emit("navigatorPartialSnapshot", {
-    sessionId: entry.sessionId,
-    draftId: entry.draftId,
-    version: entry.version,
-    afterEventId: entry.afterEventId,
-    snapshot: shaped,
-  });
-}
-
-// Phase 7c T8: user-Stop click. Pauses the iterate thread (Mcts arena
-// retained), persists the snapshot inline via napiSession.pause(), and
-// broadcasts navigatorDraftUpdate. The IIFE pattern lets supersedePriorCompute
-// coordinate via entry.pausePersistPromise.
-async function pauseNavigatorSession(sessionId, io) {
-  const entry = activeSessions.get(sessionId);
-  if (!entry) return { ok: false, reason: "no-active-session" };
-  // v4 R3-1: 'supersede' short-circuits; 'disconnect' is allowed through.
-  if (entry.endReason === "supersede") {
-    return { ok: false, reason: "session-superseded" };
-  }
-  if (entry.pausePersistPromise) {
-    // Idempotent — return prior result with idempotent flag (v4 R3-N3).
-    let priorResult;
-    try { priorResult = await entry.pausePersistPromise; }
-    catch (e) { priorResult = { ok: false, reason: "prior-pause-rejected", error: e }; }
-    return { ...priorResult, idempotent: true };
-  }
-
-  const pendingIIFE = (async () => {
-    let json;
-    try {
-      json = await entry.session.pause();
-    } catch (e) {
-      return { ok: false, reason: "pause-rejected", error: e };
-    }
-    if (entry.endReason === "supersede") {
-      return { ok: false, reason: "superseded-mid-pause" };
-    }
-    let parsed;
-    try { parsed = JSON.parse(json); }
-    catch (e) { return { ok: false, reason: "snapshot-parse-failed", error: e }; }
-    assertProtocolMajor(parsed.protocolVersion);
-    const shaped = shapeSnapshot(entry.draftId, entry.afterEventId, parsed);
-    setProjectedChildren(entry, parsed);
-    const persisted = await persistSnapshot(shaped);
-
-    if (entry.endReason === "supersede") {
-      // v4 R3-1 in-flight race: stale row written. Delete it.
-      try {
-        await NavigatorSnapshot.destroy({ where: { id: persisted.id } });
-        return { ok: true, supersededDuringPersist: true, staleRowDeleted: true };
-      } catch (deleteErr) {
-        console.error("[nav] failed to delete stale paused row:", deleteErr);
-        return { ok: true, supersededDuringPersist: true, staleDeleteFailed: true, staleRowId: persisted.id };
-      }
-    }
-
-    // v4 R4-BLOCKING: track id for supersedePriorCompute's later delete.
-    entry.lastPersistedPauseSnapshotId = persisted.id;
-
-    io.to(`navigator:${sessionId}`).emit("navigatorDraftUpdate", { snapshot: persisted });
-    return { ok: true, persisted };
-  })();
-
-  // v4 R4-N6 stylistic: capture currentPromise explicitly to make the
-  // .finally closure-ordering invariant obvious.
-  const currentPromise = pendingIIFE.finally(() => {
-    if (entry.pausePersistPromise === currentPromise) {
-      entry.pausePersistPromise = null;
-    }
-  });
-  entry.pausePersistPromise = currentPromise;
-
-  return await currentPromise;
-}
-
-// Phase 7c T8: teardown via cancel-flag (replaces Phase 7b's stopNavigatorSession).
-// Used by supersedePriorCompute, disconnect handler, shutdownEngine.
-async function endNavigatorSession(sessionId, reason = "end") {
-  const entry = activeSessions.get(sessionId);
-  if (!entry) return { ok: false };
-  if (entry.endReason === null) entry.endReason = reason;
-  entry.session.end();
-  return { ok: true };
-}
-
-// Phase 7c T10: user-Resume click. Live entry → resume the existing Mcts
-// arena (visits preserved). No live entry (post-reload) → fall back to
-// fresh session at current state (visits lost but affordance works).
-async function resumeNavigatorSession(navigatorDraft, sess, events, version, io, options = {}) {
-  const entry = activeSessions.get(sess.id);
-  if (entry && entry.session.isActive()) {
-    // v4 R3-2: clear pausePersistPromise so next pause doesn't hit the
-    // idempotent branch and skip persisting the new arena state.
-    entry.pausePersistPromise = null;
-    entry.session.resume();
-    return { ok: true, freshSession: false };
-  }
-  // No live entry — fresh session at current state. Wrap with ok:true so
-  // socket-handler !result.ok checks don't fire a false-positive toast.
-  const startResult = await startNavigatorSession(navigatorDraft, sess, events, version, io, options);
-  return { ok: true, freshSession: true, ...startResult };
-}
-
 function getEngineStatus() {
-  return { activeSessions: activeTokens.size + activeSessions.size };
-}
-
-// Iterator helper for callers that need to walk active MCTS sessions without
-// owning the raw Map (e.g. socket-disconnect cleanup matching on socketId).
-// Exposing this instead of the Map keeps the entry shape internal.
-function forEachActiveSession(cb) {
-  for (const entry of activeSessions.values()) {
-    cb(entry);
-  }
+  return { activeSessions: activeTokens.size };
 }
 
 async function shutdownEngine() {
@@ -589,21 +320,6 @@ async function shutdownEngine() {
     if (token && !token.isCancelled()) token.cancel();
   }
   activeTokens.clear();
-  for (const entry of activeSessions.values()) {
-    entry.endReason = "supersede";
-    entry.session.end();
-  }
-}
-
-// Idempotent verb-method that records why a Compute is heading toward End,
-// without exposing the entry. Disconnect/supersede/end callers route through
-// this rather than mutating entry.endReason across the module boundary.
-function markForEnd(sessionId, reason) {
-  const entry = activeSessions.get(sessionId);
-  if (!entry) return;
-  if (entry.endReason === null) {
-    entry.endReason = reason;
-  }
 }
 
 module.exports = {
@@ -612,17 +328,5 @@ module.exports = {
   shutdownEngine,
   shapeSnapshot,
   persistSnapshot,
-  setProjectedChildren,
-  startNavigatorSession,
-  pauseNavigatorSession,                // new — was stopNavigatorSession
-  endNavigatorSession,                   // new
-  resumeNavigatorSession,                // NEW from T10
-  forEachActiveSession,
-  markForEnd,
-  activeSessions,
   getLastEventId,
-  isMctsToggleEnabled: () => MCTS_TOGGLE_ENABLED,
-  __setEngineForTests,
-  __activeSessionsForTests: activeSessions,
-  __handlePartialOrErrorForTests: handlePartialOrError,
 };
