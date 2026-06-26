@@ -30,5 +30,6 @@ WORKDIR /app
 COPY --from=builder /app /app
 WORKDIR /app/backend
 
-# Run pending DB migrations on boot (idempotent — Sequelize skips applied ones), then start.
-CMD ["sh", "-c", "npx sequelize-cli db:migrate && node index.js"]
+# Match the current prod start: run pending migrations (idempotent), then boot with
+# OTel tracing preloaded (tracing.js self-gates on OTEL_EXPORTER_OTLP_ENDPOINT).
+CMD ["sh", "-c", "npx sequelize-cli db:migrate && node --require ./tracing.js index.js"]
