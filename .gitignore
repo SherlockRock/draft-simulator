@@ -17,6 +17,9 @@ data/raw/*
 !data/raw/.gitkeep
 data/compiled/*
 !data/compiled/.gitkeep
+# Engine reads these two at runtime; must be committed to ship in Railway's git context.
+!data/compiled/champion-meta.json
+!data/compiled/matchup-data.json
 
 # Rust
 target/

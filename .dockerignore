@@ -1,0 +1,6 @@
+# Host artifacts — rebuilt inside the image (does not affect Railway's git context).
+.git
+**/node_modules
+**/target
+**/*.node
+frontend/dist
