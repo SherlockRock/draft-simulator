@@ -1,6 +1,6 @@
 import { Component, Show } from "solid-js";
 import { useNavigate, useLocation } from "@solidjs/router";
-import { Pickaxe, LayoutDashboard, Swords } from "lucide-solid";
+import { Pickaxe, LayoutDashboard, Swords, Compass } from "lucide-solid";
 import { useUser, getDisplayName } from "../userProvider";
 import { handleLogin, handleRevoke } from "../utils/actions";
 
@@ -14,6 +14,7 @@ const GlobalNavBar: Component = () => {
         const path = location.pathname;
         if (path.startsWith("/canvas")) return "canvas";
         if (path.startsWith("/versus")) return "versus";
+        if (path.startsWith("/navigator")) return "navigator";
         return null;
     };
 
@@ -90,6 +91,20 @@ const GlobalNavBar: Component = () => {
                             class={activeFlow() === "versus" ? "" : "text-darius-crimson"}
                         />
                         <span>Versus</span>
+                    </button>
+                    <button
+                        onClick={() => navigate("/navigator")}
+                        class={`flex items-center gap-2 rounded-md px-4 py-2 font-medium transition-colors ${
+                            activeFlow() === "navigator"
+                                ? "bg-blue-500 text-white"
+                                : "bg-darius-card-hover text-darius-text-secondary hover:bg-darius-border"
+                        }`}
+                    >
+                        <Compass
+                            size={18}
+                            class={activeFlow() === "navigator" ? "" : "text-blue-400"}
+                        />
+                        <span>Navigator</span>
                     </button>
                 </div>
             </div>
