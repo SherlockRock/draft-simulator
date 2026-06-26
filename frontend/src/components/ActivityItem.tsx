@@ -13,7 +13,8 @@ import {
     ChevronUp,
     LayoutDashboard,
     Swords,
-    FileText
+    FileText,
+    Compass
 } from "lucide-solid";
 import {
     generateVersusShareLink,
@@ -25,6 +26,7 @@ import {
     editVersusDraft,
     deleteCanvas
 } from "../utils/actions";
+import { updateNavigatorSession, deleteNavigatorSession } from "../utils/navigatorApi";
 import { Activity } from "../utils/schemas";
 import { track } from "../utils/analytics";
 import toast from "solid-toast";
@@ -66,6 +68,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
     const [editCompetitive, setEditCompetitive] = createSignal(false);
     const [editDisabledChampions, setEditDisabledChampions] = createSignal<string[]>([]);
     const [disabledExpanded, setDisabledExpanded] = createSignal(false);
+    const [confirmDeleteNavigator, setConfirmDeleteNavigator] = createSignal(false);
 
     let shareButtonRef: HTMLDivElement | undefined;
     let cardRef: HTMLDivElement | undefined;
@@ -123,6 +126,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
             setEditName(props.activity.resource_name);
             setEditDescription(props.activity.description || "");
             setEditIcon(props.activity.icon || "");
+            setConfirmDeleteNavigator(false);
             const v = versus();
             if (v) {
                 setEditBlueTeamName(v.blueTeamName || "Team 1");
@@ -237,12 +241,41 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
         }
     }));
 
+    const editNavigatorMutation = useMutation(() => ({
+        mutationFn: (data: { name: string }) =>
+            updateNavigatorSession(props.activity.resource_id, { name: data.name }),
+        onSuccess: () => {
+            setIsEditOpen(false);
+            toast.success("Navigator session updated");
+            queryClient.invalidateQueries({ queryKey: ["recentActivity"] });
+            queryClient.invalidateQueries({ queryKey: ["navigatorSessions"] });
+        },
+        onError: () => {
+            toast.error("Failed to update navigator session");
+        }
+    }));
+
+    const deleteNavigatorMutation = useMutation(() => ({
+        mutationFn: () => deleteNavigatorSession(props.activity.resource_id),
+        onSuccess: () => {
+            setIsEditOpen(false);
+            toast.success("Navigator session deleted");
+            queryClient.invalidateQueries({ queryKey: ["recentActivity"] });
+            queryClient.invalidateQueries({ queryKey: ["navigatorSessions"] });
+        },
+        onError: () => {
+            toast.error("Failed to delete navigator session");
+        }
+    }));
+
     const getDefaultIcon = () => {
         switch (props.activity.resource_type) {
             case "canvas":
                 return <LayoutDashboard size={24} class="text-darius-purple-bright" />;
             case "versus":
                 return <Swords size={24} class="text-darius-crimson" />;
+            case "navigator":
+                return <Compass size={24} class="text-blue-400" />;
             default:
                 return <FileText size={24} class="text-darius-ember" />;
         }
@@ -267,6 +300,15 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                     iconRing: "ring-2 ring-inset ring-darius-crimson/50",
                     badge: "bg-darius-crimson/15 text-darius-crimson",
                     action: "text-darius-crimson"
+                };
+            case "navigator":
+                return {
+                    title: "text-blue-400",
+                    icon: "text-blue-400",
+                    iconBg: "bg-blue-500/25",
+                    iconRing: "ring-2 ring-inset ring-blue-400/50",
+                    badge: "bg-blue-500/15 text-blue-400",
+                    action: "text-blue-400"
                 };
             default:
                 return {
@@ -399,6 +441,8 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                 icon: editIcon(),
                 disabledChampions: editDisabledChampions()
             });
+        } else if (props.activity.resource_type === "navigator") {
+            editNavigatorMutation.mutate({ name: editName() });
         }
     };
 
@@ -460,13 +504,21 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                 >
                                     <div ref={shareButtonRef} class="relative shrink-0">
                                         <div class="flex items-center gap-2">
-                                            <button
-                                                onClick={handleShare}
-                                                class={`${colors.action} transition-opacity hover:opacity-70`}
-                                                title="Share"
+                                            {/* Navigator has no share mechanism — omit its share button */}
+                                            <Show
+                                                when={
+                                                    props.activity.resource_type !==
+                                                    "navigator"
+                                                }
                                             >
-                                                <Share2 size={20} />
-                                            </button>
+                                                <button
+                                                    onClick={handleShare}
+                                                    class={`${colors.action} transition-opacity hover:opacity-70`}
+                                                    title="Share"
+                                                >
+                                                    <Share2 size={20} />
+                                                </button>
+                                            </Show>
                                             <button
                                                 onClick={handleEdit}
                                                 class={`${colors.action} transition-opacity hover:opacity-70`}
@@ -481,6 +533,11 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                             <Show when={props.activity.resource_type === "canvas"}>
                                 <div class="text-xs font-medium text-darius-text-secondary">
                                     Canvas
+                                </div>
+                            </Show>
+                            <Show when={props.activity.resource_type === "navigator"}>
+                                <div class="text-xs font-medium text-darius-text-secondary">
+                                    Navigator
                                 </div>
                             </Show>
                             {/* Team names row (versus only) */}
@@ -657,8 +714,8 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                         </div>
                     </Show>
 
-                    {/* For Versus/Draft - show single share link */}
-                    <Show when={props.activity.resource_type !== "canvas"}>
+                    {/* For Versus - show single share link (navigator has no share link) */}
+                    <Show when={props.activity.resource_type === "versus"}>
                         <Show
                             when={!shareLinkQuery.isPending}
                             fallback={
@@ -718,62 +775,72 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                 class="w-full rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary focus:outline-none focus:ring-2 focus:ring-darius-ember"
                             />
                         </div>
-                        <div class="mb-4">
-                            <label class="mb-2 block text-sm font-medium text-darius-text-primary">
-                                Description (optional)
-                            </label>
-                            <textarea
-                                value={editDescription()}
-                                onInput={(e) => setEditDescription(e.currentTarget.value)}
-                                rows={3}
-                                class="w-full rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary focus:outline-none focus:ring-2 focus:ring-darius-ember"
-                            />
-                            <p class="mt-1 text-xs text-darius-text-secondary">
-                                {editDescription().length}/1000 characters
-                            </p>
-                        </div>
-                        <div class="mb-4">
-                            <label class="mb-2 block text-sm font-medium text-darius-text-primary">
-                                Icon (optional)
-                            </label>
-                            <button
-                                type="button"
-                                onClick={() => setShowIconPicker(true)}
-                                class="flex h-16 w-full items-center gap-3 rounded border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary hover:bg-darius-border"
-                            >
-                                <Show
-                                    when={editIcon()}
-                                    fallback={
-                                        <div class="flex h-12 w-12 items-center justify-center rounded bg-darius-card">
-                                            <Plus
-                                                size={24}
-                                                class="text-darius-text-secondary"
-                                            />
-                                        </div>
+                        <Show when={props.activity.resource_type !== "navigator"}>
+                            <div class="mb-4">
+                                <label class="mb-2 block text-sm font-medium text-darius-text-primary">
+                                    Description (optional)
+                                </label>
+                                <textarea
+                                    value={editDescription()}
+                                    onInput={(e) =>
+                                        setEditDescription(e.currentTarget.value)
                                     }
+                                    rows={3}
+                                    class="w-full rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary focus:outline-none focus:ring-2 focus:ring-darius-ember"
+                                />
+                                <p class="mt-1 text-xs text-darius-text-secondary">
+                                    {editDescription().length}/1000 characters
+                                </p>
+                            </div>
+                            <div class="mb-4">
+                                <label class="mb-2 block text-sm font-medium text-darius-text-primary">
+                                    Icon (optional)
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowIconPicker(true)}
+                                    class="flex h-16 w-full items-center gap-3 rounded border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary hover:bg-darius-border"
                                 >
-                                    <div class="flex h-12 w-12 items-center justify-center overflow-hidden rounded">
-                                        <Show
-                                            when={!isNaN(parseInt(editIcon()!))}
-                                            fallback={
-                                                <span class="text-3xl">{editIcon()}</span>
-                                            }
-                                        >
-                                            <img
-                                                src={champions[parseInt(editIcon()!)].img}
-                                                alt={
-                                                    champions[parseInt(editIcon()!)].name
+                                    <Show
+                                        when={editIcon()}
+                                        fallback={
+                                            <div class="flex h-12 w-12 items-center justify-center rounded bg-darius-card">
+                                                <Plus
+                                                    size={24}
+                                                    class="text-darius-text-secondary"
+                                                />
+                                            </div>
+                                        }
+                                    >
+                                        <div class="flex h-12 w-12 items-center justify-center overflow-hidden rounded">
+                                            <Show
+                                                when={!isNaN(parseInt(editIcon()!))}
+                                                fallback={
+                                                    <span class="text-3xl">
+                                                        {editIcon()}
+                                                    </span>
                                                 }
-                                                class="h-full w-full object-cover"
-                                            />
-                                        </Show>
-                                    </div>
-                                </Show>
-                                <span class="text-sm text-darius-text-secondary">
-                                    {editIcon() ? "Change icon" : "Select an icon"}
-                                </span>
-                            </button>
-                        </div>
+                                            >
+                                                <img
+                                                    src={
+                                                        champions[parseInt(editIcon()!)]
+                                                            .img
+                                                    }
+                                                    alt={
+                                                        champions[parseInt(editIcon()!)]
+                                                            .name
+                                                    }
+                                                    class="h-full w-full object-cover"
+                                                />
+                                            </Show>
+                                        </div>
+                                    </Show>
+                                    <span class="text-sm text-darius-text-secondary">
+                                        {editIcon() ? "Change icon" : "Select an icon"}
+                                    </span>
+                                </button>
+                            </div>
+                        </Show>
                         <Show when={props.activity.resource_type === "versus"}>
                             <div class="mb-4 grid grid-cols-2 gap-4">
                                 <div>
@@ -878,7 +945,45 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                 </div>
                             </Show>
                         </Show>
-                        <div class="flex justify-end gap-2">
+                        <div class="flex items-center justify-end gap-2">
+                            <Show when={props.activity.resource_type === "navigator"}>
+                                <Show
+                                    when={!confirmDeleteNavigator()}
+                                    fallback={
+                                        <div class="mr-auto flex items-center gap-2">
+                                            <span class="text-sm text-darius-text-secondary">
+                                                Delete?
+                                            </span>
+                                            <button
+                                                onClick={() =>
+                                                    deleteNavigatorMutation.mutate()
+                                                }
+                                                disabled={
+                                                    deleteNavigatorMutation.isPending
+                                                }
+                                                class="rounded-md bg-darius-crimson px-3 py-2 text-sm text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                            >
+                                                Confirm
+                                            </button>
+                                            <button
+                                                onClick={() =>
+                                                    setConfirmDeleteNavigator(false)
+                                                }
+                                                class="rounded-md bg-darius-card-hover px-3 py-2 text-sm text-darius-text-primary hover:bg-darius-border"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    }
+                                >
+                                    <button
+                                        onClick={() => setConfirmDeleteNavigator(true)}
+                                        class="mr-auto rounded-md px-4 py-2 text-darius-crimson hover:bg-darius-crimson/10"
+                                    >
+                                        Delete
+                                    </button>
+                                </Show>
+                            </Show>
                             <button
                                 onClick={() => setIsEditOpen(false)}
                                 class="rounded-md bg-darius-card-hover px-4 py-2 text-darius-text-primary hover:bg-darius-border"

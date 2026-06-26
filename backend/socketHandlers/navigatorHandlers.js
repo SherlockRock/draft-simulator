@@ -2,8 +2,11 @@ const NavigatorSession = require("../models/NavigatorSession");
 const NavigatorDraft = require("../models/NavigatorDraft");
 const NavigatorEvent = require("../models/NavigatorEvent");
 const NavigatorSnapshot = require("../models/NavigatorSnapshot");
-const { computeForDraft } = require("../services/navigatorEngine");
+const navigatorEngine = require("../services/navigatorEngine");
+// Note: computeForDraft is accessed via navigatorEngine.* (not destructured)
+// so test-time spies on navigatorEngine.computeForDraft are honoured.
 const { getOurSideForGame } = require("../utils/navigatorSide");
+const { getTurn, TOTAL_TURNS } = require("../utils/navigatorTurns");
 
 // Per-session engine job version. Bumped on every pick/ban/undo. Results whose
 // job version is behind the session's current version are dropped.
@@ -18,31 +21,6 @@ function bumpVersion(sessionId) {
 function getCurrentVersion(sessionId) {
   return sessionVersions.get(sessionId) || 0;
 }
-
-const TURN_SEQUENCE = [
-  { side: "blue", type: "ban", phase: "ban1" },
-  { side: "red", type: "ban", phase: "ban1" },
-  { side: "blue", type: "ban", phase: "ban1" },
-  { side: "red", type: "ban", phase: "ban1" },
-  { side: "blue", type: "ban", phase: "ban1" },
-  { side: "red", type: "ban", phase: "ban1" },
-  { side: "blue", type: "pick", phase: "pick1" },
-  { side: "red", type: "pick", phase: "pick1" },
-  { side: "red", type: "pick", phase: "pick1" },
-  { side: "blue", type: "pick", phase: "pick1" },
-  { side: "blue", type: "pick", phase: "pick1" },
-  { side: "red", type: "pick", phase: "pick1" },
-  { side: "red", type: "ban", phase: "ban2" },
-  { side: "blue", type: "ban", phase: "ban2" },
-  { side: "red", type: "ban", phase: "ban2" },
-  { side: "blue", type: "ban", phase: "ban2" },
-  { side: "red", type: "pick", phase: "pick2" },
-  { side: "blue", type: "pick", phase: "pick2" },
-  { side: "blue", type: "pick", phase: "pick2" },
-  { side: "red", type: "pick", phase: "pick2" },
-];
-
-const TOTAL_TURNS = TURN_SEQUENCE.length; // 20
 
 function getSocketUserId(socket) {
   return socket.user?.id || socket.user?.dataValues?.id || null;
@@ -117,6 +95,54 @@ async function listDraftEvents(draftId) {
   });
 }
 
+// Consolidates the auth + draft-lookup + events-fetch preamble that most
+// navigator socket handlers open-code. Returns null and emits a navigatorError
+// to the socket on any failure step; otherwise returns { session, draft, events }.
+//
+// Options:
+//   requireDraftId  — when true, look up the draft by data.draftId (must match session_id).
+//                     when false (default), look up the current draft via findCurrentDraft.
+//   fetchEvents     — when true (default), listDraftEvents for the resolved draft (or [] if no draft).
+//                     when false, events: null.
+async function loadAuthorizedContext(socket, data, options = {}) {
+  const { requireDraftId = false, fetchEvents = true } = options;
+  const { sessionId, draftId } = data || {};
+
+  if (!sessionId) {
+    emitNavigatorError(socket, "sessionId is required");
+    return null;
+  }
+  if (requireDraftId && !draftId) {
+    emitNavigatorError(socket, "draftId is required");
+    return null;
+  }
+
+  const session = await findOwnedSession(sessionId, socket);
+  if (!session) return null;
+
+  let draft;
+  if (requireDraftId) {
+    draft = await findSessionDraft(sessionId, draftId);
+    if (!draft) {
+      emitNavigatorError(socket, "Navigator draft not found");
+      return null;
+    }
+  } else {
+    draft = await findCurrentDraft(sessionId);
+  }
+
+  let events;
+  if (!fetchEvents) {
+    events = null;
+  } else if (draft) {
+    events = await listDraftEvents(draft.id);
+  } else {
+    events = [];
+  }
+
+  return { session, draft, events };
+}
+
 async function findLatestSnapshot(draftId) {
   return NavigatorSnapshot.findOne({
     where: { navigator_draft_id: draftId },
@@ -144,16 +170,23 @@ async function listCompletedGames(sessionId, currentDraftId) {
   return result;
 }
 
+// Normalizes navigator snapshots to wire shape for socket emission.
+// Accepts two input shapes:
+//   1. Sequelize DB row (has `pruned_tree`/`compute_meta` columns) — converts to wire shape.
+//   2. Already wire-shaped object (has `tree`/`meta` plus a `source` field) — passes through.
+// The polymorphism is deliberate: `findLatestSnapshot` returns DB rows while
+// `storeSnapshot`/`persistSnapshot` produce wire shape directly.
 function toClientSnapshot(snapshot) {
   if (!snapshot) {
     return null;
   }
 
-  if (snapshot.tree || snapshot.meta) {
+  if (snapshot.source) {
     return snapshot;
   }
 
   return {
+    source: "persisted",
     id: snapshot.id,
     navigator_draft_id: snapshot.navigator_draft_id,
     after_event_id: snapshot.after_event_id,
@@ -169,10 +202,17 @@ async function emitDraftUpdate(io, sessionId, payload) {
   io.to(getRoomName(sessionId)).emit("navigatorDraftUpdate", payload);
 }
 
-async function recomputeAndBroadcast(io, socket, session, draft, events, version) {
-  void socket;
+async function recomputeAndBroadcast(io, socket, session, draft, events, version, options = {}) {
   try {
-    const result = await computeForDraft(draft, session, events, version, io);
+    const mergedOptions = { ...options, socketId: socket.id };
+    const result = await navigatorEngine.computeForDraft(draft, session, events, version, io, mergedOptions);
+
+    // Cancellation-driven swallow (engine.cancelled or meta.cancelled === true).
+    // Newer compute will broadcast its own snapshot — drop silently.
+    if (result.cancelled || (!result.snapshot && result.partial)) {
+      return null;
+    }
+
     const currentVersion = getCurrentVersion(session.id);
     if (result.version !== currentVersion) {
       console.log(
@@ -187,6 +227,13 @@ async function recomputeAndBroadcast(io, socket, session, draft, events, version
     });
     return result.snapshot;
   } catch (error) {
+    if (error && error.code === "engine.invalid_input") {
+      console.warn(
+        `[nav] engine.invalid_input session=${session.id} draft=${draft.id} path=${JSON.stringify(error.path || [])}`,
+      );
+      emitNavigatorError(socket, "Engine rejected request: invalid input");
+      return null;
+    }
     console.error("Navigator engine compute failed:", error);
     await emitDraftUpdate(io, session.id, {
       draft,
@@ -203,20 +250,10 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
   wrap("navigatorJoin", async (data = {}) => {
     try {
+      const ctx = await loadAuthorizedContext(socket, data);
+      if (!ctx) return;
+      const { session, draft, events } = ctx;
       const { sessionId } = data;
-
-      if (!sessionId) {
-        emitNavigatorError(socket, "sessionId is required");
-        return;
-      }
-
-      const session = await findOwnedSession(sessionId, socket);
-      if (!session) {
-        return;
-      }
-
-      const draft = await findCurrentDraft(sessionId);
-      const events = draft ? await listDraftEvents(draft.id) : [];
       const snapshot = draft ? await findLatestSnapshot(draft.id) : null;
       const completedGames = await listCompletedGames(
         sessionId,
@@ -238,67 +275,72 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
     }
   });
 
-  async function handleDraftInput(data, eventType) {
-    const { sessionId, draftId, championId, slot } = data || {};
-
-    if (!sessionId || !draftId || !championId || typeof slot !== "number") {
-      emitNavigatorError(
-        socket,
-        "sessionId, draftId, championId, and numeric slot are required",
-      );
-      return;
-    }
-
-    const session = await findOwnedSession(sessionId, socket);
-    if (!session) {
-      return;
-    }
-
-    const draft = await findSessionDraft(sessionId, draftId);
-    if (!draft) {
-      emitNavigatorError(socket, "Navigator draft not found");
-      return;
-    }
-
-    const currentTurn = TURN_SEQUENCE[slot];
-    if (!currentTurn) {
-      emitNavigatorError(socket, "Invalid draft slot");
-      return;
-    }
-
-    if (currentTurn.type !== eventType) {
-      emitNavigatorError(socket, `Slot ${slot} does not accept a ${eventType}`);
-      return;
-    }
-
-    await NavigatorEvent.create({
-      navigator_draft_id: draftId,
-      event_type: eventType,
-      slot,
-      side: currentTurn.side,
-      champion_id: championId,
-      user_injected: false,
-    });
-
-    const events = await listDraftEvents(draft.id);
-
-    if (events.length >= TOTAL_TURNS && draft.status !== "completed") {
-      draft.status = "completed";
-      await draft.save();
-    }
-
-    await emitDraftUpdate(io, sessionId, {
-      draft,
-      events,
-    });
-
-    const version = bumpVersion(sessionId);
-    await recomputeAndBroadcast(io, socket, session, draft, events, version);
-  }
-
   wrap("navigatorPick", async (data = {}) => {
     try {
-      await handleDraftInput(data, "pick");
+      const { championIds, firstSlot } = data;
+      if (
+        !Array.isArray(championIds) ||
+        championIds.length < 1 ||
+        championIds.length > 2 ||
+        !championIds.every((c) => typeof c === "string" && c.length > 0) ||
+        typeof firstSlot !== "number" ||
+        firstSlot < 0
+      ) {
+        emitNavigatorError(
+          socket,
+          "championIds (1 or 2 strings) and numeric firstSlot are required",
+        );
+        return;
+      }
+
+      const ctx = await loadAuthorizedContext(socket, data, {
+        requireDraftId: true,
+        fetchEvents: false,
+      });
+      if (!ctx) return;
+      const { session, draft } = ctx;
+      const { sessionId, draftId } = data;
+
+      // Validate each slot is a pick turn.
+      for (let i = 0; i < championIds.length; i++) {
+        const slot = firstSlot + i;
+        const turn = getTurn(slot);
+        if (!turn) {
+          emitNavigatorError(socket, `Invalid draft slot ${slot}`);
+          return;
+        }
+        if (turn.type !== "pick") {
+          emitNavigatorError(socket, `Slot ${slot} does not accept a pick`);
+          return;
+        }
+      }
+
+      // Persist 1 or 2 NavigatorEvent rows for this turn.
+      for (let i = 0; i < championIds.length; i++) {
+        const slot = firstSlot + i;
+        const turn = getTurn(slot);
+        await NavigatorEvent.create({
+          navigator_draft_id: draftId,
+          event_type: "pick",
+          slot,
+          side: turn.side,
+          champion_id: championIds[i],
+          user_injected: false,
+        });
+      }
+
+      const events = await listDraftEvents(draft.id);
+
+      if (events.length >= TOTAL_TURNS && draft.status !== "completed") {
+        draft.status = "completed";
+        await draft.save();
+      }
+
+      await emitDraftUpdate(io, sessionId, { draft, events });
+
+      const version = bumpVersion(sessionId);
+
+      await recomputeAndBroadcast(io, socket, session, draft, events, version);
     } catch (error) {
       console.error("Error in navigatorPick:", error);
       emitNavigatorError(socket, "Failed to record pick");
@@ -307,87 +349,120 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
   wrap("navigatorBan", async (data = {}) => {
     try {
-      await handleDraftInput(data, "ban");
+      const { championId, slot } = data;
+      if (
+        typeof championId !== "string" ||
+        championId.length === 0 ||
+        typeof slot !== "number" ||
+        slot < 0
+      ) {
+        emitNavigatorError(
+          socket,
+          "championId and numeric slot are required",
+        );
+        return;
+      }
+
+      const ctx = await loadAuthorizedContext(socket, data, {
+        requireDraftId: true,
+        fetchEvents: false,
+      });
+      if (!ctx) return;
+      const { session, draft } = ctx;
+      const { sessionId, draftId } = data;
+
+      const turn = getTurn(slot);
+      if (!turn) {
+        emitNavigatorError(socket, "Invalid draft slot");
+        return;
+      }
+      if (turn.type !== "ban") {
+        emitNavigatorError(socket, `Slot ${slot} does not accept a ban`);
+        return;
+      }
+
+      await NavigatorEvent.create({
+        navigator_draft_id: draftId,
+        event_type: "ban",
+        slot,
+        side: turn.side,
+        champion_id: championId,
+        user_injected: false,
+      });
+
+      const events = await listDraftEvents(draft.id);
+
+      if (events.length >= TOTAL_TURNS && draft.status !== "completed") {
+        draft.status = "completed";
+        await draft.save();
+      }
+
+      await emitDraftUpdate(io, sessionId, { draft, events });
+
+      const version = bumpVersion(sessionId);
+
+      await recomputeAndBroadcast(io, socket, session, draft, events, version);
     } catch (error) {
       console.error("Error in navigatorBan:", error);
       emitNavigatorError(socket, "Failed to record ban");
     }
   });
 
-  wrap("navigatorSwapChampion", async (data = {}) => {
-    try {
-      const { sessionId, draftId, pathToParent, newChampionId, oldChampionId } = data;
+  // Phase 11 frontend will switch to the content-addressed { path, targetSlot,
+  // championId } payload. Until then, this handler validates the new shape
+  // and rejects the legacy { pathToParent, newChampionId } shape with a clear
+  // error — that's intentional: the legacy payload can't be served by the
+  // Rust engine, so we'd rather fail loudly than silently misinterpret.
+  function dispatchForcedBranch(eventName, mode) {
+    return async (data = {}) => {
+      try {
+        const { path, targetSlot, championId } = data;
 
-      if (!sessionId || !draftId || !Array.isArray(pathToParent) || !newChampionId) {
-        emitNavigatorError(socket, "Invalid navigatorSwapChampion payload");
-        return;
+        if (
+          !Array.isArray(path) ||
+          typeof targetSlot !== "number" ||
+          !championId
+        ) {
+          emitNavigatorError(
+            socket,
+            `Invalid ${eventName} payload (expected { path, targetSlot, championId })`,
+          );
+          return;
+        }
+
+        const ctx = await loadAuthorizedContext(socket, data, {
+          requireDraftId: true,
+        });
+        if (!ctx) return;
+        const { session, draft, events } = ctx;
+        const { sessionId } = data;
+
+        // Append a single forcedBranches entry for this dispatch. The engine
+        // produces a full tree with the forced node marked userInjected: true.
+        const forcedBranches = [{ path, targetSlot, championId, mode }];
+        const version = bumpVersion(sessionId);
+        await recomputeAndBroadcast(io, socket, session, draft, events, version, {
+          forcedBranches,
+        });
+      } catch (error) {
+        console.error(`Error in ${eventName}:`, error);
+        emitNavigatorError(socket, `${eventName} failed`);
       }
+    };
+  }
 
-      // TODO(engine): when the engine supports seeded re-search, pass the
-      // (pathToParent, newChampionId, oldChampionId) as a seed hint.
-      console.log("[nav] swap requested (stub)", {
-        sessionId,
-        draftId,
-        pathToParent,
-        newChampionId,
-        oldChampionId,
-      });
-      emitNavigatorError(
-        socket,
-        "Swap champion is not yet implemented by the engine. Coming with the Rust engine rewrite."
-      );
-    } catch (error) {
-      console.error("Error in navigatorSwapChampion:", error);
-      emitNavigatorError(socket, "Swap champion failed");
-    }
-  });
-
-  wrap("navigatorBranch", async (data = {}) => {
-    try {
-      const { sessionId, draftId, pathToParent, newChampionId } = data;
-
-      if (!sessionId || !draftId || !Array.isArray(pathToParent) || !newChampionId) {
-        emitNavigatorError(socket, "Invalid navigatorBranch payload");
-        return;
-      }
-
-      // TODO(engine): additive branch — engine-side re-search adds a sibling
-      // node with newChampionId under pathToParent. Not yet implemented.
-      console.log("[nav] branch requested (stub)", {
-        sessionId,
-        draftId,
-        pathToParent,
-        newChampionId,
-      });
-      emitNavigatorError(
-        socket,
-        "Create branch is not yet implemented by the engine. Coming with the Rust engine rewrite."
-      );
-    } catch (error) {
-      console.error("Error in navigatorBranch:", error);
-      emitNavigatorError(socket, "Create branch failed");
-    }
-  });
+  wrap("navigatorSwapChampion", dispatchForcedBranch("navigatorSwapChampion", "sole"));
+  wrap("navigatorBranch", dispatchForcedBranch("navigatorBranch", "include"));
 
   wrap("navigatorUndo", async (data = {}) => {
     try {
+      const ctx = await loadAuthorizedContext(socket, data, {
+        requireDraftId: true,
+        fetchEvents: false,
+      });
+      if (!ctx) return;
+      const { session, draft } = ctx;
       const { sessionId, draftId } = data;
-
-      if (!sessionId || !draftId) {
-        emitNavigatorError(socket, "sessionId and draftId are required");
-        return;
-      }
-
-      const session = await findOwnedSession(sessionId, socket);
-      if (!session) {
-        return;
-      }
-
-      const draft = await findSessionDraft(sessionId, draftId);
-      if (!draft) {
-        emitNavigatorError(socket, "Navigator draft not found");
-        return;
-      }
 
       const lastEvent = await NavigatorEvent.findOne({
         where: { navigator_draft_id: draftId },
@@ -420,25 +495,14 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
   wrap("navigatorStartDraft", async (data = {}) => {
     try {
-      const { sessionId } = data;
-
-      if (!sessionId) {
-        emitNavigatorError(socket, "sessionId is required");
-        return;
-      }
-
-      const session = await findOwnedSession(sessionId, socket);
-      if (!session) {
-        return;
-      }
+      const ctx = await loadAuthorizedContext(socket, data);
+      if (!ctx) return;
+      const { session, draft, events } = ctx;
 
       if (session.status === "setup") {
         session.status = "active";
         await session.save();
       }
-
-      const draft = await findCurrentDraft(sessionId);
-      const events = draft ? await listDraftEvents(draft.id) : [];
       const snapshot = draft ? await findLatestSnapshot(draft.id) : null;
 
       await emitDraftUpdate(io, sessionId, {
@@ -455,19 +519,13 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
   wrap("navigatorNextGame", async (data = {}) => {
     try {
-      const { sessionId, ourSideOverride } = data;
+      const { ourSideOverride } = data;
 
-      if (!sessionId) {
-        emitNavigatorError(socket, "sessionId is required");
-        return;
-      }
+      const ctx = await loadAuthorizedContext(socket, data, { fetchEvents: false });
+      if (!ctx) return;
+      const { session, draft: currentDraft } = ctx;
+      const { sessionId } = data;
 
-      const session = await findOwnedSession(sessionId, socket);
-      if (!session) {
-        return;
-      }
-
-      const currentDraft = await findCurrentDraft(sessionId);
       if (!currentDraft) {
         emitNavigatorError(socket, "No current draft for this session");
         return;
@@ -564,4 +622,4 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
   });
 }
 
-module.exports = { setupNavigatorHandlers };
+module.exports = { setupNavigatorHandlers, toClientSnapshot, loadAuthorizedContext };

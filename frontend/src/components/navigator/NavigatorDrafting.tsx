@@ -5,7 +5,7 @@ import { useNavigatorContext } from "../../contexts/NavigatorContext";
 import type { NavigatorTreeNode } from "../../contexts/NavigatorContext";
 import { getPickerState } from "../../utils/navigatorPool";
 import { TURN_SEQUENCE } from "../../utils/turnSequence";
-import { eventsToConfirmedTurns } from "../../utils/treeReconcile";
+import { eventsToConfirmedTurns, pathStepsToIndexPath } from "../../utils/treeReconcile";
 import DraftInputPanel from "./DraftInputPanel";
 import DecisionTree from "./DecisionTree";
 import ScenarioLanes from "./ScenarioLanes";
@@ -17,11 +17,12 @@ const NavigatorDrafting: Component = () => {
         joinSession,
         navigatorContext,
         syntheticTree,
+        effectiveScenarios,
         isComputing: isComputingFromContext,
         selectedScenarioIndex,
         setSelectedScenarioIndex,
         panRequest,
-        emitPick,
+        emitPickStep,
         emitBan,
         swapChampion,
         createBranch,
@@ -33,15 +34,53 @@ const NavigatorDrafting: Component = () => {
     const [highlightedTreePath, setHighlightedTreePath] = createSignal<number[] | null>(
         null
     );
+    type ContentAddressedStep = { slot: number; championIds: string[] };
     const [swapTarget, setSwapTarget] = createSignal<{
-        path: number[];
+        path: ContentAddressedStep[];
+        targetSlot: number;
         oldChampionId: string;
         contextLabel: string;
+        depth: number;
     } | null>(null);
     const [branchTarget, setBranchTarget] = createSignal<{
-        pathToParent: number[];
+        path: ContentAddressedStep[];
+        targetSlot: number;
         contextLabel: string;
+        depth: number;
     } | null>(null);
+
+    // Walks the synthetic tree using an index path and returns the
+    // content-addressed lineage (slot + championIds at each step). Returns the
+    // PARENT lineage (excludes the targeted node's own step), the targetSlot,
+    // and the target's championIds for the picker label. Matches the protocol
+    // EngineRequest.config.forcedBranches[].path shape.
+    const deriveContentAddressedTarget = (
+        indexPath: number[]
+    ): {
+        path: ContentAddressedStep[];
+        targetSlot: number;
+        championIds: string[];
+    } | null => {
+        const tree = syntheticTree();
+        if (!tree || indexPath.length === 0) return null;
+        const fullLineage: ContentAddressedStep[] = [];
+        let node: NavigatorTreeNode | null = tree;
+        for (const idx of indexPath) {
+            if (!node || !node.children[idx]) return null;
+            node = node.children[idx];
+            fullLineage.push({
+                slot: node.slots[0],
+                championIds: [...node.championIds]
+            });
+        }
+        if (!node) return null;
+        const target = fullLineage[fullLineage.length - 1];
+        return {
+            path: fullLineage.slice(0, -1),
+            targetSlot: target.slot,
+            championIds: node.championIds
+        };
+    };
 
     const session = () => navigatorContext().session;
     const activeDraft = () => navigatorContext().draft;
@@ -96,7 +135,7 @@ const NavigatorDrafting: Component = () => {
     const scenarios = createMemo(() => {
         const archive = viewingArchive();
         if (archive) return archive.snapshot?.scenarios ?? [];
-        return navigatorContext().snapshot?.scenarios ?? [];
+        return effectiveScenarios();
     });
 
     const confirmedDepth = createMemo(() => {
@@ -126,8 +165,8 @@ const NavigatorDrafting: Component = () => {
     const swapColoringFor = (championId: string): ChampionColorState => {
         const session = navigatorContext().session;
         if (!session) return "neutral";
-        const turnIndex = swapTarget()?.path.length ?? 0;
-        const turnInfo = TURN_SEQUENCE[turnIndex - 1];
+        const depth = swapTarget()?.depth ?? 0;
+        const turnInfo = TURN_SEQUENCE[depth - 1];
         return getPickerState(
             championId,
             turnInfo?.side ?? null,
@@ -140,8 +179,8 @@ const NavigatorDrafting: Component = () => {
     const branchColoringFor = (championId: string): ChampionColorState => {
         const session = navigatorContext().session;
         if (!session) return "neutral";
-        const turnIndex = (branchTarget()?.pathToParent.length ?? 0) + 1;
-        const turnInfo = TURN_SEQUENCE[turnIndex - 1];
+        const depth = branchTarget()?.depth ?? 0;
+        const turnInfo = TURN_SEQUENCE[depth - 1];
         return getPickerState(
             championId,
             turnInfo?.side ?? null,
@@ -154,24 +193,31 @@ const NavigatorDrafting: Component = () => {
     createEffect(() => {
         const nextScenarios = scenarios();
         const selectedIndex = selectedScenarioIndex();
+        const synth = syntheticTree();
 
         if (nextScenarios.length === 0) {
             setSelectedScenarioIndex(null);
             setHighlightedTreePath(null);
         } else if (selectedIndex !== null && selectedIndex >= nextScenarios.length) {
             setSelectedScenarioIndex(null);
-        } else if (selectedIndex !== null) {
+        } else if (selectedIndex !== null && synth) {
             const selected = nextScenarios[selectedIndex];
             if (selected?.treePath) {
-                setHighlightedTreePath(selected.treePath);
+                const indexPath = pathStepsToIndexPath(synth, selected.treePath);
+                if (indexPath) setHighlightedTreePath(indexPath);
             }
         }
     });
 
     const handleNodeClick = (nodePath: number[]) => {
-        const matchIdx = scenarios().findIndex((scenario) =>
-            nodePath.every((value, index) => scenario.treePath[index] === value)
-        );
+        const synth = syntheticTree();
+        const matchIdx = scenarios().findIndex((scenario) => {
+            if (!synth) return false;
+            const scenarioIndexPath = pathStepsToIndexPath(synth, scenario.treePath);
+            if (!scenarioIndexPath) return false;
+            if (nodePath.length > scenarioIndexPath.length) return false;
+            return nodePath.every((value, index) => scenarioIndexPath[index] === value);
+        });
 
         setHighlightedTreePath(nodePath);
         setSelectedScenarioIndex(matchIdx >= 0 ? matchIdx : null);
@@ -211,50 +257,48 @@ const NavigatorDrafting: Component = () => {
         ).length;
 
         if (current.actionType === "pick") {
-            // Pair-pick nodes carry two champions across two adjacent slots; emit both.
-            emitPick(draftId, championIds[0], turnIndex);
-            if (championIds.length > 1) {
-                emitPick(draftId, championIds[1], turnIndex + 1);
-            }
+            // Pair-pick nodes carry two champions across two adjacent slots; emit atomically.
+            emitPickStep(draftId, championIds, turnIndex);
         } else {
             emitBan(draftId, championIds[0], turnIndex);
         }
     };
 
-    const handleOpenSwap = (path: number[]) => {
-        const synthetic = syntheticTree();
-        if (!synthetic) return;
-
-        let node: NavigatorTreeNode | null = synthetic;
-        for (const index of path) {
-            if (!node || !node.children[index]) return;
-            node = node.children[index];
-        }
-        if (!node) return;
-
-        const oldChampionId = node.championIds[0];
+    const handleOpenSwap = (indexPath: number[]) => {
+        const target = deriveContentAddressedTarget(indexPath);
+        if (!target) return;
+        const oldChampionId = target.championIds[0];
         if (!oldChampionId) return;
 
-        const turnInfo = TURN_SEQUENCE[path.length - 1];
+        const turnInfo = TURN_SEQUENCE[indexPath.length - 1];
         const label = turnInfo
-            ? `${turnInfo.side.toUpperCase()} ${turnInfo.type.toUpperCase()} ${path.length}`
-            : `TURN ${path.length}`;
+            ? `${turnInfo.side.toUpperCase()} ${turnInfo.type.toUpperCase()} ${indexPath.length}`
+            : `TURN ${indexPath.length}`;
 
         setSwapTarget({
-            path,
+            path: target.path,
+            targetSlot: target.targetSlot,
             oldChampionId,
-            contextLabel: label
+            contextLabel: label,
+            depth: indexPath.length
         });
     };
 
-    const handleOpenBranch = (path: number[]) => {
-        const turnInfo = TURN_SEQUENCE[path.length - 1];
+    const handleOpenBranch = (indexPath: number[]) => {
+        const target = deriveContentAddressedTarget(indexPath);
+        if (!target) return;
+        const turnInfo = TURN_SEQUENCE[indexPath.length - 1];
         const label = turnInfo
-            ? `${turnInfo.side.toUpperCase()} ${turnInfo.type.toUpperCase()} ${path.length}`
-            : `TURN ${path.length}`;
+            ? `${turnInfo.side.toUpperCase()} ${turnInfo.type.toUpperCase()} ${indexPath.length}`
+            : `TURN ${indexPath.length}`;
+        // For branch (mode: include) we add a sibling at the same slot as the
+        // node the user clicked — so targetSlot is the clicked node's slot,
+        // and path is the parent lineage (same as swap).
         setBranchTarget({
-            pathToParent: path.slice(0, -1),
-            contextLabel: label
+            path: target.path,
+            targetSlot: target.targetSlot,
+            contextLabel: label,
+            depth: indexPath.length
         });
     };
 
@@ -326,13 +370,26 @@ const NavigatorDrafting: Component = () => {
                             }
                             highlightedPath={highlightedTreePath()}
                             confirmedDepth={confirmedDepth()}
-                            scenarioPaths={scenarios().map((scenario, index) => ({
-                                path: scenario.treePath,
-                                tier:
-                                    selectedScenarioIndex() === index
-                                        ? "selected"
-                                        : "unselected"
-                            }))}
+                            scenarioPaths={(() => {
+                                const synth = syntheticTree();
+                                if (!synth) return [];
+                                return scenarios().flatMap((scenario, index) => {
+                                    const path = pathStepsToIndexPath(
+                                        synth,
+                                        scenario.treePath
+                                    );
+                                    if (!path) return [];
+                                    return [
+                                        {
+                                            path,
+                                            tier:
+                                                selectedScenarioIndex() === index
+                                                    ? ("selected" as const)
+                                                    : ("unselected" as const)
+                                        }
+                                    ];
+                                });
+                            })()}
                             panRequest={panRequest()}
                             onNodeClick={handleNodeClick}
                             onPromoteToScenario={handlePromoteToScenario}
@@ -341,8 +398,8 @@ const NavigatorDrafting: Component = () => {
                             onOpenBranch={handleOpenBranch}
                         />
 
-                        <Show when={isStale()}>
-                            <div class="pointer-events-none absolute right-4 top-4 flex items-center gap-2">
+                        <div class="pointer-events-none absolute right-4 top-4 flex items-center gap-2">
+                            <Show when={isStale()}>
                                 <span class="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-amber-300">
                                     Stale
                                 </span>
@@ -353,8 +410,8 @@ const NavigatorDrafting: Component = () => {
                                 >
                                     Retry
                                 </button>
-                            </div>
-                        </Show>
+                            </Show>
+                        </div>
 
                         <Show when={viewingGameNumber() !== null}>
                             <div class="pointer-events-none absolute left-4 top-4 rounded-full border border-slate-500/40 bg-slate-900/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-200">
@@ -381,9 +438,9 @@ const NavigatorDrafting: Component = () => {
                         onSelect={(newChampionId) => {
                             const currentTarget = target();
                             swapChampion({
-                                pathToParent: currentTarget.path.slice(0, -1),
-                                newChampionId,
-                                oldChampionId: currentTarget.oldChampionId
+                                path: currentTarget.path,
+                                targetSlot: currentTarget.targetSlot,
+                                newChampionId
                             });
                             setSwapTarget(null);
                         }}
@@ -402,7 +459,8 @@ const NavigatorDrafting: Component = () => {
                         onSelect={(newChampionId) => {
                             const t = target();
                             createBranch({
-                                pathToParent: t.pathToParent,
+                                path: t.path,
+                                targetSlot: t.targetSlot,
                                 newChampionId
                             });
                             setBranchTarget(null);

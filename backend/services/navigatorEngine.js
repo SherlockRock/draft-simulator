@@ -1,130 +1,66 @@
-const fs = require("fs");
 const path = require("path");
-const { pathToFileURL } = require("url");
 
 const NavigatorSnapshot = require("../models/NavigatorSnapshot");
 const { getCrossGameExclusions } = require("../utils/navigatorSeriesRestrictions");
+const { Engine, CancelToken } = require("@draft-sim/engine-node");
+const { currentTurn } = require("../utils/navigatorTurns");
 
-const ENGINE_INDEX_PATH = path.resolve(
-  __dirname,
-  "../../packages/engine-proto/dist/index.js"
-);
-const ENGINE_TURN_SEQUENCE_PATH = path.resolve(
-  __dirname,
-  "../../packages/engine-proto/dist/draft-state.js"
-);
 const CHAMPION_META_PATH = path.resolve(
   __dirname,
-  "../../data/compiled/champion-meta.json"
+  "../../data/compiled/champion-meta.json",
 );
 const MATCHUP_DATA_PATH = path.resolve(
   __dirname,
-  "../../data/compiled/matchup-data.json"
+  "../../data/compiled/matchup-data.json",
 );
 
-const FALLBACK_TURN_SEQUENCE = [
-  { side: "blue", type: "ban", phase: "ban1", pairStart: false, pairEnd: false },
-  { side: "red", type: "ban", phase: "ban1", pairStart: false, pairEnd: false },
-  { side: "blue", type: "ban", phase: "ban1", pairStart: false, pairEnd: false },
-  { side: "red", type: "ban", phase: "ban1", pairStart: false, pairEnd: false },
-  { side: "blue", type: "ban", phase: "ban1", pairStart: false, pairEnd: false },
-  { side: "red", type: "ban", phase: "ban1", pairStart: false, pairEnd: false },
-  { side: "blue", type: "pick", phase: "pick1", pairStart: false, pairEnd: false },
-  { side: "red", type: "pick", phase: "pick1", pairStart: true, pairEnd: false },
-  { side: "red", type: "pick", phase: "pick1", pairStart: false, pairEnd: true },
-  { side: "blue", type: "pick", phase: "pick1", pairStart: true, pairEnd: false },
-  { side: "blue", type: "pick", phase: "pick1", pairStart: false, pairEnd: true },
-  { side: "red", type: "pick", phase: "pick1", pairStart: false, pairEnd: false },
-  { side: "red", type: "ban", phase: "ban2", pairStart: false, pairEnd: false },
-  { side: "blue", type: "ban", phase: "ban2", pairStart: false, pairEnd: false },
-  { side: "red", type: "ban", phase: "ban2", pairStart: false, pairEnd: false },
-  { side: "blue", type: "ban", phase: "ban2", pairStart: false, pairEnd: false },
-  { side: "red", type: "pick", phase: "pick2", pairStart: false, pairEnd: false },
-  { side: "blue", type: "pick", phase: "pick2", pairStart: true, pairEnd: false },
-  { side: "blue", type: "pick", phase: "pick2", pairStart: false, pairEnd: true },
-  { side: "red", type: "pick", phase: "pick2", pairStart: false, pairEnd: false },
-];
+const EXPECTED_PROTOCOL_MAJOR = 1;
 
-let engine = null;
-let engineModulePromise = null;
-let turnSequencePromise = null;
-let pending = null;
-const queue = [];
+// αβ's 5000ms is the compute deadline (it's a one-shot algorithm).
+const AB_COMPUTE_BUDGET_MS = 5000;
 
-const cachedMetaData = loadMetaData();
+// Default rev-4 phase weights, ported from packages/engine-proto/src/weights.ts.
+//
+// Pick2 coverage bumped from 0.6 → 1.5 to overcome high-WR mismatch dominance
+// at 3-missing-role pair turns. Detail: the coverage_score gap between a
+// 1-missing-role comp (≈0.398) and a 2-missing-role comp (≈0.158) is bounded
+// to 0.24 by the geometric-mean formula. With weight 0.6, that's a 0.144
+// signal — smaller than the per-pick win-rate sum gap when 2 high-WR singles
+// out-tier 2 specialists by ≈0.10 WR each. Weight 1.5 puts the coverage
+// signal at ≈0.36, which dominates realistic WR gaps.
+const DEFAULT_PHASE_WEIGHTS = {
+  blue: {
+    ban1: { comp: 0.35, info: 0.65, coverage: 0.0 },
+    pick1: { comp: 0.5, info: 0.5, coverage: 0.3 },
+    ban2: { comp: 0.6, info: 0.4, coverage: 0.4 },
+    pick2: { comp: 0.8, info: 0.2, coverage: 1.5 },
+  },
+  red: {
+    ban1: { comp: 0.3, info: 0.7, coverage: 0.0 },
+    pick1: { comp: 0.4, info: 0.6, coverage: 0.3 },
+    ban2: { comp: 0.5, info: 0.5, coverage: 0.4 },
+    pick2: { comp: 0.8, info: 0.2, coverage: 1.5 },
+  },
+};
 
-function loadJsonOnce(filePath) {
-  return JSON.parse(fs.readFileSync(filePath, "utf8"));
-}
+// Engine.create is synchronous and parses JSON files at construction time.
+// Eager initialization keeps the first compute() call cold-cache-free.
+const engine = Engine.create({
+  championMetaPath: CHAMPION_META_PATH,
+  matchupDataPath: MATCHUP_DATA_PATH,
+});
 
-function loadMetaData() {
-  const championMeta = loadJsonOnce(CHAMPION_META_PATH);
-  const matchupData = loadJsonOnce(MATCHUP_DATA_PATH);
-  const champions = championMeta.champions || {};
+// Per-session active token for the αβ supersession path. When a new compute
+// is dispatched for a session, the prior token (if any) is cancelled so the
+// in-flight Rust compute aborts within ~50ms (Phase 8.3 gate).
+const activeTokens = new Map();
 
-  return {
-    winRates: Object.values(champions).reduce((acc, champion) => {
-      acc[champion.id] = champion.winRate;
-      return acc;
-    }, {}),
-    synergies: Array.isArray(matchupData.synergyRules) ? matchupData.synergyRules : [],
-    counters: matchupData.counters || {},
-  };
-}
-
-function loadPickRates() {
-  const championMeta = loadJsonOnce(CHAMPION_META_PATH);
-  const champions = championMeta.champions || {};
-  return Object.values(champions).reduce((acc, champion) => {
-    acc[champion.id] = champion.pickRate ?? 0;
-    return acc;
-  }, {});
-}
-
-// Pre-Rust engine has O(n^2) pair generation in filterPairs. Pools over ~60
-// champions exceed the 2s latencyBudget. Cap the search pool by pickRate —
-// the engine already selects top-branchWidth moves via orderMoves, so this
-// just moves the cap earlier. Remove when Rust engine lands.
-const MAX_ENGINE_SEARCH_POOL = 60;
-const cachedPickRates = loadPickRates();
-
-function capSearchPool(ids) {
-  if (ids.length <= MAX_ENGINE_SEARCH_POOL) return ids;
-  return [...ids]
-    .sort((a, b) => (cachedPickRates[b] ?? 0) - (cachedPickRates[a] ?? 0))
-    .slice(0, MAX_ENGINE_SEARCH_POOL);
-}
-
-async function loadEngineModule() {
-  if (!engineModulePromise) {
-    engineModulePromise = import(pathToFileURL(ENGINE_INDEX_PATH).href);
+function decodeEngineError(err) {
+  try {
+    return JSON.parse(err.message);
+  } catch {
+    return { code: "engine.internal", message: String(err && err.message), path: [] };
   }
-
-  return engineModulePromise;
-}
-
-async function loadTurnSequence() {
-  if (!turnSequencePromise) {
-    turnSequencePromise = import(pathToFileURL(ENGINE_TURN_SEQUENCE_PATH).href)
-      .then((module) => module.TURN_SEQUENCE || FALLBACK_TURN_SEQUENCE)
-      .catch(() => FALLBACK_TURN_SEQUENCE);
-  }
-
-  return turnSequencePromise;
-}
-
-async function getEngine() {
-  if (engine) {
-    return engine;
-  }
-
-  const engineModule = await loadEngineModule();
-  if (typeof engineModule.createEngine !== "function") {
-    throw new Error("engine-proto createEngine() export is unavailable");
-  }
-
-  engine = engineModule.createEngine();
-  return engine;
 }
 
 function isRealDraftEvent(event) {
@@ -135,37 +71,50 @@ function sortEvents(events) {
   return [...(Array.isArray(events) ? events : [])].sort((a, b) => {
     const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-
-    if (aTime !== bTime) {
-      return aTime - bTime;
-    }
-
+    if (aTime !== bTime) return aTime - bTime;
     if (typeof a.slot === "number" && typeof b.slot === "number" && a.slot !== b.slot) {
       return a.slot - b.slot;
     }
-
-    if (a.id && b.id) {
-      return String(a.id).localeCompare(String(b.id));
-    }
-
+    if (a.id && b.id) return String(a.id).localeCompare(String(b.id));
     return 0;
   });
 }
 
-async function buildEngineRequest(session, events, exclusions) {
-  const turnSequence = await loadTurnSequence();
+// Maps the JS-side pool shape (lowercase keys, "mid" instead of "middle") to
+// the protocol's display map (uppercase keys, "MIDDLE"). Cross-game-excluded
+// champions are filtered out of both display and search.
+function toProtocolTeamPool(pool, excluded) {
+  const isExcluded = (id) => excluded.has(id);
+  const display = pool.display || {};
+  const filterArr = (arr) => (Array.isArray(arr) ? arr.filter((id) => !isExcluded(id)) : []);
+  return {
+    display: {
+      TOP: filterArr(display.top),
+      JUNGLE: filterArr(display.jungle),
+      MIDDLE: filterArr(display.mid),
+      ADC: filterArr(display.adc),
+      SUPPORT: filterArr(display.support),
+    },
+    search: filterArr(pool.search),
+  };
+}
+
+const EMPTY_POOL = {
+  display: { top: [], jungle: [], mid: [], adc: [], support: [] },
+  search: [],
+};
+
+async function buildEngineRequest(session, events, exclusions, forcedBranches = []) {
   const orderedEvents = sortEvents(events);
   const realEvents = orderedEvents.filter(isRealDraftEvent);
   const bans = [];
   const picks = [];
-
   for (const event of realEvents) {
     const normalized = {
       championId: event.champion_id,
       side: event.side,
       slot: event.slot,
     };
-
     if (event.event_type === "ban") {
       bans.push(normalized);
     } else {
@@ -174,187 +123,210 @@ async function buildEngineRequest(session, events, exclusions) {
   }
 
   const turnIndex = realEvents.length;
-  const currentTurn = turnSequence[turnIndex];
-
-  if (!currentTurn) {
+  const turn = currentTurn(realEvents.length);
+  if (!turn) {
     throw new Error("Cannot compute navigator snapshot: draft is complete");
   }
 
-  const EMPTY_TEAM_POOL = {
-    display: { top: [], jungle: [], mid: [], adc: [], support: [] },
-    search: [],
-  };
-  const bluePool = session.blue_pool || EMPTY_TEAM_POOL;
-  const redPool = session.red_pool || EMPTY_TEAM_POOL;
   const excluded = new Set(exclusions || []);
-  const flattenDisplay = (d) => [
-    ...(d.top || []),
-    ...(d.jungle || []),
-    ...(d.mid || []),
-    ...(d.adc || []),
-    ...(d.support || []),
-  ];
-  const ourPool = session.our_side === "red" ? redPool : bluePool;
+  const blue = toProtocolTeamPool(session.blue_pool || EMPTY_POOL, excluded);
+  const red = toProtocolTeamPool(session.red_pool || EMPTY_POOL, excluded);
 
-  const rawSearchPool = Array.from(
-    new Set([...(bluePool.search || []), ...(redPool.search || [])])
-  ).filter((id) => !excluded.has(id));
-  const searchPool = capSearchPool(rawSearchPool);
-  const coreTier = flattenDisplay(ourPool.display || {}).filter(
-    (id) => !excluded.has(id)
-  );
-
-  return {
+  const request = {
+    protocolVersion: "1.1.0",
     draftState: {
       format: "standard",
       bans,
       picks,
-      currentPhase: currentTurn.phase,
+      currentPhase: turn.phase,
       currentSlot: turnIndex,
-      currentSide: currentTurn.side,
+      currentSide: turn.side,
     },
-    searchPool,
-    opponentModel: {
-      type: "meta",
-      weights: {},
-      conditionalAdjustments: {},
+    pools: {
+      ourSide: session.our_side === "red" ? "red" : "blue",
+      blue,
+      red,
+      crossGameExclusions: Array.from(excluded),
     },
+    opponentModel: { type: "meta", weights: {} },
     playerModel: {
-      championTiers: {
-        core: coreTier,
-        playable: [],
-        emergency: [],
-      },
+      championTiers: { core: [], playable: [], emergency: [] },
       weights: {},
     },
-    metaData: cachedMetaData,
     config: {
-      branchWidth: 5,
-      maxDepth: 8,
-      broadDepth: 8,
-      extensionTurnThreshold: 8,
-      latencyBudgetMs: 2000,
-      forcedMoves: [],
+      search: {
+        branchWidth: 5,
+        pairBranchWidth: 500,
+        singlePairTopK: 32,
+        maxDepth: 8,
+        broadDepth: 8,
+        extensionTurnThreshold: 8,
+        latencyBudgetMs: AB_COMPUTE_BUDGET_MS,
+      },
+      weights: {
+        phaseWeights: DEFAULT_PHASE_WEIGHTS,
+        penalties: { outOfRole: 0.25, outOfPool: 0.75 },
+        synergyMultiplier: 1.0,
+        counterMultiplier: 1.0,
+        flexRetentionWeight: 1.0,
+        revealCostWeight: 1.0,
+      },
+      profile: "firstpick-default-v1",
+      forcedBranches,
     },
   };
+
+  return request;
 }
 
 function getLastEventId(events) {
-  const orderedEvents = sortEvents(events);
-  return orderedEvents.length > 0 ? orderedEvents[orderedEvents.length - 1].id : null;
+  const ordered = sortEvents(events);
+  return ordered.length > 0 ? ordered[ordered.length - 1].id : null;
 }
 
-async function storeSnapshot(navigatorDraft, lastEventId, output) {
-  const snapshot = await NavigatorSnapshot.create({
-    navigator_draft_id: navigatorDraft.id,
-    after_event_id: lastEventId,
-    pruned_tree: output.tree,
-    scenarios: output.scenarios,
-    compute_meta: output.meta,
-  });
-
+// Pure transformation: returns the in-memory wire shape used by the αβ
+// one-shot persistence path. No DB write. id/createdAt/updatedAt are nulled
+// out here and filled in by persistSnapshot.
+function shapeSnapshot(navigatorDraftId, lastEventId, response) {
   return {
-    id: snapshot.id,
-    navigator_draft_id: snapshot.navigator_draft_id,
-    after_event_id: snapshot.after_event_id,
-    tree: snapshot.pruned_tree,
-    scenarios: snapshot.scenarios,
-    meta: snapshot.compute_meta,
-    createdAt: snapshot.createdAt,
-    updatedAt: snapshot.updatedAt,
+    source: "persisted",
+    id: null,
+    navigator_draft_id: navigatorDraftId,
+    after_event_id: lastEventId,
+    tree: response.tree,
+    scenarios: response.scenarios,
+    meta: response.meta,
+    createdAt: null,
+    updatedAt: null,
   };
 }
 
-async function processQueue() {
-  if (pending || queue.length === 0) {
-    return pending;
-  }
-
-  const next = queue.shift();
-
-  pending = (async () => {
-    try {
-      const activeEngine = await getEngine();
-      const output = await activeEngine.compute(next.request);
-      const snapshot = await storeSnapshot(next.navigatorDraft, next.lastEventId, output);
-      next.resolve(snapshot);
-    } catch (error) {
-      next.reject(error);
-    } finally {
-      pending = null;
-      processQueue().catch((queueError) => {
-        console.error("Navigator engine queue failed", queueError);
-      });
-    }
-  })();
-
-  return pending;
-}
-
-async function enqueue(request, navigatorDraft, lastEventId, version) {
-  return new Promise((resolve, reject) => {
-    queue.push({ request, navigatorDraft, lastEventId, version, resolve, reject });
-    processQueue().catch((error) => {
-      console.error("Navigator engine queue failed to start", error);
-    });
+// Persists a shaped snapshot via the NavigatorSnapshot model and merges the
+// row's id/createdAt/updatedAt into the returned wire shape.
+async function persistSnapshot(shaped) {
+  const row = await NavigatorSnapshot.create({
+    navigator_draft_id: shaped.navigator_draft_id,
+    after_event_id: shaped.after_event_id,
+    pruned_tree: shaped.tree,
+    scenarios: shaped.scenarios,
+    compute_meta: shaped.meta,
   });
+  return {
+    ...shaped,
+    source: "persisted",
+    id: row.id,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
-async function computeForDraft(navigatorDraft, session, events, version, io) {
-  void io;
+// Composition kept for existing callers (computeForDraft). T10's partial-emit
+// path will use shapeSnapshot directly without persisting.
+async function storeSnapshot(navigatorDraft, lastEventId, response) {
+  return persistSnapshot(shapeSnapshot(navigatorDraft.id, lastEventId, response));
+}
 
+function assertProtocolMajor(version) {
+  const major = parseInt(String(version || "0").split(".")[0], 10);
+  if (!Number.isFinite(major) || major !== EXPECTED_PROTOCOL_MAJOR) {
+    throw new Error(
+      `engine/backend protocol mismatch: engine returned "${version}", backend expects "${EXPECTED_PROTOCOL_MAJOR}.x"`,
+    );
+  }
+}
+
+// Cancel any prior in-flight compute for this session so the Rust engine
+// aborts (≤50ms via Phase 8.3 gate). The new compute then dispatches.
+function supersedePriorCompute(sessionId) {
+  const priorToken = activeTokens.get(sessionId);
+  if (priorToken && priorToken.token && !priorToken.token.isCancelled()) {
+    priorToken.token.cancel();
+  }
+}
+
+async function computeForDraft(navigatorDraft, session, events, version, io, options = {}) {
   if (!navigatorDraft || !navigatorDraft.id) {
     throw new Error("navigatorDraft.id is required");
   }
-
   if (!session) {
     throw new Error("session is required");
   }
-
   if (typeof version !== "number") {
     throw new Error("version is required");
   }
+  return computeForDraftAB(navigatorDraft, session, events, version, io, options);
+}
 
+async function computeForDraftAB(navigatorDraft, session, events, version, io, options = {}) {
+  void io;
   const exclusions = await getCrossGameExclusions(session, navigatorDraft);
-  const request = await buildEngineRequest(session, events, exclusions);
+  const request = await buildEngineRequest(
+    session,
+    events,
+    exclusions,
+    options.forcedBranches || [],
+  );
   const lastEventId = getLastEventId(events);
-  const snapshot = await enqueue(request, navigatorDraft, lastEventId, version);
+
+  await supersedePriorCompute(session.id);
+  const token = new CancelToken();
+  activeTokens.set(session.id, { version, token });
+
+  let responseJson;
+  try {
+    responseJson = await engine.compute(JSON.stringify(request), token);
+  } catch (err) {
+    const decoded = decodeEngineError(err);
+    if (decoded.code === "engine.cancelled") {
+      // Supersession-driven cancel — swallow silently. The newer compute will
+      // produce the snapshot. No DB write.
+      return { version, snapshot: null, cancelled: true };
+    }
+    // engine.timeout / engine.invalid_input / engine.internal: surface to caller.
+    const error = new Error(decoded.message || "engine error");
+    error.code = decoded.code || "engine.internal";
+    error.path = decoded.path || [];
+    throw error;
+  } finally {
+    // Clean up the active-token slot only if we still own it (avoid clobbering
+    // a newer compute's token that already replaced ours).
+    const current = activeTokens.get(session.id);
+    if (current && current.version === version) {
+      activeTokens.delete(session.id);
+    }
+  }
+
+  const response = JSON.parse(responseJson);
+  assertProtocolMajor(response.protocolVersion);
+
+  // Snapshot policy (spec § Node ↔ Rust Boundary "Timeout partial snapshot
+  // persistence" + "No snapshot writes for cancelled jobs"):
+  //   meta.cancelled === true  → swallow (no broadcast, no persist)
+  //   otherwise                → broadcast + persist (including timeout-with-partial)
+  if (response.meta && response.meta.cancelled === true) {
+    return { version, snapshot: null, partial: response };
+  }
+
+  const snapshot = await storeSnapshot(navigatorDraft, lastEventId, response);
   return { version, snapshot };
 }
 
 function getEngineStatus() {
-  return {
-    busy: pending !== null,
-    queueLength: queue.length,
-  };
+  return { activeSessions: activeTokens.size };
 }
 
 async function shutdownEngine() {
-  const activePending = pending;
-
-  while (queue.length > 0) {
-    const queued = queue.shift();
-    queued.reject(new Error("Navigator engine shutdown"));
+  for (const { token } of activeTokens.values()) {
+    if (token && !token.isCancelled()) token.cancel();
   }
-
-  if (engine) {
-    engine.terminate();
-    engine = null;
-  }
-
-  try {
-    await activePending;
-  } catch (error) {
-    if (error && error.message !== "Engine terminated") {
-      throw error;
-    }
-  } finally {
-    pending = null;
-  }
+  activeTokens.clear();
 }
 
 module.exports = {
   computeForDraft,
   getEngineStatus,
   shutdownEngine,
+  shapeSnapshot,
+  persistSnapshot,
+  getLastEventId,
 };

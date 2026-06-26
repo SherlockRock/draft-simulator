@@ -1,0 +1,25 @@
+{
+  "protocolVersion": "1.0.0",
+  "engineId": "firstpick/v1.0.0",
+  "tree": {
+    "championIds": [],
+    "scores": { "composite": 0, "compStrength": 0, "informationValue": 0, "flexRetention": 0, "revealCost": 0, "roleCoverage": 0 },
+    "assignmentDistribution": [],
+    "side": null,
+    "slots": [],
+    "actionType": "ban",
+    "phase": "ban1",
+    "userInjected": false,
+    "children": []
+  },
+  "scenarios": [],
+  "meta": {
+    "nodesEvaluated": 0,
+    "computeTimeMs": 0,
+    "pruningRate": 0,
+    "depthReached": 0,
+    "transpositionsFound": 0,
+    "forcedBranchesDropped": 0,
+    "cancelled": false
+  }
+}

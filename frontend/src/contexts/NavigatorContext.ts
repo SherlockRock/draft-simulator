@@ -40,16 +40,25 @@ export interface NavigatorTreeNode {
     confirmedChampionIds?: string[];
 }
 
+/** Content-addressed path step matching `engine-protocol`'s `PathStep`.
+ *  See spec § "Engine Protocol → treePath": each step identifies a hop by the
+ *  `(slot, championIds)` tuple of the child node, not by sibling index. */
+export interface NavigatorScenarioPathStep {
+    slot: number;
+    championIds: string[];
+}
+
 export interface NavigatorScenario {
     name: string;
     scores: Pick<NavigatorScoreSet, "composite" | "compStrength" | "informationValue">;
     description: string;
     bluePicks: string[];
-    likelyAssignments: NavigatorWeightedAssignment[];
     redPicks: string[];
     blueBans: string[];
     redBans: string[];
-    treePath: number[];
+    blueLikelyAssignments: NavigatorWeightedAssignment[];
+    redLikelyAssignments: NavigatorWeightedAssignment[];
+    treePath: NavigatorScenarioPathStep[];
     perspective: "robust" | "likely" | "off_profile";
     indicators: string[];
 }
@@ -109,7 +118,8 @@ export interface NavigatorEventData {
 }
 
 export interface NavigatorSnapshotData {
-    id: string;
+    source: "persisted" | "cache";
+    id: string | null;
     navigator_draft_id: string;
     after_event_id: string | null;
     tree: NavigatorTreeNode;
@@ -121,7 +131,7 @@ export interface NavigatorSnapshotData {
         depthReached: number;
         transpositionsFound: number;
     } | null;
-    createdAt: string;
+    createdAt: string | null;
 }
 
 export interface NavigatorPanRequest {
@@ -136,10 +146,14 @@ export interface NodeLayoutOverride {
 export interface NavigatorWorkflowContextValue {
     navigatorContext: Accessor<NavigatorSessionState>;
     syntheticTree: Accessor<NavigatorTreeNode | null>;
+    effectiveScenarios: Accessor<NavigatorScenario[]>;
     isComputing: Accessor<boolean>;
+    /** The meta block to show in the Computing readout. Reads the persisted
+     *  snapshot's meta. Null when there is no meta block. */
+    currentMeta: Accessor<NavigatorSnapshotData["meta"]>;
     joinSession: (sessionId: string) => void;
     leaveSession: () => void;
-    emitPick: (draftId: string, championId: string, slot: number) => void;
+    emitPickStep: (draftId: string, championIds: string[], firstSlot: number) => void;
     emitBan: (draftId: string, championId: string, slot: number) => void;
     emitUndo: (draftId: string) => void;
     startDraft: () => void;
@@ -152,7 +166,7 @@ export interface NavigatorWorkflowContextValue {
     setSelectedScenarioIndex: (index: number | null) => void;
     panRequest: Accessor<NavigatorPanRequest | null>;
     setPanRequest: (request: NavigatorPanRequest | null) => void;
-    requestScenarioPan: (treePath: number[]) => void;
+    requestScenarioPan: (treePath: NavigatorScenarioPathStep[]) => void;
     manualExpansionKeys: Accessor<ReadonlySet<string>>;
     manualCollapseKeys: Accessor<ReadonlySet<string>>;
     setManualExpansionKeys: (
@@ -165,12 +179,13 @@ export interface NavigatorWorkflowContextValue {
     setLayoutOverride: (nodeKey: string, override: NodeLayoutOverride | null) => void;
     clearAllLayoutOverrides: () => void;
     swapChampion: (params: {
-        pathToParent: number[];
+        path: { slot: number; championIds: string[] }[];
+        targetSlot: number;
         newChampionId: string;
-        oldChampionId: string;
     }) => void;
     createBranch: (params: {
-        pathToParent: number[];
+        path: { slot: number; championIds: string[] }[];
+        targetSlot: number;
         newChampionId: string;
     }) => void;
 }

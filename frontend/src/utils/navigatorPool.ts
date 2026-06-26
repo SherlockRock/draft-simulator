@@ -1,17 +1,14 @@
 import type { TeamPool, RolePoolMap } from "@draft-sim/shared-types";
 
 export type PickerState =
-    | "picked"        // already banned or picked in the draft
-    | "own-team"      // in the current turn's team display pool only
-    | "other-team"    // in the other team's display pool only
-    | "shared"        // in both teams' display pools
-    | "neutral";      // in neither team's display pool
+    | "picked" // already banned or picked in the draft
+    | "own-team" // in the current turn's team display pool only
+    | "other-team" // in the other team's display pool only
+    | "shared" // in both teams' display pools
+    | "neutral"; // in neither team's display pool
 
 // Returns true if a champion ID is in any role list of a team's display pool.
-export function isInTeamDisplay(
-    championId: string,
-    teamPool: TeamPool
-): boolean {
+export function isInTeamDisplay(championId: string, teamPool: TeamPool): boolean {
     const display = teamPool.display;
     return (
         display.top.includes(championId) ||

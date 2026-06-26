@@ -58,8 +58,8 @@ export const PoolEditModal: Component<PoolEditModalProps> = (props) => {
                                 Edit Pools
                             </h2>
                             <p class="mt-1 text-xs text-slate-400">
-                                Changes apply to all future games in this series.
-                                Past games remain frozen.
+                                Changes apply to all future games in this series. Past
+                                games remain frozen.
                             </p>
                         </div>
                     </div>

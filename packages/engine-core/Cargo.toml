@@ -1,0 +1,35 @@
+[package]
+name = "engine-core"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[[bench]]
+name = "pair_turn_171"
+harness = false
+
+[[bench]]
+name = "cancellation_latency"
+harness = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+rayon.workspace = true
+thiserror.workspace = true
+
+[build-dependencies]
+typify = "0.2"
+schemars = "0.8"
+serde_json = "1"
+prettyplease = "0.2"
+syn = { version = "2", features = ["full"] }
+
+[dev-dependencies]
+insta = { version = "1.40", features = ["yaml"] }
+proptest = "1.5"
+criterion = { version = "0.5", features = ["html_reports"] }

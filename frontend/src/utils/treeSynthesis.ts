@@ -1,6 +1,7 @@
 import type {
     NavigatorEventData,
     NavigatorScenario,
+    NavigatorScenarioPathStep,
     NavigatorTreeNode
 } from "../contexts/NavigatorContext";
 import type { DraftStateSummary } from "./draftEventsToState";
@@ -213,23 +214,29 @@ function emptyNodeChildren(): NavigatorTreeNode {
 }
 
 /**
- * Translate an engine-tree scenario path into the synthetic-tree index path.
+ * Translate an engine-relative scenario path into a synthetic-tree-relative
+ * content-addressed path.
  *
- * The synthetic tree prepends one zero per spine step from the overall root
- * down to the fanout-parent. When there are N>0 confirmed turns that's N zeros
- * (root → turn[0] → ... → turn[N-1], each via `children[0]`). When N=0 it's
- * one zero (root → engine-root placeholder). The engine's `treePath` indexes
- * from the fanout-parent's children outward, so the full synthetic path is
- * `[...spinePrefix, ...scenario.treePath]`.
+ * The synthetic tree wraps the engine tree with one spine node per confirmed
+ * turn (excluding pair-pending — see `spineNodeCount`), plus one synthetic
+ * root above. The engine's `treePath` is content-addressed and starts from the
+ * fanout-parent's children. The full synthetic-relative path is
+ * `[...spinePrefix, ...scenario.treePath]` where each prefix step matches one
+ * spine node by `(slot, championIds)`. When no turns are confirmed the prefix
+ * is a single step matching the engine-root placeholder (championIds: []).
  */
 export function remapScenarioPath(
     scenario: NavigatorScenario,
-    spineLength: number
+    confirmedTurns: ConfirmedTurn[]
 ): NavigatorScenario {
-    // Path length from the overall root to the fanout-parent (one link when
-    // no turns are confirmed, otherwise one link per confirmed turn).
-    const prefixLength = Math.max(spineLength, 1);
-    const spinePrefix = Array.from({ length: prefixLength }, () => 0);
+    const spineLength = spineNodeCount(confirmedTurns);
+    const spinePrefix: NavigatorScenarioPathStep[] =
+        spineLength === 0
+            ? [{ slot: 0, championIds: [] }]
+            : confirmedTurns.slice(0, spineLength).map((turn) => ({
+                  slot: turn.slots[0],
+                  championIds: [...turn.championIds]
+              }));
     return {
         ...scenario,
         treePath: [...spinePrefix, ...scenario.treePath]
@@ -238,9 +245,9 @@ export function remapScenarioPath(
 
 export function remapScenarios(
     scenarios: NavigatorScenario[],
-    spineLength: number
+    confirmedTurns: ConfirmedTurn[]
 ): NavigatorScenario[] {
-    return scenarios.map((scenario) => remapScenarioPath(scenario, spineLength));
+    return scenarios.map((scenario) => remapScenarioPath(scenario, confirmedTurns));
 }
 
 function prependConfirmedValues(projected: string[], confirmed: string[]): string[] {
@@ -456,37 +463,79 @@ function mergeChildren(
         }
     }
 
+    // Preserve absent-from-fresh children only when they have a reason to stick
+    // around (scenario lane or user-pinned). Otherwise dropping out of the
+    // engine's top-K means the child is stale — keeping it lets ghost branches
+    // accumulate across successive emits.
+    const scenarioSegmentsAtDepth = scenarioSegmentsAt(
+        priority.scenarioKeyPaths,
+        keyPath.length
+    );
     for (const [key, preservedChild] of preservedByKey) {
         if (visited.has(key)) continue;
+        const thisPath = [...keyPath, key].join(">");
+        const isReferenced =
+            scenarioSegmentsAtDepth.has(key) ||
+            priority.manualExpansionKeyPaths.has(thisPath);
+        if (!isReferenced) continue;
         result.push(preservedChild);
     }
 
-    return trimChildrenByPriority(result, keyPath, priority, branchWidth);
+    return trimChildrenByPriority(
+        result,
+        keyPath,
+        priority,
+        branchWidth,
+        scenarioSegmentsAtDepth
+    );
+}
+
+/** Collect the nodeKeys that appear at `depth` across any scenario path.
+ *  Engine-side wire truncation keeps these (see `to_protocol_tree`'s
+ *  must-keep paths in projection.rs); the frontend trim/preserve logic must
+ *  mirror that contract so rendered scenario lanes match the engine's
+ *  emitted scenarios. */
+function scenarioSegmentsAt(paths: ReadonlyArray<string>, depth: number): Set<string> {
+    const result = new Set<string>();
+    for (const path of paths) {
+        if (path === "") continue;
+        const segs = path.split(">");
+        const seg = segs[depth];
+        if (seg !== undefined) result.add(seg);
+    }
+    return result;
 }
 
 function trimChildrenByPriority(
     children: NavigatorTreeNode[],
     keyPath: string[],
     priority: ReconcilePriority,
-    branchWidth: number
+    branchWidth: number,
+    scenarioSegmentsAtDepth: Set<string> = scenarioSegmentsAt(
+        priority.scenarioKeyPaths,
+        keyPath.length
+    )
 ): NavigatorTreeNode[] {
-    if (children.length <= branchWidth) return children;
-    const selectedSegments = priority.selectedScenarioKeyPath
-        ? priority.selectedScenarioKeyPath.split(">")
-        : [];
-    const selectedAtDepth = selectedSegments[keyPath.length] ?? null;
-
     type Ranked = { child: NavigatorTreeNode; rank: number; score: number };
     const ranked: Ranked[] = children.map((child) => {
         const key = nodeKey(child);
         const thisPath = [...keyPath, key].join(">");
         let rank = 3;
-        if (selectedAtDepth === key) rank = 0;
+        if (scenarioSegmentsAtDepth.has(key)) rank = 0;
         else if (priority.manualExpansionKeyPaths.has(thisPath)) rank = 1;
         return { child, rank, score: child.scores.composite };
     });
-    ranked.sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : b.score - a.score));
-    return ranked.slice(0, branchWidth).map((entry) => entry.child);
+
+    // Keep every rank-0 child unconditionally (scenario lanes are
+    // load-bearing). `branchWidth` is the floor on total kept children, not
+    // a hard ceiling — fill remaining slots from rank-1 then rank-3 by
+    // score, but never drop a scenario-referenced child.
+    const rankZero = ranked.filter((r) => r.rank === 0);
+    const rest = ranked
+        .filter((r) => r.rank !== 0)
+        .sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : b.score - a.score));
+    const fillCount = Math.max(0, branchWidth - rankZero.length);
+    return [...rankZero, ...rest.slice(0, fillCount)].map((entry) => entry.child);
 }
 
 /**

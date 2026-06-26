@@ -130,9 +130,7 @@ const NavigatorDashboard: Component = () => {
                 </div>
 
                 <section class="flex flex-1 flex-col">
-                    <h2 class="mb-5 text-xl font-semibold text-slate-100">
-                        Sessions
-                    </h2>
+                    <h2 class="mb-5 text-xl font-semibold text-slate-100">Sessions</h2>
 
                     <Show
                         when={sessionsQuery.data}
@@ -146,8 +144,7 @@ const NavigatorDashboard: Component = () => {
                             when={(sessionsQuery.data?.length ?? 0) > 0}
                             fallback={
                                 <div class="rounded-lg border border-slate-700/50 bg-slate-800 p-6 text-slate-400">
-                                    No sessions yet. Create one to start analyzing
-                                    drafts.
+                                    No sessions yet. Create one to start analyzing drafts.
                                 </div>
                             }
                         >
@@ -166,9 +163,7 @@ const NavigatorDashboard: Component = () => {
                                                     event.key === " "
                                                 ) {
                                                     event.preventDefault();
-                                                    navigate(
-                                                        `/navigator/${session.id}`
-                                                    );
+                                                    navigate(`/navigator/${session.id}`);
                                                 }
                                             }}
                                             class="flex w-full items-center justify-between gap-4 rounded-lg border border-slate-700/50 bg-slate-800 p-5 text-left transition-colors hover:border-blue-400/50 hover:bg-slate-800/90"
@@ -181,8 +176,7 @@ const NavigatorDashboard: Component = () => {
                                                     </h3>
                                                     <span
                                                         class={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                                                            session.our_side ===
-                                                            "blue"
+                                                            session.our_side === "blue"
                                                                 ? "bg-blue-500/15 text-blue-300 ring-1 ring-blue-500/40"
                                                                 : "bg-red-500/15 text-red-300 ring-1 ring-red-500/40"
                                                         }`}
@@ -214,10 +208,7 @@ const NavigatorDashboard: Component = () => {
                                             <button
                                                 type="button"
                                                 onClick={(event) =>
-                                                    handleDeleteSession(
-                                                        event,
-                                                        session.id
-                                                    )
+                                                    handleDeleteSession(event, session.id)
                                                 }
                                                 class="rounded-lg border border-slate-600 p-2 text-slate-400 transition-colors hover:border-red-400/60 hover:text-red-300"
                                                 aria-label="Delete session"

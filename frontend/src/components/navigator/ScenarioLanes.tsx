@@ -1,4 +1,12 @@
-import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import {
+    Component,
+    For,
+    Show,
+    createMemo,
+    createSignal,
+    onCleanup,
+    onMount
+} from "solid-js";
 import { NavigatorScenario, useNavigatorContext } from "../../contexts/NavigatorContext";
 import ScenarioCard from "./ScenarioCard";
 
@@ -72,6 +80,14 @@ const ScenarioLanes: Component<ScenarioLanesProps> = (props) => {
                                     <div class="mb-2 h-4 w-32 rounded bg-slate-700/50" />
                                     <div class="mb-3 h-3 w-48 rounded bg-slate-700/30" />
                                     <div class="mb-2 flex items-center gap-1">
+                                        <div class="h-7 w-7 rounded-full bg-slate-700/40" />
+                                        <div class="h-7 w-7 rounded-full bg-slate-700/40" />
+                                        <div class="h-7 w-7 rounded-full bg-slate-700/40" />
+                                        <div class="mx-1 h-5 w-px bg-slate-700/30" />
+                                        <div class="h-7 w-7 rounded-full bg-slate-700/40" />
+                                        <div class="h-7 w-7 rounded-full bg-slate-700/40" />
+                                    </div>
+                                    <div class="mb-2 flex items-center gap-1">
                                         <div class="h-7 w-7 rounded-full bg-slate-700/50" />
                                         <div class="mx-1 h-5 w-px bg-slate-700/30" />
                                         <div class="h-7 w-7 rounded-full bg-slate-700/50" />
@@ -79,6 +95,14 @@ const ScenarioLanes: Component<ScenarioLanesProps> = (props) => {
                                         <div class="mx-1 h-5 w-px bg-slate-700/30" />
                                         <div class="h-7 w-7 rounded-full bg-slate-700/50" />
                                         <div class="h-7 w-7 rounded-full bg-slate-700/50" />
+                                    </div>
+                                    <div class="mb-2 flex items-center gap-1">
+                                        <div class="h-7 w-7 rounded-full bg-slate-700/40" />
+                                        <div class="h-7 w-7 rounded-full bg-slate-700/40" />
+                                        <div class="h-7 w-7 rounded-full bg-slate-700/40" />
+                                        <div class="mx-1 h-5 w-px bg-slate-700/30" />
+                                        <div class="h-7 w-7 rounded-full bg-slate-700/40" />
+                                        <div class="h-7 w-7 rounded-full bg-slate-700/40" />
                                     </div>
                                     <div class="flex items-center gap-1">
                                         <div class="h-7 w-7 rounded-full bg-slate-700/30" />
@@ -126,7 +150,11 @@ const ScenarioLanes: Component<ScenarioLanesProps> = (props) => {
                     class="absolute bottom-0 left-0 top-0 z-10 flex w-8 items-center justify-center bg-gradient-to-r from-slate-900/80 to-transparent transition-opacity hover:from-slate-900"
                     onClick={() => scrollBy(-1)}
                 >
-                    <svg class="h-5 w-5 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
+                    <svg
+                        class="h-5 w-5 text-slate-400"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                    >
                         <path
                             fill-rule="evenodd"
                             d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
@@ -141,7 +169,11 @@ const ScenarioLanes: Component<ScenarioLanesProps> = (props) => {
                     class="absolute bottom-0 right-0 top-0 z-10 flex w-8 items-center justify-center bg-gradient-to-l from-slate-900/80 to-transparent transition-opacity hover:from-slate-900"
                     onClick={() => scrollBy(1)}
                 >
-                    <svg class="h-5 w-5 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
+                    <svg
+                        class="h-5 w-5 text-slate-400"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                    >
                         <path
                             fill-rule="evenodd"
                             d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"

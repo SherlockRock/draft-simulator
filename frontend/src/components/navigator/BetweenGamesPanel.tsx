@@ -19,14 +19,11 @@ interface BetweenGamesPanelProps {
 
 export const BetweenGamesPanel: Component<BetweenGamesPanelProps> = (props) => {
     const [editOpen, setEditOpen] = createSignal(false);
-    const [manualChoice, setManualChoice] = createSignal<"blue" | "red" | null>(
-        null
-    );
+    const [manualChoice, setManualChoice] = createSignal<"blue" | "red" | null>(null);
 
     const nextGameNumber = () => props.completedDraft.game_number + 1;
 
-    const autoSide = () =>
-        getProjectedSideForGameNumber(props.session, nextGameNumber());
+    const autoSide = () => getProjectedSideForGameNumber(props.session, nextGameNumber());
 
     const handleStart = () => {
         if (props.session.side_swap_mode === "manual") {
@@ -69,9 +66,7 @@ export const BetweenGamesPanel: Component<BetweenGamesPanelProps> = (props) => {
                     when={props.session.side_swap_mode === "auto"}
                     fallback={
                         <div class="flex flex-col gap-2">
-                            <span class="text-sm text-slate-300">
-                                Choose your side
-                            </span>
+                            <span class="text-sm text-slate-300">Choose your side</span>
                             <div class="flex gap-2">
                                 <button
                                     type="button"
@@ -103,9 +98,7 @@ export const BetweenGamesPanel: Component<BetweenGamesPanelProps> = (props) => {
                         You're on{" "}
                         <span
                             class={
-                                autoSide() === "blue"
-                                    ? "text-blue-300"
-                                    : "text-red-300"
+                                autoSide() === "blue" ? "text-blue-300" : "text-red-300"
                             }
                         >
                             {autoSide() === "blue" ? "Blue" : "Red"}

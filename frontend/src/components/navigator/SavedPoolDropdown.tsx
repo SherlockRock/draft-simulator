@@ -1,10 +1,4 @@
-import {
-    Component,
-    For,
-    Show,
-    createResource,
-    createSignal
-} from "solid-js";
+import { Component, For, Show, createResource, createSignal } from "solid-js";
 import { ChevronDown } from "lucide-solid";
 import toast from "solid-toast";
 import type { RolePoolMap, SavedPool } from "@draft-sim/shared-types";
@@ -53,9 +47,7 @@ export const SavedPoolDropdown: Component<SavedPoolDropdownProps> = (props) => {
     );
 
     const handlePick = (pool: SavedPool) => {
-        const { champions, droppedCount } = sanitizeAgainstCatalog(
-            pool.champions
-        );
+        const { champions, droppedCount } = sanitizeAgainstCatalog(pool.champions);
         if (droppedCount > 0) {
             toast(
                 `Dropped ${droppedCount} champion${droppedCount === 1 ? "" : "s"} no longer in catalog`,
@@ -80,16 +72,10 @@ export const SavedPoolDropdown: Component<SavedPoolDropdownProps> = (props) => {
                 <ChevronDown size={14} />
             </button>
             <Show when={isOpen()}>
-                <div
-                    class="fixed inset-0 z-40"
-                    onClick={() => setIsOpen(false)}
-                />
+                <div class="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
                 <div class="absolute left-0 top-full z-50 mt-1 max-h-[320px] w-72 overflow-y-auto rounded-md border border-slate-700 bg-slate-900 shadow-xl">
                     <Show when={!pools.loading} fallback={<LoadingRow />}>
-                        <Show
-                            when={(pools() ?? []).length > 0}
-                            fallback={<EmptyRow />}
-                        >
+                        <Show when={(pools() ?? []).length > 0} fallback={<EmptyRow />}>
                             <For each={pools() ?? []}>
                                 {(pool) => (
                                     <button

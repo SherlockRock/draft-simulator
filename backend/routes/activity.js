@@ -5,8 +5,10 @@ const Draft = require("../models/Draft");
 const { Canvas, UserCanvas } = require("../models/Canvas");
 const VersusDraft = require("../models/VersusDraft");
 const VersusParticipant = require("../models/VersusParticipant");
+const NavigatorSession = require("../models/NavigatorSession");
 const User = require("../models/User");
 const { getUserFromRequest } = require("../middleware/auth");
+const { mapNavigatorActivityRow } = require("../utils/navigatorActivity");
 
 const getSortOrder = (sort, tableName = null) => {
   const nameCol = tableName ? `LOWER("${tableName}"."name")` : "LOWER(name)";
@@ -43,7 +45,7 @@ router.get("/recent", async (req, res) => {
     const offset = page * pageSize;
 
     // Filter by resource type if provided
-    const resourceType = req.query.resource_type; // 'canvas', 'versus', or undefined for all
+    const resourceType = req.query.resource_type; // 'canvas', 'versus', 'navigator', or undefined for all
 
     // Search and sort parameters
     const search = req.query.search || "";
@@ -54,7 +56,7 @@ router.get("/recent", async (req, res) => {
 
     // Get user's canvases if needed
     const canvases =
-      resourceType === "versus"
+      resourceType && resourceType !== "canvas"
         ? []
         : await Canvas.findAll({
             where: {
@@ -85,7 +87,7 @@ router.get("/recent", async (req, res) => {
 
     // Get user's versus drafts if needed (owned OR participated in)
     let versusDrafts = [];
-    if (resourceType !== "canvas") {
+    if (!resourceType || resourceType === "versus") {
       // Get IDs of versus drafts where user is a participant
       const participatedVersusIds = await VersusParticipant.findAll({
         where: { user_id: user.id },
@@ -134,6 +136,20 @@ router.get("/recent", async (req, res) => {
       });
     }
 
+    // Get user's navigator sessions if needed (owned by the requesting user)
+    let navigatorSessions = [];
+    if (!resourceType || resourceType === "navigator") {
+      navigatorSessions = await NavigatorSession.findAll({
+        where: {
+          user_id: user.id,
+          ...(search && { name: { [Op.iLike]: `%${search}%` } }),
+        },
+        attributes: ["id", "name", "user_id", "createdAt", "updatedAt"],
+        order: getSortOrder(sort),
+        limit: fetchLimit,
+      });
+    }
+
     // Transform canvases to activity format
     const canvasActivities = canvases.map((canvas) => ({
       resource_type: "canvas",
@@ -170,10 +186,16 @@ router.get("/recent", async (req, res) => {
       };
     });
 
+    // Transform navigator sessions to activity format
+    const navigatorActivities = navigatorSessions.map((session) =>
+      mapNavigatorActivityRow(session, user.id),
+    );
+
     // Combine and sort
     const allActivities = [
       ...canvasActivities,
       ...versusActivities,
+      ...navigatorActivities,
     ];
 
     // Sort combined results (case-insensitive for name sorting)

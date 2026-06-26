@@ -36,16 +36,12 @@ export function getChampionPrimaryRole(championId: string): Role | null {
 export function getChampionRoles(championId: string): Role[] {
     const champ = champions.find((c) => c.id === championId);
     if (!champ || !champ.positions) return [];
-    return champ.positions
-        .map(riotPositionToRole)
-        .filter((r): r is Role => r !== null);
+    return champ.positions.map(riotPositionToRole).filter((r): r is Role => r !== null);
 }
 
 // Returns champion IDs that list the given role in their positions.
 export function championsInRole(role: Role): string[] {
     return champions
-        .filter((c) =>
-            (c.positions ?? []).some((p) => riotPositionToRole(p) === role)
-        )
+        .filter((c) => (c.positions ?? []).some((p) => riotPositionToRole(p) === role))
         .map((c) => c.id);
 }

@@ -97,7 +97,8 @@ export const RolePoolAccordion: Component<RolePoolAccordionProps> = (props) => {
                                     class={`relative aspect-square overflow-hidden rounded border-2 transition-all ${
                                         isSelected(champ.id)
                                             ? TEAM_ACCENT[props.teamColor]
-                                            : "border-slate-700 hover:" + TEAM_BORDER[props.teamColor]
+                                            : "hover: border-slate-700" +
+                                              TEAM_BORDER[props.teamColor]
                                     }`}
                                 >
                                     <img

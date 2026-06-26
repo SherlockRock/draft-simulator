@@ -5,7 +5,8 @@ dist
 *.pem
 *.key
 *.local.md
-docs/
+docs/*
+!docs/adr/
 .worktrees
 .desloppify
 .superpowers
@@ -16,3 +17,14 @@ data/raw/*
 !data/raw/.gitkeep
 data/compiled/*
 !data/compiled/.gitkeep
+
+# Rust
+target/
+*.node
+packages/engine-node/index.d.ts
+
+# Generated protocol artifacts
+packages/engine-protocol/schema.json
+packages/engine-protocol/dist/
+packages/engine-core/src/protocol_types.rs
+docs/spikes/v*-data/

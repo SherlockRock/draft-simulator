@@ -1,9 +1,5 @@
 import { Component, For, createSignal } from "solid-js";
-import type {
-    Role,
-    RolePoolMap,
-    SavedPool
-} from "@draft-sim/shared-types";
+import type { Role, RolePoolMap, SavedPool } from "@draft-sim/shared-types";
 import { ROLES } from "../../utils/championRoles";
 import { RolePoolAccordion } from "./RolePoolAccordion";
 import { SavedPoolDropdown } from "./SavedPoolDropdown";
@@ -18,9 +14,7 @@ interface TeamPoolEditorProps {
 }
 
 export const TeamPoolEditor: Component<TeamPoolEditorProps> = (props) => {
-    const [openRoles, setOpenRoles] = createSignal<Set<Role>>(
-        new Set<Role>(["top"])
-    );
+    const [openRoles, setOpenRoles] = createSignal<Set<Role>>(new Set<Role>(["top"]));
     const [saveDialogOpen, setSaveDialogOpen] = createSignal(false);
     const [importDialogOpen, setImportDialogOpen] = createSignal(false);
     const [savedPoolsVersion, setSavedPoolsVersion] = createSignal(0);
@@ -42,10 +36,7 @@ export const TeamPoolEditor: Component<TeamPoolEditorProps> = (props) => {
     };
 
     const totalSelected = () =>
-        ROLES.reduce(
-            (sum, role) => sum + props.displayPool()[role].length,
-            0
-        );
+        ROLES.reduce((sum, role) => sum + props.displayPool()[role].length, 0);
 
     const headerClass =
         props.teamColor === "blue"
@@ -63,9 +54,7 @@ export const TeamPoolEditor: Component<TeamPoolEditorProps> = (props) => {
 
     return (
         <div class="flex flex-col gap-3">
-            <div
-                class={`flex items-center justify-between border-b pb-2 ${headerClass}`}
-            >
+            <div class={`flex items-center justify-between border-b pb-2 ${headerClass}`}>
                 <h2 class="text-lg font-semibold">{props.teamLabel}</h2>
                 <span class="rounded-full border border-slate-600 bg-slate-900 px-2.5 py-1 text-xs font-medium text-slate-300">
                     {totalSelected()} total
@@ -101,12 +90,8 @@ export const TeamPoolEditor: Component<TeamPoolEditorProps> = (props) => {
                             teamColor={props.teamColor}
                             isOpen={openRoles().has(role)}
                             onToggleOpen={() => toggleOpen(role)}
-                            selectedChampionIds={() =>
-                                props.displayPool()[role]
-                            }
-                            onSelectionChange={(ids) =>
-                                setRoleChampions(role, ids)
-                            }
+                            selectedChampionIds={() => props.displayPool()[role]}
+                            onSelectionChange={(ids) => setRoleChampions(role, ids)}
                         />
                     )}
                 </For>

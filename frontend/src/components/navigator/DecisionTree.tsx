@@ -578,7 +578,10 @@ const TreeNodeComponent: Component<{
                                         preserveAspectRatio="xMidYMid slice"
                                         clip-path={`url(#${singleClipId()})`}
                                         class="pointer-events-none"
-                                        style="-webkit-user-drag: none; user-select: none"
+                                        style={{
+                                            "-webkit-user-drag": "none",
+                                            "user-select": "none"
+                                        }}
                                     />
                                 )}
                             </Show>
@@ -635,7 +638,10 @@ const TreeNodeComponent: Component<{
                                         clip-path={`url(#${pairClipLeftId()})`}
                                         opacity={halfOpacity}
                                         class="pointer-events-none transition-opacity duration-150"
-                                        style="-webkit-user-drag: none; user-select: none"
+                                        style={{
+                                            "-webkit-user-drag": "none",
+                                            "user-select": "none"
+                                        }}
                                     />
                                 );
                             }}
@@ -657,7 +663,10 @@ const TreeNodeComponent: Component<{
                                         clip-path={`url(#${pairClipRightId()})`}
                                         opacity={halfOpacity}
                                         class="pointer-events-none transition-opacity duration-150"
-                                        style="-webkit-user-drag: none; user-select: none"
+                                        style={{
+                                            "-webkit-user-drag": "none",
+                                            "user-select": "none"
+                                        }}
                                     />
                                 );
                             }}
@@ -802,8 +811,12 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         const tree = effectiveTreeData();
         if (!tree) return;
         const validPaths = collectNodeKeyPaths(tree);
-        setManualExpansionKeys((prev) => new Set([...prev].filter((k) => validPaths.has(k))));
-        setManualCollapseKeys((prev) => new Set([...prev].filter((k) => validPaths.has(k))));
+        setManualExpansionKeys(
+            (prev) => new Set([...prev].filter((k) => validPaths.has(k)))
+        );
+        setManualCollapseKeys(
+            (prev) => new Set([...prev].filter((k) => validPaths.has(k)))
+        );
         const overrides = layoutOverrides();
         for (const key of overrides.keys()) {
             if (!validPaths.has(key)) {
@@ -982,8 +995,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         if (!node) return [];
 
         const isConfirmed = path.length < props.confirmedDepth;
-        const isDepthOneProjected =
-            !isConfirmed && path.length === props.confirmedDepth;
+        const isDepthOneProjected = !isConfirmed && path.length === props.confirmedDepth;
         const tree = effectiveTreeData();
         const nodeKeyPathString = tree ? pathIndicesToNodeKeyPath(tree, path) : null;
         const hasLayoutOverride =
@@ -1176,7 +1188,10 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
             const dx = moveEvent.pageX - current.startPageX;
             const dy = moveEvent.pageY - current.startPageY;
             const dist2 = dx * dx + dy * dy;
-            if (!current.startedDragging && dist2 < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) {
+            if (
+                !current.startedDragging &&
+                dist2 < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX
+            ) {
                 return;
             }
             if (!current.startedDragging) {
@@ -1322,7 +1337,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         >
             <Show when={props.isComputing}>
                 <div
-                    class="pointer-events-none absolute right-3 top-3 z-10 flex items-center gap-2 rounded-full border border-slate-700/50 bg-slate-900/80 px-3 py-1 text-xs text-slate-300 backdrop-blur"
+                    class="absolute right-3 top-3 z-10 flex items-center gap-2 rounded-full border border-slate-700/50 bg-slate-900/80 px-3 py-1 text-xs text-slate-300 backdrop-blur"
                     role="status"
                     aria-live="polite"
                 >

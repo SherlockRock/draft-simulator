@@ -1,0 +1,374 @@
+use crate::coverage::coverage_score;
+use crate::draft_state::{ActionType, Side};
+use crate::evaluator::ScoreSet;
+use crate::forced_branches::PathStep;
+use crate::role_solver::{self, ChampionMeta, WeightedAssignment};
+use crate::search::TreeNode;
+use std::collections::HashMap;
+
+/// Threshold for "degenerate" coverage. Tunable. Rakan+Rell ≈ 0.003,
+/// healthy comps 0.30–0.60. See plan v4 calibration constants.
+const SCENARIO_FILTER_COVERAGE_FLOOR: f64 = 0.20;
+
+fn full_picks_owned(confirmed: &[String], leaf_picks: &[String]) -> Vec<String> {
+    confirmed.iter().chain(leaf_picks.iter()).cloned().collect()
+}
+
+#[derive(Clone, Debug)]
+pub struct Scenario {
+    pub name: String,
+    pub description: String,
+    pub perspective: Perspective,
+    pub indicators: Vec<String>,
+    pub scores: ScoreSet,
+    pub blue_picks: Vec<String>,
+    pub red_picks: Vec<String>,
+    pub blue_bans: Vec<String>,
+    pub red_bans: Vec<String>,
+    pub blue_likely_assignments: Vec<WeightedAssignment>,
+    pub red_likely_assignments: Vec<WeightedAssignment>,
+    pub tree_path: Vec<PathStep>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Perspective {
+    Robust,
+    Likely,
+    OffProfile,
+}
+
+#[derive(Clone, Debug)]
+pub struct LeafInfo {
+    pub path: Vec<PathStep>,
+    pub blue_picks: Vec<String>,
+    pub red_picks: Vec<String>,
+    pub blue_bans: Vec<String>,
+    pub red_bans: Vec<String>,
+    pub scores: ScoreSet,
+}
+
+pub fn collect_leaves(tree: &TreeNode) -> Vec<LeafInfo> {
+    fn walk(
+        node: &TreeNode,
+        path: &mut Vec<PathStep>,
+        blue_picks: &mut Vec<String>,
+        red_picks: &mut Vec<String>,
+        blue_bans: &mut Vec<String>,
+        red_bans: &mut Vec<String>,
+        leaves: &mut Vec<LeafInfo>,
+    ) {
+        match (node.side, node.action_type) {
+            (Some(Side::Blue), ActionType::Pick) => {
+                blue_picks.extend(node.champion_ids.iter().cloned());
+            }
+            (Some(Side::Red), ActionType::Pick) => {
+                red_picks.extend(node.champion_ids.iter().cloned());
+            }
+            (Some(Side::Blue), ActionType::Ban) => {
+                blue_bans.extend(node.champion_ids.iter().cloned());
+            }
+            (Some(Side::Red), ActionType::Ban) => {
+                red_bans.extend(node.champion_ids.iter().cloned());
+            }
+            (None, _) => {}
+        }
+
+        if node.children.is_empty() {
+            leaves.push(LeafInfo {
+                path: path.clone(),
+                blue_picks: blue_picks.clone(),
+                red_picks: red_picks.clone(),
+                blue_bans: blue_bans.clone(),
+                red_bans: red_bans.clone(),
+                scores: node.scores,
+            });
+        } else {
+            for child in &node.children {
+                path.push(PathStep {
+                    slot: child.slots.first().copied().unwrap_or(0),
+                    champion_ids: child.champion_ids.clone(),
+                });
+                walk(
+                    child,
+                    path,
+                    blue_picks,
+                    red_picks,
+                    blue_bans,
+                    red_bans,
+                    leaves,
+                );
+                path.pop();
+            }
+        }
+
+        match (node.side, node.action_type) {
+            (Some(Side::Blue), ActionType::Pick) => {
+                blue_picks.truncate(blue_picks.len().saturating_sub(node.champion_ids.len()));
+            }
+            (Some(Side::Red), ActionType::Pick) => {
+                red_picks.truncate(red_picks.len().saturating_sub(node.champion_ids.len()));
+            }
+            (Some(Side::Blue), ActionType::Ban) => {
+                blue_bans.truncate(blue_bans.len().saturating_sub(node.champion_ids.len()));
+            }
+            (Some(Side::Red), ActionType::Ban) => {
+                red_bans.truncate(red_bans.len().saturating_sub(node.champion_ids.len()));
+            }
+            (None, _) => {}
+        }
+    }
+
+    let mut leaves = Vec::new();
+    let mut path = Vec::new();
+    let mut blue_picks = Vec::new();
+    let mut red_picks = Vec::new();
+    let mut blue_bans = Vec::new();
+    let mut red_bans = Vec::new();
+
+    for child in &tree.children {
+        path.push(PathStep {
+            slot: child.slots.first().copied().unwrap_or(0),
+            champion_ids: child.champion_ids.clone(),
+        });
+        walk(
+            child,
+            &mut path,
+            &mut blue_picks,
+            &mut red_picks,
+            &mut blue_bans,
+            &mut red_bans,
+            &mut leaves,
+        );
+        path.pop();
+    }
+
+    if tree.children.is_empty() {
+        leaves.push(LeafInfo {
+            path: Vec::new(),
+            blue_picks: Vec::new(),
+            red_picks: Vec::new(),
+            blue_bans: Vec::new(),
+            red_bans: Vec::new(),
+            scores: tree.scores,
+        });
+    }
+
+    leaves
+}
+
+pub fn feature_vector(picks: &[String], meta: &HashMap<String, ChampionMeta>) -> [f64; 7] {
+    if picks.is_empty() {
+        return [0.0; 7];
+    }
+
+    let mut vector = [0.0; 7];
+    let mut count = 0.0;
+
+    for pick in picks {
+        let Some(champion) = meta.get(pick) else {
+            continue;
+        };
+        vector[0] += champion.damage_profile.physical;
+        vector[1] += champion.damage_profile.magic;
+        vector[2] += champion.scaling_profile.early;
+        vector[3] += champion.scaling_profile.mid;
+        vector[4] += champion.scaling_profile.late;
+        vector[5] += champion.cc_profile.engage_quality;
+        vector[6] += champion.cc_profile.peel_quality;
+        count += 1.0;
+    }
+
+    if count == 0.0 {
+        return [0.0; 7];
+    }
+
+    for value in &mut vector {
+        *value /= count;
+    }
+
+    vector
+}
+
+pub fn label_scenario(picks: &[String], meta: &HashMap<String, ChampionMeta>) -> String {
+    let vector = feature_vector(picks, meta);
+    let mut traits = Vec::with_capacity(3);
+
+    if vector[0] > 0.6 {
+        traits.push("Physical Heavy");
+    } else if vector[1] > 0.6 {
+        traits.push("Magic Heavy");
+    } else {
+        traits.push("Mixed Damage");
+    }
+
+    if vector[2] > 0.6 {
+        traits.push("Early Game");
+    } else if vector[4] > 0.6 {
+        traits.push("Late Scaling");
+    } else {
+        traits.push("Mid Game");
+    }
+
+    if vector[5] > 0.4 {
+        traits.push("Hard Engage");
+    } else if vector[6] > 0.4 {
+        traits.push("Peel Focused");
+    }
+
+    traits.into_iter().take(2).collect::<Vec<_>>().join(" / ")
+}
+
+fn vector_distance(a: &[f64; 7], b: &[f64; 7]) -> f64 {
+    let mut sum = 0.0;
+    for (left, right) in a.iter().zip(b.iter()) {
+        let diff = left - right;
+        sum += diff * diff;
+    }
+    sum.sqrt()
+}
+
+pub fn extract_scenarios(
+    tree: &TreeNode,
+    champion_meta: &HashMap<String, ChampionMeta>,
+    max_scenarios: usize,
+    confirmed_blue_picks: &[String],
+    confirmed_red_picks: &[String],
+) -> Vec<Scenario> {
+    let leaves = collect_leaves(tree);
+    if leaves.is_empty() || (leaves.len() == 1 && leaves[0].path.is_empty()) || max_scenarios == 0
+    {
+        return Vec::new();
+    }
+
+    let mut featured: Vec<(LeafInfo, [f64; 7])> = leaves
+        .into_iter()
+        .map(|leaf| {
+            let vector = feature_vector(&leaf.blue_picks, champion_meta);
+            (leaf, vector)
+        })
+        .collect();
+    featured.sort_by(|(left_leaf, _), (right_leaf, _)| {
+        right_leaf.scores.composite.total_cmp(&left_leaf.scores.composite)
+    });
+
+    // Phase 4 scenario filter: drop legally-feasible-but-degenerate full-comp
+    // candidates (Rakan+Rell-class). Compute against the FULL comp (confirmed +
+    // leaf-projected); leaf.{blue,red}_picks alone is the projection delta.
+    // Skip filter when comp is partial, when meta is missing for any pick, or
+    // when the Robust scenario itself is degenerate (don't over-filter).
+    let robust_full_blue = full_picks_owned(confirmed_blue_picks, &featured[0].0.blue_picks);
+    let robust_full_red = full_picks_owned(confirmed_red_picks, &featured[0].0.red_picks);
+    let robust_blue_meta_complete =
+        robust_full_blue.iter().all(|p| champion_meta.contains_key(p));
+    let robust_red_meta_complete =
+        robust_full_red.iter().all(|p| champion_meta.contains_key(p));
+    let robust_blue_cov = if robust_full_blue.len() == 5 && robust_blue_meta_complete {
+        coverage_score(&robust_full_blue, champion_meta)
+    } else {
+        0.0
+    };
+    let robust_red_cov = if robust_full_red.len() == 5 && robust_red_meta_complete {
+        coverage_score(&robust_full_red, champion_meta)
+    } else {
+        0.0
+    };
+
+    let robust = featured.remove(0);
+    featured.retain(|(leaf, _vec)| {
+        let full_blue = full_picks_owned(confirmed_blue_picks, &leaf.blue_picks);
+        let full_red = full_picks_owned(confirmed_red_picks, &leaf.red_picks);
+
+        let blue_full = full_blue.len() == 5;
+        let red_full = full_red.len() == 5;
+        let blue_meta_complete = full_blue.iter().all(|p| champion_meta.contains_key(p));
+        let red_meta_complete = full_red.iter().all(|p| champion_meta.contains_key(p));
+
+        let blue_ok = !blue_full
+            || !blue_meta_complete
+            || coverage_score(&full_blue, champion_meta) >= SCENARIO_FILTER_COVERAGE_FLOOR
+            || robust_blue_cov < SCENARIO_FILTER_COVERAGE_FLOOR;
+
+        let red_ok = !red_full
+            || !red_meta_complete
+            || coverage_score(&full_red, champion_meta) >= SCENARIO_FILTER_COVERAGE_FLOOR
+            || robust_red_cov < SCENARIO_FILTER_COVERAGE_FLOOR;
+
+        blue_ok && red_ok
+    });
+
+    let mut selected = vec![robust];
+
+    while selected.len() < max_scenarios && !featured.is_empty() {
+        let (farthest_idx, _) = featured
+            .iter()
+            .enumerate()
+            .map(|(idx, (_, vector))| {
+                let min_distance = selected
+                    .iter()
+                    .map(|(_, selected_vector)| vector_distance(vector, selected_vector))
+                    .fold(f64::INFINITY, f64::min);
+                (idx, min_distance)
+            })
+            .max_by(|(_, left), (_, right)| left.total_cmp(right))
+            .expect("featured is non-empty");
+        selected.push(featured.remove(farthest_idx));
+    }
+
+    selected
+        .into_iter()
+        .enumerate()
+        .map(|(idx, (leaf, _))| {
+            let full_blue_picks: Vec<&str> = confirmed_blue_picks
+                .iter()
+                .chain(leaf.blue_picks.iter())
+                .map(String::as_str)
+                .collect();
+            let full_red_picks: Vec<&str> = confirmed_red_picks
+                .iter()
+                .chain(leaf.red_picks.iter())
+                .map(String::as_str)
+                .collect();
+            let blue_likely_assignments = if !full_blue_picks.is_empty()
+                && full_blue_picks
+                    .iter()
+                    .all(|pick| champion_meta.contains_key(*pick))
+            {
+                role_solver::solve(&full_blue_picks, champion_meta)
+            } else {
+                Vec::new()
+            };
+            let red_likely_assignments = if !full_red_picks.is_empty()
+                && full_red_picks
+                    .iter()
+                    .all(|pick| champion_meta.contains_key(*pick))
+            {
+                role_solver::solve(&full_red_picks, champion_meta)
+            } else {
+                Vec::new()
+            };
+
+            Scenario {
+                name: label_scenario(&leaf.blue_picks, champion_meta),
+                description: format!(
+                    "{} vs {}",
+                    leaf.blue_picks.join(", "),
+                    leaf.red_picks.join(", ")
+                ),
+                perspective: if idx == 0 {
+                    Perspective::Robust
+                } else {
+                    Perspective::Likely
+                },
+                indicators: Vec::new(),
+                scores: leaf.scores,
+                blue_picks: leaf.blue_picks,
+                red_picks: leaf.red_picks,
+                blue_bans: leaf.blue_bans,
+                red_bans: leaf.red_bans,
+                blue_likely_assignments,
+                red_likely_assignments,
+                tree_path: leaf.path,
+            }
+        })
+        .collect()
+}

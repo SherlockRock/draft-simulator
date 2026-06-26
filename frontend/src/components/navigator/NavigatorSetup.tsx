@@ -20,9 +20,7 @@ const NavigatorSetup: Component = () => {
     const [ourSide, setOurSide] = createSignal<"blue" | "red">("blue");
     const [draftMode, setDraftMode] = createSignal<DraftMode>("standard");
     const [seriesLength, setSeriesLength] = createSignal<1 | 3 | 5 | 7>(1);
-    const [sideSwapMode, setSideSwapMode] = createSignal<"auto" | "manual">(
-        "auto"
-    );
+    const [sideSwapMode, setSideSwapMode] = createSignal<"auto" | "manual">("auto");
     const [bluePool, setBluePool] = createSignal<TeamPool>(EMPTY_TEAM_POOL);
     const [redPool, setRedPool] = createSignal<TeamPool>(EMPTY_TEAM_POOL);
     const [isStarting, setIsStarting] = createSignal(false);
@@ -92,7 +90,9 @@ const NavigatorSetup: Component = () => {
                     <div class="flex flex-col gap-8 p-6 sm:p-8">
                         <section class="flex flex-col gap-5">
                             <div>
-                                <h1 class="text-2xl font-bold text-slate-100">Session Config</h1>
+                                <h1 class="text-2xl font-bold text-slate-100">
+                                    Session Config
+                                </h1>
                                 <p class="mt-1 text-sm text-slate-400">
                                     Configure the session before the draft room opens.
                                 </p>
@@ -100,7 +100,9 @@ const NavigatorSetup: Component = () => {
 
                             <div class="grid gap-4 lg:grid-cols-3 lg:items-end">
                                 <label class="block">
-                                    <span class="mb-2 block text-sm font-medium text-slate-300">Session Name</span>
+                                    <span class="mb-2 block text-sm font-medium text-slate-300">
+                                        Session Name
+                                    </span>
                                     <input
                                         type="text"
                                         value={name()}
@@ -141,7 +143,9 @@ const NavigatorSetup: Component = () => {
                                 </div>
 
                                 <label class="block">
-                                    <span class="mb-2 block text-sm font-medium text-slate-300">Draft Mode</span>
+                                    <span class="mb-2 block text-sm font-medium text-slate-300">
+                                        Draft Mode
+                                    </span>
                                     <StyledSelect
                                         value={draftMode()}
                                         onChange={(val) =>
@@ -219,9 +223,12 @@ const NavigatorSetup: Component = () => {
                         <section class="flex flex-col gap-4 border-t border-slate-700/60 pt-8">
                             <div class="flex items-center justify-between">
                                 <div>
-                                    <h2 class="text-xl font-semibold text-slate-100">Team Pools</h2>
+                                    <h2 class="text-xl font-semibold text-slate-100">
+                                        Team Pools
+                                    </h2>
                                     <p class="mt-1 text-sm text-slate-400">
-                                        Role-structured champion pools per team. Engine biases toward these.
+                                        Role-structured champion pools per team. Engine
+                                        biases toward these.
                                     </p>
                                 </div>
                                 <button

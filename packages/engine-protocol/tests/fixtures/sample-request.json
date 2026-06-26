@@ -1,0 +1,62 @@
+{
+  "protocolVersion": "1.0.0",
+  "draftState": {
+    "format": "standard",
+    "bans": [],
+    "picks": [],
+    "currentPhase": "ban1",
+    "currentSlot": 0,
+    "currentSide": "blue"
+  },
+  "pools": {
+    "ourSide": "blue",
+    "blue": {
+      "display": { "TOP": ["Aatrox"], "JUNGLE": ["Vi"], "MIDDLE": ["Ahri"], "ADC": ["Jinx"], "SUPPORT": ["Nautilus"] },
+      "search": ["Aatrox", "Vi", "Ahri", "Jinx", "Nautilus"]
+    },
+    "red": {
+      "display": { "TOP": ["Renekton"], "JUNGLE": ["Wukong"], "MIDDLE": ["Sylas"], "ADC": ["Kaisa"], "SUPPORT": ["Rakan"] },
+      "search": ["Renekton", "Wukong", "Sylas", "Kaisa", "Rakan"]
+    },
+    "crossGameExclusions": []
+  },
+  "opponentModel": { "type": "meta", "weights": {} },
+  "playerModel": {
+    "championTiers": { "core": [], "playable": [], "emergency": [] },
+    "weights": {}
+  },
+  "config": {
+    "search": {
+      "branchWidth": 5,
+      "pairBranchWidth": 500,
+      "singlePairTopK": 32,
+      "maxDepth": 8,
+      "broadDepth": 8,
+      "extensionTurnThreshold": 8,
+      "latencyBudgetMs": 2000
+    },
+    "weights": {
+      "phaseWeights": {
+        "blue": {
+          "ban1": { "info": 0.65, "comp": 0.35, "coverage": 0.0 },
+          "pick1": { "info": 0.5, "comp": 0.5, "coverage": 0.3 },
+          "ban2": { "info": 0.4, "comp": 0.6, "coverage": 0.4 },
+          "pick2": { "info": 0.2, "comp": 0.8, "coverage": 1.5 }
+        },
+        "red": {
+          "ban1": { "info": 0.7, "comp": 0.3, "coverage": 0.0 },
+          "pick1": { "info": 0.6, "comp": 0.4, "coverage": 0.3 },
+          "ban2": { "info": 0.5, "comp": 0.5, "coverage": 0.4 },
+          "pick2": { "info": 0.2, "comp": 0.8, "coverage": 1.5 }
+        }
+      },
+      "penalties": { "outOfRole": 0.25, "outOfPool": 0.75 },
+      "synergyMultiplier": 1.0,
+      "counterMultiplier": 1.0,
+      "flexRetentionWeight": 1.0,
+      "revealCostWeight": 1.0
+    },
+    "profile": "firstpick-default-v1",
+    "forcedBranches": []
+  }
+}

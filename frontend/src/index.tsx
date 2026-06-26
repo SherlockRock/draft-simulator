@@ -74,10 +74,7 @@ render(
                         </Route>
                         <Route path="/navigator" component={NavigatorWorkflow}>
                             <Route path="/" component={NavigatorDashboard} />
-                            <Route
-                                path="/:sessionId"
-                                component={NavigatorSessionView}
-                            />
+                            <Route path="/:sessionId" component={NavigatorSessionView} />
                         </Route>
                         <Route path="*" component={HomePage} />
                     </Route>

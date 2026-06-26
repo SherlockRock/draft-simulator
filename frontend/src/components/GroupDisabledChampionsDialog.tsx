@@ -154,8 +154,7 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
 
                         <Show
                             when={
-                                seriesEnabled() &&
-                                (props.canEditSeriesSettings ?? true)
+                                seriesEnabled() && (props.canEditSeriesSettings ?? true)
                             }
                         >
                             <div class="space-y-4 rounded-md border border-darius-border bg-darius-card-hover/30 p-3">
@@ -255,11 +254,10 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                                     name: name().trim(),
                                     disabledChampions: selected(),
                                     draftMode: draftMode(),
-                                    convertToSeries:
-                                        !props.isSeries && seriesEnabled(),
+                                    convertToSeries: !props.isSeries && seriesEnabled(),
                                     blueTeamName: blueTeamName().trim() || "Team 1",
                                     redTeamName: redTeamName().trim() || "Team 2",
-                                    length: length(),
+                                    length: length()
                                 });
                                 props.onClose();
                             }}
