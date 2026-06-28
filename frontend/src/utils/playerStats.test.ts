@@ -5,7 +5,7 @@ import {
     computeTotals,
     computeRoleDistribution,
     serializePlayersParam,
-    parsePlayersParam,
+    parsePlayersParam
 } from "./playerStats";
 
 const entry = (
@@ -19,7 +19,7 @@ const entry = (
     games,
     wins,
     lastPlayed: null,
-    recentWindowGames: null,
+    recentWindowGames: null
 });
 
 describe("aggregateChampRows", () => {
@@ -27,11 +27,11 @@ describe("aggregateChampRows", () => {
         const rows = aggregateChampRows([
             entry("Ahri", "mid", 10, 6),
             entry("Sylas", "mid", 20, 9),
-            entry("Ahri", "top", 5, 4),
+            entry("Ahri", "top", 5, 4)
         ]);
         expect(rows).toEqual([
             { championId: "Sylas", games: 20, wins: 9 },
-            { championId: "Ahri", games: 15, wins: 10 },
+            { championId: "Ahri", games: 15, wins: 10 }
         ]);
     });
 
@@ -42,10 +42,12 @@ describe("aggregateChampRows", () => {
 
 describe("computeTotals", () => {
     it("sums games/wins and rounds winrate", () => {
-        expect(computeTotals([
-            { championId: "A", games: 20, wins: 9 },
-            { championId: "B", games: 10, wins: 6 },
-        ])).toEqual({ games: 30, wins: 15, losses: 15, winrate: 50 });
+        expect(
+            computeTotals([
+                { championId: "A", games: 20, wins: 9 },
+                { championId: "B", games: 10, wins: 6 }
+            ])
+        ).toEqual({ games: 30, wins: 15, losses: 15, winrate: 50 });
     });
 
     it("winrate 0 when no games (no divide-by-zero)", () => {
@@ -55,11 +57,13 @@ describe("computeTotals", () => {
 
 describe("computeRoleDistribution", () => {
     it("counts games per role with all roles present", () => {
-        expect(computeRoleDistribution([
-            entry("Ahri", "mid", 10, 6),
-            entry("Sylas", "mid", 5, 3),
-            entry("Jinx", "adc", 4, 2),
-        ])).toEqual({ top: 0, jungle: 0, mid: 15, adc: 4, support: 0 });
+        expect(
+            computeRoleDistribution([
+                entry("Ahri", "mid", 10, 6),
+                entry("Sylas", "mid", 5, 3),
+                entry("Jinx", "adc", 4, 2)
+            ])
+        ).toEqual({ top: 0, jungle: 0, mid: 15, adc: 4, support: 0 });
     });
 });
 
@@ -68,7 +72,7 @@ describe("players param round-trip", () => {
         const players = [
             { gameName: "Aeon", tagLine: "NA3" },
             { gameName: "Two Words", tagLine: "EUW" },
-            { gameName: "weird#name", tagLine: "k,r" },
+            { gameName: "weird#name", tagLine: "k,r" }
         ];
         const raw = serializePlayersParam(players);
         expect(parsePlayersParam(raw)).toEqual(players);
@@ -83,10 +87,12 @@ describe("players param round-trip", () => {
     });
 
     it("serialize skips incomplete rows", () => {
-        expect(serializePlayersParam([
-            { gameName: "Aeon", tagLine: "NA3" },
-            { gameName: "", tagLine: "NA1" },
-            { gameName: "Bob", tagLine: "" },
-        ])).toBe(`${encodeURIComponent("Aeon")}#${encodeURIComponent("NA3")}`);
+        expect(
+            serializePlayersParam([
+                { gameName: "Aeon", tagLine: "NA3" },
+                { gameName: "", tagLine: "NA1" },
+                { gameName: "Bob", tagLine: "" }
+            ])
+        ).toBe(`${encodeURIComponent("Aeon")}#${encodeURIComponent("NA3")}`);
     });
 });

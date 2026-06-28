@@ -61,11 +61,7 @@ export function computeRoleDistribution(
 }
 
 export function winrateColor(wr: number): string {
-    return wr >= 60
-        ? "text-orange-400"
-        : wr >= 50
-          ? "text-blue-300"
-          : "text-slate-400";
+    return wr >= 60 ? "text-orange-400" : wr >= 50 ? "text-blue-300" : "text-slate-400";
 }
 
 // URL encoding: each player → "gameName#tag" with both fields percent-encoded

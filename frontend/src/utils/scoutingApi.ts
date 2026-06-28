@@ -11,8 +11,6 @@ export interface ScoutPlayersInput {
 
 // POST /api/scouting/players — apiPost validates the response against the Zod
 // schema, so a drifted u.gg/back-end shape surfaces as a ValidationError.
-export function scoutPlayers(
-    input: ScoutPlayersInput
-): Promise<ScoutPlayersResponse> {
+export function scoutPlayers(input: ScoutPlayersInput): Promise<ScoutPlayersResponse> {
     return apiPost("/scouting/players", input, ScoutPlayersResponseSchema);
 }

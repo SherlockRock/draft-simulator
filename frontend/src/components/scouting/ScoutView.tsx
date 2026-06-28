@@ -71,8 +71,7 @@ const ScoutView: Component = () => {
 
     const query = useQuery(() => ({
         queryKey: ["scoutPlayers", activeRegion(), playersParam()],
-        queryFn: () =>
-            scoutPlayers({ region: activeRegion(), players: activePlayers() }),
+        queryFn: () => scoutPlayers({ region: activeRegion(), players: activePlayers() }),
         enabled: activePlayers().length > 0,
         staleTime: 5 * 60 * 1000
     }));

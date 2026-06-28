@@ -13,8 +13,7 @@ interface PlayerColumnProps {
 }
 
 const PlayerColumn: Component<PlayerColumnProps> = (props) => {
-    const riotId = () =>
-        `${props.result.input.gameName} #${props.result.input.tagLine}`;
+    const riotId = () => `${props.result.input.gameName} #${props.result.input.tagLine}`;
 
     const entries = () =>
         props.result.status === "ok" ? props.result.envelope.entries : [];
