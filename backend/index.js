@@ -19,6 +19,7 @@ const activityRoutes = require("./routes/activity");
 const versusRoutes = require("./routes/versus");
 const navigatorRoutes = require("./routes/navigator");
 const savedPoolsRoutes = require("./routes/savedPools");
+const { router: scoutingRouter } = require("./routes/scouting");
 const Draft = require("./models/Draft");
 const User = require("./models/User");
 const setupAssociations = require("./models/associations");
@@ -105,6 +106,7 @@ async function main() {
   app.use("/api/versus-drafts", versusRoutes);
   app.use("/api/navigator", navigatorRoutes);
   app.use("/api/saved-pools", savedPoolsRoutes);
+  app.use("/api/scouting", scoutingRouter);
 
   let server;
   const certPath =

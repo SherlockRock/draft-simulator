@@ -15,6 +15,7 @@ docs/*
 # Champion data pipeline
 data/raw/*
 !data/raw/.gitkeep
+!data/raw/cdragon-champions.json
 data/compiled/*
 !data/compiled/.gitkeep
 # Engine reads these two at runtime; must be committed to ship in Railway's git context.

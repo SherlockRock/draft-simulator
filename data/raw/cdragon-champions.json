@@ -1,0 +1,4928 @@
+{
+  "scrapedAt": "2026-04-15T02:03:38.797Z",
+  "source": "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1",
+  "championCount": 191,
+  "champions": {
+    "Annie": {
+      "numericId": 1,
+      "alias": "Annie",
+      "name": "Annie",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Summon",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Olaf": {
+      "numericId": 2,
+      "alias": "Olaf",
+      "name": "Olaf",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Self Healing"
+      }
+    },
+    "Galio": {
+      "numericId": 3,
+      "alias": "Galio",
+      "name": "Galio",
+      "roles": [
+        "tank",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Battlecaster",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "TwistedFate": {
+      "numericId": 4,
+      "alias": "TwistedFate",
+      "name": "Twisted Fate",
+      "roles": [
+        "mage",
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "XinZhao": {
+      "numericId": 5,
+      "alias": "XinZhao",
+      "name": "Xin Zhao",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "",
+        "championTagSecondary": ""
+      }
+    },
+    "Urgot": {
+      "numericId": 6,
+      "alias": "Urgot",
+      "name": "Urgot",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Sustained Damage"
+      }
+    },
+    "Leblanc": {
+      "numericId": 7,
+      "alias": "Leblanc",
+      "name": "LeBlanc",
+      "roles": [
+        "assassin",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Vladimir": {
+      "numericId": 8,
+      "alias": "Vladimir",
+      "name": "Vladimir",
+      "roles": [
+        "mage",
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Self Healing",
+        "championTagSecondary": "Battlecaster"
+      }
+    },
+    "FiddleSticks": {
+      "numericId": 9,
+      "alias": "FiddleSticks",
+      "name": "Fiddlesticks",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Self Healing",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Kayle": {
+      "numericId": 10,
+      "alias": "Kayle",
+      "name": "Kayle",
+      "roles": [
+        "mage",
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Hypercarry",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "MasterYi": {
+      "numericId": 11,
+      "alias": "MasterYi",
+      "name": "Master Yi",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Auto-attack",
+        "championTagSecondary": "Hypercarry"
+      }
+    },
+    "Alistar": {
+      "numericId": 12,
+      "alias": "Alistar",
+      "name": "Alistar",
+      "roles": [
+        "tank",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Initiator"
+      }
+    },
+    "Ryze": {
+      "numericId": 13,
+      "alias": "Ryze",
+      "name": "Ryze",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Battlecaster",
+        "championTagSecondary": "Sustained Damage"
+      }
+    },
+    "Sion": {
+      "numericId": 14,
+      "alias": "Sion",
+      "name": "Sion",
+      "roles": [
+        "tank",
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Durable",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Sivir": {
+      "numericId": 15,
+      "alias": "Sivir",
+      "name": "Sivir",
+      "roles": [
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "AoE",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Soraka": {
+      "numericId": 16,
+      "alias": "Soraka",
+      "name": "Soraka",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Ally Protection",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Teemo": {
+      "numericId": 17,
+      "alias": "Teemo",
+      "name": "Teemo",
+      "roles": [
+        "marksman",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Damage-over-Time",
+        "championTagSecondary": "Stealth"
+      }
+    },
+    "Tristana": {
+      "numericId": 18,
+      "alias": "Tristana",
+      "name": "Tristana",
+      "roles": [
+        "marksman",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Warwick": {
+      "numericId": 19,
+      "alias": "Warwick",
+      "name": "Warwick",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 1,
+        "damageType": "kMixed",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Self Healing",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Nunu": {
+      "numericId": 20,
+      "alias": "Nunu",
+      "name": "Nunu & Willump",
+      "roles": [
+        "tank",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 3,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Initiator",
+        "championTagSecondary": "Battlecaster"
+      }
+    },
+    "MissFortune": {
+      "numericId": 21,
+      "alias": "MissFortune",
+      "name": "Miss Fortune",
+      "roles": [
+        "marksman",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "AoE",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Ashe": {
+      "numericId": 22,
+      "alias": "Ashe",
+      "name": "Ashe",
+      "roles": [
+        "marksman",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Auto-attack",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Tryndamere": {
+      "numericId": 23,
+      "alias": "Tryndamere",
+      "name": "Tryndamere",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Jax": {
+      "numericId": 24,
+      "alias": "Jax",
+      "name": "Jax",
+      "roles": [
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Morgana": {
+      "numericId": 25,
+      "alias": "Morgana",
+      "name": "Morgana",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Ally Protection"
+      }
+    },
+    "Zilean": {
+      "numericId": 26,
+      "alias": "Zilean",
+      "name": "Zilean",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Ally Protection"
+      }
+    },
+    "Singed": {
+      "numericId": 27,
+      "alias": "Singed",
+      "name": "Singed",
+      "roles": [
+        "tank",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Battlecaster",
+        "championTagSecondary": "Damage-over-Time"
+      }
+    },
+    "Evelynn": {
+      "numericId": 28,
+      "alias": "Evelynn",
+      "name": "Evelynn",
+      "roles": [
+        "assassin",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Stealth",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Twitch": {
+      "numericId": 29,
+      "alias": "Twitch",
+      "name": "Twitch",
+      "roles": [
+        "marksman",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 1,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Hypercarry",
+        "championTagSecondary": "Stealth"
+      }
+    },
+    "Karthus": {
+      "numericId": 30,
+      "alias": "Karthus",
+      "name": "Karthus",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "AoE",
+        "championTagSecondary": "Sustained Damage"
+      }
+    },
+    "Chogath": {
+      "numericId": 31,
+      "alias": "Chogath",
+      "name": "Cho'Gath",
+      "roles": [
+        "tank",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Durable",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Amumu": {
+      "numericId": 32,
+      "alias": "Amumu",
+      "name": "Amumu",
+      "roles": [
+        "tank",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Initiator"
+      }
+    },
+    "Rammus": {
+      "numericId": 33,
+      "alias": "Rammus",
+      "name": "Rammus",
+      "roles": [
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Anivia": {
+      "numericId": 34,
+      "alias": "Anivia",
+      "name": "Anivia",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "AoE",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Shaco": {
+      "numericId": 35,
+      "alias": "Shaco",
+      "name": "Shaco",
+      "roles": [
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 5,
+        "difficulty": 3,
+        "damageType": "kMixed",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Stealth",
+        "championTagSecondary": "Summon"
+      }
+    },
+    "DrMundo": {
+      "numericId": 36,
+      "alias": "DrMundo",
+      "name": "Dr. Mundo",
+      "roles": [
+        "tank",
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 1,
+        "damageType": "kMixed",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Durable",
+        "championTagSecondary": "Self Healing"
+      }
+    },
+    "Sona": {
+      "numericId": 37,
+      "alias": "Sona",
+      "name": "Sona",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Ally Protection",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Kassadin": {
+      "numericId": 38,
+      "alias": "Kassadin",
+      "name": "Kassadin",
+      "roles": [
+        "assassin",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Hypercarry",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Irelia": {
+      "numericId": 39,
+      "alias": "Irelia",
+      "name": "Irelia",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Janna": {
+      "numericId": 40,
+      "alias": "Janna",
+      "name": "Janna",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Ally Protection"
+      }
+    },
+    "Gangplank": {
+      "numericId": 41,
+      "alias": "Gangplank",
+      "name": "Gangplank",
+      "roles": [
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "AoE",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Corki": {
+      "numericId": 42,
+      "alias": "Corki",
+      "name": "Corki",
+      "roles": [
+        "marksman",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 5,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Auto-attack",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Karma": {
+      "numericId": 43,
+      "alias": "Karma",
+      "name": "Karma",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Ally Protection",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Taric": {
+      "numericId": 44,
+      "alias": "Taric",
+      "name": "Taric",
+      "roles": [
+        "support",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Durable",
+        "championTagSecondary": "Ally Protection"
+      }
+    },
+    "Veigar": {
+      "numericId": 45,
+      "alias": "Veigar",
+      "name": "Veigar",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Hypercarry",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Trundle": {
+      "numericId": 48,
+      "alias": "Trundle",
+      "name": "Trundle",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Self Healing"
+      }
+    },
+    "Swain": {
+      "numericId": 50,
+      "alias": "Swain",
+      "name": "Swain",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Battlecaster",
+        "championTagSecondary": "Self Healing"
+      }
+    },
+    "Caitlyn": {
+      "numericId": 51,
+      "alias": "Caitlyn",
+      "name": "Caitlyn",
+      "roles": [
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Auto-attack",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Blitzcrank": {
+      "numericId": 53,
+      "alias": "Blitzcrank",
+      "name": "Blitzcrank",
+      "roles": [
+        "tank",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 2,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Initiator",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Malphite": {
+      "numericId": 54,
+      "alias": "Malphite",
+      "name": "Malphite",
+      "roles": [
+        "tank",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Initiator",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Katarina": {
+      "numericId": 55,
+      "alias": "Katarina",
+      "name": "Katarina",
+      "roles": [
+        "assassin",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Nocturne": {
+      "numericId": 56,
+      "alias": "Nocturne",
+      "name": "Nocturne",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Dive",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Maokai": {
+      "numericId": 57,
+      "alias": "Maokai",
+      "name": "Maokai",
+      "roles": [
+        "tank",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Initiator",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Renekton": {
+      "numericId": 58,
+      "alias": "Renekton",
+      "name": "Renekton",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 5,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Durable"
+      }
+    },
+    "JarvanIV": {
+      "numericId": 59,
+      "alias": "JarvanIV",
+      "name": "Jarvan IV",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Dive",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Elise": {
+      "numericId": 60,
+      "alias": "Elise",
+      "name": "Elise",
+      "roles": [
+        "assassin",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Shapeshift",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Orianna": {
+      "numericId": 61,
+      "alias": "Orianna",
+      "name": "Orianna",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "AoE",
+        "championTagSecondary": "Long Range"
+      }
+    },
+    "MonkeyKing": {
+      "numericId": 62,
+      "alias": "MonkeyKing",
+      "name": "Wukong",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Dive",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Brand": {
+      "numericId": 63,
+      "alias": "Brand",
+      "name": "Brand",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Damage-over-Time",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "LeeSin": {
+      "numericId": 64,
+      "alias": "LeeSin",
+      "name": "Lee Sin",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Vayne": {
+      "numericId": 67,
+      "alias": "Vayne",
+      "name": "Vayne",
+      "roles": [
+        "marksman",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 1,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Hypercarry",
+        "championTagSecondary": "Stealth"
+      }
+    },
+    "Rumble": {
+      "numericId": 68,
+      "alias": "Rumble",
+      "name": "Rumble",
+      "roles": [
+        "fighter",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Damage-over-Time",
+        "championTagSecondary": "Battlecaster"
+      }
+    },
+    "Cassiopeia": {
+      "numericId": 69,
+      "alias": "Cassiopeia",
+      "name": "Cassiopeia",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Sustained Damage"
+      }
+    },
+    "Skarner": {
+      "numericId": 72,
+      "alias": "Skarner",
+      "name": "Skarner",
+      "roles": [
+        "tank",
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 5,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Initiator"
+      }
+    },
+    "Heimerdinger": {
+      "numericId": 74,
+      "alias": "Heimerdinger",
+      "name": "Heimerdinger",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Summon",
+        "championTagSecondary": "Sustained Damage"
+      }
+    },
+    "Nasus": {
+      "numericId": 75,
+      "alias": "Nasus",
+      "name": "Nasus",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Durable",
+        "championTagSecondary": "Hypercarry"
+      }
+    },
+    "Nidalee": {
+      "numericId": 76,
+      "alias": "Nidalee",
+      "name": "Nidalee",
+      "roles": [
+        "assassin",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Shapeshift",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Udyr": {
+      "numericId": 77,
+      "alias": "Udyr",
+      "name": "Udyr",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 2,
+        "damageType": "kMixed",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Auto-attack",
+        "championTagSecondary": "Durable"
+      }
+    },
+    "Poppy": {
+      "numericId": 78,
+      "alias": "Poppy",
+      "name": "Poppy",
+      "roles": [
+        "tank",
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Durable",
+        "championTagSecondary": "Dive"
+      }
+    },
+    "Gragas": {
+      "numericId": 79,
+      "alias": "Gragas",
+      "name": "Gragas",
+      "roles": [
+        "fighter",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Pantheon": {
+      "numericId": 80,
+      "alias": "Pantheon",
+      "name": "Pantheon",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Dive",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Ezreal": {
+      "numericId": 81,
+      "alias": "Ezreal",
+      "name": "Ezreal",
+      "roles": [
+        "marksman",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 1,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Long Range",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Mordekaiser": {
+      "numericId": 82,
+      "alias": "Mordekaiser",
+      "name": "Mordekaiser",
+      "roles": [
+        "fighter",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Sustained Damage"
+      }
+    },
+    "Yorick": {
+      "numericId": 83,
+      "alias": "Yorick",
+      "name": "Yorick",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Summon",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Akali": {
+      "numericId": 84,
+      "alias": "Akali",
+      "name": "Akali",
+      "roles": [
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Kennen": {
+      "numericId": 85,
+      "alias": "Kennen",
+      "name": "Kennen",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Garen": {
+      "numericId": 86,
+      "alias": "Garen",
+      "name": "Garen",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Durable",
+        "championTagSecondary": "Sustained Damage"
+      }
+    },
+    "Leona": {
+      "numericId": 89,
+      "alias": "Leona",
+      "name": "Leona",
+      "roles": [
+        "tank",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Initiator",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Malzahar": {
+      "numericId": 90,
+      "alias": "Malzahar",
+      "name": "Malzahar",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Damage-over-Time",
+        "championTagSecondary": "Summon"
+      }
+    },
+    "Talon": {
+      "numericId": 91,
+      "alias": "Talon",
+      "name": "Talon",
+      "roles": [
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Riven": {
+      "numericId": 92,
+      "alias": "Riven",
+      "name": "Riven",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "KogMaw": {
+      "numericId": 96,
+      "alias": "KogMaw",
+      "name": "Kog'Maw",
+      "roles": [
+        "marksman",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 2,
+        "damageType": "kMixed",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Hypercarry",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Shen": {
+      "numericId": 98,
+      "alias": "Shen",
+      "name": "Shen",
+      "roles": [
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 5,
+        "difficulty": 1,
+        "damageType": "kMixed",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Ally Protection",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Lux": {
+      "numericId": 99,
+      "alias": "Lux",
+      "name": "Lux",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Long Range"
+      }
+    },
+    "Xerath": {
+      "numericId": 101,
+      "alias": "Xerath",
+      "name": "Xerath",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Long Range",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Shyvana": {
+      "numericId": 102,
+      "alias": "Shyvana",
+      "name": "Shyvana",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 1,
+        "damageType": "kMixed",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "",
+        "championTagSecondary": ""
+      }
+    },
+    "Ahri": {
+      "numericId": 103,
+      "alias": "Ahri",
+      "name": "Ahri",
+      "roles": [
+        "mage",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Graves": {
+      "numericId": 104,
+      "alias": "Graves",
+      "name": "Graves",
+      "roles": [
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Fizz": {
+      "numericId": 105,
+      "alias": "Fizz",
+      "name": "Fizz",
+      "roles": [
+        "assassin",
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Volibear": {
+      "numericId": 106,
+      "alias": "Volibear",
+      "name": "Volibear",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 1,
+        "damageType": "kMixed",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Durable"
+      }
+    },
+    "Rengar": {
+      "numericId": 107,
+      "alias": "Rengar",
+      "name": "Rengar",
+      "roles": [
+        "assassin",
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Stealth",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Varus": {
+      "numericId": 110,
+      "alias": "Varus",
+      "name": "Varus",
+      "roles": [
+        "marksman",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Long Range",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Nautilus": {
+      "numericId": 111,
+      "alias": "Nautilus",
+      "name": "Nautilus",
+      "roles": [
+        "tank",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Initiator",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Viktor": {
+      "numericId": 112,
+      "alias": "Viktor",
+      "name": "Viktor",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Sustained Damage",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Sejuani": {
+      "numericId": 113,
+      "alias": "Sejuani",
+      "name": "Sejuani",
+      "roles": [
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 3,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Initiator"
+      }
+    },
+    "Fiora": {
+      "numericId": 114,
+      "alias": "Fiora",
+      "name": "Fiora",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Ziggs": {
+      "numericId": 115,
+      "alias": "Ziggs",
+      "name": "Ziggs",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Long Range",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Lulu": {
+      "numericId": 117,
+      "alias": "Lulu",
+      "name": "Lulu",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Ally Protection",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Draven": {
+      "numericId": 119,
+      "alias": "Draven",
+      "name": "Draven",
+      "roles": [
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Auto-attack",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Hecarim": {
+      "numericId": 120,
+      "alias": "Hecarim",
+      "name": "Hecarim",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Dive"
+      }
+    },
+    "Khazix": {
+      "numericId": 121,
+      "alias": "Khazix",
+      "name": "Kha'Zix",
+      "roles": [
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Stealth"
+      }
+    },
+    "Darius": {
+      "numericId": 122,
+      "alias": "Darius",
+      "name": "Darius",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Self Healing"
+      }
+    },
+    "Jayce": {
+      "numericId": 126,
+      "alias": "Jayce",
+      "name": "Jayce",
+      "roles": [
+        "fighter",
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 5,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Shapeshift",
+        "championTagSecondary": "Long Range"
+      }
+    },
+    "Lissandra": {
+      "numericId": 127,
+      "alias": "Lissandra",
+      "name": "Lissandra",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Diana": {
+      "numericId": 131,
+      "alias": "Diana",
+      "name": "Diana",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Dive"
+      }
+    },
+    "Quinn": {
+      "numericId": 133,
+      "alias": "Quinn",
+      "name": "Quinn",
+      "roles": [
+        "marksman",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Syndra": {
+      "numericId": 134,
+      "alias": "Syndra",
+      "name": "Syndra",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Long Range"
+      }
+    },
+    "AurelionSol": {
+      "numericId": 136,
+      "alias": "AurelionSol",
+      "name": "Aurelion Sol",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Hypercarry",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Kayn": {
+      "numericId": 141,
+      "alias": "Kayn",
+      "name": "Kayn",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 1,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Dive"
+      }
+    },
+    "Zoe": {
+      "numericId": 142,
+      "alias": "Zoe",
+      "name": "Zoe",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Long Range"
+      }
+    },
+    "Zyra": {
+      "numericId": 143,
+      "alias": "Zyra",
+      "name": "Zyra",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Summon",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Kaisa": {
+      "numericId": 145,
+      "alias": "Kaisa",
+      "name": "Kai'Sa",
+      "roles": [
+        "marksman",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 0,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Dive",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Seraphine": {
+      "numericId": 147,
+      "alias": "Seraphine",
+      "name": "Seraphine",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "AoE",
+        "championTagSecondary": "Ally Protection"
+      }
+    },
+    "Gnar": {
+      "numericId": 150,
+      "alias": "Gnar",
+      "name": "Gnar",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 5,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Shapeshift",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Zac": {
+      "numericId": 154,
+      "alias": "Zac",
+      "name": "Zac",
+      "roles": [
+        "tank",
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Initiator",
+        "championTagSecondary": "Self Healing"
+      }
+    },
+    "Yasuo": {
+      "numericId": 157,
+      "alias": "Yasuo",
+      "name": "Yasuo",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Velkoz": {
+      "numericId": 161,
+      "alias": "Velkoz",
+      "name": "Vel'Koz",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Long Range",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Taliyah": {
+      "numericId": 163,
+      "alias": "Taliyah",
+      "name": "Taliyah",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Camille": {
+      "numericId": 164,
+      "alias": "Camille",
+      "name": "Camille",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Dive",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Akshan": {
+      "numericId": 166,
+      "alias": "Akshan",
+      "name": "Akshan",
+      "roles": [
+        "marksman",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 1,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Stealth"
+      }
+    },
+    "Belveth": {
+      "numericId": 200,
+      "alias": "Belveth",
+      "name": "Bel'Veth",
+      "roles": [
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 1,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Auto-attack",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Braum": {
+      "numericId": 201,
+      "alias": "Braum",
+      "name": "Braum",
+      "roles": [
+        "tank",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 2,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Durable",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Jhin": {
+      "numericId": 202,
+      "alias": "Jhin",
+      "name": "Jhin",
+      "roles": [
+        "marksman",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Long Range",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Kindred": {
+      "numericId": 203,
+      "alias": "Kindred",
+      "name": "Kindred",
+      "roles": [
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Auto-attack",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Zeri": {
+      "numericId": 221,
+      "alias": "Zeri",
+      "name": "Zeri",
+      "roles": [
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 0
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Jinx": {
+      "numericId": 222,
+      "alias": "Jinx",
+      "name": "Jinx",
+      "roles": [
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Auto-attack",
+        "championTagSecondary": "Hypercarry"
+      }
+    },
+    "TahmKench": {
+      "numericId": 223,
+      "alias": "TahmKench",
+      "name": "Tahm Kench",
+      "roles": [
+        "tank",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Ally Protection"
+      }
+    },
+    "Briar": {
+      "numericId": 233,
+      "alias": "Briar",
+      "name": "Briar",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 3,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Self Healing",
+        "championTagSecondary": "Dive"
+      }
+    },
+    "Viego": {
+      "numericId": 234,
+      "alias": "Viego",
+      "name": "Viego",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Shapeshift",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Senna": {
+      "numericId": 235,
+      "alias": "Senna",
+      "name": "Senna",
+      "roles": [
+        "support",
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Auto-attack",
+        "championTagSecondary": "Ally Protection"
+      }
+    },
+    "Lucian": {
+      "numericId": 236,
+      "alias": "Lucian",
+      "name": "Lucian",
+      "roles": [
+        "marksman",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Zed": {
+      "numericId": 238,
+      "alias": "Zed",
+      "name": "Zed",
+      "roles": [
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Kled": {
+      "numericId": 240,
+      "alias": "Kled",
+      "name": "Kled",
+      "roles": [
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Dive",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Ekko": {
+      "numericId": 245,
+      "alias": "Ekko",
+      "name": "Ekko",
+      "roles": [
+        "assassin",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Qiyana": {
+      "numericId": 246,
+      "alias": "Qiyana",
+      "name": "Qiyana",
+      "roles": [
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Vi": {
+      "numericId": 254,
+      "alias": "Vi",
+      "name": "Vi",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 3,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Dive",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Aatrox": {
+      "numericId": 266,
+      "alias": "Aatrox",
+      "name": "Aatrox",
+      "roles": [
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 3,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Sustained Damage",
+        "championTagSecondary": "Self Healing"
+      }
+    },
+    "Nami": {
+      "numericId": 267,
+      "alias": "Nami",
+      "name": "Nami",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Ally Protection",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Azir": {
+      "numericId": 268,
+      "alias": "Azir",
+      "name": "Azir",
+      "roles": [
+        "mage",
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 5,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Hypercarry",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Yuumi": {
+      "numericId": 350,
+      "alias": "Yuumi",
+      "name": "Yuumi",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Ally Protection",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Samira": {
+      "numericId": 360,
+      "alias": "Samira",
+      "name": "Samira",
+      "roles": [
+        "marksman",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 1,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "AoE",
+        "championTagSecondary": "Dive"
+      }
+    },
+    "Thresh": {
+      "numericId": 412,
+      "alias": "Thresh",
+      "name": "Thresh",
+      "roles": [
+        "support",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 2,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Initiator",
+        "championTagSecondary": "Ally Protection"
+      }
+    },
+    "Illaoi": {
+      "numericId": 420,
+      "alias": "Illaoi",
+      "name": "Illaoi",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Self Healing",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "RekSai": {
+      "numericId": 421,
+      "alias": "RekSai",
+      "name": "Rek'Sai",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Dive"
+      }
+    },
+    "Ivern": {
+      "numericId": 427,
+      "alias": "Ivern",
+      "name": "Ivern",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 1,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 2,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Summon",
+        "championTagSecondary": "Ally Protection"
+      }
+    },
+    "Kalista": {
+      "numericId": 429,
+      "alias": "Kalista",
+      "name": "Kalista",
+      "roles": [
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Bard": {
+      "numericId": 432,
+      "alias": "Bard",
+      "name": "Bard",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 2,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Rakan": {
+      "numericId": 497,
+      "alias": "Rakan",
+      "name": "Rakan",
+      "roles": [
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 2,
+        "crowdControl": 3,
+        "mobility": 3,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Xayah": {
+      "numericId": 498,
+      "alias": "Xayah",
+      "name": "Xayah",
+      "roles": [
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "AoE",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Ornn": {
+      "numericId": 516,
+      "alias": "Ornn",
+      "name": "Ornn",
+      "roles": [
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Initiator",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Sylas": {
+      "numericId": 517,
+      "alias": "Sylas",
+      "name": "Sylas",
+      "roles": [
+        "mage",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Battlecaster"
+      }
+    },
+    "Neeko": {
+      "numericId": 518,
+      "alias": "Neeko",
+      "name": "Neeko",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "AoE",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Aphelios": {
+      "numericId": 523,
+      "alias": "Aphelios",
+      "name": "Aphelios",
+      "roles": [
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Hypercarry",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Rell": {
+      "numericId": 526,
+      "alias": "Rell",
+      "name": "Rell",
+      "roles": [
+        "tank",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Initiator"
+      }
+    },
+    "Pyke": {
+      "numericId": 555,
+      "alias": "Pyke",
+      "name": "Pyke",
+      "roles": [
+        "support",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Stealth"
+      }
+    },
+    "Vex": {
+      "numericId": 711,
+      "alias": "Vex",
+      "name": "Vex",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Yone": {
+      "numericId": 777,
+      "alias": "Yone",
+      "name": "Yone",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 5,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Ambessa": {
+      "numericId": 799,
+      "alias": "Ambessa",
+      "name": "Ambessa",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Dive"
+      }
+    },
+    "Mel": {
+      "numericId": 800,
+      "alias": "Mel",
+      "name": "Mel",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Long Range",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Yunara": {
+      "numericId": 804,
+      "alias": "Yunara",
+      "name": "Yunara",
+      "roles": [
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 2,
+        "utility": 0
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Auto-attack",
+        "championTagSecondary": "Sustained Damage"
+      }
+    },
+    "Sett": {
+      "numericId": 875,
+      "alias": "Sett",
+      "name": "Sett",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Durable"
+      }
+    },
+    "Lillia": {
+      "numericId": 876,
+      "alias": "Lillia",
+      "name": "Lillia",
+      "roles": [
+        "fighter",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Damage-over-Time"
+      }
+    },
+    "Gwen": {
+      "numericId": 887,
+      "alias": "Gwen",
+      "name": "Gwen",
+      "roles": [
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 5,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Sustained Damage",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Renata": {
+      "numericId": 888,
+      "alias": "Renata",
+      "name": "Renata Glasc",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Ally Protection"
+      }
+    },
+    "Aurora": {
+      "numericId": 893,
+      "alias": "Aurora",
+      "name": "Aurora",
+      "roles": [
+        "mage",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Stealth"
+      }
+    },
+    "Nilah": {
+      "numericId": 895,
+      "alias": "Nilah",
+      "name": "Nilah",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Auto-attack",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "KSante": {
+      "numericId": 897,
+      "alias": "KSante",
+      "name": "K'Sante",
+      "roles": [
+        "tank",
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Durable",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Smolder": {
+      "numericId": 901,
+      "alias": "Smolder",
+      "name": "Smolder",
+      "roles": [
+        "marksman",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Hypercarry",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Milio": {
+      "numericId": 902,
+      "alias": "Milio",
+      "name": "Milio",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Ally Protection",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Zaahen": {
+      "numericId": 904,
+      "alias": "Zaahen",
+      "name": "Zaahen",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "",
+        "championTagSecondary": ""
+      }
+    },
+    "Hwei": {
+      "numericId": 910,
+      "alias": "Hwei",
+      "name": "Hwei",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "AoE",
+        "championTagSecondary": "Long Range"
+      }
+    },
+    "Naafiri": {
+      "numericId": 950,
+      "alias": "Naafiri",
+      "name": "Naafiri",
+      "roles": [
+        "assassin",
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Summon",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Ruby_Urgot": {
+      "numericId": 66600,
+      "alias": "Ruby_Urgot",
+      "name": "Doom Bot Urgot",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "",
+        "championTagSecondary": ""
+      }
+    },
+    "Ruby_Corki": {
+      "numericId": 66602,
+      "alias": "Ruby_Corki",
+      "name": "Doom Bot Corki",
+      "roles": [
+        "marksman",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 1,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "",
+        "championTagSecondary": ""
+      }
+    },
+    "Ruby_Lux": {
+      "numericId": 66603,
+      "alias": "Ruby_Lux",
+      "name": "Doom Bot Lux",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "",
+        "championTagSecondary": ""
+      }
+    },
+    "Ruby_Amumu": {
+      "numericId": 66604,
+      "alias": "Ruby_Amumu",
+      "name": "Doom Bot Amumu",
+      "roles": [
+        "tank",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "",
+        "championTagSecondary": ""
+      }
+    },
+    "Ruby_Chogath": {
+      "numericId": 66605,
+      "alias": "Ruby_Chogath",
+      "name": "Doom Bot Cho'Gath",
+      "roles": [
+        "tank",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "",
+        "championTagSecondary": ""
+      }
+    },
+    "Ruby_Tristana": {
+      "numericId": 66606,
+      "alias": "Ruby_Tristana",
+      "name": "Doom Bot Tristana",
+      "roles": [
+        "marksman",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "",
+        "championTagSecondary": ""
+      }
+    },
+    "Ruby_Nami": {
+      "numericId": 66607,
+      "alias": "Ruby_Nami",
+      "name": "Doom Bot Nami",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "",
+        "championTagSecondary": ""
+      }
+    },
+    "Ruby_LeeSin": {
+      "numericId": 66608,
+      "alias": "Ruby_LeeSin",
+      "name": "Doom Bot Lee Sin",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "",
+        "championTagSecondary": ""
+      }
+    },
+    "Ruby_Caitlyn": {
+      "numericId": 66609,
+      "alias": "Ruby_Caitlyn",
+      "name": "Doom Bot Caitlyn",
+      "roles": [
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "",
+        "championTagSecondary": ""
+      }
+    },
+    "Ruby_Nautilus": {
+      "numericId": 66610,
+      "alias": "Ruby_Nautilus",
+      "name": "Doom Bot Nautilus",
+      "roles": [
+        "tank",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "",
+        "championTagSecondary": ""
+      }
+    },
+    "Ruby_Maokai": {
+      "numericId": 66611,
+      "alias": "Ruby_Maokai",
+      "name": "Doom Bot Maokai",
+      "roles": [
+        "tank",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "",
+        "championTagSecondary": ""
+      }
+    },
+    "Ruby_Xerath": {
+      "numericId": 66612,
+      "alias": "Ruby_Xerath",
+      "name": "Doom Bot Xerath",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "",
+        "championTagSecondary": ""
+      }
+    },
+    "Ruby_Brand": {
+      "numericId": 66613,
+      "alias": "Ruby_Brand",
+      "name": "Doom Bot Brand",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Ruby_Wukong": {
+      "numericId": 66614,
+      "alias": "Ruby_Wukong",
+      "name": "Doom Bot Wukong",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Stealth"
+      }
+    },
+    "Ruby_Soraka": {
+      "numericId": 66615,
+      "alias": "Ruby_Soraka",
+      "name": "Doom Bot Soraka",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Ally Protection",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Ruby_Diana": {
+      "numericId": 66616,
+      "alias": "Ruby_Diana",
+      "name": "Doom Bot Diana",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Ruby_Jinx": {
+      "numericId": 66617,
+      "alias": "Ruby_Jinx",
+      "name": "Doom Bot Jinx",
+      "roles": [
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Auto-attack",
+        "championTagSecondary": "Hypercarry"
+      }
+    },
+    "Ruby_Malzahar": {
+      "numericId": 66618,
+      "alias": "Ruby_Malzahar",
+      "name": "Doom Bot Malzahar",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Damage-over-Time"
+      }
+    },
+    "Ruby_Blitzcrank": {
+      "numericId": 66619,
+      "alias": "Ruby_Blitzcrank",
+      "name": "Doom Bot Blitzcrank",
+      "roles": [
+        "tank",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 2,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Initiator",
+        "championTagSecondary": "Crowd Control"
+      }
+    }
+  }
+}
