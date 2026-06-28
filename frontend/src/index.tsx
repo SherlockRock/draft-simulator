@@ -14,7 +14,7 @@ import DraftWorkflow from "./workflows/DraftWorkflow";
 import CanvasWorkflow from "./workflows/CanvasWorkflow";
 import VersusWorkflow from "./workflows/VersusWorkflow";
 import NavigatorWorkflow from "./workflows/NavigatorWorkflow";
-import ScoutPlayerPanel from "./components/scouting/ScoutPlayerPanel";
+import ScoutView from "./components/scouting/ScoutView";
 import { initAnalytics } from "./utils/analytics";
 
 // Lazy-loaded page components for code splitting
@@ -52,7 +52,7 @@ render(
                     <Route path="/" component={UserWrapper}>
                         <Route path="/oauth2callback" component={AuthCallback} />
                         <Route path="/settings" component={SettingsPage} />
-                        <Route path="/scout" component={ScoutPlayerPanel} />
+                        <Route path="/scout" component={ScoutView} />
                         <Route path="/" component={HomePage} />
                         <Route path="/canvas" component={CanvasWorkflow}>
                             <Route path="/" component={CanvasEntryRedirect} />
