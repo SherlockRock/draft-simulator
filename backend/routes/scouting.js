@@ -3,6 +3,7 @@ const express = require("express");
 const auth = require("../middleware/auth");
 const { perUserThrottle } = require("../middleware/throttle");
 const scoutService = require("../services/scoutService");
+const { MAX_SCOUT_PLAYERS } = require("@draft-sim/shared-types");
 
 function isNonEmptyString(v) {
   return typeof v === "string" && v.trim().length > 0;
@@ -37,6 +38,41 @@ function makeScoutingRouter({ windowMs = 10_000, max = 3 } = {}) {
         return res.json(envelope);
       } catch (err) {
         console.error("scout player failed:", err);
+        return res.status(502).json({ error: "Failed to fetch player data from u.gg" });
+      }
+    }
+  );
+
+  router.post(
+    "/players",
+    (req, res, next) => auth.protect(req, res, next),
+    scoutThrottle,
+    async (req, res) => {
+      const { region, players } = req.body || {};
+      if (!isNonEmptyString(region)) {
+        return res.status(400).json({ error: "region is required" });
+      }
+      if (!Array.isArray(players) || players.length < 1 || players.length > MAX_SCOUT_PLAYERS) {
+        return res.status(400).json({
+          error: `players must be a non-empty array of at most ${MAX_SCOUT_PLAYERS}`,
+        });
+      }
+      if (!players.every((p) => p && isNonEmptyString(p.gameName) && isNonEmptyString(p.tagLine))) {
+        return res
+          .status(400)
+          .json({ error: "each player needs non-empty gameName and tagLine" });
+      }
+      try {
+        const out = await scoutService.scoutPlayers({
+          region: region.trim(),
+          players: players.map((p) => ({
+            gameName: p.gameName.trim(),
+            tagLine: p.tagLine.trim(),
+          })),
+        });
+        return res.json(out);
+      } catch (err) {
+        console.error("scout players failed:", err);
         return res.status(502).json({ error: "Failed to fetch player data from u.gg" });
       }
     }

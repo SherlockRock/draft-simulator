@@ -28,6 +28,7 @@ function buildApp(opts) {
 }
 
 let scoutSpy;
+let scoutPlayersSpy;
 beforeEach(() => {
   vi.restoreAllMocks();
   // Stub auth so requests are "authenticated" without a real JWT/cookie.
@@ -36,6 +37,7 @@ beforeEach(() => {
     next();
   });
   scoutSpy = vi.spyOn(scoutService, "scoutPlayer");
+  scoutPlayersSpy = vi.spyOn(scoutService, "scoutPlayers");
 });
 
 describe("POST /api/scouting/player", () => {
@@ -73,6 +75,80 @@ describe("POST /api/scouting/player", () => {
       expect(ok.status).toBe(200);
     }
     const res = await request(app).post("/api/scouting/player").send(body);
+    expect(res.status).toBe(429);
+  });
+});
+
+describe("POST /api/scouting/players", () => {
+  const players = [{ gameName: "Foo", tagLine: "NA1" }, { gameName: "Bar", tagLine: "EUW" }];
+  const okResults = {
+    results: [
+      { status: "ok", input: { region: "na1", gameName: "Foo", tagLine: "NA1" }, envelope },
+      { status: "error", input: { region: "na1", gameName: "Bar", tagLine: "EUW" }, error: "u.gg 404" },
+    ],
+  };
+
+  it("400 when region missing (service not called)", async () => {
+    const res = await request(buildApp()).post("/api/scouting/players").send({ players });
+    expect(res.status).toBe(400);
+    expect(scoutPlayersSpy).not.toHaveBeenCalled();
+  });
+
+  it("400 when players is empty", async () => {
+    const res = await request(buildApp())
+      .post("/api/scouting/players")
+      .send({ region: "na1", players: [] });
+    expect(res.status).toBe(400);
+    expect(scoutPlayersSpy).not.toHaveBeenCalled();
+  });
+
+  it("400 when over MAX_SCOUT_PLAYERS", async () => {
+    const tooMany = Array.from({ length: 6 }, (_, i) => ({ gameName: `P${i}`, tagLine: "NA1" }));
+    const res = await request(buildApp())
+      .post("/api/scouting/players")
+      .send({ region: "na1", players: tooMany });
+    expect(res.status).toBe(400);
+    expect(scoutPlayersSpy).not.toHaveBeenCalled();
+  });
+
+  it("400 when a player entry is missing a field", async () => {
+    const res = await request(buildApp())
+      .post("/api/scouting/players")
+      .send({ region: "na1", players: [{ gameName: "Foo" }] });
+    expect(res.status).toBe(400);
+    expect(scoutPlayersSpy).not.toHaveBeenCalled();
+  });
+
+  it("200 returns results array (partial failures included), trims inputs", async () => {
+    scoutPlayersSpy.mockResolvedValue(okResults);
+    const res = await request(buildApp())
+      .post("/api/scouting/players")
+      .send({ region: " na1 ", players: [{ gameName: " Foo ", tagLine: " NA1 " }, { gameName: "Bar", tagLine: "EUW" }] });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(okResults);
+    expect(scoutPlayersSpy).toHaveBeenCalledWith({
+      region: "na1",
+      players: [{ gameName: "Foo", tagLine: "NA1" }, { gameName: "Bar", tagLine: "EUW" }],
+    });
+  });
+
+  it("502 when the service throws entirely", async () => {
+    scoutPlayersSpy.mockRejectedValue(new Error("boom"));
+    const res = await request(buildApp())
+      .post("/api/scouting/players")
+      .send({ region: "na1", players });
+    expect(res.status).toBe(502);
+  });
+
+  it("429 after exceeding the throttle", async () => {
+    scoutPlayersSpy.mockResolvedValue(okResults);
+    const app = buildApp({ windowMs: 10_000, max: 3 });
+    const body = { region: "na1", players };
+    for (let i = 0; i < 3; i++) {
+      const ok = await request(app).post("/api/scouting/players").send(body);
+      expect(ok.status).toBe(200);
+    }
+    const res = await request(app).post("/api/scouting/players").send(body);
     expect(res.status).toBe(429);
   });
 });
