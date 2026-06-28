@@ -278,6 +278,13 @@ router.put("/:id", protect, async (req, res) => {
         .json({ error: "Not authorized to edit this draft" });
     }
 
+    const originalName = draft.name;
+    const willChangePublic =
+      publicStatus !== undefined && publicStatus !== draft.public;
+    const willChangeDescription =
+      description !== undefined && description !== draft.description;
+    const willChangeIcon = icon !== undefined && icon !== draft.icon;
+
     // Handle name change for canvas drafts with uniqueness validation
     if (name && name !== draft.name && draft.type === "canvas") {
       // This is a canvas draft being renamed - need to validate uniqueness
@@ -325,6 +332,21 @@ router.put("/:id", protect, async (req, res) => {
     if (canvas_id) {
       const canvas = await Canvas.findByPk(canvas_id);
       if (canvas) {
+        const isRenameOnlyCanvasUpdate =
+          draft.type === "canvas" &&
+          draft.name !== originalName &&
+          !willChangePublic &&
+          !willChangeDescription &&
+          !willChangeIcon;
+
+        if (isRenameOnlyCanvasUpdate) {
+          socketService.emitToRoom(canvas_id, "draftNameUpdated", {
+            draftId: draft.id,
+            name: draft.name,
+          });
+          return;
+        }
+
         const canvasDrafts = await CanvasDraft.findAll({
           where: { canvas_id },
           attributes: [

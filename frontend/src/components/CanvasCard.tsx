@@ -78,6 +78,13 @@ export const CanvasCard = (props: CanvasCardProps) => {
         }
     });
 
+    createEffect(() => {
+        const draftName = props.canvasDraft.Draft.name;
+        if (!isNameFocused() && nameSignal() !== draftName) {
+            setNameSignal(draftName);
+        }
+    });
+
     const handleViewClick = () => {
         navigate(`/canvas/${props.canvasId}/draft/${props.canvasDraft.Draft.id}`);
     };

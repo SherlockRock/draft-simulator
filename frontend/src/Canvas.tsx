@@ -128,6 +128,11 @@ type CanvasComponentProps = {
     sharePopperContent?: JSX.Element;
 };
 
+type DraftNameUpdatedData = {
+    draftId: string;
+    name: string;
+};
+
 const CanvasComponent = (props: CanvasComponentProps) => {
     const params = useParams();
     const navigate = useNavigate();
@@ -875,6 +880,31 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 });
             }
         );
+        socket.on("draftNameUpdated", (data: DraftNameUpdatedData) => {
+            setCanvasDrafts(
+                (cd) => cd.Draft.id === data.draftId,
+                "Draft",
+                "name",
+                data.name
+            );
+            canvasContext.mutateCanvas((prev: CanvasResposnse | undefined) => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
+                    drafts: prev.drafts.map((draft) =>
+                        draft.Draft.id === data.draftId
+                            ? {
+                                  ...draft,
+                                  Draft: {
+                                      ...draft.Draft,
+                                      name: data.name
+                                  }
+                              }
+                            : draft
+                    )
+                };
+            });
+        });
         socket.on("draftUpdate", (rawData: unknown) => {
             const data = validateSocketEvent(
                 "draftUpdate",
@@ -1016,6 +1046,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
         onCleanup(() => {
             socket.off("canvasUpdate");
+            socket.off("draftNameUpdated");
             socket.off("draftUpdate");
             socket.off("canvasObjectMoved");
             socket.off("connectionCreated");
