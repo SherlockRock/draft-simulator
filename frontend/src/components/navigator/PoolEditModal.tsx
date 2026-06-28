@@ -64,7 +64,7 @@ export const PoolEditModal: Component<PoolEditModalProps> = (props) => {
                         </div>
                     </div>
 
-                    <div class="grid flex-1 gap-6 overflow-y-auto lg:grid-cols-2">
+                    <div class="custom-scrollbar grid flex-1 gap-6 overflow-y-auto lg:grid-cols-2">
                         <TeamPoolEditor
                             teamColor="blue"
                             teamLabel="Blue Team"

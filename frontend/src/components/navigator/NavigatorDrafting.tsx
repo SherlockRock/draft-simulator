@@ -7,7 +7,7 @@ import { getPickerState } from "../../utils/navigatorPool";
 import { TURN_SEQUENCE } from "../../utils/turnSequence";
 import { eventsToConfirmedTurns, pathStepsToIndexPath } from "../../utils/treeReconcile";
 import DraftInputPanel from "./DraftInputPanel";
-import DecisionTree from "./DecisionTree";
+import DecisionTree, { type ScenarioPathTier } from "./DecisionTree";
 import ScenarioLanes from "./ScenarioLanes";
 import { SeriesTabStrip } from "./SeriesTabStrip";
 import { BetweenGamesPanel } from "./BetweenGamesPanel";
@@ -302,6 +302,9 @@ const NavigatorDrafting: Component = () => {
         });
     };
 
+    const scenarioTier = (index: number): ScenarioPathTier =>
+        selectedScenarioIndex() === index ? "selected" : "unselected";
+
     return (
         <>
             <div class="flex h-full w-full flex-col">
@@ -324,7 +327,7 @@ const NavigatorDrafting: Component = () => {
                         "grid-template-rows": "1fr 280px"
                     }}
                 >
-                    <div class="row-span-2 overflow-y-auto border-r border-slate-700/50">
+                    <div class="custom-scrollbar row-span-2 overflow-y-auto border-r border-slate-700/50">
                         <Show
                             when={showBetweenGamesPanel()}
                             fallback={
@@ -382,10 +385,7 @@ const NavigatorDrafting: Component = () => {
                                     return [
                                         {
                                             path,
-                                            tier:
-                                                selectedScenarioIndex() === index
-                                                    ? ("selected" as const)
-                                                    : ("unselected" as const)
+                                            tier: scenarioTier(index)
                                         }
                                     ];
                                 });
@@ -396,6 +396,7 @@ const NavigatorDrafting: Component = () => {
                             onConfirmProjectedPick={handleConfirmProjectedPick}
                             onOpenSwap={handleOpenSwap}
                             onOpenBranch={handleOpenBranch}
+                            canMutate={viewingArchive() === null}
                         />
 
                         <div class="pointer-events-none absolute right-4 top-4 flex items-center gap-2">

@@ -49,6 +49,7 @@ interface DecisionTreeProps {
     panRequest: { path: number[] } | null;
     onNodeClick: (nodeIndex: number[]) => void;
     confirmedDepth: number;
+    canMutate?: boolean;
     onPromoteToScenario?: (path: number[]) => void;
     onConfirmProjectedPick?: (path: number[]) => void;
     onOpenSwap?: (path: number[]) => void;
@@ -765,6 +766,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
     let svgRef: SVGSVGElement | undefined;
     let svgGroupRef: SVGGElement | undefined;
     let panzoomInstance: PanZoom | null = null;
+    let layoutOverrideRafId: number | undefined;
     let resizeObserver: ResizeObserver | null = null;
     const [viewportSize, setViewportSize] = createSignal<ViewportSize>({
         width: 0,
@@ -790,6 +792,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
     const DRAG_THRESHOLD_PX = 5;
 
     const closeContextMenu = () => setContextMenuState(null);
+    const canMutate = createMemo(() => props.canMutate !== false);
 
     const handleNodeContextMenu = (event: MouseEvent, path: number[]) => {
         setContextMenuState({
@@ -1007,6 +1010,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
             isConfirmed,
             isDepthOneProjected,
             hasLayoutOverride,
+            canMutate: canMutate(),
             onConfirmPick: () => {
                 props.onConfirmProjectedPick?.(path);
                 closeContextMenu();
@@ -1175,6 +1179,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
         if (!tree) return;
         const keyPath = pathIndicesToNodeKeyPath(tree, indexPath);
         if (keyPath === null || keyPath === "") return;
+        panzoomInstance?.pause();
         setDragState({
             keyPath,
             startPageX: event.pageX,
@@ -1199,12 +1204,24 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
             }
             const angle = getCursorAngleFromRoot(moveEvent.pageX, moveEvent.pageY);
             if (angle === null) return;
-            setLayoutOverride(current.keyPath, { angle });
+            if (layoutOverrideRafId !== undefined) {
+                cancelAnimationFrame(layoutOverrideRafId);
+            }
+            layoutOverrideRafId = requestAnimationFrame(() => {
+                setLayoutOverride(current.keyPath, { angle });
+                layoutOverrideRafId = undefined;
+            });
         };
 
         const handleUp = () => {
             window.removeEventListener("pointermove", handleMove);
             window.removeEventListener("pointerup", handleUp);
+            window.removeEventListener("pointercancel", handleUp);
+            if (layoutOverrideRafId !== undefined) {
+                cancelAnimationFrame(layoutOverrideRafId);
+                layoutOverrideRafId = undefined;
+            }
+            panzoomInstance?.resume();
             const state = dragState();
             if (state?.startedDragging) {
                 setJustDragged(true);
@@ -1215,6 +1232,7 @@ const DecisionTree: Component<DecisionTreeProps> = (props) => {
 
         window.addEventListener("pointermove", handleMove);
         window.addEventListener("pointerup", handleUp);
+        window.addEventListener("pointercancel", handleUp);
     };
 
     onMount(() => {

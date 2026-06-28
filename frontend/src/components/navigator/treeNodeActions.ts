@@ -5,6 +5,7 @@ export interface TreeActionContext {
     /** True when this node is a direct child of the confirmed frontier (depth-1 projected). */
     isDepthOneProjected: boolean;
     hasLayoutOverride: boolean;
+    canMutate: boolean;
     onConfirmPick: () => void;
     onCollapseSubtree: () => void;
     onPromoteToScenario: () => void;
@@ -20,7 +21,7 @@ export interface TreeActionContext {
 export function actionsForNode(ctx: TreeActionContext): ContextMenuAction[] {
     const actions: ContextMenuAction[] = [];
 
-    if (!ctx.isConfirmed && ctx.isDepthOneProjected) {
+    if (ctx.canMutate && !ctx.isConfirmed && ctx.isDepthOneProjected) {
         actions.push({
             label: "Confirm this pick",
             action: ctx.onConfirmPick
@@ -32,7 +33,7 @@ export function actionsForNode(ctx: TreeActionContext): ContextMenuAction[] {
         action: ctx.onCollapseSubtree
     });
 
-    if (!ctx.isConfirmed) {
+    if (ctx.canMutate && !ctx.isConfirmed) {
         actions.push({
             label: "Promote to scenario lane",
             action: ctx.onPromoteToScenario

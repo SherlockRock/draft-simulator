@@ -84,7 +84,7 @@ const NavigatorSetup: Component = () => {
     };
 
     return (
-        <div class="flex-1 overflow-y-auto bg-darius-bg bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
+        <div class="custom-scrollbar flex-1 overflow-y-auto bg-darius-bg bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
             <div class="mx-auto flex min-h-full w-full max-w-[1400px] flex-col p-6 sm:p-8">
                 <div class="rounded-xl border border-slate-700/50 bg-slate-800/95 shadow-[0_20px_60px_rgba(15,23,42,0.35)]">
                     <div class="flex flex-col gap-8 p-6 sm:p-8">

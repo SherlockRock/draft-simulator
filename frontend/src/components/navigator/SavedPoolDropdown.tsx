@@ -1,9 +1,11 @@
 import { Component, For, Show, createResource, createSignal } from "solid-js";
 import { ChevronDown } from "lucide-solid";
 import toast from "solid-toast";
-import type { RolePoolMap, SavedPool } from "@draft-sim/shared-types";
+import type { Role, RolePoolMap, SavedPool } from "@draft-sim/shared-types";
 import { fetchSavedPools } from "../../utils/savedPoolsApi";
 import { champions as allChampions } from "../../utils/constants";
+
+const ROLE_KEYS: Role[] = ["top", "jungle", "mid", "adc", "support"];
 
 interface SavedPoolDropdownProps {
     // Fires when the user picks a saved pool from the list.
@@ -27,7 +29,7 @@ function sanitizeAgainstCatalog(champions: RolePoolMap): {
         adc: [],
         support: []
     };
-    for (const role of ["top", "jungle", "mid", "adc", "support"] as const) {
+    for (const role of ROLE_KEYS) {
         for (const id of champions[role] ?? []) {
             if (validIds.has(id)) {
                 next[role].push(id);
@@ -73,7 +75,7 @@ export const SavedPoolDropdown: Component<SavedPoolDropdownProps> = (props) => {
             </button>
             <Show when={isOpen()}>
                 <div class="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-                <div class="absolute left-0 top-full z-50 mt-1 max-h-[320px] w-72 overflow-y-auto rounded-md border border-slate-700 bg-slate-900 shadow-xl">
+                <div class="custom-scrollbar absolute left-0 top-full z-50 mt-1 max-h-[320px] w-72 overflow-y-auto rounded-md border border-slate-700 bg-slate-900 shadow-xl">
                     <Show when={!pools.loading} fallback={<LoadingRow />}>
                         <Show when={(pools() ?? []).length > 0} fallback={<EmptyRow />}>
                             <For each={pools() ?? []}>
