@@ -92,3 +92,66 @@ export function parsePlayersParam(raw: string): PlayerId[] {
     }
     return out;
 }
+
+// op.gg region path segment → our Riot platform code. Unknown codes fall back
+// to null (the caller keeps the dropdown selection).
+const OPGG_REGION_TO_RIOT: Record<string, string> = {
+    na: "na1",
+    euw: "euw1",
+    eune: "eun1",
+    kr: "kr",
+    br: "br1",
+    oce: "oc1",
+    oc: "oc1"
+};
+
+export interface ParsedPlayersInput {
+    // Region extracted from an op.gg URL, or null when the input is a plain
+    // list (the caller then uses the region dropdown).
+    region: string | null;
+    players: PlayerId[];
+}
+
+// Parse a comma-separated "Name#TAG" list (gameName may contain spaces) into
+// players. Raw user text — trims, drops malformed chunks, no URL decoding.
+function parseRiotIdList(raw: string): PlayerId[] {
+    const out: PlayerId[] = [];
+    for (const chunk of raw.split(",")) {
+        const t = chunk.trim();
+        const hash = t.indexOf("#");
+        if (hash === -1) continue;
+        const gameName = t.slice(0, hash).trim();
+        const tagLine = t.slice(hash + 1).trim();
+        if (!gameName || !tagLine) continue;
+        out.push({ gameName, tagLine });
+    }
+    return out;
+}
+
+// Parse the single scout text field: either a plain "Name#TAG,Name#TAG" list or
+// a pasted op.gg multisearch URL (e.g.
+// https://op.gg/lol/multisearch/na?summoners=city+mouse%23yum%2C...). For the
+// URL form, region is read from the path and players from the `summoners` query
+// (URLSearchParams decodes %23/%2C/+ for us).
+export function parsePlayersInput(text: string): ParsedPlayersInput {
+    const trimmed = text.trim();
+    if (!trimmed) return { region: null, players: [] };
+    if (/^https?:\/\//i.test(trimmed)) {
+        try {
+            const url = new URL(trimmed);
+            const summoners = url.searchParams.get("summoners") ?? "";
+            const m = url.pathname.match(/multisearch\/([^/?#]+)/i);
+            const region = m ? (OPGG_REGION_TO_RIOT[m[1].toLowerCase()] ?? null) : null;
+            return { region, players: parseRiotIdList(summoners) };
+        } catch {
+            return { region: null, players: [] };
+        }
+    }
+    return { region: null, players: parseRiotIdList(trimmed) };
+}
+
+// Render players back into the plain text-field format ("Name#TAG,Name#TAG"),
+// used to seed the field from the URL so a shared scout stays editable.
+export function formatPlayersInput(players: PlayerId[]): string {
+    return players.map((p) => `${p.gameName}#${p.tagLine}`).join(",");
+}

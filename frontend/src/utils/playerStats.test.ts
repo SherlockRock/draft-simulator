@@ -5,7 +5,9 @@ import {
     computeTotals,
     computeRoleDistribution,
     serializePlayersParam,
-    parsePlayersParam
+    parsePlayersParam,
+    parsePlayersInput,
+    formatPlayersInput
 } from "./playerStats";
 
 const entry = (
@@ -94,5 +96,73 @@ describe("players param round-trip", () => {
                 { gameName: "Bob", tagLine: "" }
             ])
         ).toBe(`${encodeURIComponent("Aeon")}#${encodeURIComponent("NA3")}`);
+    });
+});
+
+describe("parsePlayersInput", () => {
+    it("parses a plain comma-separated list (gameName may contain spaces)", () => {
+        expect(
+            parsePlayersInput(
+                "city mouse#yum,khuromee#emate,White#KWAN,ZeroDomain#Kass,Yeongjae#KOR"
+            )
+        ).toEqual({
+            region: null,
+            players: [
+                { gameName: "city mouse", tagLine: "yum" },
+                { gameName: "khuromee", tagLine: "emate" },
+                { gameName: "White", tagLine: "KWAN" },
+                { gameName: "ZeroDomain", tagLine: "Kass" },
+                { gameName: "Yeongjae", tagLine: "KOR" }
+            ]
+        });
+    });
+
+    it("trims whitespace around chunks and drops malformed ones", () => {
+        expect(parsePlayersInput("  Aeon#NA3 , broken , Bob#NA1 ")).toEqual({
+            region: null,
+            players: [
+                { gameName: "Aeon", tagLine: "NA3" },
+                { gameName: "Bob", tagLine: "NA1" }
+            ]
+        });
+    });
+
+    it("parses an op.gg multisearch URL (region from path, players from query)", () => {
+        expect(
+            parsePlayersInput(
+                "https://op.gg/lol/multisearch/na?summoners=city+mouse%23yum%2Ckhuromee%23emate%2CWhite%23KWAN%2CZeroDomain%23Kass%2CYeongjae%23KOR"
+            )
+        ).toEqual({
+            region: "na1",
+            players: [
+                { gameName: "city mouse", tagLine: "yum" },
+                { gameName: "khuromee", tagLine: "emate" },
+                { gameName: "White", tagLine: "KWAN" },
+                { gameName: "ZeroDomain", tagLine: "Kass" },
+                { gameName: "Yeongjae", tagLine: "KOR" }
+            ]
+        });
+    });
+
+    it("maps a KR op.gg URL region", () => {
+        const r = parsePlayersInput(
+            "https://www.op.gg/multisearch/kr?summoners=Hide+on+bush%23KR1"
+        );
+        expect(r.region).toBe("kr");
+        expect(r.players).toEqual([{ gameName: "Hide on bush", tagLine: "KR1" }]);
+    });
+
+    it("empty input → no players", () => {
+        expect(parsePlayersInput("")).toEqual({ region: null, players: [] });
+    });
+});
+
+describe("formatPlayersInput", () => {
+    it("round-trips with parsePlayersInput for a plain list", () => {
+        const players = [
+            { gameName: "city mouse", tagLine: "yum" },
+            { gameName: "Bob", tagLine: "NA1" }
+        ];
+        expect(parsePlayersInput(formatPlayersInput(players)).players).toEqual(players);
     });
 });
