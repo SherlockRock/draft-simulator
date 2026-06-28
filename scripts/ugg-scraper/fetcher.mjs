@@ -10,6 +10,8 @@ import { TokenBucket } from "../match-pipeline/rate-limiter.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const USER_AGENT = "draft-simulator-pipeline/1.0 (firstpick.lol)";
+
 export class UggFetcher {
   constructor({
     fetch = globalThis.fetch.bind(globalThis),
@@ -26,16 +28,27 @@ export class UggFetcher {
   }
 
   async getJson(url) {
+    return this.#request(url, { headers: { "user-agent": USER_AGENT } });
+  }
+
+  async postJson(url, body) {
+    return this.#request(url, {
+      method: "POST",
+      headers: {
+        "user-agent": USER_AGENT,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  async #request(url, init) {
     let attempt = 0;
     while (true) {
       await this.rateLimiter.acquire();
       let response;
       try {
-        response = await this.fetch(url, {
-          headers: {
-            "user-agent": "draft-simulator-pipeline/1.0 (firstpick.lol)",
-          },
-        });
+        response = await this.fetch(url, init);
       } catch (err) {
         if (attempt >= this.maxRetries) throw err;
         const wait = this.backoffBaseMs * 2 ** attempt;
@@ -47,9 +60,8 @@ export class UggFetcher {
 
       if (response.ok) return response.json();
 
-      // 404 — legitimate "no data" (e.g. champion not in this patch).
-      // 403 — u.gg's response for non-real champion IDs (Ruby_* placeholders,
-      //   private/internal IDs). Same downstream effect: skip this champion.
+      // 404 = legitimate "no data" (private/empty profile, missing combo).
+      // 403 = u.gg's response for non-real / blocked identifiers. Both: null.
       if (response.status === 404 || response.status === 403) return null;
 
       if (response.status >= 500 || response.status === 429) {

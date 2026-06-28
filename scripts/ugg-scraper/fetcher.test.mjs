@@ -87,3 +87,30 @@ test("getJson retries on network error then throws", async () => {
   await assert.rejects(() => f.getJson("https://x"), /ECONNRESET/);
   assert.equal(fetch.calls.length, 4);
 });
+
+test("postJson sends JSON body and returns parsed response on 200", async () => {
+  const fetch = stubFetch([{ status: 200, body: { data: { ok: 1 } } }]);
+  const f = new UggFetcher({ fetch, rateLimiter: noWaitLimiter() });
+  const out = await f.postJson("https://u.gg/api", { query: "q", variables: {} });
+  assert.deepEqual(out, { data: { ok: 1 } });
+  const call = fetch.calls[0];
+  assert.equal(call.init.method, "POST");
+  assert.equal(call.init.headers["content-type"], "application/json");
+  assert.deepEqual(JSON.parse(call.init.body), { query: "q", variables: {} });
+});
+
+test("postJson returns null on 404/403", async () => {
+  const fetch = stubFetch([{ status: 404, body: {} }]);
+  const f = new UggFetcher({ fetch, rateLimiter: noWaitLimiter() });
+  assert.equal(await f.postJson("https://u.gg/api", {}), null);
+});
+
+test("postJson retries on 503 then succeeds", async () => {
+  const fetch = stubFetch([
+    { status: 503, body: {} },
+    { status: 200, body: { ok: 1 } },
+  ]);
+  const f = new UggFetcher({ fetch, rateLimiter: noWaitLimiter(), backoffBaseMs: 1 });
+  assert.deepEqual(await f.postJson("https://u.gg/api", {}), { ok: 1 });
+  assert.equal(fetch.calls.length, 2);
+});
