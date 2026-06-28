@@ -1,17 +1,18 @@
 import {
-    ChampionStatsEnvelopeSchema,
-    type ChampionStatsEnvelope
+    ScoutPlayersResponseSchema,
+    type ScoutPlayersResponse
 } from "@draft-sim/shared-types";
 import { apiPost } from "./apiClient";
 
-export interface ScoutInput {
+export interface ScoutPlayersInput {
     region: string;
-    gameName: string;
-    tagLine: string;
+    players: { gameName: string; tagLine: string }[];
 }
 
-// POST /api/scouting/player — apiPost validates the response against the Zod
-// envelope schema, so a drifted u.gg shape surfaces as a ValidationError.
-export function scoutPlayer(input: ScoutInput): Promise<ChampionStatsEnvelope> {
-    return apiPost("/scouting/player", input, ChampionStatsEnvelopeSchema);
+// POST /api/scouting/players — apiPost validates the response against the Zod
+// schema, so a drifted u.gg/back-end shape surfaces as a ValidationError.
+export function scoutPlayers(
+    input: ScoutPlayersInput
+): Promise<ScoutPlayersResponse> {
+    return apiPost("/scouting/players", input, ScoutPlayersResponseSchema);
 }
