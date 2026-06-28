@@ -925,3 +925,45 @@ export const ChampionStatsEnvelopeSchema = z.object({
   entries: z.array(ChampionStatEntrySchema),
 });
 export type ChampionStatsEnvelope = z.infer<typeof ChampionStatsEnvelopeSchema>;
+
+// Max players per multi-scout. Single source of truth for the cap (client +
+// server). Lifting the cap later is a one-line change here.
+export const MAX_SCOUT_PLAYERS = 5;
+
+export const ScoutPlayerInputSchema = z.object({
+  region: z.string(),
+  gameName: z.string(),
+  tagLine: z.string(),
+});
+export type ScoutPlayerInput = z.infer<typeof ScoutPlayerInputSchema>;
+
+// Batch request: one shared region, 1..MAX players.
+export const ScoutPlayersRequestSchema = z.object({
+  region: z.string().min(1),
+  players: z
+    .array(z.object({ gameName: z.string().min(1), tagLine: z.string().min(1) }))
+    .min(1)
+    .max(MAX_SCOUT_PLAYERS),
+});
+export type ScoutPlayersRequest = z.infer<typeof ScoutPlayersRequestSchema>;
+
+// Per-player result: a discriminated union so one bad Riot ID never nukes the
+// whole scout. Type-safe narrowing on `status` (no `as`).
+export const PlayerScoutResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("ok"),
+    input: ScoutPlayerInputSchema,
+    envelope: ChampionStatsEnvelopeSchema,
+  }),
+  z.object({
+    status: z.literal("error"),
+    input: ScoutPlayerInputSchema,
+    error: z.string(),
+  }),
+]);
+export type PlayerScoutResult = z.infer<typeof PlayerScoutResultSchema>;
+
+export const ScoutPlayersResponseSchema = z.object({
+  results: z.array(PlayerScoutResultSchema),
+});
+export type ScoutPlayersResponse = z.infer<typeof ScoutPlayersResponseSchema>;
