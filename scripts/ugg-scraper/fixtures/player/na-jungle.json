@@ -1,0 +1,24 @@
+{
+  "_comment": "Trimmed REAL capture: getPlayerStats role=1 (jungle) for aeon#na3 / na1, 2026-06-28. Fields reduced to our minimal selection set (championId/totalMatches/wins + block role/queueType/seasonId). 64=LeeSin pure jungle, 799=Ambessa flex-split (78 of 81 season games were jungle), 254=Vi low-game, 200=Belveth 1-game. Second block is the empty ranked-flex (440) result.",
+  "data": {
+    "fetchPlayerStatistics": [
+      {
+        "basicChampionPerformances": [
+          { "championId": 64, "totalMatches": 133, "wins": 69 },
+          { "championId": 799, "totalMatches": 78, "wins": 38 },
+          { "championId": 254, "totalMatches": 12, "wins": 7 },
+          { "championId": 200, "totalMatches": 1, "wins": 1 }
+        ],
+        "queueType": 420,
+        "role": 1,
+        "seasonId": 26
+      },
+      {
+        "basicChampionPerformances": [],
+        "queueType": 440,
+        "role": 1,
+        "seasonId": 26
+      }
+    ]
+  }
+}

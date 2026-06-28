@@ -1,0 +1,9 @@
+{
+  "_comment": "An empty/private profile (or a role the player never plays): both queue blocks return empty basicChampionPerformances. Canonicalizes to zero entries.",
+  "data": {
+    "fetchPlayerStatistics": [
+      { "basicChampionPerformances": [], "queueType": 420, "role": 1, "seasonId": 26 },
+      { "basicChampionPerformances": [], "queueType": 440, "role": 1, "seasonId": 26 }
+    ]
+  }
+}
