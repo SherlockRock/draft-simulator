@@ -64,6 +64,23 @@ export function winrateColor(wr: number): string {
     return wr >= 60 ? "text-orange-400" : wr >= 50 ? "text-blue-300" : "text-slate-400";
 }
 
+const ROLE_ORDER: Role[] = ["top", "jungle", "mid", "adc", "support"];
+
+// The player's most-played role (most games), or null if no entries. Ties break
+// toward the earlier role in top→jungle→mid→adc→support order.
+export function computeMainRole(entries: ChampionStatEntry[]): Role | null {
+    const dist = computeRoleDistribution(entries);
+    let best: Role | null = null;
+    let bestGames = 0;
+    for (const role of ROLE_ORDER) {
+        if (dist[role] > bestGames) {
+            bestGames = dist[role];
+            best = role;
+        }
+    }
+    return best;
+}
+
 // URL encoding: each player → "gameName#tag" with both fields percent-encoded
 // (so # and , inside a name don't break parsing), joined by commas. The router
 // handles the outer URL encoding of the whole value.

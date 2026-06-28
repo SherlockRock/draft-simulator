@@ -11,6 +11,7 @@ import {
 } from "../../utils/playerStats";
 import { StyledSelect } from "../StyledSelect";
 import PlayerColumn from "./PlayerColumn";
+import SquadSummaryBar from "./SquadSummaryBar";
 
 const REGION_OPTIONS = [
     { value: "na1", label: "NA" },
@@ -125,14 +126,21 @@ const ScoutView: Component = () => {
                 </Show>
 
                 <Show when={query.data}>
-                    <div
-                        class="custom-scrollbar flex gap-4 overflow-x-auto pb-2"
-                        classList={{ "justify-center": single() }}
-                    >
-                        <For each={query.data?.results}>
-                            {(result) => <PlayerColumn result={result} />}
-                        </For>
-                    </div>
+                    {(data) => (
+                        <>
+                            <Show when={data().results.length > 1}>
+                                <SquadSummaryBar results={data().results} />
+                            </Show>
+                            <div
+                                class="custom-scrollbar flex gap-4 overflow-x-auto pb-2"
+                                classList={{ "justify-center": single() }}
+                            >
+                                <For each={data().results}>
+                                    {(result) => <PlayerColumn result={result} />}
+                                </For>
+                            </div>
+                        </>
+                    )}
                 </Show>
             </div>
         </div>

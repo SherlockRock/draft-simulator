@@ -7,7 +7,8 @@ import {
     serializePlayersParam,
     parsePlayersParam,
     parsePlayersInput,
-    formatPlayersInput
+    formatPlayersInput,
+    computeMainRole
 } from "./playerStats";
 
 const entry = (
@@ -154,6 +155,28 @@ describe("parsePlayersInput", () => {
 
     it("empty input → no players", () => {
         expect(parsePlayersInput("")).toEqual({ region: null, players: [] });
+    });
+});
+
+describe("computeMainRole", () => {
+    it("returns the role with the most games", () => {
+        expect(
+            computeMainRole([
+                entry("Ahri", "mid", 10, 6),
+                entry("Sylas", "mid", 5, 3),
+                entry("Jinx", "adc", 4, 2)
+            ])
+        ).toBe("mid");
+    });
+
+    it("returns null for no entries", () => {
+        expect(computeMainRole([])).toBeNull();
+    });
+
+    it("breaks ties toward the earlier role (top→...→support)", () => {
+        expect(
+            computeMainRole([entry("Jinx", "adc", 5, 3), entry("Garen", "top", 5, 2)])
+        ).toBe("top");
     });
 });
 

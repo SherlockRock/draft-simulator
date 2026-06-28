@@ -11,6 +11,28 @@ export const ROLE_LABELS: Record<Role, string> = {
     support: "Support"
 };
 
+// CommunityDragon position icons (same source RoleFilter uses).
+const ROLE_ICON_CDN =
+    "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg";
+
+const ROLE_ICON_SLUG: Record<Role, string> = {
+    top: "position-top",
+    jungle: "position-jungle",
+    mid: "position-middle",
+    adc: "position-bottom",
+    support: "position-utility"
+};
+
+export function roleIconUrl(role: Role): string {
+    return `${ROLE_ICON_CDN}/${ROLE_ICON_SLUG[role]}.svg`;
+}
+
+// Resolve a champion alias (the envelope's championId, = champion.id) to its
+// square icon URL, or undefined when unknown.
+export function getChampionImg(championId: string): string | undefined {
+    return champions.find((c) => c.id === championId)?.img;
+}
+
 // Map Riot-convention position strings to our lowercase Role vocabulary.
 const RIOT_POSITION_TO_ROLE: Record<string, Role> = {
     TOP: "top",
