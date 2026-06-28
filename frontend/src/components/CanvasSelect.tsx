@@ -44,6 +44,7 @@ export const CanvasSelect = (props: props) => {
     const buttonRefs: Map<number, HTMLButtonElement> = new Map();
     let inputRef: HTMLInputElement | undefined;
     let selectionFrameId: number | undefined;
+    let blurTimeoutId: number | undefined;
     let wasActiveSelection = false;
     let skipBlurNormalization = false;
 
@@ -60,6 +61,20 @@ export const CanvasSelect = (props: props) => {
         if (isCompact()) return "left-0 w-56";
         return props.side === "team2" ? "right-0 w-40" : "left-0 w-40";
     });
+
+    const retryChampionImage = (
+        e: Event & { currentTarget: HTMLImageElement }
+    ) => {
+        const img = e.currentTarget;
+        if (img.dataset.retried === "true") return;
+
+        img.dataset.retried = "true";
+        const src = img.src;
+        window.setTimeout(() => {
+            img.src = "";
+            img.src = src;
+        }, 1500);
+    };
 
     const spliceIndexToRealIndex = createMemo(() =>
         getPickOrderForLayout(props.cardLayout())
@@ -142,7 +157,27 @@ export const CanvasSelect = (props: props) => {
             return;
         }
 
-        props.onBlur?.();
+        // Defer the blur decision until focus settles. During rapid entry the
+        // committed slot's <input> unmounts (wide-art swaps it for champion art),
+        // so focus transiently lands on <body> before the next slot's input
+        // claims it — and Firefox reports relatedTarget=null for the programmatic
+        // focus, so neither sync check above can see the hand-off. Re-checking the
+        // settled activeElement on the next macrotask avoids a spurious blur that
+        // would reset focusedSelectIndex mid-advance.
+        if (blurTimeoutId !== undefined) {
+            clearTimeout(blurTimeoutId);
+        }
+        blurTimeoutId = window.setTimeout(() => {
+            blurTimeoutId = undefined;
+            const active = document.activeElement;
+            if (
+                active instanceof HTMLElement &&
+                active.closest("[data-canvas-select-root='true']")
+            ) {
+                return;
+            }
+            props.onBlur?.();
+        }, 0);
     };
 
     const activateSelect = () => {
@@ -220,6 +255,15 @@ export const CanvasSelect = (props: props) => {
 
     const focusInput = () => {
         if (!inputRef || document.activeElement === inputRef) return;
+        if (!document.contains(inputRef)) {
+            // Wide-art Show transition: ref points to detached element, retry next frame
+            requestAnimationFrame(() => {
+                if (inputRef && isActiveSelection() && document.contains(inputRef)) {
+                    inputRef.focus();
+                }
+            });
+            return;
+        }
         inputRef.focus();
     };
 
@@ -240,6 +284,10 @@ export const CanvasSelect = (props: props) => {
 
     onCleanup(() => {
         cancelPendingSelectionNormalization();
+        if (blurTimeoutId !== undefined) {
+            clearTimeout(blurTimeoutId);
+            blurTimeoutId = undefined;
+        }
     });
 
     const handleInputChange = (newValue: string) => {
@@ -278,6 +326,15 @@ export const CanvasSelect = (props: props) => {
 
     const commitHighlightedOption = (moveFocus = true, reverse = false) => {
         if (!dropdownOpen()) {
+            if (moveFocus && selectedChampion() !== null) {
+                // Filled slot with closed dropdown → advance, don't re-open
+                if (reverse) {
+                    props.onSelectPrevious?.();
+                } else {
+                    props.onSelectNext?.();
+                }
+                return;
+            }
             setDropdownOpen(true);
             setDropdownIndex(0);
             return;
@@ -454,6 +511,7 @@ export const CanvasSelect = (props: props) => {
                                                 src={selectedChampion()?.img}
                                                 alt={selectedChampion()?.name}
                                                 class="h-6 w-6 shrink-0 rounded-md"
+                                                onError={retryChampionImage}
                                             />
                                         </Show>
                                         <input
@@ -468,6 +526,7 @@ export const CanvasSelect = (props: props) => {
                                             onBlur={restoreOrCommitInputValue}
                                             placeholder={placeholderLabel()}
                                             name="select"
+                                            autocomplete="off"
                                             id={`${props.draft.id}-${props.index()}-select`}
                                             class="h-6 min-w-0 flex-1 appearance-none bg-inherit px-1 outline-none"
                                             classList={{
@@ -525,6 +584,7 @@ export const CanvasSelect = (props: props) => {
                                             src={getSplashUrl(selectedChampion()!.name)}
                                             alt={selectedChampion()!.name}
                                             class="absolute -inset-2 block h-[calc(100%+1rem)] w-[calc(100%+1rem)] max-w-none object-cover object-[center_25%]"
+                                            onError={retryChampionImage}
                                             classList={{
                                                 "-translate-x-[15%] scale-[1.25]":
                                                     props.side === "team1",
@@ -552,6 +612,7 @@ export const CanvasSelect = (props: props) => {
                                                 onBlur={restoreOrCommitInputValue}
                                                 placeholder={wideArtInputPlaceholder()}
                                                 name="select"
+                                                autocomplete="off"
                                                 id={`${props.draft.id}-${props.index()}-select`}
                                                 class="relative z-[3] w-full cursor-text appearance-none border-0 bg-transparent px-3 py-2 outline-none"
                                                 classList={{
@@ -633,6 +694,7 @@ export const CanvasSelect = (props: props) => {
                                 onKeyDown={handleInputKeyDown}
                                 onBlur={restoreOrCommitInputValue}
                                 name="select"
+                                autocomplete="off"
                                 id={`${props.draft.id}-${props.index()}-select`}
                                 class="absolute inset-0 z-[2] h-full w-full cursor-text appearance-none border-0 bg-transparent text-transparent caret-transparent outline-none"
                                 aria-label={selectedChampion()?.name ?? "Champion ban"}
@@ -652,6 +714,7 @@ export const CanvasSelect = (props: props) => {
                                     src={selectedChampion()?.img}
                                     alt={selectedChampion()?.name}
                                     class="h-full w-full rounded-md object-cover"
+                                    onError={retryChampionImage}
                                 />
                             </Show>
                         </div>
@@ -678,7 +741,7 @@ export const CanvasSelect = (props: props) => {
                 <Show when={dropdownOpen() && !props.disabled}>
                     <div
                         ref={dropdownRef}
-                        class={`absolute z-10 overflow-auto rounded-xl border shadow-[0_18px_40px_rgba(15,23,42,0.55)] ${dropdownWidthClass()}`}
+                        class={`absolute z-10 min-w-40 overflow-auto rounded-xl border shadow-[0_18px_40px_rgba(15,23,42,0.55)] ${dropdownWidthClass()}`}
                         classList={{
                             "max-h-60 border-darius-border bg-darius-bg": !isWideArt(),
                             "top-full mt-1 custom-scrollbar max-h-[28rem] border-darius-border/90 bg-darius-bg/98":
@@ -761,6 +824,7 @@ export const CanvasSelect = (props: props) => {
                                                                 src={champion.img}
                                                                 alt={champion.name}
                                                                 class="h-6 w-6 rounded"
+                                                                onError={retryChampionImage}
                                                             />
                                                             <span>{champion.name}</span>
                                                         </button>
@@ -810,6 +874,7 @@ export const CanvasSelect = (props: props) => {
                                                             )}
                                                             alt={champion.name}
                                                             class="absolute -inset-2 block h-[calc(100%+1rem)] w-[calc(100%+1rem)] max-w-none object-cover object-[center_25%]"
+                                                            onError={retryChampionImage}
                                                             classList={{
                                                                 "-translate-x-[12%] scale-[1.12]":
                                                                     props.side ===
