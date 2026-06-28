@@ -28,46 +28,42 @@ const PlayerColumn: Component<PlayerColumnProps> = (props) => {
     const roleDistribution = createMemo(() => computeRoleDistribution(entries()));
 
     return (
-        <section class="flex w-[300px] shrink-0 flex-col rounded-xl border border-slate-700/50 bg-slate-800/95">
-            <header class="border-b border-slate-700/60 p-3">
+        <section class="flex w-[232px] shrink-0 flex-col rounded-xl border border-slate-700/50 bg-slate-800/95">
+            <header class="border-b border-slate-700/60 px-3 py-2.5">
                 <h2 class="truncate text-sm font-bold text-slate-100" title={riotId()}>
                     {props.result.input.gameName}
                     <span class="text-slate-500"> #{props.result.input.tagLine}</span>
                 </h2>
 
                 <Show when={props.result.status === "ok" && champRows().length > 0}>
-                    <div class="mt-1.5 flex items-baseline gap-2">
-                        <span class="text-[11px] text-slate-300">
-                            {totals().wins}W {totals().losses}L
-                        </span>
+                    <div class="mt-1 flex items-baseline gap-2">
                         <span
-                            class={`text-[11px] font-semibold ${winrateColor(totals().winrate)}`}
+                            class={`text-xl font-bold ${winrateColor(totals().winrate)}`}
                         >
-                            {totals().winrate}% WR
+                            {totals().winrate}%
                         </span>
-                        <span class="text-[10px] text-slate-500">
-                            {totals().games} games
+                        <span class="text-xs text-slate-400">
+                            {totals().wins}W {totals().losses}L
+                            <span class="text-slate-600"> · </span>
+                            {totals().games}g
                         </span>
                     </div>
-                    <div class="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-slate-400">
+                    <div class="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-300">
                         <For each={ROLES}>
                             {(role) => (
                                 <Show when={roleDistribution()[role] > 0}>
-                                    <span class="flex items-center gap-0.5">
+                                    <span class="flex items-center gap-1">
                                         <img
                                             src={roleIconUrl(role)}
                                             alt={ROLE_LABELS[role]}
                                             title={ROLE_LABELS[role]}
-                                            class="h-3.5 w-3.5 opacity-80"
+                                            class="h-4 w-4 opacity-80"
                                         />
-                                        <span class="text-slate-300">
-                                            {Math.round(
-                                                (roleDistribution()[role] /
-                                                    totals().games) *
-                                                    100
-                                            )}
-                                            %
-                                        </span>
+                                        {Math.round(
+                                            (roleDistribution()[role] / totals().games) *
+                                                100
+                                        )}
+                                        %
                                     </span>
                                 </Show>
                             )}
