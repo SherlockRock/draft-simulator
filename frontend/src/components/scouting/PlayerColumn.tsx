@@ -30,9 +30,13 @@ const PlayerColumn: Component<PlayerColumnProps> = (props) => {
     return (
         <section class="flex w-[232px] shrink-0 flex-col rounded-xl border border-slate-700/50 bg-slate-800/95">
             <header class="border-b border-slate-700/60 px-3 py-2.5">
-                <h2 class="truncate text-sm font-bold text-slate-100" title={riotId()}>
-                    {props.result.input.gameName}
-                    <span class="text-slate-500"> #{props.result.input.tagLine}</span>
+                <h2 class="flex items-baseline gap-1" title={riotId()}>
+                    <span class="min-w-0 truncate text-sm font-bold text-slate-100">
+                        {props.result.input.gameName}
+                    </span>
+                    <span class="shrink-0 text-sm text-slate-500">
+                        #{props.result.input.tagLine}
+                    </span>
                 </h2>
 
                 <Show when={props.result.status === "ok" && champRows().length > 0}>
@@ -45,7 +49,7 @@ const PlayerColumn: Component<PlayerColumnProps> = (props) => {
                         <span class="text-xs text-slate-400">
                             {totals().wins}W {totals().losses}L
                             <span class="text-slate-600"> · </span>
-                            {totals().games}g
+                            {totals().games} games
                         </span>
                     </div>
                     <div class="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-300">
