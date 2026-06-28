@@ -626,23 +626,19 @@ const CD_BASE =
 
 // Champions with non-standard internal names
 const INTERNAL_NAME_OVERRIDES: Record<string, string> = {
-    Wukong: "monkeyking"
+    Wukong: "monkeyking",
+    "Renata Glasc": "renata"
 };
 
-// Champions with special URL patterns (VGU/ASU/reworks or newer .name.jpg format)
+// Champions whose splash filename deviates from the standard
+// `<internal>_splash_centered_0.jpg` pattern (reworks keep a legacy basename).
+// NOTE: Community Dragon dropped the old `.<suffix>.jpg` variants — most
+// reworked/new champs now resolve via the default format, so only genuinely
+// non-standard filenames belong here. Verify with a live HTTP check before
+// adding an entry.
 const SPECIAL_SPLASH_URLS: Record<string, string> = {
-    // VGU/ASU reworks
-    Ambessa: `${CD_BASE}/ambessa/skins/base/images/ambessa_splash_centered_0.domina.jpg`,
-    Hwei: `${CD_BASE}/hwei/skins/skin0/images/hwei_splash_centered_0.jpg`,
-    LeBlanc: `${CD_BASE}/leblanc/skins/base/images/leblanc_splash_centered_0.leblanc_rework.jpg`,
-    Teemo: `${CD_BASE}/teemo/skins/base/images/teemo_splash_centered_0.asu_teemo.jpg`,
-    Viktor: `${CD_BASE}/viktor/skins/base/images/viktor_splash_centered_0.viktorvgu.jpg`,
-    "Xin Zhao": `${CD_BASE}/xinzhao/skins/base/images/xinzhaorework_splash_centered_0.xinzhaorework.jpg`,
-    // Newer champions with .name.jpg format
-    Aurora: `${CD_BASE}/aurora/skins/base/images/aurora_splash_centered_0.aurora.jpg`,
-    Mel: `${CD_BASE}/mel/skins/base/images/mel_splash_centered_0.mel.jpg`,
-    Yunara: `${CD_BASE}/yunara/skins/base/images/yunara_splash_centered_0.yunara.jpg`,
-    Zaahen: `${CD_BASE}/zaahen/skins/base/images/zaahen_splash_centered_0.zaahen.jpg`
+    Shyvana: `${CD_BASE}/shyvana/skins/base/images/shyvana_splash_centered_0.shyvana_rework.jpg`,
+    "Xin Zhao": `${CD_BASE}/xinzhao/skins/base/images/xinzhaorework_splash_centered_0.jpg`
 };
 
 /**

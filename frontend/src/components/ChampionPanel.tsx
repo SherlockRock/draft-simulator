@@ -123,6 +123,20 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
         }
     };
 
+    const retryChampionImage = (
+        e: Event & { currentTarget: HTMLImageElement }
+    ) => {
+        const img = e.currentTarget;
+        if (img.dataset.retried === "true") return;
+
+        img.dataset.retried = "true";
+        const src = img.src;
+        window.setTimeout(() => {
+            img.src = "";
+            img.src = src;
+        }, 1500);
+    };
+
     // Derived: are we filtering?
     const isFiltering = createMemo(
         () => searchText() !== "" || selectedCategories().size > 0
@@ -245,6 +259,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                         alt={champ.name}
                                         class="h-full w-full object-cover opacity-50"
                                         title={`${champ.name} - ${groupProps.group.label} ${getDraftPositionText(pickIndex)}`}
+                                        onError={retryChampionImage}
                                     />
                                     <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-darius-bg/85 px-1 py-px text-[9px] font-bold leading-tight">
                                         <span class={overlayTeamColor}>
@@ -343,6 +358,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                                     src={champ.img}
                                                                     alt={champ.name}
                                                                     class="h-full w-full object-cover opacity-50"
+                                                                    onError={retryChampionImage}
                                                                 />
                                                                 <div class="absolute inset-0 flex items-center justify-center">
                                                                     <X
@@ -425,6 +441,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                                         ? "opacity-40"
                                                                         : ""
                                                                 }`}
+                                                                onError={retryChampionImage}
                                                             />
                                                             {/* Current game picked overlay badge */}
                                                             <Show
@@ -569,6 +586,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                                     ? "opacity-40"
                                                                     : ""
                                                             }`}
+                                                            onError={retryChampionImage}
                                                         />
                                                         {/* Disabled overlay */}
                                                         <Show
