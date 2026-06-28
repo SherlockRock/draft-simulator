@@ -52,16 +52,16 @@ const PlayerColumn: Component<PlayerColumnProps> = (props) => {
                             {totals().games} games
                         </span>
                     </div>
-                    <div class="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-300">
+                    <div class="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-slate-300">
                         <For each={ROLES}>
                             {(role) => (
                                 <Show when={roleDistribution()[role] > 0}>
-                                    <span class="flex items-center gap-1">
+                                    <span class="flex items-center gap-0.5">
                                         <img
                                             src={roleIconUrl(role)}
                                             alt={ROLE_LABELS[role]}
                                             title={ROLE_LABELS[role]}
-                                            class="h-4 w-4 opacity-80"
+                                            class="h-3.5 w-3.5 opacity-80"
                                         />
                                         {Math.round(
                                             (roleDistribution()[role] / totals().games) *
