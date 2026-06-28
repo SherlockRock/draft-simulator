@@ -1,14 +1,7 @@
 import { Component, createMemo, createSignal, For, Show } from "solid-js";
 import toast from "solid-toast";
-import type { ChampionStatsEnvelope } from "@draft-sim/shared-types";
+import type { ChampionStatsEnvelope, Role } from "@draft-sim/shared-types";
 import { scoutPlayer } from "../../utils/scoutingApi";
-import type { Role } from "@draft-sim/shared-types";
-import {
-    scorePool,
-    DEFAULT_COMFORT_WEIGHTS,
-    type ComfortWeights,
-    type ScoredChamp
-} from "../../utils/comfort";
 import { ROLES, ROLE_LABELS } from "../../utils/championRoles";
 import { StyledSelect } from "../StyledSelect";
 
@@ -21,43 +14,71 @@ const REGION_OPTIONS = [
     { value: "oc1", label: "OCE" }
 ];
 
+interface ChampRow {
+    championId: string;
+    games: number;
+    wins: number;
+}
+
 const ScoutPlayerPanel: Component = () => {
     const [region, setRegion] = createSignal("na1");
     const [gameName, setGameName] = createSignal("");
     const [tagLine, setTagLine] = createSignal("");
     const [loading, setLoading] = createSignal(false);
     const [envelope, setEnvelope] = createSignal<ChampionStatsEnvelope | null>(null);
-    const [weights, setWeights] = createSignal<ComfortWeights>({
-        ...DEFAULT_COMFORT_WEIGHTS
-    });
 
     const canScout = createMemo(
         () => gameName().trim().length > 0 && tagLine().trim().length > 0 && !loading()
     );
 
-    // Re-scores live as sliders move (pure recompute — Task 2).
-    const scored = createMemo<ScoredChamp[]>(() => {
+    // Aggregate per-(champ, role) envelope entries into per-champ totals,
+    // sorted by games played (descending) — op.gg's champion-list ordering.
+    const champRows = createMemo<ChampRow[]>(() => {
         const env = envelope();
         if (!env) return [];
-        return scorePool(env.entries, weights(), new Date());
-    });
-
-    // Real type guard (no `as`): asserts a string is one of the five engine roles.
-    const isRole = (value: string): value is Role => ROLES.some((r) => r === value);
-
-    const byRole = createMemo<Record<Role, ScoredChamp[]>>(() => {
-        const groups: Record<Role, ScoredChamp[]> = {
-            top: [],
-            jungle: [],
-            mid: [],
-            adc: [],
-            support: []
-        };
-        for (const champ of scored()) {
-            if (isRole(champ.role)) groups[champ.role].push(champ);
+        const map = new Map<string, ChampRow>();
+        for (const e of env.entries) {
+            const row = map.get(e.championId) ?? {
+                championId: e.championId,
+                games: 0,
+                wins: 0
+            };
+            row.games += e.games;
+            row.wins += e.wins;
+            map.set(e.championId, row);
         }
-        return groups;
+        return [...map.values()].sort((a, b) => b.games - a.games);
     });
+
+    const totals = createMemo(() => {
+        const rows = champRows();
+        const games = rows.reduce((s, r) => s + r.games, 0);
+        const wins = rows.reduce((s, r) => s + r.wins, 0);
+        return {
+            games,
+            wins,
+            losses: games - wins,
+            winrate: games ? Math.round((wins / games) * 100) : 0
+        };
+    });
+
+    // Games played per role, for the role-distribution summary.
+    const roleDistribution = createMemo(() => {
+        const dist: Record<Role, number> = {
+            top: 0,
+            jungle: 0,
+            mid: 0,
+            adc: 0,
+            support: 0
+        };
+        const env = envelope();
+        if (!env) return dist;
+        for (const e of env.entries) dist[e.role] += e.games;
+        return dist;
+    });
+
+    const winrateColor = (wr: number) =>
+        wr >= 60 ? "text-orange-400" : wr >= 50 ? "text-blue-300" : "text-slate-400";
 
     const handleScout = async () => {
         setLoading(true);
@@ -72,7 +93,6 @@ const ScoutPlayerPanel: Component = () => {
                 toast("No ranked champion data found for that profile.");
             }
         } catch {
-            // Surface failure over silent stale data (design §9).
             toast.error(
                 "Couldn't scout that player — u.gg may be unavailable or the Riot ID is wrong."
             );
@@ -81,17 +101,13 @@ const ScoutPlayerPanel: Component = () => {
         }
     };
 
-    const setWeight = (key: keyof ComfortWeights, value: number) =>
-        setWeights((prev) => ({ ...prev, [key]: value }));
-
     return (
         <div class="custom-scrollbar h-full overflow-y-auto bg-darius-bg bg-[radial-gradient(circle,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:24px_24px]">
-            <div class="mx-auto flex min-h-full w-full max-w-[1400px] flex-col gap-6 p-6 sm:p-8">
+            <div class="mx-auto flex min-h-full w-full max-w-[760px] flex-col gap-6 p-6 sm:p-8">
                 <section class="rounded-xl border border-slate-700/50 bg-slate-800/95 p-6">
                     <h1 class="text-2xl font-bold text-slate-100">Scout a Player</h1>
                     <p class="mt-1 text-sm text-slate-400">
-                        Enter a Riot ID to derive a comfort-ranked champion pool from
-                        ranked match data.
+                        Enter a Riot ID to see their ranked champions, most-played first.
                     </p>
                     <div class="mt-5 grid gap-4 lg:grid-cols-[160px_1fr_140px_auto] lg:items-end">
                         <label class="block">
@@ -112,7 +128,7 @@ const ScoutPlayerPanel: Component = () => {
                                 type="text"
                                 value={gameName()}
                                 onInput={(e) => setGameName(e.currentTarget.value)}
-                                placeholder="e.g. Faker"
+                                placeholder="e.g. Aeon"
                                 class="w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 outline-none focus:border-blue-400"
                             />
                         </label>
@@ -124,7 +140,7 @@ const ScoutPlayerPanel: Component = () => {
                                 type="text"
                                 value={tagLine()}
                                 onInput={(e) => setTagLine(e.currentTarget.value)}
-                                placeholder="NA1"
+                                placeholder="NA3"
                                 class="w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 outline-none focus:border-blue-400"
                             />
                         </label>
@@ -139,91 +155,73 @@ const ScoutPlayerPanel: Component = () => {
                     </div>
                 </section>
 
-                <Show when={envelope()}>
+                <Show when={envelope() && champRows().length > 0}>
                     <section class="rounded-xl border border-slate-700/50 bg-slate-800/95 p-6">
-                        <h2 class="text-lg font-semibold text-slate-100">
-                            Comfort Weights
-                        </h2>
-                        <div class="mt-4 grid gap-5 sm:grid-cols-3">
-                            <For each={["games", "winRate", "recency"] as const}>
-                                {(key) => (
-                                    <label class="block">
-                                        <span class="mb-2 flex justify-between text-sm font-medium text-slate-300">
+                        <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-700/60 pb-4">
+                            <div class="flex items-baseline gap-3">
+                                <span class="text-sm text-slate-300">
+                                    {totals().wins}W {totals().losses}L
+                                </span>
+                                <span
+                                    class={`text-sm font-semibold ${winrateColor(totals().winrate)}`}
+                                >
+                                    {totals().winrate}% WR
+                                </span>
+                                <span class="text-xs text-slate-500">
+                                    {totals().games} games
+                                </span>
+                            </div>
+                            <div class="flex flex-wrap gap-3 text-xs text-slate-400">
+                                <For each={ROLES}>
+                                    {(role) => (
+                                        <Show when={roleDistribution()[role] > 0}>
                                             <span>
-                                                {key === "winRate"
-                                                    ? "Win Rate"
-                                                    : key[0].toUpperCase() + key.slice(1)}
+                                                {ROLE_LABELS[role]}{" "}
+                                                <span class="text-slate-300">
+                                                    {Math.round(
+                                                        (roleDistribution()[role] /
+                                                            totals().games) *
+                                                            100
+                                                    )}
+                                                    %
+                                                </span>
                                             </span>
-                                            <span class="text-slate-400">
-                                                {weights()[key]}
+                                        </Show>
+                                    )}
+                                </For>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 flex flex-col">
+                            <For each={champRows()}>
+                                {(champ) => {
+                                    const wr = champ.games
+                                        ? Math.round((champ.wins / champ.games) * 100)
+                                        : 0;
+                                    return (
+                                        <div class="flex items-center justify-between border-b border-slate-700/30 py-2 last:border-b-0">
+                                            <span class="truncate text-sm text-slate-100">
+                                                {champ.championId}
                                             </span>
-                                        </span>
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max="100"
-                                            value={weights()[key]}
-                                            onInput={(e) =>
-                                                setWeight(
-                                                    key,
-                                                    Number(e.currentTarget.value)
-                                                )
-                                            }
-                                            class="w-full accent-blue-500"
-                                        />
-                                    </label>
-                                )}
+                                            <div class="flex items-center gap-4 text-xs">
+                                                <span class="text-slate-400">
+                                                    {champ.wins}W{" "}
+                                                    {champ.games - champ.wins}L
+                                                </span>
+                                                <span class="w-16 text-right text-slate-500">
+                                                    {champ.games} games
+                                                </span>
+                                                <span
+                                                    class={`w-10 text-right font-semibold ${winrateColor(wr)}`}
+                                                >
+                                                    {wr}%
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                }}
                             </For>
                         </div>
-                    </section>
-
-                    <section class="grid gap-4 lg:grid-cols-5">
-                        <For each={ROLES}>
-                            {(role) => (
-                                <div class="rounded-xl border border-slate-700/50 bg-slate-800/95 p-3">
-                                    <h3 class="mb-3 text-sm font-semibold text-slate-200">
-                                        {ROLE_LABELS[role]}
-                                    </h3>
-                                    <Show
-                                        when={byRole()[role].length > 0}
-                                        fallback={
-                                            <p class="text-xs text-slate-500">
-                                                No champions.
-                                            </p>
-                                        }
-                                    >
-                                        <div class="flex flex-col gap-2">
-                                            <For each={byRole()[role]}>
-                                                {(champ) => (
-                                                    <div class="flex items-center justify-between rounded-lg bg-slate-900 px-3 py-2">
-                                                        <div class="min-w-0">
-                                                            <p class="truncate text-sm text-slate-100">
-                                                                {champ.championId}
-                                                            </p>
-                                                            <p class="text-xs text-slate-500">
-                                                                {champ.wins}/{champ.games}{" "}
-                                                                (
-                                                                {Math.round(
-                                                                    (champ.wins /
-                                                                        champ.games) *
-                                                                        100
-                                                                )}
-                                                                %)
-                                                            </p>
-                                                        </div>
-                                                        <span class="ml-2 shrink-0 rounded bg-blue-500/20 px-2 py-1 text-xs font-semibold text-blue-300">
-                                                            {Math.round(
-                                                                champ.comfort * 100
-                                                            )}
-                                                        </span>
-                                                    </div>
-                                                )}
-                                            </For>
-                                        </div>
-                                    </Show>
-                                </div>
-                            )}
-                        </For>
                     </section>
                 </Show>
             </div>
