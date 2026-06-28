@@ -901,3 +901,27 @@ export type SideSwapMode = z.infer<typeof SideSwapModeSchema>;
 
 export const OurSideOverrideSchema = z.enum(["blue", "red"]).nullable();
 export type OurSideOverride = z.infer<typeof OurSideOverrideSchema>;
+
+// =============================================================================
+// Player Scouting Schemas (Team Scouting & Player-Derived Pools — Slice 1)
+// =============================================================================
+
+export const ChampionStatEntrySchema = z.object({
+  championId: z.string(),
+  role: z.enum(["top", "jungle", "mid", "adc", "support"]),
+  games: z.number().int().nonnegative(),
+  wins: z.number().int().nonnegative(),
+  lastPlayed: z.string().nullable(),
+  recentWindowGames: z.number().int().nonnegative().nullable(),
+});
+export type ChampionStatEntry = z.infer<typeof ChampionStatEntrySchema>;
+
+export const ChampionStatsEnvelopeSchema = z.object({
+  provider: z.literal("ugg"),
+  schemaVersion: z.literal(1),
+  fetchedAt: z.string(),
+  season: z.string(),
+  queue: z.string(),
+  entries: z.array(ChampionStatEntrySchema),
+});
+export type ChampionStatsEnvelope = z.infer<typeof ChampionStatsEnvelopeSchema>;
