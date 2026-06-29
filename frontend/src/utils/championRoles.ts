@@ -27,6 +27,17 @@ export function roleIconUrl(role: Role): string {
     return `${ROLE_ICON_CDN}/${ROLE_ICON_SLUG[role]}.svg`;
 }
 
+// Per-role accent colors. Full literal class strings (not interpolated) so
+// Tailwind's content scan keeps them. `icon` tints the CSS-masked position
+// glyph; `border` accents the main-role hero badge.
+export const ROLE_COLOR: Record<Role, { icon: string; border: string }> = {
+    top: { icon: "bg-red-400", border: "border-red-400" },
+    jungle: { icon: "bg-emerald-400", border: "border-emerald-400" },
+    mid: { icon: "bg-blue-400", border: "border-blue-400" },
+    adc: { icon: "bg-amber-400", border: "border-amber-400" },
+    support: { icon: "bg-purple-400", border: "border-purple-400" }
+};
+
 // Resolve a champion alias (the envelope's championId, = champion.id) to its
 // square icon URL, or undefined when unknown.
 export function getChampionImg(championId: string): string | undefined {
