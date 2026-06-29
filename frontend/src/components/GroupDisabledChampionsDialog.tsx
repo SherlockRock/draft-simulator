@@ -1,7 +1,7 @@
 import { createSignal, createEffect, Show, Component } from "solid-js";
 import { ChevronDown, ChevronUp } from "lucide-solid";
 import type { DraftMode } from "@draft-sim/shared-types";
-import { Dialog } from "./Dialog";
+import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./Dialog";
 import { ChampionToggleGrid } from "./ChampionToggleGrid";
 import { StyledSelect } from "./StyledSelect";
 import { resolveChampionId } from "../utils/constants";
@@ -17,6 +17,8 @@ interface GroupSettingsDialogProps {
     initialBlueTeamName?: string;
     initialRedTeamName?: string;
     initialLength?: number;
+    defaultSeriesEnabled?: boolean;
+    primaryLabel?: string;
     onSave: (data: {
         name: string;
         disabledChampions: string[];
@@ -35,11 +37,19 @@ const DRAFT_MODE_OPTIONS = [
 ];
 
 const SERIES_LENGTH_OPTIONS = [
-    { value: "1", label: "Best of 1" },
-    { value: "3", label: "Best of 3" },
-    { value: "5", label: "Best of 5" },
-    { value: "7", label: "Best of 7" }
+    { value: "1", label: "1 game" },
+    { value: "2", label: "2 games" },
+    { value: "3", label: "3 games" },
+    { value: "4", label: "4 games" },
+    { value: "5", label: "5 games" },
+    { value: "6", label: "6 games" },
+    { value: "7", label: "7 games" }
 ];
+
+const clampSeriesLength = (value: number) => {
+    if (!Number.isFinite(value)) return 3;
+    return Math.min(7, Math.max(1, Math.trunc(value)));
+};
 
 export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) => {
     const [name, setName] = createSignal("");
@@ -56,13 +66,28 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
             setName(props.initialName);
             setSelected(props.initialChampions.map(resolveChampionId));
             setDraftMode(props.initialDraftMode);
-            setSeriesEnabled(props.isSeries ?? false);
+            setSeriesEnabled(
+                (props.isSeries ?? false) || (props.defaultSeriesEnabled ?? false)
+            );
             setBlueTeamName(props.initialBlueTeamName || "Team 1");
             setRedTeamName(props.initialRedTeamName || "Team 2");
-            setLength(props.initialLength || 3);
+            setLength(clampSeriesLength(props.initialLength || 3));
             setDisabledExpanded(false);
         }
     });
+
+    const save = () => {
+        props.onSave({
+            name: name().trim(),
+            disabledChampions: selected(),
+            draftMode: draftMode(),
+            convertToSeries: !props.isSeries && seriesEnabled(),
+            blueTeamName: blueTeamName().trim() || "Team 1",
+            redTeamName: redTeamName().trim() || "Team 2",
+            length: clampSeriesLength(length())
+        });
+        props.onClose();
+    };
 
     const handleToggle = (champId: string) => {
         setSelected((prev) =>
@@ -76,6 +101,8 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
         <Dialog
             isOpen={props.isOpen}
             onCancel={props.onClose}
+            onConfirm={save}
+            confirmOnInput={true}
             body={
                 <div class="w-[min(100vw-2rem,32rem)] max-w-full">
                     <h2 class="mb-4 text-xl font-bold text-darius-text-primary">
@@ -242,28 +269,18 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                                 (document.activeElement as HTMLElement)?.blur();
                                 props.onClose();
                             }}
-                            class="rounded-md bg-darius-card-hover px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-border"
+                            class="flex items-center gap-2 rounded-md bg-darius-ember px-4 py-2 text-sm font-medium text-darius-text-primary transition-[filter] hover:brightness-110"
                         >
-                            Cancel
+                            <span>Cancel</span>
+                            <EscapeKeyHint />
                         </button>
                         <button
                             type="button"
-                            onClick={() => {
-                                (document.activeElement as HTMLElement)?.blur();
-                                props.onSave({
-                                    name: name().trim(),
-                                    disabledChampions: selected(),
-                                    draftMode: draftMode(),
-                                    convertToSeries: !props.isSeries && seriesEnabled(),
-                                    blueTeamName: blueTeamName().trim() || "Team 1",
-                                    redTeamName: redTeamName().trim() || "Team 2",
-                                    length: length()
-                                });
-                                props.onClose();
-                            }}
-                            class="rounded-md bg-darius-purple bg-darius-purple px-4 py-2 text-sm font-medium text-white"
+                            onClick={save}
+                            class="flex items-center gap-2 rounded-md bg-darius-purple px-4 py-2 text-sm font-medium text-white"
                         >
-                            Save
+                            <span>{props.primaryLabel ?? "Save"}</span>
+                            <ReturnKeyHint />
                         </button>
                     </div>
                 </div>

@@ -83,6 +83,16 @@ const ChampionPicker: Component<ChampionPickerProps> = (props) => {
         return items[highlightedIndex()]?.item ?? null;
     });
 
+    const exactChampionMatch = createMemo(() => {
+        const normalized = filterState.searchText().trim().toLowerCase();
+        if (!normalized) return null;
+        return (
+            champions.find(
+                (champion) => champion.name.trim().toLowerCase() === normalized
+            ) ?? null
+        );
+    });
+
     let searchInputRef: HTMLInputElement | undefined;
 
     // Apply initialRole once per open.
@@ -131,7 +141,7 @@ const ChampionPicker: Component<ChampionPickerProps> = (props) => {
             }
             if (e.key === "Enter") {
                 e.preventDefault();
-                const champ = items[highlightedIndex()]?.item;
+                const champ = exactChampionMatch() ?? items[highlightedIndex()]?.item;
                 if (!champ) return;
                 if (props.disabledChampionIds?.has(champ.id)) return;
                 props.onSelect(champ.id);

@@ -10,7 +10,7 @@ import {
     Accessor,
     JSX
 } from "solid-js";
-import { createStore } from "solid-js/store";
+import { createStore, reconcile } from "solid-js/store";
 import { champions } from "./utils/constants";
 import { useMutation } from "@tanstack/solid-query";
 import {
@@ -51,7 +51,7 @@ import {
 } from "./utils/schemas";
 import { validateSocketEvent } from "./utils/socketValidation";
 import { CanvasCard } from "./components/CanvasCard";
-import { Dialog } from "./components/Dialog";
+import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./components/Dialog";
 import { ImportToCanvasDialog } from "./components/ImportToCanvasDialog";
 import {
     ConnectionComponent,
@@ -77,7 +77,8 @@ import {
     localUpdateGroup,
     localConvertGroupToSeries,
     localDeleteGroup,
-    localUpdateDraftGroup
+    localUpdateDraftGroup,
+    localUpdateDraftMetadata
 } from "./utils/useLocalCanvasMutations";
 import { getLocalCanvas, saveLocalCanvas } from "./utils/localCanvasStore";
 import { handleLogin } from "./utils/actions";
@@ -261,6 +262,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             : "standard";
     };
     const [createGroupPosition, setCreateGroupPosition] = createSignal({ x: 0, y: 0 });
+    const [pendingGroupSettingsPosition, setPendingGroupSettingsPosition] = createSignal<{
+        x: number;
+        y: number;
+    } | null>(null);
     const [dragOverGroupId, setDragOverGroupId] = createSignal<string | null>(null);
     const [exitingGroupId, setExitingGroupId] = createSignal<string | null>(null);
     const [contextMenuPosition, setContextMenuPosition] = createSignal<{
@@ -306,6 +311,44 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const getDraftsForGroup = (groupId: string) =>
         canvasDrafts.filter((cd) => cd.group_id === groupId);
+
+    const upsertCanvasGroup = (group: CanvasGroup) => {
+        setCanvasGroups((groups) => {
+            const exists = groups.some((g) => g.id === group.id);
+            return exists
+                ? groups.map((g) => (g.id === group.id ? group : g))
+                : [...groups, group];
+        });
+        canvasContext.mutateCanvas((prev: CanvasResposnse | undefined) => {
+            if (!prev) return prev;
+            const exists = prev.groups.some((g) => g.id === group.id);
+            return {
+                ...prev,
+                groups: exists
+                    ? prev.groups.map((g) => (g.id === group.id ? group : g))
+                    : [...prev.groups, group]
+            };
+        });
+    };
+
+    const upsertCanvasDrafts = (drafts: CanvasDraft[]) => {
+        if (drafts.length === 0) return;
+        const returnedIds = new Set(drafts.map((d) => d.Draft.id));
+        setCanvasDrafts([
+            ...canvasDrafts.filter((d) => !returnedIds.has(d.Draft.id)),
+            ...drafts
+        ]);
+        canvasContext.mutateCanvas((prev: CanvasResposnse | undefined) => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                drafts: [
+                    ...prev.drafts.filter((d) => !returnedIds.has(d.Draft.id)),
+                    ...drafts
+                ]
+            };
+        });
+    };
 
     let canvasContainerRef: HTMLDivElement | undefined;
     let svgRef: SVGSVGElement | undefined;
@@ -621,7 +664,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             setCanvasGroups([...canvasGroups, tempGroup]);
             return { tempId };
         },
-        onSuccess: () => {
+        onSuccess: (data, _variables, context) => {
+            if (context?.tempId) {
+                setCanvasGroups((g) => g.id === context.tempId, data.group);
+            }
             toast.success("Group created");
         },
         onError: (error, _vars, context) => {
@@ -636,9 +682,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         mutationFn: updateCanvasGroup,
         onSuccess: (data, variables) => {
             setCanvasGroups((g) => g.id === variables.groupId, data.group);
-            if (data.group.type === "series") {
-                canvasContext.refetchCanvas();
-            }
             canvasContext.mutateCanvas((prev: CanvasResposnse | undefined) => {
                 if (!prev) return prev;
                 return {
@@ -862,9 +905,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 connections: Connection[];
                 groups?: CanvasGroup[];
             }) => {
-                setCanvasDrafts(data.drafts);
+                // Reconcile (merge in place) instead of replacing the arrays
+                // wholesale. A wholesale replace hands `<For>` brand-new object
+                // references for every draft/group, so it destroys and recreates
+                // every series row + container — including the swap button that
+                // may be under the cursor — which leaves its :hover/cursor stale
+                // until the next real mousemove. CanvasDraft has no top-level id
+                // (its id is nested at `Draft.id`), so reconcile positionally
+                // (`key: null`); CanvasGroup has a stable top-level `id`.
+                setCanvasDrafts(reconcile(data.drafts, { key: null }));
                 setConnections(data.connections);
-                setCanvasGroups(data.groups ?? []);
+                setCanvasGroups(reconcile(data.groups ?? [], { key: "id" }));
                 canvasContext.mutateCanvas((prev: CanvasResposnse | undefined) => {
                     if (!prev) return prev;
                     return {
@@ -1744,6 +1795,80 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         redTeamName: string;
         length: number;
     }) => {
+        const pendingPosition = pendingGroupSettingsPosition();
+        if (pendingPosition) {
+            const groupName = data.name || "Custom Series";
+            if (isLocalMode()) {
+                const result = localCreateGroup({
+                    positionX: pendingPosition.x,
+                    positionY: pendingPosition.y
+                });
+                if (data.convertToSeries) {
+                    localConvertGroupToSeries({
+                        groupId: result.group.id,
+                        name: groupName,
+                        blueTeamName: data.blueTeamName,
+                        redTeamName: data.redTeamName,
+                        length: data.length,
+                        draftMode: data.draftMode,
+                        disabledChampions: data.disabledChampions
+                    });
+                } else {
+                    localUpdateGroup({
+                        groupId: result.group.id,
+                        name: groupName,
+                        metadata: {
+                            disabledChampions: data.disabledChampions,
+                            draftMode: data.draftMode
+                        }
+                    });
+                }
+                refreshFromLocal();
+                toast.success(data.convertToSeries ? "Series created" : "Group created");
+            } else {
+                createCanvasGroup({
+                    canvasId: canvasId(),
+                    name: groupName,
+                    positionX: pendingPosition.x,
+                    positionY: pendingPosition.y
+                })
+                    .then((result) => {
+                        if (!data.convertToSeries) {
+                            return updateCanvasGroup({
+                                canvasId: canvasId(),
+                                groupId: result.group.id,
+                                metadata: {
+                                    disabledChampions: data.disabledChampions,
+                                    draftMode: data.draftMode
+                                }
+                            });
+                        }
+                        return convertGroupToSeries({
+                            canvasId: canvasId(),
+                            groupId: result.group.id,
+                            name: groupName,
+                            blueTeamName: data.blueTeamName,
+                            redTeamName: data.redTeamName,
+                            length: data.length,
+                            type: data.draftMode,
+                            disabledChampions: data.disabledChampions
+                        });
+                    })
+                    .then((result) => {
+                        upsertCanvasGroup(result.group);
+                        upsertCanvasDrafts(result.group.CanvasDrafts ?? []);
+                        toast.success(
+                            data.convertToSeries ? "Series created" : "Group created"
+                        );
+                    })
+                    .catch((error: Error) => {
+                        toast.error(`Failed to create group: ${error.message}`);
+                    });
+            }
+            setPendingGroupSettingsPosition(null);
+            return;
+        }
+
         const groupId = disabledChampionsGroupId();
         if (!groupId) return;
 
@@ -1853,6 +1978,52 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 canvasId: canvasId(),
                 positionX: pos.x,
                 positionY: pos.y
+            });
+        }
+    };
+
+    const handleCreateGroupFromContextMenu = () => {
+        setPendingGroupSettingsPosition(createGroupPosition());
+    };
+
+    const closeGroupSettingsDialog = () => {
+        setDisabledChampionsGroupId(null);
+        setPendingGroupSettingsPosition(null);
+    };
+
+    const handleUpdateSeriesDraftMetadata = (
+        draftId: string,
+        metadata: {
+            winner?: "blue" | "red" | null;
+            blueSideTeam?: 1 | 2;
+            firstPick?: "blue" | "red";
+        }
+    ) => {
+        if (!canEdit()) return;
+
+        setCanvasDrafts(
+            (cd) => cd.Draft.id === draftId,
+            "Draft",
+            (draft) => ({
+                ...draft,
+                ...metadata,
+                ...(metadata.winner !== undefined
+                    ? { completed: metadata.winner !== null }
+                    : {})
+            })
+        );
+
+        if (isLocalMode()) {
+            localUpdateDraftMetadata({ draftId, ...metadata });
+            refreshFromLocal();
+        } else {
+            updateCanvasDraft({
+                canvasId: canvasId(),
+                draftId,
+                ...metadata
+            }).catch((error: Error) => {
+                toast.error(`Failed to update game metadata: ${error.message}`);
+                canvasContext.refetchCanvas();
             });
         }
     };
@@ -2841,6 +3012,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 onSelectAnchor={onGroupAnchorClick}
                                 isGroupSelected={groupConnectionSource() === group.id}
                                 sourceAnchor={sourceAnchor()}
+                                onUpdateDraftMetadata={handleUpdateSeriesDraftMetadata}
                                 renderDraftCard={(cd) => {
                                     // Compute team names based on blueSideTeam
                                     const bst = cd.Draft.blueSideTeam ?? 1;
@@ -2934,28 +3106,30 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 <Dialog
                     isOpen={isDeleteDialogOpen}
                     onCancel={onCancel}
+                    onConfirm={onDelete}
                     body={
                         <>
                             <h3 class="mb-4 text-lg font-bold text-darius-text-primary">
-                                Confirm Deletion
+                                Remove Draft from Canvas?
                             </h3>
                             <p class="mb-6 text-darius-text-primary">
-                                Are you sure you want to delete the draft "
-                                {draftToDelete()?.Draft.name}
-                                "?
+                                This will remove "{draftToDelete()?.Draft.name}" from this
+                                canvas.
                             </p>
                             <div class="flex justify-end gap-4">
                                 <button
                                     onClick={onCancel}
-                                    class="rounded bg-darius-purple px-4 py-2 text-darius-text-primary transition-colors hover:bg-darius-purple-bright"
+                                    class="flex items-center gap-2 rounded bg-darius-ember px-4 py-2 text-darius-text-primary transition-[filter] hover:brightness-110"
                                 >
-                                    Cancel
+                                    <span>Cancel</span>
+                                    <EscapeKeyHint />
                                 </button>
                                 <button
                                     onClick={onDelete}
-                                    class="rounded bg-darius-crimson px-4 py-2 text-darius-text-primary transition-colors hover:bg-darius-ember"
+                                    class="flex items-center gap-2 rounded bg-darius-crimson px-4 py-2 text-darius-text-primary transition-colors hover:bg-darius-ember"
                                 >
-                                    Delete
+                                    <span>Remove from Canvas</span>
+                                    <ReturnKeyHint />
                                 </button>
                             </div>
                         </>
@@ -2981,6 +3155,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 <Dialog
                     isOpen={isDeleteGroupDialogOpen}
                     onCancel={onDeleteGroupCancel}
+                    onConfirm={() => {
+                        const group = groupToDelete();
+                        if (!group) return;
+                        handleDeleteGroupWithChoice(group.type === "custom");
+                    }}
                     body={
                         <Show when={groupToDelete()}>
                             {(group) => (
@@ -2992,27 +3171,30 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 Remove Series from Canvas?
                                             </h3>
                                             <p class="mb-4 text-darius-text-primary">
-                                                This will remove "{group().name}" and all
-                                                its games from this canvas.
+                                                This will remove "{group().name}" from
+                                                this canvas.
                                             </p>
                                             <p class="mb-6 text-sm text-darius-text-secondary">
-                                                The original series data will not be
-                                                deleted - you can re-import it later.
+                                                Its games will leave this canvas. The
+                                                original series data will not be deleted,
+                                                and you can re-import it later.
                                             </p>
                                             <div class="flex justify-end gap-4">
                                                 <button
                                                     onClick={onDeleteGroupCancel}
-                                                    class="rounded bg-darius-purple px-4 py-2 text-darius-text-primary transition-colors hover:bg-darius-purple-bright"
+                                                    class="flex items-center gap-2 rounded bg-darius-ember px-4 py-2 text-darius-text-primary transition-[filter] hover:brightness-110"
                                                 >
-                                                    Cancel
+                                                    <span>Cancel</span>
+                                                    <EscapeKeyHint />
                                                 </button>
                                                 <button
                                                     onClick={() =>
                                                         handleDeleteGroupWithChoice(false)
                                                     }
-                                                    class="rounded bg-darius-crimson px-4 py-2 text-darius-text-primary transition-colors hover:bg-darius-ember"
+                                                    class="flex items-center gap-2 rounded bg-darius-crimson px-4 py-2 text-darius-text-primary transition-colors hover:bg-darius-ember"
                                                 >
-                                                    Remove
+                                                    <span>Remove from Canvas</span>
+                                                    <ReturnKeyHint />
                                                 </button>
                                             </div>
                                         </>
@@ -3036,9 +3218,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 />
                 {/* Group Settings Modal */}
                 <GroupSettingsDialog
-                    isOpen={() => disabledChampionsGroupId() !== null}
-                    onClose={() => setDisabledChampionsGroupId(null)}
-                    initialName={settingsGroup()?.name ?? ""}
+                    isOpen={() =>
+                        disabledChampionsGroupId() !== null ||
+                        pendingGroupSettingsPosition() !== null
+                    }
+                    onClose={closeGroupSettingsDialog}
+                    defaultSeriesEnabled={pendingGroupSettingsPosition() !== null}
+                    primaryLabel={
+                        pendingGroupSettingsPosition() !== null ? "Create" : "Save"
+                    }
+                    initialName={settingsGroup()?.name ?? "Custom Series"}
                     initialChampions={settingsGroup()?.metadata.disabledChampions ?? []}
                     initialDraftMode={toDraftMode(
                         settingsGroup()?.metadata.draftMode ??
@@ -3103,7 +3292,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             onClick={() => {
                                 const pos = contextMenuWorldPosition();
                                 setCreateGroupPosition(pos);
-                                handleCreateGroup();
+                                handleCreateGroupFromContextMenu();
                                 closeContextMenu();
                             }}
                         >

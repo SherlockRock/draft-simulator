@@ -18,8 +18,17 @@ const {
 } = require("../helpers.js");
 const { Op } = require("sequelize");
 
-const VALID_SERIES_LENGTHS = new Set([1, 3, 5, 7]);
+const MIN_SERIES_LENGTH = 1;
+const MAX_SERIES_LENGTH = 7;
 const VALID_DRAFT_MODES = new Set(["standard", "fearless", "ironman"]);
+
+function isValidSeriesLength(length) {
+  return (
+    Number.isInteger(length) &&
+    length >= MIN_SERIES_LENGTH &&
+    length <= MAX_SERIES_LENGTH
+  );
+}
 
 function normalizeSeriesData(body) {
   const length = Number(body.length);
@@ -36,7 +45,7 @@ function normalizeSeriesData(body) {
       typeof body.redTeamName === "string" && body.redTeamName.trim()
         ? body.redTeamName.trim()
         : "Team 2",
-    length: VALID_SERIES_LENGTHS.has(length) ? length : 3,
+    length: isValidSeriesLength(length) ? length : 3,
     type: VALID_DRAFT_MODES.has(body.type) ? body.type : "standard",
     disabledChampions: Array.isArray(body.disabledChampions)
       ? body.disabledChampions
@@ -335,7 +344,8 @@ router.get("/:canvasId", async (req, res) => {
 
 router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
   try {
-    const { positionX, positionY, group_id } = req.body;
+    const { positionX, positionY, group_id, winner, blueSideTeam, firstPick } =
+      req.body;
     const { canvasId, draftId } = req.params;
 
     const userCanvas = await UserCanvas.findOne({
@@ -350,28 +360,51 @@ router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
       });
     }
 
-    // Build update object
-    const updates = {};
-    if (typeof positionX === "number") updates.positionX = positionX;
-    if (typeof positionY === "number") updates.positionY = positionY;
-    if (group_id !== undefined) updates.group_id = group_id; // null to ungroup
+    const canvasDraftUpdates = {};
+    if (typeof positionX === "number") canvasDraftUpdates.positionX = positionX;
+    if (typeof positionY === "number") canvasDraftUpdates.positionY = positionY;
+    if (group_id !== undefined) canvasDraftUpdates.group_id = group_id; // null to ungroup
 
-    if (Object.keys(updates).length === 0) {
+    const draftUpdates = {};
+    if (winner === "blue" || winner === "red" || winner === null) {
+      draftUpdates.winner = winner;
+      draftUpdates.completed = winner !== null;
+      draftUpdates.completedAt = winner === null ? null : new Date();
+    }
+    if (blueSideTeam === 1 || blueSideTeam === 2) {
+      draftUpdates.blueSideTeam = blueSideTeam;
+    }
+    if (firstPick === "blue" || firstPick === "red") {
+      draftUpdates.firstPick = firstPick;
+    }
+
+    if (
+      Object.keys(canvasDraftUpdates).length === 0 &&
+      Object.keys(draftUpdates).length === 0
+    ) {
       return res.status(400).json({ error: "No valid fields to update" });
     }
 
-    const [affectedRows] = await CanvasDraft.update(updates, {
+    const canvasDraft = await CanvasDraft.findOne({
       where: {
         canvas_id: canvasId,
         draft_id: draftId,
       },
     });
 
-    if (affectedRows > 0) {
+    if (canvasDraft) {
+      if (Object.keys(canvasDraftUpdates).length > 0) {
+        await canvasDraft.update(canvasDraftUpdates);
+      }
+      if (Object.keys(draftUpdates).length > 0) {
+        await Draft.update(draftUpdates, {
+          where: { id: draftId },
+        });
+      }
       await touchCanvasTimestamp(canvasId);
 
-      // If group assignment changed, emit full canvas update
-      if (group_id !== undefined) {
+      // If group assignment or draft metadata changed, emit full canvas update
+      if (group_id !== undefined || Object.keys(draftUpdates).length > 0) {
         const canvasDrafts = await CanvasDraft.findAll({
           where: { canvas_id: canvasId },
           attributes: [
@@ -393,6 +426,8 @@ router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
                 "seriesIndex",
                 "completed",
                 "winner",
+                "blueSideTeam",
+                "firstPick",
               ],
             },
           ],
@@ -1037,7 +1072,8 @@ router.post(
 
       if (
         !userCanvas ||
-        (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
+        (userCanvas.permissions !== "edit" &&
+          userCanvas.permissions !== "admin")
       ) {
         await t.rollback();
         return res.status(403).json({
@@ -1057,7 +1093,9 @@ router.post(
 
       if (group.type !== "custom") {
         await t.rollback();
-        return res.status(400).json({ error: "Only custom groups can be converted" });
+        return res
+          .status(400)
+          .json({ error: "Only custom groups can be converted" });
       }
 
       const versusDraft = await VersusDraft.create(
@@ -1185,7 +1223,9 @@ router.post(
     } catch (error) {
       if (!committed) await t.rollback();
       console.error("Failed to convert group to series:", error);
-      res.status(500).json({ error: error.message || "Failed to convert group" });
+      res
+        .status(500)
+        .json({ error: error.message || "Failed to convert group" });
     }
   },
 );
@@ -1545,7 +1585,7 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
 
         const nextLength = Number(seriesMetadata.length);
         if (
-          VALID_SERIES_LENGTHS.has(nextLength) &&
+          isValidSeriesLength(nextLength) &&
           nextLength !== versusDraft.length
         ) {
           await syncManualSeriesLength({
@@ -1798,7 +1838,16 @@ router.patch("/:canvasId/card-layout", protect, async (req, res) => {
     const { canvasId } = req.params;
     const { cardLayout } = req.body;
 
-    if (!["vertical", "horizontal", "wide", "wide-draft-order", "compact", "draft-order"].includes(cardLayout)) {
+    if (
+      ![
+        "vertical",
+        "horizontal",
+        "wide",
+        "wide-draft-order",
+        "compact",
+        "draft-order",
+      ].includes(cardLayout)
+    ) {
       return res.status(400).json({ error: "Invalid card layout" });
     }
 

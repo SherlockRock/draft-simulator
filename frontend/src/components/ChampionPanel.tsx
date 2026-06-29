@@ -123,9 +123,7 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
         }
     };
 
-    const retryChampionImage = (
-        e: Event & { currentTarget: HTMLImageElement }
-    ) => {
+    const retryChampionImage = (e: Event & { currentTarget: HTMLImageElement }) => {
         const img = e.currentTarget;
         if (img.dataset.retried === "true") return;
 
@@ -358,7 +356,9 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                                     src={champ.img}
                                                                     alt={champ.name}
                                                                     class="h-full w-full object-cover opacity-50"
-                                                                    onError={retryChampionImage}
+                                                                    onError={
+                                                                        retryChampionImage
+                                                                    }
                                                                 />
                                                                 <div class="absolute inset-0 flex items-center justify-center">
                                                                     <X
@@ -441,7 +441,9 @@ export const ChampionPanel: Component<ChampionPanelProps> = (props) => {
                                                                         ? "opacity-40"
                                                                         : ""
                                                                 }`}
-                                                                onError={retryChampionImage}
+                                                                onError={
+                                                                    retryChampionImage
+                                                                }
                                                             />
                                                             {/* Current game picked overlay badge */}
                                                             <Show

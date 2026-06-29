@@ -2,7 +2,7 @@ import { Component, createSignal, createEffect, For, Show } from "solid-js";
 import { Trash2, Plus, AlertTriangle } from "lucide-solid";
 import { UseQueryResult } from "@tanstack/solid-query";
 import { CanvasUser } from "../utils/schemas";
-import { Dialog } from "./Dialog";
+import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./Dialog";
 import { StyledSelect } from "./StyledSelect";
 import { IconPicker } from "./IconPicker";
 import { IconDisplay } from "./IconDisplay";
@@ -128,6 +128,15 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
         );
     };
 
+    const handleDialogConfirm = () => {
+        if (showIconPicker()) return;
+        if (activeTab() === "details" && hasChanges() && !isSaving()) {
+            void handleSave();
+        } else if (activeTab() === "delete" && showDeleteConfirm() && !isDeleting()) {
+            handleDelete();
+        }
+    };
+
     const tabClasses = (tab: TabType) => {
         const base = "px-4 py-2 text-sm font-medium transition-colors";
         if (activeTab() === tab) {
@@ -140,6 +149,8 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
         <Dialog
             isOpen={props.isOpen}
             onCancel={props.onClose}
+            onConfirm={handleDialogConfirm}
+            shouldConfirmOnTarget={(target) => target instanceof HTMLInputElement}
             body={
                 <div class="flex h-[490px] w-[500px] flex-col text-darius-text-primary">
                     <h2 class="mb-4 text-xl font-bold text-darius-text-primary">
@@ -289,17 +300,21 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                     <button
                                         type="button"
                                         onClick={props.onClose}
-                                        class="rounded-md bg-darius-card px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-card-hover"
+                                        class="flex items-center gap-2 rounded-md bg-darius-ember px-4 py-2 text-sm font-medium text-darius-text-primary transition-[filter] hover:brightness-110"
                                     >
-                                        Cancel
+                                        <span>Cancel</span>
+                                        <EscapeKeyHint />
                                     </button>
                                     <button
                                         type="button"
                                         onClick={handleSave}
                                         disabled={isSaving() || !hasChanges()}
-                                        class="rounded-md bg-darius-purple px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-purple-bright disabled:cursor-not-allowed disabled:opacity-50"
+                                        class="flex items-center gap-2 rounded-md bg-darius-purple px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-purple-bright disabled:cursor-not-allowed disabled:opacity-50"
                                     >
-                                        {isSaving() ? "Saving..." : "Save Changes"}
+                                        <span>{isSaving() ? "Saving..." : "Save"}</span>
+                                        <Show when={!isSaving() && hasChanges()}>
+                                            <ReturnKeyHint />
+                                        </Show>
                                     </button>
                                 </div>
                             </div>
@@ -459,7 +474,7 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                                                             null
                                                                         )
                                                                     }
-                                                                    class="rounded bg-darius-card px-3 py-1.5 text-sm text-darius-text-primary transition-colors hover:bg-darius-card-hover"
+                                                                    class="rounded bg-darius-ember px-3 py-1.5 text-sm text-darius-text-primary transition-[filter] hover:brightness-110"
                                                                 >
                                                                     Cancel
                                                                 </button>
@@ -493,9 +508,10 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                     <button
                                         type="button"
                                         onClick={props.onClose}
-                                        class="rounded-md bg-darius-card px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-card-hover"
+                                        class="flex items-center gap-2 rounded-md bg-darius-card px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-card-hover"
                                     >
-                                        Close
+                                        <span>Close</span>
+                                        <EscapeKeyHint />
                                     </button>
                                 </div>
                             </div>
@@ -528,8 +544,8 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                     >
                                         <div class="space-y-3">
                                             <p class="text-sm font-medium text-red-300">
-                                                Are you sure you want to delete "
-                                                {props.canvas.name}"?
+                                                This will permanently delete "
+                                                {props.canvas.name}".
                                             </p>
                                             <div class="flex gap-2">
                                                 <button
@@ -538,7 +554,7 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                                         setShowDeleteConfirm(false)
                                                     }
                                                     disabled={isDeleting()}
-                                                    class="rounded-md bg-darius-card px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-card-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                                    class="rounded-md bg-darius-ember px-4 py-2 text-sm font-medium text-darius-text-primary transition-[filter] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                                                 >
                                                     Cancel
                                                 </button>
@@ -546,11 +562,16 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                                     type="button"
                                                     onClick={handleDelete}
                                                     disabled={isDeleting()}
-                                                    class="rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+                                                    class="flex items-center gap-2 rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
                                                 >
-                                                    {isDeleting()
-                                                        ? "Deleting..."
-                                                        : "Yes, Delete"}
+                                                    <span>
+                                                        {isDeleting()
+                                                            ? "Deleting..."
+                                                            : "Delete Canvas"}
+                                                    </span>
+                                                    <Show when={!isDeleting()}>
+                                                        <ReturnKeyHint />
+                                                    </Show>
                                                 </button>
                                             </div>
                                         </div>
@@ -561,9 +582,10 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                     <button
                                         type="button"
                                         onClick={props.onClose}
-                                        class="rounded-md bg-darius-card px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-card-hover"
+                                        class="flex items-center gap-2 rounded-md bg-darius-card px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-card-hover"
                                     >
-                                        Close
+                                        <span>Close</span>
+                                        <EscapeKeyHint />
                                     </button>
                                 </div>
                             </div>

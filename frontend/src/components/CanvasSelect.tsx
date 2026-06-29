@@ -62,9 +62,7 @@ export const CanvasSelect = (props: props) => {
         return props.side === "team2" ? "right-0 w-40" : "left-0 w-40";
     });
 
-    const retryChampionImage = (
-        e: Event & { currentTarget: HTMLImageElement }
-    ) => {
+    const retryChampionImage = (e: Event & { currentTarget: HTMLImageElement }) => {
         const img = e.currentTarget;
         if (img.dataset.retried === "true") return;
 
@@ -221,6 +219,15 @@ export const CanvasSelect = (props: props) => {
 
     const holdSortOptions = createMemo(() => handleSortOptions(selectText()));
 
+    const exactChampionMatch = () => {
+        const normalized = selectText().trim().toLowerCase();
+        if (!normalized) return null;
+        return (
+            champions.find((option) => option.name.trim().toLowerCase() === normalized) ??
+            null
+        );
+    };
+
     const commitSelection = (championName: string) => {
         props.handlePickChange(
             props.draft.id,
@@ -351,7 +358,10 @@ export const CanvasSelect = (props: props) => {
         const shouldCommitSelection = hasTypedInput || hasExplicitHighlight;
 
         if (shouldCommitSelection) {
-            const holdChampName = holdOptions[dropdownIndex() % holdOptions.length].name;
+            const exactMatch = exactChampionMatch();
+            const holdChampName =
+                exactMatch?.name ??
+                holdOptions[dropdownIndex() % holdOptions.length].name;
             const champNotAvailable = unavailableChampions().includes(holdChampName);
             if (!champNotAvailable) {
                 setSelectText(holdChampName);
@@ -824,7 +834,9 @@ export const CanvasSelect = (props: props) => {
                                                                 src={champion.img}
                                                                 alt={champion.name}
                                                                 class="h-6 w-6 rounded"
-                                                                onError={retryChampionImage}
+                                                                onError={
+                                                                    retryChampionImage
+                                                                }
                                                             />
                                                             <span>{champion.name}</span>
                                                         </button>

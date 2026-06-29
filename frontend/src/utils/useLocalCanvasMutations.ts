@@ -465,3 +465,24 @@ export const localUpdateDraftGroup = (data: {
         return { canvas, result: { success: true } };
     });
 };
+
+export const localUpdateDraftMetadata = (data: {
+    draftId: string;
+    winner?: "blue" | "red" | null;
+    blueSideTeam?: 1 | 2;
+    firstPick?: "blue" | "red";
+}) => {
+    return mutateLocal((canvas) => {
+        const draft = canvas.drafts.find((d) => d.Draft.id === data.draftId);
+        if (draft) {
+            if (data.winner !== undefined) {
+                draft.Draft.winner = data.winner;
+                draft.Draft.completed = data.winner !== null;
+            }
+            if (data.blueSideTeam !== undefined)
+                draft.Draft.blueSideTeam = data.blueSideTeam;
+            if (data.firstPick !== undefined) draft.Draft.firstPick = data.firstPick;
+        }
+        return { canvas, result: { success: true } };
+    });
+};

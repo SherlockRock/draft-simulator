@@ -211,13 +211,19 @@ export const updateCanvasDraft = async (data: {
     positionX?: number;
     positionY?: number;
     group_id?: string | null;
+    winner?: "blue" | "red" | null;
+    blueSideTeam?: 1 | 2;
+    firstPick?: "blue" | "red";
 }) => {
     return apiPut(
         `/canvas/${data.canvasId}/draft/${data.draftId}`,
         {
             positionX: data.positionX,
             positionY: data.positionY,
-            group_id: data.group_id
+            group_id: data.group_id,
+            winner: data.winner,
+            blueSideTeam: data.blueSideTeam,
+            firstPick: data.firstPick
         },
         SuccessSchema
     );

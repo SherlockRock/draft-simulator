@@ -1,4 +1,5 @@
 import { CanvasGroup } from "../utils/schemas";
+import { EscapeKeyHint, ReturnKeyHint } from "./Dialog";
 
 type DeleteGroupDialogProps = {
     group: CanvasGroup;
@@ -12,30 +13,36 @@ export const DeleteGroupDialog = (props: DeleteGroupDialogProps) => {
     return (
         <div>
             <h3 class="mb-4 text-lg font-bold text-darius-text-primary">
-                Delete group "{props.group.name}"?
+                Remove Group from Canvas?
             </h3>
-            <p class="mb-6 text-darius-text-primary">
-                This group contains {props.draftCount} draft
-                {props.draftCount !== 1 ? "s" : ""}.
+            <p class="mb-3 text-darius-text-primary">
+                This will remove "{props.group.name}" from this canvas.
+            </p>
+            <p class="mb-6 text-sm text-darius-text-secondary">
+                It contains {props.draftCount} draft
+                {props.draftCount !== 1 ? "s" : ""}. You can keep those drafts on the
+                canvas or remove them with the group.
             </p>
             <div class="flex justify-end gap-3">
                 <button
                     onClick={props.onCancel}
-                    class="rounded-md bg-darius-card-hover px-4 py-2 text-darius-text-primary transition-colors hover:bg-darius-border"
+                    class="flex items-center gap-2 rounded-md bg-darius-ember px-4 py-2 text-darius-text-primary transition-[filter] hover:brightness-110"
                 >
-                    Cancel
+                    <span>Cancel</span>
+                    <EscapeKeyHint />
                 </button>
                 <button
                     onClick={props.onKeepDrafts}
-                    class="rounded-md bg-darius-ember px-4 py-2 text-darius-text-primary transition-[filter] hover:brightness-110"
+                    class="flex items-center gap-2 rounded-md bg-darius-ember px-4 py-2 text-darius-text-primary transition-[filter] hover:brightness-110"
                 >
-                    Keep Drafts
+                    <span>Remove Group Only</span>
+                    <ReturnKeyHint />
                 </button>
                 <button
                     onClick={props.onDeleteAll}
                     class="rounded-md bg-darius-crimson px-4 py-2 text-darius-text-primary transition-[filter] hover:brightness-110"
                 >
-                    Delete All
+                    Remove Group and Drafts
                 </button>
             </div>
         </div>

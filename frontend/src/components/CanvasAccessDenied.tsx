@@ -60,7 +60,7 @@ export const CanvasAccessDenied: Component<CanvasAccessDeniedProps> = (props) =>
                 <Show when={props.errorType === "unauthorized"}>
                     <button
                         onClick={handleSignIn}
-                        class="rounded-md bg-darius-purple bg-darius-purple px-5 py-2 text-sm font-medium text-darius-text-primary transition-colors"
+                        class="rounded-md bg-darius-purple px-5 py-2 text-sm font-medium text-darius-text-primary transition-colors"
                     >
                         Sign in
                     </button>
@@ -75,7 +75,7 @@ export const CanvasAccessDenied: Component<CanvasAccessDeniedProps> = (props) =>
                 <Show when={props.errorType !== "unauthorized"}>
                     <button
                         onClick={props.onNavigateToCanvases}
-                        class="rounded-md bg-darius-purple bg-darius-purple px-5 py-2 text-sm font-medium text-darius-text-primary transition-colors"
+                        class="rounded-md bg-darius-purple px-5 py-2 text-sm font-medium text-darius-text-primary transition-colors"
                     >
                         View your canvases
                     </button>
