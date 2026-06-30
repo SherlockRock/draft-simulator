@@ -25,7 +25,9 @@ const User = require("./models/User");
 const setupAssociations = require("./models/associations");
 const socketService = require("./middleware/socketService");
 const { UserCanvas, CanvasDraft, CanvasGroup } = require("./models/Canvas");
-const { getGroupRestrictedChampions } = require("./utils/groupRestrictions");
+const {
+  getRestrictedChampionsForGroup,
+} = require("./utils/draftRestrictions");
 const { setupVersusHandlers } = require("./socketHandlers/versusHandlers");
 const { setupNavigatorHandlers } = require("./socketHandlers/navigatorHandlers");
 const { initializeTimerService } = require("./services/versusTimerService");
@@ -235,16 +237,21 @@ async function main() {
 
           if (groupId) {
             const group = await CanvasGroup.findByPk(groupId, {
-              attributes: ["metadata"],
+              attributes: ["type", "metadata"],
             });
 
             if (group) {
               const metadata = group.metadata || {};
               const disabledChampions = metadata.disabledChampions || [];
-              const draftMode = metadata.draftMode;
+              const isSeries = group.type === "series";
+              // Series groups carry the mode in seriesType; custom groups in draftMode.
+              const effectiveMode = isSeries
+                ? metadata.seriesType || metadata.draftMode
+                : metadata.draftMode;
 
               const hasDisabled = disabledChampions.length > 0;
-              const hasRestrictions = draftMode && draftMode !== "standard";
+              const hasRestrictions =
+                effectiveMode && effectiveMode !== "standard";
 
               if (hasDisabled || hasRestrictions) {
                 // Fetch current picks to only validate newly added champions
@@ -283,7 +290,7 @@ async function main() {
                     include: [
                       {
                         model: Draft,
-                        attributes: ["id", "picks"],
+                        attributes: ["id", "picks", "seriesIndex"],
                       },
                     ],
                   });
@@ -293,18 +300,26 @@ async function main() {
                     .map((cd) => ({
                       id: cd.Draft.id,
                       picks: cd.Draft.picks,
+                      seriesIndex: cd.Draft.seriesIndex,
                     }));
 
-                  const restricted = getGroupRestrictedChampions(
-                    draftMode,
-                    draftsForRestriction,
-                    data.id,
-                  );
+                  const currentSeriesIndex =
+                    draftsForRestriction.find((d) => d.id === data.id)
+                      ?.seriesIndex ?? 0;
+
+                  const restricted = getRestrictedChampionsForGroup({
+                    groupType: group.type,
+                    seriesType: metadata.seriesType || metadata.draftMode,
+                    draftMode: metadata.draftMode,
+                    drafts: draftsForRestriction,
+                    currentDraftId: data.id,
+                    currentSeriesIndex,
+                  });
 
                   if (restricted.length > 0) {
                     const restrictedSet = new Set(restricted);
                     // Check only changed indices, respecting mode scope
-                    const startIndex = draftMode === "ironman" ? 0 : 10;
+                    const startIndex = effectiveMode === "ironman" ? 0 : 10;
                     for (const i of changedIndices) {
                       if (i >= startIndex && restrictedSet.has(data.picks[i])) {
                         socket.emit("error", {
