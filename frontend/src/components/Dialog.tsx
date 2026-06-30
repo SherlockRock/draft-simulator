@@ -1,6 +1,9 @@
 import { CornerDownLeft, X } from "lucide-solid";
 import { createEffect, JSX, onCleanup, Show } from "solid-js";
 
+const DEFAULT_CONTENT_CLASS =
+    "relative max-h-[90vh] overflow-y-auto rounded-lg bg-darius-card p-6 pr-14 shadow-lg";
+
 export const Dialog = (props: {
     body: JSX.Element;
     isOpen: () => boolean;
@@ -8,7 +11,23 @@ export const Dialog = (props: {
     onConfirm?: () => void;
     confirmOnInput?: boolean;
     shouldConfirmOnTarget?: (target: EventTarget | null) => boolean;
+    /** Override the inner card classes for full-bleed bodies. Defaults to the
+     *  standard padded card. */
+    contentClass?: string;
+    /** Whether to render the built-in close (X) button. Bodies that draw their
+     *  own close affordance pass false. Defaults to true. */
+    showCloseButton?: boolean;
 }) => {
+    // Only treat a backdrop interaction as "click outside to close" when BOTH
+    // the press and the release land directly on the backdrop. This prevents a
+    // text drag-select that starts inside an input and releases on the backdrop
+    // (and the inverse: a drag starting on the backdrop, releasing on the
+    // dialog) from accidentally dismissing the dialog and discarding edits.
+    // Tracked via pointer events rather than `click`, since a `click` fires on
+    // the common ancestor of press+release and can't tell where the pointer was
+    // actually released.
+    let pointerDownOnBackdrop = false;
+
     createEffect(() => {
         if (!props.isOpen()) return;
 
@@ -50,31 +69,37 @@ export const Dialog = (props: {
         <Show when={props.isOpen()}>
             <div
                 class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
-                onClick={(e: MouseEvent) => {
-                    e.stopPropagation();
-                    if (e.target === e.currentTarget) {
+                onPointerDown={(e: PointerEvent) => {
+                    pointerDownOnBackdrop = e.target === e.currentTarget;
+                }}
+                onPointerUp={(e: PointerEvent) => {
+                    if (pointerDownOnBackdrop && e.target === e.currentTarget) {
                         props.onCancel();
                     }
+                    pointerDownOnBackdrop = false;
                 }}
+                onClick={(e: MouseEvent) => e.stopPropagation()}
                 onWheel={(e: WheelEvent) => e.stopPropagation()}
                 onContextMenu={(e: MouseEvent) => {
                     e.stopPropagation();
                 }}
             >
                 <div
-                    class="relative max-h-[90vh] overflow-y-auto rounded-lg bg-darius-card p-6 pr-14 shadow-lg"
+                    class={props.contentClass ?? DEFAULT_CONTENT_CLASS}
                     onContextMenu={(e: MouseEvent) => {
                         e.stopPropagation();
                     }}
                 >
-                    <button
-                        type="button"
-                        onClick={props.onCancel}
-                        class="absolute right-4 top-4 text-darius-text-primary text-darius-text-secondary transition-colors"
-                        aria-label="Close dialog"
-                    >
-                        <X size={20} />
-                    </button>
+                    <Show when={props.showCloseButton ?? true}>
+                        <button
+                            type="button"
+                            onClick={() => props.onCancel()}
+                            class="absolute right-4 top-4 text-darius-text-primary text-darius-text-secondary transition-colors"
+                            aria-label="Close dialog"
+                        >
+                            <X size={20} />
+                        </button>
+                    </Show>
                     {props.body}
                 </div>
             </div>
