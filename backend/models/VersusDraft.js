@@ -31,7 +31,8 @@ const VersusDraft = sequelize.define("VersusDraft", {
     allowNull: false,
     defaultValue: 3,
     validate: {
-      isIn: [[1, 3, 5, 7]],
+      min: 1,
+      max: 7,
     },
   },
   competitive: {
