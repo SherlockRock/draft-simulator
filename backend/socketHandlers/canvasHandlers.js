@@ -10,8 +10,8 @@ function getSocketActor(socket) {
 // Thin socket adapters over the Canvas Mutation Gate: build the actor, map
 // the wire payload onto a gate call, and translate typed gate errors into a
 // canvasMutationError event. All authorization, validation, persistence and
-// broadcasting lives in the gate.
-function setupCanvasHandlers(io, socket, gate, wrapSocketHandler) {
+// broadcasting lives in the gate — adapters deliberately get no `io`.
+function setupCanvasHandlers(socket, gate, wrapSocketHandler) {
   const handle = (event, run) => {
     wrapSocketHandler(socket, event, async (data) => {
       try {

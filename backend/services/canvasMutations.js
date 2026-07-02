@@ -19,6 +19,14 @@ class CanvasMutationError extends Error {
   }
 }
 
+// Unauthenticated (no user) and forbidden (insufficient permission) are
+// separate codes so REST adapters can map them to 401 vs 403.
+class NotAuthenticatedError extends CanvasMutationError {
+  constructor(message = "Authentication required") {
+    super(message, "NOT_AUTHENTICATED");
+  }
+}
+
 class NotAuthorizedError extends CanvasMutationError {
   constructor(message = "Not authorized") {
     super(message, "NOT_AUTHORIZED");
@@ -54,7 +62,7 @@ function meetsLevel(permissions, level) {
 function createCanvasMutationGate({ io }) {
   async function assertCanvasAccess({ userId, canvasId, level = "edit" }) {
     if (!userId) {
-      throw new NotAuthorizedError("Authentication required");
+      throw new NotAuthenticatedError();
     }
     const userCanvas = await UserCanvas.findOne({
       where: { canvas_id: canvasId, user_id: userId },
@@ -71,17 +79,17 @@ function createCanvasMutationGate({ io }) {
   // cross-canvas sharing arrives.
   async function assertDraftEditAccess({ userId, canvasDrafts }) {
     if (!userId) {
-      throw new NotAuthorizedError("Authentication required");
+      throw new NotAuthenticatedError();
     }
-    for (const cd of canvasDrafts) {
-      const userCanvas = await UserCanvas.findOne({
-        where: { canvas_id: cd.canvas_id, user_id: userId },
-      });
-      if (userCanvas && meetsLevel(userCanvas.permissions, "edit")) {
-        return;
-      }
+    const userCanvases = await UserCanvas.findAll({
+      where: {
+        canvas_id: canvasDrafts.map((cd) => cd.canvas_id),
+        user_id: userId,
+      },
+    });
+    if (!userCanvases.some((uc) => meetsLevel(uc.permissions, "edit"))) {
+      throw new NotAuthorizedError();
     }
-    throw new NotAuthorizedError();
   }
 
   async function assertGroupRestrictions({ draftId, picks, canvasDrafts }) {
@@ -198,7 +206,7 @@ function createCanvasMutationGate({ io }) {
     } else {
       // Non-canvas draft: only the owner may edit.
       if (!actor.userId) {
-        throw new NotAuthorizedError("Authentication required");
+        throw new NotAuthenticatedError();
       }
       const draft = await Draft.findByPk(draftId);
       if (!draft || draft.owner_id !== actor.userId) {
@@ -264,6 +272,7 @@ function createCanvasMutationGate({ io }) {
 module.exports = {
   createCanvasMutationGate,
   CanvasMutationError,
+  NotAuthenticatedError,
   NotAuthorizedError,
   DraftLockedError,
   ChampionRestrictedError,

@@ -178,7 +178,7 @@ async function main() {
     setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler);
     setupNavigatorHandlers(io, socket, wrapSocketHandler);
 
-    setupCanvasHandlers(io, socket, canvasMutationGate, wrapSocketHandler);
+    setupCanvasHandlers(socket, canvasMutationGate, wrapSocketHandler);
 
     wrapSocketHandler(socket, "joinRoom", async (room) => {
       socket.join(room);

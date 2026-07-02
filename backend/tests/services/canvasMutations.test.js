@@ -9,6 +9,7 @@ const { UserCanvas, CanvasDraft, CanvasGroup } = require("../../models/Canvas");
 const {
   createCanvasMutationGate,
   CanvasMutationError,
+  NotAuthenticatedError,
   NotAuthorizedError,
   DraftLockedError,
   ChampionRestrictedError,
@@ -44,11 +45,20 @@ function picksWith(entries) {
   return picks;
 }
 
-// UserCanvas.findOne responses keyed by canvas_id.
+// UserCanvas responses keyed by canvas_id (findOne for single-canvas access,
+// findAll for the any-canvas IN-clause lookup).
 function mockPermissions(byCanvasId) {
   vi.spyOn(UserCanvas, "findOne").mockImplementation(async ({ where }) => {
     const permissions = byCanvasId[where.canvas_id];
     return permissions ? { permissions } : null;
+  });
+  vi.spyOn(UserCanvas, "findAll").mockImplementation(async ({ where }) => {
+    const ids = Array.isArray(where.canvas_id)
+      ? where.canvas_id
+      : [where.canvas_id];
+    return ids
+      .filter((id) => byCanvasId[id])
+      .map((id) => ({ canvas_id: id, permissions: byCanvasId[id] }));
   });
 }
 
@@ -87,12 +97,19 @@ describe("applyDraftPicks — payload validation", () => {
 });
 
 describe("applyDraftPicks — canvas draft authorization", () => {
-  it("rejects an anonymous actor with NotAuthorized", async () => {
+  // Unauthenticated is distinct from forbidden so the REST adapter (slice 2+)
+  // can map NOT_AUTHENTICATED -> 401 and NOT_AUTHORIZED -> 403.
+  it("rejects an anonymous actor with NotAuthenticated", async () => {
     mockCanvasDrafts([{ canvas_id: "c-1", is_locked: false, group_id: null }]);
     const { gate } = buildGate();
-    await expect(
-      gate.applyDraftPicks({ actor: ANON, draftId: "d-1", picks: emptyPicks() }),
-    ).rejects.toThrow(NotAuthorizedError);
+    const err = await gate
+      .applyDraftPicks({ actor: ANON, draftId: "d-1", picks: emptyPicks() })
+      .then(
+        () => null,
+        (e) => e,
+      );
+    expect(err).toBeInstanceOf(NotAuthenticatedError);
+    expect(err.code).toBe("NOT_AUTHENTICATED");
   });
 
   it("rejects an actor with only view permission", async () => {
@@ -346,7 +363,7 @@ describe("ephemeral relays — authorize → broadcast only", () => {
         positionX: 0,
         positionY: 0,
       }),
-    ).rejects.toThrow(NotAuthorizedError);
+    ).rejects.toThrow(NotAuthenticatedError);
     expect(emit).not.toHaveBeenCalled();
     expect(exceptEmit).not.toHaveBeenCalled();
   });

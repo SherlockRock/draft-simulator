@@ -39,7 +39,7 @@ function wrapSocketHandler(socket, eventName, handler) {
 function installHandlers(overrides = {}) {
   const { socket, handlers } = buildFakeSocket(overrides);
   const gate = buildFakeGate();
-  setupCanvasHandlers({}, socket, gate, wrapSocketHandler);
+  setupCanvasHandlers(socket, gate, wrapSocketHandler);
   return { socket, handlers, gate };
 }
 
