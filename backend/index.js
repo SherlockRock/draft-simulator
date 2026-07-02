@@ -20,16 +20,13 @@ const versusRoutes = require("./routes/versus");
 const navigatorRoutes = require("./routes/navigator");
 const savedPoolsRoutes = require("./routes/savedPools");
 const { router: scoutingRouter } = require("./routes/scouting");
-const Draft = require("./models/Draft");
 const User = require("./models/User");
 const setupAssociations = require("./models/associations");
 const socketService = require("./middleware/socketService");
-const { UserCanvas, CanvasDraft, CanvasGroup } = require("./models/Canvas");
-const {
-  getRestrictedChampionsForGroup,
-} = require("./utils/draftRestrictions");
 const { setupVersusHandlers } = require("./socketHandlers/versusHandlers");
 const { setupNavigatorHandlers } = require("./socketHandlers/navigatorHandlers");
+const { setupCanvasHandlers } = require("./socketHandlers/canvasHandlers");
+const { createCanvasMutationGate } = require("./services/canvasMutations");
 const { initializeTimerService } = require("./services/versusTimerService");
 const VersusSessionManager = require("./services/versusSessionManager");
 require("dotenv").config();
@@ -133,6 +130,8 @@ async function main() {
 
   socketService.init(io);
 
+  const canvasMutationGate = createCanvasMutationGate({ io });
+
   // Initialize versus timer service
   initializeTimerService(io);
   const versusSessionManager = new VersusSessionManager();
@@ -179,177 +178,7 @@ async function main() {
     setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler);
     setupNavigatorHandlers(io, socket, wrapSocketHandler);
 
-    wrapSocketHandler(socket, "newDraft", async (data) => {
-      try {
-        if ("id" in data && data.picks.length === 20) {
-          // Find all canvases containing this draft
-          const canvasDrafts = await CanvasDraft.findAll({
-            where: { draft_id: data.id },
-            attributes: ["canvas_id", "is_locked", "group_id"],
-          });
-
-          if (canvasDrafts.length > 0) {
-            // Canvas draft: require sign-in and edit/admin on at least one canvas
-            if (!socket.user) {
-              return;
-            }
-            let hasPermission = false;
-            for (const cd of canvasDrafts) {
-              const userCanvas = await UserCanvas.findOne({
-                where: {
-                  canvas_id: cd.canvas_id,
-                  user_id: socket.user.dataValues.id,
-                },
-              });
-              if (
-                userCanvas &&
-                (userCanvas.permissions === "edit" ||
-                  userCanvas.permissions === "admin")
-              ) {
-                hasPermission = true;
-                break;
-              }
-            }
-            if (!hasPermission) {
-              return;
-            }
-            // Check if draft is locked in any canvas
-            const isLocked = canvasDrafts.some((cd) => cd.is_locked);
-            if (isLocked) {
-              return;
-            }
-          } else {
-            // Non-canvas draft: require sign-in and ownership
-            if (!socket.user) {
-              return;
-            }
-            const draft = await Draft.findByPk(data.id);
-            if (!draft || socket.user.dataValues.id !== draft.owner_id) {
-              return;
-            }
-          }
-
-          // Check group-level restrictions (draftMode + disabledChampions)
-          const groupId =
-            canvasDrafts.length > 0
-              ? canvasDrafts.find((cd) => cd.group_id)?.group_id
-              : null;
-
-          if (groupId) {
-            const group = await CanvasGroup.findByPk(groupId, {
-              attributes: ["type", "metadata"],
-            });
-
-            if (group) {
-              const metadata = group.metadata || {};
-              const disabledChampions = metadata.disabledChampions || [];
-              const isSeries = group.type === "series";
-              // Series groups carry the mode in seriesType; custom groups in draftMode.
-              const effectiveMode = isSeries
-                ? metadata.seriesType || metadata.draftMode
-                : metadata.draftMode;
-
-              const hasDisabled = disabledChampions.length > 0;
-              const hasRestrictions =
-                effectiveMode && effectiveMode !== "standard";
-
-              if (hasDisabled || hasRestrictions) {
-                // Fetch current picks to only validate newly added champions
-                const currentDraft = await Draft.findByPk(data.id, {
-                  attributes: ["picks"],
-                });
-                const currentPicks = currentDraft?.picks || [];
-
-                // Find indices where a new champion was placed
-                const changedIndices = [];
-                for (let i = 0; i < 20; i++) {
-                  const newPick = data.picks[i] || "";
-                  const oldPick = currentPicks[i] || "";
-                  if (newPick !== "" && newPick !== oldPick) {
-                    changedIndices.push(i);
-                  }
-                }
-
-                // Check disabled champions on changed picks
-                if (hasDisabled && changedIndices.length > 0) {
-                  const disabledSet = new Set(disabledChampions);
-                  for (const i of changedIndices) {
-                    if (disabledSet.has(data.picks[i])) {
-                      socket.emit("error", {
-                        message: "Champion is disabled for this group",
-                      });
-                      return;
-                    }
-                  }
-                }
-
-                // Check draft mode restrictions on changed picks
-                if (hasRestrictions && changedIndices.length > 0) {
-                  const siblingDrafts = await CanvasDraft.findAll({
-                    where: { group_id: groupId },
-                    include: [
-                      {
-                        model: Draft,
-                        attributes: ["id", "picks", "seriesIndex"],
-                      },
-                    ],
-                  });
-
-                  const draftsForRestriction = siblingDrafts
-                    .filter((cd) => cd.Draft)
-                    .map((cd) => ({
-                      id: cd.Draft.id,
-                      picks: cd.Draft.picks,
-                      seriesIndex: cd.Draft.seriesIndex,
-                    }));
-
-                  const currentSeriesIndex =
-                    draftsForRestriction.find((d) => d.id === data.id)
-                      ?.seriesIndex ?? 0;
-
-                  const restricted = getRestrictedChampionsForGroup({
-                    groupType: group.type,
-                    seriesType: metadata.seriesType || metadata.draftMode,
-                    draftMode: metadata.draftMode,
-                    drafts: draftsForRestriction,
-                    currentDraftId: data.id,
-                    currentSeriesIndex,
-                  });
-
-                  if (restricted.length > 0) {
-                    const restrictedSet = new Set(restricted);
-                    // Check only changed indices, respecting mode scope
-                    const startIndex = effectiveMode === "ironman" ? 0 : 10;
-                    for (const i of changedIndices) {
-                      if (i >= startIndex && restrictedSet.has(data.picks[i])) {
-                        socket.emit("error", {
-                          message: "Champion restricted by group draft mode",
-                        });
-                        return;
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-
-          await Draft.update({ picks: data.picks }, { where: { id: data.id } });
-
-          // Multi-context broadcast: send to draft room
-          io.to(data.id).emit("draftUpdate", data, data.id);
-
-          // Broadcast to each canvas room
-          for (const cd of canvasDrafts) {
-            io.to(cd.canvas_id).emit("draftUpdate", data, data.id);
-          }
-        }
-      } catch (e) {
-        console.log(e);
-        // TODO handle the failure
-        return;
-      }
-    });
+    setupCanvasHandlers(io, socket, canvasMutationGate, wrapSocketHandler);
 
     wrapSocketHandler(socket, "joinRoom", async (room) => {
       socket.join(room);
@@ -363,84 +192,6 @@ async function main() {
       console.log(`${socket.id} left room: ${room}`);
       const roomSize = await socketService.getRoomSize(room);
       io.to(room).emit("userCountUpdate", roomSize);
-    });
-
-    wrapSocketHandler(socket, "canvasObjectMove", async (data) => {
-      if (!socket.user) return;
-      const userCanvas = await UserCanvas.findOne({
-        where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },
-      });
-      if (
-        userCanvas &&
-        (userCanvas.permissions === "edit" ||
-          userCanvas.permissions === "admin")
-      ) {
-        io.to(data.canvasId).emit(
-          "canvasObjectMoved",
-          {
-            draftId: data.draftId,
-            positionX: data.positionX,
-            positionY: data.positionY,
-          },
-          data.canvasId,
-        );
-      }
-    });
-
-    wrapSocketHandler(socket, "vertexMove", async (data) => {
-      if (!socket.user) return;
-      const userCanvas = await UserCanvas.findOne({
-        where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },
-      });
-      if (
-        userCanvas &&
-        (userCanvas.permissions === "edit" ||
-          userCanvas.permissions === "admin")
-      ) {
-        io.to(data.canvasId).emit("vertexMoved", {
-          connectionId: data.connectionId,
-          vertexId: data.vertexId,
-          x: data.x,
-          y: data.y,
-        });
-      }
-    });
-
-    wrapSocketHandler(socket, "groupMove", async (data) => {
-      if (!socket.user) return;
-      const userCanvas = await UserCanvas.findOne({
-        where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },
-      });
-      if (
-        userCanvas &&
-        (userCanvas.permissions === "edit" ||
-          userCanvas.permissions === "admin")
-      ) {
-        socket.to(data.canvasId).emit("groupMoved", {
-          groupId: data.groupId,
-          positionX: data.positionX,
-          positionY: data.positionY,
-        });
-      }
-    });
-
-    wrapSocketHandler(socket, "groupResize", async (data) => {
-      if (!socket.user) return;
-      const userCanvas = await UserCanvas.findOne({
-        where: { canvas_id: data.canvasId, user_id: socket.user.dataValues.id },
-      });
-      if (
-        userCanvas &&
-        (userCanvas.permissions === "edit" ||
-          userCanvas.permissions === "admin")
-      ) {
-        socket.to(data.canvasId).emit("groupResized", {
-          groupId: data.groupId,
-          width: data.width,
-          height: data.height,
-          positionX: data.positionX,
-        });
-      }
     });
 
     socket.on("disconnecting", () => {
