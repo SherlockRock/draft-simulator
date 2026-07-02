@@ -2441,13 +2441,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 const newWorldY = worldCoords.y - state.offsetY;
 
                 if (state.dragGroupId) {
-                    // Dragging within a custom group — store group-relative position
+                    // Dragging within a custom group — store group-relative position.
+                    // Emit the same relative coords: receivers apply positionX/Y raw
+                    // and render grouped drafts at group.position + cd.position.
                     const group = canvasGroups.find((g) => g.id === state.dragGroupId);
                     if (group) {
+                        const relativeX = newWorldX - group.positionX;
+                        const relativeY = newWorldY - group.positionY;
                         setCanvasDrafts((cd) => cd.Draft.id === state.activeBoxId, {
-                            positionX: newWorldX - group.positionX,
-                            positionY: newWorldY - group.positionY
+                            positionX: relativeX,
+                            positionY: relativeY
                         });
+                        debouncedEmitMove(state.activeBoxId, relativeX, relativeY);
                     }
                 } else {
                     setCanvasDrafts((cd) => cd.Draft.id === state.activeBoxId, {
