@@ -42,6 +42,19 @@ A new **Compute** replacing a prior in-flight one for the same **Navigator Serie
 - _Draft-switch supersession_ — user navigates to a different **Navigator Draft** within the same series; same key, different game.
 _History_: MCTS also supported warm-restart via napi `applyPick` (ADR-0005) and same-event supersession from an algorithm toggle; both removed with the streaming engine.
 
+### Canvas
+
+**Canvas** (DB: `Canvas`):
+A collaborative workspace holding **Drafts** (via `CanvasDraft` placements), groups, and connections. Per-user access via `UserCanvas` with permission levels `view` / `edit` / `admin`.
+
+**Canvas Mutation Gate** (planned module, design settled 2026-07-01):
+The single seam for "may this actor change this Canvas-related thing, and apply it if so." Two mutation classes behind one interface:
+- _Persisted mutations_ (picks, rename, positions-at-drag-end, group settings) — run the full pipeline: authorize → validate (lock, disabled champions, series restrictions) → persist → broadcast.
+- _Ephemeral relays_ (drag previews: object/vertex/group move, group resize) — authorize → broadcast only; persistence arrives later via a persisted mutation.
+
+The gate **emits via an injected emitter** (owns room targeting and event vocabulary) and **throws uniform typed errors** (`NotAuthorized`, `DraftLocked`, `ChampionRestricted`, …); adapters translate — REST to status codes, socket to error events. Replaces ~28 inline `userCanvas.permissions` checks across REST routes and socket handlers (strangler migration: socket handlers first).
+_Known quirk (kept, documented)_: draft-pick permission is "edit on **any** canvas containing the Draft," and lock is "locked on **any** canvas blocks all." Benign today because cross-canvas shared Drafts are only versus-linked, which are not editable — revisit if that changes.
+
 ## Relationships
 
 - One **User** owns many **Navigator Series**.
