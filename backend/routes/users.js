@@ -16,6 +16,10 @@ const VersusParticipant = require("../models/VersusParticipant");
 const UserToken = require("../models/UserToken");
 const sequelize = require("../config/database");
 const socketService = require("../middleware/socketService");
+const { assertCanvasAccess } = require("../services/canvasMutations");
+const {
+  respondCanvasMutationError,
+} = require("../middleware/canvasMutationErrors");
 const {
   generateUniqueCanvasDraftName,
   generateUniqueCanvasGroupName,
@@ -487,13 +491,13 @@ router.get("/me/export", protect, async (req, res) => {
 });
 
 router.post("/me/import", protect, async (req, res) => {
-  const transaction = await sequelize.transaction();
+  let transaction;
+  let committed = false;
 
   try {
     const parsed = await validateImportPayload(req.body);
 
     if (!parsed.success) {
-      await transaction.rollback();
       return res.status(400).json({
         error: "Invalid import payload",
         details: parsed.error,
@@ -512,7 +516,6 @@ router.post("/me/import", protect, async (req, res) => {
     } = parsed.data;
 
     if (canvasIds.length === 0 && versusSeriesIds.length === 0) {
-      await transaction.rollback();
       return res
         .status(400)
         .json({ error: "Select at least one canvas or series to import" });
@@ -523,7 +526,6 @@ router.post("/me/import", protect, async (req, res) => {
       canvasIds.length > 0 &&
       !targetCanvasId
     ) {
-      await transaction.rollback();
       return res
         .status(400)
         .json({
@@ -534,23 +536,16 @@ router.post("/me/import", protect, async (req, res) => {
     let targetCanvas = null;
 
     if (targetCanvasId) {
-      const userCanvas = await UserCanvas.findOne({
-        where: { canvas_id: targetCanvasId, user_id: req.user.id },
-        transaction,
+      await assertCanvasAccess({
+        userId: req.user.id,
+        canvasId: targetCanvasId,
+        level: "edit",
       });
+    }
 
-      if (
-        !userCanvas ||
-        (userCanvas.permissions !== "edit" &&
-          userCanvas.permissions !== "admin")
-      ) {
-        await transaction.rollback();
-        return res.status(403).json({
-          error:
-            "Forbidden: You don't have permission to import into this canvas",
-        });
-      }
+    transaction = await sequelize.transaction();
 
+    if (targetCanvasId) {
       targetCanvas = await Canvas.findByPk(targetCanvasId, { transaction });
     }
 
@@ -847,6 +842,7 @@ router.post("/me/import", protect, async (req, res) => {
     }
 
     await transaction.commit();
+    committed = true;
 
     res.json({
       success: true,
@@ -854,39 +850,38 @@ router.post("/me/import", protect, async (req, res) => {
       warnings,
     });
   } catch (error) {
-    await transaction.rollback();
+    if (transaction && !committed) await transaction.rollback();
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED:
+          "Forbidden: You don't have permission to import into this canvas",
+      })
+    )
+      return;
     console.error("Import error:", error);
     res.status(500).json({ error: "Failed to import data" });
   }
 });
 
 router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
-  const transaction = await sequelize.transaction();
+  let transaction;
+  let committed = false;
 
   try {
     const { canvasId } = req.params;
     const parsed = await validateCanvasJsonImportPayload(req.body);
 
     if (!parsed.success) {
-      await transaction.rollback();
       return res.status(400).json({ error: parsed.error });
     }
 
-    const userCanvas = await UserCanvas.findOne({
-      where: { canvas_id: canvasId, user_id: req.user.id },
-      transaction,
+    await assertCanvasAccess({
+      userId: req.user.id,
+      canvasId,
+      level: "edit",
     });
 
-    if (
-      !userCanvas ||
-      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
-    ) {
-      await transaction.rollback();
-      return res.status(403).json({
-        error:
-          "Forbidden: You don't have permission to import into this canvas",
-      });
-    }
+    transaction = await sequelize.transaction();
 
     const targetCanvas = await Canvas.findByPk(canvasId, { transaction });
     if (!targetCanvas) {
@@ -1227,6 +1222,7 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
 
     await touchCanvasTimestamp(targetCanvas.id, transaction);
     await transaction.commit();
+    committed = true;
     await broadcastCanvasUpdate(targetCanvas.id);
 
     res.json({
@@ -1235,7 +1231,14 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
       warnings,
     });
   } catch (error) {
-    await transaction.rollback();
+    if (transaction && !committed) await transaction.rollback();
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED:
+          "Forbidden: You don't have permission to import into this canvas",
+      })
+    )
+      return;
     console.error("Canvas JSON import error:", error);
     res.status(500).json({ error: "Failed to import JSON into canvas" });
   }

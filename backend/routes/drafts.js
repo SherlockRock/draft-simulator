@@ -14,6 +14,13 @@ const {
 } = require("../models/Canvas.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
+const {
+  assertCanvasAccess,
+  checkCanvasAccess,
+} = require("../services/canvasMutations");
+const {
+  respondCanvasMutationError,
+} = require("../middleware/canvasMutationErrors");
 const { draftHasSharedWithUser } = require("../helpers.js");
 const User = require("../models/User.js");
 
@@ -128,18 +135,11 @@ router.post("/", protect, async (req, res) => {
         return res.status(404).json({ error: "Canvas not found" });
       }
 
-      const userCanvas = await UserCanvas.findOne({
-        where: { canvas_id, user_id: req.user.id },
+      await assertCanvasAccess({
+        userId: req.user.id,
+        canvasId: canvas_id,
+        level: "edit",
       });
-      if (
-        !userCanvas ||
-        (userCanvas.permissions !== "edit" &&
-          userCanvas.permissions !== "admin")
-      ) {
-        return res.status(403).json({
-          error: "Forbidden: You don't have permission to edit this canvas",
-        });
-      }
 
       draftType = "canvas";
       const { generateUniqueCanvasDraftName } = require("../helpers");
@@ -215,6 +215,13 @@ router.post("/", protect, async (req, res) => {
 
     res.json(draft);
   } catch (err) {
+    if (
+      respondCanvasMutationError(res, err, {
+        NOT_AUTHORIZED:
+          "Forbidden: You don't have permission to edit this canvas",
+      })
+    )
+      return;
     console.error(err);
     res.status(500).json({ error: "Server Error" });
   }
@@ -257,17 +264,12 @@ router.put("/:id", protect, async (req, res) => {
           where: { draft_id: draft.id, canvas_id },
         });
         if (canvasDraftAssoc) {
-          // Check user has edit permission on this canvas
-          const userCanvas = await UserCanvas.findOne({
-            where: { canvas_id, user_id: req.user.id },
-          });
-          if (
-            userCanvas &&
-            (userCanvas.permissions === "edit" ||
-              userCanvas.permissions === "admin")
-          ) {
-            authorized = true;
-          }
+          authorized = Boolean(
+            await checkCanvasAccess({
+              userId: req.user.id,
+              canvasId: canvas_id,
+            }),
+          );
         }
       }
     }
