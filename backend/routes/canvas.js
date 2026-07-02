@@ -12,6 +12,10 @@ const User = require("../models/User.js");
 const VersusDraft = require("../models/VersusDraft.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
+const { assertCanvasAccess } = require("../services/canvasMutations");
+const {
+  respondCanvasMutationError,
+} = require("../middleware/canvasMutationErrors");
 const {
   draftHasSharedWithUser,
   generateUniqueCanvasGroupName,
@@ -348,17 +352,7 @@ router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
       req.body;
     const { canvasId, draftId } = req.params;
 
-    const userCanvas = await UserCanvas.findOne({
-      where: { canvas_id: canvasId, user_id: req.user.id },
-    });
-    if (
-      !userCanvas ||
-      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
-    ) {
-      return res.status(403).json({
-        error: "Forbidden: You don't have permission to edit this canvas",
-      });
-    }
+    await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
 
     const canvasDraftUpdates = {};
     if (typeof positionX === "number") canvasDraftUpdates.positionX = positionX;
@@ -458,6 +452,13 @@ router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
         .json({ success: false, message: "Canvas draft not found" });
     }
   } catch (error) {
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED:
+          "Forbidden: You don't have permission to edit this canvas",
+      })
+    )
+      return;
     console.error("Failed to update canvas draft:", error);
     res.status(500).json({ error: "Failed to update canvas draft" });
   }
@@ -468,18 +469,7 @@ router.post("/:canvasId/draft/:draftId/copy", protect, async (req, res) => {
   try {
     const { canvasId, draftId } = req.params;
 
-    const userCanvas = await UserCanvas.findOne({
-      where: { canvas_id: canvasId, user_id: req.user.id },
-    });
-
-    if (
-      !userCanvas ||
-      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
-    ) {
-      return res.status(403).json({
-        error: "Forbidden: You don't have permission to edit this canvas",
-      });
-    }
+    await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
 
     // Find the existing canvas draft
     const existingCanvasDraft = await CanvasDraft.findOne({
@@ -571,6 +561,13 @@ router.post("/:canvasId/draft/:draftId/copy", protect, async (req, res) => {
       groups: groups.map((g) => g.toJSON()),
     });
   } catch (error) {
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED:
+          "Forbidden: You don't have permission to edit this canvas",
+      })
+    )
+      return;
     console.error("Failed to copy draft:", error);
     res.status(500).json({ error: "Failed to copy draft" });
   }
@@ -580,18 +577,7 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
   try {
     const { canvasId, draftId } = req.params;
 
-    const userCanvas = await UserCanvas.findOne({
-      where: { canvas_id: canvasId, user_id: req.user.id },
-    });
-
-    if (
-      !userCanvas ||
-      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
-    ) {
-      return res.status(403).json({
-        error: "Forbidden: You don't have permission to edit this canvas",
-      });
-    }
+    await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
 
     // Find all CanvasDraft records with this draft_id
     const canvasDraftsToCheck = await CanvasDraft.findAll({
@@ -707,6 +693,13 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
       groups: groups.map((g) => g.toJSON()),
     });
   } catch (error) {
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED:
+          "Forbidden: You don't have permission to edit this canvas",
+      })
+    )
+      return;
     console.error("Failed to remove draft from canvas:", error);
     res.status(500).json({ error: "Failed to remove draft from canvas" });
   }
@@ -799,18 +792,7 @@ router.post("/:canvasId/import/draft", protect, async (req, res) => {
       return res.status(400).json({ error: "draftId is required" });
     }
 
-    const userCanvas = await UserCanvas.findOne({
-      where: { canvas_id: canvasId, user_id: req.user.id },
-    });
-
-    if (
-      !userCanvas ||
-      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
-    ) {
-      return res.status(403).json({
-        error: "Forbidden: You don't have permission to edit this canvas",
-      });
-    }
+    await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
 
     const draft = await Draft.findByPk(draftId);
     if (!draft) {
@@ -899,6 +881,13 @@ router.post("/:canvasId/import/draft", protect, async (req, res) => {
       groups: groups.map((g) => g.toJSON()),
     });
   } catch (error) {
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED:
+          "Forbidden: You don't have permission to edit this canvas",
+      })
+    )
+      return;
     console.error("Failed to import draft:", error);
     res.status(500).json({ error: "Failed to import draft" });
   }
@@ -906,7 +895,8 @@ router.post("/:canvasId/import/draft", protect, async (req, res) => {
 
 // Import versus series as a group
 router.post("/:canvasId/import/series", protect, async (req, res) => {
-  const t = await Canvas.sequelize.transaction();
+  let t;
+  let committed = false;
   try {
     const { canvasId } = req.params;
     const { versusDraftId, positionX, positionY } = req.body;
@@ -915,19 +905,8 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
       return res.status(400).json({ error: "versusDraftId is required" });
     }
 
-    const userCanvas = await UserCanvas.findOne({
-      where: { canvas_id: canvasId, user_id: req.user.id },
-    });
-
-    if (
-      !userCanvas ||
-      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
-    ) {
-      await t.rollback();
-      return res.status(403).json({
-        error: "Forbidden: You don't have permission to edit this canvas",
-      });
-    }
+    await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
+    t = await Canvas.sequelize.transaction();
 
     const versusDraft = await VersusDraft.findByPk(versusDraftId, {
       include: [{ model: Draft, as: "Drafts" }],
@@ -989,6 +968,7 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
     }
 
     await t.commit();
+    committed = true;
     await touchCanvasTimestamp(canvasId);
 
     // Fetch all groups for response
@@ -1049,7 +1029,14 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
       groups: groups.map((g) => g.toJSON()),
     });
   } catch (error) {
-    await t.rollback();
+    if (t && !committed) await t.rollback();
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED:
+          "Forbidden: You don't have permission to edit this canvas",
+      })
+    )
+      return;
     console.error("Failed to import series:", error);
     res.status(500).json({ error: "Failed to import series" });
   }
@@ -1059,27 +1046,18 @@ router.post(
   "/:canvasId/group/:groupId/convert-to-series",
   protect,
   async (req, res) => {
-    const t = await Canvas.sequelize.transaction();
+    let t;
     let committed = false;
     try {
       const { canvasId, groupId } = req.params;
       const data = normalizeSeriesData(req.body);
 
-      const userCanvas = await UserCanvas.findOne({
-        where: { canvas_id: canvasId, user_id: req.user.id },
-        transaction: t,
+      await assertCanvasAccess({
+        userId: req.user.id,
+        canvasId,
+        level: "edit",
       });
-
-      if (
-        !userCanvas ||
-        (userCanvas.permissions !== "edit" &&
-          userCanvas.permissions !== "admin")
-      ) {
-        await t.rollback();
-        return res.status(403).json({
-          error: "Forbidden: You don't have permission to edit this canvas",
-        });
-      }
+      t = await Canvas.sequelize.transaction();
 
       const group = await CanvasGroup.findOne({
         where: { id: groupId, canvas_id: canvasId },
@@ -1221,7 +1199,14 @@ router.post(
         groups: payload.groups,
       });
     } catch (error) {
-      if (!committed) await t.rollback();
+      if (t && !committed) await t.rollback();
+      if (
+        respondCanvasMutationError(res, error, {
+          NOT_AUTHORIZED:
+            "Forbidden: You don't have permission to edit this canvas",
+        })
+      )
+        return;
       console.error("Failed to convert group to series:", error);
       res
         .status(500)
@@ -1236,18 +1221,7 @@ router.post("/:canvasId/group", protect, async (req, res) => {
     const { canvasId } = req.params;
     const { name, positionX, positionY } = req.body;
 
-    const userCanvas = await UserCanvas.findOne({
-      where: { canvas_id: canvasId, user_id: req.user.id },
-    });
-
-    if (
-      !userCanvas ||
-      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
-    ) {
-      return res.status(403).json({
-        error: "Forbidden: You don't have permission to edit this canvas",
-      });
-    }
+    await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
 
     const groupName =
       name && typeof name === "string" && name.trim().length > 0
@@ -1320,6 +1294,13 @@ router.post("/:canvasId/group", protect, async (req, res) => {
       groups: groups.map((g) => g.toJSON()),
     });
   } catch (error) {
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED:
+          "Forbidden: You don't have permission to edit this canvas",
+      })
+    )
+      return;
     console.error("Failed to create group:", error);
     res.status(500).json({ error: "Failed to create group" });
   }
@@ -1327,24 +1308,14 @@ router.post("/:canvasId/group", protect, async (req, res) => {
 
 // Delete a group from canvas
 router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
-  const t = await Canvas.sequelize.transaction();
+  let t;
+  let committed = false;
   try {
     const { canvasId, groupId } = req.params;
     const keepDrafts = req.query.keepDrafts === "true";
 
-    const userCanvas = await UserCanvas.findOne({
-      where: { canvas_id: canvasId, user_id: req.user.id },
-    });
-
-    if (
-      !userCanvas ||
-      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
-    ) {
-      await t.rollback();
-      return res.status(403).json({
-        error: "Forbidden: You don't have permission to edit this canvas",
-      });
-    }
+    await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
+    t = await Canvas.sequelize.transaction();
 
     const group = await CanvasGroup.findOne({
       where: { id: groupId, canvas_id: canvasId },
@@ -1441,6 +1412,7 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
     await group.destroy({ transaction: t });
 
     await t.commit();
+    committed = true;
     await touchCanvasTimestamp(canvasId);
 
     // Fetch updated canvas data
@@ -1494,7 +1466,14 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
       groups: groups.map((g) => g.toJSON()),
     });
   } catch (error) {
-    await t.rollback();
+    if (t && !committed) await t.rollback();
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED:
+          "Forbidden: You don't have permission to edit this canvas",
+      })
+    )
+      return;
     console.error("Failed to delete group:", error);
     res.status(500).json({ error: "Failed to delete group" });
   }
@@ -1502,26 +1481,14 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
 
 // Update group (name, position, size)
 router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
-  const t = await Canvas.sequelize.transaction();
+  let t;
   let committed = false;
   try {
     const { canvasId, groupId } = req.params;
     const { name, positionX, positionY, width, height, metadata } = req.body;
 
-    const userCanvas = await UserCanvas.findOne({
-      where: { canvas_id: canvasId, user_id: req.user.id },
-      transaction: t,
-    });
-
-    if (
-      !userCanvas ||
-      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
-    ) {
-      await t.rollback();
-      return res.status(403).json({
-        error: "Forbidden: You don't have permission to edit this canvas",
-      });
-    }
+    await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
+    t = await Canvas.sequelize.transaction();
 
     const group = await CanvasGroup.findOne({
       where: { id: groupId, canvas_id: canvasId },
@@ -1636,26 +1603,27 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
       });
     }
   } catch (error) {
-    if (!committed) await t.rollback();
+    if (t && !committed) await t.rollback();
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED:
+          "Forbidden: You don't have permission to edit this canvas",
+      })
+    )
+      return;
     console.error("Failed to update group:", error);
     res.status(500).json({ error: "Failed to update group" });
   }
 });
 
 router.delete("/:canvasId", protect, async (req, res) => {
-  const t = await Canvas.sequelize.transaction();
+  let t;
+  let committed = false;
   try {
     const { canvasId } = req.params;
 
-    const userCanvas = await UserCanvas.findOne({
-      where: { canvas_id: canvasId, user_id: req.user.id },
-    });
-
-    if (!userCanvas || userCanvas.permissions !== "admin") {
-      return res.status(403).json({
-        error: "Forbidden: You must be an admin to delete this canvas",
-      });
-    }
+    await assertCanvasAccess({ userId: req.user.id, canvasId, level: "admin" });
+    t = await Canvas.sequelize.transaction();
 
     await CanvasConnection.destroy({
       where: { canvas_id: canvasId },
@@ -1677,13 +1645,21 @@ router.delete("/:canvasId", protect, async (req, res) => {
 
     if (affectedRows > 0) {
       await t.commit();
+      committed = true;
       res.status(200).json({ success: true, message: "Canvas deleted" });
     } else {
       await t.rollback();
       res.status(404).json({ success: false, message: "Canvas not found" });
     }
   } catch (error) {
-    await t.rollback();
+    if (t && !committed) await t.rollback();
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED:
+          "Forbidden: You must be an admin to delete this canvas",
+      })
+    )
+      return;
     console.error("Failed to delete canvas:", error);
     res.status(500).json({ error: "Failed to delete canvas" });
   }
@@ -1746,18 +1722,7 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
       return res.status(400).json({ error: "Invalid canvas name" });
     }
 
-    const userCanvas = await UserCanvas.findOne({
-      where: { canvas_id: canvasId, user_id: req.user.id },
-    });
-
-    if (
-      !userCanvas ||
-      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
-    ) {
-      return res.status(403).json({
-        error: "Forbidden: You don't have permission to edit this canvas",
-      });
-    }
+    await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
 
     const canvas = await Canvas.findByPk(canvasId);
 
@@ -1828,6 +1793,13 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
       groups: groups.map((g) => g.toJSON()),
     });
   } catch (error) {
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED:
+          "Forbidden: You don't have permission to edit this canvas",
+      })
+    )
+      return;
     console.error("Failed to update canvas name:", error);
     res.status(500).json({ error: "Failed to update canvas name" });
   }
@@ -1851,18 +1823,7 @@ router.patch("/:canvasId/card-layout", protect, async (req, res) => {
       return res.status(400).json({ error: "Invalid card layout" });
     }
 
-    const userCanvas = await UserCanvas.findOne({
-      where: { canvas_id: canvasId, user_id: req.user.id },
-    });
-
-    if (
-      !userCanvas ||
-      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
-    ) {
-      return res.status(403).json({
-        error: "Forbidden: You don't have permission to edit this canvas",
-      });
-    }
+    await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
 
     const canvas = await Canvas.findByPk(canvasId);
 
@@ -1925,6 +1886,13 @@ router.patch("/:canvasId/card-layout", protect, async (req, res) => {
       groups: groups.map((g) => g.toJSON()),
     });
   } catch (error) {
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED:
+          "Forbidden: You don't have permission to edit this canvas",
+      })
+    )
+      return;
     console.error("Failed to update canvas card layout:", error);
     res.status(500).json({ error: "Failed to update canvas card layout" });
   }
@@ -1994,15 +1962,7 @@ router.put("/:canvasId/users/:userId", protect, async (req, res) => {
     const { canvasId, userId } = req.params;
     const { permissions } = req.body;
 
-    const requesterUserCanvas = await UserCanvas.findOne({
-      where: { canvas_id: canvasId, user_id: req.user.id },
-    });
-
-    if (!requesterUserCanvas || requesterUserCanvas.permissions !== "admin") {
-      return res
-        .status(403)
-        .json({ error: "Forbidden: You must be an admin to manage users" });
-    }
+    await assertCanvasAccess({ userId: req.user.id, canvasId, level: "admin" });
 
     const [affectedRows] = await UserCanvas.update(
       { permissions },
@@ -2024,6 +1984,12 @@ router.put("/:canvasId/users/:userId", protect, async (req, res) => {
         .json({ success: false, message: "User not found on this canvas" });
     }
   } catch (error) {
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED: "Forbidden: You must be an admin to manage users",
+      })
+    )
+      return;
     res.status(500).json({ error: "Failed to update user permissions" });
   }
 });
@@ -2032,15 +1998,7 @@ router.delete("/:canvasId/users/:userId", protect, async (req, res) => {
   try {
     const { canvasId, userId } = req.params;
 
-    const requesterUserCanvas = await UserCanvas.findOne({
-      where: { canvas_id: canvasId, user_id: req.user.id },
-    });
-
-    if (!requesterUserCanvas || requesterUserCanvas.permissions !== "admin") {
-      return res
-        .status(403)
-        .json({ error: "Forbidden: You must be an admin to remove users" });
-    }
+    await assertCanvasAccess({ userId: req.user.id, canvasId, level: "admin" });
 
     const affectedRows = await UserCanvas.destroy({
       where: {
@@ -2059,6 +2017,12 @@ router.delete("/:canvasId/users/:userId", protect, async (req, res) => {
         .json({ success: false, message: "User not found on this canvas" });
     }
   } catch (error) {
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED: "Forbidden: You must be an admin to remove users",
+      })
+    )
+      return;
     console.error("Failed to remove user:", error);
     res.status(500).json({ error: "Failed to remove user" });
   }
@@ -2082,18 +2046,7 @@ router.post("/:canvasId/connections", protect, async (req, res) => {
       });
     }
 
-    const userCanvas = await UserCanvas.findOne({
-      where: { canvas_id: canvasId, user_id: req.user.id },
-    });
-
-    if (
-      !userCanvas ||
-      (userCanvas.permissions !== "edit" && userCanvas.permissions !== "admin")
-    ) {
-      return res.status(403).json({
-        error: "Forbidden: You don't have permission to edit this canvas",
-      });
-    }
+    await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
 
     // Validate all endpoint IDs exist on this canvas
     const canvasDrafts = await CanvasDraft.findAll({
@@ -2180,6 +2133,13 @@ router.post("/:canvasId/connections", protect, async (req, res) => {
       allConnections: connections,
     });
   } catch (error) {
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED:
+          "Forbidden: You don't have permission to edit this canvas",
+      })
+    )
+      return;
     console.error("Failed to create connection:", error);
     res.status(500).json({ error: "Failed to create connection" });
   }
@@ -2193,19 +2153,11 @@ router.patch(
       const { canvasId, connectionId } = req.params;
       const { addSource, addTarget } = req.body;
 
-      const userCanvas = await UserCanvas.findOne({
-        where: { canvas_id: canvasId, user_id: req.user.id },
+      await assertCanvasAccess({
+        userId: req.user.id,
+        canvasId,
+        level: "edit",
       });
-
-      if (
-        !userCanvas ||
-        (userCanvas.permissions !== "edit" &&
-          userCanvas.permissions !== "admin")
-      ) {
-        return res.status(403).json({
-          error: "Forbidden: You don't have permission to edit this canvas",
-        });
-      }
 
       const connection = await CanvasConnection.findOne({
         where: { id: connectionId, canvas_id: canvasId },
@@ -2325,6 +2277,13 @@ router.patch(
         allConnections: connections,
       });
     } catch (error) {
+      if (
+        respondCanvasMutationError(res, error, {
+          NOT_AUTHORIZED:
+            "Forbidden: You don't have permission to edit this canvas",
+        })
+      )
+        return;
       console.error("Failed to update connection:", error);
       res.status(500).json({ error: "Failed to update connection" });
     }
@@ -2338,19 +2297,11 @@ router.delete(
     try {
       const { canvasId, connectionId } = req.params;
 
-      const userCanvas = await UserCanvas.findOne({
-        where: { canvas_id: canvasId, user_id: req.user.id },
+      await assertCanvasAccess({
+        userId: req.user.id,
+        canvasId,
+        level: "edit",
       });
-
-      if (
-        !userCanvas ||
-        (userCanvas.permissions !== "edit" &&
-          userCanvas.permissions !== "admin")
-      ) {
-        return res.status(403).json({
-          error: "Forbidden: You don't have permission to edit this canvas",
-        });
-      }
 
       const affectedRows = await CanvasConnection.destroy({
         where: {
@@ -2383,6 +2334,13 @@ router.delete(
         });
       }
     } catch (error) {
+      if (
+        respondCanvasMutationError(res, error, {
+          NOT_AUTHORIZED:
+            "Forbidden: You don't have permission to edit this canvas",
+        })
+      )
+        return;
       console.error("Failed to delete connection:", error);
       res.status(500).json({ error: "Failed to delete connection" });
     }
@@ -2406,19 +2364,11 @@ router.post(
         });
       }
 
-      const userCanvas = await UserCanvas.findOne({
-        where: { canvas_id: canvasId, user_id: req.user.id },
+      await assertCanvasAccess({
+        userId: req.user.id,
+        canvasId,
+        level: "edit",
       });
-
-      if (
-        !userCanvas ||
-        (userCanvas.permissions !== "edit" &&
-          userCanvas.permissions !== "admin")
-      ) {
-        return res.status(403).json({
-          error: "Forbidden: You don't have permission to edit this canvas",
-        });
-      }
 
       const connection = await CanvasConnection.findOne({
         where: { id: connectionId, canvas_id: canvasId },
@@ -2468,6 +2418,13 @@ router.post(
         allConnections: connections,
       });
     } catch (error) {
+      if (
+        respondCanvasMutationError(res, error, {
+          NOT_AUTHORIZED:
+            "Forbidden: You don't have permission to edit this canvas",
+        })
+      )
+        return;
       console.error("Failed to create vertex:", error);
       res.status(500).json({ error: "Failed to create vertex" });
     }
@@ -2490,19 +2447,11 @@ router.put(
         });
       }
 
-      const userCanvas = await UserCanvas.findOne({
-        where: { canvas_id: canvasId, user_id: req.user.id },
+      await assertCanvasAccess({
+        userId: req.user.id,
+        canvasId,
+        level: "edit",
       });
-
-      if (
-        !userCanvas ||
-        (userCanvas.permissions !== "edit" &&
-          userCanvas.permissions !== "admin")
-      ) {
-        return res.status(403).json({
-          error: "Forbidden: You don't have permission to edit this canvas",
-        });
-      }
 
       const connection = await CanvasConnection.findOne({
         where: { id: connectionId, canvas_id: canvasId },
@@ -2543,6 +2492,13 @@ router.put(
         y: vertices[vertexIndex].y,
       });
     } catch (error) {
+      if (
+        respondCanvasMutationError(res, error, {
+          NOT_AUTHORIZED:
+            "Forbidden: You don't have permission to edit this canvas",
+        })
+      )
+        return;
       console.error("Failed to update vertex:", error);
       res.status(500).json({ error: "Failed to update vertex" });
     }
@@ -2557,19 +2513,11 @@ router.delete(
     try {
       const { canvasId, connectionId, vertexId } = req.params;
 
-      const userCanvas = await UserCanvas.findOne({
-        where: { canvas_id: canvasId, user_id: req.user.id },
+      await assertCanvasAccess({
+        userId: req.user.id,
+        canvasId,
+        level: "edit",
       });
-
-      if (
-        !userCanvas ||
-        (userCanvas.permissions !== "edit" &&
-          userCanvas.permissions !== "admin")
-      ) {
-        return res.status(403).json({
-          error: "Forbidden: You don't have permission to edit this canvas",
-        });
-      }
 
       const connection = await CanvasConnection.findOne({
         where: { id: connectionId, canvas_id: canvasId },
@@ -2606,6 +2554,13 @@ router.delete(
         vertexId,
       });
     } catch (error) {
+      if (
+        respondCanvasMutationError(res, error, {
+          NOT_AUTHORIZED:
+            "Forbidden: You don't have permission to edit this canvas",
+        })
+      )
+        return;
       console.error("Failed to delete vertex:", error);
       res.status(500).json({ error: "Failed to delete vertex" });
     }
