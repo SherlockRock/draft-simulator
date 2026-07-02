@@ -8,6 +8,8 @@ const Draft = require("../../models/Draft");
 const { UserCanvas, CanvasDraft, CanvasGroup } = require("../../models/Canvas");
 const {
   createCanvasMutationGate,
+  checkCanvasAccess,
+  assertCanvasAccess,
   CanvasMutationError,
   NotAuthenticatedError,
   NotAuthorizedError,
@@ -450,6 +452,79 @@ describe("ephemeral relays — authorize → broadcast only", () => {
 });
 
 describe("assertCanvasAccess — required level", () => {
+  it("module-scope export is the same function exposed by a gate instance", () => {
+    const { gate } = buildGate();
+    expect(gate.assertCanvasAccess).toBe(assertCanvasAccess);
+  });
+
+  it("checkCanvasAccess returns the row when edit permission meets edit level", async () => {
+    const row = { canvas_id: "c-1", user_id: "user-1", permissions: "edit" };
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue(row);
+
+    await expect(
+      checkCanvasAccess({ userId: "user-1", canvasId: "c-1" }),
+    ).resolves.toBe(row);
+  });
+
+  it("checkCanvasAccess returns the row when admin permission meets edit level", async () => {
+    const row = { canvas_id: "c-1", user_id: "user-1", permissions: "admin" };
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue(row);
+
+    await expect(
+      checkCanvasAccess({ userId: "user-1", canvasId: "c-1", level: "edit" }),
+    ).resolves.toBe(row);
+  });
+
+  it("checkCanvasAccess returns the row when admin permission meets admin level", async () => {
+    const row = { canvas_id: "c-1", user_id: "user-1", permissions: "admin" };
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue(row);
+
+    await expect(
+      checkCanvasAccess({ userId: "user-1", canvasId: "c-1", level: "admin" }),
+    ).resolves.toBe(row);
+  });
+
+  it("checkCanvasAccess returns null when the row is missing", async () => {
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue(null);
+
+    await expect(
+      checkCanvasAccess({ userId: "user-1", canvasId: "c-1" }),
+    ).resolves.toBeNull();
+  });
+
+  it("checkCanvasAccess returns null when the level is not met", async () => {
+    const row = { canvas_id: "c-1", user_id: "user-1", permissions: "edit" };
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue(row);
+
+    await expect(
+      checkCanvasAccess({ userId: "user-1", canvasId: "c-1", level: "admin" }),
+    ).resolves.toBeNull();
+  });
+
+  it("checkCanvasAccess returns null when userId is missing", async () => {
+    const findOne = vi.spyOn(UserCanvas, "findOne");
+
+    await expect(
+      checkCanvasAccess({ userId: null, canvasId: "c-1" }),
+    ).resolves.toBeNull();
+    expect(findOne).not.toHaveBeenCalled();
+  });
+
+  it("assertCanvasAccess returns the row on success", async () => {
+    const row = { canvas_id: "c-1", user_id: "user-1", permissions: "edit" };
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue(row);
+
+    await expect(
+      assertCanvasAccess({ userId: "user-1", canvasId: "c-1" }),
+    ).resolves.toBe(row);
+  });
+
+  it("assertCanvasAccess throws NotAuthenticated when userId is missing", async () => {
+    await expect(
+      assertCanvasAccess({ userId: null, canvasId: "c-1" }),
+    ).rejects.toThrow(NotAuthenticatedError);
+  });
+
   it("admin level rejects an actor with only edit permission", async () => {
     mockPermissions({ "c-1": "edit" });
     const { gate } = buildGate();
@@ -463,7 +538,7 @@ describe("assertCanvasAccess — required level", () => {
     const { gate } = buildGate();
     await expect(
       gate.assertCanvasAccess({ userId: "user-1", canvasId: "c-1", level: "edit" }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ permissions: "admin" });
   });
 
   it("typed errors are CanvasMutationError instances with stable codes", async () => {

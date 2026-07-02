@@ -59,19 +59,30 @@ function meetsLevel(permissions, level) {
   return held !== undefined && required !== undefined && held >= required;
 }
 
-function createCanvasMutationGate({ io }) {
-  async function assertCanvasAccess({ userId, canvasId, level = "edit" }) {
-    if (!userId) {
-      throw new NotAuthenticatedError();
-    }
-    const userCanvas = await UserCanvas.findOne({
-      where: { canvas_id: canvasId, user_id: userId },
-    });
-    if (!userCanvas || !meetsLevel(userCanvas.permissions, level)) {
-      throw new NotAuthorizedError();
-    }
-  }
+async function checkCanvasAccess({ userId, canvasId, level = "edit" }) {
+  if (!userId) return null;
 
+  const userCanvas = await UserCanvas.findOne({
+    where: { canvas_id: canvasId, user_id: userId },
+  });
+  if (!userCanvas || !meetsLevel(userCanvas.permissions, level)) {
+    return null;
+  }
+  return userCanvas;
+}
+
+async function assertCanvasAccess({ userId, canvasId, level = "edit" }) {
+  if (!userId) {
+    throw new NotAuthenticatedError();
+  }
+  const userCanvas = await checkCanvasAccess({ userId, canvasId, level });
+  if (!userCanvas) {
+    throw new NotAuthorizedError();
+  }
+  return userCanvas;
+}
+
+function createCanvasMutationGate({ io }) {
   // KEPT QUIRK (documented in CONTEXT.md): draft-pick permission is
   // edit/admin on ANY canvas containing the draft, and a lock on ANY
   // containing canvas blocks all edits. Benign today because cross-canvas
@@ -271,6 +282,8 @@ function createCanvasMutationGate({ io }) {
 
 module.exports = {
   createCanvasMutationGate,
+  checkCanvasAccess,
+  assertCanvasAccess,
   CanvasMutationError,
   NotAuthenticatedError,
   NotAuthorizedError,
