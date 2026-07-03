@@ -896,7 +896,6 @@ router.post("/:canvasId/import/draft", protect, async (req, res) => {
 // Import versus series as a group
 router.post("/:canvasId/import/series", protect, async (req, res) => {
   let t;
-  let committed = false;
   try {
     const { canvasId } = req.params;
     const { versusDraftId, positionX, positionY } = req.body;
@@ -968,7 +967,6 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
     }
 
     await t.commit();
-    committed = true;
     await touchCanvasTimestamp(canvasId);
 
     // Fetch all groups for response
@@ -1029,7 +1027,7 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
       groups: groups.map((g) => g.toJSON()),
     });
   } catch (error) {
-    if (t && !committed) await t.rollback();
+    if (t && !t.finished) await t.rollback();
     if (
       respondCanvasMutationError(res, error, {
         NOT_AUTHORIZED:
@@ -1047,7 +1045,6 @@ router.post(
   protect,
   async (req, res) => {
     let t;
-    let committed = false;
     try {
       const { canvasId, groupId } = req.params;
       const data = normalizeSeriesData(req.body);
@@ -1176,7 +1173,6 @@ router.post(
       );
 
       await t.commit();
-      committed = true;
       await touchCanvasTimestamp(canvasId);
 
       const payload = await getCanvasBroadcastPayload(canvasId);
@@ -1199,7 +1195,7 @@ router.post(
         groups: payload.groups,
       });
     } catch (error) {
-      if (t && !committed) await t.rollback();
+      if (t && !t.finished) await t.rollback();
       if (
         respondCanvasMutationError(res, error, {
           NOT_AUTHORIZED:
@@ -1309,7 +1305,6 @@ router.post("/:canvasId/group", protect, async (req, res) => {
 // Delete a group from canvas
 router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
   let t;
-  let committed = false;
   try {
     const { canvasId, groupId } = req.params;
     const keepDrafts = req.query.keepDrafts === "true";
@@ -1412,7 +1407,6 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
     await group.destroy({ transaction: t });
 
     await t.commit();
-    committed = true;
     await touchCanvasTimestamp(canvasId);
 
     // Fetch updated canvas data
@@ -1466,7 +1460,7 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
       groups: groups.map((g) => g.toJSON()),
     });
   } catch (error) {
-    if (t && !committed) await t.rollback();
+    if (t && !t.finished) await t.rollback();
     if (
       respondCanvasMutationError(res, error, {
         NOT_AUTHORIZED:
@@ -1482,7 +1476,6 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
 // Update group (name, position, size)
 router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
   let t;
-  let committed = false;
   try {
     const { canvasId, groupId } = req.params;
     const { name, positionX, positionY, width, height, metadata } = req.body;
@@ -1577,7 +1570,6 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
 
     await group.update(updates, { transaction: t });
     await t.commit();
-    committed = true;
     await touchCanvasTimestamp(canvasId);
 
     res.status(200).json({ success: true, group: group.toJSON() });
@@ -1603,7 +1595,7 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
       });
     }
   } catch (error) {
-    if (t && !committed) await t.rollback();
+    if (t && !t.finished) await t.rollback();
     if (
       respondCanvasMutationError(res, error, {
         NOT_AUTHORIZED:
@@ -1618,7 +1610,6 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
 
 router.delete("/:canvasId", protect, async (req, res) => {
   let t;
-  let committed = false;
   try {
     const { canvasId } = req.params;
 
@@ -1645,14 +1636,13 @@ router.delete("/:canvasId", protect, async (req, res) => {
 
     if (affectedRows > 0) {
       await t.commit();
-      committed = true;
       res.status(200).json({ success: true, message: "Canvas deleted" });
     } else {
       await t.rollback();
       res.status(404).json({ success: false, message: "Canvas not found" });
     }
   } catch (error) {
-    if (t && !committed) await t.rollback();
+    if (t && !t.finished) await t.rollback();
     if (
       respondCanvasMutationError(res, error, {
         NOT_AUTHORIZED:

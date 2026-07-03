@@ -492,7 +492,6 @@ router.get("/me/export", protect, async (req, res) => {
 
 router.post("/me/import", protect, async (req, res) => {
   let transaction;
-  let committed = false;
 
   try {
     const parsed = await validateImportPayload(req.body);
@@ -842,7 +841,6 @@ router.post("/me/import", protect, async (req, res) => {
     }
 
     await transaction.commit();
-    committed = true;
 
     res.json({
       success: true,
@@ -850,7 +848,7 @@ router.post("/me/import", protect, async (req, res) => {
       warnings,
     });
   } catch (error) {
-    if (transaction && !committed) await transaction.rollback();
+    if (transaction && !transaction.finished) await transaction.rollback();
     if (
       respondCanvasMutationError(res, error, {
         NOT_AUTHORIZED:
@@ -865,7 +863,6 @@ router.post("/me/import", protect, async (req, res) => {
 
 router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
   let transaction;
-  let committed = false;
 
   try {
     const { canvasId } = req.params;
@@ -1222,7 +1219,6 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
 
     await touchCanvasTimestamp(targetCanvas.id, transaction);
     await transaction.commit();
-    committed = true;
     await broadcastCanvasUpdate(targetCanvas.id);
 
     res.json({
@@ -1231,7 +1227,7 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
       warnings,
     });
   } catch (error) {
-    if (transaction && !committed) await transaction.rollback();
+    if (transaction && !transaction.finished) await transaction.rollback();
     if (
       respondCanvasMutationError(res, error, {
         NOT_AUTHORIZED:

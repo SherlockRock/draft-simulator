@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
+const canvasMutations = require("../../services/canvasMutations");
 const {
   CanvasMutationError,
   NotAuthenticatedError,
@@ -9,7 +10,7 @@ const {
   DraftLockedError,
   ChampionRestrictedError,
   InvalidMutationError,
-} = require("../../services/canvasMutations");
+} = canvasMutations;
 const {
   respondCanvasMutationError,
 } = require("../../middleware/canvasMutationErrors");
@@ -67,6 +68,43 @@ describe("respondCanvasMutationError", () => {
 
     expect(status).toHaveBeenCalledWith(400);
     expect(json).toHaveBeenCalledWith({ error: "future text" });
+  });
+
+  it("has an explicit non-default REST status for every CanvasMutationError code", () => {
+    const expectedStatusByCode = {
+      NOT_AUTHENTICATED: 401,
+      NOT_AUTHORIZED: 403,
+      DRAFT_LOCKED: 423,
+      CHAMPION_RESTRICTED: 409,
+      INVALID_MUTATION: 400,
+    };
+
+    const errorClasses = Object.values(canvasMutations).filter(
+      (value) =>
+        typeof value === "function" &&
+        (value === CanvasMutationError ||
+          value.prototype instanceof CanvasMutationError),
+    );
+
+    for (const ErrorClass of errorClasses) {
+      if (ErrorClass === CanvasMutationError) continue;
+
+      const error = new ErrorClass("test message");
+      const expectedStatus = expectedStatusByCode[error.code];
+      expect(
+        expectedStatus,
+        `missing explicit REST status expectation for ${error.code}`,
+      ).toBeDefined();
+
+      const { res, status } = buildRes();
+      const handled = respondCanvasMutationError(res, error);
+
+      expect(handled).toBe(true);
+      expect(status).toHaveBeenCalledWith(expectedStatus);
+      if (error.code !== "INVALID_MUTATION") {
+        expect(expectedStatus).not.toBe(400);
+      }
+    }
   });
 
   it("returns false for non-gate errors without touching res", () => {
