@@ -92,6 +92,10 @@ export const CanvasGroupMetadataSchema = z.object({
   origin: z.enum(["live", "manual"]).optional(),
   disabledChampions: z.array(z.string()).optional(),
   draftMode: DraftModeSchema.optional(),
+  layout: z.enum(["free", "grid"]).optional(),
+  gridCols: z.number().int().min(1).optional(),
+  rowLabels: z.array(z.string()).optional(),
+  colLabels: z.array(z.string()).optional(),
 });
 
 export const CanvasGroupSchema = z.object({
@@ -109,6 +113,18 @@ export const CanvasGroupSchema = z.object({
   CanvasDrafts: z.array(CanvasDraftSchema).optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
+});
+
+export const DraftPositionUpdateSchema = z.object({
+  draft_id: z.string(),
+  positionX: z.number(),
+  positionY: z.number(),
+  group_id: z.string().nullable().optional(),
+});
+
+export const DraftPositionsUpdatedSchema = z.object({
+  positions: z.array(DraftPositionUpdateSchema),
+  group: CanvasGroupSchema.nullable(),
 });
 
 // =============================================================================
@@ -730,6 +746,10 @@ export type CanvasDraft = z.infer<typeof CanvasDraftSchema>;
 export type CanvasGroupMetadata = z.infer<typeof CanvasGroupMetadataSchema>;
 export type DraftMode = z.infer<typeof DraftModeSchema>;
 export type CanvasGroup = z.infer<typeof CanvasGroupSchema>;
+export type DraftPositionUpdate = z.infer<typeof DraftPositionUpdateSchema>;
+export type DraftPositionsUpdated = z.infer<
+  typeof DraftPositionsUpdatedSchema
+>;
 export type Connection = z.infer<typeof ConnectionSchema>;
 export type ConnectionEndpoint = z.infer<typeof ConnectionEndpointSchema>;
 export type Vertex = z.infer<typeof VertexSchema>;
