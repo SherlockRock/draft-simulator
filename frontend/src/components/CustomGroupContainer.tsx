@@ -1,7 +1,24 @@
-import { Show, createSignal, createMemo, createEffect, Accessor, JSX } from "solid-js";
+import {
+    Show,
+    For,
+    createSignal,
+    createMemo,
+    createEffect,
+    Accessor,
+    JSX
+} from "solid-js";
 import { Trash2, Settings } from "lucide-solid";
 import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/schemas";
-import { GRID_HEADER_HEIGHT } from "../utils/gridLayout";
+import {
+    GRID_HEADER_HEIGHT,
+    GridCell,
+    isGridGroup,
+    gridColsOf,
+    cellToPosition,
+    positionToCell
+} from "../utils/gridLayout";
+import { cardWidth, cardHeight } from "../utils/helpers";
+import type { CardLayout } from "../utils/canvasCardLayout";
 
 type CustomGroupContainerProps = {
     group: CanvasGroup;
@@ -40,6 +57,7 @@ type CustomGroupContainerProps = {
     editingGroupId?: Accessor<string | null>;
     onContextMenu?: (group: CanvasGroup, e: MouseEvent) => void;
     onEditingComplete?: () => void;
+    cardLayout: () => CardLayout;
     children: JSX.Element;
 };
 
@@ -172,6 +190,29 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
 
     const draftCount = createMemo(() => props.drafts.length);
 
+    const isGrid = () => isGridGroup(props.group);
+
+    // All cells for the currently occupied rows plus one growth row.
+    const hintCells = createMemo<GridCell[]>(() => {
+        if (!isGrid()) return [];
+        const cols = gridColsOf(props.group);
+        const layout = props.cardLayout();
+        let maxRow = 0;
+        for (const d of props.drafts) {
+            maxRow = Math.max(
+                maxRow,
+                positionToCell(d.positionX, d.positionY, layout, cols).row
+            );
+        }
+        const cells: GridCell[] = [];
+        for (let row = 0; row <= maxRow + 1; row++) {
+            for (let col = 0; col < cols; col++) {
+                cells.push({ row, col });
+            }
+        }
+        return cells;
+    });
+
     return (
         <div
             class="absolute z-20 rounded-xl border-2 bg-darius-card/90 shadow-xl backdrop-blur-sm"
@@ -265,6 +306,65 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 </Show>
             </div>
 
+            {/* Drag-time grid cell hints */}
+            <Show when={isGrid() && props.isDragTarget}>
+                <div class="pointer-events-none absolute inset-0">
+                    <For each={hintCells()}>
+                        {(cell) => {
+                            const pos = cellToPosition(cell, props.cardLayout());
+                            return (
+                                <div
+                                    class="absolute rounded-lg border-2 border-dashed border-darius-border/70"
+                                    style={{
+                                        left: `${pos.x}px`,
+                                        top: `${pos.y}px`,
+                                        width: `${cardWidth(props.cardLayout())}px`,
+                                        height: `${cardHeight(props.cardLayout())}px`
+                                    }}
+                                />
+                            );
+                        }}
+                    </For>
+                </div>
+            </Show>
+
+            {/* Row / column labels rendered just outside the container edges */}
+            <Show when={isGrid()}>
+                <For each={props.group.metadata.colLabels ?? []}>
+                    {(label, i) => (
+                        <Show when={label.trim().length > 0}>
+                            <div
+                                class="pointer-events-none absolute -top-6 truncate text-center text-xs font-semibold text-darius-text-secondary"
+                                style={{
+                                    left: `${cellToPosition({ row: 0, col: i() }, props.cardLayout()).x}px`,
+                                    width: `${cardWidth(props.cardLayout())}px`
+                                }}
+                            >
+                                {label}
+                            </div>
+                        </Show>
+                    )}
+                </For>
+                <For each={props.group.metadata.rowLabels ?? []}>
+                    {(label, i) => (
+                        <Show when={label.trim().length > 0}>
+                            <div
+                                class="pointer-events-none absolute -ml-2 max-w-32 -translate-x-full truncate text-right text-xs font-semibold text-darius-text-secondary"
+                                style={{
+                                    left: "0px",
+                                    top: `${
+                                        cellToPosition({ row: i(), col: 0 }, props.cardLayout()).y +
+                                        cardHeight(props.cardLayout()) / 2
+                                    }px`
+                                }}
+                            >
+                                {label}
+                            </div>
+                        </Show>
+                    )}
+                </For>
+            </Show>
+
             {/* Content area */}
             <div
                 class="relative"
@@ -313,8 +413,8 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 />
             </Show>
 
-            {/* Resize handle */}
-            <Show when={props.canEdit()}>
+            {/* Resize handle — hidden in grid mode (dimensions follow content) */}
+            <Show when={props.canEdit() && !isGrid()}>
                 <div
                     class="absolute bottom-0 left-0 h-4 w-4 cursor-sw-resize"
                     onMouseDown={(e) => handleResizeMouseDown(e, "left")}

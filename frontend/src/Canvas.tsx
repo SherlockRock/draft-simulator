@@ -3163,6 +3163,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     onContextMenu={handleGroupContextMenu}
                                     editingGroupId={editingGroupId}
                                     onEditingComplete={() => setEditingGroupId(null)}
+                                    cardLayout={props.cardLayout}
                                 >
                                     <For each={getDraftsForGroup(group.id)}>
                                         {(cd) => (
