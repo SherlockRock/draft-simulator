@@ -2,12 +2,15 @@ import {
     CanvasDraft,
     Connection,
     CanvasGroup,
-    CanvasGroupMetadata,
     Viewport,
     AnchorType
 } from "./schemas";
 import { getLocalCanvas, saveLocalCanvas, LocalCanvas } from "./localCanvasStore";
 import type { CardLayout } from "./canvasCardLayout";
+import type {
+    CanvasGroupMetadata,
+    DraftPositionUpdate
+} from "@draft-sim/shared-types";
 
 // Helper to safely cast anchor type with default
 const toAnchorType = (
@@ -461,6 +464,37 @@ export const localUpdateDraftGroup = (data: {
             draft.group_id = data.group_id;
             if (data.positionX !== undefined) draft.positionX = data.positionX;
             if (data.positionY !== undefined) draft.positionY = data.positionY;
+        }
+        return { canvas, result: { success: true } };
+    });
+};
+
+export const localUpdateDraftPositions = (data: {
+    positions: DraftPositionUpdate[];
+    group?: {
+        id: string;
+        width?: number;
+        height?: number;
+        metadata?: Partial<CanvasGroupMetadata>;
+    };
+}) => {
+    return mutateLocal((canvas) => {
+        for (const p of data.positions) {
+            const draft = canvas.drafts.find((d) => d.Draft.id === p.draft_id);
+            if (draft) {
+                draft.positionX = p.positionX;
+                draft.positionY = p.positionY;
+                if (p.group_id !== undefined) draft.group_id = p.group_id;
+            }
+        }
+        if (data.group) {
+            const group = canvas.groups.find((g) => g.id === data.group?.id);
+            if (group) {
+                if (data.group.width !== undefined) group.width = data.group.width;
+                if (data.group.height !== undefined) group.height = data.group.height;
+                if (data.group.metadata !== undefined)
+                    group.metadata = { ...group.metadata, ...data.group.metadata };
+            }
         }
         return { canvas, result: { success: true } };
     });

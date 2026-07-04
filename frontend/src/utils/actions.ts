@@ -30,9 +30,12 @@ import {
     ImportSeriesResponseSchema,
     UpdateCanvasNameResponseSchema,
     ShareCanvasVerifySchema,
-    CanvasGroupMetadata,
     CardLayoutSchema
 } from "./schemas";
+import type {
+    CanvasGroupMetadata,
+    DraftPositionUpdate
+} from "@draft-sim/shared-types";
 
 // Re-export types for backward compatibility
 export type { CanvasResponse as CanvasResposnse } from "./schemas";
@@ -225,6 +228,23 @@ export const updateCanvasDraft = async (data: {
             blueSideTeam: data.blueSideTeam,
             firstPick: data.firstPick
         },
+        SuccessSchema
+    );
+};
+
+export const updateCanvasDraftPositions = async (data: {
+    canvasId: string;
+    positions: DraftPositionUpdate[];
+    group?: {
+        id: string;
+        width?: number;
+        height?: number;
+        metadata?: Partial<CanvasGroupMetadata>;
+    };
+}) => {
+    return apiPut(
+        `/canvas/${data.canvasId}/draft-positions`,
+        { positions: data.positions, group: data.group },
         SuccessSchema
     );
 };

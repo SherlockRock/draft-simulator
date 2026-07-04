@@ -92,7 +92,10 @@ import { useCanvasContext } from "./contexts/CanvasContext";
 import { useCanvasSocket } from "./providers/CanvasSocketProvider";
 import CanvasSidebar from "./components/CanvasSidebar";
 import { getGroupRestrictedChampions } from "./utils/groupRestrictions";
-import type { DraftMode } from "@draft-sim/shared-types";
+import {
+    DraftPositionsUpdatedSchema,
+    type DraftMode
+} from "@draft-sim/shared-types";
 import {
     getDirectionalCanvasSlotIndex,
     getNextCanvasSlotIndex,
@@ -981,6 +984,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 });
             }
         });
+        socket.on("draftPositionsUpdated", (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "draftPositionsUpdated",
+                rawData,
+                DraftPositionsUpdatedSchema
+            );
+            if (!data) return;
+            for (const p of data.positions) {
+                setCanvasDrafts((cd) => cd.Draft.id === p.draft_id, {
+                    positionX: p.positionX,
+                    positionY: p.positionY,
+                    ...(p.group_id !== undefined ? { group_id: p.group_id } : {})
+                });
+            }
+            const group = data.group;
+            if (group) {
+                setCanvasGroups((g) => g.id === group.id, group);
+            }
+        });
         socket.on(
             "connectionCreated",
             (data: { connection: Connection; allConnections: Connection[] }) => {
@@ -1100,6 +1122,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             socket.off("draftNameUpdated");
             socket.off("draftUpdate");
             socket.off("canvasObjectMoved");
+            socket.off("draftPositionsUpdated");
             socket.off("connectionCreated");
             socket.off("connectionUpdated");
             socket.off("connectionDeleted");
