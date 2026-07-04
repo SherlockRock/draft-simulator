@@ -464,6 +464,99 @@ router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
   }
 });
 
+// Batch position commit: grid snap/swap and arrange-as-grid. Updates all
+// drafts (and optionally the containing group's metadata/dimensions) in one
+// transaction, then broadcasts a surgical draftPositionsUpdated event.
+router.put("/:canvasId/draft-positions", protect, async (req, res) => {
+  let t;
+  try {
+    const { canvasId } = req.params;
+    const { positions, group } = req.body;
+
+    await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
+
+    const validPositions =
+      Array.isArray(positions) &&
+      positions.length > 0 &&
+      positions.every(
+        (p) =>
+          p &&
+          typeof p.draft_id === "string" &&
+          typeof p.positionX === "number" &&
+          typeof p.positionY === "number" &&
+          (p.group_id === undefined ||
+            p.group_id === null ||
+            typeof p.group_id === "string"),
+      );
+    if (!validPositions) {
+      return res.status(400).json({
+        error:
+          "positions must be a non-empty array of {draft_id, positionX, positionY}",
+      });
+    }
+
+    t = await Canvas.sequelize.transaction();
+
+    for (const p of positions) {
+      const updates = { positionX: p.positionX, positionY: p.positionY };
+      if (p.group_id !== undefined) updates.group_id = p.group_id;
+      const [updated] = await CanvasDraft.update(updates, {
+        where: { canvas_id: canvasId, draft_id: p.draft_id },
+        transaction: t,
+      });
+      if (updated === 0) {
+        await t.rollback();
+        return res
+          .status(404)
+          .json({ error: `Draft ${p.draft_id} not found on canvas` });
+      }
+    }
+
+    let updatedGroup = null;
+    if (group && typeof group === "object" && typeof group.id === "string") {
+      const groupRow = await CanvasGroup.findOne({
+        where: { id: group.id, canvas_id: canvasId },
+        transaction: t,
+      });
+      if (!groupRow) {
+        await t.rollback();
+        return res.status(404).json({ error: "Group not found" });
+      }
+      const groupUpdates = {};
+      if (typeof group.width === "number") groupUpdates.width = group.width;
+      if (typeof group.height === "number") groupUpdates.height = group.height;
+      if (group.metadata && typeof group.metadata === "object") {
+        groupUpdates.metadata = { ...groupRow.metadata, ...group.metadata };
+      }
+      if (Object.keys(groupUpdates).length > 0) {
+        await groupRow.update(groupUpdates, { transaction: t });
+      }
+      updatedGroup = groupRow;
+    }
+
+    await t.commit();
+    await touchCanvasTimestamp(canvasId);
+
+    res.status(200).json({ success: true });
+
+    socketService.emitToRoom(canvasId, "draftPositionsUpdated", {
+      positions,
+      group: updatedGroup ? updatedGroup.toJSON() : null,
+    });
+  } catch (error) {
+    if (t && !t.finished) await t.rollback();
+    if (
+      respondCanvasMutationError(res, error, {
+        NOT_AUTHORIZED:
+          "Forbidden: You don't have permission to edit this canvas",
+      })
+    )
+      return;
+    console.error("Failed to update draft positions:", error);
+    res.status(500).json({ error: "Failed to update draft positions" });
+  }
+});
+
 // Copy a draft within a canvas
 router.post("/:canvasId/draft/:draftId/copy", protect, async (req, res) => {
   try {
