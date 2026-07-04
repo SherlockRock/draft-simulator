@@ -103,7 +103,8 @@ import {
     gridDimensions,
     positionToCell,
     firstEmptyCell,
-    cellToPosition
+    cellToPosition,
+    type GridCell
 } from "./utils/gridLayout";
 import { GridSettingsDialog } from "./components/GridSettingsDialog";
 import {
@@ -289,6 +290,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     } | null>(null);
     const [dragOverGroupId, setDragOverGroupId] = createSignal<string | null>(null);
     const [exitingGroupId, setExitingGroupId] = createSignal<string | null>(null);
+    // Cell the dragged card would land in, mirroring the drop math in
+    // onWindowMouseUp (top-left position quantized via positionToCell).
+    const [gridDropCell, setGridDropCell] = createSignal<{
+        groupId: string;
+        cell: GridCell;
+    } | null>(null);
+    const highlightCellFor = (groupId: string): GridCell | null => {
+        const target = gridDropCell();
+        return target && target.groupId === groupId ? target.cell : null;
+    };
     const [contextMenuPosition, setContextMenuPosition] = createSignal<{
         x: number;
         y: number;
@@ -2788,6 +2799,31 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         setExitingGroupId(null);
                     }
                 }
+
+                // Grid drop-cell highlight: incoming (hovering a different grid
+                // group) or intra-group (hovering the grid group the card came
+                // from). Same quantization the drop handlers use, so the
+                // highlight matches where the card actually lands.
+                const gridHoverGroup =
+                    hoverGroup &&
+                    isGridGroup(hoverGroup) &&
+                    (hoverGroup.id !== currentGroupId ||
+                        hoverGroup.id === state.dragGroupId)
+                        ? hoverGroup
+                        : null;
+                setGridDropCell(
+                    gridHoverGroup
+                        ? {
+                              groupId: gridHoverGroup.id,
+                              cell: positionToCell(
+                                  newWorldX - gridHoverGroup.positionX,
+                                  newWorldY - gridHoverGroup.positionY,
+                                  props.cardLayout(),
+                                  gridColsOf(gridHoverGroup)
+                              )
+                          }
+                        : null
+                );
             }
         };
 
@@ -3004,6 +3040,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             // Clear drag visual states
             setDragOverGroupId(null);
             setExitingGroupId(null);
+            setGridDropCell(null);
 
             setDragState({
                 activeBoxId: null,
@@ -3280,6 +3317,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     canEdit={canEdit}
                                     isConnectionMode={isConnectionMode()}
                                     isDragTarget={dragOverGroupId() === group.id}
+                                    isDragSource={
+                                        dragState().activeBoxId !== null &&
+                                        dragState().dragGroupId === group.id
+                                    }
+                                    highlightCell={highlightCellFor(group.id)}
                                     isExitingSource={exitingGroupId() === group.id}
                                     contentMinWidth={
                                         computeMinGroupSize(group.id).minWidth

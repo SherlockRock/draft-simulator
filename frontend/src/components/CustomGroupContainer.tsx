@@ -49,6 +49,11 @@ type CustomGroupContainerProps = {
     canEdit: () => boolean;
     isConnectionMode: boolean;
     isDragTarget: boolean;
+    // A member of this group is being dragged (intra-group drag) — the
+    // grid hints should show even though the group isn't the drag target.
+    isDragSource: boolean;
+    // Cell the dragged card would land in, or null when none applies.
+    highlightCell: GridCell | null;
     isExitingSource: boolean;
     contentMinWidth: number;
     contentMinHeight: number;
@@ -315,14 +320,23 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
             </div>
 
             {/* Drag-time grid cell hints */}
-            <Show when={isGrid() && props.isDragTarget}>
+            <Show when={isGrid() && (props.isDragTarget || props.isDragSource)}>
                 <div class="pointer-events-none absolute inset-0">
                     <For each={hintCells()}>
                         {(cell) => {
                             const pos = cellToPosition(cell, props.cardLayout());
+                            const isHighlighted = () =>
+                                props.highlightCell?.row === cell.row &&
+                                props.highlightCell?.col === cell.col;
                             return (
                                 <div
-                                    class="absolute rounded-lg border-2 border-dashed border-darius-border/70"
+                                    class="absolute rounded-lg border-2"
+                                    classList={{
+                                        "border-dashed border-darius-border/40":
+                                            !isHighlighted(),
+                                        "border-darius-purple-bright bg-darius-purple-bright/10":
+                                            isHighlighted()
+                                    }}
                                     style={{
                                         left: `${pos.x}px`,
                                         top: `${pos.y}px`,
