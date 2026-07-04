@@ -203,6 +203,22 @@ const ScoutView: Component = () => {
         pulseTimer = setTimeout(() => setPulse(null), 1500);
     };
 
+    const swapRoles = (side: MatchupSide, from: Role, to: Role) => {
+        const param = side === "you" ? yourTeamParam() : enemyTeamParam();
+        if (param.kind !== "slots") return;
+        const slots = [...param.slots];
+        const fromIndex = ROLE_ORDER.indexOf(from);
+        const toIndex = ROLE_ORDER.indexOf(to);
+        const fromSlot = slots[fromIndex];
+        slots[fromIndex] = slots[toIndex];
+        slots[toIndex] = fromSlot;
+        setSearchParams(
+            side === "you"
+                ? { players: serializeTeamParam(slots) }
+                : { enemies: serializeTeamParam(slots) }
+        );
+    };
+
     const highlightFor = (col: number): { you: Set<string>; enemy: Set<string> } => {
         const you = yourSlots()[col];
         const enemy = enemySlots()[col];
@@ -336,6 +352,7 @@ const ScoutView: Component = () => {
                                         highlightEnemy={highlightFor(index()).enemy}
                                         pulse={pulse()}
                                         onChipClick={scrollToRow}
+                                        onSwap={swapRoles}
                                     />
                                 )}
                             </For>

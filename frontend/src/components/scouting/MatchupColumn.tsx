@@ -1,6 +1,6 @@
 import { Component, Show, createMemo } from "solid-js";
 import type { PlayerScoutResult, Role } from "@draft-sim/shared-types";
-import { computeSharedChamps } from "../../utils/playerStats";
+import { computeSharedChamps, ROLE_ORDER } from "../../utils/playerStats";
 import { ROLE_LABELS } from "../../utils/championRoles";
 import { PlayerSummaryHeader, ChampListSection, RoleIcon } from "./PlayerPanel";
 import { ChampChipStrip, type ChipDetail } from "./ChampChipStrip";
@@ -19,6 +19,16 @@ const entriesOf = (r: PlayerScoutResult | null) =>
 
 const riotIdOf = (r: PlayerScoutResult): string =>
     `${r.input.gameName}#${r.input.tagLine}`;
+
+const dragPayload = (side: MatchupSide, role: Role): string => `${side}:${role}`;
+
+const parseDragPayload = (raw: string): { side: MatchupSide; role: Role } | null => {
+    const parts = raw.split(":");
+    if (parts.length !== 2) return null;
+    const side = parts[0] === "you" || parts[0] === "enemy" ? parts[0] : null;
+    const role = ROLE_ORDER.find((r) => r === parts[1]) ?? null;
+    return side && role ? { side, role } : null;
+};
 
 interface HalfProps {
     side: MatchupSide;
@@ -76,6 +86,42 @@ interface MatchupColumnProps {
     onSwap?: (side: MatchupSide, from: Role, to: Role) => void;
 }
 
+interface DraggableHalfProps extends HalfProps {
+    onSwap?: (side: MatchupSide, from: Role, to: Role) => void;
+}
+
+const DraggableHalf: Component<DraggableHalfProps> = (props) => (
+    <div
+        draggable={props.result !== null}
+        onDragStart={(e) => {
+            if (!props.result) return;
+            e.dataTransfer?.setData("text/plain", dragPayload(props.side, props.role));
+        }}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+            e.preventDefault();
+            const raw = e.dataTransfer?.getData("text/plain");
+            if (!raw) return;
+            const parsed = parseDragPayload(raw);
+            if (!parsed) return;
+            if (parsed.side !== props.side) return;
+            if (parsed.role === props.role) return;
+            props.onSwap?.(props.side, parsed.role, props.role);
+        }}
+        class="flex min-h-0 flex-1 flex-col"
+        classList={{ "cursor-grab": props.result !== null }}
+    >
+        <PlayerHalf
+            side={props.side}
+            role={props.role}
+            result={props.result}
+            rowRefs={props.rowRefs}
+            highlight={props.highlight}
+            pulse={props.pulse}
+        />
+    </div>
+);
+
 export const MatchupColumn: Component<MatchupColumnProps> = (props) => {
     const shared = createMemo(() =>
         computeSharedChamps(entriesOf(props.you), entriesOf(props.enemy))
@@ -97,13 +143,14 @@ export const MatchupColumn: Component<MatchupColumnProps> = (props) => {
                     {ROLE_LABELS[props.role]}
                 </span>
             </div>
-            <PlayerHalf
+            <DraggableHalf
                 side="you"
                 role={props.role}
                 result={props.you}
                 rowRefs={props.rowRefs}
                 highlight={props.highlightYou}
                 pulse={props.pulse}
+                onSwap={props.onSwap}
             />
             {/* Divider: the pool intersection, structurally — no verdicts. */}
             <div class="border-y border-slate-700/60 bg-slate-900/60 px-1.5 py-1">
@@ -124,13 +171,14 @@ export const MatchupColumn: Component<MatchupColumnProps> = (props) => {
                     />
                 </Show>
             </div>
-            <PlayerHalf
+            <DraggableHalf
                 side="enemy"
                 role={props.role}
                 result={props.enemy}
                 rowRefs={props.rowRefs}
                 highlight={props.highlightEnemy}
                 pulse={props.pulse}
+                onSwap={props.onSwap}
             />
         </section>
     );
