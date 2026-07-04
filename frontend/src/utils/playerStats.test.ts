@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import type { ChampionStatEntry, PlayerScoutResult } from "@draft-sim/shared-types";
 import {
     aggregateChampRows,
+    computeSharedChamps,
+    computeFlexChamps,
     computeTotals,
     computeRoleDistribution,
     serializePlayersParam,
@@ -12,6 +14,7 @@ import {
     autoAssignRoles,
     ROLE_ORDER
 } from "./playerStats";
+import type { AssignedPlayer } from "./playerStats";
 
 const entry = (
     championId: string,
@@ -265,5 +268,73 @@ describe("autoAssignRoles", () => {
 
     it("returns all-null for an empty team", () => {
         expect(autoAssignRoles([])).toEqual([null, null, null, null, null]);
+    });
+});
+
+describe("computeSharedChamps", () => {
+    it("intersects champion-level across roles, preserving per-side role detail", () => {
+        const shared = computeSharedChamps(
+            [entry("Sylas", "mid", 40, 24), entry("Ahri", "mid", 10, 5)],
+            [entry("Sylas", "jungle", 12, 6), entry("Gnar", "top", 30, 15)]
+        );
+        expect(shared).toHaveLength(1);
+        expect(shared[0].championId).toBe("Sylas");
+        expect(shared[0].you).toEqual({
+            games: 40,
+            wins: 24,
+            roles: [{ role: "mid", games: 40, wins: 24 }]
+        });
+        expect(shared[0].enemy.roles).toEqual([{ role: "jungle", games: 12, wins: 6 }]);
+    });
+
+    it("returns [] when pools are disjoint or a side is empty", () => {
+        expect(computeSharedChamps([entry("Ahri", "mid", 5, 3)], [])).toEqual([]);
+        expect(
+            computeSharedChamps([entry("Ahri", "mid", 5, 3)], [entry("Gnar", "top", 5, 3)])
+        ).toEqual([]);
+    });
+
+    it("sorts by combined games descending", () => {
+        const shared = computeSharedChamps(
+            [entry("Ahri", "mid", 5, 3), entry("Sylas", "mid", 30, 15)],
+            [entry("Ahri", "mid", 6, 3), entry("Sylas", "jungle", 10, 5)]
+        );
+        expect(shared.map((s) => s.championId)).toEqual(["Sylas", "Ahri"]);
+    });
+});
+
+describe("computeFlexChamps", () => {
+    const player = (
+        riotId: string,
+        assignedRole: ChampionStatEntry["role"],
+        entries: ChampionStatEntry[]
+    ): AssignedPlayer => ({ riotId, assignedRole, entries });
+
+    it("includes only champs in 2+ teammates' pools, skipping null slots", () => {
+        const flex = computeFlexChamps([
+            player("A#1", "top", [entry("Sylas", "top", 20, 10), entry("Gnar", "top", 9, 4)]),
+            null,
+            player("B#2", "mid", [entry("Sylas", "mid", 15, 9)]),
+            null,
+            null
+        ]);
+        expect(flex).toHaveLength(1);
+        expect(flex[0].championId).toBe("Sylas");
+        expect(flex[0].players.map((p) => p.riotId)).toEqual(["A#1", "B#2"]);
+        expect(flex[0].players[0].roles).toEqual([{ role: "top", games: 20, wins: 10 }]);
+    });
+
+    it("sorts by teammate count desc, then total games desc", () => {
+        const flex = computeFlexChamps([
+            player("A#1", "top", [entry("Sylas", "top", 5, 2), entry("Ahri", "mid", 50, 25)]),
+            player("B#2", "mid", [entry("Sylas", "mid", 5, 2), entry("Ahri", "mid", 1, 1)]),
+            player("C#3", "adc", [entry("Sylas", "adc", 5, 2)]),
+            null,
+            null
+        ]);
+        // Sylas: 3 players / 15 games. Ahri: 2 players / 51 games. Count wins.
+        expect(flex.map((f) => f.championId)).toEqual(["Sylas", "Ahri"]);
+        // Within a champ, players sorted by games desc.
+        expect(flex[1].players[0].riotId).toBe("A#1");
     });
 });

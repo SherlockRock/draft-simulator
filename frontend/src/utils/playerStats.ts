@@ -35,6 +35,116 @@ export function aggregateChampRows(entries: ChampionStatEntry[]): ChampRow[] {
     return [...map.values()].sort((a, b) => b.games - a.games);
 }
 
+export interface RoleStat {
+    role: Role;
+    games: number;
+    wins: number;
+}
+
+export interface SharedChampSide {
+    games: number;
+    wins: number;
+    roles: RoleStat[];
+}
+
+export interface SharedChamp {
+    championId: string;
+    you: SharedChampSide;
+    enemy: SharedChampSide;
+}
+
+// Per-champ totals WITH the per-role breakdown (unlike aggregateChampRows,
+// which collapses roles) — popovers need the any-role asymmetry.
+function champSideDetail(entries: ChampionStatEntry[]): Map<string, SharedChampSide> {
+    const map = new Map<string, SharedChampSide>();
+    for (const e of entries) {
+        const side = map.get(e.championId) ?? { games: 0, wins: 0, roles: [] };
+        side.games += e.games;
+        side.wins += e.wins;
+        const rs = side.roles.find((r) => r.role === e.role);
+        if (rs) {
+            rs.games += e.games;
+            rs.wins += e.wins;
+        } else {
+            side.roles.push({ role: e.role, games: e.games, wins: e.wins });
+        }
+        map.set(e.championId, side);
+    }
+    for (const side of map.values()) side.roles.sort((a, b) => b.games - a.games);
+    return map;
+}
+
+// Champion-level intersection of two players' pools (any role — a Sylas ban
+// denies both players wherever they play him). Sorted by combined games desc.
+export function computeSharedChamps(
+    you: ChampionStatEntry[],
+    enemy: ChampionStatEntry[]
+): SharedChamp[] {
+    const yours = champSideDetail(you);
+    const theirs = champSideDetail(enemy);
+    const out: SharedChamp[] = [];
+    for (const [championId, youSide] of yours) {
+        const enemySide = theirs.get(championId);
+        if (enemySide) out.push({ championId, you: youSide, enemy: enemySide });
+    }
+    return out.sort(
+        (a, b) => b.you.games + b.enemy.games - (a.you.games + a.enemy.games)
+    );
+}
+
+export interface AssignedPlayer {
+    riotId: string;
+    assignedRole: Role;
+    entries: ChampionStatEntry[];
+}
+
+export interface FlexChampPlayer {
+    riotId: string;
+    assignedRole: Role;
+    games: number;
+    wins: number;
+    roles: RoleStat[];
+}
+
+export interface FlexChamp {
+    championId: string;
+    players: FlexChampPlayer[];
+}
+
+// Champs appearing in 2+ teammates' pools (the within-team flex axis).
+// Sorted by teammate count desc, then total games desc; players within a
+// champ by games desc.
+export function computeFlexChamps(team: (AssignedPlayer | null)[]): FlexChamp[] {
+    const byChamp = new Map<string, FlexChampPlayer[]>();
+    for (const p of team) {
+        if (!p) continue;
+        for (const [championId, side] of champSideDetail(p.entries)) {
+            const list = byChamp.get(championId) ?? [];
+            list.push({
+                riotId: p.riotId,
+                assignedRole: p.assignedRole,
+                games: side.games,
+                wins: side.wins,
+                roles: side.roles
+            });
+            byChamp.set(championId, list);
+        }
+    }
+    const totalGames = (players: FlexChampPlayer[]) =>
+        players.reduce((s, p) => s + p.games, 0);
+    return [...byChamp.entries()]
+        .filter(([, players]) => players.length >= 2)
+        .map(([championId, players]) => ({
+            championId,
+            players: [...players].sort((a, b) => b.games - a.games)
+        }))
+        .sort(
+            (a, b) =>
+                b.players.length - a.players.length ||
+                totalGames(b.players) - totalGames(a.players)
+        );
+}
+
 export function computeTotals(rows: ChampRow[]): PlayerTotals {
     const games = rows.reduce((s, r) => s + r.games, 0);
     const wins = rows.reduce((s, r) => s + r.wins, 0);
