@@ -12,7 +12,10 @@ import {
     formatPlayersInput,
     computeMainRole,
     autoAssignRoles,
-    ROLE_ORDER
+    ROLE_ORDER,
+    parseTeamParam,
+    serializeTeamParam,
+    canonicalPlayersKey
 } from "./playerStats";
 import type { AssignedPlayer } from "./playerStats";
 
@@ -336,5 +339,49 @@ describe("computeFlexChamps", () => {
         expect(flex.map((f) => f.championId)).toEqual(["Sylas", "Ahri"]);
         // Within a champ, players sorted by games desc.
         expect(flex[1].players[0].riotId).toBe("A#1");
+    });
+});
+
+describe("team param codec", () => {
+    it("round-trips 5 slots including empties", () => {
+        const slots = [
+            { gameName: "city mouse", tagLine: "yum" },
+            null,
+            { gameName: "White", tagLine: "KWAN" },
+            null,
+            null
+        ];
+        const parsed = parseTeamParam(serializeTeamParam(slots));
+        expect(parsed).toEqual({ kind: "slots", slots });
+    });
+
+    it("treats exactly 5 chunks as slot-form, fewer as list-form", () => {
+        expect(parseTeamParam("a%231,b%232,c%233").kind).toBe("list");
+        expect(parseTeamParam("a%231,b%232,c%233,d%234,e%235").kind).toBe("slots");
+    });
+
+    it("parses empty string to an empty list", () => {
+        expect(parseTeamParam("")).toEqual({ kind: "list", players: [] });
+    });
+
+    it("percent-encodes # and , inside names", () => {
+        const slots = [{ gameName: "a#b", tagLine: "c,d" }, null, null, null, null];
+        const s = serializeTeamParam(slots);
+        expect(s.split(",")).toHaveLength(5);
+        expect(parseTeamParam(s)).toEqual({ kind: "slots", slots });
+    });
+});
+
+describe("canonicalPlayersKey", () => {
+    it("is order- and case-insensitive", () => {
+        const a = canonicalPlayersKey([
+            { gameName: "Bb", tagLine: "Y" },
+            { gameName: "aA", tagLine: "X" }
+        ]);
+        const b = canonicalPlayersKey([
+            { gameName: "aa", tagLine: "x" },
+            { gameName: "bb", tagLine: "y" }
+        ]);
+        expect(a).toBe(b);
     });
 });

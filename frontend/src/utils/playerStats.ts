@@ -240,15 +240,22 @@ export function computeMainRole(entries: ChampionStatEntry[]): Role | null {
 // URL encoding: each player → "gameName#tag" with both fields percent-encoded
 // (so # and , inside a name don't break parsing), joined by commas. The router
 // handles the outer URL encoding of the whole value.
+const encodeChunk = (p: PlayerId): string =>
+    `${encodeURIComponent(p.gameName.trim())}#${encodeURIComponent(p.tagLine.trim())}`;
+
+const decodeChunk = (chunk: string): PlayerId | null => {
+    const hash = chunk.indexOf("#");
+    if (hash === -1) return null;
+    const gameName = decodeURIComponent(chunk.slice(0, hash));
+    const tagLine = decodeURIComponent(chunk.slice(hash + 1));
+    if (!gameName || !tagLine) return null;
+    return { gameName, tagLine };
+};
+
 export function serializePlayersParam(players: PlayerId[]): string {
     return players
         .filter((p) => p.gameName.trim() && p.tagLine.trim())
-        .map(
-            (p) =>
-                `${encodeURIComponent(p.gameName.trim())}#${encodeURIComponent(
-                    p.tagLine.trim()
-                )}`
-        )
+        .map(encodeChunk)
         .join(",");
 }
 
@@ -264,6 +271,45 @@ export function parsePlayersParam(raw: string): PlayerId[] {
         out.push({ gameName, tagLine });
     }
     return out;
+}
+
+export type TeamParam =
+    | { kind: "slots"; slots: (PlayerId | null)[] }
+    | { kind: "list"; players: PlayerId[] };
+
+// Matchup-mode team param: exactly 5 comma-separated slots in ROLE_ORDER,
+// empty slot = unfilled role — the role ASSIGNMENT itself is URL state, so
+// drag fixes survive refresh/share.
+export function serializeTeamParam(slots: (PlayerId | null)[]): string {
+    return slots.map((p) => (p ? encodeChunk(p) : "")).join(",");
+}
+
+// Exactly 5 chunks (empties counted) = slot-form, position = role. Anything
+// else = an unordered list (legacy links, fresh pastes) that the caller
+// auto-assigns and normalizes. Legacy 5-player single-team links parse as
+// slots too, which is harmless: single-team mode just compacts non-null
+// slots in order, preserving the original column order.
+export function parseTeamParam(raw: string): TeamParam {
+    if (!raw) return { kind: "list", players: [] };
+    const chunks = raw.split(",");
+    if (chunks.length === ROLE_ORDER.length) {
+        return { kind: "slots", slots: chunks.map(decodeChunk) };
+    }
+    return {
+        kind: "list",
+        players: chunks
+            .map(decodeChunk)
+            .filter((p): p is PlayerId => p !== null)
+    };
+}
+
+// Query-key identity for a team: order- and case-insensitive, so dragging
+// players between role slots NEVER refetches.
+export function canonicalPlayersKey(players: PlayerId[]): string {
+    return players
+        .map((p) => `${p.gameName.toLowerCase()}#${p.tagLine.toLowerCase()}`)
+        .sort()
+        .join(",");
 }
 
 // op.gg region path segment → our Riot platform code. Unknown codes fall back
