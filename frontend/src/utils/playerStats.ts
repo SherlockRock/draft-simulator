@@ -1,4 +1,4 @@
-import type { ChampionStatEntry, Role } from "@draft-sim/shared-types";
+import type { ChampionStatEntry, PlayerScoutResult, Role } from "@draft-sim/shared-types";
 
 export interface ChampRow {
     championId: string;
@@ -64,7 +64,53 @@ export function winrateColor(wr: number): string {
     return wr >= 60 ? "text-orange-400" : wr >= 50 ? "text-blue-300" : "text-slate-400";
 }
 
-const ROLE_ORDER: Role[] = ["top", "jungle", "mid", "adc", "support"];
+export const ROLE_ORDER: Role[] = ["top", "jungle", "mid", "adc", "support"];
+
+// A team's five role slots in ROLE_ORDER; null = unfilled role.
+export type TeamSlots = (PlayerScoutResult | null)[];
+
+const resultEntries = (r: PlayerScoutResult): ChampionStatEntry[] =>
+    r.status === "ok" ? r.envelope.entries : [];
+
+// Proper 1:1 player→role assignment maximizing Σ games(player, assignedRole).
+// ≤5 players × 5 roles → exhaustive over injective assignments (≤ 5! = 120),
+// no assignment-problem library needed. Strict `>` keeps the FIRST optimum
+// found, and roles are tried in ROLE_ORDER per player in input order, so ties
+// resolve deterministically: earlier players take earlier roles. Errored /
+// no-data players score 0 everywhere and therefore never displace a
+// data-backed player from a scoring role.
+export function autoAssignRoles(results: PlayerScoutResult[]): TeamSlots {
+    const players = results.slice(0, ROLE_ORDER.length);
+    const dists = players.map((r) => computeRoleDistribution(resultEntries(r)));
+
+    let best: number[] = [];
+    let bestScore = -1;
+    const search = (playerIdx: number, remainingRoles: number[], acc: number[]): void => {
+        if (playerIdx === players.length) {
+            let score = 0;
+            for (let p = 0; p < acc.length; p++) score += dists[p][ROLE_ORDER[acc[p]]];
+            if (score > bestScore) {
+                bestScore = score;
+                best = [...acc];
+            }
+            return;
+        }
+        for (let i = 0; i < remainingRoles.length; i++) {
+            search(
+                playerIdx + 1,
+                [...remainingRoles.slice(0, i), ...remainingRoles.slice(i + 1)],
+                [...acc, remainingRoles[i]]
+            );
+        }
+    };
+    search(0, ROLE_ORDER.map((_, i) => i), []);
+
+    const slots: TeamSlots = ROLE_ORDER.map(() => null);
+    best.forEach((roleIdx, playerIdx) => {
+        slots[roleIdx] = players[playerIdx];
+    });
+    return slots;
+}
 
 // The player's most-played role (most games), or null if no entries. Ties break
 // toward the earlier role in top→jungle→mid→adc→support order.
