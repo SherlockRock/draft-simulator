@@ -1,6 +1,7 @@
 import { Show, createSignal, createMemo, createEffect, Accessor, JSX } from "solid-js";
 import { Trash2, Settings } from "lucide-solid";
 import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/schemas";
+import { GRID_HEADER_HEIGHT } from "../utils/gridLayout";
 
 type CustomGroupContainerProps = {
     group: CanvasGroup;
@@ -44,7 +45,7 @@ type CustomGroupContainerProps = {
 
 const MIN_WIDTH = 200;
 const MIN_HEIGHT = 150;
-export const CUSTOM_GROUP_HEADER_HEIGHT = 48;
+export const CUSTOM_GROUP_HEADER_HEIGHT = GRID_HEADER_HEIGHT;
 const HEADER_HEIGHT = CUSTOM_GROUP_HEADER_HEIGHT;
 const PADDING = 16;
 
