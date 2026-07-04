@@ -1,7 +1,19 @@
-import { Component, For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import {
+    Component,
+    For,
+    Show,
+    createEffect,
+    createMemo,
+    createSignal,
+    onCleanup
+} from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
-import { MAX_SCOUT_PLAYERS, type PlayerScoutResult, type Role } from "@draft-sim/shared-types";
+import {
+    MAX_SCOUT_PLAYERS,
+    type PlayerScoutResult,
+    type Role
+} from "@draft-sim/shared-types";
 import { scoutPlayers } from "../../utils/scoutingApi";
 import {
     serializePlayersParam,
@@ -37,7 +49,9 @@ const getParamString = (param: string | string[] | undefined): string => {
 };
 
 const teamPlayers = (param: TeamParam): PlayerId[] =>
-    param.kind === "list" ? param.players : param.slots.filter((s): s is PlayerId => s !== null);
+    param.kind === "list"
+        ? param.players
+        : param.slots.filter((s): s is PlayerId => s !== null);
 
 const playerKey = (p: { gameName: string; tagLine: string }): string =>
     `${p.gameName.toLowerCase()}#${p.tagLine.toLowerCase()}`;
@@ -57,7 +71,9 @@ const slotResults = (
 ): (PlayerScoutResult | null)[] =>
     param.kind === "slots"
         ? param.slots.map((slot) =>
-              slot ? (results.find((r) => playerKey(r.input) === playerKey(slot)) ?? null) : null
+              slot
+                  ? (results.find((r) => playerKey(r.input) === playerKey(slot)) ?? null)
+                  : null
           )
         : [null, null, null, null, null];
 
@@ -102,7 +118,9 @@ const ScoutView: Component = () => {
     const parsedEnemy = createMemo(() => parsePlayersInput(enemyInput()));
     const parsedEnemyPlayers = createMemo(() => parsedEnemy().players);
     const overCap = createMemo(() => parsedPlayers().length > MAX_SCOUT_PLAYERS);
-    const enemyOverCap = createMemo(() => parsedEnemyPlayers().length > MAX_SCOUT_PLAYERS);
+    const enemyOverCap = createMemo(
+        () => parsedEnemyPlayers().length > MAX_SCOUT_PLAYERS
+    );
 
     const yourQuery = useQuery(() => ({
         queryKey: ["scoutPlayers", activeRegion(), canonicalPlayersKey(yourPlayers())],
@@ -160,26 +178,28 @@ const ScoutView: Component = () => {
         const nextYou =
             you.kind === "slots"
                 ? you.slots
-                : autoAssignRoles(resultsFor(you.players, yourQuery.data?.results ?? [])).map(
-                      (slot) =>
-                          slot
-                              ? {
-                                    gameName: slot.input.gameName,
-                                    tagLine: slot.input.tagLine
-                                }
-                              : null
+                : autoAssignRoles(
+                      resultsFor(you.players, yourQuery.data?.results ?? [])
+                  ).map((slot) =>
+                      slot
+                          ? {
+                                gameName: slot.input.gameName,
+                                tagLine: slot.input.tagLine
+                            }
+                          : null
                   );
         const nextEnemy =
             enemy.kind === "slots"
                 ? enemy.slots
-                : autoAssignRoles(resultsFor(enemy.players, enemyQuery.data?.results ?? [])).map(
-                      (slot) =>
-                          slot
-                              ? {
-                                    gameName: slot.input.gameName,
-                                    tagLine: slot.input.tagLine
-                                }
-                              : null
+                : autoAssignRoles(
+                      resultsFor(enemy.players, enemyQuery.data?.results ?? [])
+                  ).map((slot) =>
+                      slot
+                          ? {
+                                gameName: slot.input.gameName,
+                                tagLine: slot.input.tagLine
+                            }
+                          : null
                   );
 
         setSearchParams(
@@ -370,7 +390,9 @@ const ScoutView: Component = () => {
                         <Show when={yourQuery.isError || enemyQuery.isError}>
                             <p class="rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">
                                 {yourQuery.isError ? "Couldn't scout your team. " : ""}
-                                {enemyQuery.isError ? "Couldn't scout the enemy team. " : ""}
+                                {enemyQuery.isError
+                                    ? "Couldn't scout the enemy team. "
+                                    : ""}
                                 u.gg may be unavailable — try again.
                             </p>
                         </Show>

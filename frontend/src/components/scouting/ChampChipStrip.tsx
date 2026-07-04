@@ -24,9 +24,12 @@ const championIdOf = (c: ChipDetail): string =>
     c.kind === "shared" ? c.champ.championId : c.champ.championId;
 
 // One popover line: who plays it, in which role(s), with games/WR.
-const StatLine: Component<{ name: string; games: number; wins: number; roles: RoleStat[] }> = (
-    props
-) => {
+const StatLine: Component<{
+    name: string;
+    games: number;
+    wins: number;
+    roles: RoleStat[];
+}> = (props) => {
     const wr = () => (props.games ? Math.round((props.wins / props.games) * 100) : 0);
     return (
         <div class="flex items-center gap-2 whitespace-nowrap">
@@ -43,7 +46,9 @@ const StatLine: Component<{ name: string; games: number; wins: number; roles: Ro
                     )}
                 </For>
             </span>
-            <span class={`tabular-nums font-semibold ${winrateColor(wr())}`}>{wr()}%</span>
+            <span class={`font-semibold tabular-nums ${winrateColor(wr())}`}>
+                {wr()}%
+            </span>
         </div>
     );
 };
@@ -56,7 +61,12 @@ const PopoverBody: Component<{ chip: ChipDetail }> = (props) => (
         fallback={
             <For each={props.chip.kind === "flex" ? props.chip.champ.players : []}>
                 {(p) => (
-                    <StatLine name={p.riotId} games={p.games} wins={p.wins} roles={p.roles} />
+                    <StatLine
+                        name={p.riotId}
+                        games={p.games}
+                        wins={p.wins}
+                        roles={p.roles}
+                    />
                 )}
             </For>
         }
@@ -94,7 +104,9 @@ export const ChampChipStrip: Component<ChampChipStripProps> = (props) => {
     });
 
     return (
-        <div class={`custom-scrollbar flex items-center gap-1 overflow-x-auto ${props.class ?? ""}`}>
+        <div
+            class={`custom-scrollbar flex items-center gap-1 overflow-x-auto ${props.class ?? ""}`}
+        >
             <For each={props.chips}>
                 {(chip) => {
                     const id = championIdOf(chip);
@@ -105,12 +117,18 @@ export const ChampChipStrip: Component<ChampChipStripProps> = (props) => {
                             title={id}
                             onClick={() => props.onChipClick?.(id)}
                             onMouseEnter={(e) =>
-                                setHover({ chip, rect: e.currentTarget.getBoundingClientRect() })
+                                setHover({
+                                    chip,
+                                    rect: e.currentTarget.getBoundingClientRect()
+                                })
                             }
                             onMouseLeave={() => setHover(null)}
                             class="shrink-0 rounded ring-1 ring-slate-600 transition-transform hover:scale-110 hover:ring-amber-400/70"
                         >
-                            <Show when={img} fallback={<div class="h-5 w-5 rounded bg-slate-700" />}>
+                            <Show
+                                when={img}
+                                fallback={<div class="h-5 w-5 rounded bg-slate-700" />}
+                            >
                                 <img src={img} alt={id} class="h-5 w-5 rounded" />
                             </Show>
                         </button>

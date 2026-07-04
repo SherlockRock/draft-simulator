@@ -31,7 +31,9 @@ const ROLE_MASK_STYLE: JSX.CSSProperties = {
 
 // A position glyph tinted via CSS mask (the source SVGs are white). `active`
 // roles take their per-role accent color; inactive roles read as dim slate.
-export const RoleIcon: Component<{ role: Role; active: boolean; class?: string }> = (props) => (
+export const RoleIcon: Component<{ role: Role; active: boolean; class?: string }> = (
+    props
+) => (
     <span
         title={ROLE_LABELS[props.role]}
         class={`inline-block shrink-0 ${props.class ?? ""} ${
@@ -217,7 +219,9 @@ export const ChampListSection: Component<{
                     </p>
                 }
             >
-                <div class={`custom-scrollbar flex flex-col overflow-y-auto p-1.5 ${props.maxHeightClass ?? "max-h-[62vh]"}`}>
+                <div
+                    class={`custom-scrollbar flex flex-col overflow-y-auto p-1.5 ${props.maxHeightClass ?? "max-h-[62vh]"}`}
+                >
                     <For each={champRows()}>
                         {(champ) => {
                             const wr = champ.games
@@ -230,7 +234,8 @@ export const ChampListSection: Component<{
                                     class="flex items-center gap-2 rounded px-1.5 py-1 hover:bg-slate-700/30"
                                     classList={{
                                         "ring-1 ring-inset ring-amber-400/40":
-                                            props.highlightSet?.has(champ.championId) ?? false,
+                                            props.highlightSet?.has(champ.championId) ??
+                                            false,
                                         "ring-2 ring-inset ring-amber-300 animate-pulse":
                                             props.pulseChampionId === champ.championId
                                     }}

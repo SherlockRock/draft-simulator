@@ -198,10 +198,7 @@ describe("formatPlayersInput", () => {
     });
 });
 
-const okResult = (
-    gameName: string,
-    entries: ChampionStatEntry[]
-): PlayerScoutResult => ({
+const okResult = (gameName: string, entries: ChampionStatEntry[]): PlayerScoutResult => ({
     status: "ok",
     input: { region: "na1", gameName, tagLine: "TAG" },
     envelope: {
@@ -228,7 +225,10 @@ describe("autoAssignRoles", () => {
         // A: mid 40 / jungle 10. B: mid 30 / top 20.
         // Optimal is A→mid + B→top (60), not B→mid + A→jungle (40).
         const slots = autoAssignRoles([
-            okResult("A", [entry("Sylas", "mid", 40, 20), entry("LeeSin", "jungle", 10, 5)]),
+            okResult("A", [
+                entry("Sylas", "mid", 40, 20),
+                entry("LeeSin", "jungle", 10, 5)
+            ]),
             okResult("B", [entry("Ahri", "mid", 30, 15), entry("Gnar", "top", 20, 10)])
         ]);
         expect(nameAt(slots, "mid")).toBe("A");
@@ -245,7 +245,11 @@ describe("autoAssignRoles", () => {
             okResult("Jg", [entry("LeeSin", "jungle", 30, 15)])
         ]);
         expect(ROLE_ORDER.map((r) => nameAt(slots, r))).toEqual([
-            "Top", "Jg", "Mid", "Adc", "Sup"
+            "Top",
+            "Jg",
+            "Mid",
+            "Adc",
+            "Sup"
         ]);
     });
 
@@ -293,7 +297,10 @@ describe("computeSharedChamps", () => {
     it("returns [] when pools are disjoint or a side is empty", () => {
         expect(computeSharedChamps([entry("Ahri", "mid", 5, 3)], [])).toEqual([]);
         expect(
-            computeSharedChamps([entry("Ahri", "mid", 5, 3)], [entry("Gnar", "top", 5, 3)])
+            computeSharedChamps(
+                [entry("Ahri", "mid", 5, 3)],
+                [entry("Gnar", "top", 5, 3)]
+            )
         ).toEqual([]);
     });
 
@@ -315,7 +322,10 @@ describe("computeFlexChamps", () => {
 
     it("includes only champs in 2+ teammates' pools, skipping null slots", () => {
         const flex = computeFlexChamps([
-            player("A#1", "top", [entry("Sylas", "top", 20, 10), entry("Gnar", "top", 9, 4)]),
+            player("A#1", "top", [
+                entry("Sylas", "top", 20, 10),
+                entry("Gnar", "top", 9, 4)
+            ]),
             null,
             player("B#2", "mid", [entry("Sylas", "mid", 15, 9)]),
             null,
@@ -329,8 +339,14 @@ describe("computeFlexChamps", () => {
 
     it("sorts by teammate count desc, then total games desc", () => {
         const flex = computeFlexChamps([
-            player("A#1", "top", [entry("Sylas", "top", 5, 2), entry("Ahri", "mid", 50, 25)]),
-            player("B#2", "mid", [entry("Sylas", "mid", 5, 2), entry("Ahri", "mid", 1, 1)]),
+            player("A#1", "top", [
+                entry("Sylas", "top", 5, 2),
+                entry("Ahri", "mid", 50, 25)
+            ]),
+            player("B#2", "mid", [
+                entry("Sylas", "mid", 5, 2),
+                entry("Ahri", "mid", 1, 1)
+            ]),
             player("C#3", "adc", [entry("Sylas", "adc", 5, 2)]),
             null,
             null

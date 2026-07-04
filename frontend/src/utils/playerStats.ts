@@ -213,7 +213,11 @@ export function autoAssignRoles(results: PlayerScoutResult[]): TeamSlots {
             );
         }
     };
-    search(0, ROLE_ORDER.map((_, i) => i), []);
+    search(
+        0,
+        ROLE_ORDER.map((_, i) => i),
+        []
+    );
 
     const slots: TeamSlots = ROLE_ORDER.map(() => null);
     best.forEach((roleIdx, playerIdx) => {
@@ -292,7 +296,11 @@ export function serializeTeamParam(slots: (PlayerId | null)[]): string {
 export function parseTeamParam(raw: string): TeamParam {
     if (!raw) return { kind: "list", players: [] };
     if (raw.startsWith("s:")) {
-        const slots = raw.slice(2).split(",").map(decodeChunk).slice(0, ROLE_ORDER.length);
+        const slots = raw
+            .slice(2)
+            .split(",")
+            .map(decodeChunk)
+            .slice(0, ROLE_ORDER.length);
         while (slots.length < ROLE_ORDER.length) {
             slots.push(null);
         }

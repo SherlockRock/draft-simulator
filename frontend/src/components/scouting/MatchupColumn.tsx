@@ -64,7 +64,10 @@ const PlayerHalf: Component<HalfProps> = (props) => (
                         highlightSet={props.highlight}
                         pulseChampionId={pulseId()}
                         onRowRef={(championId, el) =>
-                            props.rowRefs.set(rowRefKey(props.side, props.role, championId), el)
+                            props.rowRefs.set(
+                                rowRefKey(props.side, props.role, championId),
+                                el
+                            )
                         }
                     />
                 </div>
