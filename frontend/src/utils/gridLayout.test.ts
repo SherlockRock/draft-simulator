@@ -9,11 +9,13 @@ import {
     resolveGridDrop,
     arrangeGrid,
     gridDimensions,
-    rowCountAfter
+    rowCountAfter,
+    colsFromWidth,
+    effectiveGridCols
 } from "./gridLayout";
 import { cardWidth, cardHeight } from "./helpers";
 import type { CardLayout } from "./canvasCardLayout";
-import type { CanvasDraft } from "./schemas";
+import type { CanvasDraft, CanvasGroup } from "./schemas";
 
 const LAYOUTS: CardLayout[] = [
     "vertical",
@@ -234,5 +236,76 @@ describe("rowCountAfter", () => {
         const p = cellToPosition({ row: 0, col: 1 }, "wide");
         const updates = [{ draft_id: "moving", positionX: p.x, positionY: p.y }];
         expect(rowCountAfter(updates, [settled], "wide", 3)).toBe(3);
+    });
+});
+
+describe("column growth", () => {
+    function gridGroup(gridCols: number, width: number | null): CanvasGroup {
+        return {
+            id: "g1",
+            canvas_id: "c1",
+            name: "Grid",
+            type: "custom",
+            positionX: 0,
+            positionY: 0,
+            width,
+            height: 400,
+            metadata: { layout: "grid", gridCols }
+        };
+    }
+
+    it("colsFromWidth matches the width gridDimensions computes", () => {
+        for (const layout of LAYOUTS) {
+            for (const cols of [1, 3, 5]) {
+                const { width } = gridDimensions(1, cols, layout);
+                expect(colsFromWidth(width, layout)).toBe(cols);
+                // A hair narrower than the next column keeps the count.
+                expect(
+                    colsFromWidth(width + cardWidth(layout) - 1, layout)
+                ).toBe(cols);
+                // Room for one more full column raises it.
+                expect(
+                    colsFromWidth(
+                        width + cardWidth(layout) + GRID_CELL_GAP,
+                        layout
+                    )
+                ).toBe(cols + 1);
+            }
+        }
+    });
+
+    it("colsFromWidth never returns less than 1", () => {
+        expect(colsFromWidth(0, "wide")).toBe(1);
+    });
+
+    it("effectiveGridCols is configured cols + 1 growth column at content width", () => {
+        const { width } = gridDimensions(1, 3, "wide");
+        expect(effectiveGridCols(gridGroup(3, width), "wide")).toBe(4);
+    });
+
+    it("effectiveGridCols follows width when the group is resized wider", () => {
+        const { width } = gridDimensions(1, 6, "wide");
+        expect(effectiveGridCols(gridGroup(3, width), "wide")).toBe(6);
+    });
+
+    it("effectiveGridCols tolerates a missing width", () => {
+        expect(effectiveGridCols(gridGroup(3, null), "wide")).toBe(4);
+    });
+
+    it("resolveGridDrop lands in a growth column when cols allow it", () => {
+        const a = draftInCell("a", 0, 2, "wide");
+        const target = cellToPosition({ row: 0, col: 3 }, "wide");
+        const updates = resolveGridDrop({
+            groupDrafts: [a, draftAt("dragged", target.x + 10, target.y)],
+            draggedDraftId: "dragged",
+            draggedOrigin: null,
+            dropX: target.x + 10,
+            dropY: target.y,
+            layout: "wide",
+            cols: 4
+        });
+        expect(updates).toEqual([
+            { draft_id: "dragged", positionX: target.x, positionY: target.y }
+        ]);
     });
 });

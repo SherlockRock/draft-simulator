@@ -7,7 +7,7 @@ import {
     Accessor,
     JSX
 } from "solid-js";
-import { Trash2, Settings } from "lucide-solid";
+import { Trash2, Settings, ArrowLeftRight } from "lucide-solid";
 import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/schemas";
 import {
     GRID_HEADER_HEIGHT,
@@ -16,6 +16,7 @@ import {
     GridCell,
     isGridGroup,
     gridColsOf,
+    colsFromWidth,
     cellToPosition,
     positionToCell
 } from "../utils/gridLayout";
@@ -54,6 +55,10 @@ type CustomGroupContainerProps = {
     isDragSource: boolean;
     // Cell the dragged card would land in, or null when none applies.
     highlightCell: GridCell | null;
+    // The landing cell is occupied — the drop will swap the two cards.
+    highlightIsSwap: boolean;
+    // Where the displaced card will move on a swap drop.
+    displacedCell: GridCell | null;
     isExitingSource: boolean;
     contentMinWidth: number;
     contentMinHeight: number;
@@ -199,9 +204,10 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
 
     const isGrid = () => isGridGroup(props.group);
 
-    // Cells covering every row the group currently shows: enough for the
-    // occupied rows plus a growth row, and enough to fill the group's height
-    // when the user has resized it taller (so empty rows read as drop targets).
+    // Cells covering every row and column the group currently shows: the
+    // occupied rows plus a growth row (and the configured columns plus a
+    // growth column), extended to fill the group when the user has resized
+    // it larger — so empty rows/columns read as drop targets.
     const hintCells = createMemo<GridCell[]>(() => {
         if (!isGrid()) return [];
         const cols = gridColsOf(props.group);
@@ -217,14 +223,36 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         const availH = groupHeight() - GRID_HEADER_HEIGHT - 2 * GRID_PADDING + GRID_CELL_GAP;
         const rowsFromHeight = Math.max(1, Math.floor(availH / cellH));
         const totalRows = Math.max(maxRow + 2, rowsFromHeight);
+        const totalCols = Math.max(cols + 1, colsFromWidth(groupWidth(), layout));
         const cells: GridCell[] = [];
         for (let row = 0; row < totalRows; row++) {
-            for (let col = 0; col < cols; col++) {
+            for (let col = 0; col < totalCols; col++) {
                 cells.push({ row, col });
             }
         }
         return cells;
     });
+
+    // Landing/swap cells rendered in a second overlay above the cards
+    // (grouped cards sit at z-30), so the swap target reads over the
+    // occupant card instead of hiding behind it.
+    type HighlightKind = "landing" | "swap-target" | "swap-displaced";
+    const highlightCells = createMemo<{ cell: GridCell; kind: HighlightKind }[]>(
+        () => {
+            if (!isGrid()) return [];
+            const out: { cell: GridCell; kind: HighlightKind }[] = [];
+            if (props.highlightCell) {
+                out.push({
+                    cell: props.highlightCell,
+                    kind: props.highlightIsSwap ? "swap-target" : "landing"
+                });
+            }
+            if (props.displacedCell) {
+                out.push({ cell: props.displacedCell, kind: "swap-displaced" });
+            }
+            return out;
+        }
+    );
 
     return (
         <div
@@ -319,24 +347,15 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 </Show>
             </div>
 
-            {/* Drag-time grid cell hints */}
+            {/* Drag-time grid cell hints (under the cards) */}
             <Show when={isGrid() && (props.isDragTarget || props.isDragSource)}>
                 <div class="pointer-events-none absolute inset-0">
                     <For each={hintCells()}>
                         {(cell) => {
                             const pos = cellToPosition(cell, props.cardLayout());
-                            const isHighlighted = () =>
-                                props.highlightCell?.row === cell.row &&
-                                props.highlightCell?.col === cell.col;
                             return (
                                 <div
-                                    class="absolute rounded-lg border-2"
-                                    classList={{
-                                        "border-dashed border-darius-border/40":
-                                            !isHighlighted(),
-                                        "border-darius-purple-bright bg-darius-purple-bright/10":
-                                            isHighlighted()
-                                    }}
+                                    class="absolute rounded-lg border-2 border-dashed border-darius-border/40"
                                     style={{
                                         left: `${pos.x}px`,
                                         top: `${pos.y}px`,
@@ -344,6 +363,42 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                                         height: `${cardHeight(props.cardLayout())}px`
                                     }}
                                 />
+                            );
+                        }}
+                    </For>
+                </div>
+            </Show>
+
+            {/* Landing/swap highlight (above the cards) */}
+            <Show when={highlightCells().length > 0}>
+                <div class="pointer-events-none absolute inset-0 z-40">
+                    <For each={highlightCells()}>
+                        {(hc) => {
+                            const pos = cellToPosition(hc.cell, props.cardLayout());
+                            return (
+                                <div
+                                    class="absolute rounded-lg border-2"
+                                    classList={{
+                                        "border-darius-purple-bright bg-darius-purple-bright/10":
+                                            hc.kind === "landing",
+                                        "border-darius-ember bg-darius-ember/10":
+                                            hc.kind === "swap-target",
+                                        "border-dashed border-darius-ember/70 bg-darius-ember/5":
+                                            hc.kind === "swap-displaced"
+                                    }}
+                                    style={{
+                                        left: `${pos.x}px`,
+                                        top: `${pos.y}px`,
+                                        width: `${cardWidth(props.cardLayout())}px`,
+                                        height: `${cardHeight(props.cardLayout())}px`
+                                    }}
+                                >
+                                    <Show when={hc.kind === "swap-target"}>
+                                        <div class="absolute right-1.5 top-1.5 rounded-full border border-darius-ember/60 bg-darius-bg/90 p-1 text-darius-ember">
+                                            <ArrowLeftRight size={14} />
+                                        </div>
+                                    </Show>
+                                </div>
                             );
                         }}
                     </For>

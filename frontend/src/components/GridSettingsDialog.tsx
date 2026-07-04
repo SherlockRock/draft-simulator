@@ -41,7 +41,7 @@ export const GridSettingsDialog = (props: GridSettingsDialogProps) => {
 
     const handleColsInput = (value: string) => {
         const parsed = Number(value);
-        if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 8) {
+        if (Number.isInteger(parsed) && parsed >= 1) {
             setCols(parsed);
             setColLabels((labels) =>
                 Array.from({ length: parsed }, (_, i) => labels[i] ?? "")
@@ -74,7 +74,6 @@ export const GridSettingsDialog = (props: GridSettingsDialogProps) => {
                             <input
                                 type="number"
                                 min="1"
-                                max="8"
                                 value={cols()}
                                 onInput={(e) => handleColsInput(e.currentTarget.value)}
                                 class="w-20 rounded-md border border-darius-border bg-darius-bg px-2 py-1 text-darius-text-primary"

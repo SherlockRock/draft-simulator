@@ -104,6 +104,7 @@ import {
     positionToCell,
     firstEmptyCell,
     cellToPosition,
+    effectiveGridCols,
     type GridCell
 } from "./utils/gridLayout";
 import { GridSettingsDialog } from "./components/GridSettingsDialog";
@@ -291,14 +292,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [dragOverGroupId, setDragOverGroupId] = createSignal<string | null>(null);
     const [exitingGroupId, setExitingGroupId] = createSignal<string | null>(null);
     // Cell the dragged card would land in, mirroring the drop math in
-    // onWindowMouseUp (top-left position quantized via positionToCell).
+    // onWindowMouseUp. When the cell is occupied the drop swaps, so the
+    // displaced card's destination rides along for the swap preview.
     const [gridDropCell, setGridDropCell] = createSignal<{
         groupId: string;
         cell: GridCell;
+        isSwap: boolean;
+        displacedCell: GridCell | null;
     } | null>(null);
-    const highlightCellFor = (groupId: string): GridCell | null => {
+    const gridHighlightFor = (groupId: string) => {
         const target = gridDropCell();
-        return target && target.groupId === groupId ? target.cell : null;
+        return target && target.groupId === groupId ? target : null;
     };
     const [contextMenuPosition, setContextMenuPosition] = createSignal<{
         x: number;
@@ -556,26 +560,32 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const groupDrafts = canvasDrafts.filter(
             (cd) => cd.group_id === group.id || cd.Draft.id === draggedDraftId
         );
+        const layout = props.cardLayout();
+        // Columns can grow like rows do: a drop in the growth column (or a
+        // width-exposed column) bumps gridCols, persisted with the batch.
+        const targetCell = positionToCell(
+            relX,
+            relY,
+            layout,
+            effectiveGridCols(group, layout)
+        );
+        const cols = Math.max(gridColsOf(group), targetCell.col + 1);
         const updates = resolveGridDrop({
             groupDrafts,
             draggedDraftId,
             draggedOrigin: origin,
             dropX: relX,
             dropY: relY,
-            layout: props.cardLayout(),
-            cols: gridColsOf(group)
+            layout,
+            cols
         });
         if (groupIdChange !== undefined) {
             const dragged = updates.find((u) => u.draft_id === draggedDraftId);
             if (dragged) dragged.group_id = groupIdChange;
         }
-        const rows = rowCountAfter(
-            updates,
-            groupDrafts,
-            props.cardLayout(),
-            gridColsOf(group)
-        );
-        const dims = growGridDims(group, rows, gridColsOf(group));
+        const rows = rowCountAfter(updates, groupDrafts, layout, cols);
+        const dims = growGridDims(group, rows, cols);
+        const metadata = cols !== gridColsOf(group) ? { gridCols: cols } : undefined;
 
         for (const u of updates) {
             setCanvasDrafts((cd) => cd.Draft.id === u.draft_id, {
@@ -586,19 +596,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
         setCanvasGroups((g) => g.id === group.id, {
             width: dims.width,
-            height: dims.height
+            height: dims.height,
+            ...(metadata ? { metadata: { ...group.metadata, ...metadata } } : {})
         });
 
         if (isLocalMode()) {
             localUpdateDraftPositions({
                 positions: updates,
-                group: { id: group.id, width: dims.width, height: dims.height }
+                group: { id: group.id, width: dims.width, height: dims.height, metadata }
             });
         } else {
             updateDraftPositionsMutation.mutate({
                 canvasId: canvasId(),
                 positions: updates,
-                group: { id: group.id, width: dims.width, height: dims.height }
+                group: { id: group.id, width: dims.width, height: dims.height, metadata }
             });
         }
     };
@@ -2802,8 +2813,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
                 // Grid drop-cell highlight: incoming (hovering a different grid
                 // group) or intra-group (hovering the grid group the card came
-                // from). Same quantization the drop handlers use, so the
-                // highlight matches where the card actually lands.
+                // from). Runs the same resolveGridDrop the drop handlers use,
+                // so the highlight — including the swap preview — matches
+                // where the cards actually land.
                 const gridHoverGroup =
                     hoverGroup &&
                     isGridGroup(hoverGroup) &&
@@ -2811,19 +2823,53 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         hoverGroup.id === state.dragGroupId)
                         ? hoverGroup
                         : null;
-                setGridDropCell(
-                    gridHoverGroup
-                        ? {
-                              groupId: gridHoverGroup.id,
-                              cell: positionToCell(
-                                  newWorldX - gridHoverGroup.positionX,
-                                  newWorldY - gridHoverGroup.positionY,
-                                  props.cardLayout(),
-                                  gridColsOf(gridHoverGroup)
+                if (gridHoverGroup) {
+                    const layout = props.cardLayout();
+                    const relX = newWorldX - gridHoverGroup.positionX;
+                    const relY = newWorldY - gridHoverGroup.positionY;
+                    const targetCell = positionToCell(
+                        relX,
+                        relY,
+                        layout,
+                        effectiveGridCols(gridHoverGroup, layout)
+                    );
+                    const cols = Math.max(
+                        gridColsOf(gridHoverGroup),
+                        targetCell.col + 1
+                    );
+                    const isIntraGroup = gridHoverGroup.id === state.dragGroupId;
+                    const updates = resolveGridDrop({
+                        groupDrafts: canvasDrafts.filter(
+                            (cd) =>
+                                cd.group_id === gridHoverGroup.id ||
+                                cd.Draft.id === state.activeBoxId
+                        ),
+                        draggedDraftId: state.activeBoxId,
+                        draggedOrigin: isIntraGroup
+                            ? { x: state.dragOriginX, y: state.dragOriginY }
+                            : null,
+                        dropX: relX,
+                        dropY: relY,
+                        layout,
+                        cols
+                    });
+                    const displaced = updates.length > 1 ? updates[1] : null;
+                    setGridDropCell({
+                        groupId: gridHoverGroup.id,
+                        cell: targetCell,
+                        isSwap: displaced !== null,
+                        displacedCell: displaced
+                            ? positionToCell(
+                                  displaced.positionX,
+                                  displaced.positionY,
+                                  layout,
+                                  cols
                               )
-                          }
-                        : null
-                );
+                            : null
+                    });
+                } else {
+                    setGridDropCell(null);
+                }
             }
         };
 
@@ -3321,7 +3367,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         dragState().activeBoxId !== null &&
                                         dragState().dragGroupId === group.id
                                     }
-                                    highlightCell={highlightCellFor(group.id)}
+                                    highlightCell={
+                                        gridHighlightFor(group.id)?.cell ?? null
+                                    }
+                                    highlightIsSwap={
+                                        gridHighlightFor(group.id)?.isSwap ?? false
+                                    }
+                                    displacedCell={
+                                        gridHighlightFor(group.id)?.displacedCell ??
+                                        null
+                                    }
                                     isExitingSource={exitingGroupId() === group.id}
                                     contentMinWidth={
                                         computeMinGroupSize(group.id).minWidth

@@ -47,6 +47,24 @@ export const positionToCell = (
     )
 });
 
+// Columns that fit in the group's current width (mirror of the
+// height-based row computation in the hint overlay).
+export const colsFromWidth = (width: number, layout: CardLayout): number =>
+    Math.max(
+        1,
+        Math.floor((width - 2 * GRID_PADDING + GRID_CELL_GAP) / cellW(layout))
+    );
+
+// Columns available as drag/drop targets: the configured count plus one
+// growth column, or more when the group has been resized wider. Dropping
+// beyond the configured count bumps gridCols (columns, unlike rows, are
+// stored in group metadata).
+export const effectiveGridCols = (
+    group: CanvasGroup,
+    layout: CardLayout
+): number =>
+    Math.max(gridColsOf(group) + 1, colsFromWidth(group.width ?? 0, layout));
+
 const cellKey = (cell: GridCell) => `${cell.row}:${cell.col}`;
 
 const occupiedKeys = (drafts: CanvasDraft[], layout: CardLayout, cols: number) =>
