@@ -18,6 +18,7 @@ code {
 /* Scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
     width: 8px;
+    height: 6px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
     background: #3A3040; /* darius-border */
