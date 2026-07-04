@@ -32,6 +32,7 @@ import {
     createCanvasGroup,
     updateCanvasGroup,
     updateCanvasDraft,
+    updateCanvasDraftPositions,
     convertGroupToSeries
 } from "./utils/actions";
 import { useNavigate, useParams } from "@solidjs/router";
@@ -78,6 +79,7 @@ import {
     localConvertGroupToSeries,
     localDeleteGroup,
     localUpdateDraftGroup,
+    localUpdateDraftPositions,
     localUpdateDraftMetadata
 } from "./utils/useLocalCanvasMutations";
 import { getLocalCanvas, saveLocalCanvas } from "./utils/localCanvasStore";
@@ -92,6 +94,13 @@ import { useCanvasContext } from "./contexts/CanvasContext";
 import { useCanvasSocket } from "./providers/CanvasSocketProvider";
 import CanvasSidebar from "./components/CanvasSidebar";
 import { getGroupRestrictedChampions } from "./utils/groupRestrictions";
+import {
+    isGridGroup,
+    gridColsOf,
+    resolveGridDrop,
+    rowCountAfter,
+    gridDimensions
+} from "./utils/gridLayout";
 import {
     DraftPositionsUpdatedSchema,
     type DraftMode
@@ -211,6 +220,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         offsetX: number;
         offsetY: number;
         dragGroupId: string | null;
+        dragOriginX: number;
+        dragOriginY: number;
         isPanning: boolean;
         panStartX: number;
         panStartY: number;
@@ -221,6 +232,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         offsetX: 0,
         offsetY: 0,
         dragGroupId: null,
+        dragOriginX: 0,
+        dragOriginY: 0,
         isPanning: false,
         panStartX: 0,
         panStartY: 0,
@@ -492,6 +505,74 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             toast.error(`Failed to save position: ${error.message}`);
         }
     }));
+
+    const updateDraftPositionsMutation = useMutation(() => ({
+        mutationFn: updateCanvasDraftPositions,
+        onError: (error: Error) => {
+            toast.error(`Failed to save grid positions: ${error.message}`);
+        }
+    }));
+
+    // Snap/swap commit for a drop inside a grid-mode custom group. Applies
+    // optimistic store updates, then persists positions + derived group
+    // dimensions in one atomic request (or the local-storage equivalent).
+    const commitGridDrop = (
+        group: CanvasGroup,
+        draggedDraftId: string,
+        relX: number,
+        relY: number,
+        origin: { x: number; y: number } | null,
+        groupIdChange: string | undefined
+    ) => {
+        const groupDrafts = canvasDrafts.filter(
+            (cd) => cd.group_id === group.id || cd.Draft.id === draggedDraftId
+        );
+        const updates = resolveGridDrop({
+            groupDrafts,
+            draggedDraftId,
+            draggedOrigin: origin,
+            dropX: relX,
+            dropY: relY,
+            layout: props.cardLayout(),
+            cols: gridColsOf(group)
+        });
+        if (groupIdChange !== undefined) {
+            const dragged = updates.find((u) => u.draft_id === draggedDraftId);
+            if (dragged) dragged.group_id = groupIdChange;
+        }
+        const rows = rowCountAfter(
+            updates,
+            groupDrafts,
+            props.cardLayout(),
+            gridColsOf(group)
+        );
+        const dims = gridDimensions(rows, gridColsOf(group), props.cardLayout());
+
+        for (const u of updates) {
+            setCanvasDrafts((cd) => cd.Draft.id === u.draft_id, {
+                positionX: u.positionX,
+                positionY: u.positionY,
+                ...(u.group_id !== undefined ? { group_id: u.group_id } : {})
+            });
+        }
+        setCanvasGroups((g) => g.id === group.id, {
+            width: dims.width,
+            height: dims.height
+        });
+
+        if (isLocalMode()) {
+            localUpdateDraftPositions({
+                positions: updates,
+                group: { id: group.id, width: dims.width, height: dims.height }
+            });
+        } else {
+            updateDraftPositionsMutation.mutate({
+                canvasId: canvasId(),
+                positions: updates,
+                group: { id: group.id, width: dims.width, height: dims.height }
+            });
+        }
+    };
 
     const deleteDraftMutation = useMutation(() => ({
         mutationFn: deleteDraftFromCanvas,
@@ -1605,6 +1686,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 offsetX: worldCoords.x - worldX,
                 offsetY: worldCoords.y - worldY,
                 dragGroupId: customGroup ? customGroup.id : null,
+                dragOriginX: cd.positionX,
+                dragOriginY: cd.positionY,
                 isPanning: false,
                 panStartX: 0,
                 panStartY: 0,
@@ -1629,6 +1712,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 offsetX: 0,
                 offsetY: 0,
                 dragGroupId: null,
+                dragOriginX: 0,
+                dragOriginY: 0,
                 isPanning: true,
                 panStartX: e.clientX,
                 panStartY: e.clientY,
@@ -2605,30 +2690,45 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         const relativeX = worldX - dropGroup.positionX;
                         const relativeY = worldY - dropGroup.positionY;
 
-                        setCanvasDrafts((cd) => cd.Draft.id === state.activeBoxId, {
-                            positionX: relativeX,
-                            positionY: relativeY,
-                            group_id: dropGroup.id
-                        });
-
-                        if (isLocalMode()) {
-                            localUpdateDraftGroup({
-                                draftId: finalDraft.Draft.id,
-                                positionX: relativeX,
-                                positionY: relativeY,
-                                group_id: dropGroup.id
-                            });
+                        if (isGridGroup(dropGroup)) {
+                            // Grid destination: snap/swap and derive dimensions.
+                            commitGridDrop(
+                                dropGroup,
+                                finalDraft.Draft.id,
+                                relativeX,
+                                relativeY,
+                                null,
+                                dropGroup.id
+                            );
                         } else {
-                            updateDraftGroupMutation.mutate({
-                                canvasId: canvasId(),
-                                draftId: finalDraft.Draft.id,
-                                positionX: relativeX,
-                                positionY: relativeY,
-                                group_id: dropGroup.id
-                            });
-                        }
+                            setCanvasDrafts(
+                                (cd) => cd.Draft.id === state.activeBoxId,
+                                {
+                                    positionX: relativeX,
+                                    positionY: relativeY,
+                                    group_id: dropGroup.id
+                                }
+                            );
 
-                        maybeExpandGroup(dropGroup, relativeX, relativeY);
+                            if (isLocalMode()) {
+                                localUpdateDraftGroup({
+                                    draftId: finalDraft.Draft.id,
+                                    positionX: relativeX,
+                                    positionY: relativeY,
+                                    group_id: dropGroup.id
+                                });
+                            } else {
+                                updateDraftGroupMutation.mutate({
+                                    canvasId: canvasId(),
+                                    draftId: finalDraft.Draft.id,
+                                    positionX: relativeX,
+                                    positionY: relativeY,
+                                    group_id: dropGroup.id
+                                });
+                            }
+
+                            maybeExpandGroup(dropGroup, relativeX, relativeY);
+                        }
                     } else if (!dropGroup && finalDraft.group_id) {
                         // Dropped outside all groups - ungroup if in a custom group
                         const currentGroup = canvasGroups.find(
@@ -2661,28 +2761,44 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         }
                     } else {
                         // Same group or ungrouped — save position
-                        if (isLocalMode()) {
-                            localUpdateDraftPosition({
-                                draftId: state.activeBoxId,
-                                positionX: finalDraft.positionX,
-                                positionY: finalDraft.positionY
-                            });
-                        } else {
-                            updatePositionMutation.mutate({
-                                canvasId: canvasId(),
-                                draftId: state.activeBoxId,
-                                positionX: finalDraft.positionX,
-                                positionY: finalDraft.positionY
-                            });
-                        }
-
-                        // Auto-expand if repositioned within a custom group
-                        if (state.dragGroupId && dropGroup) {
-                            maybeExpandGroup(
-                                dropGroup,
+                        const sameGroup = state.dragGroupId
+                            ? canvasGroups.find((g) => g.id === state.dragGroupId)
+                            : null;
+                        if (sameGroup && isGridGroup(sameGroup)) {
+                            // Repositioning within a grid group: snap/swap
+                            // relative to where the card started.
+                            commitGridDrop(
+                                sameGroup,
+                                finalDraft.Draft.id,
                                 finalDraft.positionX,
-                                finalDraft.positionY
+                                finalDraft.positionY,
+                                { x: state.dragOriginX, y: state.dragOriginY },
+                                undefined
                             );
+                        } else {
+                            if (isLocalMode()) {
+                                localUpdateDraftPosition({
+                                    draftId: state.activeBoxId,
+                                    positionX: finalDraft.positionX,
+                                    positionY: finalDraft.positionY
+                                });
+                            } else {
+                                updatePositionMutation.mutate({
+                                    canvasId: canvasId(),
+                                    draftId: state.activeBoxId,
+                                    positionX: finalDraft.positionX,
+                                    positionY: finalDraft.positionY
+                                });
+                            }
+
+                            // Auto-expand if repositioned within a custom group
+                            if (state.dragGroupId && dropGroup) {
+                                maybeExpandGroup(
+                                    dropGroup,
+                                    finalDraft.positionX,
+                                    finalDraft.positionY
+                                );
+                            }
                         }
                     }
                 }
@@ -2697,6 +2813,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 offsetX: 0,
                 offsetY: 0,
                 dragGroupId: null,
+                dragOriginX: 0,
+                dragOriginY: 0,
                 isPanning: false,
                 panStartX: 0,
                 panStartY: 0,
