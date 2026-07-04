@@ -1,4 +1,4 @@
-import { Component, For, Show, createSignal, JSX } from "solid-js";
+import { Component, For, Show, createEffect, createSignal, JSX } from "solid-js";
 import { Portal } from "solid-js/web";
 import type { SharedChamp, FlexChamp, RoleStat } from "../../utils/playerStats";
 import { winrateColor } from "../../utils/playerStats";
@@ -92,20 +92,59 @@ const PopoverBody: Component<{ chip: ChipDetail }> = (props) => (
 
 export const ChampChipStrip: Component<ChampChipStripProps> = (props) => {
     const [hover, setHover] = createSignal<HoverState | null>(null);
+    const [popoverEl, setPopoverEl] = createSignal<HTMLDivElement | null>(null);
+    const [pos, setPos] = createSignal<{ left: number; top: number } | null>(null);
 
     // Fixed positioning from the chip's viewport rect, portaled to <body> -
     // the column row is overflow-x-auto, so an in-flow popover would clip.
-    const popoverStyle = (rect: DOMRect): JSX.CSSProperties => ({
-        position: "fixed",
-        left: `${Math.max(8, rect.left + rect.width / 2)}px`,
-        top: `${rect.bottom + 6}px`,
-        transform: "translateX(-50%)",
-        "z-index": "50"
+    // Measured in an effect (which runs AFTER the portal content is in the
+    // DOM - a ref fires pre-insertion, when offsetWidth/Height are still 0)
+    // so the popover can be kept inside the viewport: centered on the chip,
+    // clamped horizontally, flipped above the chip when there's no room
+    // below - strips sit near the screen edges.
+    createEffect(() => {
+        const h = hover();
+        const el = popoverEl();
+        if (!h || !el) {
+            setPos(null);
+            return;
+        }
+        const margin = 8;
+        const centered = h.rect.left + h.rect.width / 2 - el.offsetWidth / 2;
+        const left = Math.min(
+            Math.max(centered, margin),
+            Math.max(margin, window.innerWidth - el.offsetWidth - margin)
+        );
+        let top = h.rect.bottom + 6;
+        if (top + el.offsetHeight > window.innerHeight - margin) {
+            top = h.rect.top - el.offsetHeight - 6;
+        }
+        setPos({ left, top });
     });
+
+    // Hidden until the measuring effect has produced a position.
+    const popoverStyle = (): JSX.CSSProperties => {
+        const p = pos();
+        if (!p) {
+            return {
+                position: "fixed",
+                left: "0px",
+                top: "0px",
+                visibility: "hidden",
+                "z-index": "50"
+            };
+        }
+        return {
+            position: "fixed",
+            left: `${p.left}px`,
+            top: `${p.top}px`,
+            "z-index": "50"
+        };
+    };
 
     return (
         <div
-            class={`custom-scrollbar flex items-center gap-1 overflow-x-auto pb-1 ${props.class ?? ""}`}
+            class={`custom-scrollbar flex items-center gap-1 overflow-x-auto pb-2 ${props.class ?? ""}`}
         >
             <For each={props.chips}>
                 {(chip) => {
@@ -139,7 +178,8 @@ export const ChampChipStrip: Component<ChampChipStripProps> = (props) => {
                 {(h) => (
                     <Portal>
                         <div
-                            style={popoverStyle(h().rect)}
+                            ref={setPopoverEl}
+                            style={popoverStyle()}
                             class="flex flex-col gap-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs shadow-xl"
                         >
                             <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
