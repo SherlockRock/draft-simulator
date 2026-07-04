@@ -8,6 +8,7 @@ type GroupContextMenuProps = {
     onViewSeries?: () => void;
     onArrangeGrid?: () => void;
     onConvertToFree?: () => void;
+    onGridSettings?: () => void;
     onGoTo: () => void;
     onDelete: () => void;
     onClose: () => void;
@@ -77,6 +78,15 @@ export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
                     props.group.metadata.layout === "grid"
                 }
             >
+                <button
+                    class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-border"
+                    onClick={() => {
+                        props.onGridSettings?.();
+                        props.onClose();
+                    }}
+                >
+                    Grid settings
+                </button>
                 <button
                     class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-border"
                     onClick={() => {

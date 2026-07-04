@@ -100,8 +100,10 @@ import {
     resolveGridDrop,
     arrangeGrid,
     rowCountAfter,
-    gridDimensions
+    gridDimensions,
+    positionToCell
 } from "./utils/gridLayout";
+import { GridSettingsDialog } from "./components/GridSettingsDialog";
 import {
     DraftPositionsUpdatedSchema,
     type DraftMode
@@ -304,6 +306,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     } | null>(null);
 
     const [editingGroupId, setEditingGroupId] = createSignal<string | null>(null);
+    const [gridSettingsGroup, setGridSettingsGroup] =
+        createSignal<CanvasGroup | null>(null);
     const [editingDraftId, setEditingDraftId] = createSignal<string | null>(null);
 
     let previousCardLayout: CardLayout | undefined;
@@ -628,6 +632,51 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             metadata: { ...group.metadata, ...metadata }
         });
         if (isLocalMode()) {
+            localUpdateGroup({ groupId: group.id, metadata });
+        } else {
+            updateGroupMutation.mutate({
+                canvasId: canvasId(),
+                groupId: group.id,
+                metadata
+            });
+        }
+    };
+
+    const gridRowCount = (group: CanvasGroup): number => {
+        const groupDrafts = canvasDrafts.filter((cd) => cd.group_id === group.id);
+        const cols = gridColsOf(group);
+        let maxRow = 0;
+        for (const d of groupDrafts) {
+            maxRow = Math.max(
+                maxRow,
+                positionToCell(d.positionX, d.positionY, props.cardLayout(), cols).row
+            );
+        }
+        return groupDrafts.length === 0 ? 1 : maxRow + 1;
+    };
+
+    const saveGridSettings = (settings: {
+        gridCols: number;
+        rowLabels: string[];
+        colLabels: string[];
+    }) => {
+        const group = gridSettingsGroup();
+        if (!group) return;
+        const colsChanged = settings.gridCols !== gridColsOf(group);
+        const metadata = {
+            gridCols: settings.gridCols,
+            rowLabels: settings.rowLabels,
+            colLabels: settings.colLabels
+        };
+        setCanvasGroups((g) => g.id === group.id, {
+            metadata: { ...group.metadata, ...metadata }
+        });
+        setGridSettingsGroup(null);
+        if (colsChanged) {
+            // Column count changed: reflow all cards into the new grid.
+            const updated = canvasGroups.find((g) => g.id === group.id);
+            if (updated) arrangeGroupAsGrid(updated);
+        } else if (isLocalMode()) {
             localUpdateGroup({ groupId: group.id, metadata });
         } else {
             updateGroupMutation.mutate({
@@ -3456,6 +3505,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     initialLength={settingsGroup()?.metadata.length ?? 3}
                     onSave={handleSaveGroupSettings}
                 />
+                <GridSettingsDialog
+                    group={gridSettingsGroup}
+                    isOpen={() => gridSettingsGroup() !== null}
+                    onCancel={() => setGridSettingsGroup(null)}
+                    onSave={saveGridSettings}
+                    rowCount={gridRowCount}
+                />
                 {/* Context Menu */}
                 <Show when={contextMenuPosition()}>
                     <div
@@ -3563,6 +3619,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             }}
                             onArrangeGrid={() => arrangeGroupAsGrid(menu().group)}
                             onConvertToFree={() => convertGroupToFree(menu().group)}
+                            onGridSettings={() => setGridSettingsGroup(menu().group)}
                             onGoTo={() => {
                                 const group = menu().group;
                                 props.setViewport({
