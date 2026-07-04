@@ -6,6 +6,8 @@ type GroupContextMenuProps = {
     group: CanvasGroup;
     onRename?: () => void;
     onViewSeries?: () => void;
+    onArrangeGrid?: () => void;
+    onConvertToFree?: () => void;
     onGoTo: () => void;
     onDelete: () => void;
     onClose: () => void;
@@ -51,6 +53,38 @@ export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
                     }}
                 >
                     Rename
+                </button>
+            </Show>
+            <Show
+                when={
+                    props.group.type === "custom" &&
+                    props.group.metadata.layout !== "grid"
+                }
+            >
+                <button
+                    class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-border"
+                    onClick={() => {
+                        props.onArrangeGrid?.();
+                        props.onClose();
+                    }}
+                >
+                    Arrange as grid
+                </button>
+            </Show>
+            <Show
+                when={
+                    props.group.type === "custom" &&
+                    props.group.metadata.layout === "grid"
+                }
+            >
+                <button
+                    class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-border"
+                    onClick={() => {
+                        props.onConvertToFree?.();
+                        props.onClose();
+                    }}
+                >
+                    Convert to free layout
                 </button>
             </Show>
             <Show

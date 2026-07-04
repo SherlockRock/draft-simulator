@@ -98,6 +98,7 @@ import {
     isGridGroup,
     gridColsOf,
     resolveGridDrop,
+    arrangeGrid,
     rowCountAfter,
     gridDimensions
 } from "./utils/gridLayout";
@@ -570,6 +571,69 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 canvasId: canvasId(),
                 positions: updates,
                 group: { id: group.id, width: dims.width, height: dims.height }
+            });
+        }
+    };
+
+    // Quantize all member cards to cells and flip the group into grid mode,
+    // atomically (positions + metadata + dimensions in one request).
+    const arrangeGroupAsGrid = (group: CanvasGroup) => {
+        const groupDrafts = canvasDrafts.filter((cd) => cd.group_id === group.id);
+        const cols = gridColsOf(group);
+        const updates = arrangeGrid(groupDrafts, props.cardLayout(), cols);
+        const rows = rowCountAfter(updates, groupDrafts, props.cardLayout(), cols);
+        const dims = gridDimensions(rows, cols, props.cardLayout());
+        const metadata = { layout: "grid" as const, gridCols: cols };
+
+        for (const u of updates) {
+            setCanvasDrafts((cd) => cd.Draft.id === u.draft_id, {
+                positionX: u.positionX,
+                positionY: u.positionY
+            });
+        }
+        setCanvasGroups((g) => g.id === group.id, {
+            width: dims.width,
+            height: dims.height,
+            metadata: { ...group.metadata, ...metadata }
+        });
+
+        if (isLocalMode()) {
+            localUpdateDraftPositions({
+                positions: updates,
+                group: {
+                    id: group.id,
+                    width: dims.width,
+                    height: dims.height,
+                    metadata
+                }
+            });
+        } else {
+            updateDraftPositionsMutation.mutate({
+                canvasId: canvasId(),
+                positions: updates,
+                group: {
+                    id: group.id,
+                    width: dims.width,
+                    height: dims.height,
+                    metadata
+                }
+            });
+        }
+    };
+
+    // Lossless: positions are already real floats; only the mode flag flips.
+    const convertGroupToFree = (group: CanvasGroup) => {
+        const metadata = { layout: "free" as const };
+        setCanvasGroups((g) => g.id === group.id, {
+            metadata: { ...group.metadata, ...metadata }
+        });
+        if (isLocalMode()) {
+            localUpdateGroup({ groupId: group.id, metadata });
+        } else {
+            updateGroupMutation.mutate({
+                canvasId: canvasId(),
+                groupId: group.id,
+                metadata
             });
         }
     };
@@ -3496,6 +3560,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 }
                                 closeGroupContextMenu();
                             }}
+                            onArrangeGrid={() => arrangeGroupAsGrid(menu().group)}
+                            onConvertToFree={() => convertGroupToFree(menu().group)}
                             onGoTo={() => {
                                 const group = menu().group;
                                 props.setViewport({
