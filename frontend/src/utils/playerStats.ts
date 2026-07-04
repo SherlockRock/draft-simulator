@@ -245,12 +245,9 @@ const encodeChunk = (p: PlayerId): string =>
 
 const decodeChunk = (chunk: string): PlayerId | null => {
     const hash = chunk.indexOf("#");
-    const decoded = hash === -1 ? decodeURIComponent(chunk) : "";
-    const normalized = hash === -1 ? decoded : chunk;
-    const normalizedHash = normalized.indexOf("#");
-    if (normalizedHash === -1) return null;
-    const gameName = decodeURIComponent(normalized.slice(0, normalizedHash));
-    const tagLine = decodeURIComponent(normalized.slice(normalizedHash + 1));
+    if (hash === -1) return null;
+    const gameName = decodeURIComponent(chunk.slice(0, hash));
+    const tagLine = decodeURIComponent(chunk.slice(hash + 1));
     if (!gameName || !tagLine) return null;
     return { gameName, tagLine };
 };
