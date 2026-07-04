@@ -163,7 +163,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
 
     return (
         <div
-            class="absolute z-20 rounded-xl border-2 border-darius-border bg-darius-card/90 shadow-xl backdrop-blur-sm"
+            class="group-container absolute z-20 rounded-xl border-2 border-darius-border bg-darius-card/90 shadow-xl backdrop-blur-sm"
             style={{
                 left: `${screenPos().x}px`,
                 top: `${screenPos().y}px`,
