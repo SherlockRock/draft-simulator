@@ -105,7 +105,7 @@ export const ChampChipStrip: Component<ChampChipStripProps> = (props) => {
 
     return (
         <div
-            class={`custom-scrollbar flex items-center gap-1 overflow-x-auto ${props.class ?? ""}`}
+            class={`custom-scrollbar flex items-center gap-1 overflow-x-auto pb-1 ${props.class ?? ""}`}
         >
             <For each={props.chips}>
                 {(chip) => {

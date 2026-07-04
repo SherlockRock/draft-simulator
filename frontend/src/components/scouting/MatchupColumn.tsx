@@ -36,7 +36,7 @@ interface HalfProps {
     result: PlayerScoutResult | null;
     rowRefs: Map<string, HTMLDivElement>;
     highlight: Set<string>;
-    pulse: { key: string } | null;
+    pulse: { keys: Set<string> } | null;
 }
 
 const PlayerHalf: Component<HalfProps> = (props) => (
@@ -53,7 +53,10 @@ const PlayerHalf: Component<HalfProps> = (props) => (
                 const p = props.pulse;
                 if (!p) return null;
                 const prefix = `${props.side}:${props.role}:`;
-                return p.key.startsWith(prefix) ? p.key.slice(prefix.length) : null;
+                for (const key of p.keys) {
+                    if (key.startsWith(prefix)) return key.slice(prefix.length);
+                }
+                return null;
             };
             return (
                 <div class="flex min-h-0 flex-1 flex-col">
@@ -83,7 +86,7 @@ interface MatchupColumnProps {
     rowRefs: Map<string, HTMLDivElement>;
     highlightYou: Set<string>;
     highlightEnemy: Set<string>;
-    pulse: { key: string } | null;
+    pulse: { keys: Set<string> } | null;
     onChipClick: (side: MatchupSide, role: Role, championId: string) => void;
     // Task 8 wires this to role-swap DOM controls.
     onSwap?: (side: MatchupSide, from: Role, to: Role) => void;

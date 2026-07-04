@@ -106,7 +106,7 @@ const ScoutView: Component = () => {
     const [enemyInput, setEnemyInput] = createSignal(
         formatPlayersInput(teamPlayers(parseTeamParam(enemiesParam())))
     );
-    const [pulse, setPulse] = createSignal<{ key: string } | null>(null);
+    const [pulse, setPulse] = createSignal<{ keys: Set<string> } | null>(null);
 
     const yourTeamParam = createMemo(() => parseTeamParam(playersParam()));
     const enemyTeamParam = createMemo(() => parseTeamParam(enemiesParam()));
@@ -215,10 +215,16 @@ const ScoutView: Component = () => {
     let pulseTimer: ReturnType<typeof setTimeout> | undefined;
     onCleanup(() => clearTimeout(pulseTimer));
 
+    // Accumulates keys so multi-target clicks (divider = both sides, flex = every
+    // sharing teammate) pulse ALL their rows, not just the last call's.
     const scrollToRow = (side: MatchupSide, role: Role, championId: string) => {
         const key = rowRefKey(side, role, championId);
         rowRefs.get(key)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        setPulse({ key });
+        setPulse((prev) => {
+            const keys = new Set(prev?.keys ?? []);
+            keys.add(key);
+            return { keys };
+        });
         clearTimeout(pulseTimer);
         pulseTimer = setTimeout(() => setPulse(null), 1500);
     };
