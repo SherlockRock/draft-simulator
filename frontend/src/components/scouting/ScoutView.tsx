@@ -1,10 +1,9 @@
-import { Component, For, Show, createEffect, createMemo, createSignal } from "solid-js";
+import { Component, For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
 import { MAX_SCOUT_PLAYERS, type PlayerScoutResult, type Role } from "@draft-sim/shared-types";
 import { scoutPlayers } from "../../utils/scoutingApi";
 import {
-    parsePlayersParam,
     serializePlayersParam,
     parsePlayersInput,
     formatPlayersInput,
@@ -86,10 +85,10 @@ const ScoutView: Component = () => {
     // Editable state, seeded from the URL so a shared link stays editable.
     const [region, setRegion] = createSignal(activeRegion());
     const [input, setInput] = createSignal(
-        formatPlayersInput(parsePlayersParam(playersParam()))
+        formatPlayersInput(teamPlayers(parseTeamParam(playersParam())))
     );
     const [enemyInput, setEnemyInput] = createSignal(
-        formatPlayersInput(parsePlayersParam(enemiesParam()))
+        formatPlayersInput(teamPlayers(parseTeamParam(enemiesParam())))
     );
     const [pulse, setPulse] = createSignal<{ key: string } | null>(null);
 
@@ -194,6 +193,8 @@ const ScoutView: Component = () => {
 
     const rowRefs = new Map<string, HTMLDivElement>();
     let pulseTimer: ReturnType<typeof setTimeout> | undefined;
+    onCleanup(() => clearTimeout(pulseTimer));
+
     const scrollToRow = (side: MatchupSide, role: Role, championId: string) => {
         const key = rowRefKey(side, role, championId);
         rowRefs.get(key)?.scrollIntoView({ block: "nearest", behavior: "smooth" });

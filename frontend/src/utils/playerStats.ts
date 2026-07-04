@@ -245,9 +245,12 @@ const encodeChunk = (p: PlayerId): string =>
 
 const decodeChunk = (chunk: string): PlayerId | null => {
     const hash = chunk.indexOf("#");
-    if (hash === -1) return null;
-    const gameName = decodeURIComponent(chunk.slice(0, hash));
-    const tagLine = decodeURIComponent(chunk.slice(hash + 1));
+    const decoded = hash === -1 ? decodeURIComponent(chunk) : "";
+    const normalized = hash === -1 ? decoded : chunk;
+    const normalizedHash = normalized.indexOf("#");
+    if (normalizedHash === -1) return null;
+    const gameName = decodeURIComponent(normalized.slice(0, normalizedHash));
+    const tagLine = decodeURIComponent(normalized.slice(normalizedHash + 1));
     if (!gameName || !tagLine) return null;
     return { gameName, tagLine };
 };
@@ -277,27 +280,31 @@ export type TeamParam =
     | { kind: "slots"; slots: (PlayerId | null)[] }
     | { kind: "list"; players: PlayerId[] };
 
-// Matchup-mode team param: exactly 5 comma-separated slots in ROLE_ORDER,
+// Matchup-mode team param: "s:" prefix + 5 comma-separated slots in ROLE_ORDER,
 // empty slot = unfilled role — the role ASSIGNMENT itself is URL state, so
-// drag fixes survive refresh/share.
+// drag fixes survive refresh/share. Slot-form is explicit because a 5-player
+// list and a 5-slot assignment are otherwise byte-identical. ":" is always
+// percent-encoded by encodeURIComponent inside names, so the prefix cannot
+// collide with player data.
 export function serializeTeamParam(slots: (PlayerId | null)[]): string {
-    return slots.map((p) => (p ? encodeChunk(p) : "")).join(",");
+    return `s:${slots.map((p) => (p ? encodeChunk(p) : "")).join(",")}`;
 }
 
-// Exactly 5 chunks (empties counted) = slot-form, position = role. Anything
-// else = an unordered list (legacy links, fresh pastes) that the caller
-// auto-assigns and normalizes. Legacy 5-player single-team links parse as
-// slots too, which is harmless: single-team mode just compacts non-null
-// slots in order, preserving the original column order.
+// "s:" prefix = slot-form, position = role. Anything else = an unordered list
+// (legacy links, fresh pastes) that the caller auto-assigns and normalizes.
 export function parseTeamParam(raw: string): TeamParam {
     if (!raw) return { kind: "list", players: [] };
-    const chunks = raw.split(",");
-    if (chunks.length === ROLE_ORDER.length) {
-        return { kind: "slots", slots: chunks.map(decodeChunk) };
+    if (raw.startsWith("s:")) {
+        const slots = raw.slice(2).split(",").map(decodeChunk).slice(0, ROLE_ORDER.length);
+        while (slots.length < ROLE_ORDER.length) {
+            slots.push(null);
+        }
+        return { kind: "slots", slots };
     }
     return {
         kind: "list",
-        players: chunks
+        players: raw
+            .split(",")
             .map(decodeChunk)
             .filter((p): p is PlayerId => p !== null)
     };

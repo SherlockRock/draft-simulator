@@ -355,9 +355,45 @@ describe("team param codec", () => {
         expect(parsed).toEqual({ kind: "slots", slots });
     });
 
-    it("treats exactly 5 chunks as slot-form, fewer as list-form", () => {
+    it("treats unprefixed chunks as list-form and prefixed chunks as slot-form", () => {
         expect(parseTeamParam("a%231,b%232,c%233").kind).toBe("list");
-        expect(parseTeamParam("a%231,b%232,c%233,d%234,e%235").kind).toBe("slots");
+        expect(parseTeamParam("a%231,b%232,c%233,d%234,e%235")).toEqual({
+            kind: "list",
+            players: [
+                { gameName: "a", tagLine: "1" },
+                { gameName: "b", tagLine: "2" },
+                { gameName: "c", tagLine: "3" },
+                { gameName: "d", tagLine: "4" },
+                { gameName: "e", tagLine: "5" }
+            ]
+        });
+        expect(parseTeamParam("s:a%231,b%232,c%233,d%234,e%235").kind).toBe("slots");
+    });
+
+    it("pads short prefixed slot params to five slots", () => {
+        expect(parseTeamParam("s:a%231,b%232")).toEqual({
+            kind: "slots",
+            slots: [
+                { gameName: "a", tagLine: "1" },
+                { gameName: "b", tagLine: "2" },
+                null,
+                null,
+                null
+            ]
+        });
+    });
+
+    it("truncates overlong prefixed slot params to five slots", () => {
+        expect(parseTeamParam("s:a%231,b%232,c%233,d%234,e%235,f%236,g%237")).toEqual({
+            kind: "slots",
+            slots: [
+                { gameName: "a", tagLine: "1" },
+                { gameName: "b", tagLine: "2" },
+                { gameName: "c", tagLine: "3" },
+                { gameName: "d", tagLine: "4" },
+                { gameName: "e", tagLine: "5" }
+            ]
+        });
     });
 
     it("parses empty string to an empty list", () => {
