@@ -124,7 +124,10 @@ export const localDeleteDraft = (draftId: string) => {
 
 const COPY_OFFSET = 50;
 
-export const localCopyDraft = (draftId: string) => {
+export const localCopyDraft = (
+    draftId: string,
+    placement?: { positionX: number; positionY: number; group_id: string }
+) => {
     return mutateLocal((canvas) => {
         const originalDraft = canvas.drafts.find((d) => d.Draft.id === draftId);
         if (!originalDraft) {
@@ -133,9 +136,13 @@ export const localCopyDraft = (draftId: string) => {
 
         const newDraftId = crypto.randomUUID();
         const newDraft: CanvasDraft = {
-            positionX: originalDraft.positionX + COPY_OFFSET,
-            positionY: originalDraft.positionY + COPY_OFFSET,
-            group_id: null,
+            positionX: placement
+                ? placement.positionX
+                : originalDraft.positionX + COPY_OFFSET,
+            positionY: placement
+                ? placement.positionY
+                : originalDraft.positionY + COPY_OFFSET,
+            group_id: placement ? placement.group_id : null,
             source_type: "canvas",
             Draft: {
                 id: newDraftId,

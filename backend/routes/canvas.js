@@ -584,14 +584,24 @@ router.post("/:canvasId/draft/:draftId/copy", protect, async (req, res) => {
       owner_id: req.user.id,
     });
 
-    // Create the canvas draft at offset position
+    const { positionX, positionY, group_id } = req.body ?? {};
+
+    // Create the canvas draft at the requested position (grid placement) or
+    // offset from the original (default).
     const COPY_OFFSET = 50;
     const newCanvasDraft = await CanvasDraft.create({
       canvas_id: canvasId,
       draft_id: newDraft.id,
-      positionX: existingCanvasDraft.positionX + COPY_OFFSET,
-      positionY: existingCanvasDraft.positionY + COPY_OFFSET,
+      positionX:
+        typeof positionX === "number"
+          ? positionX
+          : existingCanvasDraft.positionX + COPY_OFFSET,
+      positionY:
+        typeof positionY === "number"
+          ? positionY
+          : existingCanvasDraft.positionY + COPY_OFFSET,
       is_locked: false,
+      group_id: typeof group_id === "string" ? group_id : null,
       source_type: "canvas",
     });
 

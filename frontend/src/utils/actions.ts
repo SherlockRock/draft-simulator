@@ -98,10 +98,20 @@ export const deleteDraftFromCanvas = async (data: { canvas: string; draft: strin
     return apiDelete(`/canvas/${data.canvas}/draft/${data.draft}`, SuccessSchema);
 };
 
-export const copyDraftInCanvas = async (data: { canvasId: string; draftId: string }) => {
+export const copyDraftInCanvas = async (data: {
+    canvasId: string;
+    draftId: string;
+    positionX?: number;
+    positionY?: number;
+    group_id?: string;
+}) => {
     return apiPost(
         `/canvas/${data.canvasId}/draft/${data.draftId}/copy`,
-        {},
+        {
+            positionX: data.positionX,
+            positionY: data.positionY,
+            group_id: data.group_id
+        },
         z.object({ success: z.boolean(), canvasDraft: CanvasDraftSchema })
     );
 };

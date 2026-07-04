@@ -11,7 +11,9 @@ const {
   UserCanvas,
   CanvasDraft,
   CanvasGroup,
+  CanvasConnection,
 } = require("../../models/Canvas");
+const Draft = require("../../models/Draft.js");
 
 function loadRouter() {
   const routePath = require.resolve("../../routes/canvas");
@@ -181,6 +183,84 @@ describe("PUT /:canvasId/draft-positions", () => {
       "c1",
       "draftPositionsUpdated",
       expect.objectContaining({ group: { id: "g1", metadata: { layout: "grid" } } })
+    );
+  });
+});
+
+describe("POST /:canvasId/draft/:draftId/copy grid placement", () => {
+  it("copy honors explicit position and group_id", async () => {
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
+    vi.spyOn(CanvasDraft, "findOne").mockResolvedValue({
+      positionX: 100,
+      positionY: 100,
+      Draft: { name: "Orig", picks: Array(20).fill("") },
+    });
+    vi.spyOn(Draft, "create").mockResolvedValue({
+      id: "new-draft",
+      toJSON: () => ({ id: "new-draft" }),
+    });
+    const createCanvasDraft = vi
+      .spyOn(CanvasDraft, "create")
+      .mockResolvedValue({ toJSON: () => ({}) });
+    // Broadcast fetches — return empty sets.
+    vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+    // touchCanvasTimestamp + broadcast both call Canvas.findByPk.
+    vi.spyOn(Canvas, "findByPk").mockResolvedValue({
+      changed: vi.fn(),
+      save: vi.fn().mockResolvedValue(undefined),
+      toJSON: () => ({}),
+    });
+
+    const res = await request(buildApp())
+      .post("/api/canvas/c1/draft/d1/copy")
+      .send({ positionX: 16, positionY: 64, group_id: "g1" });
+
+    expect(res.status).toBe(201);
+    expect(createCanvasDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        positionX: 16,
+        positionY: 64,
+        group_id: "g1",
+      })
+    );
+  });
+
+  it("copy without a body falls back to offset placement, no group", async () => {
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
+    vi.spyOn(CanvasDraft, "findOne").mockResolvedValue({
+      positionX: 100,
+      positionY: 200,
+      Draft: { name: "Orig", picks: Array(20).fill("") },
+    });
+    vi.spyOn(Draft, "create").mockResolvedValue({
+      id: "new-draft",
+      toJSON: () => ({ id: "new-draft" }),
+    });
+    const createCanvasDraft = vi
+      .spyOn(CanvasDraft, "create")
+      .mockResolvedValue({ toJSON: () => ({}) });
+    vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+    vi.spyOn(Canvas, "findByPk").mockResolvedValue({
+      changed: vi.fn(),
+      save: vi.fn().mockResolvedValue(undefined),
+      toJSON: () => ({}),
+    });
+
+    const res = await request(buildApp())
+      .post("/api/canvas/c1/draft/d1/copy")
+      .send({});
+
+    expect(res.status).toBe(201);
+    expect(createCanvasDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        positionX: 150,
+        positionY: 250,
+        group_id: null,
+      })
     );
   });
 });
