@@ -520,6 +520,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     }));
 
+    // Grid dimensions grow to fit content but never shrink below the group's
+    // current (possibly user-resized) size — so a resized-taller group keeps
+    // its empty rows as drop targets instead of snapping back to content.
+    const growGridDims = (group: CanvasGroup, rows: number, cols: number) => {
+        const content = gridDimensions(rows, cols, props.cardLayout());
+        return {
+            width: Math.max(group.width ?? 0, content.width),
+            height: Math.max(group.height ?? 0, content.height)
+        };
+    };
+
     // Snap/swap commit for a drop inside a grid-mode custom group. Applies
     // optimistic store updates, then persists positions + derived group
     // dimensions in one atomic request (or the local-storage equivalent).
@@ -553,7 +564,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             props.cardLayout(),
             gridColsOf(group)
         );
-        const dims = gridDimensions(rows, gridColsOf(group), props.cardLayout());
+        const dims = growGridDims(group, rows, gridColsOf(group));
 
         for (const u of updates) {
             setCanvasDrafts((cd) => cd.Draft.id === u.draft_id, {
@@ -588,7 +599,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const cols = gridColsOf(group);
         const updates = arrangeGrid(groupDrafts, props.cardLayout(), cols);
         const rows = rowCountAfter(updates, groupDrafts, props.cardLayout(), cols);
-        const dims = gridDimensions(rows, cols, props.cardLayout());
+        const dims = growGridDims(group, rows, cols);
         const metadata = { layout: "grid" as const, gridCols: cols };
 
         for (const u of updates) {
@@ -699,7 +710,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     ) => {
         const cols = gridColsOf(group);
         const rows = rowCountAfter([], groupDrafts, props.cardLayout(), cols);
-        const dims = gridDimensions(rows, cols, props.cardLayout());
+        const dims = growGridDims(group, rows, cols);
         setCanvasGroups((g) => g.id === group.id, {
             width: dims.width,
             height: dims.height

@@ -11,6 +11,8 @@ import { Trash2, Settings } from "lucide-solid";
 import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/schemas";
 import {
     GRID_HEADER_HEIGHT,
+    GRID_PADDING,
+    GRID_CELL_GAP,
     GridCell,
     isGridGroup,
     gridColsOf,
@@ -192,7 +194,9 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
 
     const isGrid = () => isGridGroup(props.group);
 
-    // All cells for the currently occupied rows plus one growth row.
+    // Cells covering every row the group currently shows: enough for the
+    // occupied rows plus a growth row, and enough to fill the group's height
+    // when the user has resized it taller (so empty rows read as drop targets).
     const hintCells = createMemo<GridCell[]>(() => {
         if (!isGrid()) return [];
         const cols = gridColsOf(props.group);
@@ -204,8 +208,12 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 positionToCell(d.positionX, d.positionY, layout, cols).row
             );
         }
+        const cellH = cardHeight(layout) + GRID_CELL_GAP;
+        const availH = groupHeight() - GRID_HEADER_HEIGHT - 2 * GRID_PADDING + GRID_CELL_GAP;
+        const rowsFromHeight = Math.max(1, Math.floor(availH / cellH));
+        const totalRows = Math.max(maxRow + 2, rowsFromHeight);
         const cells: GridCell[] = [];
-        for (let row = 0; row <= maxRow + 1; row++) {
+        for (let row = 0; row < totalRows; row++) {
             for (let col = 0; col < cols; col++) {
                 cells.push({ row, col });
             }
@@ -387,6 +395,19 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                         props.onBodyMouseDown(e);
                     }
                 }}
+                onContextMenu={(e) => {
+                    // Right-clicking empty group space opens the group menu.
+                    // Cards handle their own context menu, so ignore those.
+                    const target = e.target;
+                    if (target instanceof Element && target.closest(".canvas-card")) {
+                        return;
+                    }
+                    if (props.canEdit() && props.onContextMenu) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        props.onContextMenu(props.group, e);
+                    }
+                }}
             >
                 <Show
                     when={draftCount() > 0}
@@ -413,8 +434,8 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 />
             </Show>
 
-            {/* Resize handle — hidden in grid mode (dimensions follow content) */}
-            <Show when={props.canEdit() && !isGrid()}>
+            {/* Resize handle — in grid mode, resizing taller exposes empty rows */}
+            <Show when={props.canEdit()}>
                 <div
                     class="absolute bottom-0 left-0 h-4 w-4 cursor-sw-resize"
                     onMouseDown={(e) => handleResizeMouseDown(e, "left")}
