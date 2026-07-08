@@ -15,9 +15,10 @@ import {
     ROLE_ORDER,
     parseTeamParam,
     serializeTeamParam,
+    serializeSubmitParam,
     canonicalPlayersKey
 } from "./playerStats";
-import type { AssignedPlayer } from "./playerStats";
+import type { AssignedPlayer, TeamParam } from "./playerStats";
 
 const entry = (
     championId: string,
@@ -435,5 +436,57 @@ describe("canonicalPlayersKey", () => {
             { gameName: "bb", tagLine: "y" }
         ]);
         expect(a).toBe(b);
+    });
+});
+
+describe("serializeSubmitParam", () => {
+    const slots = [
+        { gameName: "a", tagLine: "1" },
+        { gameName: "b", tagLine: "2" },
+        null,
+        { gameName: "c", tagLine: "3" },
+        null
+    ];
+    const slotParam: TeamParam = { kind: "slots", slots };
+
+    it("keeps the slot assignment when the roster is unchanged", () => {
+        const ids = [
+            { gameName: "a", tagLine: "1" },
+            { gameName: "b", tagLine: "2" },
+            { gameName: "c", tagLine: "3" }
+        ];
+        expect(serializeSubmitParam(slotParam, ids)).toBe(serializeTeamParam(slots));
+    });
+
+    it("keeps the slot assignment regardless of input order and case", () => {
+        const ids = [
+            { gameName: "C", tagLine: "3" },
+            { gameName: "A", tagLine: "1" },
+            { gameName: "B", tagLine: "2" }
+        ];
+        expect(serializeSubmitParam(slotParam, ids)).toBe(serializeTeamParam(slots));
+    });
+
+    it("falls back to list form when a player was replaced", () => {
+        const ids = [
+            { gameName: "a", tagLine: "1" },
+            { gameName: "b", tagLine: "2" },
+            { gameName: "z", tagLine: "9" }
+        ];
+        expect(serializeSubmitParam(slotParam, ids)).toBe(serializePlayersParam(ids));
+    });
+
+    it("falls back to list form when a player was removed", () => {
+        const ids = [
+            { gameName: "a", tagLine: "1" },
+            { gameName: "b", tagLine: "2" }
+        ];
+        expect(serializeSubmitParam(slotParam, ids)).toBe(serializePlayersParam(ids));
+    });
+
+    it("serializes as list form when the current param is a list", () => {
+        const ids = [{ gameName: "a", tagLine: "1" }];
+        const listParam: TeamParam = { kind: "list", players: ids };
+        expect(serializeSubmitParam(listParam, ids)).toBe(serializePlayersParam(ids));
     });
 });

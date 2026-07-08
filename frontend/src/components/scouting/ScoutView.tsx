@@ -16,7 +16,7 @@ import {
 } from "@draft-sim/shared-types";
 import { scoutPlayers } from "../../utils/scoutingApi";
 import {
-    serializePlayersParam,
+    serializeSubmitParam,
     parsePlayersInput,
     formatPlayersInput,
     parseTeamParam,
@@ -158,8 +158,11 @@ const ScoutView: Component = () => {
         if (you.region) setRegion(you.region);
         setSearchParams({
             region: nextRegion,
-            players: serializePlayersParam(yourIds),
-            enemies: enemyIds.length > 0 ? serializePlayersParam(enemyIds) : undefined,
+            players: serializeSubmitParam(yourTeamParam(), yourIds),
+            enemies:
+                enemyIds.length > 0
+                    ? serializeSubmitParam(enemyTeamParam(), enemyIds)
+                    : undefined,
             enemyRegion:
                 enemyIds.length > 0 && enemy.region && enemy.region !== nextRegion
                     ? enemy.region

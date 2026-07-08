@@ -315,6 +315,20 @@ export function parseTeamParam(raw: string): TeamParam {
     };
 }
 
+// Submit-time serialization: re-scouting the SAME roster keeps the existing
+// slot assignment (manual drag fixes survive an Enter/Scout press); any roster
+// change falls back to list form so auto-assign runs on the new lineup.
+export function serializeSubmitParam(current: TeamParam, ids: PlayerId[]): string {
+    const currentPlayers =
+        current.kind === "slots"
+            ? current.slots.filter((s): s is PlayerId => s !== null)
+            : [];
+    return current.kind === "slots" &&
+        canonicalPlayersKey(currentPlayers) === canonicalPlayersKey(ids)
+        ? serializeTeamParam(current.slots)
+        : serializePlayersParam(ids);
+}
+
 // Query-key identity for a team: order- and case-insensitive, so dragging
 // players between role slots NEVER refetches.
 export function canonicalPlayersKey(players: PlayerId[]): string {
