@@ -22,7 +22,8 @@ import {
     deleteDraftFromCanvas,
     deleteCanvas,
     updateCanvasName,
-    updateCanvasCardLayout
+    updateCanvasCardLayout,
+    updateCanvasGroup
 } from "../utils/actions";
 import { getLocalCanvas, hasLocalCanvas } from "../utils/localCanvasStore";
 import FlowPanel from "../components/FlowPanel";
@@ -40,7 +41,8 @@ import { GroupContextMenu } from "../components/GroupContextMenu";
 import {
     localCopyDraft,
     localDeleteDraft,
-    localUpdateCardLayout
+    localUpdateCardLayout,
+    localUpdateGroup
 } from "../utils/useLocalCanvasMutations";
 import { CanvasContext } from "../contexts/CanvasContext";
 import { CanvasSocketProvider } from "../providers/CanvasSocketProvider";
@@ -52,7 +54,8 @@ import {
     parseDraftMode
 } from "../utils/groupRestrictions";
 import type { RestrictionGroup } from "../components/ChampionPanel";
-import { cardWidth } from "../utils/helpers";
+import { cardWidth, SERIES_CARD_GAP, SERIES_PADDING } from "../utils/helpers";
+import { resolveCopyPlacement } from "../utils/copyPlacement";
 
 const ChampionStrip: Component<{
     championIds: string[];
@@ -416,6 +419,16 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         }
     }));
 
+    const updateGroupMutation = useMutation(() => ({
+        mutationFn: updateCanvasGroup,
+        onSuccess: () => {
+            refetchCanvas();
+        },
+        onError: (error: Error) => {
+            toast.error(`Failed to update group: ${error.message}`);
+        }
+    }));
+
     const deleteDraftMutation = useMutation(() => ({
         mutationFn: deleteDraftFromCanvas,
         onSuccess: () => {
@@ -481,10 +494,9 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
             const draftIndex = sortedDrafts.findIndex(
                 (cd) => cd.Draft.id === draft.Draft.id
             );
-            const PADDING = 20;
-            const CARD_GAP = 24;
             const cw = cardWidth(cardLayout());
-            const offsetX = PADDING + draftIndex * (cw + CARD_GAP);
+            const offsetX =
+                SERIES_PADDING + draftIndex * (cw + SERIES_CARD_GAP);
             callback(group.positionX + offsetX, group.positionY);
         } else {
             callback(draft.positionX, draft.positionY);
@@ -492,14 +504,57 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     };
 
     const handleSidebarDraftCopy = (draft: CanvasDraft) => {
+        const localCanvas = isLocalMode() ? getLocalCanvas() : null;
+        const groups = isLocalMode()
+            ? (localCanvas?.groups ?? [])
+            : (canvas()?.groups ?? []);
+        const drafts = isLocalMode()
+            ? (localCanvas?.drafts ?? [])
+            : (canvas()?.drafts ?? []);
+        const sourceGroup = draft.group_id
+            ? groups.find((group) => group.id === draft.group_id)
+            : undefined;
+        const placement = resolveCopyPlacement({
+            draft,
+            group: sourceGroup,
+            groupDrafts: sourceGroup
+                ? drafts.filter((canvasDraft) => canvasDraft.group_id === sourceGroup.id)
+                : [],
+            layout: cardLayout()
+        });
+
+        if (placement.groupDims && sourceGroup) {
+            if (isLocalMode()) {
+                localUpdateGroup({
+                    groupId: sourceGroup.id,
+                    width: placement.groupDims.width,
+                    height: placement.groupDims.height
+                });
+            } else {
+                updateGroupMutation.mutate({
+                    canvasId: canvasId(),
+                    groupId: sourceGroup.id,
+                    width: placement.groupDims.width,
+                    height: placement.groupDims.height
+                });
+            }
+        }
+
         if (isLocalMode()) {
-            localCopyDraft(draft.Draft.id);
+            localCopyDraft(draft.Draft.id, {
+                positionX: placement.positionX,
+                positionY: placement.positionY,
+                group_id: placement.group_id
+            });
             refetchCanvas();
             toast.success("Draft copied successfully");
         } else {
             copyDraftMutation.mutate({
                 canvasId: canvasId(),
-                draftId: draft.Draft.id
+                draftId: draft.Draft.id,
+                positionX: placement.positionX,
+                positionY: placement.positionY,
+                group_id: placement.group_id
             });
         }
     };
@@ -956,17 +1011,15 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                                                     canvasDraft.positionY
                                                                                             };
                                                                                         }
-                                                                                        const PADDING = 20;
-                                                                                        const CARD_GAP = 24;
                                                                                         const cw =
                                                                                             cardWidth(
                                                                                                 cardLayout()
                                                                                             );
                                                                                         const offsetX =
-                                                                                            PADDING +
+                                                                                            SERIES_PADDING +
                                                                                             index() *
                                                                                                 (cw +
-                                                                                                    CARD_GAP);
+                                                                                                    SERIES_CARD_GAP);
                                                                                         return {
                                                                                             x:
                                                                                                 group.positionX +

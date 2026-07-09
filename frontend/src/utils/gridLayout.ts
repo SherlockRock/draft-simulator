@@ -37,41 +37,27 @@ export const positionToCell = (
     layout: CardLayout,
     cols: number
 ): GridCell => ({
-    row: Math.max(
-        0,
-        Math.round((y - GRID_HEADER_HEIGHT - GRID_PADDING) / cellH(layout))
-    ),
-    col: Math.min(
-        cols - 1,
-        Math.max(0, Math.round((x - GRID_PADDING) / cellW(layout)))
-    )
+    row: Math.max(0, Math.round((y - GRID_HEADER_HEIGHT - GRID_PADDING) / cellH(layout))),
+    col: Math.min(cols - 1, Math.max(0, Math.round((x - GRID_PADDING) / cellW(layout))))
 });
 
 // Columns that fit in the group's current width (mirror of the
 // height-based row computation in the hint overlay).
 export const colsFromWidth = (width: number, layout: CardLayout): number =>
-    Math.max(
-        1,
-        Math.floor((width - 2 * GRID_PADDING + GRID_CELL_GAP) / cellW(layout))
-    );
+    Math.max(1, Math.floor((width - 2 * GRID_PADDING + GRID_CELL_GAP) / cellW(layout)));
 
 // Columns available as drag/drop targets: the configured count plus one
 // growth column, or more when the group has been resized wider. Dropping
 // beyond the configured count bumps gridCols (columns, unlike rows, are
 // stored in group metadata).
-export const effectiveGridCols = (
-    group: CanvasGroup,
-    layout: CardLayout
-): number =>
+export const effectiveGridCols = (group: CanvasGroup, layout: CardLayout): number =>
     Math.max(gridColsOf(group) + 1, colsFromWidth(group.width ?? 0, layout));
 
 const cellKey = (cell: GridCell) => `${cell.row}:${cell.col}`;
 
 const occupiedKeys = (drafts: CanvasDraft[], layout: CardLayout, cols: number) =>
     new Set(
-        drafts.map((d) =>
-            cellKey(positionToCell(d.positionX, d.positionY, layout, cols))
-        )
+        drafts.map((d) => cellKey(positionToCell(d.positionX, d.positionY, layout, cols)))
     );
 
 export const firstEmptyCell = (
@@ -147,8 +133,7 @@ export const arrangeGrid = (
         const cellOrder = a.ideal.row - b.ideal.row || a.ideal.col - b.ideal.col;
         if (cellOrder !== 0) return cellOrder;
         return (
-            a.draft.positionY - b.draft.positionY ||
-            a.draft.positionX - b.draft.positionX
+            a.draft.positionY - b.draft.positionY || a.draft.positionX - b.draft.positionX
         );
     });
 
@@ -173,11 +158,7 @@ export const arrangeGrid = (
     });
 };
 
-export const gridDimensions = (
-    rowCount: number,
-    cols: number,
-    layout: CardLayout
-) => ({
+export const gridDimensions = (rowCount: number, cols: number, layout: CardLayout) => ({
     width:
         2 * GRID_PADDING +
         cols * cardWidth(layout) +
@@ -188,6 +169,19 @@ export const gridDimensions = (
         rowCount * cardHeight(layout) +
         Math.max(0, rowCount - 1) * GRID_CELL_GAP
 });
+
+export const growGridDims = (
+    group: CanvasGroup,
+    rows: number,
+    cols: number,
+    layout: CardLayout
+) => {
+    const content = gridDimensions(rows, cols, layout);
+    return {
+        width: Math.max(group.width ?? 0, content.width),
+        height: Math.max(group.height ?? 0, content.height)
+    };
+};
 
 export const rowCountAfter = (
     updates: PositionUpdate[],

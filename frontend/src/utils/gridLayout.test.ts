@@ -86,10 +86,7 @@ describe("firstEmptyCell", () => {
     });
 
     it("skips occupied cells in reading order", () => {
-        const drafts = [
-            draftInCell("a", 0, 0, "wide"),
-            draftInCell("b", 0, 1, "wide")
-        ];
+        const drafts = [draftInCell("a", 0, 0, "wide"), draftInCell("b", 0, 1, "wide")];
         expect(firstEmptyCell(drafts, "wide", 3)).toEqual({ row: 0, col: 2 });
     });
 
@@ -171,10 +168,7 @@ describe("resolveGridDrop", () => {
 
 describe("arrangeGrid", () => {
     it("keeps already-tidy drafts in place", () => {
-        const drafts = [
-            draftInCell("a", 0, 0, "wide"),
-            draftInCell("b", 0, 1, "wide")
-        ];
+        const drafts = [draftInCell("a", 0, 0, "wide"), draftInCell("b", 0, 1, "wide")];
         const updates = arrangeGrid(drafts, "wide", 3);
         const a = updates.find((u) => u.draft_id === "a");
         expect(a).toEqual({
@@ -188,10 +182,7 @@ describe("arrangeGrid", () => {
 
     it("resolves two drafts nearest the same cell: second goes to next empty cell in reading order", () => {
         const p = cellToPosition({ row: 0, col: 0 }, "wide");
-        const drafts = [
-            draftAt("a", p.x + 5, p.y + 5),
-            draftAt("b", p.x + 40, p.y + 40)
-        ];
+        const drafts = [draftAt("a", p.x + 5, p.y + 5), draftAt("b", p.x + 40, p.y + 40)];
         const updates = arrangeGrid(drafts, "wide", 3);
         const cells = updates.map((u) =>
             positionToCell(u.positionX, u.positionY, "wide", 3)
@@ -260,15 +251,10 @@ describe("column growth", () => {
                 const { width } = gridDimensions(1, cols, layout);
                 expect(colsFromWidth(width, layout)).toBe(cols);
                 // A hair narrower than the next column keeps the count.
-                expect(
-                    colsFromWidth(width + cardWidth(layout) - 1, layout)
-                ).toBe(cols);
+                expect(colsFromWidth(width + cardWidth(layout) - 1, layout)).toBe(cols);
                 // Room for one more full column raises it.
                 expect(
-                    colsFromWidth(
-                        width + cardWidth(layout) + GRID_CELL_GAP,
-                        layout
-                    )
+                    colsFromWidth(width + cardWidth(layout) + GRID_CELL_GAP, layout)
                 ).toBe(cols + 1);
             }
         }

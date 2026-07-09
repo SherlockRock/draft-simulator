@@ -135,6 +135,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
     const effectiveMinHeight = () => Math.max(MIN_HEIGHT, props.contentMinHeight);
 
     const handleResizeMouseDown = (e: MouseEvent, edge: "left" | "right") => {
+        if (e.button !== 0) return;
         if (!props.canEdit()) return;
         e.preventDefault();
         e.stopPropagation();
@@ -220,7 +221,8 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
             );
         }
         const cellH = cardHeight(layout) + GRID_CELL_GAP;
-        const availH = groupHeight() - GRID_HEADER_HEIGHT - 2 * GRID_PADDING + GRID_CELL_GAP;
+        const availH =
+            groupHeight() - GRID_HEADER_HEIGHT - 2 * GRID_PADDING + GRID_CELL_GAP;
         const rowsFromHeight = Math.max(1, Math.floor(availH / cellH));
         const totalRows = Math.max(maxRow + 2, rowsFromHeight);
         const totalCols = Math.max(cols + 1, colsFromWidth(groupWidth(), layout));
@@ -237,22 +239,20 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
     // (grouped cards sit at z-30), so the swap target reads over the
     // occupant card instead of hiding behind it.
     type HighlightKind = "landing" | "swap-target" | "swap-displaced";
-    const highlightCells = createMemo<{ cell: GridCell; kind: HighlightKind }[]>(
-        () => {
-            if (!isGrid()) return [];
-            const out: { cell: GridCell; kind: HighlightKind }[] = [];
-            if (props.highlightCell) {
-                out.push({
-                    cell: props.highlightCell,
-                    kind: props.highlightIsSwap ? "swap-target" : "landing"
-                });
-            }
-            if (props.displacedCell) {
-                out.push({ cell: props.displacedCell, kind: "swap-displaced" });
-            }
-            return out;
+    const highlightCells = createMemo<{ cell: GridCell; kind: HighlightKind }[]>(() => {
+        if (!isGrid()) return [];
+        const out: { cell: GridCell; kind: HighlightKind }[] = [];
+        if (props.highlightCell) {
+            out.push({
+                cell: props.highlightCell,
+                kind: props.highlightIsSwap ? "swap-target" : "landing"
+            });
         }
-    );
+        if (props.displacedCell) {
+            out.push({ cell: props.displacedCell, kind: "swap-displaced" });
+        }
+        return out;
+    });
 
     return (
         <div
@@ -312,7 +312,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                             onInput={(e) => setEditName(e.currentTarget.value)}
                             onBlur={handleNameBlur}
                             onKeyDown={handleNameKeyDown}
-                            class="w-full rounded border border-darius-border bg-darius-card px-1 font-semibold text-darius-text-primary outline-none focus:border-darius-purple-bright"
+                            class="w-full select-text rounded border border-darius-border bg-darius-card px-1 font-semibold text-darius-text-primary outline-none focus:border-darius-purple-bright"
                             autofocus
                         />
                     </Show>
@@ -430,7 +430,10 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                                 style={{
                                     left: "0px",
                                     top: `${
-                                        cellToPosition({ row: i(), col: 0 }, props.cardLayout()).y +
+                                        cellToPosition(
+                                            { row: i(), col: 0 },
+                                            props.cardLayout()
+                                        ).y +
                                         cardHeight(props.cardLayout()) / 2
                                     }px`
                                 }}

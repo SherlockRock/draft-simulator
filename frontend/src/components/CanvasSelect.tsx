@@ -538,7 +538,7 @@ export const CanvasSelect = (props: props) => {
                                             name="select"
                                             autocomplete="off"
                                             id={`${props.draft.id}-${props.index()}-select`}
-                                            class="h-6 min-w-0 flex-1 appearance-none bg-inherit px-1 outline-none"
+                                            class="h-6 min-w-0 flex-1 select-text appearance-none bg-inherit px-1 outline-none"
                                             classList={{
                                                 "text-darius-text-primary": true,
                                                 "text-right": props.side === "team2"
@@ -624,7 +624,7 @@ export const CanvasSelect = (props: props) => {
                                                 name="select"
                                                 autocomplete="off"
                                                 id={`${props.draft.id}-${props.index()}-select`}
-                                                class="relative z-[3] w-full cursor-text appearance-none border-0 bg-transparent px-3 py-2 outline-none"
+                                                class="relative z-[3] w-full cursor-text select-text appearance-none border-0 bg-transparent px-3 py-2 outline-none"
                                                 classList={{
                                                     "text-right": props.side === "team2",
                                                     "text-sm font-semibold uppercase tracking-[0.2em] text-darius-text-secondary caret-darius-text-secondary drop-shadow placeholder:font-semibold placeholder:uppercase placeholder:tracking-[0.2em] text-darius-text-secondary":
@@ -706,7 +706,7 @@ export const CanvasSelect = (props: props) => {
                                 name="select"
                                 autocomplete="off"
                                 id={`${props.draft.id}-${props.index()}-select`}
-                                class="absolute inset-0 z-[2] h-full w-full cursor-text appearance-none border-0 bg-transparent text-transparent caret-transparent outline-none"
+                                class="absolute inset-0 z-[2] h-full w-full cursor-text select-text appearance-none border-0 bg-transparent text-transparent caret-transparent outline-none"
                                 aria-label={selectedChampion()?.name ?? "Champion ban"}
                                 disabled={props.disabled}
                             />

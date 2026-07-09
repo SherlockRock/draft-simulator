@@ -601,7 +601,12 @@ router.post("/:canvasId/draft/:draftId/copy", protect, async (req, res) => {
           ? positionY
           : existingCanvasDraft.positionY + COPY_OFFSET,
       is_locked: false,
-      group_id: typeof group_id === "string" ? group_id : null,
+      group_id:
+        typeof group_id === "string"
+          ? group_id
+          : group_id === null
+            ? null
+            : existingCanvasDraft.group_id,
       source_type: "canvas",
     });
 
