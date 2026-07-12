@@ -11,7 +11,8 @@ import { useNavigate } from "@solidjs/router";
 import { Eye, Plus, X, Lock } from "lucide-solid";
 import { CanvasDraft, Viewport, AnchorType } from "../utils/schemas";
 import { AnchorPoints } from "./AnchorPoints";
-import { CanvasSelect } from "./CanvasSelect";
+import { CanvasSlot, type SlotDisplayMode } from "./CanvasSlot";
+import { PickerTarget } from "./CanvasChampionPicker";
 import { CUSTOM_GROUP_HEADER_HEIGHT } from "./CustomGroupContainer";
 import {
     CardLayout,
@@ -27,7 +28,7 @@ type CanvasCardProps = {
     addBox: (fromBox: CanvasDraft) => void;
     deleteBox: (draftId: string) => void;
     handleNameChange: (draftId: string, newName: string) => void;
-    handlePickChange: (draftId: string, pickIndex: number, championName: string) => void;
+    handlePickChange: (draftId: string, pickIndex: number, championId: string) => void;
     onBoxMouseDown: (draftId: string, e: MouseEvent) => void;
     onContextMenu: (draft: CanvasDraft, e: MouseEvent) => void;
     cardLayout: () => CardLayout;
@@ -36,16 +37,8 @@ type CanvasCardProps = {
     onAnchorClick: (draftId: string, anchorType: AnchorType) => void;
     connectionSource: () => string | null;
     sourceAnchor: () => { type: AnchorType } | null;
-    focusedDraftId: () => string | null;
-    focusedSelectIndex: () => number;
-    onSelectFocus: (draftId: string, selectIndex: number) => void;
-    onSelectBlur: () => void;
-    onSelectNext: () => void;
-    onSelectPrevious: () => void;
-    onSelectMove: (
-        axis: "horizontal" | "vertical",
-        direction: "forward" | "backward"
-    ) => void;
+    pickerTarget: () => PickerTarget | null;
+    onSlotOpen: (draftId: string, pickIndex: number) => void;
     canEdit: () => boolean;
     isGrouped?: boolean;
     groupType?: "series" | "custom";
@@ -112,6 +105,15 @@ export const CanvasCard = (props: CanvasCardProps) => {
 
     const slotDisabled = () =>
         props.isConnectionMode || !props.canEdit() || !!props.canvasDraft.is_locked;
+
+    const isSlotTargeted = (pickIndex: number) => {
+        const target = props.pickerTarget();
+        return (
+            target !== null &&
+            target.draftId === props.canvasDraft.Draft.id &&
+            target.pickIndex === pickIndex
+        );
+    };
 
     const sectionPanelClass =
         "rounded-xl border border-darius-border/80 bg-darius-card/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]";
@@ -215,28 +217,22 @@ export const CanvasCard = (props: CanvasCardProps) => {
         </div>
     );
 
-    const renderFullSlot = (pickIndex: number) => (
-        <CanvasSelect
-            index={() => pickIndex}
-            pickIndex={pickIndex}
+    const renderSlot = (pickIndex: number, displayMode?: SlotDisplayMode) => (
+        <CanvasSlot
             pick={props.canvasDraft.Draft.picks[pickIndex]}
-            handlePickChange={props.handlePickChange}
-            draft={props.canvasDraft.Draft}
-            indexToShorthand={slotLabels()}
-            cardLayout={props.cardLayout}
-            disabled={slotDisabled()}
-            focusedDraftId={props.focusedDraftId}
-            focusedSelectIndex={props.focusedSelectIndex}
-            onFocus={() => props.onSelectFocus(props.canvasDraft.Draft.id, pickIndex)}
-            onBlur={props.onSelectBlur}
-            onSelectNext={props.onSelectNext}
-            onSelectPrevious={props.onSelectPrevious}
-            onSelectMove={props.onSelectMove}
+            label={slotLabels()[pickIndex]}
+            displayMode={displayMode}
             side={getTeamSide(pickIndex)}
-            restrictedChampions={props.restrictedChampions}
-            disabledChampions={props.disabledChampions}
+            disabled={slotDisabled()}
+            isPickerTarget={isSlotTargeted(pickIndex)}
+            onOpen={() => props.onSlotOpen(props.canvasDraft.Draft.id, pickIndex)}
+            onClear={() =>
+                props.handlePickChange(props.canvasDraft.Draft.id, pickIndex, "")
+            }
         />
     );
+
+    const renderFullSlot = (pickIndex: number) => renderSlot(pickIndex);
 
     const renderHorizontalColumn = (pickIndices: number[], barClass: string) =>
         renderTopRailPanel(barClass, () => (
@@ -247,53 +243,9 @@ export const CanvasCard = (props: CanvasCardProps) => {
             </For>
         ));
 
-    const renderCompactBanSlot = (pickIndex: number) => (
-        <CanvasSelect
-            index={() => pickIndex}
-            pickIndex={pickIndex}
-            pick={props.canvasDraft.Draft.picks[pickIndex]}
-            handlePickChange={props.handlePickChange}
-            draft={props.canvasDraft.Draft}
-            indexToShorthand={slotLabels()}
-            cardLayout={props.cardLayout}
-            displayMode="compact"
-            disabled={slotDisabled()}
-            focusedDraftId={props.focusedDraftId}
-            focusedSelectIndex={props.focusedSelectIndex}
-            onFocus={() => props.onSelectFocus(props.canvasDraft.Draft.id, pickIndex)}
-            onBlur={props.onSelectBlur}
-            onSelectNext={props.onSelectNext}
-            onSelectPrevious={props.onSelectPrevious}
-            onSelectMove={props.onSelectMove}
-            side={getTeamSide(pickIndex)}
-            restrictedChampions={props.restrictedChampions}
-            disabledChampions={props.disabledChampions}
-        />
-    );
+    const renderCompactBanSlot = (pickIndex: number) => renderSlot(pickIndex, "compact");
 
-    const renderWideArtSlot = (pickIndex: number) => (
-        <CanvasSelect
-            index={() => pickIndex}
-            pickIndex={pickIndex}
-            pick={props.canvasDraft.Draft.picks[pickIndex]}
-            handlePickChange={props.handlePickChange}
-            draft={props.canvasDraft.Draft}
-            indexToShorthand={slotLabels()}
-            cardLayout={props.cardLayout}
-            displayMode="wide-art"
-            disabled={slotDisabled()}
-            focusedDraftId={props.focusedDraftId}
-            focusedSelectIndex={props.focusedSelectIndex}
-            onFocus={() => props.onSelectFocus(props.canvasDraft.Draft.id, pickIndex)}
-            onBlur={props.onSelectBlur}
-            onSelectNext={props.onSelectNext}
-            onSelectPrevious={props.onSelectPrevious}
-            onSelectMove={props.onSelectMove}
-            side={getTeamSide(pickIndex)}
-            restrictedChampions={props.restrictedChampions}
-            disabledChampions={props.disabledChampions}
-        />
-    );
+    const renderWideArtSlot = (pickIndex: number) => renderSlot(pickIndex, "wide-art");
 
     const renderWideArtColumn = (pickIndices: readonly number[]) => (
         <div class="flex h-full min-h-0 flex-col gap-2.5">
@@ -518,6 +470,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
     return (
         <div
             data-canvas-drag-root="true"
+            data-draft-id={props.canvasDraft.Draft.id}
             class="canvas-card flex flex-col rounded-xl border border-darius-border/90 bg-darius-card-hover/95 shadow-[0_16px_40px_rgba(15,23,42,0.42)]"
             classList={{
                 "absolute z-30": !props.isGrouped || props.groupType === "custom",

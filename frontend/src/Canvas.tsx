@@ -11,7 +11,7 @@ import {
     JSX
 } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { champions } from "./utils/constants";
+import { resolveChampionId } from "./utils/constants";
 import { useMutation } from "@tanstack/solid-query";
 import {
     postNewDraft,
@@ -52,6 +52,10 @@ import {
 } from "./utils/schemas";
 import { validateSocketEvent } from "./utils/socketValidation";
 import { CanvasCard } from "./components/CanvasCard";
+import {
+    CanvasChampionPicker,
+    type PickerTarget
+} from "./components/CanvasChampionPicker";
 import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./components/Dialog";
 import { ImportToCanvasDialog } from "./components/ImportToCanvasDialog";
 import {
@@ -108,15 +112,8 @@ import {
     type GridCell
 } from "./utils/gridLayout";
 import { GridSettingsDialog } from "./components/GridSettingsDialog";
-import {
-    DraftPositionsUpdatedSchema,
-    type DraftMode
-} from "@draft-sim/shared-types";
-import {
-    getDirectionalCanvasSlotIndex,
-    getNextCanvasSlotIndex,
-    type CardLayout
-} from "./utils/canvasCardLayout";
+import { DraftPositionsUpdatedSchema, type DraftMode } from "@draft-sim/shared-types";
+import { type CardLayout } from "./utils/canvasCardLayout";
 
 const debounce = <T extends unknown[]>(func: (...args: T) => void, limit: number) => {
     let inDebounce: boolean;
@@ -267,8 +264,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         offsetX: 0,
         offsetY: 0
     });
-    const [focusedDraftId, setFocusedDraftId] = createSignal<string | null>(null);
-    const [focusedSelectIndex, setFocusedSelectIndex] = createSignal<number>(-1);
+    const [pickerTarget, setPickerTarget] = createSignal<PickerTarget | null>(null);
+    const [pickerAnchorSession, setPickerAnchorSession] = createSignal(0);
+    const openPicker = (draftId: string, pickIndex: number) => {
+        setPickerTarget({ draftId, pickIndex });
+        setPickerAnchorSession((n) => n + 1);
+    };
+    const closePicker = () => setPickerTarget(null);
     const [isImportDialogOpen, setIsImportDialogOpen] = createSignal(false);
     const [importPosition, setImportPosition] = createSignal({ x: 0, y: 0 });
     const [isDeleteGroupDialogOpen, setIsDeleteGroupDialogOpen] = createSignal(false);
@@ -323,26 +325,34 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     } | null>(null);
 
     const [editingGroupId, setEditingGroupId] = createSignal<string | null>(null);
-    const [gridSettingsGroup, setGridSettingsGroup] =
-        createSignal<CanvasGroup | null>(null);
+    const [gridSettingsGroup, setGridSettingsGroup] = createSignal<CanvasGroup | null>(
+        null
+    );
     const [editingDraftId, setEditingDraftId] = createSignal<string | null>(null);
 
+    // Layout switches resize every card and re-map slot geometry, so the
+    // picker closes (design D3).
     let previousCardLayout: CardLayout | undefined;
     createEffect(() => {
         const currentCardLayout = props.cardLayout();
         if (
             previousCardLayout !== undefined &&
-            currentCardLayout !== previousCardLayout &&
-            focusedDraftId() !== null
+            currentCardLayout !== previousCardLayout
         ) {
-            if (document.activeElement instanceof HTMLElement) {
-                document.activeElement.blur();
-            }
-            setFocusedDraftId(null);
-            setFocusedSelectIndex(-1);
+            closePicker();
         }
-
         previousCardLayout = currentCardLayout;
+    });
+
+    // Close when the target draft disappears, locks, loses editability, or
+    // connection mode starts.
+    createEffect(() => {
+        const target = pickerTarget();
+        if (!target) return;
+        const canvasDraft = canvasDrafts.find((cd) => cd.Draft.id === target.draftId);
+        if (!canvasDraft || canvasDraft.is_locked || !canEdit() || isConnectionMode()) {
+            closePicker();
+        }
     });
 
     const ungroupedDrafts = createMemo(() => canvasDrafts.filter((cd) => !cd.group_id));
@@ -726,10 +736,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // them via the group endpoint. Used after a copy adds a card to a grid;
     // commitGridDrop persists dimensions inline with its position batch, so it
     // does not use this. `groupDrafts` must already include the new card.
-    const persistGridDimensions = (
-        group: CanvasGroup,
-        groupDrafts: CanvasDraft[]
-    ) => {
+    const persistGridDimensions = (group: CanvasGroup, groupDrafts: CanvasDraft[]) => {
         const cols = gridColsOf(group);
         const rows = rowCountAfter([], groupDrafts, props.cardLayout(), cols);
         const dims = growGridDims(group, rows, cols);
@@ -1427,14 +1434,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
-    const handlePickChange = (
-        draftId: string,
-        pickIndex: number,
-        championName: string
-    ) => {
+    const handlePickChange = (draftId: string, pickIndex: number, championId: string) => {
         if (!canEdit()) return;
-        const champion = champions.find((value) => value.name === championName);
-        const championId = champion?.id ?? "";
         setCanvasDrafts(
             (cd) => cd.Draft.id === draftId,
             "Draft",
@@ -1488,6 +1489,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             siblingDrafts,
             canvasDraft.Draft.id
         );
+    };
+
+    // Slice 1 tile states: everything unavailable is uniformly grey — picked in
+    // this draft, fearless-restricted from siblings, or group-disabled.
+    const getUnavailableChampionIds = (draftId: string): Set<string> => {
+        const ids = new Set<string>();
+        const canvasDraft = canvasDrafts.find((cd) => cd.Draft.id === draftId);
+        if (!canvasDraft) return ids;
+        for (const pick of canvasDraft.Draft.picks) {
+            if (pick !== "") ids.add(resolveChampionId(pick));
+        }
+        for (const restricted of getRestrictedChampionsForDraft(canvasDraft)) {
+            ids.add(resolveChampionId(restricted));
+        }
+        const group = canvasGroups.find((g) => g.id === canvasDraft.group_id);
+        for (const disabled of group?.metadata.disabledChampions ?? []) {
+            ids.add(resolveChampionId(disabled));
+        }
+        return ids;
     };
 
     const handleNameChange = (draftId: string, newName: string) => {
@@ -1831,7 +1851,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         return (
             target instanceof HTMLElement &&
             !!target.closest(
-                '[data-canvas-select-root="true"], input, button, select, textarea, [contenteditable="true"]'
+                '[data-canvas-slot-root="true"], input, button, select, textarea, [contenteditable="true"]'
             )
         );
     };
@@ -1995,57 +2015,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 vertexId
             });
         }
-    };
-
-    const onSelectFocus = (draftId: string, selectIndex: number) => {
-        setFocusedDraftId(draftId);
-        setFocusedSelectIndex(selectIndex);
-    };
-
-    const onSelectBlur = () => {
-        setFocusedDraftId(null);
-        setFocusedSelectIndex(-1);
-    };
-
-    const moveFocusedSelect = (
-        axis: "horizontal" | "vertical",
-        direction: "forward" | "backward"
-    ) => {
-        const currentDraftId = focusedDraftId();
-        const currentIndex = focusedSelectIndex();
-
-        if (currentDraftId === null || currentIndex === -1) return;
-
-        setFocusedSelectIndex(
-            getNextCanvasSlotIndex(props.cardLayout(), currentIndex, axis, direction)
-        );
-    };
-
-    const onSelectNext = () => {
-        moveFocusedSelect("vertical", "forward");
-    };
-
-    const onSelectPrevious = () => {
-        moveFocusedSelect("vertical", "backward");
-    };
-
-    const onSelectMove = (
-        axis: "horizontal" | "vertical",
-        direction: "forward" | "backward"
-    ) => {
-        const currentDraftId = focusedDraftId();
-        const currentIndex = focusedSelectIndex();
-
-        if (currentDraftId === null || currentIndex === -1) return;
-
-        setFocusedSelectIndex(
-            getDirectionalCanvasSlotIndex(
-                props.cardLayout(),
-                currentIndex,
-                axis,
-                direction
-            )
-        );
     };
 
     const onGroupMouseDown = (groupId: string, e: MouseEvent) => {
@@ -2659,30 +2628,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setIsDeleteDialogOpen(true);
     };
 
-    const moveToNextSelect = () => {
-        moveFocusedSelect("horizontal", "forward");
-    };
-
-    const moveToPreviousSelect = () => {
-        moveFocusedSelect("horizontal", "backward");
-    };
-
     onMount(() => {
         canvasContext.setSetEditingGroupIdCallback(() => setEditingGroupId);
         canvasContext.setDeleteGroupCallback(() => (id: string) => handleDeleteGroup(id));
         canvasContext.setSetEditingDraftIdCallback(() => setEditingDraftId);
 
         const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Tab" && focusedDraftId() !== null) {
-                e.preventDefault();
-                if (e.shiftKey) {
-                    moveToPreviousSelect();
-                } else {
-                    moveToNextSelect();
-                }
-                return;
-            }
-
             if (e.key === "Escape" && isConnectionMode()) {
                 e.preventDefault();
                 if (
@@ -2833,10 +2784,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         layout,
                         effectiveGridCols(gridHoverGroup, layout)
                     );
-                    const cols = Math.max(
-                        gridColsOf(gridHoverGroup),
-                        targetCell.col + 1
-                    );
+                    const cols = Math.max(gridColsOf(gridHoverGroup), targetCell.col + 1);
                     const isIntraGroup = gridHoverGroup.id === state.dragGroupId;
                     const updates = resolveGridDrop({
                         groupDrafts: canvasDrafts.filter(
@@ -2980,14 +2928,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 dropGroup.id
                             );
                         } else {
-                            setCanvasDrafts(
-                                (cd) => cd.Draft.id === state.activeBoxId,
-                                {
-                                    positionX: relativeX,
-                                    positionY: relativeY,
-                                    group_id: dropGroup.id
-                                }
-                            );
+                            setCanvasDrafts((cd) => cd.Draft.id === state.activeBoxId, {
+                                positionX: relativeX,
+                                positionY: relativeY,
+                                group_id: dropGroup.id
+                            });
 
                             if (isLocalMode()) {
                                 localUpdateDraftGroup({
@@ -3374,8 +3319,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         gridHighlightFor(group.id)?.isSwap ?? false
                                     }
                                     displacedCell={
-                                        gridHighlightFor(group.id)?.displacedCell ??
-                                        null
+                                        gridHighlightFor(group.id)?.displacedCell ?? null
                                     }
                                     isExitingSource={exitingGroupId() === group.id}
                                     contentMinWidth={
@@ -3412,13 +3356,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 onAnchorClick={onAnchorClick}
                                                 connectionSource={connectionSource}
                                                 sourceAnchor={sourceAnchor}
-                                                focusedDraftId={focusedDraftId}
-                                                focusedSelectIndex={focusedSelectIndex}
-                                                onSelectFocus={onSelectFocus}
-                                                onSelectBlur={onSelectBlur}
-                                                onSelectNext={onSelectNext}
-                                                onSelectPrevious={onSelectPrevious}
-                                                onSelectMove={onSelectMove}
+                                                pickerTarget={pickerTarget}
+                                                onSlotOpen={openPicker}
                                                 canEdit={canEdit}
                                                 isGrouped={true}
                                                 groupType="custom"
@@ -3482,13 +3421,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                             onAnchorClick={onAnchorClick}
                                             connectionSource={connectionSource}
                                             sourceAnchor={sourceAnchor}
-                                            focusedDraftId={focusedDraftId}
-                                            focusedSelectIndex={focusedSelectIndex}
-                                            onSelectFocus={onSelectFocus}
-                                            onSelectBlur={onSelectBlur}
-                                            onSelectNext={onSelectNext}
-                                            onSelectPrevious={onSelectPrevious}
-                                            onSelectMove={onSelectMove}
+                                            pickerTarget={pickerTarget}
+                                            onSlotOpen={openPicker}
                                             canEdit={canEdit}
                                             isGrouped={true}
                                             groupType="series"
@@ -3530,13 +3464,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             onAnchorClick={onAnchorClick}
                             connectionSource={connectionSource}
                             sourceAnchor={sourceAnchor}
-                            focusedDraftId={focusedDraftId}
-                            focusedSelectIndex={focusedSelectIndex}
-                            onSelectFocus={onSelectFocus}
-                            onSelectBlur={onSelectBlur}
-                            onSelectNext={onSelectNext}
-                            onSelectPrevious={onSelectPrevious}
-                            onSelectMove={onSelectMove}
+                            pickerTarget={pickerTarget}
+                            onSlotOpen={openPicker}
                             canEdit={canEdit}
                             editingDraftId={editingDraftId}
                             onEditingComplete={() => setEditingDraftId(null)}
@@ -3822,6 +3751,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         />
                     )}
                 </Show>
+
+                <CanvasChampionPicker
+                    target={pickerTarget}
+                    anchorSession={pickerAnchorSession}
+                    onRetarget={setPickerTarget}
+                    onClose={closePicker}
+                    handlePickChange={handlePickChange}
+                    getDraft={(draftId) =>
+                        canvasDrafts.find((cd) => cd.Draft.id === draftId)
+                    }
+                    getUnavailableChampionIds={getUnavailableChampionIds}
+                    cardLayout={props.cardLayout}
+                    viewport={props.viewport}
+                />
             </div>
         </Show>
     );

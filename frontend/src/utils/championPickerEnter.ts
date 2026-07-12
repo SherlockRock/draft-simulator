@@ -3,9 +3,7 @@ export interface EnterCandidate {
     name: string;
 }
 
-export type EnterAction =
-    | { type: "commit"; champion: EnterCandidate }
-    | { type: "skip" };
+export type EnterAction = { type: "commit"; champion: EnterCandidate } | { type: "skip" };
 
 export interface EnterResolutionInput {
     searchText: string;

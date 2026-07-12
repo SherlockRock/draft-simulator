@@ -35,7 +35,13 @@ describe("getEnterAdvanceSlotIndex", () => {
     });
 
     it("visits all 20 slots exactly once walking forward from 0 on non-compact layouts", () => {
-        const layouts: CardLayout[] = ["wide", "vertical", "horizontal", "draft-order", "wide-draft-order"];
+        const layouts: CardLayout[] = [
+            "wide",
+            "vertical",
+            "horizontal",
+            "draft-order",
+            "wide-draft-order"
+        ];
         for (const layout of layouts) {
             const visited: number[] = [0];
             let current: number | null = 0;
