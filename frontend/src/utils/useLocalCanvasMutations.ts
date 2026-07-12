@@ -1,16 +1,7 @@
-import {
-    CanvasDraft,
-    Connection,
-    CanvasGroup,
-    Viewport,
-    AnchorType
-} from "./schemas";
+import { CanvasDraft, Connection, CanvasGroup, Viewport, AnchorType } from "./schemas";
 import { getLocalCanvas, saveLocalCanvas, LocalCanvas } from "./localCanvasStore";
 import type { CardLayout } from "./canvasCardLayout";
-import type {
-    CanvasGroupMetadata,
-    DraftPositionUpdate
-} from "@draft-sim/shared-types";
+import type { CanvasGroupMetadata, DraftPositionUpdate } from "@draft-sim/shared-types";
 
 // Helper to safely cast anchor type with default
 const toAnchorType = (
@@ -126,7 +117,7 @@ const COPY_OFFSET = 50;
 
 export const localCopyDraft = (
     draftId: string,
-    placement?: { positionX: number; positionY: number; group_id: string }
+    placement?: { positionX: number; positionY: number; group_id: string | null }
 ) => {
     return mutateLocal((canvas) => {
         const originalDraft = canvas.drafts.find((d) => d.Draft.id === draftId);
@@ -142,7 +133,7 @@ export const localCopyDraft = (
             positionY: placement
                 ? placement.positionY
                 : originalDraft.positionY + COPY_OFFSET,
-            group_id: placement ? placement.group_id : null,
+            group_id: placement ? placement.group_id : (originalDraft.group_id ?? null),
             source_type: "canvas",
             Draft: {
                 id: newDraftId,

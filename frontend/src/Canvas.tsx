@@ -63,7 +63,12 @@ import {
     ConnectionPreview,
     GroupConnectionPreview
 } from "./components/Connections";
-import { cardHeight, cardWidth } from "./utils/helpers";
+import {
+    cardHeight,
+    cardWidth,
+    SERIES_CARD_GAP,
+    SERIES_PADDING
+} from "./utils/helpers";
 import {
     localNewDraft,
     localEditDraft,
@@ -104,13 +109,12 @@ import {
     resolveGridDrop,
     arrangeGrid,
     rowCountAfter,
-    gridDimensions,
     positionToCell,
-    firstEmptyCell,
-    cellToPosition,
     effectiveGridCols,
+    growGridDims,
     type GridCell
 } from "./utils/gridLayout";
+import { resolveCopyPlacement } from "./utils/copyPlacement";
 import { GridSettingsDialog } from "./components/GridSettingsDialog";
 import { DraftPositionsUpdatedSchema, type DraftMode } from "@draft-sim/shared-types";
 import { type CardLayout } from "./utils/canvasCardLayout";
@@ -545,17 +549,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     }));
 
-    // Grid dimensions grow to fit content but never shrink below the group's
-    // current (possibly user-resized) size — so a resized-taller group keeps
-    // its empty rows as drop targets instead of snapping back to content.
-    const growGridDims = (group: CanvasGroup, rows: number, cols: number) => {
-        const content = gridDimensions(rows, cols, props.cardLayout());
-        return {
-            width: Math.max(group.width ?? 0, content.width),
-            height: Math.max(group.height ?? 0, content.height)
-        };
-    };
-
     // Snap/swap commit for a drop inside a grid-mode custom group. Applies
     // optimistic store updates, then persists positions + derived group
     // dimensions in one atomic request (or the local-storage equivalent).
@@ -594,7 +587,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             if (dragged) dragged.group_id = groupIdChange;
         }
         const rows = rowCountAfter(updates, groupDrafts, layout, cols);
-        const dims = growGridDims(group, rows, cols);
+        const dims = growGridDims(group, rows, cols, props.cardLayout());
         const metadata = cols !== gridColsOf(group) ? { gridCols: cols } : undefined;
 
         for (const u of updates) {
@@ -631,7 +624,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const cols = gridColsOf(group);
         const updates = arrangeGrid(groupDrafts, props.cardLayout(), cols);
         const rows = rowCountAfter(updates, groupDrafts, props.cardLayout(), cols);
-        const dims = growGridDims(group, rows, cols);
+        const dims = growGridDims(group, rows, cols, props.cardLayout());
         const metadata = { layout: "grid" as const, gridCols: cols };
 
         for (const u of updates) {
@@ -732,14 +725,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
-    // Recompute a grid group's dimensions from the given members and persist
-    // them via the group endpoint. Used after a copy adds a card to a grid;
-    // commitGridDrop persists dimensions inline with its position batch, so it
-    // does not use this. `groupDrafts` must already include the new card.
-    const persistGridDimensions = (group: CanvasGroup, groupDrafts: CanvasDraft[]) => {
-        const cols = gridColsOf(group);
-        const rows = rowCountAfter([], groupDrafts, props.cardLayout(), cols);
-        const dims = growGridDims(group, rows, cols);
+    const persistGroupDimensions = (
+        group: CanvasGroup,
+        dims: { width: number; height: number }
+    ) => {
         setCanvasGroups((g) => g.id === group.id, {
             width: dims.width,
             height: dims.height
@@ -1404,25 +1393,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const addBox = (fromBox: CanvasDraft) => {
         if (!canEdit()) return;
-        if (isLocalMode()) {
-            localNewDraft({
-                name: fromBox.Draft.name,
-                picks: fromBox.Draft.picks,
-                positionX: fromBox.positionX + 100,
-                positionY: fromBox.positionY + 100
-            });
-            refreshFromLocal();
-            toast.success("Successfully created new draft!");
-        } else {
-            newDraftMutation.mutate({
-                name: fromBox.Draft.name,
-                picks: fromBox.Draft.picks,
-                public: false,
-                canvas_id: canvasId(),
-                positionX: fromBox.positionX + 100,
-                positionY: fromBox.positionY + 100
-            });
-        }
+        handleDraftCopy(fromBox);
     };
 
     const deleteBox = (draftId: string) => {
@@ -1857,6 +1828,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const onBoxMouseDown = (draftId: string, e: MouseEvent) => {
+        if (e.button !== 0) return;
         canvasContext.closeSharePopper();
         if (isConnectionMode()) return;
         if (!canEdit()) return;
@@ -1897,6 +1869,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const onBackgroundMouseDown = (e: MouseEvent) => {
+        if (e.button !== 0) return;
         canvasContext.closeSharePopper();
 
         if (isConnectionMode()) {
@@ -1977,6 +1950,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         positionY: number,
         e: MouseEvent
     ) => {
+        if (e.button !== 0) return;
         e.stopPropagation();
         if (!canEdit()) return;
         const worldCoords = screenToWorld(e.clientX, e.clientY);
@@ -2018,6 +1992,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const onGroupMouseDown = (groupId: string, e: MouseEvent) => {
+        if (e.button !== 0) return;
         canvasContext.closeSharePopper();
         if (isConnectionMode()) return;
         if (!canEdit()) return;
@@ -2560,10 +2535,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             const draftIndex = sortedDrafts.findIndex(
                 (cd) => cd.Draft.id === draft.Draft.id
             );
-            const PADDING = 20;
-            const CARD_GAP = 24;
             const cw = cardWidth(props.cardLayout());
-            const offsetX = PADDING + draftIndex * (cw + CARD_GAP);
+            const offsetX =
+                SERIES_PADDING + draftIndex * (cw + SERIES_CARD_GAP);
             navigateToDraft(group.positionX + offsetX, group.positionY);
         } else {
             navigateToDraft(draft.positionX, draft.positionY);
@@ -2575,50 +2549,34 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             ? canvasGroups.find((g) => g.id === draft.group_id)
             : undefined;
 
-        if (sourceGroup && isGridGroup(sourceGroup)) {
-            // Grid group: land the copy in the first empty cell and grow the
-            // group if that starts a new row.
-            const cols = gridColsOf(sourceGroup);
-            const layout = props.cardLayout();
-            const groupDrafts = canvasDrafts.filter(
-                (cd) => cd.group_id === sourceGroup.id
-            );
-            const cell = firstEmptyCell(groupDrafts, layout, cols);
-            const pos = cellToPosition(cell, layout);
-            // Project the copy into its cell so dimensions are correct without
-            // waiting for the copy to land in the store.
-            const projected = [
-                ...groupDrafts,
-                { ...draft, positionX: pos.x, positionY: pos.y }
-            ];
+        const placement = resolveCopyPlacement({
+            draft,
+            group: sourceGroup,
+            groupDrafts: sourceGroup
+                ? canvasDrafts.filter((cd) => cd.group_id === sourceGroup.id)
+                : [],
+            layout: props.cardLayout()
+        });
 
-            if (isLocalMode()) {
-                localCopyDraft(draft.Draft.id, {
-                    positionX: pos.x,
-                    positionY: pos.y,
-                    group_id: sourceGroup.id
-                });
-                persistGridDimensions(sourceGroup, projected);
-                refreshFromLocal();
-                toast.success("Draft copied successfully");
-            } else {
-                copyDraftMutation.mutate({
-                    canvasId: canvasId(),
-                    draftId: draft.Draft.id,
-                    positionX: pos.x,
-                    positionY: pos.y,
-                    group_id: sourceGroup.id
-                });
-                persistGridDimensions(sourceGroup, projected);
-            }
-        } else if (isLocalMode()) {
-            localCopyDraft(draft.Draft.id);
+        if (placement.groupDims && sourceGroup) {
+            persistGroupDimensions(sourceGroup, placement.groupDims);
+        }
+
+        if (isLocalMode()) {
+            localCopyDraft(draft.Draft.id, {
+                positionX: placement.positionX,
+                positionY: placement.positionY,
+                group_id: placement.group_id
+            });
             refreshFromLocal();
             toast.success("Draft copied successfully");
         } else {
             copyDraftMutation.mutate({
                 canvasId: canvasId(),
-                draftId: draft.Draft.id
+                draftId: draft.Draft.id,
+                positionX: placement.positionX,
+                positionY: placement.positionY,
+                group_id: placement.group_id
             });
         }
     };
@@ -3143,7 +3101,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             }
         >
             <div
-                class="relative h-full w-full overflow-hidden"
+                class="relative h-full w-full select-none overflow-hidden"
                 ref={canvasContainerRef}
                 onContextMenu={handleCanvasContextMenu}
             >

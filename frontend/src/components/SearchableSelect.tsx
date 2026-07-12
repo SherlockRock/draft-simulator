@@ -140,7 +140,7 @@ export const SearchableSelect = (props: props) => {
                     placeholder={props.placeholder}
                     name="select"
                     id="select"
-                    class="w-full appearance-none bg-inherit px-4 text-darius-text-primary outline-none"
+                    class="w-full select-text appearance-none bg-inherit px-4 text-darius-text-primary outline-none"
                 />
                 <button
                     onClick={() => {

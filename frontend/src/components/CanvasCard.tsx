@@ -126,8 +126,8 @@ export const CanvasCard = (props: CanvasCardProps) => {
     const inputRowGapClass = createMemo(() => (isCompact() ? "gap-1.5" : "gap-2"));
     const titleInputClass = createMemo(() =>
         isCompact()
-            ? "absolute inset-0 w-full bg-transparent px-1 py-1 text-base font-bold text-darius-text-primary outline-none disabled:cursor-not-allowed"
-            : "absolute inset-0 w-full bg-transparent px-1 py-1.5 text-base font-bold text-darius-text-primary outline-none disabled:cursor-not-allowed"
+            ? "absolute inset-0 w-full select-text bg-transparent px-1 py-1 text-base font-bold text-darius-text-primary outline-none disabled:cursor-not-allowed"
+            : "absolute inset-0 w-full select-text bg-transparent px-1 py-1.5 text-base font-bold text-darius-text-primary outline-none disabled:cursor-not-allowed"
     );
     const titleSizerClass = createMemo(() =>
         isCompact()

@@ -46,7 +46,7 @@ export const FilterBar: Component<FilterBarProps> = (props) => {
                 value={props.searchText()}
                 onInput={(e) => props.onSearchChange(e.currentTarget.value)}
                 placeholder={props.searchPlaceholder || "Search..."}
-                class="min-w-0 flex-1 bg-inherit p-2 text-darius-text-primary text-darius-text-secondary focus:outline-none"
+                class="min-w-0 flex-1 select-text bg-inherit p-2 text-darius-text-primary text-darius-text-secondary focus:outline-none"
             />
             <button
                 type="button"

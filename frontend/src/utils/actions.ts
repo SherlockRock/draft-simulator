@@ -32,10 +32,7 @@ import {
     ShareCanvasVerifySchema,
     CardLayoutSchema
 } from "./schemas";
-import type {
-    CanvasGroupMetadata,
-    DraftPositionUpdate
-} from "@draft-sim/shared-types";
+import type { CanvasGroupMetadata, DraftPositionUpdate } from "@draft-sim/shared-types";
 
 // Re-export types for backward compatibility
 export type { CanvasResponse as CanvasResposnse } from "./schemas";
@@ -103,7 +100,7 @@ export const copyDraftInCanvas = async (data: {
     draftId: string;
     positionX?: number;
     positionY?: number;
-    group_id?: string;
+    group_id?: string | null;
 }) => {
     return apiPost(
         `/canvas/${data.canvasId}/draft/${data.draftId}/copy`,
