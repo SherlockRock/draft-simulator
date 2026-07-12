@@ -71,7 +71,7 @@ export const draftOrderTeam2Sections = [
 ] as const;
 
 type NavigationAxis = "horizontal" | "vertical";
-type NavigationDirection = "forward" | "backward";
+export type NavigationDirection = "forward" | "backward";
 type SlotCoordinate = { x: number; y: number };
 
 const verticalRowOrder = [
@@ -235,6 +235,40 @@ export const getNextCanvasSlotIndex = (
                 ? getCircularIndex(currentIndex, verticalRowOrder, direction)
                 : getCircularIndex(currentIndex, verticalColumnOrder, direction);
     }
+};
+
+const getEnterWalkSequence = (
+    cardLayout: CardLayout,
+    currentIndex: number
+): readonly number[] => {
+    if (cardLayout === "compact" && currentIndex >= 0 && currentIndex <= 9) {
+        return currentIndex <= 4 ? compactBanTeam1Order : compactBanTeam2Order;
+    }
+    switch (cardLayout) {
+        case "horizontal":
+            return horizontalColumnOrder;
+        case "draft-order":
+        case "wide-draft-order":
+            return draftOrderColumnOrder;
+        default:
+            return verticalColumnOrder;
+    }
+};
+
+// Enter-advance walk for the champion picker: the same sequence the old focus
+// machinery used for vertical-axis movement, but terminal instead of circular —
+// null past either end tells the picker to close (design D2).
+export const getEnterAdvanceSlotIndex = (
+    cardLayout: CardLayout,
+    currentIndex: number,
+    direction: NavigationDirection
+): number | null => {
+    const sequence = getEnterWalkSequence(cardLayout, currentIndex);
+    const position = sequence.indexOf(currentIndex);
+    if (position === -1) return null;
+    const nextPosition = position + (direction === "forward" ? 1 : -1);
+    if (nextPosition < 0 || nextPosition >= sequence.length) return null;
+    return sequence[nextPosition];
 };
 
 const getSlotCoordinatesForLayout = (cardLayout: CardLayout) => {
