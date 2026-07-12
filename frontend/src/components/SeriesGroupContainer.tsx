@@ -326,7 +326,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                     if (
                         !(target instanceof Element) ||
                         !target.closest(
-                            '[data-canvas-select-root="true"], [data-canvas-drag-root="true"], input, button, select, textarea'
+                            '[data-canvas-slot-root="true"], [data-canvas-drag-root="true"], input, button, select, textarea'
                         )
                     ) {
                         props.onBodyMouseDown(e);
