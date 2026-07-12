@@ -8,7 +8,6 @@ import {
     on,
     onCleanup
 } from "solid-js";
-import { X } from "lucide-solid";
 import { FilterBar } from "./FilterBar";
 import { RoleFilter } from "./RoleFilter";
 import { useMultiFilterableItems } from "../hooks/useFilterableItems";
@@ -181,15 +180,6 @@ export const ChampionPickerCore: Component<ChampionPickerCoreProps> = (props) =>
 
     return (
         <div class="relative flex min-h-0 flex-col overflow-hidden rounded-b-lg border border-darius-border bg-darius-card shadow-xl">
-            <button
-                type="button"
-                onClick={() => props.onClose()}
-                class="absolute right-3 top-3 z-10 text-darius-text-secondary hover:text-darius-text-primary"
-                aria-label="Close champion picker"
-            >
-                <X size={18} />
-            </button>
-
             {/* Search */}
             <div class="border-b border-darius-border/60 px-3 pb-2 pt-3">
                 <FilterBar
