@@ -150,10 +150,17 @@ import championData from "../data/champions.json";
 const positionsByName = new Map<string, string[]>(
     championData.champions.map((c) => [c.name, c.positions])
 );
+const idsByName = new Map<string, string>(
+    championData.champions.map((c) => [c.name, c.id])
+);
 
 export const champions = [
 ${entries}
-].map((c) => ({ ...c, positions: positionsByName.get(c.name) ?? [] }));
+].map((c) => ({
+    ...c,
+    id: idsByName.get(c.name) ?? c.name,
+    positions: positionsByName.get(c.name) ?? []
+}));
 
 ${marker}
 

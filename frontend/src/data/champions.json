@@ -1,6 +1,6 @@
 {
-  "version": "16.6.1",
-  "updatedAt": "2026-03-22",
+  "version": "16.13.1",
+  "updatedAt": "2026-07-14",
   "champions": [
     {
       "name": "Aatrox",
@@ -540,6 +540,11 @@
       "positions": [
         "MIDDLE"
       ]
+    },
+    {
+      "name": "Locke",
+      "id": "Locke",
+      "positions": ["MIDDLE"]
     },
     {
       "name": "Lucian",
@@ -1218,7 +1223,7 @@
     {
       "name": "Zaahen",
       "id": "Zaahen",
-      "positions": []
+      "positions": ["TOP", "JUNGLE"]
     },
     {
       "name": "Zac",
