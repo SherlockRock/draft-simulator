@@ -69,7 +69,7 @@ export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
                         props.onClose();
                     }}
                 >
-                    Arrange as grid
+                    Arrange as grid…
                 </button>
             </Show>
             <Show
@@ -85,7 +85,7 @@ export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
                         props.onClose();
                     }}
                 >
-                    Grid settings
+                    Grid settings…
                 </button>
                 <button
                     class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-border"
