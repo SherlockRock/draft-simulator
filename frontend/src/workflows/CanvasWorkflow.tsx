@@ -495,8 +495,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                 (cd) => cd.Draft.id === draft.Draft.id
             );
             const cw = cardWidth(cardLayout());
-            const offsetX =
-                SERIES_PADDING + draftIndex * (cw + SERIES_CARD_GAP);
+            const offsetX = SERIES_PADDING + draftIndex * (cw + SERIES_CARD_GAP);
             callback(group.positionX + offsetX, group.positionY);
         } else {
             callback(draft.positionX, draft.positionY);

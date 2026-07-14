@@ -130,12 +130,7 @@ describe("resolveCopyPlacement", () => {
         expect(placement.group_id).toBe(group.id);
         expect(placement.groupDims).toEqual({
             width: 450,
-            height:
-                40 +
-                cardHeight(layout) +
-                GRID_CELL_GAP +
-                cardHeight(layout) +
-                16
+            height: 40 + cardHeight(layout) + GRID_CELL_GAP + cardHeight(layout) + 16
         });
     });
 
@@ -153,8 +148,7 @@ describe("resolveCopyPlacement", () => {
         const seriesDims = getSeriesGroupDimensions(groupDrafts.length, layout);
 
         expect(resolveCopyPlacement({ draft, group, groupDrafts, layout })).toEqual({
-            positionX:
-                300 + SERIES_PADDING + cardWidth(layout) + SERIES_CARD_GAP,
+            positionX: 300 + SERIES_PADDING + cardWidth(layout) + SERIES_CARD_GAP,
             positionY: 400 + seriesDims.height + GRID_CELL_GAP,
             group_id: null
         });

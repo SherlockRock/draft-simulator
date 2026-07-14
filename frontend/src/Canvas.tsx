@@ -63,12 +63,7 @@ import {
     ConnectionPreview,
     GroupConnectionPreview
 } from "./components/Connections";
-import {
-    cardHeight,
-    cardWidth,
-    SERIES_CARD_GAP,
-    SERIES_PADDING
-} from "./utils/helpers";
+import { cardHeight, cardWidth, SERIES_CARD_GAP, SERIES_PADDING } from "./utils/helpers";
 import {
     localNewDraft,
     localEditDraft,
@@ -2536,8 +2531,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 (cd) => cd.Draft.id === draft.Draft.id
             );
             const cw = cardWidth(props.cardLayout());
-            const offsetX =
-                SERIES_PADDING + draftIndex * (cw + SERIES_CARD_GAP);
+            const offsetX = SERIES_PADDING + draftIndex * (cw + SERIES_CARD_GAP);
             navigateToDraft(group.positionX + offsetX, group.positionY);
         } else {
             navigateToDraft(draft.positionX, draft.positionY);
