@@ -164,6 +164,11 @@ const CanvasGroup = sequelize.define("CanvasGroup", {
     allowNull: true,
     references: { model: "Teams", key: "id" },
   },
+  parent_group_id: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: { model: "CanvasGroups", key: "id" },
+  },
   metadata: {
     type: DataTypes.JSONB,
     defaultValue: {},
