@@ -246,7 +246,11 @@ export const buildGridMetadata = (
 ): GridMetadata => ({
     layout: "grid",
     gridCols: settings.gridCols,
-    colLabels: mergeLabels(existing.colLabels ?? [], settings.colLabels, settings.gridCols),
+    colLabels: mergeLabels(
+        existing.colLabels ?? [],
+        settings.colLabels,
+        settings.gridCols
+    ),
     rowLabels: mergeLabels(
         existing.rowLabels ?? [],
         settings.rowLabels,
