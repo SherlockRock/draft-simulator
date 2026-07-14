@@ -2,6 +2,7 @@ import { CanvasDraft, Connection, CanvasGroup, Viewport, AnchorType } from "./sc
 import { getLocalCanvas, saveLocalCanvas, LocalCanvas } from "./localCanvasStore";
 import type { CardLayout } from "./canvasCardLayout";
 import type { CanvasGroupMetadata, DraftPositionUpdate } from "@draft-sim/shared-types";
+import { getManualSeriesGameDefaults } from "./manualSeriesDefaults";
 
 // Helper to safely cast anchor type with default
 const toAnchorType = (
@@ -372,6 +373,7 @@ export const localConvertGroupToSeries = (data: {
             throw new Error("Group not found");
         }
 
+        const isInitialConversion = group.type === "custom";
         group.name = data.name || group.name;
         group.type = "series";
         group.metadata = {
@@ -396,6 +398,9 @@ export const localConvertGroupToSeries = (data: {
 
         for (let i = 0; i < Math.min(groupDrafts.length, data.length); i += 1) {
             groupDrafts[i].Draft.seriesIndex = i;
+            if (isInitialConversion) {
+                Object.assign(groupDrafts[i].Draft, getManualSeriesGameDefaults(i));
+            }
         }
         for (let i = data.length; i < groupDrafts.length; i += 1) {
             groupDrafts[i].Draft.seriesIndex = null;
@@ -417,7 +422,8 @@ export const localConvertGroupToSeries = (data: {
                     name: `${group.name} - Game ${i + 1}`,
                     picks: Array(20).fill(""),
                     type: "canvas",
-                    seriesIndex: i
+                    seriesIndex: i,
+                    ...getManualSeriesGameDefaults(i)
                 }
             });
         }

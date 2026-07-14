@@ -102,11 +102,6 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
         return drafts.length > 0 && drafts.every((d) => d.Draft.completed);
     });
 
-    const seriesLengthLabel = createMemo(() => {
-        const len = props.group.metadata.length ?? props.drafts.length;
-        return `Bo${len}`;
-    });
-
     const versusTypeLabel = createMemo(() => {
         const type = props.group.metadata.seriesType;
         if (!type) return null;
@@ -214,26 +209,6 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    {/* Series Length Badge */}
-                    <span
-                        class="rounded px-2 py-0.5 text-xs"
-                        classList={{
-                            "bg-darius-purple/20 text-darius-purple-bright":
-                                (props.group.metadata.length ?? props.drafts.length) ===
-                                1,
-                            "bg-darius-ember/20 text-darius-ember":
-                                (props.group.metadata.length ?? props.drafts.length) ===
-                                3,
-                            "bg-darius-crimson/20 text-darius-crimson":
-                                (props.group.metadata.length ?? props.drafts.length) ===
-                                5,
-                            "bg-darius-purple-bright/20 text-darius-purple-bright":
-                                (props.group.metadata.length ?? props.drafts.length) === 7
-                        }}
-                    >
-                        {seriesLengthLabel()}
-                    </span>
-
                     {/* Versus Type Badge */}
                     <Show when={versusTypeLabel()}>
                         <span

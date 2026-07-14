@@ -21,6 +21,9 @@ const {
   generateUniqueCanvasGroupName,
 } = require("../helpers.js");
 const { Op } = require("sequelize");
+const {
+  getManualSeriesGameDefaults,
+} = require("../utils/manualSeriesDefaults");
 
 const MIN_SERIES_LENGTH = 1;
 const MAX_SERIES_LENGTH = 7;
@@ -154,6 +157,7 @@ async function syncManualSeriesLength({
           public: false,
           description: "",
           picks: Array(20).fill(""),
+          ...getManualSeriesGameDefaults(i),
         },
         { transaction },
       );
@@ -1212,6 +1216,7 @@ router.post(
             versus_draft_id: versusDraft.id,
             seriesIndex: i,
             owner_id: canvasDraft.Draft.owner_id || req.user.id,
+            ...getManualSeriesGameDefaults(i),
           },
           { transaction: t },
         );
@@ -1251,6 +1256,7 @@ router.post(
             public: false,
             description: "",
             picks: Array(20).fill(""),
+            ...getManualSeriesGameDefaults(i),
           },
           { transaction: t },
         );
