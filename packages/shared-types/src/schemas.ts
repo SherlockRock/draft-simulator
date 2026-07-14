@@ -108,6 +108,7 @@ export const CanvasGroupSchema = z.object({
   width: z.number().nullable().optional(),
   height: z.number().nullable().optional(),
   versus_draft_id: z.string().nullable().optional(),
+  parent_group_id: z.string().nullable().optional(),
   metadata: CanvasGroupMetadataSchema,
   isInProgress: z.boolean().optional(),
   CanvasDrafts: z.array(CanvasDraftSchema).optional(),
