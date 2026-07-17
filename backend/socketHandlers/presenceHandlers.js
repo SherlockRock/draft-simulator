@@ -11,7 +11,9 @@ function getPresenceUser(socket) {
   if (!row?.id) return null;
   return {
     userId: row.id,
-    displayName: row.display_name ?? row.name,
+    // Non-empty fallback: clients validate the whole snapshot at once, so a
+    // single blank name must not be able to drop presence for everyone.
+    displayName: row.display_name || row.name || "Unknown",
     picture: row.picture ?? null,
   };
 }
@@ -23,18 +25,25 @@ function getPresenceUser(socket) {
 // membership IS the ACL for high-frequency presence relays; revocation must
 // eject sockets from the room (slice 3).
 function setupPresenceHandlers(socket, store, wrapSocketHandler) {
+  // Canvases this socket currently wants to be in. joinCanvas re-checks the
+  // set after its async ACL lookup: a leaveCanvas processed while the check
+  // was in flight cancels the join instead of leaving ghost membership.
+  const wantedCanvases = new Set();
+
   wrapSocketHandler(socket, "joinCanvas", async (data) => {
     const canvasId = data?.canvasId;
     try {
-      if (!canvasId) {
+      if (typeof canvasId !== "string" || !canvasId) {
         throw new InvalidMutationError("canvasId is required");
       }
+      wantedCanvases.add(canvasId);
       const user = getPresenceUser(socket);
       await assertCanvasAccess({
         userId: user?.userId ?? null,
         canvasId,
         level: "view",
       });
+      if (!wantedCanvases.has(canvasId)) return;
 
       socket.join(canvasId);
       const newlyPresent = store.join(canvasId, user, socket.id);
@@ -60,8 +69,9 @@ function setupPresenceHandlers(socket, store, wrapSocketHandler) {
 
   wrapSocketHandler(socket, "leaveCanvas", async (data) => {
     const canvasId = data?.canvasId;
-    if (!canvasId) return;
+    if (typeof canvasId !== "string" || !canvasId) return;
 
+    wantedCanvases.delete(canvasId);
     socket.leave(canvasId);
     const user = getPresenceUser(socket);
     if (!user) return;

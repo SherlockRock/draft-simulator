@@ -21,6 +21,7 @@ const navigatorRoutes = require("./routes/navigator");
 const savedPoolsRoutes = require("./routes/savedPools");
 const { router: scoutingRouter } = require("./routes/scouting");
 const User = require("./models/User");
+const Draft = require("./models/Draft");
 const setupAssociations = require("./models/associations");
 const socketService = require("./middleware/socketService");
 const { setupVersusHandlers } = require("./socketHandlers/versusHandlers");
@@ -185,6 +186,12 @@ async function main() {
     setupPresenceHandlers(socket, presenceStore, wrapSocketHandler);
 
     wrapSocketHandler(socket, "joinRoom", async (room) => {
+      // Legacy unauthenticated join is for draft rooms only. Canvas rooms
+      // (named by canvasId) are ACL-gated behind joinCanvas and carry
+      // presence identities, so refuse anything that isn't a known draft.
+      if (typeof room !== "string" || !(await Draft.findByPk(room))) {
+        return;
+      }
       socket.join(room);
       console.log(`${socket.id} joined room: ${room}`);
       const roomSize = await socketService.getRoomSize(room);

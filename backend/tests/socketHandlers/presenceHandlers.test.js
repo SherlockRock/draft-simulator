@@ -155,6 +155,50 @@ describe("setupPresenceHandlers", () => {
     );
   });
 
+  it("joinCanvas with a non-string canvasId is an INVALID_MUTATION", async () => {
+    const { socket, handlers } = installHandlers();
+
+    await handlers.get("joinCanvas")({ canvasId: { nested: true } });
+
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.emit).toHaveBeenCalledWith(
+      "canvasMutationError",
+      expect.objectContaining({ event: "joinCanvas", code: "INVALID_MUTATION" }),
+    );
+  });
+
+  it("displayName falls back to 'Unknown' when display_name and name are blank", async () => {
+    const { socket, handlers } = installHandlers({
+      user: { dataValues: { ...ALICE_ROW, display_name: null, name: "" } },
+    });
+
+    await handlers.get("joinCanvas")({ canvasId: "c-1" });
+
+    expect(socket.emit).toHaveBeenCalledWith("presenceSnapshot", {
+      canvasId: "c-1",
+      users: [{ ...ALICE_PRESENCE, displayName: "Unknown" }],
+    });
+  });
+
+  it("a leaveCanvas processed during the pending access check cancels the join", async () => {
+    let releaseAccessCheck;
+    vi.spyOn(UserCanvas, "findOne").mockReturnValue(
+      new Promise((resolve) => {
+        releaseAccessCheck = () => resolve({ permissions: "view" });
+      }),
+    );
+    const { socket, handlers, roomEmit, store } = installHandlers();
+
+    const pendingJoin = handlers.get("joinCanvas")({ canvasId: "c-1" });
+    await handlers.get("leaveCanvas")({ canvasId: "c-1" });
+    releaseAccessCheck();
+    await pendingJoin;
+
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(roomEmit).not.toHaveBeenCalled();
+    expect(store.snapshot("c-1")).toEqual([]);
+  });
+
   it("a second socket of the same user joins the room without re-broadcasting presenceJoin", async () => {
     const store = createPresenceStore();
     const first = installHandlers({ id: "sock-1" }, store);
