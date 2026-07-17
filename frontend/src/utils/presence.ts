@@ -23,6 +23,12 @@ export const presenceLeaveSchema = z.object({
     userId: z.string()
 });
 
+// Server-initiated ejection: the user's canvas access was revoked while
+// they were connected, and their sockets were forced out of the room.
+export const canvasAccessRevokedSchema = z.object({
+    canvasId: z.string()
+});
+
 // Cursor positions travel in WORLD coordinates; each client transforms them
 // through its own pan/zoom. userId is stamped by the server, never trusted
 // from the sending client.

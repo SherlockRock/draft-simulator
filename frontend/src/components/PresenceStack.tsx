@@ -5,7 +5,8 @@ import {
     createSignal,
     createEffect,
     createMemo,
-    onCleanup
+    onCleanup,
+    type JSX
 } from "solid-js";
 import { useUser } from "../userProvider";
 import { PresenceUser, presenceColor } from "../utils/presence";
@@ -40,16 +41,48 @@ const PresenceAvatar: Component<{
     );
 };
 
-// Top-right presence surface: overlapping avatars + count, with a read-only
-// viewer list popover. This stack anchors the unified Share popover in a
-// later slice.
-export const PresenceStack: Component<{ users: PresenceUser[] }> = (props) => {
+// Top-right presence surface: overlapping avatars + count. When the unified
+// Share popover plumbing is provided, the stack is its second anchor (same
+// workflow-owned content as the sidebar Share button); otherwise it falls
+// back to the legacy read-only viewer list.
+export const PresenceStack: Component<{
+    users: PresenceUser[];
+    isShareOpen?: boolean;
+    onOpenShare?: () => void;
+    onCloseShare?: () => void;
+    shareContent?: JSX.Element;
+}> = (props) => {
     const accessor = useUser();
     const [user] = accessor();
 
-    const [isOpen, setIsOpen] = createSignal(false);
+    const [internalOpen, setInternalOpen] = createSignal(false);
     let buttonRef: HTMLButtonElement | undefined;
     let popoverRef: HTMLDivElement | undefined;
+
+    // Controlled by the workflow's share-anchor state when both handlers
+    // exist; uncontrolled (legacy viewer list) otherwise.
+    const isControlled = () => !!(props.onOpenShare && props.onCloseShare);
+    const isOpen = () => (isControlled() ? (props.isShareOpen ?? false) : internalOpen());
+
+    const toggleOpen = () => {
+        if (isControlled()) {
+            if (isOpen()) {
+                props.onCloseShare?.();
+            } else {
+                props.onOpenShare?.();
+            }
+        } else {
+            setInternalOpen((open) => !open);
+        }
+    };
+
+    const close = () => {
+        if (isControlled()) {
+            props.onCloseShare?.();
+        } else {
+            setInternalOpen(false);
+        }
+    };
 
     const currentUserId = () => user()?.id;
 
@@ -77,7 +110,7 @@ export const PresenceStack: Component<{ users: PresenceUser[] }> = (props) => {
                 return;
             }
 
-            setIsOpen(false);
+            close();
         };
 
         document.addEventListener("mousedown", handlePointerDown);
@@ -90,7 +123,7 @@ export const PresenceStack: Component<{ users: PresenceUser[] }> = (props) => {
                 <button
                     ref={buttonRef}
                     type="button"
-                    onClick={() => setIsOpen((open) => !open)}
+                    onClick={toggleOpen}
                     aria-label={`${sortedUsers().length} viewing this canvas`}
                     class="flex cursor-pointer items-center gap-2 rounded-full border border-darius-border bg-darius-card/90 py-1 pl-1 pr-3 shadow-lg backdrop-blur-sm transition-colors hover:border-darius-purple-bright/40"
                 >
@@ -110,44 +143,61 @@ export const PresenceStack: Component<{ users: PresenceUser[] }> = (props) => {
                 <Show when={isOpen()}>
                     <div
                         ref={popoverRef}
-                        class="absolute right-0 top-full mt-2 w-64 rounded-xl border border-darius-border bg-darius-bg p-2 shadow-xl"
+                        class="absolute right-0 top-full mt-2 rounded-xl border border-darius-border bg-darius-bg shadow-xl"
+                        classList={{
+                            "w-80 p-3": isControlled(),
+                            "w-64 p-2": !isControlled()
+                        }}
                     >
-                        <div class="mb-1 px-2 pt-1 text-[11px] font-semibold uppercase tracking-wider text-darius-text-secondary">
-                            Viewing now — {sortedUsers().length}
-                        </div>
-                        <div class="custom-scrollbar max-h-64 space-y-0.5 overflow-y-auto">
-                            <For each={sortedUsers()}>
-                                {(presenceUser) => (
-                                    <div class="flex items-center gap-2.5 rounded-md px-2 py-1.5">
-                                        <PresenceAvatar
-                                            user={presenceUser}
-                                            sizeClass="h-6 w-6 shrink-0"
-                                        />
-                                        <span class="min-w-0 truncate text-sm text-darius-text-primary">
-                                            {presenceUser.displayName}
-                                        </span>
-                                        <Show
-                                            when={presenceUser.userId === currentUserId()}
-                                        >
-                                            <span class="text-xs text-darius-text-secondary">
-                                                (you)
-                                            </span>
-                                        </Show>
-                                        <span
-                                            class="ml-auto h-1.5 w-1.5 shrink-0 rounded-full"
-                                            style={{
-                                                "background-color": presenceColor(
-                                                    presenceUser.userId
-                                                )
-                                            }}
-                                        />
-                                    </div>
-                                )}
-                            </For>
-                        </div>
+                        <Show when={isControlled()}>{props.shareContent}</Show>
+                        <Show when={!isControlled()}>
+                            <LegacyViewerList
+                                users={sortedUsers()}
+                                currentUserId={currentUserId()}
+                            />
+                        </Show>
                     </div>
                 </Show>
             </div>
         </Show>
+    );
+};
+
+const LegacyViewerList: Component<{
+    users: PresenceUser[];
+    currentUserId: string | undefined;
+}> = (props) => {
+    return (
+        <>
+            <div class="mb-1 px-2 pt-1 text-[11px] font-semibold uppercase tracking-wider text-darius-text-secondary">
+                Viewing now — {props.users.length}
+            </div>
+            <div class="custom-scrollbar max-h-64 space-y-0.5 overflow-y-auto">
+                <For each={props.users}>
+                    {(presenceUser) => (
+                        <div class="flex items-center gap-2.5 rounded-md px-2 py-1.5">
+                            <PresenceAvatar
+                                user={presenceUser}
+                                sizeClass="h-6 w-6 shrink-0"
+                            />
+                            <span class="min-w-0 truncate text-sm text-darius-text-primary">
+                                {presenceUser.displayName}
+                            </span>
+                            <Show when={presenceUser.userId === props.currentUserId}>
+                                <span class="text-xs text-darius-text-secondary">
+                                    (you)
+                                </span>
+                            </Show>
+                            <span
+                                class="ml-auto h-1.5 w-1.5 shrink-0 rounded-full"
+                                style={{
+                                    "background-color": presenceColor(presenceUser.userId)
+                                }}
+                            />
+                        </div>
+                    )}
+                </For>
+            </div>
+        </>
     );
 };

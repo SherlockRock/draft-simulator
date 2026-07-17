@@ -31,8 +31,8 @@ import { VersionFooter } from "../components/VersionFooter";
 import CanvasSelector from "../components/CanvasSelector";
 import { Dialog } from "../components/Dialog";
 import { CanvasSettingsDialog } from "../components/CanvasSettingsDialog";
+import { SharePopoverContent } from "../components/SharePopover";
 import { FlowBackLink } from "../components/FlowBackLink";
-import { Check, Copy } from "lucide-solid";
 import toast from "solid-toast";
 import { CanvasGroup, CanvasDraft } from "../utils/schemas";
 import { CanvasAccessDenied, AccessErrorType } from "../components/CanvasAccessDenied";
@@ -44,7 +44,7 @@ import {
     localUpdateCardLayout,
     localUpdateGroup
 } from "../utils/useLocalCanvasMutations";
-import { CanvasContext } from "../contexts/CanvasContext";
+import { CanvasContext, type ShareAnchor } from "../contexts/CanvasContext";
 import { CanvasSocketProvider } from "../providers/CanvasSocketProvider";
 import type { CardLayout } from "../utils/canvasCardLayout";
 import { resolveChampion } from "../utils/constants";
@@ -241,8 +241,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         ((id: string | null) => void) | null
     >(null);
     const [isManageUsersOpen, setIsManageUsersOpen] = createSignal(false);
-    const [isSharePopperOpen, setIsSharePopperOpen] = createSignal(false);
-    const [copied, setCopied] = createSignal("");
+    const [shareAnchor, setShareAnchor] = createSignal<ShareAnchor | null>(null);
     const [accessError, setAccessError] = createSignal<{
         type: AccessErrorType;
         canvasId: string;
@@ -323,16 +322,25 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         );
     };
 
+    const isLocalMode = () => canvasId() === "local";
+
+    // The unified Share popover shows the access list to everyone with
+    // canvas access; share links are admin-only, so those queries stay
+    // gated on hasAdminPermissions.
     const usersQuery = useQuery(() => ({
         queryKey: ["canvasUsers", params.id],
-        enabled: isManageUsersOpen() && !!params.id,
+        enabled: shareAnchor() !== null && !!params.id && !isLocalMode(),
         queryFn: () => fetchCanvasUsers(canvasId())
     }));
 
     const viewShareLinkQuery = useQuery(() => ({
         queryKey: ["canvasShareLink", params.id, "view"],
         queryFn: () => generateCanvasShareLink(canvasId(), "view"),
-        enabled: isSharePopperOpen() && !!params.id && hasAdminPermissions(),
+        enabled:
+            shareAnchor() !== null &&
+            !!params.id &&
+            !isLocalMode() &&
+            hasAdminPermissions(),
         staleTime: 5 * 60 * 1000,
         retry: false
     }));
@@ -340,16 +348,20 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     const editShareLinkQuery = useQuery(() => ({
         queryKey: ["canvasShareLink", params.id, "edit"],
         queryFn: () => generateCanvasShareLink(canvasId(), "edit"),
-        enabled: isSharePopperOpen() && !!params.id && hasAdminPermissions(),
+        enabled:
+            shareAnchor() !== null &&
+            !!params.id &&
+            !isLocalMode() &&
+            hasAdminPermissions(),
         staleTime: 5 * 60 * 1000,
         retry: false
     }));
 
     createEffect(() => {
         const hasError = viewShareLinkQuery.isError || editShareLinkQuery.isError;
-        if (hasError && isSharePopperOpen()) {
+        if (hasError && shareAnchor() !== null) {
             toast.error("Failed to generate share links. Only admins can share.");
-            setIsSharePopperOpen(false);
+            setShareAnchor(null);
         }
     });
 
@@ -439,8 +451,6 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
             toast.error(`Error deleting draft: ${error.message}`);
         }
     }));
-
-    const isLocalMode = () => canvasId() === "local";
 
     const handleSidebarDraftContextMenu = (draft: CanvasDraft, e: MouseEvent) => {
         e.preventDefault();
@@ -574,27 +584,11 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     };
 
     const closeSharePopper = () => {
-        setIsSharePopperOpen(false);
+        setShareAnchor(null);
     };
 
-    const openSharePopper = () => {
-        setIsSharePopperOpen(true);
-    };
-
-    const handleCopyViewLink = () => {
-        if (viewShareLinkQuery.data) {
-            navigator.clipboard.writeText(viewShareLinkQuery.data);
-            setCopied("view");
-            setTimeout(() => setCopied(""), 2000);
-        }
-    };
-
-    const handleCopyEditLink = () => {
-        if (editShareLinkQuery.data) {
-            navigator.clipboard.writeText(editShareLinkQuery.data);
-            setCopied("edit");
-            setTimeout(() => setCopied(""), 2000);
-        }
+    const openSharePopper = (anchor: ShareAnchor) => {
+        setShareAnchor(anchor);
     };
 
     return (
@@ -624,75 +618,27 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                     setEditingDraftIdCallback,
                     setSetEditingDraftIdCallback,
                     openSettings: () => setIsManageUsersOpen(true),
-                    isShareOpen: isSharePopperOpen,
+                    shareAnchor: shareAnchor,
                     openShare: openSharePopper,
                     closeSharePopper: closeSharePopper,
                     sharePopperContent: () =>
-                        isSharePopperOpen() ? (
-                            <div class="space-y-2">
-                                <div>
-                                    <p class="mb-0.5 text-xs font-medium text-darius-text-secondary">
-                                        View Access
-                                    </p>
-                                    <Show
-                                        when={!viewShareLinkQuery.isPending}
-                                        fallback={
-                                            <div class="text-xs text-darius-text-secondary">
-                                                Loading...
-                                            </div>
-                                        }
-                                    >
-                                        <div class="flex items-center gap-2">
-                                            <div class="selection-purple h-[26px] w-0 flex-grow cursor-text select-all truncate rounded-md border border-darius-border bg-darius-bg px-2 py-1 text-xs text-darius-text-primary">
-                                                {viewShareLinkQuery.data || ""}
-                                            </div>
-                                            <button
-                                                onClick={handleCopyViewLink}
-                                                class="shrink-0 cursor-pointer rounded-md bg-darius-purple p-1.5 text-darius-text-primary transition-colors hover:bg-darius-purple-bright disabled:cursor-not-allowed disabled:opacity-50"
-                                                disabled={!viewShareLinkQuery.data}
-                                            >
-                                                <Show
-                                                    when={copied() !== "view"}
-                                                    fallback={<Check size={14} />}
-                                                >
-                                                    <Copy size={14} />
-                                                </Show>
-                                            </button>
-                                        </div>
-                                    </Show>
-                                </div>
-                                <div>
-                                    <p class="mb-0.5 text-xs font-medium text-darius-text-secondary">
-                                        Edit Access
-                                    </p>
-                                    <Show
-                                        when={!editShareLinkQuery.isPending}
-                                        fallback={
-                                            <div class="text-xs text-darius-text-secondary">
-                                                Loading...
-                                            </div>
-                                        }
-                                    >
-                                        <div class="flex items-center gap-2">
-                                            <div class="selection-purple h-[26px] w-0 flex-grow cursor-text select-all truncate rounded-md border border-darius-border bg-darius-bg px-2 py-1 text-xs text-darius-text-primary">
-                                                {editShareLinkQuery.data || ""}
-                                            </div>
-                                            <button
-                                                onClick={handleCopyEditLink}
-                                                class="shrink-0 cursor-pointer rounded-md bg-darius-purple p-1.5 text-darius-text-primary transition-colors hover:bg-darius-purple-bright disabled:cursor-not-allowed disabled:opacity-50"
-                                                disabled={!editShareLinkQuery.data}
-                                            >
-                                                <Show
-                                                    when={copied() !== "edit"}
-                                                    fallback={<Check size={14} />}
-                                                >
-                                                    <Copy size={14} />
-                                                </Show>
-                                            </button>
-                                        </div>
-                                    </Show>
-                                </div>
-                            </div>
+                        shareAnchor() !== null ? (
+                            <SharePopoverContent
+                                isAdmin={hasAdminPermissions()}
+                                usersQuery={usersQuery}
+                                viewShareLinkQuery={viewShareLinkQuery}
+                                editShareLinkQuery={editShareLinkQuery}
+                                currentUserId={user()?.id}
+                                onPermissionChange={(userId, permission) =>
+                                    updatePermissionMutation.mutate({
+                                        userId,
+                                        permissions: permission
+                                    })
+                                }
+                                onRemoveUser={(userId) =>
+                                    removeUserMutation.mutate(userId)
+                                }
+                            />
                         ) : null
                 }}
             >
@@ -708,16 +654,6 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                     name: canvas()?.name ?? "",
                                     description: canvas()?.description,
                                     icon: canvas()?.icon
-                                }}
-                                usersQuery={usersQuery}
-                                onPermissionChange={(userId, permission) =>
-                                    updatePermissionMutation.mutate({
-                                        userId,
-                                        permissions: permission
-                                    })
-                                }
-                                onRemoveUser={(userId) => {
-                                    removeUserMutation.mutate(userId);
                                 }}
                                 onUpdateCanvas={(data) =>
                                     updateCanvasMutation.mutateAsync(data)

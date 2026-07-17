@@ -276,7 +276,15 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
                         />
                     </Show>
                 </SidebarGroup>
+            </Show>
 
+            {/* The Share button is available to everyone with access — the
+                unified popover is read-only for non-admins. */}
+            <Show
+                when={
+                    props.hasEditPermissions || (props.onOpenShare && props.onCloseShare)
+                }
+            >
                 <SidebarGroup>
                     <Show when={props.hasEditPermissions}>
                         <SidebarButton
@@ -285,13 +293,7 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
                             onClick={props.onImport}
                         />
                     </Show>
-                    <Show
-                        when={
-                            props.hasAdminPermissions &&
-                            props.onOpenShare &&
-                            props.onCloseShare
-                        }
-                    >
+                    <Show when={props.onOpenShare && props.onCloseShare}>
                         <div class="relative" ref={shareButtonRef}>
                             <SidebarButton
                                 icon={Share2}
@@ -308,7 +310,7 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
                             <Show when={props.isShareOpen && props.sharePopperContent}>
                                 <div
                                     ref={sharePopoverRef}
-                                    class="absolute left-full top-1/2 z-50 ml-3 w-[220px] -translate-y-1/2 rounded-xl border border-darius-border bg-darius-card shadow-lg"
+                                    class="absolute left-full top-1/2 z-50 ml-3 w-80 -translate-y-1/2 rounded-xl border border-darius-border bg-darius-card shadow-lg"
                                 >
                                     <button
                                         type="button"

@@ -20,7 +20,7 @@ const CanvasDetailView: Component = () => {
         setCardLayout,
         setCreateDraftCallback,
         openSettings,
-        isShareOpen,
+        shareAnchor,
         openShare,
         closeSharePopper,
         sharePopperContent
@@ -128,7 +128,7 @@ const CanvasDetailView: Component = () => {
                     viewport={viewport}
                     setViewport={setViewport}
                     onSettings={openSettings}
-                    isShareOpen={isShareOpen()}
+                    shareAnchor={shareAnchor()}
                     onOpenShare={openShare}
                     onCloseShare={closeSharePopper}
                     sharePopperContent={sharePopperContent()}

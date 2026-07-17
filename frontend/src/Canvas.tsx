@@ -94,7 +94,7 @@ import { DeleteGroupDialog } from "./components/DeleteGroupDialog";
 import { GroupSettingsDialog } from "./components/GroupDisabledChampionsDialog";
 import { DraftContextMenu } from "./components/DraftContextMenu";
 import { GroupContextMenu } from "./components/GroupContextMenu";
-import { useCanvasContext } from "./contexts/CanvasContext";
+import { useCanvasContext, type ShareAnchor } from "./contexts/CanvasContext";
 import { useCanvasSocket } from "./providers/CanvasSocketProvider";
 import { useUser } from "./userProvider";
 import { createCursorThrottle } from "./utils/presence";
@@ -141,10 +141,12 @@ type CanvasComponentProps = {
     setCardLayout: (val: CardLayout) => void;
     viewport: Accessor<Viewport>;
     setViewport: Setter<Viewport>;
-    // Settings/share controls (admin only)
+    // Settings (admin only) / unified Share popover controls. The popover
+    // has two anchors — the sidebar Share button and the presence stack —
+    // showing the same workflow-owned content.
     onSettings?: () => void;
-    isShareOpen?: boolean;
-    onOpenShare?: () => void;
+    shareAnchor?: ShareAnchor | null;
+    onOpenShare?: (anchor: ShareAnchor) => void;
     onCloseShare?: () => void;
     sharePopperContent?: JSX.Element;
 };
@@ -1150,14 +1152,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             cursorTracker.handleCursorMove(rawData, id);
         // The provider owns the loud validation of presenceLeave; this
         // second listener only prunes the departed user's cursor.
+        // cursorLeave (same payload shape) prunes through the same path:
+        // it fires when a user leaves the canvas *view* while staying in
+        // the room, e.g. drilling into a child draft.
         const onCursorPresenceLeave = (rawData: unknown) =>
             cursorTracker.handlePresenceLeave(rawData, id);
 
         socket.on("cursorMove", onCursorMove);
         socket.on("presenceLeave", onCursorPresenceLeave);
+        socket.on("cursorLeave", onCursorPresenceLeave);
         onCleanup(() => {
             socket.off("cursorMove", onCursorMove);
             socket.off("presenceLeave", onCursorPresenceLeave);
+            socket.off("cursorLeave", onCursorPresenceLeave);
             cursorTracker.reset();
         });
     });
@@ -1820,8 +1827,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         // A trailing send queued on the previous canvas must not fire tagged
         // with the next canvas's id (navigation keeps this component mounted
         // and the emitter reads canvasId() at fire time).
-        canvasId();
-        onCleanup(() => cursorEmitter.cancel());
+        const id = canvasId();
+        onCleanup(() => {
+            cursorEmitter.cancel();
+            // Leaving the canvas view while staying in the canvas room
+            // (draft drilldown, canvas-to-canvas nav): tell receivers to
+            // prune this cursor now instead of waiting out the idle fade.
+            const socket = socketAccessor();
+            if (id && socket && connectionStatus() === "connected") {
+                socket.emit("cursorLeave", { canvasId: id });
+            }
+        });
     });
 
     const onCursorMouseMove = (e: MouseEvent) => {
@@ -3158,8 +3174,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     hasEditPermissions={canEdit()}
                     hasAdminPermissions={hasAdminPermissions() && !isLocalMode()}
                     onSettings={props.onSettings}
-                    isShareOpen={props.isShareOpen}
-                    onOpenShare={props.onOpenShare}
+                    isShareOpen={props.shareAnchor === "sidebar"}
+                    onOpenShare={
+                        props.onOpenShare && !isLocalMode()
+                            ? () => props.onOpenShare?.("sidebar")
+                            : undefined
+                    }
                     onCloseShare={props.onCloseShare}
                     sharePopperContent={props.sharePopperContent}
                 />
@@ -3171,7 +3191,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         users={presenceUsers()}
                         viewport={props.viewport}
                     />
-                    <PresenceStack users={presenceUsers()} />
+                    <PresenceStack
+                        users={presenceUsers()}
+                        isShareOpen={props.shareAnchor === "stack"}
+                        onOpenShare={
+                            props.onOpenShare
+                                ? () => props.onOpenShare?.("stack")
+                                : undefined
+                        }
+                        onCloseShare={props.onCloseShare}
+                        shareContent={props.sharePopperContent}
+                    />
                 </Show>
                 <Show when={isLocalMode()}>
                     <div class="absolute right-4 top-4 z-40 flex items-center gap-2 rounded-lg border border-yellow-600/30 bg-yellow-900/40 px-3 py-1.5 text-xs text-yellow-300 shadow-lg backdrop-blur-sm">

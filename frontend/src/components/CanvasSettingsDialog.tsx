@@ -1,13 +1,12 @@
-import { Component, createSignal, createEffect, For, Show } from "solid-js";
-import { Trash2, Plus, AlertTriangle } from "lucide-solid";
-import { UseQueryResult } from "@tanstack/solid-query";
-import { CanvasUser } from "../utils/schemas";
+import { Component, createSignal, createEffect, Show } from "solid-js";
+import { Plus } from "lucide-solid";
 import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./Dialog";
-import { StyledSelect } from "./StyledSelect";
 import { IconPicker } from "./IconPicker";
 import { IconDisplay } from "./IconDisplay";
 
-type TabType = "details" | "users" | "delete";
+// User management lives in the unified Share popover (SharePopover.tsx);
+// this dialog covers only the canvas itself: name, description, icon, delete.
+type TabType = "details" | "delete";
 
 interface CanvasSettingsDialogProps {
     canvas: {
@@ -16,9 +15,6 @@ interface CanvasSettingsDialogProps {
         description?: string | null;
         icon?: string | null;
     };
-    usersQuery: UseQueryResult<CanvasUser[], Error>;
-    onPermissionChange: (userId: string, permission: string) => void;
-    onRemoveUser: (userId: string) => void;
     onUpdateCanvas: (data: {
         name: string;
         description?: string;
@@ -43,7 +39,6 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
     // UI state
     const [showIconPicker, setShowIconPicker] = createSignal(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = createSignal(false);
-    const [userToRemove, setUserToRemove] = createSignal<string | null>(null);
     const [isSaving, setIsSaving] = createSignal(false);
     const [internalIsDeleting, setInternalIsDeleting] = createSignal(false);
     const [errors, setErrors] = createSignal<Record<string, string>>({});
@@ -59,7 +54,6 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
             setIcon(props.canvas.icon ?? "");
             setActiveTab("details");
             setShowDeleteConfirm(false);
-            setUserToRemove(null);
             setErrors({});
         }
     });
@@ -165,13 +159,6 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                             onClick={() => setActiveTab("details")}
                         >
                             Details
-                        </button>
-                        <button
-                            type="button"
-                            class={tabClasses("users")}
-                            onClick={() => setActiveTab("users")}
-                        >
-                            Users
                         </button>
                         <button
                             type="button"
@@ -326,195 +313,6 @@ export const CanvasSettingsDialog: Component<CanvasSettingsDialogProps> = (props
                                 currentIcon={icon()}
                                 theme="purple"
                             />
-                        </Show>
-
-                        {/* Users Tab */}
-                        <Show when={activeTab() === "users"}>
-                            <div class="flex min-h-0 flex-1 flex-col">
-                                <div class="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto pr-2">
-                                    <Show when={props.usersQuery.isLoading}>
-                                        <div class="text-center text-darius-text-secondary">
-                                            Loading users...
-                                        </div>
-                                    </Show>
-                                    <Show when={props.usersQuery.isError}>
-                                        <div class="text-center text-red-400">
-                                            Failed to load users
-                                        </div>
-                                    </Show>
-                                    <For each={props.usersQuery.data}>
-                                        {(user) => {
-                                            const isOwner = () => user.isOwner;
-                                            const isConfirming = () =>
-                                                userToRemove() === user.id;
-
-                                            return (
-                                                <div
-                                                    class="rounded p-2 transition-colors"
-                                                    classList={{
-                                                        "bg-darius-card-hover":
-                                                            !isConfirming(),
-                                                        "bg-gradient-to-r from-darius-crimson/10 to-darius-card border border-darius-crimson/30":
-                                                            isConfirming()
-                                                    }}
-                                                >
-                                                    {/* Normal state */}
-                                                    <Show when={!isConfirming()}>
-                                                        <div class="flex items-center justify-between">
-                                                            <div class="flex items-center gap-2">
-                                                                {user.picture && (
-                                                                    <img
-                                                                        src={user.picture}
-                                                                        class="h-8 w-8 rounded-full"
-                                                                        alt={
-                                                                            user.display_name ??
-                                                                            user.name
-                                                                        }
-                                                                    />
-                                                                )}
-                                                                <div>
-                                                                    <div class="flex items-center gap-2">
-                                                                        <span class="text-sm font-medium">
-                                                                            {user.display_name ??
-                                                                                user.name}
-                                                                        </span>
-                                                                        <Show
-                                                                            when={isOwner()}
-                                                                        >
-                                                                            <span class="rounded bg-darius-purple/20 px-1.5 py-0.5 text-xs text-darius-purple-bright">
-                                                                                Owner
-                                                                            </span>
-                                                                        </Show>
-                                                                    </div>
-                                                                    <div class="text-xs text-darius-text-secondary">
-                                                                        {user.email}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div class="flex items-center gap-2">
-                                                                <StyledSelect
-                                                                    value={
-                                                                        user.permissions
-                                                                    }
-                                                                    onChange={(val) =>
-                                                                        props.onPermissionChange(
-                                                                            user.id,
-                                                                            val
-                                                                        )
-                                                                    }
-                                                                    theme="purple"
-                                                                    options={[
-                                                                        {
-                                                                            value: "view",
-                                                                            label: "View"
-                                                                        },
-                                                                        {
-                                                                            value: "edit",
-                                                                            label: "Edit"
-                                                                        },
-                                                                        {
-                                                                            value: "admin",
-                                                                            label: "Admin"
-                                                                        }
-                                                                    ]}
-                                                                    class="w-28"
-                                                                />
-                                                                <Show
-                                                                    when={!isOwner()}
-                                                                    fallback={
-                                                                        <div class="w-[20px]" />
-                                                                    }
-                                                                >
-                                                                    <button
-                                                                        onClick={() =>
-                                                                            setUserToRemove(
-                                                                                user.id
-                                                                            )
-                                                                        }
-                                                                        class="text-red-400 hover:text-red-300"
-                                                                        title="Remove user"
-                                                                    >
-                                                                        <Trash2
-                                                                            size={20}
-                                                                        />
-                                                                    </button>
-                                                                </Show>
-                                                            </div>
-                                                        </div>
-                                                    </Show>
-
-                                                    {/* Confirmation state */}
-                                                    <Show when={isConfirming()}>
-                                                        <div class="flex items-center justify-between">
-                                                            <div class="flex items-center gap-2">
-                                                                <div class="flex h-8 w-8 items-center justify-center rounded-full bg-red-500/20">
-                                                                    <AlertTriangle
-                                                                        size={16}
-                                                                        class="text-red-400"
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <span class="text-sm font-medium">
-                                                                        Remove{" "}
-                                                                        {user.display_name ??
-                                                                            user.name}
-                                                                        ?
-                                                                    </span>
-                                                                    <div class="text-xs text-darius-text-secondary">
-                                                                        They will lose
-                                                                        access to this
-                                                                        canvas
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div class="flex items-center gap-2">
-                                                                <button
-                                                                    onClick={() =>
-                                                                        setUserToRemove(
-                                                                            null
-                                                                        )
-                                                                    }
-                                                                    class="rounded bg-darius-ember px-3 py-1.5 text-sm text-darius-text-primary transition-[filter] hover:brightness-110"
-                                                                >
-                                                                    Cancel
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => {
-                                                                        props.onRemoveUser(
-                                                                            user.id
-                                                                        );
-                                                                        setUserToRemove(
-                                                                            null
-                                                                        );
-                                                                    }}
-                                                                    class="rounded bg-red-500 px-3 py-1.5 text-sm text-white hover:bg-red-400"
-                                                                >
-                                                                    Remove
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </Show>
-                                                </div>
-                                            );
-                                        }}
-                                    </For>
-                                    <Show when={props.usersQuery.data?.length === 0}>
-                                        <p class="text-center text-darius-text-secondary">
-                                            No users found.
-                                        </p>
-                                    </Show>
-                                </div>
-                                <div class="mt-4 flex justify-end border-t border-darius-border pt-4">
-                                    <button
-                                        type="button"
-                                        onClick={props.onClose}
-                                        class="flex items-center gap-2 rounded-md bg-darius-card px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-card-hover"
-                                    >
-                                        <span>Close</span>
-                                        <EscapeKeyHint />
-                                    </button>
-                                </div>
-                            </div>
                         </Show>
 
                         {/* Delete Tab */}
