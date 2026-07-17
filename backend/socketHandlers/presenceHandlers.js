@@ -84,6 +84,30 @@ function setupPresenceHandlers(socket, store, wrapSocketHandler) {
     }
   });
 
+  // High-frequency presence relay. Room membership is the ONLY access check —
+  // a deliberate, documented exception to the Canvas Mutation Gate convention:
+  // the gate covers mutations and persisted relays; cursor positions are
+  // session-scoped ephemera, and a DB hit per mousemove would not survive
+  // production traffic. joinCanvas is the gate that controls room membership,
+  // and revocation must eject sockets from the room (slice 3). Laser and
+  // viewport events (slices 4-5) are meant to ride this same channel shape.
+  wrapSocketHandler(socket, "cursorMove", async (data) => {
+    const canvasId = data?.canvasId;
+    if (typeof canvasId !== "string" || !canvasId) return;
+    if (!socket.rooms.has(canvasId)) return;
+    if (!Number.isFinite(data.x) || !Number.isFinite(data.y)) return;
+    const user = getPresenceUser(socket);
+    if (!user) return;
+
+    // userId is stamped server-side; a client-supplied one is ignored.
+    socket.to(canvasId).emit("cursorMove", {
+      canvasId,
+      userId: user.userId,
+      x: data.x,
+      y: data.y,
+    });
+  });
+
   socket.on("disconnecting", () => {
     for (const { canvasId, userId, departed } of store.leaveAll(socket.id)) {
       if (departed) {

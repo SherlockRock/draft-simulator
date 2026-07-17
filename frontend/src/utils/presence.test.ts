@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
     PRESENCE_COLORS,
+    createCursorThrottle,
+    cursorMoveSchema,
     presenceColor,
     presenceJoinSchema,
     presenceLeaveSchema,
-    presenceSnapshotSchema
+    presenceSnapshotSchema,
+    worldToScreen
 } from "./presence";
 
 describe("presenceColor", () => {
@@ -57,5 +60,141 @@ describe("presence event schemas", () => {
 
     it("rejects a join without a user payload", () => {
         expect(presenceJoinSchema.safeParse({ canvasId: "c-1" }).success).toBe(false);
+    });
+});
+
+describe("cursorMoveSchema", () => {
+    it("accepts a valid cursor event with fractional world coordinates", () => {
+        const result = cursorMoveSchema.safeParse({
+            canvasId: "c-1",
+            userId: "u-1",
+            x: 120.5,
+            y: -44.25
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it("rejects missing coordinates and non-numeric coordinates", () => {
+        expect(
+            cursorMoveSchema.safeParse({ canvasId: "c-1", userId: "u-1", x: 1 }).success
+        ).toBe(false);
+        expect(
+            cursorMoveSchema.safeParse({
+                canvasId: "c-1",
+                userId: "u-1",
+                x: "12",
+                y: 2
+            }).success
+        ).toBe(false);
+    });
+
+    it("rejects non-finite coordinates", () => {
+        expect(
+            cursorMoveSchema.safeParse({
+                canvasId: "c-1",
+                userId: "u-1",
+                x: Infinity,
+                y: 0
+            }).success
+        ).toBe(false);
+    });
+
+    it("rejects a payload without a userId", () => {
+        expect(cursorMoveSchema.safeParse({ canvasId: "c-1", x: 1, y: 2 }).success).toBe(
+            false
+        );
+    });
+});
+
+describe("worldToScreen", () => {
+    it("maps the viewport origin to screen (0, 0)", () => {
+        expect(worldToScreen(50, -20, { x: 50, y: -20, zoom: 2 })).toEqual({
+            x: 0,
+            y: 0
+        });
+    });
+
+    it("scales offsets from the viewport origin by zoom", () => {
+        expect(worldToScreen(110, 40, { x: 100, y: 20, zoom: 2 })).toEqual({
+            x: 20,
+            y: 40
+        });
+    });
+
+    it("inverts the screenToWorld transform used by Canvas", () => {
+        // Canvas.tsx screenToWorld: world = screen / zoom + viewport
+        const viewport = { x: -35.5, y: 210, zoom: 0.75 };
+        const world = {
+            x: 640 / viewport.zoom + viewport.x,
+            y: 480 / viewport.zoom + viewport.y
+        };
+        expect(worldToScreen(world.x, world.y, viewport)).toEqual({ x: 640, y: 480 });
+    });
+});
+
+describe("createCursorThrottle", () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it("fires the first call immediately", () => {
+        const fn = vi.fn();
+        const throttled = createCursorThrottle(fn, 35);
+
+        throttled.send(1, 2);
+
+        expect(fn).toHaveBeenCalledTimes(1);
+        expect(fn).toHaveBeenCalledWith(1, 2);
+    });
+
+    it("coalesces calls inside the interval into one trailing call with the latest args", () => {
+        const fn = vi.fn();
+        const throttled = createCursorThrottle(fn, 35);
+
+        throttled.send(1, 1);
+        throttled.send(2, 2);
+        throttled.send(3, 3);
+        expect(fn).toHaveBeenCalledTimes(1);
+
+        vi.advanceTimersByTime(35);
+        expect(fn).toHaveBeenCalledTimes(2);
+        expect(fn).toHaveBeenLastCalledWith(3, 3);
+    });
+
+    it("does not fire a trailing call when nothing arrived during the interval", () => {
+        const fn = vi.fn();
+        const throttled = createCursorThrottle(fn, 35);
+
+        throttled.send(1, 1);
+        vi.advanceTimersByTime(100);
+
+        expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it("fires immediately again once the interval has elapsed", () => {
+        const fn = vi.fn();
+        const throttled = createCursorThrottle(fn, 35);
+
+        throttled.send(1, 1);
+        vi.advanceTimersByTime(35);
+        throttled.send(2, 2);
+
+        expect(fn).toHaveBeenCalledTimes(2);
+        expect(fn).toHaveBeenLastCalledWith(2, 2);
+    });
+
+    it("cancel drops the pending trailing call", () => {
+        const fn = vi.fn();
+        const throttled = createCursorThrottle(fn, 35);
+
+        throttled.send(1, 1);
+        throttled.send(2, 2);
+        throttled.cancel();
+        vi.advanceTimersByTime(100);
+
+        expect(fn).toHaveBeenCalledTimes(1);
     });
 });
