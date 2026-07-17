@@ -310,7 +310,7 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
                             <Show when={props.isShareOpen && props.sharePopperContent}>
                                 <div
                                     ref={sharePopoverRef}
-                                    class="absolute left-full top-1/2 z-50 ml-3 w-80 -translate-y-1/2 rounded-xl border border-darius-border bg-darius-card shadow-lg"
+                                    class="absolute left-full top-1/2 z-50 ml-3 w-96 -translate-y-1/2 rounded-xl border border-darius-border bg-darius-bg shadow-lg"
                                 >
                                     <button
                                         type="button"

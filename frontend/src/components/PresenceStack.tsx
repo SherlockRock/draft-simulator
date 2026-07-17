@@ -145,7 +145,7 @@ export const PresenceStack: Component<{
                         ref={popoverRef}
                         class="absolute right-0 top-full mt-2 rounded-xl border border-darius-border bg-darius-bg shadow-xl"
                         classList={{
-                            "w-80 p-3": isControlled(),
+                            "w-96 p-3": isControlled(),
                             "w-64 p-2": !isControlled()
                         }}
                     >
