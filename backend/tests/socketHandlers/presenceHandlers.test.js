@@ -71,6 +71,7 @@ describe("setupPresenceHandlers", () => {
   it("registers joinCanvas, leaveCanvas and disconnecting", () => {
     const { handlers } = installHandlers();
     expect([...handlers.keys()].sort()).toEqual([
+      "cursorLeave",
       "cursorMove",
       "disconnecting",
       "joinCanvas",
@@ -363,6 +364,57 @@ describe("setupPresenceHandlers", () => {
       socket.rooms.add("c-1");
 
       await handlers.get("cursorMove")({ canvasId: "c-1", x: 1, y: 2 });
+
+      expect(socket.to).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("cursorLeave relay", () => {
+    async function joinedSocket(overrides = {}) {
+      const installed = installHandlers(overrides);
+      await installed.handlers.get("joinCanvas")({ canvasId: "c-1" });
+      installed.socket.to.mockClear();
+      installed.roomEmit.mockClear();
+      vi.mocked(UserCanvas.findOne).mockClear();
+      return installed;
+    }
+
+    it("relays cursorLeave to the room with the sender's userId stamped", async () => {
+      const { socket, handlers, roomEmit } = await joinedSocket();
+
+      await handlers.get("cursorLeave")({ canvasId: "c-1", userId: "u-spoofed" });
+
+      expect(socket.to).toHaveBeenCalledWith("c-1");
+      expect(roomEmit).toHaveBeenCalledWith("cursorLeave", {
+        canvasId: "c-1",
+        userId: "u-alice",
+      });
+      expect(UserCanvas.findOne).not.toHaveBeenCalled();
+    });
+
+    it("drops the event when the socket is not in the room", async () => {
+      const { socket, handlers, roomEmit } = installHandlers();
+
+      await handlers.get("cursorLeave")({ canvasId: "c-1" });
+
+      expect(socket.to).not.toHaveBeenCalled();
+      expect(roomEmit).not.toHaveBeenCalled();
+    });
+
+    it("drops events with a missing or non-string canvasId", async () => {
+      const { socket, handlers } = await joinedSocket();
+
+      await handlers.get("cursorLeave")({});
+      await handlers.get("cursorLeave")({ canvasId: { nested: true } });
+
+      expect(socket.to).not.toHaveBeenCalled();
+    });
+
+    it("drops events from a socket without a user", async () => {
+      const { socket, handlers } = installHandlers({ user: undefined });
+      socket.rooms.add("c-1");
+
+      await handlers.get("cursorLeave")({ canvasId: "c-1" });
 
       expect(socket.to).not.toHaveBeenCalled();
     });

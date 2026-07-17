@@ -13,6 +13,7 @@ const VersusDraft = require("../models/VersusDraft.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
 const { assertCanvasAccess } = require("../services/canvasMutations");
+const presenceEjection = require("../services/presenceEjection");
 const {
   respondCanvasMutationError,
 } = require("../middleware/canvasMutationErrors");
@@ -2066,6 +2067,10 @@ router.put("/:canvasId/users/:userId", protect, async (req, res) => {
     const { canvasId, userId } = req.params;
     const { permissions } = req.body;
 
+    if (!["view", "edit", "admin"].includes(permissions)) {
+      return res.status(400).json({ error: "Invalid permissions value" });
+    }
+
     await assertCanvasAccess({ userId: req.user.id, canvasId, level: "admin" });
 
     const [affectedRows] = await UserCanvas.update(
@@ -2112,6 +2117,9 @@ router.delete("/:canvasId/users/:userId", protect, async (req, res) => {
     });
 
     if (affectedRows > 0) {
+      // Room membership is the ACL for presence relays, so revoking access
+      // must also force the user's live sockets out of the canvas room.
+      presenceEjection.ejectUserFromCanvas(canvasId, userId);
       res
         .status(200)
         .json({ success: true, message: "User removed from canvas" });

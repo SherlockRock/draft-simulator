@@ -74,13 +74,20 @@ function createPresenceStore() {
     }));
   }
 
+  // Socket ids a user currently has on a canvas — the lookup revocation
+  // ejection needs to force those sockets out of the room.
+  function socketsOf(canvasId, userId) {
+    const entry = canvases.get(canvasId)?.get(userId);
+    return entry ? [...entry.sockets] : [];
+  }
+
   function snapshot(canvasId) {
     const users = canvases.get(canvasId);
     if (!users) return [];
     return [...users.values()].map((entry) => entry.user);
   }
 
-  return { join, leave, leaveAll, snapshot };
+  return { join, leave, leaveAll, socketsOf, snapshot };
 }
 
 module.exports = { createPresenceStore };

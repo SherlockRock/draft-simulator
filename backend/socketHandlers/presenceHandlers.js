@@ -108,6 +108,23 @@ function setupPresenceHandlers(socket, store, wrapSocketHandler) {
     });
   });
 
+  // Fired when a client leaves the canvas *view* while staying in the canvas
+  // room (e.g. drilling into a child draft): receivers prune the cursor
+  // immediately instead of waiting out the idle fade. Same trust model as
+  // cursorMove: room membership is the check, userId is stamped server-side.
+  wrapSocketHandler(socket, "cursorLeave", async (data) => {
+    const canvasId = data?.canvasId;
+    if (typeof canvasId !== "string" || !canvasId) return;
+    if (!socket.rooms.has(canvasId)) return;
+    const user = getPresenceUser(socket);
+    if (!user) return;
+
+    socket.to(canvasId).emit("cursorLeave", {
+      canvasId,
+      userId: user.userId,
+    });
+  });
+
   socket.on("disconnecting", () => {
     for (const { canvasId, userId, departed } of store.leaveAll(socket.id)) {
       if (departed) {
