@@ -1,19 +1,17 @@
 import { Accessor, Component, For, Show } from "solid-js";
 import { Viewport } from "../utils/schemas";
 import { PresenceUser, presenceColor, worldToScreen } from "../utils/presence";
-
-export type RemoteCursor = {
-    userId: string;
-    // World coordinates; transformed through this client's viewport on render.
-    x: number;
-    y: number;
-    idle: boolean;
-};
+import { RemoteCursor } from "../utils/remoteCursors";
 
 // Figma-style remote cursors: colored arrow + name pill per present user,
 // world→screen through the local viewport. The overflow-hidden container
 // clips off-viewport cursors, so they simply don't show. Names come from the
 // presence list — a cursor whose user is not (yet) present renders nothing.
+//
+// MUST be mounted `absolute inset-0` directly inside the same container
+// whose bounding rect Canvas's screenToWorld subtracts (canvasContainerRef):
+// worldToScreen omits that rect offset, so the two only cancel out when this
+// overlay's origin coincides with the container's top-left corner.
 export const CursorOverlay: Component<{
     cursors: RemoteCursor[];
     users: PresenceUser[];

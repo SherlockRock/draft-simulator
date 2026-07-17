@@ -97,13 +97,9 @@ import { GroupContextMenu } from "./components/GroupContextMenu";
 import { useCanvasContext } from "./contexts/CanvasContext";
 import { useCanvasSocket } from "./providers/CanvasSocketProvider";
 import { useUser } from "./userProvider";
-import {
-    CURSOR_IDLE_MS,
-    createCursorThrottle,
-    cursorMoveSchema,
-    presenceLeaveSchema
-} from "./utils/presence";
-import { CursorOverlay, RemoteCursor } from "./components/CursorOverlay";
+import { createCursorThrottle } from "./utils/presence";
+import { createRemoteCursorTracker } from "./utils/remoteCursors";
+import { CursorOverlay } from "./components/CursorOverlay";
 import CanvasSidebar from "./components/CanvasSidebar";
 import { PresenceStack } from "./components/PresenceStack";
 import { getGroupRestrictedChampions } from "./utils/groupRestrictions";
@@ -1136,79 +1132,33 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // provider: only the canvas view renders cursors, so the draft view
     // never pays for 30Hz store updates. World coordinates on the wire;
     // idle cursors fade after CURSOR_IDLE_MS and reappear on movement.
+    // State machine lives in createRemoteCursorTracker (unit-tested).
     const userAccessor = useUser();
     const [currentUser] = userAccessor();
-    const [remoteCursors, setRemoteCursors] = createStore<RemoteCursor[]>([]);
+    const cursorTracker = createRemoteCursorTracker(() => currentUser()?.id);
 
     createEffect(() => {
         if (isLocalMode()) return;
         const socket = socketAccessor();
-        if (!socket) return;
+        // Keyed on the active canvas: canvas-to-canvas navigation keeps this
+        // component mounted, so the effect must re-run — and reset cursors
+        // and idle timers — when the route param changes.
+        const id = canvasId();
+        if (!socket || !id) return;
 
-        const idleTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-        const onCursorMove = (rawData: unknown) => {
-            // Validated quietly: cursorMove arrives at mousemove frequency,
-            // and validateSocketEvent's failure toast would storm.
-            const result = cursorMoveSchema.safeParse(rawData);
-            if (!result.success) return;
-            const move = result.data;
-            if (move.canvasId !== canvasId()) return;
-            // Own cursor from another tab — never render yourself.
-            if (move.userId === currentUser()?.id) return;
-
-            const index = remoteCursors.findIndex((c) => c.userId === move.userId);
-            if (index === -1) {
-                setRemoteCursors(remoteCursors.length, {
-                    userId: move.userId,
-                    x: move.x,
-                    y: move.y,
-                    idle: false
-                });
-            } else {
-                // In-place update keeps item references stable so <For>
-                // never recreates a cursor's DOM mid-movement.
-                setRemoteCursors(index, { x: move.x, y: move.y, idle: false });
-            }
-
-            const pending = idleTimers.get(move.userId);
-            if (pending) clearTimeout(pending);
-            idleTimers.set(
-                move.userId,
-                setTimeout(() => {
-                    idleTimers.delete(move.userId);
-                    setRemoteCursors((c) => c.userId === move.userId, "idle", true);
-                }, CURSOR_IDLE_MS)
-            );
-        };
-
-        const onCursorPresenceLeave = (rawData: unknown) => {
-            // The provider owns the loud validation of presenceLeave; this
-            // second listener only prunes the departed user's cursor.
-            const result = presenceLeaveSchema.safeParse(rawData);
-            if (!result.success || result.data.canvasId !== canvasId()) return;
-            const departedId = result.data.userId;
-            const pending = idleTimers.get(departedId);
-            if (pending) {
-                clearTimeout(pending);
-                idleTimers.delete(departedId);
-            }
-            setRemoteCursors(
-                reconcile(
-                    remoteCursors.filter((c) => c.userId !== departedId),
-                    { key: "userId" }
-                )
-            );
-        };
+        const onCursorMove = (rawData: unknown) =>
+            cursorTracker.handleCursorMove(rawData, id);
+        // The provider owns the loud validation of presenceLeave; this
+        // second listener only prunes the departed user's cursor.
+        const onCursorPresenceLeave = (rawData: unknown) =>
+            cursorTracker.handlePresenceLeave(rawData, id);
 
         socket.on("cursorMove", onCursorMove);
         socket.on("presenceLeave", onCursorPresenceLeave);
         onCleanup(() => {
             socket.off("cursorMove", onCursorMove);
             socket.off("presenceLeave", onCursorPresenceLeave);
-            for (const timer of idleTimers.values()) clearTimeout(timer);
-            idleTimers.clear();
-            setRemoteCursors(reconcile([], { key: "userId" }));
+            cursorTracker.reset();
         });
     });
 
@@ -1865,6 +1815,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         socket.emit("cursorMove", { canvasId: canvasId(), x, y });
     });
     onCleanup(() => cursorEmitter.cancel());
+
+    createEffect(() => {
+        // A trailing send queued on the previous canvas must not fire tagged
+        // with the next canvas's id (navigation keeps this component mounted
+        // and the emitter reads canvasId() at fire time).
+        canvasId();
+        onCleanup(() => cursorEmitter.cancel());
+    });
 
     const onCursorMouseMove = (e: MouseEvent) => {
         if (isLocalMode()) return;
@@ -3209,7 +3167,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     {/* Before PresenceStack in source order so the (equal
                         z-40) presence popover paints above cursors. */}
                     <CursorOverlay
-                        cursors={remoteCursors}
+                        cursors={cursorTracker.cursors}
                         users={presenceUsers()}
                         viewport={props.viewport}
                     />
