@@ -64,6 +64,11 @@ const setupAssociations = () => {
   CanvasGroup.hasMany(CanvasDraft, { foreignKey: "group_id", onDelete: "SET NULL" });
   CanvasDraft.belongsTo(CanvasGroup, { foreignKey: "group_id", onDelete: "SET NULL" });
 
+  // Self-referential nesting: null parent = top-level. No DB-level cascade —
+  // recursive deletion is handled in app logic (promote-up).
+  CanvasGroup.belongsTo(CanvasGroup, { as: "parent", foreignKey: "parent_group_id" });
+  CanvasGroup.hasMany(CanvasGroup, { as: "children", foreignKey: "parent_group_id" });
+
   User.belongsToMany(Canvas, {
     through: CanvasShare,
     as: "SharedCanvases",
