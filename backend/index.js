@@ -26,7 +26,9 @@ const socketService = require("./middleware/socketService");
 const { setupVersusHandlers } = require("./socketHandlers/versusHandlers");
 const { setupNavigatorHandlers } = require("./socketHandlers/navigatorHandlers");
 const { setupCanvasHandlers } = require("./socketHandlers/canvasHandlers");
+const { setupPresenceHandlers } = require("./socketHandlers/presenceHandlers");
 const { createCanvasMutationGate } = require("./services/canvasMutations");
+const { createPresenceStore } = require("./services/canvasPresence");
 const { initializeTimerService } = require("./services/versusTimerService");
 const VersusSessionManager = require("./services/versusSessionManager");
 require("dotenv").config();
@@ -131,6 +133,7 @@ async function main() {
   socketService.init(io);
 
   const canvasMutationGate = createCanvasMutationGate({ io });
+  const presenceStore = createPresenceStore();
 
   // Initialize versus timer service
   initializeTimerService(io);
@@ -179,6 +182,7 @@ async function main() {
     setupNavigatorHandlers(io, socket, wrapSocketHandler);
 
     setupCanvasHandlers(socket, canvasMutationGate, wrapSocketHandler);
+    setupPresenceHandlers(socket, presenceStore, wrapSocketHandler);
 
     wrapSocketHandler(socket, "joinRoom", async (room) => {
       socket.join(room);

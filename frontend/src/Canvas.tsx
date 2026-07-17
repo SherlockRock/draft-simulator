@@ -97,6 +97,7 @@ import { GroupContextMenu } from "./components/GroupContextMenu";
 import { useCanvasContext } from "./contexts/CanvasContext";
 import { useCanvasSocket } from "./providers/CanvasSocketProvider";
 import CanvasSidebar from "./components/CanvasSidebar";
+import { PresenceStack } from "./components/PresenceStack";
 import { getGroupRestrictedChampions } from "./utils/groupRestrictions";
 import {
     isGridGroup,
@@ -156,7 +157,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         socket: socketAccessor,
         connectionStatus,
         justReconnected,
-        clearReconnected
+        clearReconnected,
+        presenceUsers
     } = useCanvasSocket();
     const canvasContext = useCanvasContext();
 
@@ -1088,13 +1090,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const data = props.canvasData;
         if (!data || props.isLoading || currentId === loadedCanvasId()) return;
 
-        // Leave old canvas room if switching canvases
-        const prevId = loadedCanvasId();
-        const socket = socketAccessor();
-        if (prevId && !isLocalMode() && socket) {
-            socket.emit("leaveRoom", prevId);
-        }
-
         // Reset stores with new canvas data
         setCanvasDrafts(data.drafts ?? []);
         setConnections(data.connections ?? []);
@@ -1113,21 +1108,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setIsDeleteDialogOpen(false);
         setDraftToDelete(null);
 
-        // Join new canvas room (draft updates broadcast to canvas room)
-        if (!isLocalMode() && socket) {
-            socket.emit("joinRoom", currentId);
-        }
-
+        // Canvas room membership (gated joinCanvas) is handled by
+        // CanvasSocketProvider so presence survives the draft view.
         setLoadedCanvasId(currentId);
-    });
-
-    // Leave canvas room on component unmount
-    onCleanup(() => {
-        const prevId = loadedCanvasId();
-        const socket = socketAccessor();
-        if (prevId && !isLocalMode() && socket) {
-            socket.emit("leaveRoom", prevId);
-        }
     });
 
     // Sync canvas state after reconnection
@@ -3118,6 +3101,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     onCloseShare={props.onCloseShare}
                     sharePopperContent={props.sharePopperContent}
                 />
+                <Show when={!isLocalMode()}>
+                    <PresenceStack users={presenceUsers()} />
+                </Show>
                 <Show when={isLocalMode()}>
                     <div class="absolute right-4 top-4 z-40 flex items-center gap-2 rounded-lg border border-yellow-600/30 bg-yellow-900/40 px-3 py-1.5 text-xs text-yellow-300 shadow-lg backdrop-blur-sm">
                         <span>Local only</span>
