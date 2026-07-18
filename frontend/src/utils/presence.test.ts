@@ -86,11 +86,7 @@ describe("presence event schemas", () => {
         });
         expect(result.success).toBe(true);
         if (result.success) {
-            expect(result.data.users.map((u) => u.viewport)).toEqual([
-                null,
-                null,
-                null
-            ]);
+            expect(result.data.users.map((u) => u.viewport)).toEqual([null, null, null]);
         }
     });
 });
@@ -118,8 +114,9 @@ describe("viewportMoveSchema", () => {
     });
 
     it("rejects a payload without a userId", () => {
-        const { userId: _userId, ...rest } = valid;
-        expect(viewportMoveSchema.safeParse(rest).success).toBe(false);
+        expect(
+            viewportMoveSchema.safeParse({ ...valid, userId: undefined }).success
+        ).toBe(false);
     });
 });
 

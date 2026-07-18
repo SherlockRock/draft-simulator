@@ -6,6 +6,7 @@ import {
     createEffect,
     Show,
     createMemo,
+    untrack,
     Setter,
     Accessor,
     JSX
@@ -97,7 +98,11 @@ import { GroupContextMenu } from "./components/GroupContextMenu";
 import { useCanvasContext, type ShareAnchor } from "./contexts/CanvasContext";
 import { useCanvasSocket } from "./providers/CanvasSocketProvider";
 import { useUser } from "./userProvider";
-import { createCursorThrottle } from "./utils/presence";
+import {
+    createCursorThrottle,
+    createTrailingThrottle,
+    presenceSnapshotSchema
+} from "./utils/presence";
 import { createRemoteCursorTracker } from "./utils/remoteCursors";
 import { CursorOverlay } from "./components/CursorOverlay";
 import CanvasSidebar from "./components/CanvasSidebar";
@@ -1996,6 +2001,122 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             });
         }
     }, 1000);
+
+    // Viewport broadcast (presence slice 4): announce this client's viewport
+    // on the presence channel, throttled with a trailing send so receivers
+    // land on the final resting viewport.
+    const viewportEmitter = createTrailingThrottle<Viewport>((viewport) => {
+        const socket = socketAccessor();
+        if (!socket || connectionStatus() !== "connected") return;
+        socket.emit("viewportMove", { canvasId: canvasId(), ...viewport });
+    });
+
+    // Emit on every viewport change (pan, zoom, jump) while the canvas view
+    // is live. untrack keeps the effect keyed on the viewport alone — the
+    // emitter reads socket/connection/canvasId at fire time.
+    createEffect(() => {
+        if (isLocalMode()) return;
+        const viewport = props.viewport();
+        untrack(() => viewportEmitter.send(viewport));
+    });
+
+    // The emit above can race the async joinCanvas ACL check server-side
+    // (room membership silently rejects it), leaving our last-known viewport
+    // null for everyone until we next pan. The presence snapshot is sent
+    // only after room entry is confirmed, so re-announce on receiving it —
+    // that covers mount, reconnect and canvas-to-canvas navigation.
+    createEffect(() => {
+        if (isLocalMode()) return;
+        const socket = socketAccessor();
+        const id = canvasId();
+        if (!socket || !id) return;
+
+        const onSnapshot = (rawData: unknown) => {
+            const result = presenceSnapshotSchema.safeParse(rawData);
+            if (!result.success || result.data.canvasId !== id) return;
+            viewportEmitter.send(props.viewport());
+        };
+
+        socket.on("presenceSnapshot", onSnapshot);
+        onCleanup(() => {
+            socket.off("presenceSnapshot", onSnapshot);
+        });
+    });
+
+    // One-shot jump to another user's last-known viewport: a short eased
+    // pan+zoom animation. Real user input (pointerdown/wheel) interrupts it
+    // mid-flight — the user always wins the viewport.
+    let viewportJumpFrame: number | null = null;
+    let removeViewportJumpInterrupts: (() => void) | null = null;
+
+    const stopViewportJump = () => {
+        if (viewportJumpFrame !== null) {
+            cancelAnimationFrame(viewportJumpFrame);
+            viewportJumpFrame = null;
+        }
+        removeViewportJumpInterrupts?.();
+        removeViewportJumpInterrupts = null;
+    };
+
+    const VIEWPORT_JUMP_MS = 450;
+
+    const jumpToViewport = (target: Viewport) => {
+        stopViewportJump();
+        const from = props.viewport();
+        const start = performance.now();
+        const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+        const step = (now: number) => {
+            const t = Math.min((now - start) / VIEWPORT_JUMP_MS, 1);
+            const eased = easeOutCubic(t);
+            props.setViewport({
+                x: from.x + (target.x - from.x) * eased,
+                y: from.y + (target.y - from.y) * eased,
+                zoom: from.zoom + (target.zoom - from.zoom) * eased
+            });
+            if (t < 1) {
+                viewportJumpFrame = requestAnimationFrame(step);
+            } else {
+                stopViewportJump();
+                debouncedSaveViewport(target);
+            }
+        };
+
+        const interrupt = () => stopViewportJump();
+        window.addEventListener("pointerdown", interrupt, { capture: true });
+        window.addEventListener("wheel", interrupt, { capture: true, passive: true });
+        removeViewportJumpInterrupts = () => {
+            window.removeEventListener("pointerdown", interrupt, { capture: true });
+            window.removeEventListener("wheel", interrupt, { capture: true });
+        };
+        viewportJumpFrame = requestAnimationFrame(step);
+    };
+
+    onCleanup(stopViewportJump);
+
+    createEffect(() => {
+        canvasContext.setJumpToViewportCallback(() => jumpToViewport);
+        onCleanup(() => {
+            canvasContext.setJumpToViewportCallback(null);
+        });
+    });
+
+    // Keyed cleanup mirroring the cursor emitter: a trailing send queued on
+    // the previous canvas must not fire tagged with the next canvas's id,
+    // and leaving the canvas view (draft drilldown, canvas-to-canvas nav)
+    // clears our last-known viewport server-side so remote popovers stop
+    // offering a dead jump target.
+    createEffect(() => {
+        const id = canvasId();
+        onCleanup(() => {
+            stopViewportJump();
+            viewportEmitter.cancel();
+            const socket = socketAccessor();
+            if (id && socket && connectionStatus() === "connected") {
+                socket.emit("viewportLeave", { canvasId: id });
+            }
+        });
+    });
 
     const onVertexDragStart = (
         connectionId: string,

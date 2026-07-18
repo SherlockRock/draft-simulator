@@ -1,9 +1,10 @@
 import { Component, For, Show, createMemo, createSignal } from "solid-js";
-import { AlertTriangle, Check, Copy, Trash2 } from "lucide-solid";
+import { AlertTriangle, Check, Copy, Locate, Trash2 } from "lucide-solid";
 import { UseQueryResult } from "@tanstack/solid-query";
 import { CanvasUser } from "../utils/schemas";
 import { StyledSelect } from "./StyledSelect";
 import { useCanvasSocket } from "../providers/CanvasSocketProvider";
+import { useCanvasContext } from "../contexts/CanvasContext";
 import { presenceColor } from "../utils/presence";
 
 // Unified Share popover content (design: canvas-live-presence slice 3).
@@ -94,7 +95,10 @@ const PERMISSION_LABELS: Record<CanvasUser["permissions"], string> = {
 };
 
 export const SharePopoverContent: Component<SharePopoverContentProps> = (props) => {
-    const { presenceUsers } = useCanvasSocket();
+    const { presenceUsers, remoteViewportOf } = useCanvasSocket();
+    // Registered by Canvas.tsx while the canvas view is live; null in the
+    // draft view, where there is no viewport to jump with.
+    const { jumpToViewportCallback } = useCanvasContext();
     const [copied, setCopied] = createSignal("");
     const [userToRemove, setUserToRemove] = createSignal<string | null>(null);
 
@@ -238,8 +242,41 @@ export const SharePopoverContent: Component<SharePopoverContentProps> = (props) 
                                                     </Show>
                                                 </div>
                                             </div>
-                                            {/* Right-side controls; jump button joins
-                                                this cluster in slice 4. */}
+                                            {/* Right-side controls: jump to the
+                                                user's viewport (online users with
+                                                a live canvas viewport only), then
+                                                admin permission/remove. */}
+                                            <Show
+                                                when={
+                                                    user.id !== props.currentUserId &&
+                                                    online() &&
+                                                    jumpToViewportCallback() !== null &&
+                                                    remoteViewportOf(user.id) !==
+                                                        undefined
+                                                }
+                                            >
+                                                <button
+                                                    onClick={() => {
+                                                        const jump =
+                                                            jumpToViewportCallback();
+                                                        const target = remoteViewportOf(
+                                                            user.id
+                                                        );
+                                                        // Copy the tracked target:
+                                                        // the animation must not
+                                                        // drift if a fresher
+                                                        // viewportMove lands
+                                                        // mid-flight.
+                                                        if (jump && target) {
+                                                            jump({ ...target });
+                                                        }
+                                                    }}
+                                                    class="shrink-0 cursor-pointer text-darius-text-secondary transition-colors hover:text-darius-text-primary"
+                                                    title={`Jump to ${displayName()}'s view`}
+                                                >
+                                                    <Locate size={16} />
+                                                </button>
+                                            </Show>
                                             <Show
                                                 when={props.isAdmin}
                                                 fallback={
