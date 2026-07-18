@@ -127,6 +127,12 @@ const CanvasSidebar: Component<CanvasSidebarProps> = (props) => {
             ) {
                 return;
             }
+            // StyledSelect portals its option list to document.body, so a
+            // click on a permission option is "outside" by containment —
+            // closing here would unmount the select before its click fires.
+            if (target instanceof Element && target.closest('[role="listbox"]')) {
+                return;
+            }
 
             props.onCloseShare?.();
         };

@@ -165,10 +165,11 @@ export const ConnectionSchema = z.object({
 // Canvas User Schemas
 // =============================================================================
 
+// No email by design: any canvas member (including view-only) can fetch
+// this list for the Share popover's access list.
 export const CanvasUserSchema = z.object({
   id: z.string(),
   name: z.string(),
-  email: z.string(),
   picture: z.string(),
   display_name: z.string().nullable(),
   permissions: z.enum(["view", "edit", "admin"]),

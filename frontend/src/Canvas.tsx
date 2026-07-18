@@ -1821,7 +1821,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         if (!socket || connectionStatus() !== "connected") return;
         socket.emit("cursorMove", { canvasId: canvasId(), x, y });
     });
-    onCleanup(() => cursorEmitter.cancel());
 
     createEffect(() => {
         // A trailing send queued on the previous canvas must not fire tagged
