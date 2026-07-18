@@ -40,7 +40,10 @@ function createPresenceStore() {
     let entry = users.get(user.userId);
     const newlyPresent = !entry;
     if (!entry) {
-      entry = { user, sockets: new Set() };
+      // viewport is the user's last-known canvas viewport (slice 4): null
+      // until their client first broadcasts one, preserved while any of
+      // their sockets remains, gone once they fully depart.
+      entry = { user, sockets: new Set(), viewport: null };
       users.set(user.userId, entry);
     } else {
       entry.user = user;
@@ -98,10 +101,25 @@ function createPresenceStore() {
     return entry ? [...entry.sockets] : [];
   }
 
+  function setViewport(canvasId, userId, viewport) {
+    const entry = canvases.get(canvasId)?.get(userId);
+    if (!entry) return false;
+    entry.viewport = viewport;
+    return true;
+  }
+
+  function clearViewport(canvasId, userId) {
+    const entry = canvases.get(canvasId)?.get(userId);
+    if (entry) entry.viewport = null;
+  }
+
   function snapshot(canvasId) {
     const users = canvases.get(canvasId);
     if (!users) return [];
-    return [...users.values()].map((entry) => entry.user);
+    return [...users.values()].map((entry) => ({
+      ...entry.user,
+      viewport: entry.viewport,
+    }));
   }
 
   return {
@@ -109,6 +127,8 @@ function createPresenceStore() {
     leave,
     leaveAll,
     socketsOf,
+    setViewport,
+    clearViewport,
     snapshot,
     markRevoked,
     revocationCount,

@@ -135,6 +135,44 @@ function setupPresenceHandlers(socket, store, wrapSocketHandler) {
     });
   });
 
+  // Viewport broadcast (slice 4): same thin-relay trust model as cursorMove,
+  // plus the store keeps the sender's last-known viewport so presence
+  // snapshots can offer jump-to-viewport to late joiners immediately.
+  wrapSocketHandler(socket, "viewportMove", async (data) => {
+    const canvasId = data?.canvasId;
+    if (typeof canvasId !== "string" || !canvasId) return;
+    if (!socket.rooms.has(canvasId)) return;
+    if (!Number.isFinite(data.x) || !Number.isFinite(data.y)) return;
+    if (!Number.isFinite(data.zoom) || data.zoom <= 0) return;
+    const user = getPresenceUser(socket);
+    if (!user) return;
+
+    const viewport = { x: data.x, y: data.y, zoom: data.zoom };
+    store.setViewport(canvasId, user.userId, viewport);
+    socket.to(canvasId).emit("viewportMove", {
+      canvasId,
+      userId: user.userId,
+      ...viewport,
+    });
+  });
+
+  // Fired when a client leaves the canvas *view* while staying in the canvas
+  // room (draft drilldown, canvas-to-canvas nav): the stored viewport is no
+  // longer live, so jump-to-viewport must stop offering it.
+  wrapSocketHandler(socket, "viewportLeave", async (data) => {
+    const canvasId = data?.canvasId;
+    if (typeof canvasId !== "string" || !canvasId) return;
+    if (!socket.rooms.has(canvasId)) return;
+    const user = getPresenceUser(socket);
+    if (!user) return;
+
+    store.clearViewport(canvasId, user.userId);
+    socket.to(canvasId).emit("viewportLeave", {
+      canvasId,
+      userId: user.userId,
+    });
+  });
+
   socket.on("disconnecting", () => {
     for (const { canvasId, userId, departed } of store.leaveAll(socket.id)) {
       if (departed) {

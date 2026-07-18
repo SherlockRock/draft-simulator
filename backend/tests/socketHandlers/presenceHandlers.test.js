@@ -53,6 +53,9 @@ const ALICE_PRESENCE = {
   picture: "alice.png",
 };
 
+// Snapshot entries additionally carry the last-known viewport (slice 4).
+const ALICE_SNAPSHOT = { ...ALICE_PRESENCE, viewport: null };
+
 function mockAccess(permissions) {
   vi.spyOn(UserCanvas, "findOne").mockResolvedValue(
     permissions ? { permissions } : null,
@@ -76,6 +79,8 @@ describe("setupPresenceHandlers", () => {
       "disconnecting",
       "joinCanvas",
       "leaveCanvas",
+      "viewportLeave",
+      "viewportMove",
     ]);
   });
 
@@ -92,7 +97,7 @@ describe("setupPresenceHandlers", () => {
     });
     expect(socket.emit).toHaveBeenCalledWith("presenceSnapshot", {
       canvasId: "c-1",
-      users: [ALICE_PRESENCE],
+      users: [ALICE_SNAPSHOT],
     });
   });
 
@@ -118,7 +123,7 @@ describe("setupPresenceHandlers", () => {
 
     expect(socket.emit).toHaveBeenCalledWith("presenceSnapshot", {
       canvasId: "c-1",
-      users: [{ ...ALICE_PRESENCE, displayName: "Alice" }],
+      users: [{ ...ALICE_SNAPSHOT, displayName: "Alice" }],
     });
   });
 
@@ -183,7 +188,7 @@ describe("setupPresenceHandlers", () => {
 
     expect(socket.emit).toHaveBeenCalledWith("presenceSnapshot", {
       canvasId: "c-1",
-      users: [{ ...ALICE_PRESENCE, displayName: "Unknown" }],
+      users: [{ ...ALICE_SNAPSHOT, displayName: "Unknown" }],
     });
   });
 
@@ -260,7 +265,7 @@ describe("setupPresenceHandlers", () => {
     expect(second.roomEmit).not.toHaveBeenCalled();
     expect(second.socket.emit).toHaveBeenCalledWith("presenceSnapshot", {
       canvasId: "c-1",
-      users: [ALICE_PRESENCE],
+      users: [ALICE_SNAPSHOT],
     });
   });
 
@@ -457,6 +462,162 @@ describe("setupPresenceHandlers", () => {
       socket.rooms.add("c-1");
 
       await handlers.get("cursorLeave")({ canvasId: "c-1" });
+
+      expect(socket.to).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("viewportMove relay", () => {
+    async function joinedSocket(overrides = {}, store = createPresenceStore()) {
+      const installed = installHandlers(overrides, store);
+      await installed.handlers.get("joinCanvas")({ canvasId: "c-1" });
+      installed.socket.to.mockClear();
+      installed.roomEmit.mockClear();
+      vi.mocked(UserCanvas.findOne).mockClear();
+      return installed;
+    }
+
+    it("relays viewportMove to the room with the sender's userId stamped", async () => {
+      const { socket, handlers, roomEmit } = await joinedSocket();
+
+      await handlers.get("viewportMove")({
+        canvasId: "c-1",
+        userId: "u-spoofed",
+        x: 120.5,
+        y: -40,
+        zoom: 1.5,
+      });
+
+      expect(socket.to).toHaveBeenCalledWith("c-1");
+      expect(roomEmit).toHaveBeenCalledWith("viewportMove", {
+        canvasId: "c-1",
+        userId: "u-alice",
+        x: 120.5,
+        y: -40,
+        zoom: 1.5,
+      });
+      expect(UserCanvas.findOne).not.toHaveBeenCalled();
+    });
+
+    it("stores the last-known viewport so later snapshots carry it", async () => {
+      const store = createPresenceStore();
+      const { handlers } = await joinedSocket({}, store);
+
+      await handlers.get("viewportMove")({ canvasId: "c-1", x: 1, y: 2, zoom: 0.5 });
+
+      expect(store.snapshot("c-1")).toEqual([
+        { ...ALICE_PRESENCE, viewport: { x: 1, y: 2, zoom: 0.5 } },
+      ]);
+    });
+
+    it("drops the event when the socket is not in the room", async () => {
+      const { socket, handlers, roomEmit } = installHandlers();
+
+      await handlers.get("viewportMove")({ canvasId: "c-1", x: 1, y: 2, zoom: 1 });
+
+      expect(socket.to).not.toHaveBeenCalled();
+      expect(roomEmit).not.toHaveBeenCalled();
+    });
+
+    it("drops events with a missing or non-string canvasId", async () => {
+      const { socket, handlers } = await joinedSocket();
+
+      await handlers.get("viewportMove")({ x: 1, y: 2, zoom: 1 });
+      await handlers.get("viewportMove")({
+        canvasId: { nested: true },
+        x: 1,
+        y: 2,
+        zoom: 1,
+      });
+
+      expect(socket.to).not.toHaveBeenCalled();
+    });
+
+    it("drops events with non-finite or missing coordinates", async () => {
+      const { socket, handlers } = await joinedSocket();
+
+      await handlers.get("viewportMove")({ canvasId: "c-1", x: "12", y: 2, zoom: 1 });
+      await handlers.get("viewportMove")({ canvasId: "c-1", x: 1, y: 2 });
+      await handlers.get("viewportMove")({
+        canvasId: "c-1",
+        x: Infinity,
+        y: 2,
+        zoom: 1,
+      });
+      await handlers.get("viewportMove")({ canvasId: "c-1", x: 1, y: NaN, zoom: 1 });
+
+      expect(socket.to).not.toHaveBeenCalled();
+    });
+
+    it("drops events with a non-positive zoom", async () => {
+      const { socket, handlers } = await joinedSocket();
+
+      await handlers.get("viewportMove")({ canvasId: "c-1", x: 1, y: 2, zoom: 0 });
+      await handlers.get("viewportMove")({ canvasId: "c-1", x: 1, y: 2, zoom: -1 });
+
+      expect(socket.to).not.toHaveBeenCalled();
+    });
+
+    it("drops events from a socket without a user", async () => {
+      const { socket, handlers } = installHandlers({ user: undefined });
+      socket.rooms.add("c-1");
+
+      await handlers.get("viewportMove")({ canvasId: "c-1", x: 1, y: 2, zoom: 1 });
+
+      expect(socket.to).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("viewportLeave relay", () => {
+    async function joinedSocket(overrides = {}, store = createPresenceStore()) {
+      const installed = installHandlers(overrides, store);
+      await installed.handlers.get("joinCanvas")({ canvasId: "c-1" });
+      installed.socket.to.mockClear();
+      installed.roomEmit.mockClear();
+      vi.mocked(UserCanvas.findOne).mockClear();
+      return installed;
+    }
+
+    it("relays viewportLeave with the sender's userId stamped and clears the stored viewport", async () => {
+      const store = createPresenceStore();
+      const { socket, handlers, roomEmit } = await joinedSocket({}, store);
+      await handlers.get("viewportMove")({ canvasId: "c-1", x: 1, y: 2, zoom: 1 });
+      roomEmit.mockClear();
+
+      await handlers.get("viewportLeave")({ canvasId: "c-1", userId: "u-spoofed" });
+
+      expect(socket.to).toHaveBeenCalledWith("c-1");
+      expect(roomEmit).toHaveBeenCalledWith("viewportLeave", {
+        canvasId: "c-1",
+        userId: "u-alice",
+      });
+      expect(store.snapshot("c-1")).toEqual([ALICE_SNAPSHOT]);
+      expect(UserCanvas.findOne).not.toHaveBeenCalled();
+    });
+
+    it("drops the event when the socket is not in the room", async () => {
+      const { socket, handlers, roomEmit } = installHandlers();
+
+      await handlers.get("viewportLeave")({ canvasId: "c-1" });
+
+      expect(socket.to).not.toHaveBeenCalled();
+      expect(roomEmit).not.toHaveBeenCalled();
+    });
+
+    it("drops events with a missing or non-string canvasId", async () => {
+      const { socket, handlers } = await joinedSocket();
+
+      await handlers.get("viewportLeave")({});
+      await handlers.get("viewportLeave")({ canvasId: { nested: true } });
+
+      expect(socket.to).not.toHaveBeenCalled();
+    });
+
+    it("drops events from a socket without a user", async () => {
+      const { socket, handlers } = installHandlers({ user: undefined });
+      socket.rooms.add("c-1");
+
+      await handlers.get("viewportLeave")({ canvasId: "c-1" });
 
       expect(socket.to).not.toHaveBeenCalled();
     });
