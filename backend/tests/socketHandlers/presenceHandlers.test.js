@@ -187,6 +187,48 @@ describe("setupPresenceHandlers", () => {
     });
   });
 
+  it("a revocation processed during the pending access check cancels the join", async () => {
+    let releaseAccessCheck;
+    vi.spyOn(UserCanvas, "findOne").mockReturnValue(
+      new Promise((resolve) => {
+        releaseAccessCheck = () => resolve({ permissions: "view" });
+      }),
+    );
+    const { socket, handlers, roomEmit, store } = installHandlers();
+
+    const pendingJoin = handlers.get("joinCanvas")({ canvasId: "c-1" });
+    // Revocation lands while the ACL lookup is in flight: the lookup read
+    // the pre-delete row, so its stale success must not grant room entry.
+    store.markRevoked("c-1", "u-alice");
+    releaseAccessCheck();
+    await pendingJoin;
+
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(roomEmit).not.toHaveBeenCalled();
+    expect(store.snapshot("c-1")).toEqual([]);
+    expect(socket.emit).toHaveBeenCalledWith(
+      "canvasMutationError",
+      expect.objectContaining({ event: "joinCanvas", code: "NOT_AUTHORIZED" }),
+    );
+  });
+
+  it("a revocation on a different canvas does not cancel the join", async () => {
+    let releaseAccessCheck;
+    vi.spyOn(UserCanvas, "findOne").mockReturnValue(
+      new Promise((resolve) => {
+        releaseAccessCheck = () => resolve({ permissions: "view" });
+      }),
+    );
+    const { socket, handlers, store } = installHandlers();
+
+    const pendingJoin = handlers.get("joinCanvas")({ canvasId: "c-1" });
+    store.markRevoked("c-2", "u-alice");
+    releaseAccessCheck();
+    await pendingJoin;
+
+    expect(socket.join).toHaveBeenCalledWith("c-1");
+  });
+
   it("a leaveCanvas processed during the pending access check cancels the join", async () => {
     let releaseAccessCheck;
     vi.spyOn(UserCanvas, "findOne").mockReturnValue(

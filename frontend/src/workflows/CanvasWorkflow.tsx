@@ -279,6 +279,16 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         }
     });
 
+    // The Share popover is per-canvas UI: navigating to another canvas keeps
+    // this workflow mounted, so close it instead of carrying it over.
+    let previousShareCanvasId = params.id;
+    createEffect(() => {
+        if (params.id !== previousShareCanvasId) {
+            setShareAnchor(null);
+        }
+        previousShareCanvasId = params.id;
+    });
+
     const navigate = useNavigate();
 
     // Check if we're on a detail view (has an id param)

@@ -2,6 +2,7 @@ const {
   assertCanvasAccess,
   CanvasMutationError,
   InvalidMutationError,
+  NotAuthorizedError,
 } = require("../services/canvasMutations");
 
 // Presence payload deliberately excludes the email — it is broadcast to
@@ -38,12 +39,21 @@ function setupPresenceHandlers(socket, store, wrapSocketHandler) {
       }
       wantedCanvases.add(canvasId);
       const user = getPresenceUser(socket);
+      // Snapshot before the async ACL lookup: if a revocation lands while
+      // the lookup is in flight, the lookup read the pre-delete row and its
+      // success is stale — the counter moving is how we detect that.
+      const revocationsSeen = user
+        ? store.revocationCount(canvasId, user.userId)
+        : 0;
       await assertCanvasAccess({
         userId: user?.userId ?? null,
         canvasId,
         level: "view",
       });
       if (!wantedCanvases.has(canvasId)) return;
+      if (user && store.revocationCount(canvasId, user.userId) !== revocationsSeen) {
+        throw new NotAuthorizedError();
+      }
 
       socket.join(canvasId);
       const newlyPresent = store.join(canvasId, user, socket.id);

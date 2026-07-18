@@ -74,7 +74,7 @@ describe("presenceEjection.ejectUserFromCanvas", () => {
     expect(store.snapshot("c-2")).toEqual([ALICE]);
   });
 
-  it("is a no-op when the user is not present on the canvas", () => {
+  it("does not broadcast when the user is not present on the canvas", () => {
     const { io, roomEmit } = buildFakeIo([]);
     store.join("c-1", BOB, "sock-bob");
     presenceEjection.init({ io, store });
@@ -82,6 +82,17 @@ describe("presenceEjection.ejectUserFromCanvas", () => {
     presenceEjection.ejectUserFromCanvas("c-1", "u-alice");
 
     expect(roomEmit).not.toHaveBeenCalled();
+  });
+
+  it("marks the revocation even when the user has no live sockets, so an in-flight join can see it", () => {
+    const { io } = buildFakeIo([]);
+    presenceEjection.init({ io, store });
+
+    expect(store.revocationCount("c-1", "u-alice")).toBe(0);
+    presenceEjection.ejectUserFromCanvas("c-1", "u-alice");
+
+    expect(store.revocationCount("c-1", "u-alice")).toBe(1);
+    expect(store.revocationCount("c-1", "u-bob")).toBe(0);
   });
 
   it("still prunes the store when a socket already disconnected from io", () => {

@@ -26,6 +26,11 @@ class PresenceEjection {
       return;
     }
 
+    // Always mark, even with no live sockets: a joinCanvas whose ACL
+    // lookup was in flight when the revocation committed checks this
+    // counter after its await and aborts instead of joining on stale data.
+    this.store.markRevoked(canvasId, userId);
+
     const socketIds = this.store.socketsOf(canvasId, userId);
     if (socketIds.length === 0) return;
 

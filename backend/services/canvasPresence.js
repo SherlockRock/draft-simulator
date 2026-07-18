@@ -12,6 +12,23 @@ function createPresenceStore() {
   const canvases = new Map();
   // socketId -> { userId, canvasIds: Set<canvasId> } for disconnect cleanup
   const socketIndex = new Map();
+  // "canvasId\0userId" -> monotonic revocation counter. joinCanvas snapshots
+  // it before its async ACL lookup and aborts if it moved: an access check
+  // that read the pre-revocation row must not grant room entry.
+  const revocations = new Map();
+
+  function revocationKey(canvasId, userId) {
+    return `${canvasId}\0${userId}`;
+  }
+
+  function markRevoked(canvasId, userId) {
+    const key = revocationKey(canvasId, userId);
+    revocations.set(key, (revocations.get(key) ?? 0) + 1);
+  }
+
+  function revocationCount(canvasId, userId) {
+    return revocations.get(revocationKey(canvasId, userId)) ?? 0;
+  }
 
   function join(canvasId, user, socketId) {
     let users = canvases.get(canvasId);
@@ -87,7 +104,15 @@ function createPresenceStore() {
     return [...users.values()].map((entry) => entry.user);
   }
 
-  return { join, leave, leaveAll, socketsOf, snapshot };
+  return {
+    join,
+    leave,
+    leaveAll,
+    socketsOf,
+    snapshot,
+    markRevoked,
+    revocationCount,
+  };
 }
 
 module.exports = { createPresenceStore };
