@@ -20,9 +20,6 @@ import {
     generateVersusShareLink,
     generateCanvasShareLink,
     updateCanvasName,
-    fetchCanvasUsers,
-    updateCanvasUserPermission,
-    removeUserFromCanvas,
     editVersusDraft,
     deleteCanvas
 } from "../utils/actions";
@@ -137,58 +134,6 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
             }
         }
     });
-
-    const usersQuery = useQuery(() => ({
-        queryKey: ["users", props.activity.resource_type, props.activity.resource_id],
-        queryFn: () => {
-            if (props.activity.resource_type === "canvas") {
-                return fetchCanvasUsers(props.activity.resource_id);
-            }
-            // For drafts, return empty array for now (no endpoint available)
-            return Promise.resolve([]);
-        },
-        enabled: isManageUsersOpen() && props.activity.is_owner
-    }));
-
-    const updatePermissionMutation = useMutation(() => ({
-        mutationFn: (data: { userId: string; permission: string }) =>
-            updateCanvasUserPermission(
-                props.activity.resource_id,
-                data.userId,
-                data.permission
-            ),
-        onSuccess: () => {
-            queryClient.invalidateQueries({
-                queryKey: [
-                    "users",
-                    props.activity.resource_type,
-                    props.activity.resource_id
-                ]
-            });
-            toast.success("Permission updated");
-        },
-        onError: () => {
-            toast.error("Failed to update permission");
-        }
-    }));
-
-    const removeUserMutation = useMutation(() => ({
-        mutationFn: (userId: string) =>
-            removeUserFromCanvas(props.activity.resource_id, userId),
-        onSuccess: () => {
-            queryClient.invalidateQueries({
-                queryKey: [
-                    "users",
-                    props.activity.resource_type,
-                    props.activity.resource_id
-                ]
-            });
-            toast.success("User removed");
-        },
-        onError: () => {
-            toast.error("Failed to remove user");
-        }
-    }));
 
     const editCanvasMutation = useMutation(() => ({
         mutationFn: (data: { name: string; description?: string; icon?: string }) =>
@@ -443,18 +388,6 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
             });
         } else if (props.activity.resource_type === "navigator") {
             editNavigatorMutation.mutate({ name: editName() });
-        }
-    };
-
-    const handlePermissionChange = (userId: string, permission: string) => {
-        if (props.activity.resource_type === "canvas") {
-            updatePermissionMutation.mutate({ userId, permission });
-        }
-    };
-
-    const handleRemoveUser = (userId: string) => {
-        if (props.activity.resource_type === "canvas") {
-            removeUserMutation.mutate(userId);
         }
     };
 
@@ -1019,9 +952,6 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                     description: props.activity.description,
                     icon: props.activity.icon
                 }}
-                usersQuery={usersQuery}
-                onPermissionChange={handlePermissionChange}
-                onRemoveUser={handleRemoveUser}
                 onUpdateCanvas={(data) =>
                     editCanvasMutation.mutateAsync({
                         name: data.name,

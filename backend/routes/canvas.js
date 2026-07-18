@@ -13,6 +13,7 @@ const VersusDraft = require("../models/VersusDraft.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
 const { assertCanvasAccess } = require("../services/canvasMutations");
+const presenceEjection = require("../services/presenceEjection");
 const {
   respondCanvasMutationError,
 } = require("../middleware/canvasMutationErrors");
@@ -2016,11 +2017,13 @@ router.get("/:canvasId/users", protect, async (req, res) => {
         .json({ error: "Forbidden: You don't have access to this canvas" });
     }
 
+    // No email: any member (including view-only) can fetch this list for
+    // the Share popover, and nothing in the UI renders email anymore.
     const canvas = await Canvas.findByPk(canvasId, {
       include: [
         {
           model: User,
-          attributes: ["id", "name", "email", "picture", "display_name"],
+          attributes: ["id", "name", "picture", "display_name"],
           through: {
             attributes: ["permissions", "lastAccessedAt", "createdAt"],
           },
@@ -2046,7 +2049,6 @@ router.get("/:canvasId/users", protect, async (req, res) => {
     const users = canvas.Users.map((user) => ({
       id: user.id,
       name: user.name,
-      email: user.email,
       picture: user.picture,
       display_name: user.display_name,
       permissions: user.UserCanvas.permissions,
@@ -2067,6 +2069,10 @@ router.put("/:canvasId/users/:userId", protect, async (req, res) => {
     const { permissions } = req.body;
 
     await assertCanvasAccess({ userId: req.user.id, canvasId, level: "admin" });
+
+    if (!["view", "edit", "admin"].includes(permissions)) {
+      return res.status(400).json({ error: "Invalid permissions value" });
+    }
 
     const [affectedRows] = await UserCanvas.update(
       { permissions },
@@ -2112,6 +2118,9 @@ router.delete("/:canvasId/users/:userId", protect, async (req, res) => {
     });
 
     if (affectedRows > 0) {
+      // Room membership is the ACL for presence relays, so revoking access
+      // must also force the user's live sockets out of the canvas room.
+      presenceEjection.ejectUserFromCanvas(canvasId, userId);
       res
         .status(200)
         .json({ success: true, message: "User removed from canvas" });

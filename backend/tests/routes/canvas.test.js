@@ -6,6 +6,7 @@ import request from "supertest";
 const require = createRequire(import.meta.url);
 const auth = require("../../middleware/auth");
 const socketService = require("../../middleware/socketService");
+const presenceEjection = require("../../services/presenceEjection");
 const {
   Canvas,
   UserCanvas,
@@ -69,6 +70,9 @@ beforeEach(() => {
   vi.spyOn(socketService, "emitToRoom").mockImplementation(() => {});
   vi.spyOn(CanvasDraft, "findOne").mockResolvedValue(null);
   vi.spyOn(UserCanvas, "destroy").mockResolvedValue(0);
+  vi.spyOn(presenceEjection, "ejectUserFromCanvas").mockImplementation(
+    () => {},
+  );
 });
 
 describe("canvas route mutation access", () => {
@@ -124,7 +128,7 @@ describe("canvas route mutation access", () => {
     expect(UserCanvas.destroy).not.toHaveBeenCalled();
   });
 
-  it("DELETE /:canvasId/users/:userId succeeds for admin permission", async () => {
+  it("DELETE /:canvasId/users/:userId succeeds for admin permission and ejects the user's sockets", async () => {
     mockCanvasAccess("admin");
     vi.spyOn(UserCanvas, "destroy").mockResolvedValue(1);
 
@@ -135,6 +139,47 @@ describe("canvas route mutation access", () => {
       success: true,
       message: "User removed from canvas",
     });
+    expect(presenceEjection.ejectUserFromCanvas).toHaveBeenCalledWith(
+      "c-1",
+      "u2",
+    );
+  });
+
+  it("DELETE /:canvasId/users/:userId does not eject when no access row was removed", async () => {
+    mockCanvasAccess("admin");
+
+    const res = await request(buildApp()).delete("/api/canvas/c-1/users/u2");
+
+    expect(res.status).toBe(404);
+    expect(presenceEjection.ejectUserFromCanvas).not.toHaveBeenCalled();
+  });
+
+  it("PUT /:canvasId/users/:userId updates permissions for admin without ejecting", async () => {
+    mockCanvasAccess("admin");
+    vi.spyOn(UserCanvas, "update").mockResolvedValue([1]);
+
+    const res = await request(buildApp())
+      .put("/api/canvas/c-1/users/u2")
+      .send({ permissions: "view" });
+
+    expect(res.status).toBe(200);
+    expect(UserCanvas.update).toHaveBeenCalledWith(
+      { permissions: "view" },
+      { where: { canvas_id: "c-1", user_id: "u2" } },
+    );
+    expect(presenceEjection.ejectUserFromCanvas).not.toHaveBeenCalled();
+  });
+
+  it("PUT /:canvasId/users/:userId rejects a permissions value outside the enum", async () => {
+    mockCanvasAccess("admin");
+    vi.spyOn(UserCanvas, "update").mockResolvedValue([1]);
+
+    const res = await request(buildApp())
+      .put("/api/canvas/c-1/users/u2")
+      .send({ permissions: "banana" });
+
+    expect(res.status).toBe(400);
+    expect(UserCanvas.update).not.toHaveBeenCalled();
   });
 
   it("DELETE /:canvasId returns original admin 403 text and does not create a transaction when access fails", async () => {

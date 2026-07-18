@@ -30,6 +30,7 @@ const { setupCanvasHandlers } = require("./socketHandlers/canvasHandlers");
 const { setupPresenceHandlers } = require("./socketHandlers/presenceHandlers");
 const { createCanvasMutationGate } = require("./services/canvasMutations");
 const { createPresenceStore } = require("./services/canvasPresence");
+const presenceEjection = require("./services/presenceEjection");
 const { initializeTimerService } = require("./services/versusTimerService");
 const VersusSessionManager = require("./services/versusSessionManager");
 require("dotenv").config();
@@ -135,6 +136,7 @@ async function main() {
 
   const canvasMutationGate = createCanvasMutationGate({ io });
   const presenceStore = createPresenceStore();
+  presenceEjection.init({ io, store: presenceStore });
 
   // Initialize versus timer service
   initializeTimerService(io);

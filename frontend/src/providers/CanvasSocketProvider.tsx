@@ -8,7 +8,8 @@ import {
     createMemo
 } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { useParams } from "@solidjs/router";
+import { useNavigate, useParams } from "@solidjs/router";
+import toast from "solid-toast";
 import { Socket } from "socket.io-client";
 import {
     ConnectionStatus,
@@ -21,6 +22,7 @@ import ConnectionBanner from "../ConnectionBanner";
 import { validateSocketEvent } from "../utils/socketValidation";
 import {
     PresenceUser,
+    canvasAccessRevokedSchema,
     presenceSnapshotSchema,
     presenceJoinSchema,
     presenceLeaveSchema
@@ -36,6 +38,7 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
     const accessor = useUser();
     const [user] = accessor();
     const params = useParams();
+    const navigate = useNavigate();
 
     // Presence spans the whole canvas workflow: /canvas/:id and its child
     // draft view are siblings under this provider, so a user who opens a
@@ -170,13 +173,29 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
             );
         };
 
+        // Server-side revocation ejection: our access was removed while we
+        // were viewing this canvas (or its child draft view). The server has
+        // already forced this socket out of the room; leave the dead UI.
+        const onAccessRevoked = (data: unknown) => {
+            const parsed = validateSocketEvent(
+                "canvasAccessRevoked",
+                data,
+                canvasAccessRevokedSchema
+            );
+            if (!parsed || parsed.canvasId !== presenceCanvasId()) return;
+            toast.error("Your access to this canvas was removed");
+            navigate("/canvas/dashboard");
+        };
+
         sock.on("presenceSnapshot", onSnapshot);
         sock.on("presenceJoin", onJoin);
         sock.on("presenceLeave", onLeave);
+        sock.on("canvasAccessRevoked", onAccessRevoked);
         onCleanup(() => {
             sock.off("presenceSnapshot", onSnapshot);
             sock.off("presenceJoin", onJoin);
             sock.off("presenceLeave", onLeave);
+            sock.off("canvasAccessRevoked", onAccessRevoked);
         });
     });
 

@@ -71,6 +71,7 @@ describe("setupPresenceHandlers", () => {
   it("registers joinCanvas, leaveCanvas and disconnecting", () => {
     const { handlers } = installHandlers();
     expect([...handlers.keys()].sort()).toEqual([
+      "cursorLeave",
       "cursorMove",
       "disconnecting",
       "joinCanvas",
@@ -184,6 +185,48 @@ describe("setupPresenceHandlers", () => {
       canvasId: "c-1",
       users: [{ ...ALICE_PRESENCE, displayName: "Unknown" }],
     });
+  });
+
+  it("a revocation processed during the pending access check cancels the join", async () => {
+    let releaseAccessCheck;
+    vi.spyOn(UserCanvas, "findOne").mockReturnValue(
+      new Promise((resolve) => {
+        releaseAccessCheck = () => resolve({ permissions: "view" });
+      }),
+    );
+    const { socket, handlers, roomEmit, store } = installHandlers();
+
+    const pendingJoin = handlers.get("joinCanvas")({ canvasId: "c-1" });
+    // Revocation lands while the ACL lookup is in flight: the lookup read
+    // the pre-delete row, so its stale success must not grant room entry.
+    store.markRevoked("c-1", "u-alice");
+    releaseAccessCheck();
+    await pendingJoin;
+
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(roomEmit).not.toHaveBeenCalled();
+    expect(store.snapshot("c-1")).toEqual([]);
+    expect(socket.emit).toHaveBeenCalledWith(
+      "canvasMutationError",
+      expect.objectContaining({ event: "joinCanvas", code: "NOT_AUTHORIZED" }),
+    );
+  });
+
+  it("a revocation on a different canvas does not cancel the join", async () => {
+    let releaseAccessCheck;
+    vi.spyOn(UserCanvas, "findOne").mockReturnValue(
+      new Promise((resolve) => {
+        releaseAccessCheck = () => resolve({ permissions: "view" });
+      }),
+    );
+    const { socket, handlers, store } = installHandlers();
+
+    const pendingJoin = handlers.get("joinCanvas")({ canvasId: "c-1" });
+    store.markRevoked("c-2", "u-alice");
+    releaseAccessCheck();
+    await pendingJoin;
+
+    expect(socket.join).toHaveBeenCalledWith("c-1");
   });
 
   it("a leaveCanvas processed during the pending access check cancels the join", async () => {
@@ -363,6 +406,57 @@ describe("setupPresenceHandlers", () => {
       socket.rooms.add("c-1");
 
       await handlers.get("cursorMove")({ canvasId: "c-1", x: 1, y: 2 });
+
+      expect(socket.to).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("cursorLeave relay", () => {
+    async function joinedSocket(overrides = {}) {
+      const installed = installHandlers(overrides);
+      await installed.handlers.get("joinCanvas")({ canvasId: "c-1" });
+      installed.socket.to.mockClear();
+      installed.roomEmit.mockClear();
+      vi.mocked(UserCanvas.findOne).mockClear();
+      return installed;
+    }
+
+    it("relays cursorLeave to the room with the sender's userId stamped", async () => {
+      const { socket, handlers, roomEmit } = await joinedSocket();
+
+      await handlers.get("cursorLeave")({ canvasId: "c-1", userId: "u-spoofed" });
+
+      expect(socket.to).toHaveBeenCalledWith("c-1");
+      expect(roomEmit).toHaveBeenCalledWith("cursorLeave", {
+        canvasId: "c-1",
+        userId: "u-alice",
+      });
+      expect(UserCanvas.findOne).not.toHaveBeenCalled();
+    });
+
+    it("drops the event when the socket is not in the room", async () => {
+      const { socket, handlers, roomEmit } = installHandlers();
+
+      await handlers.get("cursorLeave")({ canvasId: "c-1" });
+
+      expect(socket.to).not.toHaveBeenCalled();
+      expect(roomEmit).not.toHaveBeenCalled();
+    });
+
+    it("drops events with a missing or non-string canvasId", async () => {
+      const { socket, handlers } = await joinedSocket();
+
+      await handlers.get("cursorLeave")({});
+      await handlers.get("cursorLeave")({ canvasId: { nested: true } });
+
+      expect(socket.to).not.toHaveBeenCalled();
+    });
+
+    it("drops events from a socket without a user", async () => {
+      const { socket, handlers } = installHandlers({ user: undefined });
+      socket.rooms.add("c-1");
+
+      await handlers.get("cursorLeave")({ canvasId: "c-1" });
 
       expect(socket.to).not.toHaveBeenCalled();
     });
