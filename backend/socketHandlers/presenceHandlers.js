@@ -158,7 +158,10 @@ function setupPresenceHandlers(socket, store, wrapSocketHandler) {
 
   // Fired when a client leaves the canvas *view* while staying in the canvas
   // room (draft drilldown, canvas-to-canvas nav): the stored viewport is no
-  // longer live, so jump-to-viewport must stop offering it.
+  // longer live, so jump-to-viewport must stop offering it. Like cursors,
+  // the viewport is USER-scoped by design ("two tabs = follows the last tab
+  // that moved"), so one tab's leave clears a viewport another tab may still
+  // be broadcasting — it self-corrects on that tab's next viewportMove.
   wrapSocketHandler(socket, "viewportLeave", async (data) => {
     const canvasId = data?.canvasId;
     if (typeof canvasId !== "string" || !canvasId) return;

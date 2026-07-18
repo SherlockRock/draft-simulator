@@ -2078,7 +2078,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 viewportJumpFrame = requestAnimationFrame(step);
             } else {
                 stopViewportJump();
-                debouncedSaveViewport(target);
+                // Persist directly, not via debouncedSaveViewport: that
+                // helper is a leading-edge throttle that silently DROPS
+                // calls inside its 1s window, and a jump right after a pan
+                // must still save. A completed jump is a single discrete
+                // event, so there is nothing to throttle.
+                if (isLocalMode()) {
+                    localUpdateViewport(target);
+                } else {
+                    updateViewportMutation.mutate({
+                        canvasId: canvasId(),
+                        viewport: target
+                    });
+                }
             }
         };
 
