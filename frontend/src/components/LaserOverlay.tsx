@@ -58,37 +58,36 @@ export const LaserOverlay: Component<{
         for (const [userId, trail] of Object.entries(props.tracker.trails)) {
             ctx.strokeStyle = ctx.fillStyle = presenceColor(userId);
             for (const stroke of trail.strokes) {
+                // One stroke = ONE path and ONE stroke() call, with a uniform
+                // alpha from the newest point's age. Per-segment stroking
+                // double-paints the shared joints (overlapping round caps
+                // compound their translucency) into bright dots at every
+                // vertex; a single stroke operation paints each pixel at most
+                // once. Evaporation still shows: prune shortens the tail
+                // point by point, and after laserEnd the whole remaining
+                // tail fades out together.
+                const newest = stroke[stroke.length - 1];
+                const alpha = 1 - (nowT - newest.t) / LASER_FADE_MS;
+                if (alpha <= 0) continue;
+                ctx.globalAlpha = alpha;
                 if (stroke.length === 1) {
                     // A stroke that is only its starting point: draw a dot so
                     // the press registers before the first segment arrives.
-                    const p = stroke[0];
-                    const alpha = 1 - (nowT - p.t) / LASER_FADE_MS;
-                    if (alpha <= 0) continue;
-                    const screen = worldToScreen(p.x, p.y, viewport);
-                    ctx.globalAlpha = alpha;
+                    const screen = worldToScreen(newest.x, newest.y, viewport);
                     ctx.beginPath();
                     ctx.arc(screen.x, screen.y, 2, 0, Math.PI * 2);
                     ctx.fill();
                     continue;
                 }
+                ctx.lineWidth = 1.5 + 2.5 * alpha;
+                ctx.beginPath();
+                const start = worldToScreen(stroke[0].x, stroke[0].y, viewport);
+                ctx.moveTo(start.x, start.y);
                 for (let i = 1; i < stroke.length; i++) {
-                    // Segment alpha/width from the newer endpoint's age: the
-                    // trail thins and dims towards its evaporating tail.
-                    const alpha = 1 - (nowT - stroke[i].t) / LASER_FADE_MS;
-                    if (alpha <= 0) continue;
-                    const from = worldToScreen(
-                        stroke[i - 1].x,
-                        stroke[i - 1].y,
-                        viewport
-                    );
-                    const to = worldToScreen(stroke[i].x, stroke[i].y, viewport);
-                    ctx.globalAlpha = alpha;
-                    ctx.lineWidth = 1.5 + 2.5 * alpha;
-                    ctx.beginPath();
-                    ctx.moveTo(from.x, from.y);
-                    ctx.lineTo(to.x, to.y);
-                    ctx.stroke();
+                    const screen = worldToScreen(stroke[i].x, stroke[i].y, viewport);
+                    ctx.lineTo(screen.x, screen.y);
                 }
+                ctx.stroke();
             }
         }
         ctx.globalAlpha = 1;
