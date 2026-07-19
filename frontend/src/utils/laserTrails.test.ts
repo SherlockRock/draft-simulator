@@ -33,9 +33,7 @@ describe("createLaserTrailTracker", () => {
 
         tracker.handleLaserPoint(point("u-bob", 10, 20), "c-1");
 
-        expect(tracker.trails["u-bob"].strokes).toEqual([
-            [{ x: 10, y: 20, t: 1000 }]
-        ]);
+        expect(tracker.trails["u-bob"].strokes).toEqual([[{ x: 10, y: 20, t: 1000 }]]);
     });
 
     it("appends subsequent points to the same open stroke", () => {

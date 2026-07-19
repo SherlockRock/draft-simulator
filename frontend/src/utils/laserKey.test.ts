@@ -7,7 +7,10 @@ type KeyEventLike = {
     preventDefault: () => void;
 };
 
-const keyEvent = (key: string, repeat = false): KeyEventLike & {
+const keyEvent = (
+    key: string,
+    repeat = false
+): KeyEventLike & {
     preventDefault: ReturnType<typeof vi.fn>;
 } => ({
     key,

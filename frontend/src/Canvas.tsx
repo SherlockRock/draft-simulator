@@ -104,7 +104,10 @@ import {
     presenceSnapshotSchema
 } from "./utils/presence";
 import { createRemoteCursorTracker } from "./utils/remoteCursors";
+import { createLaserTrailTracker } from "./utils/laserTrails";
+import { createLaserKeyTracker } from "./utils/laserKey";
 import { CursorOverlay } from "./components/CursorOverlay";
+import { LaserOverlay } from "./components/LaserOverlay";
 import CanvasSidebar from "./components/CanvasSidebar";
 import { PresenceStack } from "./components/PresenceStack";
 import { getGroupRestrictedChampions } from "./utils/groupRestrictions";
@@ -1174,6 +1177,35 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     });
 
+    // Laser trails (slice 5). Same shape as the cursor listener: keyed on
+    // the active canvas, quiet validation inside the tracker, reset on
+    // canvas-to-canvas navigation. A sender's own leave emits laserEnd
+    // through its cleanup, so only full departures need pruning here.
+    const laserTracker = createLaserTrailTracker(() => currentUser()?.id);
+
+    createEffect(() => {
+        if (isLocalMode()) return;
+        const socket = socketAccessor();
+        const id = canvasId();
+        if (!socket || !id) return;
+
+        const onLaserPoint = (rawData: unknown) =>
+            laserTracker.handleLaserPoint(rawData, id);
+        const onLaserEnd = (rawData: unknown) => laserTracker.handleLaserEnd(rawData, id);
+        const onLaserPresenceLeave = (rawData: unknown) =>
+            laserTracker.handlePresenceLeave(rawData, id);
+
+        socket.on("laserPoint", onLaserPoint);
+        socket.on("laserEnd", onLaserEnd);
+        socket.on("presenceLeave", onLaserPresenceLeave);
+        onCleanup(() => {
+            socket.off("laserPoint", onLaserPoint);
+            socket.off("laserEnd", onLaserEnd);
+            socket.off("presenceLeave", onLaserPresenceLeave);
+            laserTracker.reset();
+        });
+    });
+
     createEffect(() => {
         if (isLocalMode()) return;
         const socket = socketAccessor();
@@ -1844,10 +1876,92 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     });
 
+    // Laser pointer (slice 5): hold Tab to draw. The stroke is tagged with
+    // the canvas where it STARTED (laserCanvasId, captured on activation) —
+    // canvas-to-canvas navigation keeps this component mounted, and both the
+    // trailing throttled point and the laserEnd must go to the stroke's own
+    // canvas, not whichever one canvasId() resolves to at fire time.
+    let laserCanvasId: string | null = null;
+
+    const laserEmitter = createTrailingThrottle<{ x: number; y: number }>(({ x, y }) => {
+        const socket = socketAccessor();
+        if (!socket || connectionStatus() !== "connected" || !laserCanvasId) return;
+        socket.emit("laserPoint", { canvasId: laserCanvasId, x, y });
+    });
+
+    // Tab only starts drawing when nothing interactive is focused, so
+    // tabbing through inputs, dialogs and the sidebar keeps working. After
+    // a plain canvas click document.activeElement is the body (the canvas
+    // container is not focusable), which is exactly the idle state.
+    const canStartLaser = () => {
+        if (isLocalMode()) return false;
+        const active = document.activeElement;
+        return (
+            !active ||
+            active === document.body ||
+            active === document.documentElement ||
+            active === canvasContainerRef
+        );
+    };
+
+    const laserKey = createLaserKeyTracker({
+        canActivate: canStartLaser,
+        onActivate: () => {
+            laserCanvasId = canvasId();
+        },
+        onDeactivate: () => {
+            // Cancel before ending: a queued trailing point must not append
+            // to a stroke the receivers just closed.
+            laserEmitter.cancel();
+            const socket = socketAccessor();
+            if (laserCanvasId && socket && connectionStatus() === "connected") {
+                socket.emit("laserEnd", { canvasId: laserCanvasId });
+            }
+            laserCanvasId = null;
+            laserTracker.endLocalStroke();
+        }
+    });
+
+    onMount(() => {
+        const onLaserKeyDown = (e: KeyboardEvent) => laserKey.handleKeyDown(e);
+        const onLaserKeyUp = (e: KeyboardEvent) => laserKey.handleKeyUp(e);
+        // Missed-keyup protection: alt-tab and tab-switch swallow the Tab
+        // keyup, so window blur and visibility loss both end the hold.
+        const onLaserBlur = () => laserKey.deactivate();
+        const onLaserVisibility = () => {
+            if (document.visibilityState === "hidden") laserKey.deactivate();
+        };
+
+        window.addEventListener("keydown", onLaserKeyDown);
+        window.addEventListener("keyup", onLaserKeyUp);
+        window.addEventListener("blur", onLaserBlur);
+        document.addEventListener("visibilitychange", onLaserVisibility);
+        onCleanup(() => {
+            window.removeEventListener("keydown", onLaserKeyDown);
+            window.removeEventListener("keyup", onLaserKeyUp);
+            window.removeEventListener("blur", onLaserBlur);
+            document.removeEventListener("visibilitychange", onLaserVisibility);
+        });
+    });
+
+    // Leaving the canvas view (draft drilldown, canvas-to-canvas nav) ends
+    // an in-flight stroke: deactivate() no-ops when idle, and otherwise
+    // emits laserEnd to the stroke's own canvas via laserCanvasId.
+    createEffect(() => {
+        canvasId();
+        onCleanup(() => laserKey.deactivate());
+    });
+
     const onCursorMouseMove = (e: MouseEvent) => {
         if (isLocalMode()) return;
         const world = screenToWorld(e.clientX, e.clientY);
         cursorEmitter.send(world.x, world.y);
+        if (laserKey.active()) {
+            // Local echo is unthrottled (the drawer sees a smooth line);
+            // only the network emit coalesces through the throttle.
+            laserTracker.addLocalPoint(world.x, world.y);
+            laserEmitter.send({ x: world.x, y: world.y });
+        }
     };
 
     const isPointInGroup = (x: number, y: number, group: CanvasGroup): boolean => {
@@ -3316,6 +3430,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     sharePopperContent={props.sharePopperContent}
                 />
                 <Show when={!isLocalMode()}>
+                    {/* Before CursorOverlay/PresenceStack in source order so
+                        cursors and the (equal z-40) presence popover paint
+                        above the laser trails. */}
+                    <LaserOverlay tracker={laserTracker} viewport={props.viewport} />
                     {/* Before PresenceStack in source order so the (equal
                         z-40) presence popover paints above cursors. */}
                     <CursorOverlay
