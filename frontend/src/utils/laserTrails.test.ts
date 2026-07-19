@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LASER_FADE_MS } from "./presence";
+import { LASER_FADE_MS, LASER_MAX_POINTS } from "./presence";
 import { createLaserTrailTracker } from "./laserTrails";
 
 const point = (userId: string, x: number, y: number, canvasId = "c-1") => ({
@@ -200,6 +200,32 @@ describe("createLaserTrailTracker", () => {
         tracker.handlePresenceLeave({ canvasId: "c-other", userId: "u-bob" }, "c-1");
 
         expect(tracker.trails["u-bob"]).toBeDefined();
+    });
+
+    it("caps retained points per user, dropping the oldest", () => {
+        const { tracker, clock } = track();
+        for (let i = 0; i < LASER_MAX_POINTS + 25; i++) {
+            tracker.handleLaserPoint(point("u-bob", i, i), "c-1");
+            clock.advance(1);
+        }
+
+        const kept = tracker.trails["u-bob"].strokes.flat();
+        expect(kept).toHaveLength(LASER_MAX_POINTS);
+        expect(kept[0].x).toBe(25);
+        expect(kept[kept.length - 1].x).toBe(LASER_MAX_POINTS + 24);
+    });
+
+    it("the cap drops whole emptied strokes from the front", () => {
+        const { tracker, clock } = track();
+        tracker.handleLaserPoint(point("u-bob", 0, 0), "c-1");
+        tracker.handleLaserEnd(end("u-bob"), "c-1");
+        for (let i = 1; i <= LASER_MAX_POINTS; i++) {
+            tracker.handleLaserPoint(point("u-bob", i, i), "c-1");
+            clock.advance(1);
+        }
+
+        expect(tracker.trails["u-bob"].strokes).toHaveLength(1);
+        expect(tracker.trails["u-bob"].strokes[0]).toHaveLength(LASER_MAX_POINTS);
     });
 
     it("reset clears all trails (canvas switch)", () => {

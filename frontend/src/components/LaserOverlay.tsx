@@ -28,9 +28,14 @@ export const LaserOverlay: Component<{
 
     const paint = () => {
         const canvas = canvasRef;
-        if (!canvas) return;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
+        const ctx = canvas?.getContext("2d");
+        if (!canvas || !ctx) {
+            // Bail without wedging the loop: leaving `running` true here
+            // would block every future start.
+            running = false;
+            frame = null;
+            return;
+        }
 
         const nowT = performance.now();
         const hasContent = props.tracker.prune(nowT);

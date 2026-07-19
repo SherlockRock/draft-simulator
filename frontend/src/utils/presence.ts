@@ -85,6 +85,12 @@ export const CURSOR_IDLE_MS = 5000;
 // continuously eats itself ~1s behind the cursor, and the same rule makes
 // the remaining tail fade out after release.
 export const LASER_FADE_MS = 1000;
+// Hard cap on retained points per user's trail, dropping the oldest.
+// Evaporation already bounds a well-behaved sender (~30 throttled points
+// per second, ~125/s for the unthrottled local echo, inside a 1s window);
+// the cap is defense-in-depth so a flooding room member can't amplify the
+// per-event relay into unbounded receiver memory and paint cost.
+export const LASER_MAX_POINTS = 300;
 
 type ViewportLike = { x: number; y: number; zoom: number };
 

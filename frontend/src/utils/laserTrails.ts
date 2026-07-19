@@ -1,5 +1,10 @@
 import { createStore, produce } from "solid-js/store";
-import { LASER_FADE_MS, laserEndSchema, laserPointSchema } from "./presence";
+import {
+    LASER_FADE_MS,
+    LASER_MAX_POINTS,
+    laserEndSchema,
+    laserPointSchema
+} from "./presence";
 
 export type LaserPoint = {
     // World coordinates; transformed through the viewer's viewport on paint.
@@ -47,6 +52,30 @@ export function createLaserTrailTracker(
                 strokeIndex,
                 trail.strokes[strokeIndex].length,
                 laserPoint
+            );
+        }
+
+        const total = trails[userId].strokes.reduce(
+            (sum, stroke) => sum + stroke.length,
+            0
+        );
+        if (total > LASER_MAX_POINTS) {
+            setTrails(
+                userId,
+                "strokes",
+                produce((strokes) => {
+                    let excess = total - LASER_MAX_POINTS;
+                    while (excess > 0 && strokes.length > 0) {
+                        const oldest = strokes[0];
+                        if (oldest.length <= excess) {
+                            excess -= oldest.length;
+                            strokes.shift();
+                        } else {
+                            oldest.splice(0, excess);
+                            excess = 0;
+                        }
+                    }
+                })
             );
         }
     };
