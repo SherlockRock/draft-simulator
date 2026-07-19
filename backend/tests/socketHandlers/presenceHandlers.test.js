@@ -78,6 +78,8 @@ describe("setupPresenceHandlers", () => {
       "cursorMove",
       "disconnecting",
       "joinCanvas",
+      "laserEnd",
+      "laserPoint",
       "leaveCanvas",
       "viewportLeave",
       "viewportMove",
@@ -618,6 +620,156 @@ describe("setupPresenceHandlers", () => {
       socket.rooms.add("c-1");
 
       await handlers.get("viewportLeave")({ canvasId: "c-1" });
+
+      expect(socket.to).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("laserPoint relay", () => {
+    async function joinedSocket(overrides = {}) {
+      const installed = installHandlers(overrides);
+      await installed.handlers.get("joinCanvas")({ canvasId: "c-1" });
+      installed.socket.to.mockClear();
+      installed.roomEmit.mockClear();
+      vi.mocked(UserCanvas.findOne).mockClear();
+      return installed;
+    }
+
+    it("relays laserPoint to the room excluding the sender", async () => {
+      const { socket, handlers, roomEmit } = await joinedSocket();
+
+      await handlers.get("laserPoint")({ canvasId: "c-1", x: 120.5, y: -40 });
+
+      expect(socket.to).toHaveBeenCalledWith("c-1");
+      expect(roomEmit).toHaveBeenCalledWith("laserPoint", {
+        canvasId: "c-1",
+        userId: "u-alice",
+        x: 120.5,
+        y: -40,
+      });
+    });
+
+    it("does not hit the database", async () => {
+      const { handlers } = await joinedSocket();
+
+      await handlers.get("laserPoint")({ canvasId: "c-1", x: 1, y: 2 });
+
+      expect(UserCanvas.findOne).not.toHaveBeenCalled();
+    });
+
+    it("stamps the sender's userId, ignoring one supplied by the client", async () => {
+      const { handlers, roomEmit } = await joinedSocket();
+
+      await handlers.get("laserPoint")({
+        canvasId: "c-1",
+        userId: "u-spoofed",
+        x: 1,
+        y: 2,
+      });
+
+      expect(roomEmit).toHaveBeenCalledWith("laserPoint", {
+        canvasId: "c-1",
+        userId: "u-alice",
+        x: 1,
+        y: 2,
+      });
+    });
+
+    it("drops the event when the socket is not in the room", async () => {
+      const { socket, handlers, roomEmit } = installHandlers();
+
+      await handlers.get("laserPoint")({ canvasId: "c-1", x: 1, y: 2 });
+
+      expect(socket.to).not.toHaveBeenCalled();
+      expect(roomEmit).not.toHaveBeenCalled();
+    });
+
+    it("stops relaying after leaveCanvas", async () => {
+      const { handlers, roomEmit } = await joinedSocket();
+      await handlers.get("leaveCanvas")({ canvasId: "c-1" });
+      roomEmit.mockClear();
+
+      await handlers.get("laserPoint")({ canvasId: "c-1", x: 1, y: 2 });
+
+      expect(roomEmit).not.toHaveBeenCalled();
+    });
+
+    it("drops events with a missing or non-string canvasId", async () => {
+      const { socket, handlers } = await joinedSocket();
+
+      await handlers.get("laserPoint")({ x: 1, y: 2 });
+      await handlers.get("laserPoint")({ canvasId: { nested: true }, x: 1, y: 2 });
+
+      expect(socket.to).not.toHaveBeenCalled();
+    });
+
+    it("drops events with non-finite coordinates", async () => {
+      const { socket, handlers } = await joinedSocket();
+
+      await handlers.get("laserPoint")({ canvasId: "c-1", x: "12", y: 2 });
+      await handlers.get("laserPoint")({ canvasId: "c-1", x: 1 });
+      await handlers.get("laserPoint")({ canvasId: "c-1", x: Infinity, y: 2 });
+      await handlers.get("laserPoint")({ canvasId: "c-1", x: NaN, y: 2 });
+
+      expect(socket.to).not.toHaveBeenCalled();
+    });
+
+    it("drops events from a socket without a user", async () => {
+      const { socket, handlers } = installHandlers({ user: undefined });
+      socket.rooms.add("c-1");
+
+      await handlers.get("laserPoint")({ canvasId: "c-1", x: 1, y: 2 });
+
+      expect(socket.to).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("laserEnd relay", () => {
+    async function joinedSocket(overrides = {}) {
+      const installed = installHandlers(overrides);
+      await installed.handlers.get("joinCanvas")({ canvasId: "c-1" });
+      installed.socket.to.mockClear();
+      installed.roomEmit.mockClear();
+      vi.mocked(UserCanvas.findOne).mockClear();
+      return installed;
+    }
+
+    it("relays laserEnd to the room with the sender's userId stamped", async () => {
+      const { socket, handlers, roomEmit } = await joinedSocket();
+
+      await handlers.get("laserEnd")({ canvasId: "c-1", userId: "u-spoofed" });
+
+      expect(socket.to).toHaveBeenCalledWith("c-1");
+      expect(roomEmit).toHaveBeenCalledWith("laserEnd", {
+        canvasId: "c-1",
+        userId: "u-alice",
+      });
+      expect(UserCanvas.findOne).not.toHaveBeenCalled();
+    });
+
+    it("drops the event when the socket is not in the room", async () => {
+      const { socket, handlers, roomEmit } = installHandlers();
+
+      await handlers.get("laserEnd")({ canvasId: "c-1" });
+
+      expect(socket.to).not.toHaveBeenCalled();
+      expect(roomEmit).not.toHaveBeenCalled();
+    });
+
+    it("drops events with a missing or non-string canvasId", async () => {
+      const { socket, handlers } = await joinedSocket();
+
+      await handlers.get("laserEnd")({});
+      await handlers.get("laserEnd")({ canvasId: { nested: true } });
+
+      expect(socket.to).not.toHaveBeenCalled();
+    });
+
+    it("drops events from a socket without a user", async () => {
+      const { socket, handlers } = installHandlers({ user: undefined });
+      socket.rooms.add("c-1");
+
+      await handlers.get("laserEnd")({ canvasId: "c-1" });
 
       expect(socket.to).not.toHaveBeenCalled();
     });
