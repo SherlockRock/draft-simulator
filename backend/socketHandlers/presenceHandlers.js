@@ -176,6 +176,43 @@ function setupPresenceHandlers(socket, store, wrapSocketHandler) {
     });
   });
 
+  // Laser pointer points (slice 5): same thin-relay trust model as
+  // cursorMove. Deliberately stateless server-side — a laser stroke is pure
+  // session ephemera, so a late joiner simply doesn't see one in flight.
+  wrapSocketHandler(socket, "laserPoint", async (data) => {
+    const canvasId = data?.canvasId;
+    if (typeof canvasId !== "string" || !canvasId) return;
+    if (!socket.rooms.has(canvasId)) return;
+    if (!Number.isFinite(data.x) || !Number.isFinite(data.y)) return;
+    const user = getPresenceUser(socket);
+    if (!user) return;
+
+    socket.to(canvasId).emit("laserPoint", {
+      canvasId,
+      userId: user.userId,
+      x: data.x,
+      y: data.y,
+    });
+  });
+
+  // Fired on Tab release (and on leaving the canvas view mid-stroke):
+  // receivers close the sender's current stroke so the remaining tail fades
+  // out and a quick re-press starts a fresh stroke instead of connecting to
+  // the old one. Same trust model: room membership is the check, userId is
+  // stamped server-side.
+  wrapSocketHandler(socket, "laserEnd", async (data) => {
+    const canvasId = data?.canvasId;
+    if (typeof canvasId !== "string" || !canvasId) return;
+    if (!socket.rooms.has(canvasId)) return;
+    const user = getPresenceUser(socket);
+    if (!user) return;
+
+    socket.to(canvasId).emit("laserEnd", {
+      canvasId,
+      userId: user.userId,
+    });
+  });
+
   socket.on("disconnecting", () => {
     for (const { canvasId, userId, departed } of store.leaveAll(socket.id)) {
       if (departed) {

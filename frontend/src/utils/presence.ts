@@ -69,8 +69,28 @@ export type ViewportMove = z.infer<typeof viewportMoveSchema>;
 // canvas-to-canvas nav); same payload shape as presenceLeave.
 export const viewportLeaveSchema = presenceLeaveSchema;
 
+// Laser pointer (slice 5): points travel in WORLD coordinates on the same
+// throttled channel shape as cursors — server-stamped userId, quiet
+// validation on receive. laserEnd closes the sender's current stroke
+// (Tab release, or leaving the canvas view mid-stroke).
+export const laserPointSchema = cursorMoveSchema;
+
+export type LaserPointEvent = z.infer<typeof laserPointSchema>;
+
+export const laserEndSchema = presenceLeaveSchema;
+
 export const CURSOR_THROTTLE_MS = 35;
 export const CURSOR_IDLE_MS = 5000;
+// How long a laser point lives before it has fully evaporated: the trail
+// continuously eats itself ~1s behind the cursor, and the same rule makes
+// the remaining tail fade out after release.
+export const LASER_FADE_MS = 1000;
+// Hard cap on retained points per user's trail, dropping the oldest.
+// Evaporation already bounds a well-behaved sender (~30 throttled points
+// per second, ~125/s for the unthrottled local echo, inside a 1s window);
+// the cap is defense-in-depth so a flooding room member can't amplify the
+// per-event relay into unbounded receiver memory and paint cost.
+export const LASER_MAX_POINTS = 300;
 
 type ViewportLike = { x: number; y: number; zoom: number };
 
