@@ -1946,10 +1946,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     // Leaving the canvas view (draft drilldown, canvas-to-canvas nav) ends
     // an in-flight stroke: deactivate() no-ops when idle, and otherwise
-    // emits laserEnd to the stroke's own canvas via laserCanvasId.
+    // emits laserEnd to the stroke's own canvas via laserCanvasId. The
+    // extra cancel is unconditional (mirroring the cursor emitter) so no
+    // queued trailing send can outlive the navigation even if one is ever
+    // queued outside an active hold.
     createEffect(() => {
         canvasId();
-        onCleanup(() => laserKey.deactivate());
+        onCleanup(() => {
+            laserKey.deactivate();
+            laserEmitter.cancel();
+        });
     });
 
     const onCursorMouseMove = (e: MouseEvent) => {
