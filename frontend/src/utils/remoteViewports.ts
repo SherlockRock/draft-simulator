@@ -46,9 +46,7 @@ export function createRemoteViewportTracker(selfId: () => string | undefined) {
         // Seeds last-known viewports from an already-validated presence
         // snapshot (the provider owns the loud validation), replacing any
         // previous state wholesale.
-        handleSnapshot(
-            users: { userId: string; viewport: RemoteViewport | null }[]
-        ) {
+        handleSnapshot(users: { userId: string; viewport: RemoteViewport | null }[]) {
             setViewports(
                 produce((draft) => {
                     for (const key of Object.keys(draft)) {

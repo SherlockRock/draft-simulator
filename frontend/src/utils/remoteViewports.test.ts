@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { createRemoteViewportTracker } from "./remoteViewports";
 
-const move = (
-    userId: string,
-    x: number,
-    y: number,
-    zoom: number,
-    canvasId = "c-1"
-) => ({ canvasId, userId, x, y, zoom });
+const move = (userId: string, x: number, y: number, zoom: number, canvasId = "c-1") => ({
+    canvasId,
+    userId,
+    x,
+    y,
+    zoom
+});
 
 const leave = (userId: string, canvasId = "c-1") => ({ canvasId, userId });
 
@@ -95,9 +95,7 @@ describe("createRemoteViewportTracker", () => {
         const tracker = track();
         tracker.handleViewportMove(move("u-old", 9, 9, 9), "c-1");
 
-        tracker.handleSnapshot([
-            { userId: "u-bob", viewport: { x: 1, y: 2, zoom: 1 } }
-        ]);
+        tracker.handleSnapshot([{ userId: "u-bob", viewport: { x: 1, y: 2, zoom: 1 } }]);
 
         expect(tracker.viewportOf("u-old")).toBeUndefined();
         expect(tracker.viewportOf("u-bob")).toEqual({ x: 1, y: 2, zoom: 1 });
@@ -106,9 +104,7 @@ describe("createRemoteViewportTracker", () => {
     it("handleSnapshot never records the user's own viewport", () => {
         const tracker = track("u-self");
 
-        tracker.handleSnapshot([
-            { userId: "u-self", viewport: { x: 1, y: 2, zoom: 1 } }
-        ]);
+        tracker.handleSnapshot([{ userId: "u-self", viewport: { x: 1, y: 2, zoom: 1 } }]);
 
         expect(tracker.viewportOf("u-self")).toBeUndefined();
     });
