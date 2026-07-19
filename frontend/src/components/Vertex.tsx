@@ -17,7 +17,6 @@ type VertexComponentProps = {
     isConnectionMode: boolean;
     isSelected: boolean;
     onVertexClick: (connectionId: string, vertexId: string) => void;
-    onContextMenu: (vertexId: string, e: MouseEvent) => void;
 };
 
 export const VertexComponent = (props: VertexComponentProps) => {
@@ -38,6 +37,8 @@ export const VertexComponent = (props: VertexComponentProps) => {
         <g>
             {/* Larger invisible hitbox for easier interaction */}
             <circle
+                data-connection-id={props.connectionId}
+                data-vertex-id={props.vertex.id}
                 cx={screenPos().x}
                 cy={screenPos().y}
                 r={16}
@@ -55,13 +56,6 @@ export const VertexComponent = (props: VertexComponentProps) => {
                             props.vertex.y,
                             e
                         );
-                    }
-                }}
-                onContextMenu={(e) => {
-                    if (props.onContextMenu) {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        props.onContextMenu(props.vertex.id, e);
                     }
                 }}
                 onMouseEnter={() => props.onHover(true)}

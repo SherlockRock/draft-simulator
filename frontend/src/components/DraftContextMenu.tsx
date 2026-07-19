@@ -7,7 +7,7 @@ type DraftContextMenuProps = {
     onRename?: () => void;
     onView: () => void;
     onGoTo: () => void;
-    onCopy: () => void;
+    onCopy?: () => void;
     onDelete?: () => void;
     onClose: () => void;
 };
@@ -73,15 +73,17 @@ export const DraftContextMenu: Component<DraftContextMenuProps> = (props) => {
             >
                 Go to
             </button>
-            <button
-                class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-border"
-                onClick={() => {
-                    props.onCopy();
-                    props.onClose();
-                }}
-            >
-                Copy
-            </button>
+            <Show when={props.onCopy}>
+                <button
+                    class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-border"
+                    onClick={() => {
+                        props.onCopy?.();
+                        props.onClose();
+                    }}
+                >
+                    Copy
+                </button>
+            </Show>
             <Show when={props.onDelete}>
                 <button
                     class="w-full px-4 py-2 text-left text-sm text-darius-crimson transition-colors hover:bg-darius-crimson/15"

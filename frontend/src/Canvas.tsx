@@ -93,6 +93,7 @@ import { SeriesGroupContainer } from "./components/SeriesGroupContainer";
 import { CustomGroupContainer } from "./components/CustomGroupContainer";
 import { DeleteGroupDialog } from "./components/DeleteGroupDialog";
 import { GroupSettingsDialog } from "./components/GroupDisabledChampionsDialog";
+import { ContextMenu } from "./components/ContextMenu";
 import { DraftContextMenu } from "./components/DraftContextMenu";
 import { GroupContextMenu } from "./components/GroupContextMenu";
 import { useCanvasContext, type ShareAnchor } from "./contexts/CanvasContext";
@@ -336,6 +337,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const [groupContextMenu, setGroupContextMenu] = createSignal<{
         group: CanvasGroup;
+        position: { x: number; y: number };
+    } | null>(null);
+
+    // Connection/vertex menu state lives here (not in ConnectionComponent) so
+    // the canvas-level mouse-up dispatcher can open it from the mousedown
+    // target's data-connection-id / data-vertex-id tags.
+    const [connectionContextMenu, setConnectionContextMenu] = createSignal<{
+        connectionId: string;
+        type: "connection" | "vertex";
+        vertexId?: string;
         position: { x: number; y: number };
     } | null>(null);
 
@@ -2074,43 +2085,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
-    const onBackgroundDoubleClick = (e: MouseEvent) => {
-        if (isConnectionMode()) return;
-        if (!canEdit()) return;
-
-        const target = e.target as HTMLElement;
-        if (target === canvasContainerRef || canvasContainerRef?.contains(target)) {
-            e.preventDefault();
-
-            const canvasRect = target.getBoundingClientRect();
-            const canvasRelativeX = e.clientX - canvasRect.left;
-            const canvasRelativeY = e.clientY - canvasRect.top;
-            const vp = props.viewport();
-            const worldX = canvasRelativeX / vp.zoom + vp.x;
-            const worldY = canvasRelativeY / vp.zoom + vp.y;
-
-            if (isLocalMode()) {
-                localNewDraft({
-                    name: "New Draft",
-                    picks: Array(20).fill(""),
-                    positionX: worldX,
-                    positionY: worldY
-                });
-                refreshFromLocal();
-                toast.success("Successfully created new draft!");
-            } else {
-                newDraftMutation.mutate({
-                    name: "New Draft",
-                    picks: Array(20).fill(""),
-                    public: false,
-                    canvas_id: canvasId(),
-                    positionX: worldX,
-                    positionY: worldY
-                });
-            }
-        }
-    };
-
     const debouncedSaveViewport = debounce((viewport: Viewport) => {
         if (isLocalMode()) {
             localUpdateViewport(viewport);
@@ -2765,20 +2739,146 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
-    const handleCanvasContextMenu = (e: MouseEvent) => {
-        const target = e.target as HTMLElement;
-        if (target.closest(".canvas-card") || target.closest(".group-container")) {
+    // Right/middle-drag pan + mouse-up context menu dispatch. A right or
+    // middle press anywhere on the canvas world starts a pan candidate;
+    // movement past the threshold commits the pan, and a right release under
+    // it opens the menu resolved from the *mousedown* target at the mousedown
+    // position. Menus dispatch on mouse-up rather than the native contextmenu
+    // event because that event fires on mousedown on Linux/X11 but on mouseup
+    // on Windows/macOS — mouse-up dispatch is timing-independent.
+    const PAN_DRAG_THRESHOLD_PX = 5;
+    let auxPanCandidate: {
+        button: number;
+        startX: number;
+        startY: number;
+        target: EventTarget | null;
+    } | null = null;
+    // Set on right mousedown, telling the contextmenu handler the event is
+    // mouse-originated (suppress it — the mouse-up dispatcher decides) rather
+    // than touch long-press / keyboard menu key (dispatch immediately).
+    let contextMenuFromMouse = false;
+
+    // Focused inputs keep native right/middle-click behavior (paste menu,
+    // spellcheck, X11 middle-click paste). mousedown fires before the same
+    // click moves focus, so an unfocused input is ordinary canvas surface.
+    const isFocusedInteractiveTarget = (target: EventTarget | null) => {
+        if (!(target instanceof Element)) return false;
+        const interactive = target.closest(
+            'input, textarea, select, [contenteditable="true"]'
+        );
+        return interactive !== null && interactive === document.activeElement;
+    };
+
+    // Canvas world surfaces: background (incl. the connections svg), group
+    // containers and cards. UI chrome (sidebar, dialogs, menus, pickers)
+    // keeps its current behavior.
+    const isCanvasWorldTarget = (target: EventTarget | null) =>
+        target instanceof Element &&
+        target.closest(".canvas-background, .group-container, .canvas-card") !== null;
+
+    const onAuxMouseDown = (e: MouseEvent) => {
+        if (e.button !== 1 && e.button !== 2) return;
+        if (isFocusedInteractiveTarget(e.target)) return;
+        if (!isCanvasWorldTarget(e.target)) return;
+        if (
+            dragState().activeBoxId !== null ||
+            dragState().isPanning ||
+            groupDragState().activeGroupId !== null ||
+            vertexDragState().connectionId !== null
+        ) {
+            return;
+        }
+        if (e.button === 2) contextMenuFromMouse = true;
+        // Middle mousedown would otherwise start browser autoscroll.
+        if (e.button === 1) e.preventDefault();
+        auxPanCandidate = {
+            button: e.button,
+            startX: e.clientX,
+            startY: e.clientY,
+            target: e.target
+        };
+    };
+
+    // Single menu-resolution table for all five surfaces, shared by the
+    // right mouse-up dispatcher and the touch/keyboard contextmenu fallback.
+    const dispatchContextMenu = (target: EventTarget | null, x: number, y: number) => {
+        const el = target instanceof Element ? target : null;
+
+        const card = el?.closest(".canvas-card");
+        if (card) {
+            const draftId = card.getAttribute("data-draft-id");
+            const draft = canvasDrafts.find((cd) => cd.Draft.id === draftId);
+            if (draft) {
+                closeAllContextMenus();
+                setDraftContextMenu({ draft, position: { x, y } });
+            }
             return;
         }
 
-        e.preventDefault();
+        const vertexEl = el?.closest("[data-vertex-id]");
+        if (vertexEl) {
+            const connectionId = vertexEl.getAttribute("data-connection-id");
+            const vertexId = vertexEl.getAttribute("data-vertex-id");
+            if (connectionId && vertexId) {
+                closeAllContextMenus();
+                setConnectionContextMenu({
+                    connectionId,
+                    type: "vertex",
+                    vertexId,
+                    position: { x, y }
+                });
+            }
+            return;
+        }
+
+        const connectionEl = el?.closest("[data-connection-id]");
+        if (connectionEl) {
+            const connectionId = connectionEl.getAttribute("data-connection-id");
+            if (connectionId) {
+                closeAllContextMenus();
+                setConnectionContextMenu({
+                    connectionId,
+                    type: "connection",
+                    position: { x, y }
+                });
+            }
+            return;
+        }
+
+        const groupEl = el?.closest(".group-container");
+        if (groupEl) {
+            if (!canEdit()) return;
+            const group = canvasGroups.find(
+                (g) => g.id === groupEl.getAttribute("data-group-id")
+            );
+            // Series groups have no canvas-side menu.
+            if (group && group.type === "custom") {
+                closeAllContextMenus();
+                setGroupContextMenu({ group, position: { x, y } });
+            }
+            return;
+        }
 
         if (!canEdit()) return;
-
-        const worldPos = screenToWorld(e.clientX, e.clientY);
         closeAllContextMenus();
-        setContextMenuWorldPosition(worldPos);
-        setContextMenuPosition({ x: e.clientX, y: e.clientY });
+        setContextMenuWorldPosition(screenToWorld(x, y));
+        setContextMenuPosition({ x, y });
+    };
+
+    const handleCanvasContextMenu = (e: MouseEvent) => {
+        if (contextMenuFromMouse) {
+            // Mouse-originated: the mousedown already made the exempt/ordinary
+            // call (an exempt press never sets the flag), so suppress without
+            // re-checking focus — the browser focuses an unfocused input on
+            // right mousedown itself, which would wrongly exempt it here.
+            contextMenuFromMouse = false;
+            e.preventDefault();
+            return;
+        }
+        // Touch long-press or keyboard menu key.
+        if (isFocusedInteractiveTarget(e.target)) return;
+        e.preventDefault();
+        dispatchContextMenu(e.target, e.clientX, e.clientY);
     };
 
     const closeContextMenu = (e?: MouseEvent) => {
@@ -2790,29 +2890,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setContextMenuPosition(null);
         setDraftContextMenu(null);
         setGroupContextMenu(null);
-    };
-
-    const handleDraftContextMenu = (draft: CanvasDraft, e: MouseEvent) => {
-        e.preventDefault();
-        closeAllContextMenus();
-        setDraftContextMenu({
-            draft,
-            position: { x: e.clientX, y: e.clientY }
-        });
+        setConnectionContextMenu(null);
     };
 
     const closeDraftContextMenu = () => {
         setDraftContextMenu(null);
-    };
-
-    const handleGroupContextMenu = (group: CanvasGroup, e: MouseEvent) => {
-        if (!canEdit()) return;
-        e.preventDefault();
-        closeAllContextMenus();
-        setGroupContextMenu({
-            group,
-            position: { x: e.clientX, y: e.clientY }
-        });
     };
 
     const closeGroupContextMenu = () => {
@@ -2921,6 +3003,44 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         };
 
         const onWindowMouseMove = (e: MouseEvent) => {
+            const candidate = auxPanCandidate;
+            if (candidate) {
+                // Button released outside the window: the mouseup never
+                // reached us, so a later buttonless move would spuriously
+                // commit a pan. Drop the candidate and the suppression flag.
+                const buttonBit = candidate.button === 2 ? 2 : 4;
+                if ((e.buttons & buttonBit) === 0) {
+                    auxPanCandidate = null;
+                    contextMenuFromMouse = false;
+                } else {
+                    const dx = e.clientX - candidate.startX;
+                    const dy = e.clientY - candidate.startY;
+                    if (
+                        dx * dx + dy * dy >=
+                        PAN_DRAG_THRESHOLD_PX * PAN_DRAG_THRESHOLD_PX
+                    ) {
+                        // Threshold crossed: commit the pan. Anchoring panStart at
+                        // the mousedown position makes the isPanning branch below
+                        // apply the accumulated delta on this same move.
+                        auxPanCandidate = null;
+                        const vp = props.viewport();
+                        setDragState({
+                            activeBoxId: null,
+                            offsetX: 0,
+                            offsetY: 0,
+                            dragGroupId: null,
+                            dragOriginX: 0,
+                            dragOriginY: 0,
+                            isPanning: true,
+                            panStartX: candidate.startX,
+                            panStartY: candidate.startY,
+                            viewportStartX: vp.x,
+                            viewportStartY: vp.y
+                        });
+                    }
+                }
+            }
+
             if (
                 isConnectionMode() &&
                 (connectionSource() || groupConnectionSource()) &&
@@ -3085,7 +3205,31 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             }
         };
 
-        const onWindowMouseUp = () => {
+        const onWindowMouseUp = (e: MouseEvent) => {
+            if (e.button === 2) {
+                // The contextmenu event consumes the flag (it fires after
+                // mouseup on Windows/macOS); this deferred clear only covers
+                // releases where no contextmenu event follows at all.
+                setTimeout(() => {
+                    contextMenuFromMouse = false;
+                }, 0);
+            }
+            const candidate = auxPanCandidate;
+            if (candidate && e.button === candidate.button) {
+                // Released under the drag threshold: no pan happened. A right
+                // release opens the menu resolved from the mousedown target at
+                // the mousedown position; a middle release does nothing.
+                auxPanCandidate = null;
+                if (candidate.button === 2) {
+                    dispatchContextMenu(
+                        candidate.target,
+                        candidate.startX,
+                        candidate.startY
+                    );
+                }
+                return;
+            }
+
             const vertexDrag = vertexDragState();
             if (vertexDrag.connectionId && vertexDrag.vertexId) {
                 const connection = connections.find(
@@ -3408,7 +3552,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         >
             <div
                 class="relative h-full w-full select-none overflow-hidden"
-                ref={canvasContainerRef}
+                ref={(el) => {
+                    canvasContainerRef = el;
+                    // Capture phase so right/middle presses start a pan
+                    // candidate from anywhere on the canvas — some nested
+                    // surfaces (vertices, anchors) stop mousedown propagation
+                    // in the bubble phase. The listener dies with the element.
+                    el.addEventListener("mousedown", onAuxMouseDown, true);
+                }}
                 onContextMenu={handleCanvasContextMenu}
                 onMouseMove={onCursorMouseMove}
             >
@@ -3487,7 +3638,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         "background-position": `${-props.viewport().x * props.viewport().zoom}px ${-props.viewport().y * props.viewport().zoom}px`
                     }}
                     onMouseDown={onBackgroundMouseDown}
-                    onDblClick={onBackgroundDoubleClick}
                 >
                     <svg
                         ref={svgRef}
@@ -3500,9 +3650,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     drafts={canvasDrafts}
                                     groups={canvasGroups}
                                     viewport={props.viewport}
-                                    onDeleteConnection={handleDeleteConnection}
                                     onCreateVertex={handleCreateVertex}
-                                    onDeleteVertex={handleDeleteVertex}
                                     onVertexDragStart={onVertexDragStart}
                                     isConnectionMode={isConnectionMode()}
                                     onConnectionClick={handleConnectionClick}
@@ -3627,7 +3775,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     onSelectAnchor={onGroupAnchorClick}
                                     isGroupSelected={groupConnectionSource() === group.id}
                                     sourceAnchor={sourceAnchor()}
-                                    onContextMenu={handleGroupContextMenu}
                                     editingGroupId={editingGroupId}
                                     onEditingComplete={() => setEditingGroupId(null)}
                                     cardLayout={props.cardLayout}
@@ -3643,7 +3790,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 handlePickChange={handlePickChange}
                                                 viewport={props.viewport}
                                                 onBoxMouseDown={onBoxMouseDown}
-                                                onContextMenu={handleDraftContextMenu}
                                                 cardLayout={props.cardLayout}
                                                 isConnectionMode={isConnectionMode()}
                                                 onAnchorClick={onAnchorClick}
@@ -3708,7 +3854,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                             handlePickChange={handlePickChange}
                                             viewport={props.viewport}
                                             onBoxMouseDown={onBoxMouseDown}
-                                            onContextMenu={handleDraftContextMenu}
                                             cardLayout={props.cardLayout}
                                             isConnectionMode={isConnectionMode()}
                                             onAnchorClick={onAnchorClick}
@@ -3751,7 +3896,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             handlePickChange={handlePickChange}
                             viewport={props.viewport}
                             onBoxMouseDown={onBoxMouseDown}
-                            onContextMenu={handleDraftContextMenu}
                             cardLayout={props.cardLayout}
                             isConnectionMode={isConnectionMode()}
                             onAnchorClick={onAnchorClick}
@@ -3977,7 +4121,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             position={menu().position}
                             draft={menu().draft}
                             onRename={
-                                menu().draft.is_locked
+                                !canEdit() || menu().draft.is_locked
                                     ? undefined
                                     : () => {
                                           setEditingDraftId(menu().draft.Draft.id);
@@ -3986,8 +4130,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             }
                             onView={() => handleDraftView(menu().draft)}
                             onGoTo={() => handleDraftGoTo(menu().draft)}
-                            onCopy={() => handleDraftCopy(menu().draft)}
+                            onCopy={
+                                canEdit()
+                                    ? () => handleDraftCopy(menu().draft)
+                                    : undefined
+                            }
                             onDelete={
+                                !canEdit() ||
                                 canvasGroups.find(
                                     (g) =>
                                         g.id === menu().draft.group_id &&
@@ -4041,6 +4190,68 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 closeGroupContextMenu();
                             }}
                             onClose={closeGroupContextMenu}
+                        />
+                    )}
+                </Show>
+                {/* Connection / Vertex Context Menu */}
+                <Show when={connectionContextMenu()}>
+                    {(menu) => (
+                        <ContextMenu
+                            position={menu().position}
+                            actions={
+                                menu().type === "vertex"
+                                    ? [
+                                          {
+                                              label: "Delete Vertex",
+                                              destructive: true,
+                                              action: () => {
+                                                  handleDeleteVertex(
+                                                      menu().connectionId,
+                                                      menu().vertexId ?? ""
+                                                  );
+                                                  setConnectionContextMenu(null);
+                                              }
+                                          },
+                                          {
+                                              label: "Delete Connection",
+                                              destructive: true,
+                                              action: () => {
+                                                  handleDeleteConnection(
+                                                      menu().connectionId
+                                                  );
+                                                  setConnectionContextMenu(null);
+                                              }
+                                          }
+                                      ]
+                                    : [
+                                          {
+                                              label: "Create Vertex",
+                                              action: () => {
+                                                  const pos = screenToWorld(
+                                                      menu().position.x,
+                                                      menu().position.y
+                                                  );
+                                                  handleCreateVertex(
+                                                      menu().connectionId,
+                                                      pos.x,
+                                                      pos.y
+                                                  );
+                                                  setConnectionContextMenu(null);
+                                              }
+                                          },
+                                          {
+                                              label: "Delete Connection",
+                                              destructive: true,
+                                              action: () => {
+                                                  handleDeleteConnection(
+                                                      menu().connectionId
+                                                  );
+                                                  setConnectionContextMenu(null);
+                                              }
+                                          }
+                                      ]
+                            }
+                            onClose={() => setConnectionContextMenu(null)}
                         />
                     )}
                 </Show>

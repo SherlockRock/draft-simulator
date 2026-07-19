@@ -30,7 +30,6 @@ type CanvasCardProps = {
     handleNameChange: (draftId: string, newName: string) => void;
     handlePickChange: (draftId: string, pickIndex: number, championId: string) => void;
     onBoxMouseDown: (draftId: string, e: MouseEvent) => void;
-    onContextMenu: (draft: CanvasDraft, e: MouseEvent) => void;
     cardLayout: () => CardLayout;
     viewport: () => Viewport;
     isConnectionMode: boolean;
@@ -507,13 +506,6 @@ export const CanvasCard = (props: CanvasCardProps) => {
                     (!props.isGrouped || props.groupType === "custom")
                 ) {
                     props.onBoxMouseDown(props.canvasDraft.Draft.id, e);
-                }
-            }}
-            onContextMenu={(e) => {
-                if (props.canEdit()) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    props.onContextMenu(props.canvasDraft, e);
                 }
             }}
         >
