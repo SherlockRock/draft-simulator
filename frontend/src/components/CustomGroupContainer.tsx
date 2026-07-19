@@ -67,7 +67,6 @@ type CustomGroupContainerProps = {
     isGroupSelected?: boolean;
     sourceAnchor?: { type: AnchorType } | null;
     editingGroupId?: Accessor<string | null>;
-    onContextMenu?: (group: CanvasGroup, e: MouseEvent) => void;
     onEditingComplete?: () => void;
     cardLayout: () => CardLayout;
     children: JSX.Element;
@@ -256,6 +255,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
 
     return (
         <div
+            data-group-id={props.group.id}
             class="group-container absolute z-20 rounded-xl border-2 bg-darius-card/90 shadow-xl backdrop-blur-sm"
             classList={{
                 "border-darius-border":
@@ -285,12 +285,6 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 onMouseDown={(e) => {
                     if (!isEditing()) {
                         props.onGroupMouseDown(props.group.id, e);
-                    }
-                }}
-                onContextMenu={(e) => {
-                    if (props.canEdit() && props.onContextMenu) {
-                        e.preventDefault();
-                        props.onContextMenu(props.group, e);
                     }
                 }}
             >
@@ -465,19 +459,6 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                         )
                     ) {
                         props.onBodyMouseDown(e);
-                    }
-                }}
-                onContextMenu={(e) => {
-                    // Right-clicking empty group space opens the group menu.
-                    // Cards handle their own context menu, so ignore those.
-                    const target = e.target;
-                    if (target instanceof Element && target.closest(".canvas-card")) {
-                        return;
-                    }
-                    if (props.canEdit() && props.onContextMenu) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        props.onContextMenu(props.group, e);
                     }
                 }}
             >

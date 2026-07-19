@@ -1,5 +1,4 @@
 import { createSignal, Show, createMemo, For } from "solid-js";
-import { Portal } from "solid-js/web";
 import {
     CanvasDraft,
     CanvasGroup,
@@ -7,7 +6,6 @@ import {
     Viewport,
     AnchorType
 } from "../utils/schemas";
-import { ContextMenuPosition } from "../utils/types";
 import {
     getAnchorScreenPosition,
     getGroupAnchorScreenPosition,
@@ -19,7 +17,6 @@ import {
     cardWidth,
     cardHeight
 } from "../utils/helpers";
-import { ContextMenu } from "./ContextMenu";
 import { VertexComponent } from "./Vertex";
 import type { CardLayout } from "../utils/canvasCardLayout";
 
@@ -28,9 +25,7 @@ export const ConnectionComponent = (props: {
     drafts: CanvasDraft[];
     groups: CanvasGroup[];
     viewport: () => Viewport;
-    onDeleteConnection: (id: string) => void;
     onCreateVertex: (connectionId: string, x: number, y: number) => void;
-    onDeleteVertex: (connectionId: string, vertexId: string) => void;
     onVertexDragStart: (
         connectionId: string,
         vertexId: string,
@@ -45,14 +40,7 @@ export const ConnectionComponent = (props: {
     cardLayout: () => CardLayout;
 }) => {
     const [isHovered, setIsHovered] = createSignal(false);
-    const [contextMenu, setContextMenu] = createSignal<{
-        position: ContextMenuPosition;
-        type: "connection" | "vertex";
-        vertexId?: string;
-    } | null>(null);
     const [hoveredVertex, setHoveredVertex] = createSignal<string | null>(null);
-
-    let svgElementRef: SVGSVGElement | null = null;
 
     const findDraft = (draftId: string) => {
         return props.drafts.find((d) => d.Draft.id === draftId);
@@ -267,171 +255,73 @@ export const ConnectionComponent = (props: {
         );
 
         props.onCreateVertex(props.connection.id, worldPos.x, worldPos.y);
-        setContextMenu(null);
-    };
-
-    // Handle right-click context menu on connection path
-    const handleConnectionContextMenu = (e: MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        // Store SVG reference for later coordinate conversion
-        const svgElement = (e.currentTarget as SVGPathElement).ownerSVGElement;
-        if (svgElement) {
-            svgElementRef = svgElement;
-        }
-
-        setContextMenu({
-            position: { x: e.clientX, y: e.clientY },
-            type: "connection"
-        });
-    };
-
-    // Handle vertex right-click context menu
-    const handleVertexContextMenu = (vertexId: string, e: MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setContextMenu({
-            position: { x: e.clientX, y: e.clientY },
-            type: "vertex",
-            vertexId
-        });
     };
 
     return (
-        <>
-            <g
-                class="pointer-events-auto"
-                onMouseEnter={() => setIsHovered(true)}
-                onMouseLeave={() => setIsHovered(false)}
-            >
-                {/* Connection path */}
-                <path
-                    d={path()}
-                    stroke-width={isHovered() ? "3" : "2"}
-                    fill="none"
-                    stroke-dasharray={strokeDasharray()}
-                    class="cursor-pointer"
-                    classList={{
-                        "stroke-darius-ember": !isHovered(),
-                        "stroke-darius-crimson": isHovered()
-                    }}
-                    onDblClick={(e) => {
-                        handlePathDoubleClick(e);
-                    }}
-                    onContextMenu={(e) => {
-                        handleConnectionContextMenu(e);
-                    }}
-                    onClick={(e) => {
-                        // Only handle left clicks in connection mode
-                        if (
-                            e.button === 0 &&
-                            props.isConnectionMode &&
-                            props.onConnectionClick
-                        ) {
-                            e.stopPropagation();
-                            props.onConnectionClick(props.connection.id);
-                        }
-                    }}
-                />
+        <g
+            class="pointer-events-auto"
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+        >
+            {/* Connection path */}
+            <path
+                data-connection-id={props.connection.id}
+                d={path()}
+                stroke-width={isHovered() ? "3" : "2"}
+                fill="none"
+                stroke-dasharray={strokeDasharray()}
+                class="cursor-pointer"
+                classList={{
+                    "stroke-darius-ember": !isHovered(),
+                    "stroke-darius-crimson": isHovered()
+                }}
+                onDblClick={(e) => {
+                    handlePathDoubleClick(e);
+                }}
+                onClick={(e) => {
+                    // Only handle left clicks in connection mode
+                    if (
+                        e.button === 0 &&
+                        props.isConnectionMode &&
+                        props.onConnectionClick
+                    ) {
+                        e.stopPropagation();
+                        props.onConnectionClick(props.connection.id);
+                    }
+                }}
+            />
 
-                {/* Arrowheads */}
-                <For each={arrowheads()}>
-                    {(arrowhead) => (
-                        <path
-                            d={arrowhead}
-                            class="pointer-events-none"
-                            classList={{
-                                "stroke-darius-ember fill-darius-ember": !isHovered(),
-                                "stroke-darius-crimson fill-darius-crimson": isHovered()
-                            }}
-                        />
-                    )}
-                </For>
-
-                {/* Vertices */}
-                <For each={props.connection.vertices}>
-                    {(vertex) => (
-                        <VertexComponent
-                            connectionId={props.connection.id}
-                            vertex={vertex}
-                            viewport={props.viewport}
-                            onDragStart={props.onVertexDragStart}
-                            isHovered={hoveredVertex() === vertex.id}
-                            onHover={(hover) =>
-                                setHoveredVertex(hover ? vertex.id : null)
-                            }
-                            isConnectionMode={props.isConnectionMode}
-                            isSelected={props.selectedVertexId === vertex.id}
-                            onVertexClick={props.onVertexClick}
-                            onContextMenu={handleVertexContextMenu}
-                        />
-                    )}
-                </For>
-            </g>
-
-            <Show when={contextMenu()}>
-                <Portal>
-                    <ContextMenu
-                        position={contextMenu()?.position ?? { x: 0, y: 0 }}
-                        actions={[
-                            contextMenu()?.type === "vertex"
-                                ? {
-                                      label: "Delete Vertex",
-                                      action: () => {
-                                          props.onDeleteVertex(
-                                              props.connection.id,
-                                              contextMenu()?.vertexId ?? ""
-                                          );
-                                          setContextMenu(null);
-                                      },
-                                      destructive: true
-                                  }
-                                : {
-                                      label: "Create Vertex",
-                                      action: () => {
-                                          const menu = contextMenu()!;
-
-                                          // Convert viewport coordinates to canvas-relative coordinates
-                                          let canvasRelativeX = menu.position.x;
-                                          let canvasRelativeY = menu.position.y;
-
-                                          if (svgElementRef) {
-                                              const svgRect =
-                                                  svgElementRef.getBoundingClientRect();
-                                              canvasRelativeX =
-                                                  menu.position.x - svgRect.left;
-                                              canvasRelativeY =
-                                                  menu.position.y - svgRect.top;
-                                          }
-
-                                          const worldPos = screenToWorld(
-                                              canvasRelativeX,
-                                              canvasRelativeY,
-                                              props.viewport()
-                                          );
-                                          props.onCreateVertex(
-                                              props.connection.id,
-                                              worldPos.x,
-                                              worldPos.y
-                                          );
-                                          setContextMenu(null);
-                                      }
-                                  },
-                            {
-                                label: "Delete Connection",
-                                action: () => {
-                                    props.onDeleteConnection(props.connection.id);
-                                    setContextMenu(null);
-                                },
-                                destructive: true
-                            }
-                        ]}
-                        onClose={() => setContextMenu(null)}
+            {/* Arrowheads */}
+            <For each={arrowheads()}>
+                {(arrowhead) => (
+                    <path
+                        d={arrowhead}
+                        class="pointer-events-none"
+                        classList={{
+                            "stroke-darius-ember fill-darius-ember": !isHovered(),
+                            "stroke-darius-crimson fill-darius-crimson": isHovered()
+                        }}
                     />
-                </Portal>
-            </Show>
-        </>
+                )}
+            </For>
+
+            {/* Vertices */}
+            <For each={props.connection.vertices}>
+                {(vertex) => (
+                    <VertexComponent
+                        connectionId={props.connection.id}
+                        vertex={vertex}
+                        viewport={props.viewport}
+                        onDragStart={props.onVertexDragStart}
+                        isHovered={hoveredVertex() === vertex.id}
+                        onHover={(hover) => setHoveredVertex(hover ? vertex.id : null)}
+                        isConnectionMode={props.isConnectionMode}
+                        isSelected={props.selectedVertexId === vertex.id}
+                        onVertexClick={props.onVertexClick}
+                    />
+                )}
+            </For>
+        </g>
     );
 };
 
