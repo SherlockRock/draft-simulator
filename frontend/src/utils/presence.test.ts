@@ -7,6 +7,7 @@ import {
     presenceJoinSchema,
     presenceLeaveSchema,
     presenceSnapshotSchema,
+    viewportMoveSchema,
     worldToScreen
 } from "./presence";
 
@@ -60,6 +61,62 @@ describe("presence event schemas", () => {
 
     it("rejects a join without a user payload", () => {
         expect(presenceJoinSchema.safeParse({ canvasId: "c-1" }).success).toBe(false);
+    });
+
+    it("carries a snapshot user's last-known viewport through", () => {
+        const viewport = { x: 10, y: -20, zoom: 1.5 };
+        const result = presenceSnapshotSchema.safeParse({
+            canvasId: "c-1",
+            users: [{ ...user, viewport }]
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.users[0].viewport).toEqual(viewport);
+        }
+    });
+
+    it("degrades a malformed or missing viewport to null without dropping the snapshot", () => {
+        const result = presenceSnapshotSchema.safeParse({
+            canvasId: "c-1",
+            users: [
+                { ...user, viewport: { x: 1, y: 2, zoom: 0 } },
+                { ...user, userId: "u-2", viewport: { x: 1 } },
+                { ...user, userId: "u-3" }
+            ]
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.users.map((u) => u.viewport)).toEqual([null, null, null]);
+        }
+    });
+});
+
+describe("viewportMoveSchema", () => {
+    const valid = { canvasId: "c-1", userId: "u-1", x: 10.5, y: -20, zoom: 0.75 };
+
+    it("accepts a valid viewport move", () => {
+        expect(viewportMoveSchema.safeParse(valid).success).toBe(true);
+    });
+
+    it("rejects missing or non-finite fields", () => {
+        expect(viewportMoveSchema.safeParse({ ...valid, zoom: undefined }).success).toBe(
+            false
+        );
+        expect(viewportMoveSchema.safeParse({ ...valid, x: Infinity }).success).toBe(
+            false
+        );
+        expect(viewportMoveSchema.safeParse({ ...valid, y: "12" }).success).toBe(false);
+    });
+
+    it("rejects a non-positive zoom", () => {
+        expect(viewportMoveSchema.safeParse({ ...valid, zoom: 0 }).success).toBe(false);
+        expect(viewportMoveSchema.safeParse({ ...valid, zoom: -1 }).success).toBe(false);
+    });
+
+    it("rejects a payload without a userId", () => {
+        expect(
+            viewportMoveSchema.safeParse({ ...valid, userId: undefined }).success
+        ).toBe(false);
     });
 });
 

@@ -8,9 +8,24 @@ export const presenceUserSchema = z.object({
 
 export type PresenceUser = z.infer<typeof presenceUserSchema>;
 
+// World-space canvas viewport as broadcast on the presence channel.
+export const viewportSchema = z.object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+    zoom: z.number().finite().positive()
+});
+
 export const presenceSnapshotSchema = z.object({
     canvasId: z.string(),
-    users: z.array(presenceUserSchema)
+    users: z.array(
+        presenceUserSchema.extend({
+            // Last-known viewport, null until the user's client broadcasts
+            // one. A single malformed viewport must not be able to drop
+            // presence for everyone, so it degrades to null (no jump offered)
+            // instead of failing the snapshot.
+            viewport: viewportSchema.nullable().catch(null)
+        })
+    )
 });
 
 export const presenceJoinSchema = z.object({
@@ -41,6 +56,19 @@ export const cursorMoveSchema = z.object({
 
 export type CursorMove = z.infer<typeof cursorMoveSchema>;
 
+// Viewport broadcast (slice 4): same trust model and wire shape family as
+// cursorMove — world-space values, server-stamped userId.
+export const viewportMoveSchema = viewportSchema.extend({
+    canvasId: z.string(),
+    userId: z.string()
+});
+
+export type ViewportMove = z.infer<typeof viewportMoveSchema>;
+
+// Fired when a sender's canvas viewport stops being live (draft drilldown,
+// canvas-to-canvas nav); same payload shape as presenceLeave.
+export const viewportLeaveSchema = presenceLeaveSchema;
+
 export const CURSOR_THROTTLE_MS = 35;
 export const CURSOR_IDLE_MS = 5000;
 
@@ -58,36 +86,36 @@ export function worldToScreen(
     };
 }
 
-// Leading + trailing throttle for cursor emits: the first move goes out
-// immediately, moves inside the window coalesce into one trailing send with
-// the latest coordinates (so the remote cursor always lands on the final
-// resting position), and cancel() drops any pending trailing send.
-export function createCursorThrottle(
-    fn: (x: number, y: number) => void,
+// Leading + trailing throttle for high-frequency emits: the first value goes
+// out immediately, values inside the window coalesce into one trailing send
+// with the latest value (so the receiver always lands on the final resting
+// state), and cancel() drops any pending trailing send.
+export function createTrailingThrottle<T>(
+    fn: (value: T) => void,
     intervalMs: number = CURSOR_THROTTLE_MS
-): { send: (x: number, y: number) => void; cancel: () => void } {
+): { send: (value: T) => void; cancel: () => void } {
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let pending: { x: number; y: number } | null = null;
+    let pending: { value: T } | null = null;
 
     const openWindow = () => {
         timer = setTimeout(() => {
             timer = null;
             if (pending) {
-                const { x, y } = pending;
+                const { value } = pending;
                 pending = null;
-                fn(x, y);
+                fn(value);
                 openWindow();
             }
         }, intervalMs);
     };
 
     return {
-        send(x: number, y: number) {
+        send(value: T) {
             if (timer) {
-                pending = { x, y };
+                pending = { value };
                 return;
             }
-            fn(x, y);
+            fn(value);
             openWindow();
         },
         cancel() {
@@ -97,6 +125,20 @@ export function createCursorThrottle(
             }
             pending = null;
         }
+    };
+}
+
+export function createCursorThrottle(
+    fn: (x: number, y: number) => void,
+    intervalMs: number = CURSOR_THROTTLE_MS
+): { send: (x: number, y: number) => void; cancel: () => void } {
+    const throttle = createTrailingThrottle<{ x: number; y: number }>(
+        ({ x, y }) => fn(x, y),
+        intervalMs
+    );
+    return {
+        send: (x: number, y: number) => throttle.send({ x, y }),
+        cancel: throttle.cancel
     };
 }
 

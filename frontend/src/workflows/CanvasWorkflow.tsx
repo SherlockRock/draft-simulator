@@ -34,7 +34,7 @@ import { CanvasSettingsDialog } from "../components/CanvasSettingsDialog";
 import { SharePopoverContent } from "../components/SharePopover";
 import { FlowBackLink } from "../components/FlowBackLink";
 import toast from "solid-toast";
-import { CanvasGroup, CanvasDraft } from "../utils/schemas";
+import { CanvasGroup, CanvasDraft, Viewport } from "../utils/schemas";
 import { CanvasAccessDenied, AccessErrorType } from "../components/CanvasAccessDenied";
 import { DraftContextMenu } from "../components/DraftContextMenu";
 import { GroupContextMenu } from "../components/GroupContextMenu";
@@ -226,6 +226,9 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     >(null);
     const [navigateToDraftCallback, setNavigateToDraftCallback] = createSignal<
         ((positionX: number, positionY: number) => void) | null
+    >(null);
+    const [jumpToViewportCallback, setJumpToViewportCallback] = createSignal<
+        ((viewport: Viewport) => void) | null
     >(null);
     const [importCallback, setImportCallback] = createSignal<(() => void) | null>(null);
     const [createGroupCallback, setCreateGroupCallback] = createSignal<
@@ -616,6 +619,8 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                     setCreateDraftCallback,
                     navigateToDraftCallback,
                     setNavigateToDraftCallback,
+                    jumpToViewportCallback,
+                    setJumpToViewportCallback,
                     importCallback,
                     setImportCallback,
                     createGroupCallback,

@@ -27,9 +27,13 @@ import {
     presenceJoinSchema,
     presenceLeaveSchema
 } from "../utils/presence";
+import { RemoteViewport, createRemoteViewportTracker } from "../utils/remoteViewports";
 
 export type CanvasSocketContextValue = SocketContextValue & {
     presenceUsers: () => PresenceUser[];
+    // Last-known viewport of another present user, undefined when they have
+    // no live canvas viewport (never broadcast, in a draft view, or cleared).
+    remoteViewportOf: (userId: string) => RemoteViewport | undefined;
 };
 
 const CanvasSocketContext = createContext<CanvasSocketContextValue>();
@@ -134,6 +138,12 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
         users: []
     });
 
+    // Last-known viewports live at provider level, not in Canvas.tsx: the
+    // Share popover offers jump from anywhere in the workflow, and viewport
+    // events are throttled pan/zoom-frequency (not mousemove-frequency), so
+    // an always-on listener is cheap. State machine is unit-tested.
+    const viewportTracker = createRemoteViewportTracker(() => user()?.id);
+
     createEffect(() => {
         const sock = socket();
         if (!sock) return;
@@ -148,6 +158,7 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
             );
             if (!parsed || parsed.canvasId !== presenceCanvasId()) return;
             setPresence("users", reconcile(parsed.users, { key: "userId" }));
+            viewportTracker.handleSnapshot(parsed.users);
         };
 
         const onJoin = (data: unknown) => {
@@ -171,6 +182,22 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
                     { key: "userId" }
                 )
             );
+            // A fully departed user's viewport is no longer jumpable.
+            viewportTracker.handleViewportLeave(data, parsed.canvasId);
+        };
+
+        // Viewport broadcast (slice 4): same quiet validation policy as
+        // cursor events — these arrive at pan/zoom frequency.
+        const onViewportMove = (data: unknown) => {
+            const canvasId = presenceCanvasId();
+            if (!canvasId) return;
+            viewportTracker.handleViewportMove(data, canvasId);
+        };
+
+        const onViewportLeave = (data: unknown) => {
+            const canvasId = presenceCanvasId();
+            if (!canvasId) return;
+            viewportTracker.handleViewportLeave(data, canvasId);
         };
 
         // Server-side revocation ejection: our access was removed while we
@@ -190,11 +217,15 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
         sock.on("presenceSnapshot", onSnapshot);
         sock.on("presenceJoin", onJoin);
         sock.on("presenceLeave", onLeave);
+        sock.on("viewportMove", onViewportMove);
+        sock.on("viewportLeave", onViewportLeave);
         sock.on("canvasAccessRevoked", onAccessRevoked);
         onCleanup(() => {
             sock.off("presenceSnapshot", onSnapshot);
             sock.off("presenceJoin", onJoin);
             sock.off("presenceLeave", onLeave);
+            sock.off("viewportMove", onViewportMove);
+            sock.off("viewportLeave", onViewportLeave);
             sock.off("canvasAccessRevoked", onAccessRevoked);
         });
     });
@@ -211,6 +242,7 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
         sock.emit("joinCanvas", { canvasId });
         onCleanup(() => {
             setPresence("users", reconcile([], { key: "userId" }));
+            viewportTracker.reset();
             if (sock.connected) {
                 sock.emit("leaveCanvas", { canvasId });
             }
@@ -224,7 +256,8 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
         reconnect,
         justReconnected,
         clearReconnected,
-        presenceUsers: () => presence.users
+        presenceUsers: () => presence.users,
+        remoteViewportOf: viewportTracker.viewportOf
     };
 
     // For anonymous users (local mode), skip the connection banner

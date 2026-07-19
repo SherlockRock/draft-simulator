@@ -70,8 +70,8 @@ describe("presenceEjection.ejectUserFromCanvas", () => {
     presenceEjection.ejectUserFromCanvas("c-1", "u-alice");
 
     expect(sockBob.leave).not.toHaveBeenCalled();
-    expect(store.snapshot("c-1")).toEqual([BOB]);
-    expect(store.snapshot("c-2")).toEqual([ALICE]);
+    expect(store.snapshot("c-1")).toEqual([{ ...BOB, viewport: null }]);
+    expect(store.snapshot("c-2")).toEqual([{ ...ALICE, viewport: null }]);
   });
 
   it("does not broadcast when the user is not present on the canvas", () => {

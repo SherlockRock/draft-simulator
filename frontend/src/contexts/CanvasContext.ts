@@ -1,5 +1,5 @@
 import { createContext, useContext, Setter, Resource, Accessor, JSX } from "solid-js";
-import type { CanvasResponse, CanvasListItem } from "@draft-sim/shared-types";
+import type { CanvasResponse, CanvasListItem, Viewport } from "@draft-sim/shared-types";
 import type { CardLayout } from "../utils/canvasCardLayout";
 
 // Canvas context type definition - shared between CanvasWorkflow and consumers
@@ -21,6 +21,11 @@ type CanvasContextType = {
     setNavigateToDraftCallback: Setter<
         ((positionX: number, positionY: number) => void) | null
     >;
+    // Jump-to-viewport (presence slice 4): Canvas.tsx registers its animated
+    // viewport setter on mount; null while no canvas view is live (e.g. the
+    // draft view), which hides the Share popover's jump buttons.
+    jumpToViewportCallback: Accessor<((viewport: Viewport) => void) | null>;
+    setJumpToViewportCallback: Setter<((viewport: Viewport) => void) | null>;
     importCallback: Accessor<(() => void) | null>;
     setImportCallback: Setter<(() => void) | null>;
     createGroupCallback: Accessor<
