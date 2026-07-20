@@ -206,3 +206,87 @@ export const rowCountAfter = (
     }
     return maxRow + 1;
 };
+
+export type GridSettingsInput = {
+    gridCols: number;
+    rowLabels: string[];
+    colLabels: string[];
+};
+
+export type GridMetadata = {
+    layout: "grid";
+    gridCols: number;
+    rowLabels: string[];
+    colLabels: string[];
+};
+
+// Overwrite the first `count` slots with trimmed edited values, preserve any
+// stored entries beyond `count` (e.g. columns grown by drag past what the
+// dialog last saw), then drop trailing empties while keeping interior holes so
+// a labeled row/col after an unlabeled one keeps its index. Preserved entries
+// are trimmed too, so a stored whitespace-only tail doesn't block the trim.
+export const mergeLabels = (
+    existing: string[],
+    edited: string[],
+    count: number
+): string[] => {
+    const length = Math.max(existing.length, count);
+    const out: string[] = [];
+    for (let i = 0; i < length; i++) {
+        out.push(i < count ? (edited[i] ?? "").trim() : (existing[i] ?? "").trim());
+    }
+    let end = out.length;
+    while (end > 0 && out[end - 1] === "") end--;
+    return out.slice(0, end);
+};
+
+export const buildGridMetadata = (
+    existing: { rowLabels?: string[]; colLabels?: string[] },
+    settings: GridSettingsInput
+): GridMetadata => ({
+    layout: "grid",
+    gridCols: settings.gridCols,
+    colLabels: mergeLabels(
+        existing.colLabels ?? [],
+        settings.colLabels,
+        settings.gridCols
+    ),
+    rowLabels: mergeLabels(
+        existing.rowLabels ?? [],
+        settings.rowLabels,
+        settings.rowLabels.length
+    )
+});
+
+// The row count a reflow will actually produce for `cols`. Runs the same
+// arrangeGrid → rowCountAfter the save uses, so the dialog's row-label inputs
+// match the arranged grid (arrangeGrid preserves position-derived ideal rows
+// and pushes collisions into later rows — ceil(count/cols) would under-count).
+export const arrangedRowCount = (
+    drafts: CanvasDraft[],
+    layout: CardLayout,
+    cols: number
+): number => {
+    const updates = arrangeGrid(drafts, layout, cols);
+    return rowCountAfter(updates, drafts, layout, cols);
+};
+
+// Pure save decision: the metadata to persist (always including labels) and
+// whether the group must be reflowed. Reflow when creating a grid from a free
+// group, or when an existing grid's column count changed.
+export const resolveGridSave = (
+    existing: {
+        layout?: "free" | "grid";
+        gridCols?: number;
+        rowLabels?: string[];
+        colLabels?: string[];
+    },
+    settings: GridSettingsInput
+): { metadata: GridMetadata; reflow: boolean } => {
+    const wasGrid = existing.layout === "grid";
+    const colsChanged = settings.gridCols !== (existing.gridCols ?? DEFAULT_GRID_COLS);
+    return {
+        metadata: buildGridMetadata(existing, settings),
+        reflow: !wasGrid || colsChanged
+    };
+};

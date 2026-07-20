@@ -28,7 +28,7 @@ export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
 
             if (props.group.metadata.layout !== "grid") {
                 menuActions.push({
-                    label: "Arrange as grid",
+                    label: "Arrange as grid…",
                     action: () => props.onArrangeGrid?.()
                 });
             }
@@ -36,7 +36,7 @@ export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
             if (props.group.metadata.layout === "grid") {
                 menuActions.push(
                     {
-                        label: "Grid settings",
+                        label: "Grid settings…",
                         action: () => props.onGridSettings?.()
                     },
                     {

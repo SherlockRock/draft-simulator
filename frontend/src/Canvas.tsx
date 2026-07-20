@@ -121,7 +121,11 @@ import {
     positionToCell,
     effectiveGridCols,
     growGridDims,
-    type GridCell
+    resolveGridSave,
+    arrangedRowCount,
+    type GridCell,
+    type GridSettingsInput,
+    type GridMetadata
 } from "./utils/gridLayout";
 import { resolveCopyPlacement } from "./utils/copyPlacement";
 import { GridSettingsDialog } from "./components/GridSettingsDialog";
@@ -641,13 +645,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     // Quantize all member cards to cells and flip the group into grid mode,
     // atomically (positions + metadata + dimensions in one request).
-    const arrangeGroupAsGrid = (group: CanvasGroup) => {
+    const arrangeGroupAsGrid = (group: CanvasGroup, metadata: GridMetadata) => {
+        const cols = metadata.gridCols;
         const groupDrafts = canvasDrafts.filter((cd) => cd.group_id === group.id);
-        const cols = gridColsOf(group);
         const updates = arrangeGrid(groupDrafts, props.cardLayout(), cols);
         const rows = rowCountAfter(updates, groupDrafts, props.cardLayout(), cols);
         const dims = growGridDims(group, rows, cols, props.cardLayout());
-        const metadata = { layout: "grid" as const, gridCols: cols };
 
         for (const u of updates) {
             setCanvasDrafts((cd) => cd.Draft.id === u.draft_id, {
@@ -702,48 +705,35 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
-    const gridRowCount = (group: CanvasGroup): number => {
+    const gridRowCount = (group: CanvasGroup, cols: number): number => {
         const groupDrafts = canvasDrafts.filter((cd) => cd.group_id === group.id);
-        const cols = gridColsOf(group);
-        let maxRow = 0;
-        for (const d of groupDrafts) {
-            maxRow = Math.max(
-                maxRow,
-                positionToCell(d.positionX, d.positionY, props.cardLayout(), cols).row
-            );
-        }
-        return groupDrafts.length === 0 ? 1 : maxRow + 1;
+        return arrangedRowCount(groupDrafts, props.cardLayout(), cols);
     };
 
-    const saveGridSettings = (settings: {
-        gridCols: number;
-        rowLabels: string[];
-        colLabels: string[];
-    }) => {
+    const saveGridSettings = (settings: GridSettingsInput) => {
         const group = gridSettingsGroup();
         if (!group) return;
-        const colsChanged = settings.gridCols !== gridColsOf(group);
-        const metadata = {
-            gridCols: settings.gridCols,
-            rowLabels: settings.rowLabels,
-            colLabels: settings.colLabels
-        };
-        setCanvasGroups((g) => g.id === group.id, {
-            metadata: { ...group.metadata, ...metadata }
-        });
+        const { metadata, reflow } = resolveGridSave(group.metadata, settings);
         setGridSettingsGroup(null);
-        if (colsChanged) {
-            // Column count changed: reflow all cards into the new grid.
-            const updated = canvasGroups.find((g) => g.id === group.id);
-            if (updated) arrangeGroupAsGrid(updated);
-        } else if (isLocalMode()) {
-            localUpdateGroup({ groupId: group.id, metadata });
+
+        if (reflow) {
+            // Creating a grid, or the column count changed: arrange/reflow, and the
+            // arrange path persists the full metadata (layout, gridCols, labels).
+            arrangeGroupAsGrid(group, metadata);
         } else {
-            updateGroupMutation.mutate({
-                canvasId: canvasId(),
-                groupId: group.id,
-                metadata
+            // Labels-only edit on an existing grid: persist metadata directly.
+            setCanvasGroups((g) => g.id === group.id, {
+                metadata: { ...group.metadata, ...metadata }
             });
+            if (isLocalMode()) {
+                localUpdateGroup({ groupId: group.id, metadata });
+            } else {
+                updateGroupMutation.mutate({
+                    canvasId: canvasId(),
+                    groupId: group.id,
+                    metadata
+                });
+            }
         }
     };
 
@@ -4174,7 +4164,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 }
                                 closeGroupContextMenu();
                             }}
-                            onArrangeGrid={() => arrangeGroupAsGrid(menu().group)}
+                            onArrangeGrid={() => setGridSettingsGroup(menu().group)}
                             onConvertToFree={() => convertGroupToFree(menu().group)}
                             onGridSettings={() => setGridSettingsGroup(menu().group)}
                             onGoTo={() => {

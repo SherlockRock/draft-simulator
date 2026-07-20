@@ -11,7 +11,11 @@ import {
     gridDimensions,
     rowCountAfter,
     colsFromWidth,
-    effectiveGridCols
+    effectiveGridCols,
+    mergeLabels,
+    buildGridMetadata,
+    arrangedRowCount,
+    resolveGridSave
 } from "./gridLayout";
 import { cardWidth, cardHeight } from "./helpers";
 import type { CardLayout } from "./canvasCardLayout";
@@ -293,5 +297,117 @@ describe("column growth", () => {
         expect(updates).toEqual([
             { draft_id: "dragged", positionX: target.x, positionY: target.y }
         ]);
+    });
+});
+
+describe("mergeLabels", () => {
+    it("overwrites the first `count` entries with trimmed edited values", () => {
+        expect(mergeLabels([], ["  A  ", "B"], 2)).toEqual(["A", "B"]);
+    });
+
+    it("preserves stored entries beyond `count` (grid grew via drag)", () => {
+        // Dialog only knew about 2 columns; a 3rd was created by dragging.
+        expect(mergeLabels(["A", "B", "keep"], ["A2", "B2"], 2)).toEqual([
+            "A2",
+            "B2",
+            "keep"
+        ]);
+    });
+
+    it("trims trailing empties but keeps interior holes", () => {
+        expect(mergeLabels([], ["A", "", "C", "", ""], 5)).toEqual(["A", "", "C"]);
+    });
+
+    it("trims whitespace-only preserved entries so trailing empties still drop", () => {
+        // A stored "   " beyond `count` must not block trailing-empty removal.
+        expect(mergeLabels(["A", "   "], ["A"], 1)).toEqual(["A"]);
+    });
+
+    it("pads when count exceeds existing length", () => {
+        expect(mergeLabels(["A"], ["A", "B", "C"], 3)).toEqual(["A", "B", "C"]);
+    });
+
+    it("returns an empty array when everything is blank", () => {
+        expect(mergeLabels([], ["", "  "], 2)).toEqual([]);
+    });
+});
+
+describe("buildGridMetadata", () => {
+    const settings = {
+        gridCols: 2,
+        rowLabels: ["r1", "r2"],
+        colLabels: ["c1", "c2"]
+    };
+
+    it("always emits grid layout, the column count, and both label arrays", () => {
+        const meta = buildGridMetadata({}, settings);
+        expect(meta.layout).toBe("grid");
+        expect(meta.gridCols).toBe(2);
+        expect(meta.colLabels).toEqual(["c1", "c2"]);
+        expect(meta.rowLabels).toEqual(["r1", "r2"]);
+    });
+
+    it("preserves stored labels beyond the new column count (regression: no truncation)", () => {
+        const meta = buildGridMetadata(
+            { colLabels: ["old1", "old2", "old3"], rowLabels: ["x", "y", "z"] },
+            settings
+        );
+        // gridCols=2 overwrites first 2 cols, keeps the 3rd; rows overwrite all 2 shown, keep 3rd.
+        expect(meta.colLabels).toEqual(["c1", "c2", "old3"]);
+        expect(meta.rowLabels).toEqual(["r1", "r2", "z"]);
+    });
+});
+
+describe("arrangedRowCount", () => {
+    it("returns 1 for an empty group", () => {
+        expect(arrangedRowCount([], "wide", 3)).toBe(1);
+    });
+
+    it("reflects spread-out ideal rows, not ceil(count / cols)", () => {
+        // Cards whose positions sit at rows 0 and 3. arrangeGrid preserves the
+        // ideal row, so the grid spans 4 rows even though ceil(2/3) === 1.
+        const drafts = [draftInCell("a", 0, 0, "wide"), draftInCell("b", 3, 1, "wide")];
+        expect(arrangedRowCount(drafts, "wide", 3)).toBe(4);
+    });
+
+    it("counts collision overflow into later rows", () => {
+        const p = cellToPosition({ row: 0, col: 0 }, "wide");
+        const drafts = Array.from({ length: 4 }, (_, i) =>
+            draftAt(`d${i}`, p.x + i, p.y + i)
+        );
+        // cols=1 forces the four near-(0,0) cards into rows 0..3.
+        expect(arrangedRowCount(drafts, "wide", 1)).toBe(4);
+    });
+});
+
+describe("resolveGridSave", () => {
+    const settings = { gridCols: 3, rowLabels: ["r"], colLabels: ["c1", "c2", "c3"] };
+
+    it("reflows and emits labeled grid metadata for a free group", () => {
+        const { metadata, reflow } = resolveGridSave({ layout: "free" }, settings);
+        expect(reflow).toBe(true);
+        expect(metadata.layout).toBe("grid");
+        expect(metadata.colLabels).toEqual(["c1", "c2", "c3"]);
+        expect(metadata.rowLabels).toEqual(["r"]);
+    });
+
+    it("reflows when an existing grid's column count changes, keeping labels", () => {
+        const { metadata, reflow } = resolveGridSave(
+            { layout: "grid", gridCols: 2 },
+            settings
+        );
+        expect(reflow).toBe(true);
+        expect(metadata.colLabels).toEqual(["c1", "c2", "c3"]);
+        expect(metadata.rowLabels).toEqual(["r"]);
+    });
+
+    it("does not reflow a labels-only edit, but still carries labels (regression)", () => {
+        const { metadata, reflow } = resolveGridSave(
+            { layout: "grid", gridCols: 3 },
+            settings
+        );
+        expect(reflow).toBe(false);
+        expect(metadata.rowLabels).toEqual(["r"]);
+        expect(metadata.colLabels).toEqual(["c1", "c2", "c3"]);
     });
 });
