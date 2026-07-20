@@ -1,7 +1,8 @@
 import { Index, Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
+import { Minus, Plus } from "lucide-solid";
 import { CanvasGroup } from "../utils/schemas";
 import { gridColsOf, isGridGroup, type GridSettingsInput } from "../utils/gridLayout";
-import { Dialog } from "./Dialog";
+import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./Dialog";
 
 type GridSettingsDialogProps = {
     group: () => CanvasGroup | null;
@@ -10,6 +11,12 @@ type GridSettingsDialogProps = {
     onSave: (settings: GridSettingsInput) => void;
     rowCount: (group: CanvasGroup, cols: number) => number;
 };
+
+const LABEL_INPUT_CLASS =
+    "w-full appearance-none rounded border border-darius-border bg-darius-card px-3 py-2 text-sm leading-tight text-darius-text-primary shadow focus:outline-none focus:ring-2 focus:ring-darius-purple-bright";
+
+const STEPPER_BUTTON_CLASS =
+    "flex h-8 w-8 items-center justify-center rounded border border-darius-border bg-darius-card text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-darius-text-primary disabled:cursor-not-allowed disabled:opacity-40";
 
 export const GridSettingsDialog = (props: GridSettingsDialogProps) => {
     const [cols, setCols] = createSignal(3);
@@ -51,6 +58,8 @@ export const GridSettingsDialog = (props: GridSettingsDialogProps) => {
         if (Number.isInteger(parsed) && parsed >= 1) setCols(parsed);
     };
 
+    const stepCols = (delta: number) => setCols((c) => Math.max(1, c + delta));
+
     const setColLabel = (i: number, value: string) => {
         const next = [...colLabels()];
         next[i] = value;
@@ -84,74 +93,117 @@ export const GridSettingsDialog = (props: GridSettingsDialogProps) => {
             isOpen={props.isOpen}
             onCancel={props.onCancel}
             onConfirm={save}
-            showCloseButton={false}
+            // Enter inside a label/column field saves and closes, matching
+            // CanvasSettingsDialog's convention for text-entry dialogs.
+            shouldConfirmOnTarget={(target) => target instanceof HTMLInputElement}
             body={
                 <Show when={props.group()}>
-                    <div class="flex flex-col gap-4">
-                        <h2 class="text-lg font-semibold text-darius-text-primary">
+                    <div class="flex w-[420px] flex-col text-darius-text-primary">
+                        <h2 class="mb-4 text-xl font-bold text-darius-text-primary">
                             Grid settings
                         </h2>
-                        <label class="flex items-center justify-between gap-3 text-sm text-darius-text-secondary">
-                            Columns
-                            <input
-                                type="number"
-                                min="1"
-                                value={cols()}
-                                onInput={(e) => handleColsInput(e.currentTarget.value)}
-                                onBlur={(e) => (e.currentTarget.value = String(cols()))}
-                                class="w-20 rounded-md border border-darius-border bg-darius-bg px-2 py-1 text-darius-text-primary"
-                            />
-                        </label>
-                        <div class="flex flex-col gap-1.5">
-                            <span class="text-sm text-darius-text-secondary">
-                                Column labels
-                            </span>
-                            <Index each={Array.from({ length: cols() })}>
-                                {(_, i) => (
+
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between gap-3">
+                                <label
+                                    class="text-sm font-medium text-darius-text-secondary"
+                                    for="grid-settings-cols"
+                                >
+                                    Columns
+                                </label>
+                                <div class="flex items-center gap-1.5">
+                                    <button
+                                        type="button"
+                                        class={STEPPER_BUTTON_CLASS}
+                                        onClick={() => stepCols(-1)}
+                                        disabled={cols() <= 1}
+                                        aria-label="Decrease columns"
+                                    >
+                                        <Minus size={14} />
+                                    </button>
                                     <input
-                                        type="text"
-                                        placeholder={`Column ${i + 1}`}
-                                        value={colLabels()[i] ?? ""}
+                                        id="grid-settings-cols"
+                                        type="number"
+                                        min="1"
+                                        value={cols()}
                                         onInput={(e) =>
-                                            setColLabel(i, e.currentTarget.value)
+                                            handleColsInput(e.currentTarget.value)
                                         }
-                                        class="rounded-md border border-darius-border bg-darius-bg px-2 py-1 text-sm text-darius-text-primary"
-                                    />
-                                )}
-                            </Index>
-                        </div>
-                        <div class="flex flex-col gap-1.5">
-                            <span class="text-sm text-darius-text-secondary">
-                                Row labels
-                            </span>
-                            <Index each={Array.from({ length: rowInputCount() })}>
-                                {(_, i) => (
-                                    <input
-                                        type="text"
-                                        placeholder={`Row ${i + 1}`}
-                                        value={rowLabels()[i] ?? ""}
-                                        onInput={(e) =>
-                                            setRowLabel(i, e.currentTarget.value)
+                                        onBlur={(e) =>
+                                            (e.currentTarget.value = String(cols()))
                                         }
-                                        class="rounded-md border border-darius-border bg-darius-bg px-2 py-1 text-sm text-darius-text-primary"
+                                        class="w-14 appearance-none rounded border border-darius-border bg-darius-card px-2 py-1.5 text-center text-sm leading-tight text-darius-text-primary shadow [appearance:textfield] focus:outline-none focus:ring-2 focus:ring-darius-purple-bright [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                     />
-                                )}
-                            </Index>
+                                    <button
+                                        type="button"
+                                        class={STEPPER_BUTTON_CLASS}
+                                        onClick={() => stepCols(1)}
+                                        aria-label="Increase columns"
+                                    >
+                                        <Plus size={14} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <span class="mb-2 block text-sm font-medium text-darius-text-secondary">
+                                    Column labels
+                                </span>
+                                <div class="custom-scrollbar max-h-40 space-y-2 overflow-y-auto pr-1">
+                                    <Index each={Array.from({ length: cols() })}>
+                                        {(_, i) => (
+                                            <input
+                                                type="text"
+                                                placeholder={`Column ${i + 1}`}
+                                                value={colLabels()[i] ?? ""}
+                                                onInput={(e) =>
+                                                    setColLabel(i, e.currentTarget.value)
+                                                }
+                                                class={LABEL_INPUT_CLASS}
+                                            />
+                                        )}
+                                    </Index>
+                                </div>
+                            </div>
+
+                            <div>
+                                <span class="mb-2 block text-sm font-medium text-darius-text-secondary">
+                                    Row labels
+                                </span>
+                                <div class="custom-scrollbar max-h-40 space-y-2 overflow-y-auto pr-1">
+                                    <Index each={Array.from({ length: rowInputCount() })}>
+                                        {(_, i) => (
+                                            <input
+                                                type="text"
+                                                placeholder={`Row ${i + 1}`}
+                                                value={rowLabels()[i] ?? ""}
+                                                onInput={(e) =>
+                                                    setRowLabel(i, e.currentTarget.value)
+                                                }
+                                                class={LABEL_INPUT_CLASS}
+                                            />
+                                        )}
+                                    </Index>
+                                </div>
+                            </div>
                         </div>
-                        <div class="flex items-center justify-end gap-2 pt-1">
+
+                        <div class="mt-6 flex items-center justify-end gap-2 border-t border-darius-border pt-4">
                             <button
                                 type="button"
                                 onClick={props.onCancel}
-                                class="rounded-md bg-darius-card px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-card-hover"
+                                class="flex items-center gap-2 rounded-md bg-darius-ember px-4 py-2 text-sm font-medium text-darius-text-primary transition-[filter] hover:brightness-110"
                             >
-                                Cancel
+                                <span>Cancel</span>
+                                <EscapeKeyHint />
                             </button>
                             <button
                                 type="button"
                                 onClick={save}
-                                class="rounded-md bg-darius-ember px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors"
+                                class="flex items-center gap-2 rounded-md bg-darius-purple px-4 py-2 text-sm font-medium text-darius-text-primary transition-colors hover:bg-darius-purple-bright"
                             >
-                                {isEditing() ? "Save" : "Arrange"}
+                                <span>{isEditing() ? "Save" : "Arrange"}</span>
+                                <ReturnKeyHint />
                             </button>
                         </div>
                     </div>
