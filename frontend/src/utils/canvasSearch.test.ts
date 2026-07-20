@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { CanvasDraft, CanvasGroup } from "./schemas";
 import {
+    bucketFor,
     classifySlot,
     computeSearchResults,
+    getTeamNameOptions,
     isDraftInProgress,
+    teamSideInDraft,
     type SearchQuery
 } from "./canvasSearch";
 
@@ -143,5 +146,157 @@ describe("computeSearchResults — champion-only", () => {
         expect(results.matches[0].inProgress).toBe(true);
         expect(results.matches[0].groupId).toBe("g1");
         expect(results.matches[0].outcome).toBeNull();
+    });
+});
+
+describe("teamSideInDraft", () => {
+    const group = makeGroup("g1", { blueTeamName: "T1", redTeamName: "GenG" });
+
+    it("maps team1/team2 through blueSideTeam (default team1 = blue)", () => {
+        const game1 = makeDraft("d1", fullPicks(), { group_id: "g1" });
+        expect(teamSideInDraft(game1, group, "T1")).toBe("blue");
+        expect(teamSideInDraft(game1, group, "GenG")).toBe("red");
+
+        const game2 = makeDraft("d2", fullPicks(), { group_id: "g1", blueSideTeam: 2 });
+        expect(teamSideInDraft(game2, group, "T1")).toBe("red");
+        expect(teamSideInDraft(game2, group, "GenG")).toBe("blue");
+    });
+
+    it("matches case-insensitively with trimming", () => {
+        const game = makeDraft("d1", fullPicks(), { group_id: "g1" });
+        expect(teamSideInDraft(game, group, "t1")).toBe("blue");
+        expect(teamSideInDraft(game, group, "  geng  ")).toBe("red");
+    });
+
+    it("returns null for missing group or unknown team", () => {
+        const game = makeDraft("d1", fullPicks());
+        expect(teamSideInDraft(game, undefined, "T1")).toBeNull();
+        expect(teamSideInDraft(game, group, "DRX")).toBeNull();
+        expect(teamSideInDraft(game, makeGroup("g2"), "T1")).toBeNull();
+    });
+});
+
+describe("bucketFor", () => {
+    it("classifies all four combinations", () => {
+        expect(bucketFor({ phase: "pick", side: "blue" }, "blue")).toBe("pickedBy");
+        expect(bucketFor({ phase: "pick", side: "red" }, "blue")).toBe("pickedAgainst");
+        expect(bucketFor({ phase: "ban", side: "blue" }, "blue")).toBe("bannedBy");
+        expect(bucketFor({ phase: "ban", side: "red" }, "blue")).toBe("bannedAgainst");
+    });
+});
+
+describe("getTeamNameOptions", () => {
+    it("dedupes case-insensitively, keeps first casing, sorts, skips blanks", () => {
+        const groups = [
+            makeGroup("g1", { blueTeamName: "T1", redTeamName: "GenG" }),
+            makeGroup("g2", { blueTeamName: "geng", redTeamName: "  " }),
+            makeGroup("g3", {})
+        ];
+        expect(getTeamNameOptions(groups)).toEqual(["GenG", "T1"]);
+    });
+});
+
+describe("computeSearchResults — team filter", () => {
+    const groups = [makeGroup("g1", { blueTeamName: "T1", redTeamName: "GenG" })];
+    const query = (bucket: SearchQuery["bucket"] = null): SearchQuery => ({
+        championId: "Jinx",
+        teamName: "T1",
+        bucket
+    });
+
+    it("drops ungrouped drafts and buckets slots relative to the team", () => {
+        const drafts = [
+            makeDraft("d1", fullPicks({ 12: "Jinx" }), {
+                group_id: "g1",
+                completed: true,
+                winner: "blue"
+            }),
+            makeDraft("d2", fullPicks({ 3: "Jinx" }), {
+                group_id: "g1",
+                blueSideTeam: 2,
+                completed: true,
+                winner: "blue"
+            }),
+            makeDraft("d3", fullPicks({ 10: "Jinx" }))
+        ];
+        const results = computeSearchResults(drafts, groups, query(), identity);
+
+        expect(results.matches.map((m) => m.draftId)).toEqual(["d1", "d2"]);
+        expect(results.matches[0].slots[0].bucket).toBe("pickedBy");
+        expect(results.matches[0].outcome).toBe("win");
+        expect(results.matches[1].slots[0].bucket).toBe("bannedAgainst");
+        expect(results.matches[1].outcome).toBe("loss");
+    });
+
+    it("aggregates bucket summaries with W/L, no-result, and in-progress", () => {
+        const drafts = [
+            makeDraft("d1", fullPicks({ 12: "Jinx" }), {
+                group_id: "g1",
+                completed: true,
+                winner: "blue"
+            }),
+            makeDraft("d2", fullPicks({ 12: "Jinx" }), {
+                group_id: "g1",
+                completed: true,
+                winner: "red"
+            }),
+            makeDraft("d3", fullPicks({ 12: "Jinx" }), {
+                group_id: "g1",
+                completed: true
+            }),
+            makeDraft("d4", fullPicks({ 12: "Jinx", 14: "" }), {
+                group_id: "g1",
+                completed: false
+            }),
+            makeDraft("d5", fullPicks({ 17: "Jinx" }), {
+                group_id: "g1",
+                completed: true,
+                winner: "blue"
+            })
+        ];
+        const results = computeSearchResults(drafts, groups, query(), identity);
+        const buckets = results.buckets;
+        expect(buckets).not.toBeNull();
+        if (buckets === null) return;
+
+        expect(buckets.pickedBy).toEqual({
+            games: 4,
+            wins: 1,
+            losses: 1,
+            noResult: 1,
+            inProgress: 1
+        });
+        expect(buckets.pickedAgainst).toEqual({
+            games: 1,
+            wins: 1,
+            losses: 0,
+            noResult: 0,
+            inProgress: 0
+        });
+        expect(buckets.bannedBy.games).toBe(0);
+        expect(buckets.bannedAgainst.games).toBe(0);
+    });
+
+    it("bucket filter narrows matches but summaries stay complete", () => {
+        const drafts = [
+            makeDraft("d1", fullPicks({ 12: "Jinx" }), {
+                group_id: "g1",
+                completed: true,
+                winner: "blue"
+            }),
+            makeDraft("d2", fullPicks({ 2: "Jinx" }), {
+                group_id: "g1",
+                completed: true,
+                winner: "blue"
+            })
+        ];
+        const results = computeSearchResults(drafts, groups, query("pickedBy"), identity);
+
+        expect(results.matches.map((m) => m.draftId)).toEqual(["d1"]);
+        const buckets = results.buckets;
+        expect(buckets).not.toBeNull();
+        if (buckets === null) return;
+        expect(buckets.pickedBy.games).toBe(1);
+        expect(buckets.bannedBy.games).toBe(1);
     });
 });
