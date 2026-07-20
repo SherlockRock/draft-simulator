@@ -12,6 +12,7 @@ type props = {
     setSelectText: (newValue: string) => void;
     onValidSelect?: (newValue: string) => void;
     theme?: SelectTheme;
+    textInput?: boolean;
 };
 
 export const SearchableSelect = (props: props) => {
@@ -72,8 +73,9 @@ export const SearchableSelect = (props: props) => {
         if (sortInput === "" || sortInput === props.currentlySelected) {
             return props.sortOptions;
         }
+        const needle = sortInput.toLowerCase();
         return props.sortOptions.filter((option) =>
-            option.toLowerCase().includes(sortInput)
+            option.toLowerCase().includes(needle)
         );
     };
 
@@ -98,7 +100,8 @@ export const SearchableSelect = (props: props) => {
         getItemCount: () => holdSortOptions().length,
         onSelect: handleSelect,
         onClose: closeDropdown,
-        isOpen: dropdownOpen
+        isOpen: dropdownOpen,
+        textInput: () => props.textInput
     });
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -113,6 +116,7 @@ export const SearchableSelect = (props: props) => {
         const result = keyboard.handleKeyDown(e);
         if (result === "open") {
             e.preventDefault();
+            e.stopPropagation();
             openDropdown();
             keyboard.resetIndex(0);
         }
