@@ -53,6 +53,15 @@ import {
 } from "./utils/schemas";
 import { validateSocketEvent } from "./utils/socketValidation";
 import { CanvasCard } from "./components/CanvasCard";
+import { CanvasSearchBar } from "./components/CanvasSearchBar";
+import {
+    computeSearchResults,
+    getTeamNameOptions,
+    type DraftMatch,
+    type SearchBucket,
+    type SearchResults,
+    type SlotPhase
+} from "./utils/canvasSearch";
 import {
     CanvasChampionPicker,
     type PickerTarget
@@ -450,6 +459,113 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             }));
         }
     };
+
+    const getDraftWorldPosition = (draft: CanvasDraft): { x: number; y: number } => {
+        const group = draft.group_id
+            ? canvasGroups.find((g) => g.id === draft.group_id)
+            : null;
+        if (group && group.type === "custom") {
+            return {
+                x: group.positionX + draft.positionX,
+                y: group.positionY + draft.positionY
+            };
+        }
+        if (group && group.type === "series") {
+            const groupDrafts = canvasDrafts.filter((cd) => cd.group_id === group.id);
+            const sortedDrafts = [...groupDrafts].sort(
+                (a, b) => (a.Draft.seriesIndex ?? 0) - (b.Draft.seriesIndex ?? 0)
+            );
+            const draftIndex = Math.max(
+                0,
+                sortedDrafts.findIndex((cd) => cd.Draft.id === draft.Draft.id)
+            );
+            const cw = cardWidth(props.cardLayout());
+            return {
+                x: group.positionX + SERIES_PADDING + draftIndex * (cw + SERIES_CARD_GAP),
+                y: group.positionY
+            };
+        }
+        return { x: draft.positionX, y: draft.positionY };
+    };
+
+    const [searchOpen, setSearchOpen] = createSignal(false);
+    const [searchChampionId, setSearchChampionId] = createSignal<string | null>(null);
+    const [searchTeamName, setSearchTeamName] = createSignal<string | null>(null);
+    const [searchBucket, setSearchBucket] = createSignal<SearchBucket | null>(null);
+    const [searchMatchIndex, setSearchMatchIndex] = createSignal(0);
+    const [searchFocusNonce, setSearchFocusNonce] = createSignal(0);
+
+    const searchResults = createMemo<SearchResults | null>(() => {
+        const championId = searchChampionId();
+        if (!searchOpen() || championId === null) return null;
+        return computeSearchResults(
+            canvasDrafts,
+            canvasGroups,
+            { championId, teamName: searchTeamName(), bucket: searchBucket() },
+            resolveChampionId
+        );
+    });
+    const searchTeamOptions = createMemo(() => getTeamNameOptions(canvasGroups));
+    const orderedSearchMatches = createMemo(() => {
+        const results = searchResults();
+        if (results === null) return [];
+        return results.matches
+            .map((match) => {
+                const cd = canvasDrafts.find((d) => d.Draft.id === match.draftId);
+                return { match, target: cd ? getDraftWorldPosition(cd) : null };
+            })
+            .sort(
+                (a, b) =>
+                    (a.target?.y ?? 0) - (b.target?.y ?? 0) ||
+                    (a.target?.x ?? 0) - (b.target?.x ?? 0)
+            );
+    });
+    const currentSearchIndex = createMemo(() =>
+        Math.min(searchMatchIndex(), Math.max(orderedSearchMatches().length - 1, 0))
+    );
+    const currentSearchDraftId = createMemo(
+        () => orderedSearchMatches()[currentSearchIndex()]?.match.draftId ?? null
+    );
+    const searchMatchByDraftId = createMemo(() => {
+        const map = new Map<string, DraftMatch>();
+        for (const { match } of orderedSearchMatches()) map.set(match.draftId, match);
+        return map;
+    });
+    const searchSlotPhasesByDraft = createMemo(() => {
+        const map = new Map<string, Map<number, SlotPhase>>();
+        for (const { match } of orderedSearchMatches()) {
+            map.set(
+                match.draftId,
+                new Map(match.slots.map((slot) => [slot.index, slot.phase]))
+            );
+        }
+        return map;
+    });
+    const searchActive = createMemo(() => searchResults() !== null);
+    const searchSlotPhaseFor = (draftId: string, pickIndex: number): SlotPhase | null =>
+        searchSlotPhasesByDraft().get(draftId)?.get(pickIndex) ?? null;
+    const goToSearchMatch = (direction: 1 | -1) => {
+        const list = orderedSearchMatches();
+        if (list.length === 0) return;
+        const next = (currentSearchIndex() + direction + list.length) % list.length;
+        setSearchMatchIndex(next);
+        const target = list[next].target;
+        if (target) navigateToDraft(target.x, target.y);
+    };
+    const setSearchQueryChampion = (championId: string | null) => {
+        setSearchChampionId(championId);
+        setSearchMatchIndex(0);
+    };
+    const setSearchQueryTeam = (teamName: string | null) => {
+        setSearchTeamName(teamName);
+        setSearchBucket(null);
+        setSearchMatchIndex(0);
+    };
+    const setSearchQueryBucket = (bucket: SearchBucket | null) => {
+        setSearchBucket(bucket);
+        setSearchMatchIndex(0);
+    };
+    const closeSearch = () => setSearchOpen(false);
 
     // Set the navigation callback in the context
     createEffect(() => {
@@ -2898,30 +3014,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const handleDraftGoTo = (draft: CanvasDraft) => {
-        // For grouped drafts, calculate actual position
-        const group = draft.group_id
-            ? canvasGroups.find((g) => g.id === draft.group_id)
-            : null;
-        if (group && group.type === "custom") {
-            navigateToDraft(
-                group.positionX + draft.positionX,
-                group.positionY + draft.positionY
-            );
-        } else if (group && group.type === "series") {
-            // Series groups position drafts horizontally
-            const groupDrafts = canvasDrafts.filter((cd) => cd.group_id === group.id);
-            const sortedDrafts = [...groupDrafts].sort(
-                (a, b) => (a.Draft.seriesIndex ?? 0) - (b.Draft.seriesIndex ?? 0)
-            );
-            const draftIndex = sortedDrafts.findIndex(
-                (cd) => cd.Draft.id === draft.Draft.id
-            );
-            const cw = cardWidth(props.cardLayout());
-            const offsetX = SERIES_PADDING + draftIndex * (cw + SERIES_CARD_GAP);
-            navigateToDraft(group.positionX + offsetX, group.positionY);
-        } else {
-            navigateToDraft(draft.positionX, draft.positionY);
-        }
+        const pos = getDraftWorldPosition(draft);
+        navigateToDraft(pos.x, pos.y);
     };
 
     const handleDraftCopy = (draft: CanvasDraft) => {
@@ -2972,6 +3066,37 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         canvasContext.setSetEditingDraftIdCallback(() => setEditingDraftId);
 
         const onKeyDown = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+                const isSearchBarTarget =
+                    e.target instanceof Element &&
+                    e.target.closest('[data-canvas-search-bar="true"]') !== null;
+                if (isFocusedInteractiveTarget(e.target) && !isSearchBarTarget) return;
+                e.preventDefault();
+                if (searchOpen()) setSearchFocusNonce((n) => n + 1);
+                else setSearchOpen(true);
+                return;
+            }
+            if (searchOpen() && e.key === "Escape") {
+                closeSearch();
+                return;
+            }
+            if (searchOpen() && !isFocusedInteractiveTarget(e.target)) {
+                if (e.key === "Enter" && !isConnectionMode()) {
+                    e.preventDefault();
+                    goToSearchMatch(e.shiftKey ? -1 : 1);
+                    return;
+                }
+                if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+                    e.preventDefault();
+                    goToSearchMatch(1);
+                    return;
+                }
+                if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+                    e.preventDefault();
+                    goToSearchMatch(-1);
+                    return;
+                }
+            }
             if (e.key === "Escape" && isConnectionMode()) {
                 e.preventDefault();
                 if (
@@ -3797,6 +3922,26 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 restrictedChampions={() =>
                                                     getRestrictedChampionsForDraft(cd)
                                                 }
+                                                searchDimmed={() =>
+                                                    searchActive() &&
+                                                    !searchMatchByDraftId().has(
+                                                        cd.Draft.id
+                                                    )
+                                                }
+                                                searchSlotPhase={(pickIndex) =>
+                                                    searchSlotPhaseFor(
+                                                        cd.Draft.id,
+                                                        pickIndex
+                                                    )
+                                                }
+                                                searchIsCurrent={() =>
+                                                    currentSearchDraftId() === cd.Draft.id
+                                                }
+                                                searchInProgress={() =>
+                                                    searchMatchByDraftId().get(
+                                                        cd.Draft.id
+                                                    )?.inProgress ?? false
+                                                }
                                                 disabledChampions={
                                                     group.metadata.disabledChampions
                                                 }
@@ -3863,6 +4008,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                             restrictedChampions={() =>
                                                 getRestrictedChampionsForDraft(cd)
                                             }
+                                            searchDimmed={() =>
+                                                searchActive() &&
+                                                !searchMatchByDraftId().has(cd.Draft.id)
+                                            }
+                                            searchSlotPhase={(pickIndex) =>
+                                                searchSlotPhaseFor(cd.Draft.id, pickIndex)
+                                            }
+                                            searchIsCurrent={() =>
+                                                currentSearchDraftId() === cd.Draft.id
+                                            }
+                                            searchInProgress={() =>
+                                                searchMatchByDraftId().get(cd.Draft.id)
+                                                    ?.inProgress ?? false
+                                            }
                                             disabledChampions={
                                                 group.metadata.disabledChampions
                                             }
@@ -3897,9 +4056,36 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             editingDraftId={editingDraftId}
                             onEditingComplete={() => setEditingDraftId(null)}
                             restrictedChampions={() => getRestrictedChampionsForDraft(cd)}
+                            searchDimmed={() =>
+                                searchActive() && !searchMatchByDraftId().has(cd.Draft.id)
+                            }
+                            searchSlotPhase={(pickIndex) =>
+                                searchSlotPhaseFor(cd.Draft.id, pickIndex)
+                            }
+                            searchIsCurrent={() => currentSearchDraftId() === cd.Draft.id}
+                            searchInProgress={() =>
+                                searchMatchByDraftId().get(cd.Draft.id)?.inProgress ??
+                                false
+                            }
                         />
                     )}
                 </For>
+                <Show when={searchOpen()}>
+                    <CanvasSearchBar
+                        championId={searchChampionId}
+                        onChampionChange={setSearchQueryChampion}
+                        teamName={searchTeamName}
+                        onTeamChange={setSearchQueryTeam}
+                        teamOptions={searchTeamOptions}
+                        activeBucket={searchBucket}
+                        onBucketChange={setSearchQueryBucket}
+                        results={searchResults}
+                        currentIndex={currentSearchIndex}
+                        onNavigate={goToSearchMatch}
+                        onClose={closeSearch}
+                        focusNonce={searchFocusNonce}
+                    />
+                </Show>
                 <Dialog
                     isOpen={isDeleteDialogOpen}
                     onCancel={onCancel}
