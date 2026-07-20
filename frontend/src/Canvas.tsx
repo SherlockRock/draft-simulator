@@ -2875,14 +2875,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             e.preventDefault();
             return;
         }
-        // Touch long-press or keyboard menu key.
+        // Touch long-press or keyboard menu key. Canvas chrome (sidebar,
+        // badges, popovers) keeps the native menu instead of falling through
+        // to the background Create-Draft menu.
         if (isFocusedInteractiveTarget(e.target)) return;
+        if (!isCanvasWorldTarget(e.target)) return;
         e.preventDefault();
         dispatchContextMenu(e.target, e.clientX, e.clientY);
     };
 
-    const closeContextMenu = (e?: MouseEvent) => {
-        if (e && (e.target as HTMLElement).closest(".canvas-context-menu")) return;
+    const closeContextMenu = () => {
         setContextMenuPosition(null);
     };
 
@@ -3479,14 +3481,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         window.addEventListener("mousemove", onWindowMouseMove);
         window.addEventListener("mouseup", onWindowMouseUp);
         window.addEventListener("wheel", onWindowWheel, { passive: false });
-        window.addEventListener("mousedown", closeContextMenu);
 
         onCleanup(() => {
             window.removeEventListener("keydown", onKeyDown);
             window.removeEventListener("mousemove", onWindowMouseMove);
             window.removeEventListener("mouseup", onWindowMouseUp);
             window.removeEventListener("wheel", onWindowWheel);
-            window.removeEventListener("mousedown", closeContextMenu);
         });
     });
 
@@ -4061,58 +4061,63 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 />
                 {/* Context Menu */}
                 <Show when={contextMenuPosition()}>
-                    <div
-                        class="canvas-context-menu fixed z-50 rounded-md border border-darius-border bg-darius-card-hover py-1 shadow-lg"
-                        style={{
-                            left: `${contextMenuPosition()?.x ?? 0}px`,
-                            top: `${contextMenuPosition()?.y ?? 0}px`
-                        }}
-                    >
-                        <button
-                            class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-card"
-                            onClick={() => {
-                                const pos = contextMenuWorldPosition();
-                                const group = findGroupAtPosition(pos.x, pos.y);
-                                const draftX = group ? pos.x - group.positionX : pos.x;
-                                const draftY = group ? pos.y - group.positionY : pos.y;
-                                if (isLocalMode()) {
-                                    localNewDraft({
-                                        name: "New Draft",
-                                        picks: Array(20).fill(""),
-                                        positionX: draftX,
-                                        positionY: draftY,
-                                        group_id: group?.id ?? null
-                                    });
-                                    refreshFromLocal();
-                                    toast.success("Successfully created new draft!");
-                                } else {
-                                    newDraftMutation.mutate({
-                                        name: "New Draft",
-                                        picks: Array(20).fill(""),
-                                        public: false,
-                                        canvas_id: canvasId(),
-                                        positionX: draftX,
-                                        positionY: draftY,
-                                        group_id: group?.id ?? undefined
-                                    });
+                    {(pos) => (
+                        <ContextMenu
+                            class="canvas-context-menu"
+                            position={pos()}
+                            actions={[
+                                {
+                                    label: "Create Draft",
+                                    action: () => {
+                                        const worldPos = contextMenuWorldPosition();
+                                        const group = findGroupAtPosition(
+                                            worldPos.x,
+                                            worldPos.y
+                                        );
+                                        const draftX = group
+                                            ? worldPos.x - group.positionX
+                                            : worldPos.x;
+                                        const draftY = group
+                                            ? worldPos.y - group.positionY
+                                            : worldPos.y;
+                                        if (isLocalMode()) {
+                                            localNewDraft({
+                                                name: "New Draft",
+                                                picks: Array(20).fill(""),
+                                                positionX: draftX,
+                                                positionY: draftY,
+                                                group_id: group?.id ?? null
+                                            });
+                                            refreshFromLocal();
+                                            toast.success(
+                                                "Successfully created new draft!"
+                                            );
+                                        } else {
+                                            newDraftMutation.mutate({
+                                                name: "New Draft",
+                                                picks: Array(20).fill(""),
+                                                public: false,
+                                                canvas_id: canvasId(),
+                                                positionX: draftX,
+                                                positionY: draftY,
+                                                group_id: group?.id ?? undefined
+                                            });
+                                        }
+                                    }
+                                },
+                                {
+                                    label: "Create Group",
+                                    action: () => {
+                                        setCreateGroupPosition(
+                                            contextMenuWorldPosition()
+                                        );
+                                        handleCreateGroupFromContextMenu();
+                                    }
                                 }
-                                closeContextMenu();
-                            }}
-                        >
-                            Create Draft
-                        </button>
-                        <button
-                            class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-card"
-                            onClick={() => {
-                                const pos = contextMenuWorldPosition();
-                                setCreateGroupPosition(pos);
-                                handleCreateGroupFromContextMenu();
-                                closeContextMenu();
-                            }}
-                        >
-                            Create Group
-                        </button>
-                    </div>
+                            ]}
+                            onClose={closeContextMenu}
+                        />
+                    )}
                 </Show>
                 {/* Draft Context Menu */}
                 <Show when={draftContextMenu()}>

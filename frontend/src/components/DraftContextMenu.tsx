@@ -1,5 +1,7 @@
-import { Component, onMount, onCleanup, Show } from "solid-js";
+import { Component } from "solid-js";
 import { CanvasDraft } from "../utils/schemas";
+import { ContextMenuAction } from "../utils/types";
+import { ContextMenu } from "./ContextMenu";
 
 type DraftContextMenuProps = {
     position: { x: number; y: number };
@@ -13,88 +15,46 @@ type DraftContextMenuProps = {
 };
 
 export const DraftContextMenu: Component<DraftContextMenuProps> = (props) => {
-    let menuRef: HTMLDivElement | undefined;
+    const actions = (): ContextMenuAction[] => {
+        const menuActions: ContextMenuAction[] = [];
 
-    const handleClickOutside = (e: MouseEvent) => {
-        if (menuRef && !menuRef.contains(e.target as Node)) {
-            props.onClose();
+        if (props.onRename) {
+            menuActions.push({
+                label: "Rename",
+                action: () => props.onRename?.()
+            });
         }
+
+        menuActions.push(
+            { label: "View draft", action: () => props.onView() },
+            { label: "Go to", action: () => props.onGoTo() }
+        );
+
+        if (props.onCopy) {
+            menuActions.push({
+                label: "Copy",
+                action: () => props.onCopy?.()
+            });
+        }
+
+        if (props.onDelete) {
+            menuActions.push({
+                label: "Delete",
+                action: () => props.onDelete?.(),
+                destructive: true
+            });
+        }
+
+        return menuActions;
     };
 
-    onMount(() => {
-        // Delay adding listener to avoid immediate close from the right-click event
-        setTimeout(() => {
-            document.addEventListener("mousedown", handleClickOutside);
-        }, 0);
-    });
-
-    onCleanup(() => {
-        document.removeEventListener("mousedown", handleClickOutside);
-    });
-
     return (
-        <div
-            ref={menuRef}
-            class="draft-context-menu fixed z-50 w-36 rounded-md border border-darius-border bg-darius-card-hover py-1 shadow-lg"
-            style={{
-                left: `${props.position.x}px`,
-                top: `${props.position.y}px`
-            }}
-        >
-            <div class="truncate border-b border-darius-border px-4 py-1.5 text-xs text-darius-text-secondary">
-                {props.draft.Draft.name}
-            </div>
-            <Show when={props.onRename}>
-                <button
-                    class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-border"
-                    onClick={() => {
-                        props.onRename?.();
-                        props.onClose();
-                    }}
-                >
-                    Rename
-                </button>
-            </Show>
-            <button
-                class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-border"
-                onClick={() => {
-                    props.onView();
-                    props.onClose();
-                }}
-            >
-                View draft
-            </button>
-            <button
-                class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-border"
-                onClick={() => {
-                    props.onGoTo();
-                    props.onClose();
-                }}
-            >
-                Go to
-            </button>
-            <Show when={props.onCopy}>
-                <button
-                    class="w-full px-4 py-2 text-left text-sm text-darius-text-primary transition-colors hover:bg-darius-border"
-                    onClick={() => {
-                        props.onCopy?.();
-                        props.onClose();
-                    }}
-                >
-                    Copy
-                </button>
-            </Show>
-            <Show when={props.onDelete}>
-                <button
-                    class="w-full px-4 py-2 text-left text-sm text-darius-crimson transition-colors hover:bg-darius-crimson/15"
-                    onClick={() => {
-                        props.onDelete?.();
-                        props.onClose();
-                    }}
-                >
-                    Delete
-                </button>
-            </Show>
-        </div>
+        <ContextMenu
+            class="draft-context-menu"
+            header={props.draft.Draft.name}
+            position={props.position}
+            actions={actions()}
+            onClose={props.onClose}
+        />
     );
 };
