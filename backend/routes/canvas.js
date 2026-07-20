@@ -2494,9 +2494,8 @@ router.post(
       }
 
       // Generate unique ID for the new vertex
-      const { v4: uuidv4 } = require("uuid");
       const newVertex = {
-        id: uuidv4(),
+        id: require("crypto").randomUUID(),
         x,
         y,
       };
