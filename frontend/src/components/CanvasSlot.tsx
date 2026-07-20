@@ -1,6 +1,7 @@
 import { Component, Show, createMemo } from "solid-js";
 import { X } from "lucide-solid";
 import { getSplashUrl, resolveChampion } from "../utils/constants";
+import type { SlotPhase } from "../utils/canvasSearch";
 import BlankSquare from "/src/assets/BlankSquare.webp";
 
 export type SlotDisplayMode = "full" | "compact" | "wide-art";
@@ -14,6 +15,8 @@ type CanvasSlotProps = {
     disabled: boolean;
     /** This slot is the picker's current advance target. */
     isPickerTarget: boolean;
+    /** Search match highlight; picks and bans styled distinctly. */
+    searchHighlight?: SlotPhase | null;
     onOpen: () => void;
     onClear: () => void;
 };
@@ -72,11 +75,18 @@ export const CanvasSlot: Component<CanvasSlotProps> = (props) => {
                                 class="flex h-full min-h-0 w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg border bg-darius-bg px-2 py-1 text-left text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
                                 onClick={openSlot}
                                 classList={{
-                                    "border-darius-border": !props.isPickerTarget,
+                                    "border-darius-border":
+                                        !props.isPickerTarget && !props.searchHighlight,
                                     "cursor-pointer hover:border-darius-purple-bright/60":
                                         !props.disabled,
                                     "border-darius-ember/70 ring-2 ring-darius-ember":
                                         props.isPickerTarget,
+                                    "border-darius-ember/80 ring-2 ring-darius-ember/90":
+                                        !props.isPickerTarget &&
+                                        props.searchHighlight === "pick",
+                                    "border-darius-crimson/80 ring-2 ring-darius-crimson/90":
+                                        !props.isPickerTarget &&
+                                        props.searchHighlight === "ban",
                                     "opacity-60": props.disabled
                                 }}
                             >
@@ -144,11 +154,17 @@ export const CanvasSlot: Component<CanvasSlotProps> = (props) => {
                                 onClick={openSlot}
                                 classList={{
                                     "border-darius-border shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]":
-                                        !props.isPickerTarget,
+                                        !props.isPickerTarget && !props.searchHighlight,
                                     "cursor-pointer hover:shadow-[0_12px_30px_rgba(0,0,0,0.3)]":
                                         !props.disabled,
                                     "border-darius-ember/70 ring-2 ring-darius-ember":
                                         props.isPickerTarget,
+                                    "border-darius-ember/80 ring-2 ring-darius-ember/90":
+                                        !props.isPickerTarget &&
+                                        props.searchHighlight === "pick",
+                                    "border-darius-crimson/80 ring-2 ring-darius-crimson/90":
+                                        !props.isPickerTarget &&
+                                        props.searchHighlight === "ban",
                                     "opacity-60": props.disabled
                                 }}
                             >
@@ -211,10 +227,15 @@ export const CanvasSlot: Component<CanvasSlotProps> = (props) => {
                         class="relative flex h-[30px] w-[30px] items-center justify-center overflow-hidden rounded-lg border bg-darius-bg p-[2px]"
                         onClick={openSlot}
                         classList={{
-                            "border-darius-border/80": !props.isPickerTarget,
+                            "border-darius-border/80":
+                                !props.isPickerTarget && !props.searchHighlight,
                             "cursor-pointer": !props.disabled,
                             "border-darius-ember/70 ring-2 ring-darius-ember":
                                 props.isPickerTarget,
+                            "border-darius-ember/80 ring-2 ring-darius-ember/90":
+                                !props.isPickerTarget && props.searchHighlight === "pick",
+                            "border-darius-crimson/80 ring-2 ring-darius-crimson/90":
+                                !props.isPickerTarget && props.searchHighlight === "ban",
                             "opacity-60": props.disabled
                         }}
                     >

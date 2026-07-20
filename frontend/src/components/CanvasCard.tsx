@@ -21,6 +21,7 @@ import {
     getIndexToShorthandForLayout
 } from "../utils/canvasCardLayout";
 import { cardHeight, cardWidth } from "../utils/helpers";
+import type { SlotPhase } from "../utils/canvasSearch";
 
 type CanvasCardProps = {
     canvasId: string;
@@ -47,6 +48,10 @@ type CanvasCardProps = {
     redTeamName?: string;
     restrictedChampions?: () => string[];
     disabledChampions?: string[];
+    searchDimmed?: () => boolean;
+    searchSlotPhase?: (pickIndex: number) => SlotPhase | null;
+    searchIsCurrent?: () => boolean;
+    searchInProgress?: () => boolean;
 };
 
 const blueBanIndices = [0, 1, 2, 3, 4];
@@ -224,6 +229,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
             side={getTeamSide(pickIndex)}
             disabled={slotDisabled()}
             isPickerTarget={isSlotTargeted(pickIndex)}
+            searchHighlight={props.searchSlotPhase?.(pickIndex) ?? null}
             onOpen={() => props.onSlotOpen(props.canvasDraft.Draft.id, pickIndex)}
             onClear={() =>
                 props.handlePickChange(props.canvasDraft.Draft.id, pickIndex, "")
@@ -470,12 +476,15 @@ export const CanvasCard = (props: CanvasCardProps) => {
         <div
             data-canvas-drag-root="true"
             data-draft-id={props.canvasDraft.Draft.id}
-            class="canvas-card flex flex-col rounded-xl border border-darius-border/90 bg-darius-card-hover/95 shadow-[0_16px_40px_rgba(15,23,42,0.42)]"
+            class="canvas-card flex flex-col rounded-xl border border-darius-border/90 bg-darius-card-hover/95 shadow-[0_16px_40px_rgba(15,23,42,0.42)] transition-opacity duration-150"
             classList={{
                 "absolute z-30": !props.isGrouped || props.groupType === "custom",
-                "ring-4 ring-darius-purple-bright": props.isConnectionMode && !selected(),
+                "ring-4 ring-darius-purple-bright":
+                    !selected() &&
+                    (props.isConnectionMode || (props.searchIsCurrent?.() ?? false)),
                 "ring-4 ring-darius-ember": selected(),
-                "relative flex-shrink-0": props.isGrouped && props.groupType === "series"
+                "relative flex-shrink-0": props.isGrouped && props.groupType === "series",
+                "opacity-40": props.searchDimmed?.() ?? false
             }}
             style={{
                 ...(props.isGrouped && props.groupType === "custom"
@@ -519,6 +528,11 @@ export const CanvasCard = (props: CanvasCardProps) => {
                     selected={selected}
                     sourceAnchor={props.sourceAnchor}
                 />
+            </Show>
+            <Show when={props.searchInProgress?.()}>
+                <div class="absolute -top-2.5 left-3 z-40 rounded-full border border-darius-ember/60 bg-darius-bg px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-darius-ember">
+                    In progress
+                </div>
             </Show>
             <div class={headerPaddingClass()}>
                 <div class={`flex items-start justify-between ${inputRowGapClass()}`}>
