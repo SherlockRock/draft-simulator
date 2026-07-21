@@ -6,6 +6,7 @@ import {
     computeSearchResults,
     getTeamNameOptions,
     isDraftInProgress,
+    resolveGroupTeamNames,
     teamSideInDraft,
     type SearchQuery
 } from "./canvasSearch";
@@ -45,14 +46,26 @@ const makeDraft = (
     };
 };
 
-const makeGroup = (id: string, metadata: CanvasGroup["metadata"] = {}): CanvasGroup => ({
+const makeGroup = (
+    id: string,
+    metadata: CanvasGroup["metadata"] = {},
+    teams: { Team1?: CanvasGroup["Team1"]; Team2?: CanvasGroup["Team2"] } = {}
+): CanvasGroup => ({
     id,
     canvas_id: "canvas-1",
     name: id,
     type: "series",
     positionX: 0,
     positionY: 0,
-    metadata
+    metadata,
+    ...(teams.Team1 !== undefined ? { Team1: teams.Team1 } : {}),
+    ...(teams.Team2 !== undefined ? { Team2: teams.Team2 } : {})
+});
+
+const makeTeam = (id: string, name: string): CanvasGroup["Team1"] => ({
+    id,
+    owner_id: "owner-1",
+    name
 });
 
 describe("classifySlot", () => {
@@ -193,6 +206,59 @@ describe("getTeamNameOptions", () => {
             makeGroup("g3", {})
         ];
         expect(getTeamNameOptions(groups)).toEqual(["GenG", "T1"]);
+    });
+});
+
+describe("resolveGroupTeamNames", () => {
+    it("prefers the linked entity name over the metadata string", () => {
+        const group = makeGroup(
+            "g1",
+            { blueTeamName: "Old T1", redTeamName: "Old T2" },
+            { Team1: makeTeam("t1", "T1 Esports"), Team2: null }
+        );
+        expect(resolveGroupTeamNames(group)).toEqual({
+            team1: "T1 Esports",
+            team2: "Old T2"
+        });
+    });
+
+    it("falls back to metadata strings when unlinked", () => {
+        const group = makeGroup("g1", { blueTeamName: "Gen.G", redTeamName: "DK" });
+        expect(resolveGroupTeamNames(group)).toEqual({ team1: "Gen.G", team2: "DK" });
+    });
+
+    it("returns null for missing names on both sides", () => {
+        expect(resolveGroupTeamNames(makeGroup("g1"))).toEqual({
+            team1: null,
+            team2: null
+        });
+    });
+});
+
+describe("getTeamNameOptions — entity-backed", () => {
+    it("surfaces the linked entity name instead of the stale metadata string", () => {
+        const groups = [
+            makeGroup(
+                "g1",
+                { blueTeamName: "Old Name", redTeamName: "DK" },
+                { Team1: makeTeam("t1", "T1 Esports") }
+            )
+        ];
+        expect(getTeamNameOptions(groups)).toEqual(["DK", "T1 Esports"]);
+    });
+});
+
+describe("teamSideInDraft — entity-backed", () => {
+    it("resolves a filter on the linked entity name to the correct side", () => {
+        const group = makeGroup(
+            "g1",
+            { blueTeamName: "Old Name", redTeamName: "GenG" },
+            { Team1: makeTeam("t1", "T1 Esports") }
+        );
+        const game = makeDraft("d1", fullPicks(), { group_id: "g1" });
+        expect(teamSideInDraft(game, group, "T1 Esports")).toBe("blue");
+        // the stale metadata name no longer matches once linked
+        expect(teamSideInDraft(game, group, "Old Name")).toBeNull();
     });
 });
 

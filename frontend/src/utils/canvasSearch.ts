@@ -65,6 +65,21 @@ const normalizeName = (name: string | undefined): string | null => {
     return trimmed ? trimmed : null;
 };
 
+/**
+ * Effective team names for a group: the linked Team entity's name wins, else
+ * the free-text metadata string. Keeps unlinked groups and anonymous/local
+ * canvases (no Team entity) working via the fallback.
+ */
+export const resolveGroupTeamNames = (
+    group: CanvasGroup
+): { team1: string | null; team2: string | null } => {
+    const team1 =
+        group.Team1?.name?.trim() || group.metadata.blueTeamName?.trim() || null;
+    const team2 =
+        group.Team2?.name?.trim() || group.metadata.redTeamName?.trim() || null;
+    return { team1, team2 };
+};
+
 export const teamSideInDraft = (
     draft: CanvasDraft,
     group: CanvasGroup | undefined,
@@ -73,11 +88,12 @@ export const teamSideInDraft = (
     if (!group) return null;
     const target = normalizeName(teamName);
     if (!target) return null;
-    const team1 = normalizeName(group.metadata.blueTeamName);
-    const team2 = normalizeName(group.metadata.redTeamName);
+    const { team1, team2 } = resolveGroupTeamNames(group);
+    const t1 = normalizeName(team1 ?? undefined);
+    const t2 = normalizeName(team2 ?? undefined);
     const blueSideTeam = draft.Draft.blueSideTeam ?? 1;
-    if (team1 === target) return blueSideTeam === 1 ? "blue" : "red";
-    if (team2 === target) return blueSideTeam === 1 ? "red" : "blue";
+    if (t1 === target) return blueSideTeam === 1 ? "blue" : "red";
+    if (t2 === target) return blueSideTeam === 1 ? "red" : "blue";
     return null;
 };
 
@@ -92,7 +108,8 @@ export const bucketFor = (kind: SlotKind, teamSide: SlotSide): SearchBucket => {
 export const getTeamNameOptions = (groups: readonly CanvasGroup[]): string[] => {
     const seen = new Map<string, string>();
     for (const group of groups) {
-        for (const raw of [group.metadata.blueTeamName, group.metadata.redTeamName]) {
+        const { team1, team2 } = resolveGroupTeamNames(group);
+        for (const raw of [team1, team2]) {
             const trimmed = raw?.trim();
             if (!trimmed) continue;
             const key = trimmed.toLowerCase();
