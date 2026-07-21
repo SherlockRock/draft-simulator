@@ -5,6 +5,7 @@ import {
     createEffect,
     createMemo,
     createSignal,
+    onCleanup,
     untrack
 } from "solid-js";
 import { ChevronDown, ChevronUp, X } from "lucide-solid";
@@ -92,6 +93,17 @@ export const CanvasSearchBar = (props: CanvasSearchBarProps) => {
         }
     };
 
+    createEffect(() => {
+        const root = rootRef;
+        if (!root) return;
+        root.addEventListener("keydown", handleKeyDownCapture, { capture: true });
+        onCleanup(() => {
+            root.removeEventListener("keydown", handleKeyDownCapture, {
+                capture: true
+            });
+        });
+    });
+
     const handleKeyDown = (e: KeyboardEvent) => {
         if (
             e.key === "Enter" &&
@@ -109,10 +121,9 @@ export const CanvasSearchBar = (props: CanvasSearchBarProps) => {
         <div
             ref={rootRef}
             data-canvas-search-bar="true"
-            class="fixed left-1/2 top-20 z-50 flex -translate-x-1/2 select-text flex-col gap-2 rounded-xl border border-darius-border bg-darius-card/95 p-3 shadow-[0_16px_40px_rgba(15,23,42,0.6)] backdrop-blur-sm"
+            class="absolute left-1/2 top-6 z-50 flex -translate-x-1/2 select-text flex-col gap-2 rounded-xl border border-darius-border bg-darius-card/95 p-3 shadow-[0_16px_40px_rgba(15,23,42,0.6)] backdrop-blur-sm"
             onMouseDown={(e) => e.stopPropagation()}
             onKeyDown={handleKeyDown}
-            onKeyDownCapture={handleKeyDownCapture}
         >
             <div class="flex items-center gap-2">
                 <div class="w-52">
@@ -139,7 +150,7 @@ export const CanvasSearchBar = (props: CanvasSearchBarProps) => {
                         textInput={true}
                     />
                 </div>
-                <span class="min-w-[3.5rem] text-center text-sm tabular-nums text-darius-text-secondary">
+                <span class="ml-auto min-w-[3.5rem] text-center text-sm tabular-nums text-darius-text-secondary">
                     {counterText()}
                 </span>
                 <button
