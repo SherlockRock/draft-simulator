@@ -13,7 +13,7 @@ import {
 } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { resolveChampionId } from "./utils/constants";
-import { useMutation } from "@tanstack/solid-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query";
 import {
     postNewDraft,
     updateCanvasDraftPosition,
@@ -34,7 +34,8 @@ import {
     updateCanvasGroup,
     updateCanvasDraft,
     updateCanvasDraftPositions,
-    convertGroupToSeries
+    convertGroupToSeries,
+    fetchTeams
 } from "./utils/actions";
 import { useNavigate, useParams } from "@solidjs/router";
 import { toast } from "solid-toast";
@@ -181,6 +182,7 @@ type DraftNameUpdatedData = {
 const CanvasComponent = (props: CanvasComponentProps) => {
     const params = useParams();
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const {
         socket: socketAccessor,
         connectionStatus,
@@ -1263,6 +1265,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const userAccessor = useUser();
     const [currentUser] = userAccessor();
     const cursorTracker = createRemoteCursorTracker(() => currentUser()?.id);
+
+    // Owned teams for autocomplete linking in group settings. Unavailable on
+    // local/anonymous canvases (no account) — string fallback covers those.
+    const teamsEnabled = () => !isLocalMode() && !!currentUser();
+    const teamsQuery = useQuery(() => ({
+        queryKey: ["teams"],
+        queryFn: fetchTeams,
+        enabled: teamsEnabled()
+    }));
+    const ownedTeams = () => teamsQuery.data ?? [];
+    const handleTeamCreated = () => {
+        void queryClient.invalidateQueries({ queryKey: ["teams"] });
+    };
 
     createEffect(() => {
         if (isLocalMode()) return;
@@ -2411,6 +2426,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         convertToSeries: boolean;
         blueTeamName: string;
         redTeamName: string;
+        team1_id: string | null;
+        team2_id: string | null;
         length: number;
     }) => {
         const pendingPosition = pendingGroupSettingsPosition();
@@ -2529,6 +2546,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             });
         } else {
             const group = canvasGroups.find((g) => g.id === groupId);
+            const isManualSeries =
+                group?.type === "series" && group.metadata.origin === "manual";
             updateGroupMutation.mutate({
                 canvasId: canvasId(),
                 groupId,
@@ -2536,7 +2555,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 metadata: {
                     disabledChampions: data.disabledChampions,
                     draftMode: data.draftMode,
-                    ...(group?.type === "series" && group.metadata.origin === "manual"
+                    ...(isManualSeries
                         ? {
                               blueTeamName: data.blueTeamName,
                               redTeamName: data.redTeamName,
@@ -2544,7 +2563,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                               seriesType: data.draftMode
                           }
                         : {})
-                }
+                },
+                // Team linking persists on manual series groups only.
+                ...(isManualSeries
+                    ? { team1_id: data.team1_id, team2_id: data.team2_id }
+                    : {})
             });
         }
     };
@@ -4222,9 +4245,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         settingsGroup()?.metadata.origin === "manual"
                     }
                     initialBlueTeamName={
-                        settingsGroup()?.metadata.blueTeamName ?? "Team 1"
+                        settingsGroup()?.Team1?.name ??
+                        settingsGroup()?.metadata.blueTeamName ??
+                        "Team 1"
                     }
-                    initialRedTeamName={settingsGroup()?.metadata.redTeamName ?? "Team 2"}
+                    initialRedTeamName={
+                        settingsGroup()?.Team2?.name ??
+                        settingsGroup()?.metadata.redTeamName ??
+                        "Team 2"
+                    }
+                    initialTeam1Id={settingsGroup()?.team1_id ?? null}
+                    initialTeam2Id={settingsGroup()?.team2_id ?? null}
+                    teams={ownedTeams()}
+                    teamsEnabled={teamsEnabled()}
+                    onTeamCreated={handleTeamCreated}
                     initialLength={settingsGroup()?.metadata.length ?? 3}
                     onSave={handleSaveGroupSettings}
                 />

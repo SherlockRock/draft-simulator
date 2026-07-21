@@ -1,9 +1,10 @@
 import { createSignal, createEffect, Show, Component } from "solid-js";
 import { ChevronDown, ChevronUp } from "lucide-solid";
-import type { DraftMode } from "@draft-sim/shared-types";
+import type { DraftMode, Team } from "@draft-sim/shared-types";
 import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./Dialog";
 import { ChampionToggleGrid } from "./ChampionToggleGrid";
 import { StyledSelect } from "./StyledSelect";
+import { TeamNameSelect } from "./TeamNameSelect";
 import { resolveChampionId } from "../utils/constants";
 
 interface GroupSettingsDialogProps {
@@ -16,9 +17,16 @@ interface GroupSettingsDialogProps {
     canEditSeriesSettings?: boolean;
     initialBlueTeamName?: string;
     initialRedTeamName?: string;
+    initialTeam1Id?: string | null;
+    initialTeam2Id?: string | null;
     initialLength?: number;
     defaultSeriesEnabled?: boolean;
     primaryLabel?: string;
+    /** The user's owned teams for autocomplete linking. */
+    teams?: Team[];
+    /** Enable entity linking; false on local/anonymous canvases. */
+    teamsEnabled?: boolean;
+    onTeamCreated?: (team: Team) => void;
     onSave: (data: {
         name: string;
         disabledChampions: string[];
@@ -26,6 +34,8 @@ interface GroupSettingsDialogProps {
         convertToSeries: boolean;
         blueTeamName: string;
         redTeamName: string;
+        team1_id: string | null;
+        team2_id: string | null;
         length: number;
     }) => void;
 }
@@ -58,6 +68,8 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
     const [seriesEnabled, setSeriesEnabled] = createSignal(false);
     const [blueTeamName, setBlueTeamName] = createSignal("Team 1");
     const [redTeamName, setRedTeamName] = createSignal("Team 2");
+    const [team1Id, setTeam1Id] = createSignal<string | null>(null);
+    const [team2Id, setTeam2Id] = createSignal<string | null>(null);
     const [length, setLength] = createSignal(3);
     const [disabledExpanded, setDisabledExpanded] = createSignal(false);
 
@@ -71,6 +83,8 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
             );
             setBlueTeamName(props.initialBlueTeamName || "Team 1");
             setRedTeamName(props.initialRedTeamName || "Team 2");
+            setTeam1Id(props.initialTeam1Id ?? null);
+            setTeam2Id(props.initialTeam2Id ?? null);
             setLength(clampSeriesLength(props.initialLength || 3));
             setDisabledExpanded(false);
         }
@@ -84,6 +98,8 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
             convertToSeries: !props.isSeries && seriesEnabled(),
             blueTeamName: blueTeamName().trim() || "Team 1",
             redTeamName: redTeamName().trim() || "Team 2",
+            team1_id: team1Id(),
+            team2_id: team2Id(),
             length: clampSeriesLength(length())
         });
         props.onClose();
@@ -188,25 +204,35 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                     <label class="block text-sm font-medium text-darius-text-secondary">
                                         Blue Team Name
-                                        <input
-                                            type="text"
-                                            value={blueTeamName()}
-                                            onInput={(e) =>
-                                                setBlueTeamName(e.currentTarget.value)
-                                            }
-                                            class="mt-2 w-full rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary focus:border-darius-purple-bright focus:outline-none"
-                                        />
+                                        <div class="mt-2">
+                                            <TeamNameSelect
+                                                value={blueTeamName()}
+                                                teamId={team1Id()}
+                                                teams={props.teams ?? []}
+                                                disabled={!(props.teamsEnabled ?? false)}
+                                                onChange={(nextName, nextId) => {
+                                                    setBlueTeamName(nextName);
+                                                    setTeam1Id(nextId);
+                                                }}
+                                                onCreated={props.onTeamCreated}
+                                            />
+                                        </div>
                                     </label>
                                     <label class="block text-sm font-medium text-darius-text-secondary">
                                         Red Team Name
-                                        <input
-                                            type="text"
-                                            value={redTeamName()}
-                                            onInput={(e) =>
-                                                setRedTeamName(e.currentTarget.value)
-                                            }
-                                            class="mt-2 w-full rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary focus:border-darius-purple-bright focus:outline-none"
-                                        />
+                                        <div class="mt-2">
+                                            <TeamNameSelect
+                                                value={redTeamName()}
+                                                teamId={team2Id()}
+                                                teams={props.teams ?? []}
+                                                disabled={!(props.teamsEnabled ?? false)}
+                                                onChange={(nextName, nextId) => {
+                                                    setRedTeamName(nextName);
+                                                    setTeam2Id(nextId);
+                                                }}
+                                                onCreated={props.onTeamCreated}
+                                            />
+                                        </div>
                                     </label>
                                 </div>
                                 <div class="grid grid-cols-1 gap-3 sm:max-w-[14rem]">

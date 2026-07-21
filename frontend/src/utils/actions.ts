@@ -492,6 +492,8 @@ export const updateCanvasGroup = async (data: {
     width?: number | null;
     height?: number | null;
     metadata?: Partial<CanvasGroupMetadata>;
+    team1_id?: string | null;
+    team2_id?: string | null;
 }) => {
     return apiPut(
         `/canvas/${data.canvasId}/group/${data.groupId}`,
@@ -501,7 +503,11 @@ export const updateCanvasGroup = async (data: {
             positionY: data.positionY,
             width: data.width,
             height: data.height,
-            metadata: data.metadata
+            metadata: data.metadata,
+            // Only send team fields when linking is intended, so unrelated
+            // group updates (move/resize) never touch the FKs.
+            ...(data.team1_id !== undefined ? { team1_id: data.team1_id } : {}),
+            ...(data.team2_id !== undefined ? { team2_id: data.team2_id } : {})
         },
         z.object({ success: z.boolean(), group: CanvasGroupSchema })
     );
@@ -726,11 +732,9 @@ export const fetchRecentActivity = async (
 
 export const fetchTeams = async () => apiGet(`/teams`, z.array(TeamSchema));
 
-export const createTeam = async (name: string) =>
-    apiPost(`/teams`, { name }, TeamSchema);
+export const createTeam = async (name: string) => apiPost(`/teams`, { name }, TeamSchema);
 
 export const updateTeam = async (id: string, name: string) =>
     apiPatch(`/teams/${id}`, { name }, TeamSchema);
 
-export const deleteTeam = async (id: string) =>
-    apiDelete(`/teams/${id}`, SuccessSchema);
+export const deleteTeam = async (id: string) => apiDelete(`/teams/${id}`, SuccessSchema);
