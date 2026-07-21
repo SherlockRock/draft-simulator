@@ -10,6 +10,7 @@ const {
 const Draft = require("../models/Draft.js");
 const User = require("../models/User.js");
 const VersusDraft = require("../models/VersusDraft.js");
+const Team = require("../models/Team.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
 const { assertCanvasAccess } = require("../services/canvasMutations");
@@ -29,6 +30,34 @@ const {
 const MIN_SERIES_LENGTH = 1;
 const MAX_SERIES_LENGTH = 7;
 const VALID_DRAFT_MODES = new Set(["standard", "fearless", "ironman"]);
+
+// Eager-load the linked Team entities so serialized groups carry the entity
+// name for search resolution (with metadata strings as fallback).
+const TEAM_INCLUDE = [
+  { model: Team, as: "Team1" },
+  { model: Team, as: "Team2" },
+];
+
+// Validates optional team1_id/team2_id from a group-update body against the
+// set of team ids the requesting user owns. Absent field => no change; null =>
+// unlink; a string must be in ownedTeamIds. Returns {updates} or {error}.
+function resolveTeamLinkUpdate(body, ownedTeamIds) {
+  const updates = {};
+  for (const key of ["team1_id", "team2_id"]) {
+    if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
+    const value = body[key];
+    if (value === null) {
+      updates[key] = null;
+    } else if (typeof value === "string" && ownedTeamIds.has(value)) {
+      updates[key] = value;
+    } else if (typeof value === "string") {
+      return { error: `${key} must reference a team you own` };
+    } else {
+      return { error: `${key} must be a team id string or null` };
+    }
+  }
+  return { updates };
+}
 
 function isValidSeriesLength(length) {
   return (
@@ -75,7 +104,10 @@ function getSeriesMetadata(versusDraft) {
 }
 
 async function getCanvasBroadcastPayload(canvasId) {
-  const groups = await CanvasGroup.findAll({ where: { canvas_id: canvasId } });
+  const groups = await CanvasGroup.findAll({
+    where: { canvas_id: canvasId },
+    include: TEAM_INCLUDE,
+  });
   const canvasDrafts = await CanvasDraft.findAll({
     where: { canvas_id: canvasId },
     attributes: [
@@ -315,6 +347,7 @@ router.get("/:canvasId", async (req, res) => {
 
     const groups = await CanvasGroup.findAll({
       where: { canvas_id: canvas.id },
+      include: TEAM_INCLUDE,
     });
 
     // Calculate isInProgress based on drafts in each group
@@ -1625,6 +1658,25 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
       updates.metadata = { ...group.metadata, ...metadata };
     }
 
+    // Team linking (owner-validated). team1_id/team2_id may be string|null.
+    if (
+      Object.prototype.hasOwnProperty.call(req.body, "team1_id") ||
+      Object.prototype.hasOwnProperty.call(req.body, "team2_id")
+    ) {
+      const owned = await Team.findAll({
+        where: { owner_id: req.user.id },
+        attributes: ["id"],
+        transaction: t,
+      });
+      const ownedIds = new Set(owned.map((row) => row.id));
+      const linkResult = resolveTeamLinkUpdate(req.body, ownedIds);
+      if (linkResult.error) {
+        await t.rollback();
+        return res.status(400).json({ error: linkResult.error });
+      }
+      Object.assign(updates, linkResult.updates);
+    }
+
     if (Object.keys(updates).length === 0) {
       await t.rollback();
       return res.status(400).json({ error: "No valid fields to update" });
@@ -1687,7 +1739,11 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
     await t.commit();
     await touchCanvasTimestamp(canvasId);
 
-    res.status(200).json({ success: true, group: group.toJSON() });
+    const groupWithTeams = await CanvasGroup.findOne({
+      where: { id: groupId },
+      include: TEAM_INCLUDE,
+    });
+    res.status(200).json({ success: true, group: groupWithTeams.toJSON() });
 
     // Emit appropriate socket event
     if (updates.positionX !== undefined || updates.positionY !== undefined) {
@@ -2680,3 +2736,4 @@ router.delete(
 );
 
 module.exports = router;
+module.exports.resolveTeamLinkUpdate = resolveTeamLinkUpdate;
