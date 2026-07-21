@@ -30,7 +30,8 @@ import {
     ImportSeriesResponseSchema,
     UpdateCanvasNameResponseSchema,
     ShareCanvasVerifySchema,
-    CardLayoutSchema
+    CardLayoutSchema,
+    TeamSchema
 } from "./schemas";
 import type { CanvasGroupMetadata, DraftPositionUpdate } from "@draft-sim/shared-types";
 
@@ -718,3 +719,18 @@ export const fetchRecentActivity = async (
     }
     return apiGet(`/activity/recent?${params}`, ActivityResponseSchema);
 };
+
+// =============================================================================
+// Teams (user-owned Canvas Team entity)
+// =============================================================================
+
+export const fetchTeams = async () => apiGet(`/teams`, z.array(TeamSchema));
+
+export const createTeam = async (name: string) =>
+    apiPost(`/teams`, { name }, TeamSchema);
+
+export const updateTeam = async (id: string, name: string) =>
+    apiPatch(`/teams/${id}`, { name }, TeamSchema);
+
+export const deleteTeam = async (id: string) =>
+    apiDelete(`/teams/${id}`, SuccessSchema);
