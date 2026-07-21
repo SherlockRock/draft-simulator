@@ -98,6 +98,29 @@ export const CanvasGroupMetadataSchema = z.object({
   colLabels: z.array(z.string()).optional(),
 });
 
+// =============================================================================
+// Team Schemas (Canvas Team entity — user-owned, global across their canvases)
+// =============================================================================
+
+export const TeamSchema = z.object({
+  id: z.string(),
+  owner_id: z.string(),
+  name: z.string(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+export type Team = z.infer<typeof TeamSchema>;
+
+export const CreateTeamPayloadSchema = z.object({
+  name: z.string().min(1).max(120),
+});
+export type CreateTeamPayload = z.infer<typeof CreateTeamPayloadSchema>;
+
+export const UpdateTeamPayloadSchema = z.object({
+  name: z.string().min(1).max(120),
+});
+export type UpdateTeamPayload = z.infer<typeof UpdateTeamPayloadSchema>;
+
 export const CanvasGroupSchema = z.object({
   id: z.string(),
   canvas_id: z.string(),
@@ -108,6 +131,10 @@ export const CanvasGroupSchema = z.object({
   width: z.number().nullable().optional(),
   height: z.number().nullable().optional(),
   versus_draft_id: z.string().nullable().optional(),
+  team1_id: z.string().nullable().optional(),
+  team2_id: z.string().nullable().optional(),
+  Team1: TeamSchema.nullable().optional(),
+  Team2: TeamSchema.nullable().optional(),
   metadata: CanvasGroupMetadataSchema,
   isInProgress: z.boolean().optional(),
   CanvasDrafts: z.array(CanvasDraftSchema).optional(),
