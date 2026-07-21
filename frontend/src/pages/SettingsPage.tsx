@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/solid-query";
 import { useUser, type UserData } from "../userProvider";
 import { AuthGuard } from "../components/AuthGuard";
 import { DeleteAccountModal } from "../components/DeleteAccountModal";
+import { MyTeamsSection } from "../components/MyTeamsSection";
 import {
     exportUserData,
     deleteUserAccount,
@@ -273,6 +274,9 @@ const SettingsPage: Component = () => {
                                 </button>
                             </div>
                         </div>
+
+                        {/* My Teams Section */}
+                        <MyTeamsSection />
 
                         {/* Data Export Section */}
                         <div class="mb-6 rounded-lg border border-darius-border bg-darius-card p-6">
