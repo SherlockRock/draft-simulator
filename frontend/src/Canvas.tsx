@@ -498,12 +498,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [searchFocusNonce, setSearchFocusNonce] = createSignal(0);
 
     const searchResults = createMemo<SearchResults | null>(() => {
+        if (!searchOpen()) return null;
         const championId = searchChampionId();
-        if (!searchOpen() || championId === null) return null;
+        const teamName = searchTeamName();
+        if (championId === null && teamName === null) return null;
         return computeSearchResults(
             canvasDrafts,
             canvasGroups,
-            { championId, teamName: searchTeamName(), bucket: searchBucket() },
+            { championId, teamName, bucket: searchBucket() },
             resolveChampionId
         );
     });

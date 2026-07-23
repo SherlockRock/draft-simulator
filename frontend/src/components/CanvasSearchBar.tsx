@@ -64,9 +64,10 @@ export const CanvasSearchBar = (props: CanvasSearchBarProps) => {
     });
 
     const matchCount = createMemo(() => props.results()?.matches.length ?? 0);
+    const hasQuery = () => props.championId() !== null || props.teamName() !== null;
     const counterText = createMemo(() => {
         const count = matchCount();
-        if (count === 0) return props.championId() ? "0 / 0" : "";
+        if (count === 0) return hasQuery() ? "0 / 0" : "";
         return `${Math.min(props.currentIndex() + 1, count)} / ${count}`;
     });
 
@@ -109,7 +110,7 @@ export const CanvasSearchBar = (props: CanvasSearchBarProps) => {
             e.key === "Enter" &&
             !e.defaultPrevented &&
             !(e.target instanceof HTMLButtonElement) &&
-            props.championId() !== null
+            hasQuery()
         ) {
             e.preventDefault();
             e.stopPropagation();
@@ -180,6 +181,38 @@ export const CanvasSearchBar = (props: CanvasSearchBarProps) => {
                     <X size={16} />
                 </button>
             </div>
+
+            <Show when={props.results()?.teamRecord}>
+                {(record) => (
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-darius-text-secondary">
+                        <span class="font-semibold text-darius-text-primary">
+                            {record().games} {record().games === 1 ? "game" : "games"}
+                        </span>
+                        <span aria-hidden="true" class="opacity-40">
+                            ·
+                        </span>
+                        <span>
+                            <span class="font-semibold text-darius-text-primary">
+                                {record().wins}W-{record().losses}L
+                            </span>
+                        </span>
+                        <Show when={record().noResult > 0}>
+                            <span aria-hidden="true" class="opacity-40">
+                                ·
+                            </span>
+                            <span class="opacity-70">{record().noResult} no result</span>
+                        </Show>
+                        <Show when={record().inProgress > 0}>
+                            <span aria-hidden="true" class="opacity-40">
+                                ·
+                            </span>
+                            <span class="text-darius-ember">
+                                {record().inProgress} in progress
+                            </span>
+                        </Show>
+                    </div>
+                )}
+            </Show>
 
             <Show when={props.results()?.buckets}>
                 {(buckets) => (
