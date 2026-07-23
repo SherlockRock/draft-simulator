@@ -262,6 +262,162 @@ describe("teamSideInDraft — entity-backed", () => {
     });
 });
 
+describe("computeSearchResults — team-only (champion optional)", () => {
+    const groups = [
+        makeGroup(
+            "g1",
+            { blueTeamName: "T1", redTeamName: "GenG" },
+            { Team1: makeTeam("t1", "T1 Esports") }
+        )
+    ];
+    const teamOnly = (teamName: string): SearchQuery => ({
+        championId: null,
+        teamName,
+        bucket: null
+    });
+
+    it("matches one card-level DraftMatch per draft the team is in", () => {
+        const drafts = [
+            makeDraft("d1", fullPicks(), {
+                group_id: "g1",
+                completed: true,
+                winner: "blue"
+            }),
+            makeDraft("d2", fullPicks(), {
+                group_id: "g1",
+                completed: true,
+                winner: "red"
+            }),
+            // team not in this ungrouped draft → excluded
+            makeDraft("d3", fullPicks())
+        ];
+        const results = computeSearchResults(
+            drafts,
+            groups,
+            teamOnly("T1 Esports"),
+            identity
+        );
+
+        expect(results.buckets).toBeNull();
+        expect(results.matches.map((m) => m.draftId)).toEqual(["d1", "d2"]);
+        // card-level: no per-slot highlights
+        expect(results.matches[0].slots).toEqual([]);
+        expect(results.matches[1].slots).toEqual([]);
+        expect(results.matches[0].groupId).toBe("g1");
+    });
+
+    it("resolves the team via the string fallback when unlinked", () => {
+        const stringGroups = [
+            makeGroup("g1", { blueTeamName: "T1", redTeamName: "GenG" })
+        ];
+        const drafts = [
+            makeDraft("d1", fullPicks(), {
+                group_id: "g1",
+                completed: true,
+                winner: "blue"
+            })
+        ];
+        const results = computeSearchResults(
+            drafts,
+            stringGroups,
+            teamOnly("geng"),
+            identity
+        );
+        expect(results.matches.map((m) => m.draftId)).toEqual(["d1"]);
+    });
+
+    it("excludes drafts whose group does not contain the team", () => {
+        const drafts = [
+            makeDraft("d1", fullPicks(), {
+                group_id: "g1",
+                completed: true,
+                winner: "blue"
+            })
+        ];
+        const results = computeSearchResults(drafts, groups, teamOnly("DRX"), identity);
+        expect(results.matches).toEqual([]);
+        expect(results.teamRecord).toEqual({
+            games: 0,
+            wins: 0,
+            losses: 0,
+            noResult: 0,
+            inProgress: 0
+        });
+    });
+
+    it("computes the team's W/L record with side-swap and winner mapping", () => {
+        const drafts = [
+            // T1 on blue, blue wins → win
+            makeDraft("d1", fullPicks(), {
+                group_id: "g1",
+                completed: true,
+                winner: "blue"
+            }),
+            // T1 on blue, red wins → loss
+            makeDraft("d2", fullPicks(), {
+                group_id: "g1",
+                completed: true,
+                winner: "red"
+            }),
+            // side-swap: T1 on red (blueSideTeam 2), red wins → win
+            makeDraft("d3", fullPicks(), {
+                group_id: "g1",
+                blueSideTeam: 2,
+                completed: true,
+                winner: "red"
+            }),
+            // completed, no winner → no result
+            makeDraft("d4", fullPicks(), { group_id: "g1", completed: true }),
+            // in progress
+            makeDraft("d5", fullPicks({ 14: "" }), { group_id: "g1", completed: false })
+        ];
+        const results = computeSearchResults(
+            drafts,
+            groups,
+            teamOnly("T1 Esports"),
+            identity
+        );
+
+        expect(results.buckets).toBeNull();
+        expect(results.teamRecord).toEqual({
+            games: 5,
+            wins: 2,
+            losses: 1,
+            noResult: 1,
+            inProgress: 1
+        });
+        expect(results.matches[3].outcome).toBe("noResult");
+        expect(results.matches[4].inProgress).toBe(true);
+        expect(results.matches[4].outcome).toBeNull();
+    });
+
+    it("leaves teamRecord null for champion-only and champion+team queries", () => {
+        const drafts = [
+            makeDraft("d1", fullPicks({ 12: "Jinx" }), {
+                group_id: "g1",
+                completed: true,
+                winner: "blue"
+            })
+        ];
+        const championOnlyResults = computeSearchResults(
+            drafts,
+            groups,
+            championOnly("Jinx"),
+            identity
+        );
+        expect(championOnlyResults.teamRecord).toBeNull();
+
+        const championPlusTeam = computeSearchResults(
+            drafts,
+            groups,
+            { championId: "Jinx", teamName: "T1 Esports", bucket: null },
+            identity
+        );
+        expect(championPlusTeam.teamRecord).toBeNull();
+        expect(championPlusTeam.buckets).not.toBeNull();
+    });
+});
+
 describe("computeSearchResults — team filter", () => {
     const groups = [makeGroup("g1", { blueTeamName: "T1", redTeamName: "GenG" })];
     const query = (bucket: SearchQuery["bucket"] = null): SearchQuery => ({

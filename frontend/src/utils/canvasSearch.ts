@@ -7,8 +7,8 @@ export type SearchBucket = "pickedBy" | "pickedAgainst" | "bannedBy" | "bannedAg
 export type SlotKind = { phase: SlotPhase; side: SlotSide };
 
 export type SearchQuery = {
-    /** Canonical champion id (e.g. "Jinx"). */
-    championId: string;
+    /** Canonical champion id (e.g. "Jinx"); null/"" = no champion (team-only when teamName set). */
+    championId: string | null;
     /** Case-insensitive team-name filter; null = champion-only search. */
     teamName: string | null;
     /** Restrict match highlights to one bucket; null = all buckets. */
@@ -46,6 +46,8 @@ export type SearchResults = {
     matches: DraftMatch[];
     /** Totals ignore the active bucket filter so the strip stays stable; null without team filter. */
     buckets: Record<SearchBucket, BucketSummary> | null;
+    /** The team's canvas-wide W/L record; only set in team-only mode (no champion). */
+    teamRecord: BucketSummary | null;
 };
 
 /** picks[] layout: 0-4 blue bans, 5-9 red bans, 10-14 blue picks, 15-19 red picks. */
@@ -75,8 +77,7 @@ export const resolveGroupTeamNames = (
 ): { team1: string | null; team2: string | null } => {
     const team1 =
         group.Team1?.name?.trim() || group.metadata.blueTeamName?.trim() || null;
-    const team2 =
-        group.Team2?.name?.trim() || group.metadata.redTeamName?.trim() || null;
+    const team2 = group.Team2?.name?.trim() || group.metadata.redTeamName?.trim() || null;
     return { team1, team2 };
 };
 
@@ -138,6 +139,47 @@ const computeOutcome = (
     return winner === teamSide ? "win" : "loss";
 };
 
+/**
+ * Team-only search: no champion, one card-level DraftMatch per draft the team
+ * played, plus the team's canvas-wide W/L record. `slots` is empty because the
+ * highlight is card-level (there is no champion to mark).
+ */
+const computeTeamOnlyResults = (
+    drafts: readonly CanvasDraft[],
+    groupById: Map<string, CanvasGroup>,
+    teamName: string
+): SearchResults => {
+    const matches: DraftMatch[] = [];
+    const teamRecord = emptyBucketSummary();
+
+    for (const canvasDraft of drafts) {
+        const group = canvasDraft.group_id
+            ? groupById.get(canvasDraft.group_id)
+            : undefined;
+        const teamSide = teamSideInDraft(canvasDraft, group, teamName);
+        if (teamSide === null) continue;
+
+        const inProgress = isDraftInProgress(canvasDraft);
+        const outcome = computeOutcome(canvasDraft, teamSide, inProgress);
+
+        teamRecord.games += 1;
+        if (inProgress) teamRecord.inProgress += 1;
+        else if (outcome === "win") teamRecord.wins += 1;
+        else if (outcome === "loss") teamRecord.losses += 1;
+        else teamRecord.noResult += 1;
+
+        matches.push({
+            draftId: canvasDraft.Draft.id,
+            groupId: canvasDraft.group_id ?? null,
+            slots: [],
+            inProgress,
+            outcome
+        });
+    }
+
+    return { matches, buckets: null, teamRecord };
+};
+
 export const computeSearchResults = (
     drafts: readonly CanvasDraft[],
     groups: readonly CanvasGroup[],
@@ -145,6 +187,15 @@ export const computeSearchResults = (
     resolvePick: (pickValue: string) => string
 ): SearchResults => {
     const groupById = new Map(groups.map((group) => [group.id, group]));
+
+    const championId = query.championId;
+    if (championId === null || championId === "") {
+        if (query.teamName === null) {
+            return { matches: [], buckets: null, teamRecord: null };
+        }
+        return computeTeamOnlyResults(drafts, groupById, query.teamName);
+    }
+
     const buckets =
         query.teamName !== null
             ? {
@@ -169,7 +220,7 @@ export const computeSearchResults = (
 
         const allSlots: MatchSlot[] = [];
         canvasDraft.Draft.picks.forEach((value, index) => {
-            if (value === "" || resolvePick(value) !== query.championId) return;
+            if (value === "" || resolvePick(value) !== championId) return;
             const kind = classifySlot(index);
             allSlots.push({
                 index,
@@ -213,5 +264,5 @@ export const computeSearchResults = (
         });
     }
 
-    return { matches, buckets };
+    return { matches, buckets, teamRecord: null };
 };
