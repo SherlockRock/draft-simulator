@@ -99,13 +99,55 @@ export const CanvasGroupMetadataSchema = z.object({
 });
 
 // =============================================================================
+// Scout Regions (for team roster management)
+// =============================================================================
+
+// Scout-supported Riot platform regions. Single source of truth shared by the
+// scout view dropdown and Team.region validation.
+export const SCOUT_REGIONS = [
+  "na1",
+  "euw1",
+  "eun1",
+  "kr",
+  "br1",
+  "oc1",
+] as const;
+export const ScoutRegionSchema = z.enum(SCOUT_REGIONS);
+export type ScoutRegion = z.infer<typeof ScoutRegionSchema>;
+
+export const SCOUT_REGION_OPTIONS: { value: ScoutRegion; label: string }[] = [
+  { value: "na1", label: "NA" },
+  { value: "euw1", label: "EUW" },
+  { value: "eun1", label: "EUNE" },
+  { value: "kr", label: "KR" },
+  { value: "br1", label: "BR" },
+  { value: "oc1", label: "OCE" },
+];
+
+// =============================================================================
 // Team Schemas (Canvas Team entity — user-owned, global across their canvases)
 // =============================================================================
+
+export const TeamPlayerSchema = z.object({
+  id: z.string(),
+  team_id: z.string(),
+  role: z.enum(["top", "jungle", "mid", "adc", "support"]).nullable(),
+  gameName: z.string(),
+  tagLine: z.string(),
+  ordinal: z.number().int(),
+});
+export type TeamPlayer = z.infer<typeof TeamPlayerSchema>;
 
 export const TeamSchema = z.object({
   id: z.string(),
   owner_id: z.string(),
   name: z.string(),
+  // Deliberately z.string(), NOT ScoutRegionSchema: a read schema should not
+  // throw on unexpected DB data. Writes are validated against ScoutRegionSchema
+  // (payloads) and isValidRegion (backend); StyledSelect only offers valid
+  // options, so the frontend cannot emit an out-of-set region.
+  region: z.string(),
+  TeamPlayers: z.array(TeamPlayerSchema).optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });
@@ -116,10 +158,36 @@ export const CreateTeamPayloadSchema = z.object({
 });
 export type CreateTeamPayload = z.infer<typeof CreateTeamPayloadSchema>;
 
-export const UpdateTeamPayloadSchema = z.object({
-  name: z.string().min(1).max(120),
-});
+export const UpdateTeamPayloadSchema = z
+  .object({
+    name: z.string().min(1).max(120).optional(),
+    region: ScoutRegionSchema.optional(),
+  })
+  .refine((v) => v.name !== undefined || v.region !== undefined, {
+    message: "At least one of name or region must be provided",
+  });
 export type UpdateTeamPayload = z.infer<typeof UpdateTeamPayloadSchema>;
+
+// One roster row as sent from the client, in display order (role slots first,
+// then bench). The server assigns `ordinal` by array index, so the client never
+// sends it — this makes the UNIQUE(team_id, ordinal) constraint unviolatable by
+// construction. `role` is null for bench players.
+export const RosterInputSchema = z.object({
+  role: z.enum(["top", "jungle", "mid", "adc", "support"]).nullable(),
+  gameName: z.string().min(1).max(64),
+  tagLine: z.string().min(1).max(16),
+});
+export type RosterInput = z.infer<typeof RosterInputSchema>;
+
+// Region is folded into the roster save so region + roster persist in ONE
+// transaction (no partial-write window between two requests).
+export const UpdateTeamRosterPayloadSchema = z.object({
+  region: ScoutRegionSchema.optional(),
+  players: z.array(RosterInputSchema).max(10),
+});
+export type UpdateTeamRosterPayload = z.infer<
+  typeof UpdateTeamRosterPayloadSchema
+>;
 
 export const CanvasGroupSchema = z.object({
   id: z.string(),
