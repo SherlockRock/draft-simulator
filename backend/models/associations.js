@@ -11,6 +11,7 @@ const NavigatorEvent = require("./NavigatorEvent");
 const NavigatorSnapshot = require("./NavigatorSnapshot");
 const SavedPool = require("./SavedPool");
 const Team = require("./Team");
+const TeamPlayer = require("./TeamPlayer");
 
 const setupAssociations = () => {
   User.hasMany(UserToken);
@@ -65,6 +66,13 @@ const setupAssociations = () => {
   // Team associations (user-owned Canvas Team entity)
   User.hasMany(Team, { foreignKey: "owner_id", onDelete: "CASCADE" });
   Team.belongsTo(User, { as: "owner", foreignKey: "owner_id" });
+
+  Team.hasMany(TeamPlayer, {
+    as: "TeamPlayers",
+    foreignKey: "team_id",
+    onDelete: "CASCADE",
+  });
+  TeamPlayer.belongsTo(Team, { foreignKey: "team_id" });
 
   CanvasGroup.belongsTo(Team, { as: "Team1", foreignKey: "team1_id" });
   CanvasGroup.belongsTo(Team, { as: "Team2", foreignKey: "team2_id" });
