@@ -1228,6 +1228,28 @@ router.post(
           .json({ error: "Only custom groups can be converted" });
       }
 
+      // Team links picked in the Group Settings dialog arrive with the very
+      // request that creates the series, so they must persist here — the group
+      // is not yet a series and cannot be linked by the PUT-group path.
+      const teamLinkUpdates = {};
+      if (
+        Object.prototype.hasOwnProperty.call(req.body, "team1_id") ||
+        Object.prototype.hasOwnProperty.call(req.body, "team2_id")
+      ) {
+        const owned = await Team.findAll({
+          where: { owner_id: req.user.id },
+          attributes: ["id"],
+          transaction: t,
+        });
+        const ownedIds = new Set(owned.map((row) => row.id));
+        const linkResult = resolveTeamLinkUpdate(req.body, ownedIds);
+        if (linkResult.error) {
+          await t.rollback();
+          return res.status(400).json({ error: linkResult.error });
+        }
+        Object.assign(teamLinkUpdates, linkResult.updates);
+      }
+
       const versusDraft = await VersusDraft.create(
         {
           ...data,
@@ -1325,6 +1347,7 @@ router.post(
           type: "series",
           versus_draft_id: versusDraft.id,
           metadata: getSeriesMetadata(versusDraft),
+          ...teamLinkUpdates,
         },
         { transaction: t },
       );
@@ -1334,10 +1357,18 @@ router.post(
 
       const payload = await getCanvasBroadcastPayload(canvasId);
 
+      // Hydrate the linked teams (with rosters) onto the response so the
+      // client store gets Team1/Team2 immediately — the Scout button keys on
+      // them and must not wait for the next full canvas GET.
+      const groupWithTeams = await CanvasGroup.findOne({
+        where: { id: groupId },
+        include: TEAM_INCLUDE,
+      });
+
       res.status(201).json({
         success: true,
         group: {
-          ...group.toJSON(),
+          ...(groupWithTeams ?? group).toJSON(),
           CanvasDrafts: convertedCanvasDrafts.map((cd) => ({
             ...cd.toJSON(),
             Draft: cd.Draft.toJSON(),

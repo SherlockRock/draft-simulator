@@ -306,6 +306,8 @@ export const convertGroupToSeries = async (data: {
     length: number;
     type: "standard" | "fearless" | "ironman";
     disabledChampions: string[];
+    team1_id?: string | null;
+    team2_id?: string | null;
 }) => {
     const result = await apiPost(
         `/canvas/${data.canvasId}/group/${data.groupId}/convert-to-series`,
@@ -315,7 +317,10 @@ export const convertGroupToSeries = async (data: {
             redTeamName: data.redTeamName,
             length: data.length,
             type: data.type,
-            disabledChampions: data.disabledChampions
+            disabledChampions: data.disabledChampions,
+            // Omitted (not null) when absent so the server leaves links alone.
+            ...(data.team1_id !== undefined ? { team1_id: data.team1_id } : {}),
+            ...(data.team2_id !== undefined ? { team2_id: data.team2_id } : {})
         },
         z.object({ success: z.boolean(), group: CanvasGroupSchema })
     );
