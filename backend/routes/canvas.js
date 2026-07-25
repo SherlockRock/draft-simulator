@@ -11,6 +11,7 @@ const Draft = require("../models/Draft.js");
 const User = require("../models/User.js");
 const VersusDraft = require("../models/VersusDraft.js");
 const Team = require("../models/Team.js");
+const TeamPlayer = require("../models/TeamPlayer.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
 const { assertCanvasAccess } = require("../services/canvasMutations");
@@ -31,11 +32,19 @@ const MIN_SERIES_LENGTH = 1;
 const MAX_SERIES_LENGTH = 7;
 const VALID_DRAFT_MODES = new Set(["standard", "fearless", "ironman"]);
 
-// Eager-load the linked Team entities so serialized groups carry the entity
-// name for search resolution (with metadata strings as fallback).
+// Eager-load the linked Team entities (with rosters) so serialized groups carry
+// the entity name for search resolution and the roster for "Scout this team".
 const TEAM_INCLUDE = [
-  { model: Team, as: "Team1" },
-  { model: Team, as: "Team2" },
+  {
+    model: Team,
+    as: "Team1",
+    include: [{ model: TeamPlayer, as: "TeamPlayers" }],
+  },
+  {
+    model: Team,
+    as: "Team2",
+    include: [{ model: TeamPlayer, as: "TeamPlayers" }],
+  },
 ];
 
 // Validates optional team1_id/team2_id from a group-update body against the
