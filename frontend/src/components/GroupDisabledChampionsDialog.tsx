@@ -6,6 +6,7 @@ import { ChampionToggleGrid } from "./ChampionToggleGrid";
 import { StyledSelect } from "./StyledSelect";
 import { TeamNameSelect } from "./TeamNameSelect";
 import { resolveChampionId } from "../utils/constants";
+import { resolveTeamIdByName } from "../utils/teamLink";
 
 interface GroupSettingsDialogProps {
     isOpen: () => boolean;
@@ -91,6 +92,9 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
     });
 
     const save = () => {
+        // A name typed without picking the dropdown row still links, as long as
+        // it names one of your teams — see resolveTeamIdByName.
+        const teams = props.teams ?? [];
         props.onSave({
             name: name().trim(),
             disabledChampions: selected(),
@@ -98,8 +102,8 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
             convertToSeries: !props.isSeries && seriesEnabled(),
             blueTeamName: blueTeamName().trim() || "Team 1",
             redTeamName: redTeamName().trim() || "Team 2",
-            team1_id: team1Id(),
-            team2_id: team2Id(),
+            team1_id: resolveTeamIdByName(blueTeamName(), team1Id(), teams),
+            team2_id: resolveTeamIdByName(redTeamName(), team2Id(), teams),
             length: clampSeriesLength(length())
         });
         props.onClose();
