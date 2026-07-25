@@ -38,6 +38,8 @@ export type ContextMenuAction = {
     label: string;
     action: () => void;
     destructive?: boolean;
+    disabled?: boolean;
+    title?: string;
 };
 
 export type ContextMenuPosition = {

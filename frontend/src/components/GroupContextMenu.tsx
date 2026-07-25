@@ -1,5 +1,6 @@
 import { Component } from "solid-js";
 import { CanvasGroup } from "../utils/schemas";
+import { buildScoutLink, type ScoutLinkParams } from "../utils/scoutLink";
 import { ContextMenuAction } from "../utils/types";
 import { ContextMenu } from "./ContextMenu";
 
@@ -14,6 +15,7 @@ type GroupContextMenuProps = {
     onGoTo: () => void;
     onDelete: () => void;
     onClose: () => void;
+    onScout?: (params: ScoutLinkParams) => void;
 };
 
 export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
@@ -52,6 +54,37 @@ export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
                 label: "View series",
                 action: () => props.onViewSeries?.()
             });
+        }
+
+        if (props.group.type === "series") {
+            const team1 = props.group.Team1 ?? null;
+            const team2 = props.group.Team2 ?? null;
+            if (team1 || team2) {
+                const link = buildScoutLink(team1, team2);
+                const team1Rostered = (team1?.TeamPlayers?.length ?? 0) > 0;
+                const team2Rostered = (team2?.TeamPlayers?.length ?? 0) > 0;
+                const bothRostered = team1Rostered && team2Rostered;
+                const soleName = team1Rostered ? team1?.name : team2?.name;
+                // When disabled (no rostered team), don't name a team — soleName
+                // would misleadingly fall through to team2.
+                const label =
+                    link === null
+                        ? "Scout team"
+                        : bothRostered
+                          ? "Scout matchup"
+                          : `Scout ${soleName ?? "team"}`;
+                menuActions.push({
+                    label,
+                    disabled: link === null,
+                    title:
+                        link === null
+                            ? "Add players to this team's roster first"
+                            : undefined,
+                    action: () => {
+                        if (link) props.onScout?.(link);
+                    }
+                });
+            }
         }
 
         menuActions.push(
