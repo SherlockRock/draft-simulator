@@ -33,7 +33,7 @@ import {
     CardLayoutSchema,
     TeamSchema
 } from "./schemas";
-import type { CanvasGroupMetadata, DraftPositionUpdate } from "@draft-sim/shared-types";
+import type { CanvasGroupMetadata, DraftPositionUpdate, RosterInput } from "@draft-sim/shared-types";
 
 // Re-export types for backward compatibility
 export type { CanvasResponse as CanvasResposnse } from "./schemas";
@@ -734,7 +734,16 @@ export const fetchTeams = async () => apiGet(`/teams`, z.array(TeamSchema));
 
 export const createTeam = async (name: string) => apiPost(`/teams`, { name }, TeamSchema);
 
-export const updateTeam = async (id: string, name: string) =>
-    apiPatch(`/teams/${id}`, { name }, TeamSchema);
+export const updateTeam = async (
+    id: string,
+    patch: { name?: string; region?: string }
+) => apiPatch(`/teams/${id}`, patch, TeamSchema);
+
+// region folds into the roster save so both persist in one backend transaction.
+export const updateTeamRoster = async (
+    id: string,
+    players: RosterInput[],
+    region?: string
+) => apiPut(`/teams/${id}/roster`, { players, region }, TeamSchema);
 
 export const deleteTeam = async (id: string) => apiDelete(`/teams/${id}`, SuccessSchema);

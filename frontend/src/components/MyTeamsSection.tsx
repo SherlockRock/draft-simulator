@@ -21,7 +21,7 @@ export const MyTeamsSection: Component = () => {
 
     const renameMutation = useMutation(() => ({
         mutationFn: (vars: { id: string; name: string }) =>
-            updateTeam(vars.id, vars.name),
+            updateTeam(vars.id, { name: vars.name }),
         onSuccess: () => {
             void invalidate();
             setEditingId(null);
