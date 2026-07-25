@@ -154,6 +154,27 @@ describe("PUT /:id/roster", () => {
     expect(bulkCreate).toHaveBeenCalled();
   });
 
+  it("ignores a client-supplied ordinal and reassigns by array index", async () => {
+    vi.spyOn(Team, "findByPk")
+      .mockResolvedValueOnce({ id: "t1", owner_id: "u1" })
+      .mockResolvedValueOnce({ id: "t1", owner_id: "u1", TeamPlayers: [] });
+    vi.spyOn(TeamPlayer, "destroy").mockResolvedValue(1);
+    const bulkCreate = vi.spyOn(TeamPlayer, "bulkCreate").mockResolvedValue([]);
+    vi.spyOn(sequelize, "transaction").mockImplementation(async (fn) => fn({}));
+
+    await request(buildApp())
+      .put("/api/teams/t1/roster")
+      .send({
+        players: [
+          { role: "top", gameName: "A", tagLine: "1", ordinal: 99 },
+          { role: "mid", gameName: "B", tagLine: "2", ordinal: 99 },
+        ],
+      });
+
+    const rows = bulkCreate.mock.calls[0][0];
+    expect(rows.map((r) => r.ordinal)).toEqual([0, 1]);
+  });
+
   it("saves region atomically with the roster when provided", async () => {
     const save = vi.fn();
     const team = { id: "t1", owner_id: "u1", region: "na1", save };

@@ -156,7 +156,10 @@ export const TeamRosterEditor: Component<{
         onDragStart: (e: DragEvent) => {
             setDragFrom(from);
             e.dataTransfer?.setData("text/plain", "roster-player");
-        }
+        },
+        // Clear on cancel (drop outside any target) so a stale source can't
+        // linger; a successful drop clears it via moveTo.
+        onDragEnd: () => setDragFrom(null)
     });
 
     return (
