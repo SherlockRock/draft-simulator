@@ -64,21 +64,15 @@ export const ContextMenu = (props: ContextMenuProps) => {
             <For each={props.actions}>
                 {(action) => (
                     <button
-                        type="button"
-                        disabled={action.disabled}
-                        title={action.title}
                         class="w-full px-4 py-2 text-left text-sm transition-colors"
                         classList={{
                             "text-darius-text-primary hover:bg-darius-border":
-                                !action.destructive && !action.disabled,
+                                !action.destructive,
                             "text-darius-crimson hover:bg-darius-crimson/15":
-                                action.destructive && !action.disabled,
-                            "cursor-not-allowed text-darius-text-secondary/50":
-                                action.disabled
+                                action.destructive
                         }}
                         onClick={(e) => {
                             e.stopPropagation();
-                            if (action.disabled) return;
                             action.action();
                             props.onClose();
                         }}

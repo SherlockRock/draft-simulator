@@ -138,7 +138,6 @@ import {
     type GridMetadata
 } from "./utils/gridLayout";
 import { resolveCopyPlacement } from "./utils/copyPlacement";
-import { scoutLinkPath } from "./utils/scoutLink";
 import { GridSettingsDialog } from "./components/GridSettingsDialog";
 import { DraftPositionsUpdatedSchema, type DraftMode } from "@draft-sim/shared-types";
 import { type CardLayout } from "./utils/canvasCardLayout";
@@ -4385,10 +4384,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 ) {
                                     navigate(`/versus/${group.versus_draft_id}`);
                                 }
-                                closeGroupContextMenu();
-                            }}
-                            onScout={(params) => {
-                                navigate(scoutLinkPath(params));
                                 closeGroupContextMenu();
                             }}
                             onArrangeGrid={() => setGridSettingsGroup(menu().group)}

@@ -90,15 +90,16 @@ export const TeamRosterEditor: Component<{
         setBench(nextBench);
     };
 
+    // × on a role slot demotes the player to the bench (they leave the role but
+    // stay on the roster); × on a bench player removes them from the roster.
     const removePlayer = (from: DragFrom) => {
         if (from.kind === "slot") {
-            const next = [...slots()];
-            next[from.index] = null;
-            setSlots(next);
+            const player = slots()[from.index];
+            if (!player) return;
+            setSlots(slots().map((s, i) => (i === from.index ? null : s)));
+            setBench([...bench(), player]);
         } else {
-            const next = [...bench()];
-            next.splice(from.index, 1);
-            setBench(next);
+            setBench(bench().filter((_, i) => i !== from.index));
         }
     };
 
@@ -205,6 +206,7 @@ export const TeamRosterEditor: Component<{
                             <Show when={slots()[i()]}>
                                 <button
                                     type="button"
+                                    title="Move to bench"
                                     class="text-xs text-darius-text-secondary hover:text-darius-crimson"
                                     onClick={() =>
                                         removePlayer({ kind: "slot", index: i() })
@@ -247,6 +249,7 @@ export const TeamRosterEditor: Component<{
                                 <span class="select-text">{idLabel(p)}</span>
                                 <button
                                     type="button"
+                                    title="Remove from roster"
                                     class="text-darius-text-secondary hover:text-darius-crimson"
                                     onClick={() =>
                                         removePlayer({ kind: "bench", index: i() })
