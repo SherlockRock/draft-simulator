@@ -11,6 +11,7 @@ import { useSearchParams } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
 import {
     MAX_SCOUT_PLAYERS,
+    SCOUT_REGION_OPTIONS,
     type PlayerScoutResult,
     type Role
 } from "@draft-sim/shared-types";
@@ -33,15 +34,6 @@ import { StyledSelect } from "../StyledSelect";
 import PlayerColumn from "./PlayerColumn";
 import { MatchupColumn, rowRefKey, type MatchupSide } from "./MatchupColumn";
 import { FlexStrip } from "./FlexStrip";
-
-const REGION_OPTIONS = [
-    { value: "na1", label: "NA" },
-    { value: "euw1", label: "EUW" },
-    { value: "eun1", label: "EUNE" },
-    { value: "kr", label: "KR" },
-    { value: "br1", label: "BR" },
-    { value: "oc1", label: "OCE" }
-];
 
 const getParamString = (param: string | string[] | undefined): string => {
     if (Array.isArray(param)) return param[0] || "";
@@ -277,7 +269,7 @@ const ScoutView: Component = () => {
                             <StyledSelect
                                 value={region()}
                                 onChange={setRegion}
-                                options={REGION_OPTIONS}
+                                options={SCOUT_REGION_OPTIONS}
                             />
                         </label>
                         <label class="block flex-1">
