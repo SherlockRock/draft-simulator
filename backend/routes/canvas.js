@@ -1352,18 +1352,21 @@ router.post(
         { transaction: t },
       );
 
+      // Hydrate the linked teams (with rosters) onto the response so the client
+      // store gets Team1/Team2 immediately — the Scout button keys on them and
+      // must not wait for the next full canvas GET. Read inside the transaction:
+      // it sees our own write, and a failure here still rolls the conversion
+      // back rather than stranding a converted group behind a 500.
+      const groupWithTeams = await CanvasGroup.findOne({
+        where: { id: groupId },
+        include: TEAM_INCLUDE,
+        transaction: t,
+      });
+
       await t.commit();
       await touchCanvasTimestamp(canvasId);
 
       const payload = await getCanvasBroadcastPayload(canvasId);
-
-      // Hydrate the linked teams (with rosters) onto the response so the
-      // client store gets Team1/Team2 immediately — the Scout button keys on
-      // them and must not wait for the next full canvas GET.
-      const groupWithTeams = await CanvasGroup.findOne({
-        where: { id: groupId },
-        include: TEAM_INCLUDE,
-      });
 
       res.status(201).json({
         success: true,

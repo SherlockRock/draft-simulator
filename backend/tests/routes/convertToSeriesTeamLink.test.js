@@ -48,10 +48,16 @@ function mockGroup() {
 }
 
 let group;
+let transaction;
 
 beforeEach(() => {
   vi.restoreAllMocks();
   group = mockGroup();
+  transaction = {
+    commit: vi.fn().mockResolvedValue(),
+    rollback: vi.fn().mockResolvedValue(),
+    finished: false,
+  };
 
   vi.spyOn(auth, "protect").mockImplementation((req, _res, next) => {
     req.user = { id: "u1" };
@@ -59,11 +65,7 @@ beforeEach(() => {
   });
   vi.spyOn(socketService, "emitToRoom").mockImplementation(() => {});
   vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
-  vi.spyOn(Canvas.sequelize, "transaction").mockResolvedValue({
-    commit: vi.fn().mockResolvedValue(),
-    rollback: vi.fn().mockResolvedValue(),
-    finished: false,
-  });
+  vi.spyOn(Canvas.sequelize, "transaction").mockResolvedValue(transaction);
   vi.spyOn(Canvas, "findByPk").mockResolvedValue({
     changed: vi.fn(),
     save: vi.fn().mockResolvedValue(),
@@ -91,7 +93,10 @@ beforeEach(() => {
     type: "standard",
     disabledChampions: [],
   });
-  vi.spyOn(Team, "findAll").mockResolvedValue([{ id: "t-blue" }, { id: "t-red" }]);
+  vi.spyOn(Team, "findAll").mockResolvedValue([
+    { id: "t-blue" },
+    { id: "t-red" },
+  ]);
 });
 
 const convert = (body) =>
@@ -115,6 +120,17 @@ describe("POST convert-to-series team linking", () => {
     const patch = group.update.mock.calls.at(-1)[0];
     expect(patch.team1_id).toBe("t-blue");
     expect(patch.team2_id).toBe("t-red");
+    expect(transaction.commit).toHaveBeenCalled();
+  });
+
+  // Without this the candidate set could silently widen to every team in the
+  // system and the "does not own" test below would still pass.
+  it("only considers teams owned by the requesting user", async () => {
+    await convert({ team1_id: "t-blue" });
+
+    expect(Team.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { owner_id: "u1" } }),
+    );
   });
 
   it("leaves team links untouched when the body omits them", async () => {
@@ -132,6 +148,8 @@ describe("POST convert-to-series team linking", () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("team1_id must reference a team you own");
     expect(VersusDraft.create).not.toHaveBeenCalled();
+    expect(transaction.rollback).toHaveBeenCalled();
+    expect(transaction.commit).not.toHaveBeenCalled();
   });
 
   it("returns the group hydrated with its linked teams so the client can render Scout", async () => {
@@ -151,6 +169,7 @@ describe("POST convert-to-series team linking", () => {
     const res = await convert({ team1_id: "t-blue" });
 
     expect(res.status).toBe(201);
+    expect(res.body.group.team1_id).toBe("t-blue");
     expect(res.body.group.Team1).toMatchObject({ id: "t-blue", name: "MEOW" });
   });
 });
