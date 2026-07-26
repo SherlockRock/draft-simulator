@@ -17,6 +17,11 @@ const Team = sequelize.define("Team", {
     allowNull: false,
     validate: { notEmpty: true, len: [1, 120] },
   },
+  region: {
+    type: DataTypes.STRING(8),
+    allowNull: false,
+    defaultValue: "na1",
+  },
 });
 
 module.exports = Team;

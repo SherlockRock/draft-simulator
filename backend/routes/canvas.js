@@ -11,6 +11,7 @@ const Draft = require("../models/Draft.js");
 const User = require("../models/User.js");
 const VersusDraft = require("../models/VersusDraft.js");
 const Team = require("../models/Team.js");
+const TeamPlayer = require("../models/TeamPlayer.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
 const { assertCanvasAccess } = require("../services/canvasMutations");
@@ -31,11 +32,19 @@ const MIN_SERIES_LENGTH = 1;
 const MAX_SERIES_LENGTH = 7;
 const VALID_DRAFT_MODES = new Set(["standard", "fearless", "ironman"]);
 
-// Eager-load the linked Team entities so serialized groups carry the entity
-// name for search resolution (with metadata strings as fallback).
+// Eager-load the linked Team entities (with rosters) so serialized groups carry
+// the entity name for search resolution and the roster for "Scout this team".
 const TEAM_INCLUDE = [
-  { model: Team, as: "Team1" },
-  { model: Team, as: "Team2" },
+  {
+    model: Team,
+    as: "Team1",
+    include: [{ model: TeamPlayer, as: "TeamPlayers" }],
+  },
+  {
+    model: Team,
+    as: "Team2",
+    include: [{ model: TeamPlayer, as: "TeamPlayers" }],
+  },
 ];
 
 // Validates optional team1_id/team2_id from a group-update body against the
@@ -1219,6 +1228,28 @@ router.post(
           .json({ error: "Only custom groups can be converted" });
       }
 
+      // Team links picked in the Group Settings dialog arrive with the very
+      // request that creates the series, so they must persist here — the group
+      // is not yet a series and cannot be linked by the PUT-group path.
+      const teamLinkUpdates = {};
+      if (
+        Object.prototype.hasOwnProperty.call(req.body, "team1_id") ||
+        Object.prototype.hasOwnProperty.call(req.body, "team2_id")
+      ) {
+        const owned = await Team.findAll({
+          where: { owner_id: req.user.id },
+          attributes: ["id"],
+          transaction: t,
+        });
+        const ownedIds = new Set(owned.map((row) => row.id));
+        const linkResult = resolveTeamLinkUpdate(req.body, ownedIds);
+        if (linkResult.error) {
+          await t.rollback();
+          return res.status(400).json({ error: linkResult.error });
+        }
+        Object.assign(teamLinkUpdates, linkResult.updates);
+      }
+
       const versusDraft = await VersusDraft.create(
         {
           ...data,
@@ -1316,9 +1347,21 @@ router.post(
           type: "series",
           versus_draft_id: versusDraft.id,
           metadata: getSeriesMetadata(versusDraft),
+          ...teamLinkUpdates,
         },
         { transaction: t },
       );
+
+      // Hydrate the linked teams (with rosters) onto the response so the client
+      // store gets Team1/Team2 immediately — the Scout button keys on them and
+      // must not wait for the next full canvas GET. Read inside the transaction:
+      // it sees our own write, and a failure here still rolls the conversion
+      // back rather than stranding a converted group behind a 500.
+      const groupWithTeams = await CanvasGroup.findOne({
+        where: { id: groupId },
+        include: TEAM_INCLUDE,
+        transaction: t,
+      });
 
       await t.commit();
       await touchCanvasTimestamp(canvasId);
@@ -1328,7 +1371,7 @@ router.post(
       res.status(201).json({
         success: true,
         group: {
-          ...group.toJSON(),
+          ...(groupWithTeams ?? group).toJSON(),
           CanvasDrafts: convertedCanvasDrafts.map((cd) => ({
             ...cd.toJSON(),
             Draft: cd.Draft.toJSON(),

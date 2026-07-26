@@ -3,12 +3,14 @@ import { useNavigate } from "@solidjs/router";
 import {
     ArrowLeftRight,
     Crown,
+    Crosshair,
     ExternalLink,
     Check,
     Trash2,
     Settings,
     Trophy
 } from "lucide-solid";
+import { buildScoutLink, scoutLinkPath } from "../utils/scoutLink";
 import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/schemas";
 import {
     getSeriesGroupDimensions,
@@ -113,6 +115,19 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
         () => props.group.versus_draft_id && props.group.metadata.origin !== "manual"
     );
     const isManualSeries = createMemo(() => props.group.metadata.origin === "manual");
+    // "Scout this team" — prefill /scout from the linked Team entities' rosters.
+    // Null (no rostered team linked) hides the button entirely. Keyed on
+    // non-empty roster count so the sole rostered team scouts single-team.
+    const scoutLink = createMemo(() =>
+        buildScoutLink(props.group.Team1 ?? null, props.group.Team2 ?? null)
+    );
+    const scoutLabel = createMemo(() => {
+        const t1Rostered = (props.group.Team1?.TeamPlayers?.length ?? 0) > 0;
+        const t2Rostered = (props.group.Team2?.TeamPlayers?.length ?? 0) > 0;
+        if (t1Rostered && t2Rostered) return "Scout matchup";
+        const name = t1Rostered ? props.group.Team1?.name : props.group.Team2?.name;
+        return `Scout ${name ?? "team"}`;
+    });
     const teamOneName = () => props.group.metadata.blueTeamName ?? "Team 1";
     const teamTwoName = () => props.group.metadata.redTeamName ?? "Team 2";
     const teamNameForTeam = (team: 1 | 2) => (team === 1 ? teamOneName() : teamTwoName());
@@ -258,6 +273,22 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                             <Check size={12} />
                             Completed
                         </span>
+                    </Show>
+
+                    {/* Scout this team / matchup — read-only, so not canEdit-gated */}
+                    <Show when={scoutLink()}>
+                        {(link) => (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(scoutLinkPath(link()));
+                                }}
+                                class="rounded p-1 text-darius-purple-bright transition-colors hover:bg-darius-card-hover hover:text-darius-text-primary"
+                                title={scoutLabel()}
+                            >
+                                <Crosshair size={16} />
+                            </button>
+                        )}
                     </Show>
 
                     {/* Settings + Delete Buttons */}

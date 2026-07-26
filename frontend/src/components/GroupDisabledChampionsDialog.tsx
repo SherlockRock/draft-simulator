@@ -6,6 +6,7 @@ import { ChampionToggleGrid } from "./ChampionToggleGrid";
 import { StyledSelect } from "./StyledSelect";
 import { TeamNameSelect } from "./TeamNameSelect";
 import { resolveChampionId } from "../utils/constants";
+import { resolveTeamLink } from "../utils/teamLink";
 
 interface GroupSettingsDialogProps {
     isOpen: () => boolean;
@@ -91,15 +92,22 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
     });
 
     const save = () => {
+        // A name typed without picking the dropdown row still links, as long as
+        // it unambiguously names one of your teams — see resolveTeamLink. Gated
+        // on teamsEnabled so a cached ["teams"] list can never link on a surface
+        // that renders the field as plain text (local/anonymous canvases).
+        const teams = props.teamsEnabled ? (props.teams ?? []) : [];
+        const blue = resolveTeamLink(blueTeamName(), team1Id(), teams, "Team 1");
+        const red = resolveTeamLink(redTeamName(), team2Id(), teams, "Team 2");
         props.onSave({
             name: name().trim(),
             disabledChampions: selected(),
             draftMode: draftMode(),
             convertToSeries: !props.isSeries && seriesEnabled(),
-            blueTeamName: blueTeamName().trim() || "Team 1",
-            redTeamName: redTeamName().trim() || "Team 2",
-            team1_id: team1Id(),
-            team2_id: team2Id(),
+            blueTeamName: blue.name,
+            redTeamName: red.name,
+            team1_id: blue.teamId,
+            team2_id: red.teamId,
             length: clampSeriesLength(length())
         });
         props.onClose();

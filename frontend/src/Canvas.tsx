@@ -2488,7 +2488,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             redTeamName: data.redTeamName,
                             length: data.length,
                             type: data.draftMode,
-                            disabledChampions: data.disabledChampions
+                            disabledChampions: data.disabledChampions,
+                            team1_id: data.team1_id,
+                            team2_id: data.team2_id
                         });
                     })
                     .then((result) => {
@@ -2544,7 +2546,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 redTeamName: data.redTeamName,
                 length: data.length,
                 type: data.draftMode,
-                disabledChampions: data.disabledChampions
+                disabledChampions: data.disabledChampions,
+                team1_id: data.team1_id,
+                team2_id: data.team2_id
             });
         } else {
             const group = canvasGroups.find((g) => g.id === groupId);

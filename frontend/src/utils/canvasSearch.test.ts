@@ -65,7 +65,8 @@ const makeGroup = (
 const makeTeam = (id: string, name: string): CanvasGroup["Team1"] => ({
     id,
     owner_id: "owner-1",
-    name
+    name,
+    region: "NA"
 });
 
 describe("classifySlot", () => {

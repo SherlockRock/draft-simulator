@@ -1,10 +1,21 @@
 import { Component, createSignal, For, Show } from "solid-js";
-import { Pencil, Trash2, Check, X } from "lucide-solid";
+import {
+    Pencil,
+    Trash2,
+    Check,
+    X,
+    ChevronDown,
+    ChevronRight,
+    Crosshair
+} from "lucide-solid";
+import { useNavigate } from "@solidjs/router";
 import toast from "solid-toast";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/solid-query";
 import type { Team } from "@draft-sim/shared-types";
 import { fetchTeams, updateTeam, deleteTeam } from "../utils/actions";
 import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./Dialog";
+import { TeamRosterEditor } from "./TeamRosterEditor";
+import { buildScoutLink, scoutLinkPath } from "../utils/scoutLink";
 
 export const MyTeamsSection: Component = () => {
     const queryClient = useQueryClient();
@@ -16,12 +27,23 @@ export const MyTeamsSection: Component = () => {
     const [editingId, setEditingId] = createSignal<string | null>(null);
     const [editValue, setEditValue] = createSignal("");
     const [teamToDelete, setTeamToDelete] = createSignal<Team | null>(null);
+    const [expandedId, setExpandedId] = createSignal<string | null>(null);
+    const navigate = useNavigate();
 
     const invalidate = () => queryClient.invalidateQueries({ queryKey: ["teams"] });
 
+    const scoutTeam = (team: Team) => {
+        const link = buildScoutLink(team, null);
+        if (!link) {
+            toast.error("Add players to this team's roster first");
+            return;
+        }
+        navigate(scoutLinkPath(link));
+    };
+
     const renameMutation = useMutation(() => ({
         mutationFn: (vars: { id: string; name: string }) =>
-            updateTeam(vars.id, vars.name),
+            updateTeam(vars.id, { name: vars.name }),
         onSuccess: () => {
             void invalidate();
             setEditingId(null);
@@ -72,64 +94,104 @@ export const MyTeamsSection: Component = () => {
                 <div class="divide-y divide-darius-border rounded-md border border-darius-border">
                     <For each={teamsQuery.data ?? []}>
                         {(team) => (
-                            <div class="flex items-center gap-2 px-3 py-2">
-                                <Show
-                                    when={editingId() === team.id}
-                                    fallback={
-                                        <>
-                                            <span class="flex-1 truncate text-darius-text-primary">
-                                                {team.name}
-                                            </span>
-                                            <button
-                                                type="button"
-                                                onClick={() => startEdit(team)}
-                                                class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-darius-purple-bright"
-                                                title="Rename"
-                                            >
-                                                <Pencil size={16} />
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setTeamToDelete(team)}
-                                                class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-red-400"
-                                                title="Delete"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </>
-                                    }
-                                >
-                                    <input
-                                        type="text"
-                                        value={editValue()}
-                                        maxLength={120}
-                                        autofocus
-                                        onInput={(e) =>
-                                            setEditValue(e.currentTarget.value)
+                            <div>
+                                <div class="flex items-center gap-2 px-3 py-2">
+                                    <Show
+                                        when={editingId() === team.id}
+                                        fallback={
+                                            <>
+                                                <span class="flex-1 truncate text-darius-text-primary">
+                                                    {team.name}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => scoutTeam(team)}
+                                                    class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-darius-purple-bright"
+                                                    title="Scout this team"
+                                                >
+                                                    <Crosshair size={16} />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setExpandedId((cur) =>
+                                                            cur === team.id
+                                                                ? null
+                                                                : team.id
+                                                        )
+                                                    }
+                                                    class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-darius-purple-bright"
+                                                    title="Edit roster"
+                                                >
+                                                    <Show
+                                                        when={expandedId() === team.id}
+                                                        fallback={
+                                                            <ChevronRight size={16} />
+                                                        }
+                                                    >
+                                                        <ChevronDown size={16} />
+                                                    </Show>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => startEdit(team)}
+                                                    class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-darius-purple-bright"
+                                                    title="Rename"
+                                                >
+                                                    <Pencil size={16} />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setTeamToDelete(team)}
+                                                    class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-red-400"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </>
                                         }
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter") commitEdit();
-                                            if (e.key === "Escape") setEditingId(null);
-                                        }}
-                                        class="flex-1 rounded-md border border-darius-border bg-darius-card-hover px-2 py-1 text-darius-text-primary focus:border-darius-purple-bright focus:outline-none"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={commitEdit}
-                                        disabled={renameMutation.isPending}
-                                        class="rounded p-1.5 text-darius-purple-bright transition-colors hover:bg-darius-card-hover disabled:opacity-50"
-                                        title="Save"
                                     >
-                                        <Check size={16} />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setEditingId(null)}
-                                        class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover"
-                                        title="Cancel"
-                                    >
-                                        <X size={16} />
-                                    </button>
+                                        <input
+                                            type="text"
+                                            value={editValue()}
+                                            maxLength={120}
+                                            autofocus
+                                            onInput={(e) =>
+                                                setEditValue(e.currentTarget.value)
+                                            }
+                                            onKeyDown={(e) => {
+                                                if (e.key === "Enter") commitEdit();
+                                                if (e.key === "Escape")
+                                                    setEditingId(null);
+                                            }}
+                                            class="flex-1 rounded-md border border-darius-border bg-darius-card-hover px-2 py-1 text-darius-text-primary focus:border-darius-purple-bright focus:outline-none"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={commitEdit}
+                                            disabled={renameMutation.isPending}
+                                            class="rounded p-1.5 text-darius-purple-bright transition-colors hover:bg-darius-card-hover disabled:opacity-50"
+                                            title="Save"
+                                        >
+                                            <Check size={16} />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditingId(null)}
+                                            class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover"
+                                            title="Cancel"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </Show>
+                                </div>
+                                <Show when={expandedId() === team.id}>
+                                    <div class="px-3 pb-3">
+                                        <TeamRosterEditor
+                                            team={team}
+                                            onSaved={() => setExpandedId(null)}
+                                        />
+                                    </div>
                                 </Show>
                             </div>
                         )}
