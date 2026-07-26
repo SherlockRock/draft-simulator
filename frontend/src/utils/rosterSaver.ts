@@ -9,6 +9,9 @@ export type RosterSaver = {
 
 type TeamState = {
     timer?: ReturnType<typeof setTimeout>;
+    // The payload the debounce timer is holding. Kept on the state rather than
+    // only in the timer's closure so `dispose` can see — and flush — it.
+    pending?: SavePayload;
     inFlight: boolean;
     queued?: SavePayload;
 };
@@ -40,8 +43,10 @@ export function createRosterSaver(deps: SaverDeps): RosterSaver {
         return created;
     };
 
+    // `disposed` deliberately does NOT gate this: dispose flushes the last
+    // debounced gesture, and the chain below must be able to carry that flush
+    // even after teardown. Suppression lives on the callbacks instead.
     const run = (teamId: string, payload: SavePayload): void => {
-        if (disposed) return;
         const state = stateFor(teamId);
         state.inFlight = true;
         deps.save(teamId, payload)
@@ -60,7 +65,7 @@ export function createRosterSaver(deps: SaverDeps): RosterSaver {
                 state.inFlight = false;
                 const next = state.queued;
                 state.queued = undefined;
-                if (!disposed && next) run(teamId, next);
+                if (next) run(teamId, next);
             });
     };
 
@@ -69,7 +74,10 @@ export function createRosterSaver(deps: SaverDeps): RosterSaver {
             if (disposed) return;
             const state = stateFor(teamId);
             clearTimeout(state.timer);
+            state.pending = payload;
             state.timer = setTimeout(() => {
+                state.timer = undefined;
+                state.pending = undefined;
                 if (disposed) return;
                 if (state.inFlight) {
                     state.queued = payload;
@@ -78,11 +86,27 @@ export function createRosterSaver(deps: SaverDeps): RosterSaver {
                 run(teamId, payload);
             }, deps.delayMs);
         },
+        // Flushes rather than cancels. There is no save button and no dirty
+        // state, so a drag followed by navigating away inside the debounce
+        // window would otherwise lose the user's last edit with no way to
+        // notice or retry. The write is fire-and-forget — `disposed` already
+        // suppresses onSaved/onError, since the view that would render them is
+        // gone — but it is still SERIALIZED behind any in-flight PUT, because
+        // the endpoint is a destructive whole-roster replace and two racing
+        // writes could commit oldest-last.
         dispose() {
             disposed = true;
-            teams.forEach((state) => {
+            teams.forEach((state, teamId) => {
                 clearTimeout(state.timer);
-                state.queued = undefined;
+                state.timer = undefined;
+                const pending = state.pending;
+                state.pending = undefined;
+                if (!pending) return;
+                if (state.inFlight) {
+                    state.queued = pending;
+                    return;
+                }
+                run(teamId, pending);
             });
         }
     };

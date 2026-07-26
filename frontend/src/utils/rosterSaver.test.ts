@@ -123,10 +123,69 @@ describe("createRosterSaver", () => {
         expect(errors.map((e) => e.message)).toEqual(["boom"]);
     });
 
-    it("dispose cancels a pending debounce", () => {
+    // Contract change (final review): dispose used to CANCEL the pending
+    // debounce. With no save button and no dirty state, dragging and then
+    // navigating away inside the 500ms window silently discarded the write —
+    // the worst failure mode this design has. It now flushes instead.
+    it("dispose flushes a debounced-but-unsent write immediately", () => {
         const { saver, calls } = setup();
         saver.request("t1", payload("A"));
+        vi.advanceTimersByTime(200);
         saver.dispose();
+        expect(calls).toHaveLength(1);
+        expect(nameOf(calls[0].payload)).toBe("A");
+    });
+
+    it("dispose flushes the pending write of every team", () => {
+        const { saver, calls } = setup();
+        saver.request("t1", payload("A"));
+        saver.request("t2", payload("B"));
+        saver.dispose();
+        expect(calls.map((c) => c.teamId).sort()).toEqual(["t1", "t2"]);
+    });
+
+    it("dispose does not re-fire a debounce that already fired", () => {
+        const { saver, calls } = setup();
+        saver.request("t1", payload("A"));
+        vi.advanceTimersByTime(500);
+        expect(calls).toHaveLength(1);
+        saver.dispose();
+        expect(calls).toHaveLength(1);
+    });
+
+    it("dispose flushes fire-and-forget — no success callback", async () => {
+        const { saver, calls, saved, settle } = setup();
+        saver.request("t1", payload("A"));
+        saver.dispose();
+        expect(calls).toHaveLength(1);
+        settle();
+        await vi.runAllTimersAsync();
+        expect(saved).toEqual([]);
+    });
+
+    // The endpoint is a destructive whole-roster replace, so even the teardown
+    // flush must queue behind an in-flight PUT rather than race it.
+    it("dispose queues the flush behind an in-flight save", async () => {
+        const { saver, calls, settle } = setup();
+        saver.request("t1", payload("A"));
+        vi.advanceTimersByTime(500);
+        expect(calls).toHaveLength(1);
+
+        saver.request("t1", payload("B"));
+        saver.dispose();
+        // Still one call — the flush must not overlap the in-flight write.
+        expect(calls).toHaveLength(1);
+
+        settle();
+        await vi.runAllTimersAsync();
+        expect(calls).toHaveLength(2);
+        expect(nameOf(calls[1].payload)).toBe("B");
+    });
+
+    it("dispose ignores requests made after it", () => {
+        const { saver, calls } = setup();
+        saver.dispose();
+        saver.request("t1", payload("A"));
         vi.advanceTimersByTime(1000);
         expect(calls).toHaveLength(0);
     });
