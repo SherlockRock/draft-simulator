@@ -173,8 +173,12 @@ const ScoutView: Component = () => {
     // and flush once ownership is known. This IS gesture-originated: the effect
     // only ever replays something the user actually did, and never infers a
     // save from URL state (decision 26).
+    // `teamId` is stashed alongside the lineup, NOT re-read at flush time: if
+    // the `team` param changes between the drag and the flush, the stashed
+    // lineup would otherwise be written onto whatever team the URL names then.
     const [pendingGesture, setPendingGesture] = createSignal<{
         side: MatchupSide;
+        teamId: string;
         slots: (PlayerId | null)[];
     } | null>(null);
 
@@ -191,11 +195,24 @@ const ScoutView: Component = () => {
             // (anonymous user) stays `pending` forever, so keying off isPending
             // would strand the gesture instead of correctly discarding it.
             if (!!user() && !teamsQuery.isSuccess && !teamsQuery.isError) {
-                setPendingGesture({ side, slots });
+                setPendingGesture({ side, teamId, slots });
             }
             return;
         }
         setPendingGesture(null);
+        // THE authoritative arming check (decision 26a). Here — unlike in
+        // submit() — the roster is genuinely known, so there is no load-window
+        // race, and this also catches hand-edited URLs that the submit path
+        // structurally cannot see. Overlap, not equality: decision 27 supports
+        // scouting a sub who is not yet on the roster.
+        if (
+            !shouldStayArmed(
+                team.TeamPlayers ?? [],
+                slots.filter((s): s is PlayerId => s !== null)
+            )
+        ) {
+            return;
+        }
         const merged = mergeScoutedRoster(team.TeamPlayers ?? [], slots);
         if (!merged.ok) {
             toast.error(
@@ -222,7 +239,12 @@ const ScoutView: Component = () => {
             return;
         }
         if (!teamsQuery.isSuccess) return;
+        const currentTeamId = pending.side === "you" ? teamIdParam() : enemyTeamIdParam();
         setPendingGesture(null);
+        // Drop rather than redirect: the gesture was made against a different
+        // team than the URL now names, and replaying it would write that
+        // team's lineup onto this one.
+        if (currentTeamId !== pending.teamId) return;
         writeBack(pending.side, pending.slots);
     });
 
@@ -295,14 +317,20 @@ const ScoutView: Component = () => {
                     ? enemy.region
                     : undefined,
             // setSearchParams MERGES, so a stale team id would outlive the
-            // roster it describes and a later drag would write a DIFFERENT
-            // team's players onto it (decision 26a).
+            // roster it describes. This is URL/label hygiene only — the
+            // authoritative refusal lives in writeBack, which runs when the
+            // roster is actually known. Hence the `!teamsQuery.isSuccess`
+            // leniency: disarming during the load window turned auto-save off
+            // for the whole session out of pure ignorance.
             // Omitting a key keeps it; passing undefined deletes it.
-            ...(shouldStayArmed(armedTeam("you")?.TeamPlayers ?? [], yourIds)
+            ...(yourIds.length > 0 &&
+            (!teamsQuery.isSuccess ||
+                shouldStayArmed(armedTeam("you")?.TeamPlayers ?? [], yourIds))
                 ? {}
                 : { team: undefined }),
             ...(enemyIds.length > 0 &&
-            shouldStayArmed(armedTeam("enemy")?.TeamPlayers ?? [], enemyIds)
+            (!teamsQuery.isSuccess ||
+                shouldStayArmed(armedTeam("enemy")?.TeamPlayers ?? [], enemyIds))
                 ? {}
                 : { enemyTeam: undefined })
         });
