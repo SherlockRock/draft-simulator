@@ -203,6 +203,7 @@ export const CanvasGroupSchema = z.object({
   team2_id: z.string().nullable().optional(),
   Team1: TeamSchema.nullable().optional(),
   Team2: TeamSchema.nullable().optional(),
+  parent_group_id: z.string().nullable().optional(),
   metadata: CanvasGroupMetadataSchema,
   isInProgress: z.boolean().optional(),
   CanvasDrafts: z.array(CanvasDraftSchema).optional(),
