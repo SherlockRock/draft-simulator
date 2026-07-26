@@ -169,6 +169,12 @@ const ScoutView: Component = () => {
             slot ? { gameName: slot.input.gameName, tagLine: slot.input.tagLine } : null
         );
 
+    // A list-form side with zero players has nothing to assign — treat it as
+    // already normalized so a bare /scout visit (or a matchup with one empty
+    // side) never gets rewritten into an empty slot-form string like "s:,,,,".
+    const isDone = (param: TeamParam): boolean =>
+        param.kind === "slots" || param.players.length === 0;
+
     // Normalizes list-form params into slot-form so role assignment is URL
     // state. This runs on load and is NOT a user gesture — write-back must
     // NEVER hang off it (decision 26), or opening a link would mutate a roster.
@@ -176,7 +182,7 @@ const ScoutView: Component = () => {
         const you = yourTeamParam();
         const enemy = enemyTeamParam();
         const inMatchup = matchupMode();
-        if (you.kind === "slots" && (!inMatchup || enemy.kind === "slots")) return;
+        if (isDone(you) && (!inMatchup || isDone(enemy))) return;
         // Wait for the data auto-assign needs, but only for a side that has any.
         if (you.kind === "list" && you.players.length > 0 && !yourQuery.data) return;
         if (
@@ -187,17 +193,22 @@ const ScoutView: Component = () => {
         )
             return;
 
-        const nextPlayers = serializeTeamParam(
+        const nextPlayers =
             you.kind === "slots"
-                ? you.slots
-                : assignFrom(you.players, yourQuery.data?.results ?? [])
-        );
+                ? serializeTeamParam(you.slots)
+                : you.players.length === 0
+                  ? playersParam()
+                  : serializeTeamParam(
+                        assignFrom(you.players, yourQuery.data?.results ?? [])
+                    );
         const nextEnemies = inMatchup
-            ? serializeTeamParam(
-                  enemy.kind === "slots"
-                      ? enemy.slots
-                      : assignFrom(enemy.players, enemyQuery.data?.results ?? [])
-              )
+            ? enemy.kind === "slots"
+                ? serializeTeamParam(enemy.slots)
+                : enemy.players.length === 0
+                  ? enemiesParam()
+                  : serializeTeamParam(
+                        assignFrom(enemy.players, enemyQuery.data?.results ?? [])
+                    )
             : null;
 
         const changed =
