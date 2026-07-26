@@ -2,15 +2,7 @@ import { Component, Show, createMemo } from "solid-js";
 import type { PlayerScoutResult, Role } from "@draft-sim/shared-types";
 import { computeSharedChamps } from "../../utils/playerStats";
 import { ChampChipStrip, type ChipDetail } from "./ChampChipStrip";
-import {
-    DraggableHalf,
-    RoleHeader,
-    HALF_LIST_MAX,
-    rowRefKey,
-    type MatchupSide
-} from "./RoleSlot";
-
-export { rowRefKey, type MatchupSide };
+import { DraggableHalf, RoleHeader, HALF_LIST_MAX, type MatchupSide } from "./RoleSlot";
 
 const entriesOf = (r: PlayerScoutResult | null) =>
     r && r.status === "ok" ? r.envelope.entries : [];

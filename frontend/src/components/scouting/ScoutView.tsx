@@ -20,13 +20,7 @@ import {
 import { scoutPlayers } from "../../utils/scoutingApi";
 import { fetchTeams, updateTeamRoster } from "../../utils/actions";
 import { useUser } from "../../userProvider";
-import {
-    MAX_ROSTER,
-    mergeScoutedRoster,
-    resolveWriteBackTeam,
-    shouldStayArmed
-} from "../../utils/rosterWriteBack";
-import { createRosterSaver } from "../../utils/rosterSaver";
+import { createRosterWriteBack } from "./rosterWriteBackState";
 import {
     serializeSubmitParam,
     parsePlayersInput,
@@ -42,8 +36,9 @@ import {
     type AssignedPlayer
 } from "../../utils/playerStats";
 import { StyledSelect } from "../StyledSelect";
-import { RoleColumn, NO_HIGHLIGHT } from "./RoleColumn";
-import { MatchupColumn, rowRefKey, type MatchupSide } from "./MatchupColumn";
+import { RoleColumn } from "./RoleColumn";
+import { MatchupColumn } from "./MatchupColumn";
+import { rowRefKey, type MatchupSide } from "./RoleSlot";
 import { FlexStrip } from "./FlexStrip";
 import { RosterStatusLabel } from "./RosterStatusLabel";
 
@@ -92,6 +87,11 @@ const toAssigned = (slots: (PlayerScoutResult | null)[]): (AssignedPlayer | null
             : null
     );
 
+// Passing undefined DELETES a param. Shaped as a patch rather than a call so
+// the drag gesture can merge it into the ONE setSearchParams it already makes.
+const disarmPatch = (side: MatchupSide): { team?: undefined; enemyTeam?: undefined } =>
+    side === "you" ? { team: undefined } : { enemyTeam: undefined };
+
 const ScoutView: Component = () => {
     const [searchParams, setSearchParams] = useSearchParams();
 
@@ -117,144 +117,43 @@ const ScoutView: Component = () => {
         queryFn: fetchTeams,
         enabled: !!user() && (teamIdParam() !== "" || enemyTeamIdParam() !== "")
     }));
-    const ownedTeams = (): Team[] => teamsQuery.data ?? [];
-
-    const armedTeam = (side: MatchupSide): Team | null =>
-        resolveWriteBackTeam(
-            side === "you" ? teamIdParam() : enemyTeamIdParam(),
-            ownedTeams()
-        );
-
-    const [savedTeams, setSavedTeams] = createSignal<ReadonlySet<string>>(new Set());
-    // Per team — one shared marker would let the second side's success clear
-    // the first side's.
-    const savedTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-    const markSaved = (teamId: string) => {
-        setSavedTeams((prev) => new Set(prev).add(teamId));
-        clearTimeout(savedTimers.get(teamId));
-        savedTimers.set(
-            teamId,
-            setTimeout(() => {
-                setSavedTeams((prev) => {
-                    const next = new Set(prev);
-                    next.delete(teamId);
-                    return next;
-                });
-                savedTimers.delete(teamId);
-            }, 2000)
-        );
-    };
-
-    const saver = createRosterSaver({
-        delayMs: 500,
-        save: async (teamId, payload) => {
-            const fresh = await updateTeamRoster(teamId, payload.players, payload.region);
-            // Update the cache from the response rather than only invalidating:
-            // invalidation is async, and a second gesture before the refetch
-            // lands would otherwise merge against a stale roster and delete a
-            // player the previous save just added.
-            queryClient.setQueryData<Team[]>(["teams"], (prev) =>
-                prev ? prev.map((t) => (t.id === fresh.id ? fresh : t)) : prev
-            );
-            void queryClient.invalidateQueries({ queryKey: ["teams"] });
-        },
-        onSaved: markSaved,
-        onError: (_teamId, error) => toast.error(`Couldn't save roster: ${error.message}`)
-    });
-
-    onCleanup(() => {
-        saver.dispose();
-        savedTimers.forEach((t) => clearTimeout(t));
-    });
-
-    // A gesture that arrives before ["teams"] resolves must not be silently
-    // dropped — with no save button there is nothing to retry with. Stash it
-    // and flush once ownership is known. This IS gesture-originated: the effect
-    // only ever replays something the user actually did, and never infers a
-    // save from URL state (decision 26).
-    // `teamId` is stashed alongside the lineup, NOT re-read at flush time: if
-    // the `team` param changes between the drag and the flush, the stashed
-    // lineup would otherwise be written onto whatever team the URL names then.
-    const [pendingGesture, setPendingGesture] = createSignal<{
-        side: MatchupSide;
-        teamId: string;
-        slots: (PlayerId | null)[];
-    } | null>(null);
-
-    // Called ONLY from swapRoles. `slots` is passed in rather than re-read from
-    // the URL because setSearchParams has not settled when this runs, and the
-    // debounce would otherwise persist a stale lineup.
-    const writeBack = (side: MatchupSide, slots: (PlayerId | null)[]) => {
-        const teamId = side === "you" ? teamIdParam() : enemyTeamIdParam();
-        if (!teamId) return;
-        const team = resolveWriteBackTeam(teamId, ownedTeams());
-        if (!team) {
-            // Stash ONLY while an armed lookup is genuinely still in flight.
-            // `isSuccess` is the gate, not `isPending`: a disabled v5 query
-            // (anonymous user) stays `pending` forever, so keying off isPending
-            // would strand the gesture instead of correctly discarding it.
-            if (!!user() && !teamsQuery.isSuccess && !teamsQuery.isError) {
-                setPendingGesture({ side, teamId, slots });
-            }
-            return;
-        }
-        setPendingGesture(null);
-        // THE authoritative arming check (decision 26a). Here — unlike in
-        // submit() — the roster is genuinely known, so there is no load-window
-        // race, and this also catches hand-edited URLs that the submit path
-        // structurally cannot see. Overlap, not equality: decision 27 supports
-        // scouting a sub who is not yet on the roster.
-        //
-        // Gated on the team HAVING stored players: shouldStayArmed returns
-        // false against an empty roster (nothing to overlap with), which as a
-        // write gate would permanently refuse every save to a team whose roster
-        // was emptied in Settings while this tab was open. With no stored
-        // roster there is also nothing to protect from being overwritten.
-        const storedPlayers = team.TeamPlayers ?? [];
-        if (
-            storedPlayers.length > 0 &&
-            !shouldStayArmed(
-                storedPlayers,
-                slots.filter((s): s is PlayerId => s !== null)
-            )
-        ) {
-            return;
-        }
-        const merged = mergeScoutedRoster(team.TeamPlayers ?? [], slots);
-        if (!merged.ok) {
-            toast.error(
-                `That change would give ${team.name} ${merged.count} players; the maximum is ${MAX_ROSTER}. Remove someone in Settings → My Teams.`
-            );
-            return;
-        }
-        // Raw param, NOT activeRegion(): that defaults to "na1", so a link with
-        // region stripped would silently convert a KR team to NA (decision 28).
-        const region =
-            side === "you"
-                ? getParamString(searchParams.region) || undefined
-                : getParamString(searchParams.enemyRegion) ||
-                  getParamString(searchParams.region) ||
-                  undefined;
-        saver.request(team.id, { players: merged.players, region });
-    };
-
-    createEffect(() => {
-        const pending = pendingGesture();
-        if (!pending) return;
-        if (teamsQuery.isError) {
-            setPendingGesture(null);
-            return;
-        }
-        if (!teamsQuery.isSuccess) return;
-        const currentTeamId = pending.side === "you" ? teamIdParam() : enemyTeamIdParam();
-        setPendingGesture(null);
-        // Drop rather than redirect: the gesture was made against a different
-        // team than the URL now names, and replaying it would write that
-        // team's lineup onto this one.
-        if (currentTeamId !== pending.teamId) return;
-        writeBack(pending.side, pending.slots);
-    });
+    const { armedTeam, savedTeams, writeBack, shouldKeepTeamParam } =
+        createRosterWriteBack({
+            isSignedIn: () => !!user(),
+            ownedTeams: (): Team[] => teamsQuery.data ?? [],
+            teamsResolved: () => teamsQuery.isSuccess,
+            teamsFailed: () => teamsQuery.isError,
+            teamIdFor: (side) => (side === "you" ? teamIdParam() : enemyTeamIdParam()),
+            // Raw params, NOT activeRegion(): that defaults to "na1", so a link
+            // with region stripped would silently convert a KR team to NA
+            // (decision 28).
+            regionFor: (side) =>
+                side === "you"
+                    ? getParamString(searchParams.region) || undefined
+                    : getParamString(searchParams.enemyRegion) ||
+                      getParamString(searchParams.region) ||
+                      undefined,
+            disarm: (side) => setSearchParams(disarmPatch(side)),
+            saveRoster: async (teamId, payload) => {
+                const fresh = await updateTeamRoster(
+                    teamId,
+                    payload.players,
+                    payload.region
+                );
+                // Update the cache from the response rather than only
+                // invalidating: invalidation is async, and a second gesture
+                // before the refetch lands would otherwise merge against a
+                // stale roster and delete a player the previous save just
+                // added.
+                queryClient.setQueryData<Team[]>(["teams"], (prev) =>
+                    prev ? prev.map((t) => (t.id === fresh.id ? fresh : t)) : prev
+                );
+                void queryClient.invalidateQueries({ queryKey: ["teams"] });
+            },
+            // Stable id per (reason, team) so repeated drags replace the toast
+            // instead of stacking one per drop.
+            notifyError: (id, message) => toast.error(message, { id })
+        });
 
     // Editable state, seeded from the URL so a shared link stays editable.
     const [region, setRegion] = createSignal(activeRegion());
@@ -325,22 +224,10 @@ const ScoutView: Component = () => {
                     ? enemy.region
                     : undefined,
             // setSearchParams MERGES, so a stale team id would outlive the
-            // roster it describes. This is URL/label hygiene only — the
-            // authoritative refusal lives in writeBack, which runs when the
-            // roster is actually known. Hence the `!teamsQuery.isSuccess`
-            // leniency: disarming during the load window turned auto-save off
-            // for the whole session out of pure ignorance.
+            // roster it describes (decision 26a).
             // Omitting a key keeps it; passing undefined deletes it.
-            ...(yourIds.length > 0 &&
-            (!teamsQuery.isSuccess ||
-                shouldStayArmed(armedTeam("you")?.TeamPlayers ?? [], yourIds))
-                ? {}
-                : { team: undefined }),
-            ...(enemyIds.length > 0 &&
-            (!teamsQuery.isSuccess ||
-                shouldStayArmed(armedTeam("enemy")?.TeamPlayers ?? [], enemyIds))
-                ? {}
-                : { enemyTeam: undefined })
+            ...(shouldKeepTeamParam("you", yourIds) ? {} : { team: undefined }),
+            ...(shouldKeepTeamParam("enemy", enemyIds) ? {} : { enemyTeam: undefined })
         });
     };
 
@@ -434,14 +321,18 @@ const ScoutView: Component = () => {
         const fromSlot = slots[fromIndex];
         slots[fromIndex] = slots[toIndex];
         slots[toIndex] = fromSlot;
-        setSearchParams(
-            side === "you"
+        // Save BEFORE navigating, and fold any disarm into the same
+        // setSearchParams: @solidjs/router navigates in a microtask-deferred
+        // transition, so a second call this tick would merge against the
+        // pre-swap search string and revert the drag. Pass the array we just
+        // computed for the same reason — the URL has not settled.
+        const outcome = writeBack(side, slots);
+        setSearchParams({
+            ...(side === "you"
                 ? { players: serializeTeamParam(slots) }
-                : { enemies: serializeTeamParam(slots) }
-        );
-        // Pass the array we just computed — setSearchParams has not settled
-        // yet, so re-reading the URL here would persist the previous lineup.
-        writeBack(side, slots);
+                : { enemies: serializeTeamParam(slots) }),
+            ...(outcome === "disarmed" ? disarmPatch(side) : {})
+        });
     };
 
     const highlightFor = (col: number): { you: Set<string>; enemy: Set<string> } => {
@@ -557,7 +448,6 @@ const ScoutView: Component = () => {
                                                 role={role}
                                                 result={yourSlots()[index()]}
                                                 rowRefs={rowRefs}
-                                                highlight={NO_HIGHLIGHT}
                                                 pulse={pulse()}
                                                 onSwap={swapRoles}
                                             />

@@ -73,7 +73,7 @@ const PlayerHalf: Component<HalfProps> = (props) => (
     </Show>
 );
 
-export interface DraggableHalfProps extends HalfProps {
+interface DraggableHalfProps extends HalfProps {
     onSwap?: (side: MatchupSide, from: Role, to: Role) => void;
 }
 
