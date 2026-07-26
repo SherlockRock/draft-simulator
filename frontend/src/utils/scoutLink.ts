@@ -11,6 +11,13 @@ export type ScoutLinkParams = {
     players: string;
     enemies?: string;
     enemyRegion?: string;
+    // Team UUIDs for roster write-back. `team` names whichever team's roster
+    // landed in `players` — NOT whichever slot it occupied on the canvas. The
+    // single-team branch below promotes a lone team2 into `players`, and this
+    // id follows that promotion; reversing it would write team2's scouted
+    // roles onto team1.
+    team?: string;
+    enemyTeam?: string;
 };
 
 const toPlayerId = (p: TeamPlayer): PlayerId => ({
@@ -63,7 +70,11 @@ export function buildScoutLink(
 
     if (present.length === 1) {
         const only = present[0];
-        return { region: only.region, players: encodeRosterSide(only) };
+        return {
+            region: only.region,
+            players: encodeRosterSide(only),
+            team: only.id
+        };
     }
 
     const [a, b] = present;
@@ -71,6 +82,8 @@ export function buildScoutLink(
         region: a.region,
         players: encodeRosterSide(a),
         enemies: encodeRosterSide(b),
+        team: a.id,
+        enemyTeam: b.id,
         ...(b.region !== a.region ? { enemyRegion: b.region } : {})
     };
 }
@@ -86,5 +99,7 @@ export function scoutLinkPath(params: ScoutLinkParams): string {
     usp.set("players", params.players);
     if (params.enemies) usp.set("enemies", params.enemies);
     if (params.enemyRegion) usp.set("enemyRegion", params.enemyRegion);
+    if (params.team) usp.set("team", params.team);
+    if (params.enemyTeam) usp.set("enemyTeam", params.enemyTeam);
     return `/scout?${usp.toString()}`;
 }
