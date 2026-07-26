@@ -31,7 +31,7 @@ import {
     type AssignedPlayer
 } from "../../utils/playerStats";
 import { StyledSelect } from "../StyledSelect";
-import PlayerColumn from "./PlayerColumn";
+import { RoleColumn, NO_HIGHLIGHT } from "./RoleColumn";
 import { MatchupColumn, rowRefKey, type MatchupSide } from "./MatchupColumn";
 import { FlexStrip } from "./FlexStrip";
 
@@ -132,7 +132,6 @@ const ScoutView: Component = () => {
         () => parsedPlayers().length > 0 || parsedEnemyPlayers().length > 0
     );
     const scouting = createMemo(() => yourQuery.isFetching || enemyQuery.isFetching);
-    const single = createMemo(() => (yourQuery.data?.results.length ?? 0) === 1);
     const yourSlots = createMemo(() =>
         slotResults(yourTeamParam(), yourQuery.data?.results ?? [])
     );
@@ -162,46 +161,54 @@ const ScoutView: Component = () => {
         });
     };
 
+    const assignFrom = (
+        players: PlayerId[],
+        results: PlayerScoutResult[]
+    ): (PlayerId | null)[] =>
+        autoAssignRoles(resultsFor(players, results)).map((slot) =>
+            slot ? { gameName: slot.input.gameName, tagLine: slot.input.tagLine } : null
+        );
+
+    // Normalizes list-form params into slot-form so role assignment is URL
+    // state. This runs on load and is NOT a user gesture — write-back must
+    // NEVER hang off it (decision 26), or opening a link would mutate a roster.
     createEffect(() => {
-        if (!matchupMode()) return;
         const you = yourTeamParam();
         const enemy = enemyTeamParam();
-        if (you.kind === "slots" && enemy.kind === "slots") return;
+        const inMatchup = matchupMode();
+        if (you.kind === "slots" && (!inMatchup || enemy.kind === "slots")) return;
+        // Wait for the data auto-assign needs, but only for a side that has any.
         if (you.kind === "list" && you.players.length > 0 && !yourQuery.data) return;
-        if (enemy.kind === "list" && enemy.players.length > 0 && !enemyQuery.data) return;
+        if (
+            inMatchup &&
+            enemy.kind === "list" &&
+            enemy.players.length > 0 &&
+            !enemyQuery.data
+        )
+            return;
 
-        const nextYou =
+        const nextPlayers = serializeTeamParam(
             you.kind === "slots"
                 ? you.slots
-                : autoAssignRoles(
-                      resultsFor(you.players, yourQuery.data?.results ?? [])
-                  ).map((slot) =>
-                      slot
-                          ? {
-                                gameName: slot.input.gameName,
-                                tagLine: slot.input.tagLine
-                            }
-                          : null
-                  );
-        const nextEnemy =
-            enemy.kind === "slots"
-                ? enemy.slots
-                : autoAssignRoles(
-                      resultsFor(enemy.players, enemyQuery.data?.results ?? [])
-                  ).map((slot) =>
-                      slot
-                          ? {
-                                gameName: slot.input.gameName,
-                                tagLine: slot.input.tagLine
-                            }
-                          : null
-                  );
+                : assignFrom(you.players, yourQuery.data?.results ?? [])
+        );
+        const nextEnemies = inMatchup
+            ? serializeTeamParam(
+                  enemy.kind === "slots"
+                      ? enemy.slots
+                      : assignFrom(enemy.players, enemyQuery.data?.results ?? [])
+              )
+            : null;
+
+        const changed =
+            nextPlayers !== playersParam() ||
+            (nextEnemies !== null && nextEnemies !== enemiesParam());
+        if (!changed) return;
 
         setSearchParams(
-            {
-                players: serializeTeamParam(nextYou),
-                enemies: serializeTeamParam(nextEnemy)
-            },
+            nextEnemies === null
+                ? { players: nextPlayers }
+                : { players: nextPlayers, enemies: nextEnemies },
             { replace: true }
         );
     });
@@ -338,12 +345,18 @@ const ScoutView: Component = () => {
                             </Show>
 
                             <Show when={yourQuery.data}>
-                                <div
-                                    class="custom-scrollbar flex gap-3 overflow-x-auto pb-2"
-                                    classList={{ "justify-center": single() }}
-                                >
-                                    <For each={yourQuery.data?.results}>
-                                        {(result) => <PlayerColumn result={result} />}
+                                <div class="custom-scrollbar flex gap-3 overflow-x-auto pb-2">
+                                    <For each={ROLE_ORDER}>
+                                        {(role, index) => (
+                                            <RoleColumn
+                                                role={role}
+                                                result={yourSlots()[index()]}
+                                                rowRefs={rowRefs}
+                                                highlight={NO_HIGHLIGHT}
+                                                pulse={pulse()}
+                                                onSwap={swapRoles}
+                                            />
+                                        )}
                                     </For>
                                 </div>
                             </Show>
