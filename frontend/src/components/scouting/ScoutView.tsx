@@ -205,9 +205,17 @@ const ScoutView: Component = () => {
         // race, and this also catches hand-edited URLs that the submit path
         // structurally cannot see. Overlap, not equality: decision 27 supports
         // scouting a sub who is not yet on the roster.
+        //
+        // Gated on the team HAVING stored players: shouldStayArmed returns
+        // false against an empty roster (nothing to overlap with), which as a
+        // write gate would permanently refuse every save to a team whose roster
+        // was emptied in Settings while this tab was open. With no stored
+        // roster there is also nothing to protect from being overwritten.
+        const storedPlayers = team.TeamPlayers ?? [];
         if (
+            storedPlayers.length > 0 &&
             !shouldStayArmed(
-                team.TeamPlayers ?? [],
+                storedPlayers,
                 slots.filter((s): s is PlayerId => s !== null)
             )
         ) {
