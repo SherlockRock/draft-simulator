@@ -4,15 +4,12 @@ import Draft from "../Draft";
 import { useDraftContext } from "../workflows/DraftWorkflow";
 import { useCanvasContext } from "../contexts/CanvasContext";
 import { CanvasDraft, CanvasGroup } from "../utils/schemas";
+import { getRestrictedChampionsByGame } from "../utils/seriesRestrictions";
+import { getGroupRestrictedChampionsByDraft } from "../utils/groupRestrictions";
 import {
-    getRestrictedChampions,
-    getRestrictedChampionsByGame
-} from "../utils/seriesRestrictions";
-import {
-    parseDraftMode,
-    getGroupRestrictedChampions,
-    getGroupRestrictedChampionsByDraft
-} from "../utils/groupRestrictions";
+    getRestrictedChampionsForGroup,
+    resolveGroupMode
+} from "../utils/draftRestrictions";
 
 const DraftDetailView: Component = () => {
     const { draft, mutateDraft } = useDraftContext();
@@ -83,41 +80,24 @@ const DraftDetailView: Component = () => {
         const group = currentGroup();
         if (!group) return undefined;
 
-        if (group.type === "series") {
-            return parseDraftMode(group.metadata.seriesType);
-        }
-
-        return group.metadata.draftMode;
+        return resolveGroupMode(group);
     });
 
     const restrictedChampions = createMemo(() => {
         const draftData = draft();
         const group = currentGroup();
-        const mode = effectiveDraftMode();
-        if (!draftData || !group || !mode || mode === "standard") return [];
+        if (!draftData || !group) return [];
 
-        const siblings = siblingDrafts();
-
-        if (group.type === "series") {
-            const seriesIndex =
-                siblings.find((cd) => cd.Draft.id === draftData.id)?.Draft.seriesIndex ??
-                0;
-            return getRestrictedChampions(
-                mode,
-                siblings.map((cd) => cd.Draft),
-                seriesIndex
-            );
-        }
-
-        return getGroupRestrictedChampions(
-            mode,
-            siblings.map((cd) => ({
+        return getRestrictedChampionsForGroup({
+            group,
+            drafts: siblingDrafts().map((cd) => ({
                 id: cd.Draft.id,
                 name: cd.Draft.name,
-                picks: cd.Draft.picks
+                picks: cd.Draft.picks,
+                seriesIndex: cd.Draft.seriesIndex
             })),
-            draftData.id
-        );
+            currentDraftId: draftData.id
+        });
     });
 
     const restrictedChampionSourceMap = createMemo(() => {
