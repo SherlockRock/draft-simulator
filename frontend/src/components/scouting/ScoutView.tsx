@@ -28,6 +28,8 @@ import {
     parseTeamParam,
     serializeTeamParam,
     canonicalPlayersKey,
+    slottedPlayers,
+    fullRoster,
     autoAssignRoles,
     computeSharedChamps,
     ROLE_ORDER,
@@ -46,11 +48,6 @@ const getParamString = (param: string | string[] | undefined): string => {
     if (Array.isArray(param)) return param[0] || "";
     return param || "";
 };
-
-const teamPlayers = (param: TeamParam): PlayerId[] =>
-    param.kind === "list"
-        ? param.players
-        : param.slots.filter((s): s is PlayerId => s !== null);
 
 const playerKey = (p: { gameName: string; tagLine: string }): string =>
     `${p.gameName.toLowerCase()}#${p.tagLine.toLowerCase()}`;
@@ -157,18 +154,22 @@ const ScoutView: Component = () => {
 
     // Editable state, seeded from the URL so a shared link stays editable.
     const [region, setRegion] = createSignal(activeRegion());
+    // Seeded from the FULL roster, not the slotted five: seeding from the five
+    // would make pressing Scout re-serialize five and delete the bench.
     const [input, setInput] = createSignal(
-        formatPlayersInput(teamPlayers(parseTeamParam(playersParam())))
+        formatPlayersInput(fullRoster(parseTeamParam(playersParam())))
     );
     const [enemyInput, setEnemyInput] = createSignal(
-        formatPlayersInput(teamPlayers(parseTeamParam(enemiesParam())))
+        formatPlayersInput(fullRoster(parseTeamParam(enemiesParam())))
     );
     const [pulse, setPulse] = createSignal<{ keys: Set<string> } | null>(null);
 
     const yourTeamParam = createMemo(() => parseTeamParam(playersParam()));
     const enemyTeamParam = createMemo(() => parseTeamParam(enemiesParam()));
-    const yourPlayers = createMemo(() => teamPlayers(yourTeamParam()));
-    const enemyPlayers = createMemo(() => teamPlayers(enemyTeamParam()));
+    // The scouted five. Bench players are deliberately never fetched, and this
+    // is what keeps the request inside MAX_SCOUT_PLAYERS.
+    const yourPlayers = createMemo(() => slottedPlayers(yourTeamParam()));
+    const enemyPlayers = createMemo(() => slottedPlayers(enemyTeamParam()));
 
     const parsed = createMemo(() => parsePlayersInput(input()));
     const parsedPlayers = createMemo(() => parsed().players);

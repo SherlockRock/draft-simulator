@@ -16,8 +16,12 @@ import {
     parseTeamParam,
     serializeTeamParam,
     serializeSubmitParam,
-    canonicalPlayersKey
+    canonicalPlayersKey,
+    slottedPlayers,
+    fullRoster,
+    MAX_ROSTER
 } from "./playerStats";
+import { MAX_SCOUT_PLAYERS } from "@draft-sim/shared-types";
 import type { AssignedPlayer, PlayerId, TeamParam } from "./playerStats";
 
 const entry = (
@@ -556,6 +560,67 @@ describe("team param codec", () => {
         search.set("players", serializeTeamParam(slots, bench));
         const readBack = new URLSearchParams(search.toString()).get("players");
         expect(parseTeamParam(readBack ?? "")).toEqual({ kind: "slots", slots, bench });
+    });
+});
+
+describe("slottedPlayers / fullRoster", () => {
+    const p = (n: string): PlayerId => ({ gameName: n, tagLine: "1" });
+    const many = (n: number): PlayerId[] =>
+        Array.from({ length: n }, (_, i) => p(`p${i}`));
+
+    it("slot-form: slotted is the non-null slots, excluding the bench", () => {
+        const param: TeamParam = {
+            kind: "slots",
+            slots: [p("a"), null, p("c"), null, p("e")],
+            bench: [p("f"), p("g")]
+        };
+        expect(slottedPlayers(param)).toEqual([p("a"), p("c"), p("e")]);
+    });
+
+    it("slot-form: fullRoster is slots then bench", () => {
+        const param: TeamParam = {
+            kind: "slots",
+            slots: [p("a"), null, p("c"), null, p("e")],
+            bench: [p("f"), p("g")]
+        };
+        expect(fullRoster(param)).toEqual([p("a"), p("c"), p("e"), p("f"), p("g")]);
+    });
+
+    // Without this branch a fresh ten-ID paste has an EMPTY slotted set, so
+    // nothing is fetched and the normalization guard never releases.
+    it("list-form: slotted is the first five by input order", () => {
+        const param: TeamParam = { kind: "list", players: many(10) };
+        expect(slottedPlayers(param)).toEqual(many(10).slice(0, 5));
+    });
+
+    it("list-form: fullRoster is all ten, and caps a twelve-player list at ten", () => {
+        expect(fullRoster({ kind: "list", players: many(10) })).toHaveLength(10);
+        expect(fullRoster({ kind: "list", players: many(12) })).toEqual(
+            many(12).slice(0, MAX_ROSTER)
+        );
+    });
+
+    it("never returns more than MAX_SCOUT_PLAYERS from slotted, for any input", () => {
+        const inputs: TeamParam[] = [
+            { kind: "list", players: many(12) },
+            { kind: "list", players: [] },
+            { kind: "slots", slots: many(5), bench: many(9) },
+            { kind: "slots", slots: [null, null, null, null, null], bench: many(9) }
+        ];
+        for (const param of inputs) {
+            expect(slottedPlayers(param).length).toBeLessThanOrEqual(MAX_SCOUT_PLAYERS);
+        }
+    });
+
+    // Editing the bench must not change the scout query key, or every bench
+    // move would refetch the five starters.
+    it("canonicalPlayersKey over slotted is unchanged by a bench edit", () => {
+        const slots = [p("a"), p("b"), p("c"), p("d"), p("e")];
+        const before: TeamParam = { kind: "slots", slots, bench: [p("f")] };
+        const after: TeamParam = { kind: "slots", slots, bench: [p("g"), p("h")] };
+        expect(canonicalPlayersKey(slottedPlayers(before))).toBe(
+            canonicalPlayersKey(slottedPlayers(after))
+        );
     });
 });
 

@@ -1,3 +1,4 @@
+import { MAX_SCOUT_PLAYERS } from "@draft-sim/shared-types";
 import type { ChampionStatEntry, PlayerScoutResult, Role } from "@draft-sim/shared-types";
 
 export interface ChampRow {
@@ -354,6 +355,28 @@ export function parseTeamParam(raw: string): TeamParam {
             .map(decodeChunk)
             .filter((p): p is PlayerId => p !== null)
     };
+}
+
+// The players a scout request carries, and the identity `canonicalPlayersKey`
+// is taken over. NEVER longer than MAX_SCOUT_PLAYERS, so the server's cap is
+// unreachable by construction.
+//
+// The list-form branch is load-bearing: a fresh paste serializes to list form,
+// which has no slots at all, so defining slotted as "the non-null slots" alone
+// would make it empty — nothing gets fetched, the normalization effect's
+// readiness guard never releases, and the page renders nothing forever.
+export function slottedPlayers(param: TeamParam): PlayerId[] {
+    return param.kind === "slots"
+        ? param.slots.filter((s): s is PlayerId => s !== null)
+        : param.players.slice(0, MAX_SCOUT_PLAYERS);
+}
+
+// Everyone on the side: what gets displayed, what seeds the text input, and
+// what the roster write-back payload is built from. Capped at MAX_ROSTER.
+export function fullRoster(param: TeamParam): PlayerId[] {
+    return param.kind === "slots"
+        ? [...param.slots.filter((s): s is PlayerId => s !== null), ...param.bench]
+        : param.players.slice(0, MAX_ROSTER);
 }
 
 // Submit-time serialization: re-scouting the SAME roster keeps the existing
