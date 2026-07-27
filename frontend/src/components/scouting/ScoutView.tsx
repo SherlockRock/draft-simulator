@@ -28,6 +28,7 @@ import {
     parseTeamParam,
     serializeTeamParam,
     slottedPlayers,
+    MAX_ROSTER,
     fullRoster,
     autoAssignRoles,
     computeSharedChamps,
@@ -43,6 +44,7 @@ import { rowRefKey, type MatchupSide } from "./RoleSlot";
 import {
     applyLineupMove,
     positionOf,
+    touchesSlot,
     type DragOrigin,
     type Lineup
 } from "../../utils/lineupMove";
@@ -192,10 +194,10 @@ const ScoutView: Component = () => {
     const parsedPlayers = createMemo(() => parsed().players);
     const parsedEnemy = createMemo(() => parsePlayersInput(enemyInput()));
     const parsedEnemyPlayers = createMemo(() => parsedEnemy().players);
-    const overCap = createMemo(() => parsedPlayers().length > MAX_SCOUT_PLAYERS);
-    const enemyOverCap = createMemo(
-        () => parsedEnemyPlayers().length > MAX_SCOUT_PLAYERS
-    );
+    // Ten per side now, not five: the first five are scouted and the rest go to
+    // the bench, so only an eleventh player is actually dropped.
+    const overCap = createMemo(() => parsedPlayers().length > MAX_ROSTER);
+    const enemyOverCap = createMemo(() => parsedEnemyPlayers().length > MAX_ROSTER);
 
     // Columns read per-player cache entries; fetching stays batched. Created
     // unconditionally here, in the component body and OUTSIDE the render gate:
@@ -230,8 +232,10 @@ const ScoutView: Component = () => {
     const submit = () => {
         const you = parsed();
         const enemy = parsedEnemy();
-        const yourIds = you.players.slice(0, MAX_SCOUT_PLAYERS);
-        const enemyIds = enemy.players.slice(0, MAX_SCOUT_PLAYERS);
+        // Ten per side, matching MAX_ROSTER: a paste of eight no longer hides
+        // anyone, it benches the last three.
+        const yourIds = you.players.slice(0, MAX_ROSTER);
+        const enemyIds = enemy.players.slice(0, MAX_ROSTER);
         if (yourIds.length === 0 && enemyIds.length === 0) return;
         const nextRegion = you.region ?? region();
         if (you.region) setRegion(you.region);
@@ -249,8 +253,18 @@ const ScoutView: Component = () => {
             // setSearchParams MERGES, so a stale team id would outlive the
             // roster it describes (decision 26a).
             // Omitting a key keeps it; passing undefined deletes it.
-            ...(shouldKeepTeamParam("you", yourIds) ? {} : { team: undefined }),
-            ...(shouldKeepTeamParam("enemy", enemyIds) ? {} : { enemyTeam: undefined })
+            //
+            // The overlap test stays SLOTS-ONLY, deliberately narrowed to match
+            // the write-time check rather than widened to the ten `submitted`
+            // now carries — shipping a second submit/write asymmetry would be
+            // worse than the accepted cost, which is that a user whose only
+            // roster overlap sits at text positions 6-10 is silently disarmed.
+            ...(shouldKeepTeamParam("you", yourIds.slice(0, MAX_SCOUT_PLAYERS))
+                ? {}
+                : { team: undefined }),
+            ...(shouldKeepTeamParam("enemy", enemyIds.slice(0, MAX_SCOUT_PLAYERS))
+                ? {}
+                : { enemyTeam: undefined })
         });
     };
 
@@ -264,6 +278,23 @@ const ScoutView: Component = () => {
     // side) never gets rewritten into an empty slot-form string like "s:,,,,".
     const isDone = (param: TeamParam): boolean =>
         param.kind === "slots" || param.players.length === 0;
+
+    // BOTH branches carry the bench. The slot-form branch is reachable only in
+    // matchup mode while the OTHER side is a non-empty list-form side awaiting
+    // normalization — but there, re-serializing only the slots computes a
+    // five-chunk replacement for a seven-chunk param, `changed` fires, and the
+    // { replace: true } navigation wipes the bench with no back button.
+    const normalized = (side: MatchupSide, param: TeamParam, current: string): string => {
+        if (param.kind === "slots") return serializeTeamParam(param.slots, param.bench);
+        if (param.players.length === 0) return current;
+        // Decision 40: the first five are scouted and auto-assigned, the rest
+        // become bench. Capped at MAX_ROSTER so this first write never emits
+        // more bench chunks than parse will keep.
+        return serializeTeamParam(
+            assignFrom(side, slottedPlayers(param)),
+            fullRoster(param).slice(MAX_SCOUT_PLAYERS)
+        );
+    };
 
     // Normalizes list-form params into slot-form so role assignment is URL
     // state. This runs on load and is NOT a user gesture — write-back must
@@ -290,19 +321,8 @@ const ScoutView: Component = () => {
         )
             return;
 
-        const nextPlayers =
-            you.kind === "slots"
-                ? serializeTeamParam(you.slots)
-                : you.players.length === 0
-                  ? playersParam()
-                  : serializeTeamParam(assignFrom("you", you.players));
-        const nextEnemies = inMatchup
-            ? enemy.kind === "slots"
-                ? serializeTeamParam(enemy.slots)
-                : enemy.players.length === 0
-                  ? enemiesParam()
-                  : serializeTeamParam(assignFrom("enemy", enemy.players))
-            : null;
+        const nextPlayers = normalized("you", you, playersParam());
+        const nextEnemies = inMatchup ? normalized("enemy", enemy, enemiesParam()) : null;
 
         const changed =
             nextPlayers !== playersParam() ||
@@ -349,7 +369,7 @@ const ScoutView: Component = () => {
         // Only a change to a ROLE SLOT saves. A bench-only reorder is live in
         // the URL and gets folded into the next promotion's payload, so it
         // persists late rather than never.
-        const slotsChanged = next.slots.some((slot, i) => slot !== param.slots[i]);
+        const slotsChanged = touchesSlot(current, next);
         // Save BEFORE navigating, and fold any disarm into the same
         // setSearchParams: @solidjs/router navigates in a microtask-deferred
         // transition, so a second call this tick would merge against the
@@ -437,14 +457,16 @@ const ScoutView: Component = () => {
 
                     <Show when={overCap()}>
                         <p class="mt-3 text-xs text-amber-400">
-                            Up to {MAX_SCOUT_PLAYERS} players are scouted at once — only
-                            the first {MAX_SCOUT_PLAYERS} will be shown.
+                            A team holds up to {MAX_ROSTER} players — only the first{" "}
+                            {MAX_ROSTER} will be kept. The first {MAX_SCOUT_PLAYERS} are
+                            scouted; the rest go to the bench.
                         </p>
                     </Show>
                     <Show when={enemyOverCap()}>
                         <p class="mt-3 text-xs text-amber-400">
-                            Up to {MAX_SCOUT_PLAYERS} enemy players are scouted at once —
-                            only the first {MAX_SCOUT_PLAYERS} will be shown.
+                            The enemy team holds up to {MAX_ROSTER} players — only the
+                            first {MAX_ROSTER} will be kept. The first {MAX_SCOUT_PLAYERS}{" "}
+                            are scouted; the rest go to the bench.
                         </p>
                     </Show>
                 </section>

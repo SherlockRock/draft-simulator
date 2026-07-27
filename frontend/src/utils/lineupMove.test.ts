@@ -4,6 +4,7 @@ import {
     dragPayload,
     parseDragPayload,
     positionOf,
+    touchesSlot,
     type Lineup
 } from "./lineupMove";
 import type { PlayerId } from "./playerStats";
@@ -142,6 +143,36 @@ describe("applyLineupMove", () => {
             const before = lineup();
             expect(applyLineupMove(before, slot(0), slot(9))).toBe(before);
         });
+    });
+});
+
+// Only a slot change saves. Asserting this in rosterWriteBackState would be
+// vacuous — that module receives an already-decided request and cannot know
+// what kind of change produced it.
+describe("touchesSlot", () => {
+    const moved = (
+        from: Parameters<typeof applyLineupMove>[1],
+        to: Parameters<typeof applyLineupMove>[2]
+    ) => {
+        const before = lineup();
+        return touchesSlot(before, applyLineupMove(before, from, to));
+    };
+
+    it("is false for a bench-only reorder", () => {
+        expect(moved(bench(0), bench(1))).toBe(false);
+    });
+
+    it("is true for a promotion", () => {
+        expect(moved(bench(0), slot(2))).toBe(true);
+    });
+
+    it("is true for a demotion", () => {
+        expect(moved(slot(2), bench(0))).toBe(true);
+        expect(moved(slot(2), bench(9))).toBe(true);
+    });
+
+    it("is true for a slot-to-slot swap", () => {
+        expect(moved(slot(0), slot(1))).toBe(true);
     });
 });
 

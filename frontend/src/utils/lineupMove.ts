@@ -81,6 +81,17 @@ export function applyLineupMove(
 }
 
 /**
+ * Did the move change a ROLE SLOT? Only that saves.
+ *
+ * A bench-only reorder is live in the URL and gets folded into the next
+ * promotion's payload, so it persists late rather than never. This lives here
+ * rather than in the move handler because the write-back module receives an
+ * already-decided request and cannot tell what kind of change produced it.
+ */
+export const touchesSlot = (before: Lineup, after: Lineup): boolean =>
+    after.slots.some((slot, index) => slot !== before.slots[index]);
+
+/**
  * The drag payload carried in `text/plain`.
  *
  * A slot is addressed by ROLE (that is what the column knows) and a bench chip

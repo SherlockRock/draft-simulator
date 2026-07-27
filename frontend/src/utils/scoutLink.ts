@@ -1,5 +1,6 @@
 import type { Team, TeamPlayer } from "@draft-sim/shared-types";
 import {
+    MAX_ROSTER,
     ROLE_ORDER,
     serializePlayersParam,
     serializeTeamParam,
@@ -36,19 +37,32 @@ export function rosterToSlots(players: TeamPlayer[]): (PlayerId | null)[] {
 }
 
 // A team's scout-side param: slot-form when any role is assigned (curated roles
-// survive into the scout view); otherwise the first 5 players by ordinal as an
-// unordered list, letting ScoutView.autoAssignRoles infer roles from pools.
+// survive into the scout view) with everyone else on the bench; otherwise the
+// whole roster as an unordered list, letting ScoutView slot the first five and
+// bench the rest.
+//
+// Neither branch may stop at five. A roster holds ten, and dropping players
+// 6-10 here would make the bench unreachable from a linked team — which is the
+// shape of any freshly pasted roster, where no role is assigned at all.
 export function encodeRosterSide(team: Team): string {
-    const players = team.TeamPlayers ?? [];
-    const slots = rosterToSlots(players);
-    if (slots.some((s) => s !== null)) {
-        return serializeTeamParam(slots);
+    const byOrdinal = [...(team.TeamPlayers ?? [])].sort((a, b) => a.ordinal - b.ordinal);
+
+    // Bench = every row NOT PLACED in a slot, which is not the same as
+    // `role === null`: only the first match per role is placed, so a
+    // duplicate-role row would otherwise vanish from the link entirely.
+    const placed: TeamPlayer[] = [];
+    const slots = ROLE_ORDER.map((role) => {
+        const match = byOrdinal.find((p) => p.role === role);
+        if (match) placed.push(match);
+        return match ? toPlayerId(match) : null;
+    });
+    if (placed.length > 0) {
+        const bench = byOrdinal.filter((p) => !placed.includes(p)).map(toPlayerId);
+        return serializeTeamParam(slots, bench);
     }
-    const firstFive = [...players]
-        .sort((a, b) => a.ordinal - b.ordinal)
-        .slice(0, ROLE_ORDER.length)
-        .map(toPlayerId);
-    return serializePlayersParam(firstFive);
+    // List-form, not slot-form: slot-form would bypass autoAssignRoles and the
+    // roles would come from ordinal order.
+    return serializePlayersParam(byOrdinal.slice(0, MAX_ROSTER).map(toPlayerId));
 }
 
 const hasPlayers = (team: Team | null | undefined): team is Team =>

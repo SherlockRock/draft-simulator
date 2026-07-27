@@ -112,6 +112,9 @@ const flushDebounce = (): void => {
 
 const alpha = team("team-a", "Alpha", ["Ann", "Ben", "Cal", "Dot", "Eve"]);
 const beta = team("team-b", "Beta", ["Fay", "Gus"]);
+// Five starters plus a sub, so the bench half of the payload has something to
+// carry.
+const gamma = team("team-g", "Gamma", ["Ann", "Ben", "Cal", "Dot", "Eve", "Fay"]);
 
 describe("createRosterWriteBack", () => {
     beforeEach(() => vi.useFakeTimers());
@@ -256,6 +259,37 @@ describe("createRosterWriteBack", () => {
             h.dispose();
         });
 
+        it("sends the URL bench alongside the slots", () => {
+            const h = setup({ teamId: { you: "team-g" }, ownedTeams: [gamma] });
+            h.state.writeBack("you", lineup("Ann", "Ben", "Cal", "Dot", "Eve"), [
+                id("Fay")
+            ]);
+            flushDebounce();
+            expect(h.saves[0].payload.players).toEqual([
+                { role: "top", gameName: "Ann", tagLine: "NA1" },
+                { role: "jungle", gameName: "Ben", tagLine: "NA1" },
+                { role: "mid", gameName: "Cal", tagLine: "NA1" },
+                { role: "adc", gameName: "Dot", tagLine: "NA1" },
+                { role: "support", gameName: "Eve", tagLine: "NA1" },
+                { role: null, gameName: "Fay", tagLine: "NA1" }
+            ]);
+            h.dispose();
+        });
+
+        // A legacy link carries no bench, and that must not delete the stored
+        // one — the union re-appends it.
+        it("keeps the stored bench when the URL carries none", () => {
+            const h = setup({ teamId: { you: "team-g" }, ownedTeams: [gamma] });
+            h.state.writeBack("you", lineup("Ann", "Ben", "Cal", "Dot", "Eve"));
+            flushDebounce();
+            expect(h.saves[0].payload.players).toContainEqual({
+                role: null,
+                gameName: "Fay",
+                tagLine: "NA1"
+            });
+            h.dispose();
+        });
+
         it("does nothing when no team param is set", () => {
             const h = setup({ ownedTeams: [alpha] });
             expect(h.state.writeBack("you", lineup("Ann", "Ben", null, null, null))).toBe(
@@ -307,6 +341,38 @@ describe("createRosterWriteBack", () => {
             flushDebounce();
             expect(h.saves).toHaveLength(1);
             expect(h.saves[0].teamId).toBe("team-a");
+            h.dispose();
+        });
+
+        // The bench is stashed for the same reason the teamId is: re-reading it
+        // from the URL at flush time would commit whatever the normalization
+        // effect wrote in the meantime, which is the closest that effect ever
+        // gets to the database.
+        it("replays the bench the gesture was made with", () => {
+            const h = setup({
+                teamId: { you: "team-g" },
+                ownedTeams: [],
+                resolved: false
+            });
+            expect(
+                h.state.writeBack("you", lineup("Ann", "Ben", null, null, null), [
+                    id("Fay")
+                ])
+            ).toBe("stashed");
+
+            h.setOwnedTeams([gamma]);
+            h.setResolved(true);
+            flushDebounce();
+
+            expect(h.saves).toHaveLength(1);
+            expect(h.saves[0].payload.players).toEqual([
+                { role: "top", gameName: "Ann", tagLine: "NA1" },
+                { role: "jungle", gameName: "Ben", tagLine: "NA1" },
+                { role: null, gameName: "Fay", tagLine: "NA1" },
+                { role: null, gameName: "Cal", tagLine: "NA1" },
+                { role: null, gameName: "Dot", tagLine: "NA1" },
+                { role: null, gameName: "Eve", tagLine: "NA1" }
+            ]);
             h.dispose();
         });
 
