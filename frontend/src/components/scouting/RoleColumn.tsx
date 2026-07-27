@@ -2,6 +2,7 @@ import { Component } from "solid-js";
 import type { PlayerScoutResult, Role } from "@draft-sim/shared-types";
 import { DraggableHalf, RoleHeader, type MatchupSide } from "./RoleSlot";
 import type { DragOrigin } from "../../utils/lineupMove";
+import type { PlayerId } from "../../utils/playerStats";
 
 interface RoleColumnProps {
     role: Role;
@@ -13,6 +14,8 @@ interface RoleColumnProps {
     highlight?: Set<string>;
     pulse: { keys: Set<string> } | null;
     onMove?: (side: MatchupSide, from: DragOrigin, to: DragOrigin) => void;
+    onRefresh?: (side: MatchupSide, player: PlayerId) => void;
+    busy?: boolean;
 }
 
 // Solid compiles JSX props to getters, so an inline `new Set()` default would
@@ -35,6 +38,8 @@ export const RoleColumn: Component<RoleColumnProps> = (props) => (
             highlight={props.highlight ?? NO_HIGHLIGHT}
             pulse={props.pulse}
             onMove={props.onMove}
+            onRefresh={props.onRefresh}
+            busy={props.busy}
         />
     </section>
 );

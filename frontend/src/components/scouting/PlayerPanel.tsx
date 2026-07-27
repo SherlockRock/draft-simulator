@@ -1,4 +1,5 @@
-import { Component, createMemo, For, JSX, Show } from "solid-js";
+import { Component, createMemo, createSignal, For, JSX, onCleanup, Show } from "solid-js";
+import { RefreshCw } from "lucide-solid";
 import type { PlayerScoutResult, Role } from "@draft-sim/shared-types";
 import {
     aggregateChampRows,
@@ -7,6 +8,7 @@ import {
     computeMainRole,
     winrateColor
 } from "../../utils/playerStats";
+import { formatFetchedAgo } from "../../utils/scoutFreshness";
 import {
     ROLES,
     ROLE_LABELS,
@@ -47,23 +49,66 @@ export const RoleIcon: Component<{ role: Role; active: boolean; class?: string }
     />
 );
 
-export const PlayerSummaryHeader: Component<{ result: PlayerScoutResult }> = (props) => {
+// The label counts minutes, so it has to re-read the clock on its own — nothing
+// else on the page changes as a cached envelope ages.
+const TICK_MS = 30_000;
+
+const useNow = (): (() => number) => {
+    const [now, setNow] = createSignal(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), TICK_MS);
+    onCleanup(() => clearInterval(timer));
+    return now;
+};
+
+export const PlayerSummaryHeader: Component<{
+    result: PlayerScoutResult;
+    /** Omitted where a refresh has nowhere to go (previews, tests). */
+    onRefresh?: () => void;
+    /** A batch is already outstanding for this side — refreshing now would
+     *  only burn the per-user request budget. */
+    busy?: boolean;
+}> = (props) => {
     const riotId = () => `${props.result.input.gameName} #${props.result.input.tagLine}`;
 
     const entries = () =>
         props.result.status === "ok" ? props.result.envelope.entries : [];
+
+    const now = useNow();
 
     const champRows = createMemo(() => aggregateChampRows(entries()));
     const totals = createMemo(() => computeTotals(champRows()));
     const roleDistribution = createMemo(() => computeRoleDistribution(entries()));
     const mainRole = createMemo(() => computeMainRole(entries()));
 
+    // From the envelope, so a response served out of the backend's TTL cache
+    // reports when u.gg was actually asked.
+    const fetchedAgo = () =>
+        props.result.status === "ok"
+            ? formatFetchedAgo(props.result.envelope.fetchedAt, now())
+            : "";
+
     return (
-        <header class="border-b border-slate-700/60 px-3 py-2.5">
+        <header class="relative border-b border-slate-700/60 px-3 py-2.5">
+            <Show when={props.onRefresh}>
+                <button
+                    type="button"
+                    title={
+                        props.busy
+                            ? "Scouting…"
+                            : `Refetch from u.gg${fetchedAgo() ? ` (fetched ${fetchedAgo()})` : ""}`
+                    }
+                    aria-label="Refetch this player from u.gg"
+                    disabled={props.busy}
+                    onClick={() => props.onRefresh?.()}
+                    class="absolute right-1.5 top-1.5 rounded p-1 text-slate-600 transition-colors hover:bg-slate-700/40 hover:text-slate-200 focus-visible:text-slate-200 disabled:pointer-events-none disabled:opacity-40"
+                >
+                    <RefreshCw class="h-3 w-3" />
+                </button>
+            </Show>
             <Show
                 when={props.result.status === "ok" && champRows().length > 0}
                 fallback={
-                    <h2 class="flex items-baseline gap-1" title={riotId()}>
+                    <h2 class="flex items-baseline gap-1 pr-5" title={riotId()}>
                         <span class="min-w-0 truncate text-sm font-bold text-slate-100">
                             {props.result.input.gameName}
                         </span>
@@ -131,7 +176,7 @@ export const PlayerSummaryHeader: Component<{ result: PlayerScoutResult }> = (pr
                     </div>
 
                     <div class="min-w-0 flex-1">
-                        <h2 class="flex items-baseline gap-1" title={riotId()}>
+                        <h2 class="flex items-baseline gap-1 pr-5" title={riotId()}>
                             <span class="min-w-0 truncate text-sm font-bold text-slate-100">
                                 {props.result.input.gameName}
                             </span>
@@ -147,8 +192,21 @@ export const PlayerSummaryHeader: Component<{ result: PlayerScoutResult }> = (pr
                                 {totals().losses}L
                             </span>
                         </div>
-                        <div class="text-[10px] tabular-nums text-slate-500">
-                            {totals().games} games
+                        <div class="flex items-baseline gap-1 text-[10px] tabular-nums text-slate-500">
+                            <span>{totals().games} games</span>
+                            <Show when={fetchedAgo()}>
+                                {(ago) => (
+                                    <>
+                                        <span class="text-slate-700">·</span>
+                                        <span
+                                            class="truncate"
+                                            title="When u.gg was last asked"
+                                        >
+                                            {ago()}
+                                        </span>
+                                    </>
+                                )}
+                            </Show>
                         </div>
                     </div>
                 </div>

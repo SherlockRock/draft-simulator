@@ -23,7 +23,7 @@ function makeScoutingRouter({ windowMs = 10_000, max = 3 } = {}) {
     (req, res, next) => auth.protect(req, res, next),
     scoutThrottle,
     async (req, res) => {
-      const { region, gameName, tagLine } = req.body || {};
+      const { region, gameName, tagLine, refresh } = req.body || {};
       if (![region, gameName, tagLine].every(isNonEmptyString)) {
         return res
           .status(400)
@@ -34,6 +34,7 @@ function makeScoutingRouter({ windowMs = 10_000, max = 3 } = {}) {
           region: region.trim(),
           gameName: gameName.trim(),
           tagLine: tagLine.trim(),
+          refresh: refresh === true,
         });
         return res.json(envelope);
       } catch (err) {
@@ -48,7 +49,7 @@ function makeScoutingRouter({ windowMs = 10_000, max = 3 } = {}) {
     (req, res, next) => auth.protect(req, res, next),
     scoutThrottle,
     async (req, res) => {
-      const { region, players } = req.body || {};
+      const { region, players, refresh } = req.body || {};
       if (!isNonEmptyString(region)) {
         return res.status(400).json({ error: "region is required" });
       }
@@ -69,6 +70,9 @@ function makeScoutingRouter({ windowMs = 10_000, max = 3 } = {}) {
             gameName: p.gameName.trim(),
             tagLine: p.tagLine.trim(),
           })),
+          // Strict `=== true`: a caller must opt in deliberately, so a stray
+          // "false" string can't turn every scout into a cache bypass.
+          refresh: refresh === true,
         });
         return res.json(out);
       } catch (err) {

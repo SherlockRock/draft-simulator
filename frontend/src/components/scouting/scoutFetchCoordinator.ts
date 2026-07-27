@@ -65,6 +65,7 @@ export interface ScoutFetchDeps {
     fetchPlayers?: (input: {
         region: string;
         players: PlayerId[];
+        refresh?: boolean;
     }) => Promise<{ results: PlayerScoutResult[] }>;
     debounceMs?: number;
     freshMs?: number;
@@ -93,6 +94,12 @@ export interface ScoutFetch {
      * what a user wants in that state (decision 44).
      */
     hasScoutedFor: (side: ScoutSide) => boolean;
+    /**
+     * Refetch one player now, bypassing both this cache's freshness rule and
+     * the backend's 20-minute TTL. The escape hatch for someone who just
+     * played a game — waiting out a TTL is not an answer.
+     */
+    refreshPlayer: (side: ScoutSide, player: PlayerId) => void;
 }
 
 type SideMap<T> = Record<ScoutSide, T>;
@@ -195,7 +202,11 @@ export function createScoutFetch(deps: ScoutFetchDeps): ScoutFetch {
         setFetching((prev) => ({ ...prev, [side]: prev[side] + delta }));
     };
 
-    const runBatch = async (side: ScoutSide, batch: DesiredEntry[]): Promise<void> => {
+    const runBatch = async (
+        side: ScoutSide,
+        batch: DesiredEntry[],
+        refresh = false
+    ): Promise<void> => {
         // Captured at request time, not read at fan-out time.
         const region = batch[0].region;
         batch.forEach((e) => inFlight.add(e.id));
@@ -206,7 +217,8 @@ export function createScoutFetch(deps: ScoutFetchDeps): ScoutFetch {
                 players: batch.map((e) => ({
                     gameName: e.player.gameName,
                     tagLine: e.player.tagLine
-                }))
+                })),
+                refresh
             });
             // Per-player error rows cache normally — the backend turns a single
             // bad Riot ID into a result row rather than failing the batch.
@@ -301,6 +313,24 @@ export function createScoutFetch(deps: ScoutFetchDeps): ScoutFetch {
     });
     onCleanup(() => clearTimeout(timer));
 
+    // Bypasses runPass entirely: every gate there — isFresh, and the `failed`
+    // set — exists to stop AUTOMATIC refetching, and this is the user asking.
+    // The one gate that still applies is inFlight, because a double-click must
+    // not spend two of the three requests allowed every ten seconds.
+    const refreshPlayer = (side: ScoutSide, player: PlayerId): void => {
+        const region = deps.regionFor(side);
+        const id = entryId(region, player);
+        if (inFlight.has(id)) return;
+        // A refresh is a fresh attempt at this key, so it should not stay
+        // blacklisted from later automatic passes by an older failure.
+        failed.delete(id);
+        void runBatch(
+            side,
+            [{ side, region, player, id, queryKey: scoutPlayerQueryKey(region, player) }],
+            true
+        );
+    };
+
     const resultFor = (side: ScoutSide, player: PlayerId): PlayerScoutResult | null =>
         cached().get(entryId(deps.regionFor(side), player)) ?? null;
 
@@ -323,6 +353,7 @@ export function createScoutFetch(deps: ScoutFetchDeps): ScoutFetch {
         errorFor: (side) => errors()[side],
         isError: (side) => errors()[side] !== null,
         hasCompleteResultsFor,
+        refreshPlayer,
         // The settled flag alone would strand a remount whose players are all
         // still cached: no batch is needed, so nothing ever settles, and the
         // page would render nothing. Having every result IS having scouted.

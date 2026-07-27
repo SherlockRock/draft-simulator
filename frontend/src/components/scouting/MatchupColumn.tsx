@@ -4,6 +4,7 @@ import { computeSharedChamps } from "../../utils/playerStats";
 import { ChampChipStrip, type ChipDetail } from "./ChampChipStrip";
 import { DraggableHalf, RoleHeader, HALF_LIST_MAX, type MatchupSide } from "./RoleSlot";
 import type { DragOrigin } from "../../utils/lineupMove";
+import type { PlayerId } from "../../utils/playerStats";
 
 const entriesOf = (r: PlayerScoutResult | null) =>
     r && r.status === "ok" ? r.envelope.entries : [];
@@ -24,6 +25,10 @@ interface MatchupColumnProps {
     youOccupied?: boolean;
     enemyOccupied?: boolean;
     onMove?: (side: MatchupSide, from: DragOrigin, to: DragOrigin) => void;
+    onRefresh?: (side: MatchupSide, player: PlayerId) => void;
+    /** Per side: each half's refresh disables while ITS side has a batch out. */
+    youBusy?: boolean;
+    enemyBusy?: boolean;
 }
 
 export const MatchupColumn: Component<MatchupColumnProps> = (props) => {
@@ -52,6 +57,8 @@ export const MatchupColumn: Component<MatchupColumnProps> = (props) => {
                 pulse={props.pulse}
                 maxHeightClass={HALF_LIST_MAX}
                 onMove={props.onMove}
+                onRefresh={props.onRefresh}
+                busy={props.youBusy}
             />
             {/* Divider: the pool intersection, structurally — no verdicts. */}
             <div class="border-y border-slate-700/60 bg-slate-900/60 px-1.5 py-1">
@@ -82,6 +89,8 @@ export const MatchupColumn: Component<MatchupColumnProps> = (props) => {
                 pulse={props.pulse}
                 maxHeightClass={HALF_LIST_MAX}
                 onMove={props.onMove}
+                onRefresh={props.onRefresh}
+                busy={props.enemyBusy}
             />
         </section>
     );

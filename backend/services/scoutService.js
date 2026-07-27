@@ -56,12 +56,15 @@ const scoutService = {
   // Sequentially scouts each player, isolating per-player failures into error
   // results. Sequential (not parallel) for deterministic ordering; UggFetcher
   // self-rate-limits regardless. Returns { results: PlayerScoutResult[] }.
-  async scoutPlayers({ region, players }) {
+  //
+  // `refresh` applies to the whole batch — the caller decides what is stale, and
+  // the frontend refreshes one player by sending a batch of one.
+  async scoutPlayers({ region, players, refresh = false }) {
     const results = [];
     for (const p of players) {
       const input = { region, gameName: p.gameName, tagLine: p.tagLine };
       try {
-        const envelope = await scoutService.scoutPlayer(input);
+        const envelope = await scoutService.scoutPlayer({ ...input, refresh });
         results.push({ status: "ok", input, envelope });
       } catch (err) {
         results.push({

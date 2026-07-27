@@ -131,6 +131,14 @@ describe("scoutService.scoutPlayer caching", () => {
     expect(fetchPlayer).toHaveBeenCalledTimes(2);
   });
 
+  it("scoutPlayers passes refresh through, re-fetching every player in the batch", async () => {
+    const fetchPlayer = vi.spyOn(scoutService, "fetchPlayer").mockResolvedValue(envelope);
+    const players = [{ gameName: "Foo", tagLine: "NA1" }, { gameName: "Bar", tagLine: "NA1" }];
+    await scoutService.scoutPlayers({ region: "na1", players });
+    await scoutService.scoutPlayers({ region: "na1", players, refresh: true });
+    expect(fetchPlayer).toHaveBeenCalledTimes(4);
+  });
+
   it("re-scouting an overlapping roster only fetches the players it has not seen", async () => {
     const fetchPlayer = vi.spyOn(scoutService, "fetchPlayer").mockResolvedValue(envelope);
     await scoutService.scoutPlayers({
