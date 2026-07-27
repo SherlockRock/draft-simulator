@@ -1,5 +1,6 @@
 import { Component, Show } from "solid-js";
 import type { PlayerScoutResult, Role } from "@draft-sim/shared-types";
+import type { PlayerId } from "../../utils/playerStats";
 import { dragPayload, parseDragPayload, type DragOrigin } from "../../utils/lineupMove";
 import { ROLE_LABELS } from "../../utils/championRoles";
 import { PlayerSummaryHeader, ChampListSection, RoleIcon } from "./PlayerPanel";
@@ -21,6 +22,10 @@ interface HalfProps {
     highlight: Set<string>;
     pulse: { keys: Set<string> } | null;
     maxHeightClass?: string;
+    /** Refetch this player from u.gg, bypassing the backend's TTL cache. */
+    onRefresh?: (side: MatchupSide, player: PlayerId) => void;
+    /** This side already has a batch outstanding. */
+    busy?: boolean;
 }
 
 const PlayerHalf: Component<HalfProps> = (props) => (
@@ -44,7 +49,18 @@ const PlayerHalf: Component<HalfProps> = (props) => (
             };
             return (
                 <div class="flex min-h-0 flex-1 flex-col">
-                    <PlayerSummaryHeader result={result()} />
+                    <PlayerSummaryHeader
+                        result={result()}
+                        busy={props.busy}
+                        onRefresh={
+                            props.onRefresh &&
+                            (() =>
+                                props.onRefresh?.(props.side, {
+                                    gameName: result().input.gameName,
+                                    tagLine: result().input.tagLine
+                                }))
+                        }
+                    />
                     <ChampListSection
                         result={result()}
                         maxHeightClass={props.maxHeightClass}
@@ -105,6 +121,8 @@ export const DraggableHalf: Component<DraggableHalfProps> = (props) => {
                 highlight={props.highlight}
                 pulse={props.pulse}
                 maxHeightClass={props.maxHeightClass}
+                onRefresh={props.onRefresh}
+                busy={props.busy}
             />
         </div>
     );

@@ -506,6 +506,8 @@ const ScoutView: Component = () => {
                                                 rowRefs={rowRefs}
                                                 pulse={pulse()}
                                                 onMove={moveInLineup}
+                                                onRefresh={scout.refreshPlayer}
+                                                busy={scout.isFetching("you")}
                                             />
                                         )}
                                     </For>
@@ -554,6 +556,9 @@ const ScoutView: Component = () => {
                                         pulse={pulse()}
                                         onChipClick={scrollToRow}
                                         onMove={moveInLineup}
+                                        onRefresh={scout.refreshPlayer}
+                                        youBusy={scout.isFetching("you")}
+                                        enemyBusy={scout.isFetching("enemy")}
                                     />
                                 )}
                             </For>

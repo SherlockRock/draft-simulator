@@ -7,6 +7,8 @@ import { apiPost } from "./apiClient";
 export interface ScoutPlayersInput {
     region: string;
     players: { gameName: string; tagLine: string }[];
+    /** Bypass the backend's short-TTL envelope cache for this batch. */
+    refresh?: boolean;
 }
 
 // POST /api/scouting/players — apiPost validates the response against the Zod

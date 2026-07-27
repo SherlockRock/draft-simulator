@@ -55,7 +55,29 @@ describe("POST /api/scouting/player", () => {
       .send({ region: "na1", gameName: "Foo", tagLine: "NA1" });
     expect(res.status).toBe(200);
     expect(res.body).toEqual(envelope);
-    expect(scoutSpy).toHaveBeenCalledWith({ region: "na1", gameName: "Foo", tagLine: "NA1" });
+    expect(scoutSpy).toHaveBeenCalledWith({
+      region: "na1", gameName: "Foo", tagLine: "NA1", refresh: false,
+    });
+  });
+
+  it("forwards refresh: true so a deliberate refetch bypasses the cache", async () => {
+    scoutSpy.mockResolvedValue(envelope);
+    await request(buildApp())
+      .post("/api/scouting/player")
+      .send({ region: "na1", gameName: "Foo", tagLine: "NA1", refresh: true });
+    expect(scoutSpy).toHaveBeenCalledWith({
+      region: "na1", gameName: "Foo", tagLine: "NA1", refresh: true,
+    });
+  });
+
+  it("ignores a non-boolean refresh rather than trusting it", async () => {
+    scoutSpy.mockResolvedValue(envelope);
+    await request(buildApp())
+      .post("/api/scouting/player")
+      .send({ region: "na1", gameName: "Foo", tagLine: "NA1", refresh: "yes" });
+    expect(scoutSpy).toHaveBeenCalledWith({
+      region: "na1", gameName: "Foo", tagLine: "NA1", refresh: false,
+    });
   });
 
   it("502 when the upstream client throws", async () => {
@@ -129,6 +151,17 @@ describe("POST /api/scouting/players", () => {
     expect(scoutPlayersSpy).toHaveBeenCalledWith({
       region: "na1",
       players: [{ gameName: "Foo", tagLine: "NA1" }, { gameName: "Bar", tagLine: "EUW" }],
+      refresh: false,
+    });
+  });
+
+  it("forwards refresh: true so a deliberate refetch bypasses the cache", async () => {
+    scoutPlayersSpy.mockResolvedValue(okResults);
+    await request(buildApp())
+      .post("/api/scouting/players")
+      .send({ region: "na1", players, refresh: true });
+    expect(scoutPlayersSpy).toHaveBeenCalledWith({
+      region: "na1", players, refresh: true,
     });
   });
 

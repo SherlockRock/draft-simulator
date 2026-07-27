@@ -18,13 +18,17 @@ const DEBOUNCE = 400;
 
 const id = (gameName: string): PlayerId => ({ gameName, tagLine: "NA1" });
 
-const okResult = (gameName: string, region = "na1"): PlayerScoutResult => ({
+const okResult = (
+    gameName: string,
+    region = "na1",
+    fetchedAt = "2026-07-26T00:00:00Z"
+): PlayerScoutResult => ({
     status: "ok",
     input: { region, gameName, tagLine: "NA1" },
     envelope: {
         provider: "ugg",
         schemaVersion: 1,
-        fetchedAt: "2026-07-26T00:00:00Z",
+        fetchedAt,
         season: "S2026",
         queue: "ranked_solo",
         entries: []
@@ -42,6 +46,7 @@ type SideMap<T> = Record<ScoutSide, T>;
 interface BatchCall {
     region: string;
     players: PlayerId[];
+    refresh?: boolean;
     resolve: (results: PlayerScoutResult[]) => void;
     reject: (error: unknown) => void;
 }
@@ -96,6 +101,7 @@ const setup = (options: Options = {}): Harness => {
                     calls.push({
                         region: input.region,
                         players: input.players,
+                        refresh: input.refresh,
                         resolve: (results) => resolve({ results }),
                         reject
                     });
@@ -372,6 +378,95 @@ describe("createScoutFetch", () => {
             h.calls[1].resolve([okResult("A"), okResult("B")]);
             await settle(0);
             expect(h.fetch.isError("you")).toBe(false);
+            h.dispose();
+        });
+    });
+
+    // The backend caches u.gg envelopes for 20 minutes, so "wait for it to go
+    // stale" is not an answer for someone who just played a game.
+    describe("deliberate refresh", () => {
+        it("re-requests a fresh player, telling the backend to bypass its cache", async () => {
+            const h = setup({
+                slotted: { you: [id("A"), id("B")] },
+                seed: ["A", "B"].map((n) => ({ region: "na1", result: okResult(n) }))
+            });
+            await settle();
+            expect(h.calls).toEqual([]);
+
+            h.fetch.refreshPlayer("you", id("A"));
+            await settle(0);
+
+            expect(h.calls).toHaveLength(1);
+            expect(h.calls[0].players.map((p) => p.gameName)).toEqual(["A"]);
+            expect(h.calls[0].refresh).toBe(true);
+            h.dispose();
+        });
+
+        it("writes the refreshed envelope over the stale entry", async () => {
+            const h = setup({
+                slotted: { you: [id("A")] },
+                seed: [{ region: "na1", result: okResult("A") }]
+            });
+            await settle();
+
+            h.fetch.refreshPlayer("you", id("A"));
+            await settle(0);
+            const refreshed = okResult("A", "na1", "2026-07-27T09:00:00Z");
+            h.calls[0].resolve([refreshed]);
+            await settle(0);
+
+            expect(h.fetch.resultFor("you", id("A"))).toEqual(refreshed);
+            h.dispose();
+        });
+
+        it("marks the side as fetching while the refresh is outstanding", async () => {
+            const h = setup({
+                slotted: { you: [id("A")] },
+                seed: [{ region: "na1", result: okResult("A") }]
+            });
+            await settle();
+
+            h.fetch.refreshPlayer("you", id("A"));
+            await settle(0);
+            expect(h.fetch.isFetching("you")).toBe(true);
+
+            h.calls[0].resolve([okResult("A")]);
+            await settle(0);
+            expect(h.fetch.isFetching("you")).toBe(false);
+            h.dispose();
+        });
+
+        // Double-clicking the button must not spend two of the three requests
+        // the user gets every ten seconds.
+        it("ignores a refresh for a player already being fetched", async () => {
+            const h = setup({ slotted: { you: [id("A")] } });
+            await settle();
+            expect(h.calls).toHaveLength(1);
+
+            h.fetch.refreshPlayer("you", id("A"));
+            await settle(0);
+
+            expect(h.calls).toHaveLength(1);
+            h.dispose();
+        });
+
+        it("surfaces a failed refresh as the side's error", async () => {
+            const h = setup({
+                slotted: { you: [id("A")] },
+                seed: [{ region: "na1", result: okResult("A") }]
+            });
+            await settle();
+
+            h.fetch.refreshPlayer("you", id("A"));
+            await settle(0);
+            h.calls[0].reject(new ApiError(429));
+            await settle(0);
+
+            expect(h.fetch.errorFor("you")).toBe("throttled");
+            expect(h.fetch.isFetching("you")).toBe(false);
+            // The stale entry survives a failed refresh — losing the data the
+            // user was reading would be a worse outcome than stale data.
+            expect(h.fetch.resultFor("you", id("A"))).toEqual(okResult("A"));
             h.dispose();
         });
     });

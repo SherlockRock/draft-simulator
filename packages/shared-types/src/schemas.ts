@@ -1054,13 +1054,16 @@ export const ScoutPlayerInputSchema = z.object({
 });
 export type ScoutPlayerInput = z.infer<typeof ScoutPlayerInputSchema>;
 
-// Batch request: one shared region, 1..MAX players.
+// Batch request: one shared region, 1..MAX players. `refresh` bypasses the
+// backend's short-TTL response cache for every player in the batch — a
+// deliberate refetch, not the default path.
 export const ScoutPlayersRequestSchema = z.object({
   region: z.string().min(1),
   players: z
     .array(z.object({ gameName: z.string().min(1), tagLine: z.string().min(1) }))
     .min(1)
     .max(MAX_SCOUT_PLAYERS),
+  refresh: z.boolean().optional(),
 });
 export type ScoutPlayersRequest = z.infer<typeof ScoutPlayersRequestSchema>;
 

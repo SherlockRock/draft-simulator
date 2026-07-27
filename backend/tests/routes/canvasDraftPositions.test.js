@@ -188,20 +188,20 @@ describe("PUT /:canvasId/draft-positions", () => {
 });
 
 describe("POST /:canvasId/draft/:draftId/copy grid placement", () => {
-  it("copy honors explicit position and group_id", async () => {
+  // The source row as the DB actually returns it: group_id is a real column, so
+  // an ungrouped draft carries null, never a missing key. Getting that wrong is
+  // what let the group-inheritance branch look tested when it was not.
+  const mockCopyDeps = (original) => {
     vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
     vi.spyOn(CanvasDraft, "findOne").mockResolvedValue({
-      positionX: 100,
-      positionY: 100,
+      group_id: null,
       Draft: { name: "Orig", picks: Array(20).fill("") },
+      ...original,
     });
     vi.spyOn(Draft, "create").mockResolvedValue({
       id: "new-draft",
       toJSON: () => ({ id: "new-draft" }),
     });
-    const createCanvasDraft = vi
-      .spyOn(CanvasDraft, "create")
-      .mockResolvedValue({ toJSON: () => ({}) });
     // Broadcast fetches — return empty sets.
     vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
     vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
@@ -212,6 +212,11 @@ describe("POST /:canvasId/draft/:draftId/copy grid placement", () => {
       save: vi.fn().mockResolvedValue(undefined),
       toJSON: () => ({}),
     });
+    return vi.spyOn(CanvasDraft, "create").mockResolvedValue({ toJSON: () => ({}) });
+  };
+
+  it("copy honors explicit position and group_id", async () => {
+    const createCanvasDraft = mockCopyDeps({ positionX: 100, positionY: 100 });
 
     const res = await request(buildApp())
       .post("/api/canvas/c1/draft/d1/copy")
@@ -227,28 +232,8 @@ describe("POST /:canvasId/draft/:draftId/copy grid placement", () => {
     );
   });
 
-  it("copy without a body falls back to offset placement, no group", async () => {
-    vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
-    vi.spyOn(CanvasDraft, "findOne").mockResolvedValue({
-      positionX: 100,
-      positionY: 200,
-      Draft: { name: "Orig", picks: Array(20).fill("") },
-    });
-    vi.spyOn(Draft, "create").mockResolvedValue({
-      id: "new-draft",
-      toJSON: () => ({ id: "new-draft" }),
-    });
-    const createCanvasDraft = vi
-      .spyOn(CanvasDraft, "create")
-      .mockResolvedValue({ toJSON: () => ({}) });
-    vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
-    vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
-    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
-    vi.spyOn(Canvas, "findByPk").mockResolvedValue({
-      changed: vi.fn(),
-      save: vi.fn().mockResolvedValue(undefined),
-      toJSON: () => ({}),
-    });
+  it("copy without a body falls back to offset placement", async () => {
+    const createCanvasDraft = mockCopyDeps({ positionX: 100, positionY: 200 });
 
     const res = await request(buildApp())
       .post("/api/canvas/c1/draft/d1/copy")
@@ -261,6 +246,44 @@ describe("POST /:canvasId/draft/:draftId/copy grid placement", () => {
         positionY: 250,
         group_id: null,
       })
+    );
+  });
+
+  // d67ab28: a copy stays in its source's group. Copying a card out of a group
+  // and having it land loose was the bug that commit fixed.
+  it("copy without a body inherits the original's group", async () => {
+    const createCanvasDraft = mockCopyDeps({
+      positionX: 100,
+      positionY: 200,
+      group_id: "g9",
+    });
+
+    const res = await request(buildApp())
+      .post("/api/canvas/c1/draft/d1/copy")
+      .send({});
+
+    expect(res.status).toBe(201);
+    expect(createCanvasDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ group_id: "g9" })
+    );
+  });
+
+  // The escape hatch from that inheritance: an explicit null means "loose",
+  // and must not be read as "no opinion".
+  it("an explicit null group_id copies a grouped draft out of its group", async () => {
+    const createCanvasDraft = mockCopyDeps({
+      positionX: 100,
+      positionY: 200,
+      group_id: "g9",
+    });
+
+    const res = await request(buildApp())
+      .post("/api/canvas/c1/draft/d1/copy")
+      .send({ group_id: null });
+
+    expect(res.status).toBe(201);
+    expect(createCanvasDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ group_id: null })
     );
   });
 });
