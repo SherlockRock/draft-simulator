@@ -8,14 +8,19 @@ import {
     onCleanup
 } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
-import { useQuery } from "@tanstack/solid-query";
+import { useQuery, useQueryClient } from "@tanstack/solid-query";
+import toast from "solid-toast";
 import {
     MAX_SCOUT_PLAYERS,
     SCOUT_REGION_OPTIONS,
     type PlayerScoutResult,
-    type Role
+    type Role,
+    type Team
 } from "@draft-sim/shared-types";
 import { scoutPlayers } from "../../utils/scoutingApi";
+import { fetchTeams, updateTeamRoster } from "../../utils/actions";
+import { useUser } from "../../userProvider";
+import { createRosterWriteBack } from "./rosterWriteBackState";
 import {
     serializeSubmitParam,
     parsePlayersInput,
@@ -31,9 +36,11 @@ import {
     type AssignedPlayer
 } from "../../utils/playerStats";
 import { StyledSelect } from "../StyledSelect";
-import PlayerColumn from "./PlayerColumn";
-import { MatchupColumn, rowRefKey, type MatchupSide } from "./MatchupColumn";
+import { RoleColumn } from "./RoleColumn";
+import { MatchupColumn } from "./MatchupColumn";
+import { rowRefKey, type MatchupSide } from "./RoleSlot";
 import { FlexStrip } from "./FlexStrip";
+import { RosterStatusLabel } from "./RosterStatusLabel";
 
 const getParamString = (param: string | string[] | undefined): string => {
     if (Array.isArray(param)) return param[0] || "";
@@ -80,6 +87,11 @@ const toAssigned = (slots: (PlayerScoutResult | null)[]): (AssignedPlayer | null
             : null
     );
 
+// Passing undefined DELETES a param. Shaped as a patch rather than a call so
+// the drag gesture can merge it into the ONE setSearchParams it already makes.
+const disarmPatch = (side: MatchupSide): { team?: undefined; enemyTeam?: undefined } =>
+    side === "you" ? { team: undefined } : { enemyTeam: undefined };
+
 const ScoutView: Component = () => {
     const [searchParams, setSearchParams] = useSearchParams();
 
@@ -89,6 +101,59 @@ const ScoutView: Component = () => {
     const enemiesParam = () => getParamString(searchParams.enemies);
     const matchupMode = () => enemiesParam() !== "";
     const enemyRegion = () => getParamString(searchParams.enemyRegion) || activeRegion();
+
+    const [user] = useUser()();
+    const queryClient = useQueryClient();
+
+    // Team UUIDs for roster write-back. Deliberately NOT named yourTeamParam /
+    // enemyTeamParam — those already exist below and hold parsed player slots.
+    const teamIdParam = () => getParamString(searchParams.team);
+    const enemyTeamIdParam = () => getParamString(searchParams.enemyTeam);
+
+    // fetchTeams returns ONLY owned teams, so resolving against this list IS
+    // the ownership check. Anonymous visitors and shared links never arm.
+    const teamsQuery = useQuery(() => ({
+        queryKey: ["teams"],
+        queryFn: fetchTeams,
+        enabled: !!user() && (teamIdParam() !== "" || enemyTeamIdParam() !== "")
+    }));
+    const { armedTeam, savedTeams, writeBack, shouldKeepTeamParam } =
+        createRosterWriteBack({
+            isSignedIn: () => !!user(),
+            ownedTeams: (): Team[] => teamsQuery.data ?? [],
+            teamsResolved: () => teamsQuery.isSuccess,
+            teamsFailed: () => teamsQuery.isError,
+            teamIdFor: (side) => (side === "you" ? teamIdParam() : enemyTeamIdParam()),
+            // Raw params, NOT activeRegion(): that defaults to "na1", so a link
+            // with region stripped would silently convert a KR team to NA
+            // (decision 28).
+            regionFor: (side) =>
+                side === "you"
+                    ? getParamString(searchParams.region) || undefined
+                    : getParamString(searchParams.enemyRegion) ||
+                      getParamString(searchParams.region) ||
+                      undefined,
+            disarm: (side) => setSearchParams(disarmPatch(side)),
+            saveRoster: async (teamId, payload) => {
+                const fresh = await updateTeamRoster(
+                    teamId,
+                    payload.players,
+                    payload.region
+                );
+                // Update the cache from the response rather than only
+                // invalidating: invalidation is async, and a second gesture
+                // before the refetch lands would otherwise merge against a
+                // stale roster and delete a player the previous save just
+                // added.
+                queryClient.setQueryData<Team[]>(["teams"], (prev) =>
+                    prev ? prev.map((t) => (t.id === fresh.id ? fresh : t)) : prev
+                );
+                void queryClient.invalidateQueries({ queryKey: ["teams"] });
+            },
+            // Stable id per (reason, team) so repeated drags replace the toast
+            // instead of stacking one per drop.
+            notifyError: (id, message) => toast.error(message, { id })
+        });
 
     // Editable state, seeded from the URL so a shared link stays editable.
     const [region, setRegion] = createSignal(activeRegion());
@@ -132,7 +197,6 @@ const ScoutView: Component = () => {
         () => parsedPlayers().length > 0 || parsedEnemyPlayers().length > 0
     );
     const scouting = createMemo(() => yourQuery.isFetching || enemyQuery.isFetching);
-    const single = createMemo(() => (yourQuery.data?.results.length ?? 0) === 1);
     const yourSlots = createMemo(() =>
         slotResults(yourTeamParam(), yourQuery.data?.results ?? [])
     );
@@ -158,50 +222,74 @@ const ScoutView: Component = () => {
             enemyRegion:
                 enemyIds.length > 0 && enemy.region && enemy.region !== nextRegion
                     ? enemy.region
-                    : undefined
+                    : undefined,
+            // setSearchParams MERGES, so a stale team id would outlive the
+            // roster it describes (decision 26a).
+            // Omitting a key keeps it; passing undefined deletes it.
+            ...(shouldKeepTeamParam("you", yourIds) ? {} : { team: undefined }),
+            ...(shouldKeepTeamParam("enemy", enemyIds) ? {} : { enemyTeam: undefined })
         });
     };
 
+    const assignFrom = (
+        players: PlayerId[],
+        results: PlayerScoutResult[]
+    ): (PlayerId | null)[] =>
+        autoAssignRoles(resultsFor(players, results)).map((slot) =>
+            slot ? { gameName: slot.input.gameName, tagLine: slot.input.tagLine } : null
+        );
+
+    // A list-form side with zero players has nothing to assign — treat it as
+    // already normalized so a bare /scout visit (or a matchup with one empty
+    // side) never gets rewritten into an empty slot-form string like "s:,,,,".
+    const isDone = (param: TeamParam): boolean =>
+        param.kind === "slots" || param.players.length === 0;
+
+    // Normalizes list-form params into slot-form so role assignment is URL
+    // state. This runs on load and is NOT a user gesture — write-back must
+    // NEVER hang off it (decision 26), or opening a link would mutate a roster.
     createEffect(() => {
-        if (!matchupMode()) return;
         const you = yourTeamParam();
         const enemy = enemyTeamParam();
-        if (you.kind === "slots" && enemy.kind === "slots") return;
+        const inMatchup = matchupMode();
+        if (isDone(you) && (!inMatchup || isDone(enemy))) return;
+        // Wait for the data auto-assign needs, but only for a side that has any.
         if (you.kind === "list" && you.players.length > 0 && !yourQuery.data) return;
-        if (enemy.kind === "list" && enemy.players.length > 0 && !enemyQuery.data) return;
+        if (
+            inMatchup &&
+            enemy.kind === "list" &&
+            enemy.players.length > 0 &&
+            !enemyQuery.data
+        )
+            return;
 
-        const nextYou =
+        const nextPlayers =
             you.kind === "slots"
-                ? you.slots
-                : autoAssignRoles(
-                      resultsFor(you.players, yourQuery.data?.results ?? [])
-                  ).map((slot) =>
-                      slot
-                          ? {
-                                gameName: slot.input.gameName,
-                                tagLine: slot.input.tagLine
-                            }
-                          : null
-                  );
-        const nextEnemy =
-            enemy.kind === "slots"
-                ? enemy.slots
-                : autoAssignRoles(
-                      resultsFor(enemy.players, enemyQuery.data?.results ?? [])
-                  ).map((slot) =>
-                      slot
-                          ? {
-                                gameName: slot.input.gameName,
-                                tagLine: slot.input.tagLine
-                            }
-                          : null
-                  );
+                ? serializeTeamParam(you.slots)
+                : you.players.length === 0
+                  ? playersParam()
+                  : serializeTeamParam(
+                        assignFrom(you.players, yourQuery.data?.results ?? [])
+                    );
+        const nextEnemies = inMatchup
+            ? enemy.kind === "slots"
+                ? serializeTeamParam(enemy.slots)
+                : enemy.players.length === 0
+                  ? enemiesParam()
+                  : serializeTeamParam(
+                        assignFrom(enemy.players, enemyQuery.data?.results ?? [])
+                    )
+            : null;
+
+        const changed =
+            nextPlayers !== playersParam() ||
+            (nextEnemies !== null && nextEnemies !== enemiesParam());
+        if (!changed) return;
 
         setSearchParams(
-            {
-                players: serializeTeamParam(nextYou),
-                enemies: serializeTeamParam(nextEnemy)
-            },
+            nextEnemies === null
+                ? { players: nextPlayers }
+                : { players: nextPlayers, enemies: nextEnemies },
             { replace: true }
         );
     });
@@ -233,11 +321,18 @@ const ScoutView: Component = () => {
         const fromSlot = slots[fromIndex];
         slots[fromIndex] = slots[toIndex];
         slots[toIndex] = fromSlot;
-        setSearchParams(
-            side === "you"
+        // Save BEFORE navigating, and fold any disarm into the same
+        // setSearchParams: @solidjs/router navigates in a microtask-deferred
+        // transition, so a second call this tick would merge against the
+        // pre-swap search string and revert the drag. Pass the array we just
+        // computed for the same reason — the URL has not settled.
+        const outcome = writeBack(side, slots);
+        setSearchParams({
+            ...(side === "you"
                 ? { players: serializeTeamParam(slots) }
-                : { enemies: serializeTeamParam(slots) }
-        );
+                : { enemies: serializeTeamParam(slots) }),
+            ...(outcome === "disarmed" ? disarmPatch(side) : {})
+        });
     };
 
     const highlightFor = (col: number): { you: Set<string>; enemy: Set<string> } => {
@@ -338,12 +433,25 @@ const ScoutView: Component = () => {
                             </Show>
 
                             <Show when={yourQuery.data}>
-                                <div
-                                    class="custom-scrollbar flex gap-3 overflow-x-auto pb-2"
-                                    classList={{ "justify-center": single() }}
-                                >
-                                    <For each={yourQuery.data?.results}>
-                                        {(result) => <PlayerColumn result={result} />}
+                                <Show when={armedTeam("you")}>
+                                    {(team) => (
+                                        <RosterStatusLabel
+                                            teamName={team().name}
+                                            saved={savedTeams().has(team().id)}
+                                        />
+                                    )}
+                                </Show>
+                                <div class="custom-scrollbar flex gap-3 overflow-x-auto pb-2">
+                                    <For each={ROLE_ORDER}>
+                                        {(role, index) => (
+                                            <RoleColumn
+                                                role={role}
+                                                result={yourSlots()[index()]}
+                                                rowRefs={rowRefs}
+                                                pulse={pulse()}
+                                                onSwap={swapRoles}
+                                            />
+                                        )}
                                     </For>
                                 </div>
                             </Show>
@@ -361,6 +469,14 @@ const ScoutView: Component = () => {
                                 )
                             }
                         />
+                        <Show when={armedTeam("you")}>
+                            {(team) => (
+                                <RosterStatusLabel
+                                    teamName={team().name}
+                                    saved={savedTeams().has(team().id)}
+                                />
+                            )}
+                        </Show>
                         <div class="custom-scrollbar flex gap-3 overflow-x-auto pb-2">
                             <For each={ROLE_ORDER}>
                                 {(role, index) => (
@@ -378,6 +494,14 @@ const ScoutView: Component = () => {
                                 )}
                             </For>
                         </div>
+                        <Show when={armedTeam("enemy")}>
+                            {(team) => (
+                                <RosterStatusLabel
+                                    teamName={team().name}
+                                    saved={savedTeams().has(team().id)}
+                                />
+                            )}
+                        </Show>
                         <FlexStrip
                             label="Enemy team"
                             accentClass="text-rose-300"

@@ -65,7 +65,8 @@ describe("buildScoutLink", () => {
         const link = buildScoutLink(t, null);
         expect(link).toEqual({
             region: "kr",
-            players: "s:Kiin#KR1,,Faker#KR2,,"
+            players: "s:Kiin#KR1,,Faker#KR2,,",
+            team: "t"
         });
     });
 
@@ -88,7 +89,8 @@ describe("buildScoutLink", () => {
         const link = buildScoutLink(team("na1", []), t2);
         expect(link).toEqual({
             region: "euw1",
-            players: "s:,,Caps#EUW,,"
+            players: "s:,,Caps#EUW,,",
+            team: "t"
         });
         expect(link?.enemies).toBeUndefined();
     });
@@ -139,6 +141,48 @@ describe("buildScoutLink", () => {
         if (slots.kind === "slots") {
             expect(slots.slots[0]).toEqual({ gameName: "na,me", tagLine: "ta#g" });
         }
+    });
+});
+
+describe("buildScoutLink team ids", () => {
+    it("names the sole rostered team even when it sat in slot 2", () => {
+        const team2 = team("kr", [player("Faker", "KR1", "mid", 0)], { id: "t-two" });
+        const link = buildScoutLink(null, team2);
+        // The roster is promoted into `players`, so `team` must follow it.
+        expect(link?.team).toBe("t-two");
+        expect(link?.enemyTeam).toBeUndefined();
+    });
+
+    it("names both teams in a matchup", () => {
+        const link = buildScoutLink(
+            team("na1", [player("Alice", "NA1", "top", 0)], { id: "t-one" }),
+            team("na1", [player("Bob", "NA1", "top", 0)], { id: "t-two" })
+        );
+        expect(link?.team).toBe("t-one");
+        expect(link?.enemyTeam).toBe("t-two");
+    });
+
+    it("serializes both ids into the path", () => {
+        const url = new URL(
+            scoutLinkPath({
+                region: "na1",
+                players: "s:a#NA1,,,,",
+                team: "t-one",
+                enemyTeam: "t-two"
+            }),
+            "https://example.com"
+        );
+        expect(url.searchParams.get("team")).toBe("t-one");
+        expect(url.searchParams.get("enemyTeam")).toBe("t-two");
+    });
+
+    it("omits the ids when no team is linked", () => {
+        const url = new URL(
+            scoutLinkPath({ region: "na1", players: "a#NA1" }),
+            "https://example.com"
+        );
+        expect(url.searchParams.has("team")).toBe(false);
+        expect(url.searchParams.has("enemyTeam")).toBe(false);
     });
 });
 
