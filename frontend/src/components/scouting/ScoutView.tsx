@@ -17,17 +17,16 @@ import {
     type Role,
     type Team
 } from "@draft-sim/shared-types";
-import { scoutPlayers } from "../../utils/scoutingApi";
 import { fetchTeams, updateTeamRoster } from "../../utils/actions";
 import { useUser } from "../../userProvider";
 import { createRosterWriteBack } from "./rosterWriteBackState";
+import { createScoutFetch } from "./scoutFetchCoordinator";
 import {
     serializeSubmitParam,
     parsePlayersInput,
     formatPlayersInput,
     parseTeamParam,
     serializeTeamParam,
-    canonicalPlayersKey,
     slottedPlayers,
     fullRoster,
     autoAssignRoles,
@@ -49,29 +48,20 @@ const getParamString = (param: string | string[] | undefined): string => {
     return param || "";
 };
 
-const playerKey = (p: { gameName: string; tagLine: string }): string =>
-    `${p.gameName.toLowerCase()}#${p.tagLine.toLowerCase()}`;
-
-const resultsFor = (
-    players: PlayerId[],
-    results: PlayerScoutResult[]
-): PlayerScoutResult[] =>
-    players.flatMap((p) => {
-        const result = results.find((r) => playerKey(r.input) === playerKey(p));
-        return result ? [result] : [];
-    });
-
 const slotResults = (
     param: TeamParam,
-    results: PlayerScoutResult[]
+    lookup: (player: PlayerId) => PlayerScoutResult | null
 ): (PlayerScoutResult | null)[] =>
     param.kind === "slots"
-        ? param.slots.map((slot) =>
-              slot
-                  ? (results.find((r) => playerKey(r.input) === playerKey(slot)) ?? null)
-                  : null
-          )
+        ? param.slots.map((slot) => (slot ? lookup(slot) : null))
         : [null, null, null, null, null];
+
+// A throttle rejection is not an upstream outage. Saying "u.gg may be
+// unavailable" when the user simply dragged four times inside ten seconds sends
+// them away instead of making them wait a moment.
+const THROTTLED_HINT =
+    "Scouting too fast — only a few lookups are allowed every 10 seconds. Wait a moment and try again.";
+const OUTAGE_HINT = "u.gg may be unavailable — try again.";
 
 const toAssigned = (slots: (PlayerScoutResult | null)[]): (AssignedPlayer | null)[] =>
     slots.map((slot, index) =>
@@ -180,29 +170,34 @@ const ScoutView: Component = () => {
         () => parsedEnemyPlayers().length > MAX_SCOUT_PLAYERS
     );
 
-    const yourQuery = useQuery(() => ({
-        queryKey: ["scoutPlayers", activeRegion(), canonicalPlayersKey(yourPlayers())],
-        queryFn: () => scoutPlayers({ region: activeRegion(), players: yourPlayers() }),
-        enabled: yourPlayers().length > 0,
-        staleTime: 5 * 60 * 1000
-    }));
-
-    const enemyQuery = useQuery(() => ({
-        queryKey: ["scoutPlayers", enemyRegion(), canonicalPlayersKey(enemyPlayers())],
-        queryFn: () => scoutPlayers({ region: enemyRegion(), players: enemyPlayers() }),
-        enabled: matchupMode() && enemyPlayers().length > 0,
-        staleTime: 5 * 60 * 1000
-    }));
+    // Columns read per-player cache entries; fetching stays batched. Created
+    // unconditionally here, in the component body and OUTSIDE the render gate:
+    // observers made inside `<Show when={hasScoutedFor(...)}>` would have no
+    // observer for the data the gate itself reads, so the gate would never turn
+    // reactive and the page would be permanently blank.
+    const scout = createScoutFetch({
+        queryClient,
+        slottedFor: (side) => (side === "you" ? yourPlayers() : enemyPlayers()),
+        regionFor: (side) => (side === "you" ? activeRegion() : enemyRegion()),
+        isActive: (side) => side === "you" || matchupMode()
+    });
 
     const canScout = createMemo(
         () => parsedPlayers().length > 0 || parsedEnemyPlayers().length > 0
     );
-    const scouting = createMemo(() => yourQuery.isFetching || enemyQuery.isFetching);
+    const scouting = createMemo(
+        () => scout.isFetching("you") || scout.isFetching("enemy")
+    );
     const yourSlots = createMemo(() =>
-        slotResults(yourTeamParam(), yourQuery.data?.results ?? [])
+        slotResults(yourTeamParam(), (p) => scout.resultFor("you", p))
     );
     const enemySlots = createMemo(() =>
-        slotResults(enemyTeamParam(), enemyQuery.data?.results ?? [])
+        slotResults(enemyTeamParam(), (p) => scout.resultFor("enemy", p))
+    );
+    const throttled = createMemo(
+        () =>
+            scout.errorFor("you") === "throttled" ||
+            scout.errorFor("enemy") === "throttled"
     );
 
     const submit = () => {
@@ -232,11 +227,8 @@ const ScoutView: Component = () => {
         });
     };
 
-    const assignFrom = (
-        players: PlayerId[],
-        results: PlayerScoutResult[]
-    ): (PlayerId | null)[] =>
-        autoAssignRoles(resultsFor(players, results)).map((slot) =>
+    const assignFrom = (side: MatchupSide, players: PlayerId[]): (PlayerId | null)[] =>
+        autoAssignRoles(scout.resultsFor(side, players)).map((slot) =>
             slot ? { gameName: slot.input.gameName, tagLine: slot.input.tagLine } : null
         );
 
@@ -255,12 +247,19 @@ const ScoutView: Component = () => {
         const inMatchup = matchupMode();
         if (isDone(you) && (!inMatchup || isDone(enemy))) return;
         // Wait for the data auto-assign needs, but only for a side that has any.
-        if (you.kind === "list" && you.players.length > 0 && !yourQuery.data) return;
+        // The COMPLETE predicate, not the settled-or-failed one: normalizing on
+        // partial data would freeze a half-guessed role assignment into the URL.
+        if (
+            you.kind === "list" &&
+            you.players.length > 0 &&
+            !scout.hasCompleteResultsFor("you")
+        )
+            return;
         if (
             inMatchup &&
             enemy.kind === "list" &&
             enemy.players.length > 0 &&
-            !enemyQuery.data
+            !scout.hasCompleteResultsFor("enemy")
         )
             return;
 
@@ -269,17 +268,13 @@ const ScoutView: Component = () => {
                 ? serializeTeamParam(you.slots)
                 : you.players.length === 0
                   ? playersParam()
-                  : serializeTeamParam(
-                        assignFrom(you.players, yourQuery.data?.results ?? [])
-                    );
+                  : serializeTeamParam(assignFrom("you", you.players));
         const nextEnemies = inMatchup
             ? enemy.kind === "slots"
                 ? serializeTeamParam(enemy.slots)
                 : enemy.players.length === 0
                   ? enemiesParam()
-                  : serializeTeamParam(
-                        assignFrom(enemy.players, enemyQuery.data?.results ?? [])
-                    )
+                  : serializeTeamParam(assignFrom("enemy", enemy.players))
             : null;
 
         const changed =
@@ -426,14 +421,17 @@ const ScoutView: Component = () => {
                     when={matchupMode()}
                     fallback={
                         <>
-                            <Show when={yourQuery.isError}>
-                                <p class="rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">
-                                    Couldn't scout that squad — u.gg may be unavailable.
-                                    Try again.
-                                </p>
+                            <Show when={scout.errorFor("you")}>
+                                {(kind) => (
+                                    <p class="rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">
+                                        {kind() === "throttled"
+                                            ? THROTTLED_HINT
+                                            : `Couldn't scout that squad — ${OUTAGE_HINT}`}
+                                    </p>
+                                )}
                             </Show>
 
-                            <Show when={yourQuery.data}>
+                            <Show when={scout.hasScoutedFor("you")}>
                                 <Show when={armedTeam("you")}>
                                     {(team) => (
                                         <RosterStatusLabel
@@ -513,13 +511,13 @@ const ScoutView: Component = () => {
                                 )
                             }
                         />
-                        <Show when={yourQuery.isError || enemyQuery.isError}>
+                        <Show when={scout.isError("you") || scout.isError("enemy")}>
                             <p class="rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">
-                                {yourQuery.isError ? "Couldn't scout your team. " : ""}
-                                {enemyQuery.isError
+                                {scout.isError("you") ? "Couldn't scout your team. " : ""}
+                                {scout.isError("enemy")
                                     ? "Couldn't scout the enemy team. "
                                     : ""}
-                                u.gg may be unavailable — try again.
+                                {throttled() ? THROTTLED_HINT : OUTAGE_HINT}
                             </p>
                         </Show>
                     </div>
