@@ -388,7 +388,7 @@ router.get("/:canvasId", async (req, res) => {
       userPermissions: userCanvas.permissions,
     });
   } catch (error) {
-    console.log("Error loading canvas:", error);
+    console.error("Error loading canvas:", error);
     res.status(500).json({ error: "Failed to load canvas" });
   }
 });
@@ -2648,7 +2648,6 @@ router.put(
   protect,
   async (req, res) => {
     try {
-      console.log("Updating vertex position");
       const { canvasId, connectionId, vertexId } = req.params;
       const { x, y } = req.body;
 

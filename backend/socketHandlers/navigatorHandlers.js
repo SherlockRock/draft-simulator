@@ -1,3 +1,4 @@
+const log = require("../utils/logger");
 const NavigatorSession = require("../models/NavigatorSession");
 const NavigatorDraft = require("../models/NavigatorDraft");
 const NavigatorEvent = require("../models/NavigatorEvent");
@@ -215,7 +216,7 @@ async function recomputeAndBroadcast(io, socket, session, draft, events, version
 
     const currentVersion = getCurrentVersion(session.id);
     if (result.version !== currentVersion) {
-      console.log(
+      log.debug(
         `[nav] dropping stale engine result: session=${session.id} job_v=${result.version} current_v=${currentVersion}`,
       );
       return null;
@@ -563,7 +564,7 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       const newDraft = await NavigatorDraft.create(newDraftAttrs);
 
       const derivedSide = getOurSideForGame(session, newDraft);
-      console.log(
+      log.debug(
         `[nav] Game ${nextGameNumber} started for session ${sessionId} on ${derivedSide}`,
       );
 

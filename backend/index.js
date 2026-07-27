@@ -34,6 +34,7 @@ const { createPresenceStore } = require("./services/canvasPresence");
 const presenceEjection = require("./services/presenceEjection");
 const { initializeTimerService } = require("./services/versusTimerService");
 const VersusSessionManager = require("./services/versusSessionManager");
+const log = require("./utils/logger");
 require("dotenv").config();
 const otelMetrics = require("./tracing");
 
@@ -172,7 +173,7 @@ async function main() {
         return next(new Error("Authentication error"));
       }
     }
-    console.log("No valid token found in cookies");
+    log.debug("No valid token found in cookies");
     next();
   });
 
@@ -197,14 +198,14 @@ async function main() {
         return;
       }
       socket.join(room);
-      console.log(`${socket.id} joined room: ${room}`);
+      log.debug(`${socket.id} joined room: ${room}`);
       const roomSize = await socketService.getRoomSize(room);
       io.to(room).emit("userCountUpdate", roomSize);
     });
 
     wrapSocketHandler(socket, "leaveRoom", async (room) => {
       socket.leave(room);
-      console.log(`${socket.id} left room: ${room}`);
+      log.debug(`${socket.id} left room: ${room}`);
       const roomSize = await socketService.getRoomSize(room);
       io.to(room).emit("userCountUpdate", roomSize);
     });
@@ -218,11 +219,14 @@ async function main() {
       }
     });
 
-    socket.on("disconnect", () => {
+    // `reason` distinguishes a client that navigated away ("transport close")
+    // from one that gave up on our keepalive ("ping timeout") — without it a
+    // disconnect storm is unattributable. Keep it out of the debug gate.
+    socket.on("disconnect", (reason) => {
       if (otelMetrics.socketConnections) {
         otelMetrics.socketConnections.add(-1);
       }
-      console.log(`Client disconnected: ${socket.id}`);
+      console.log(`Client disconnected: ${socket.id} (${reason})`);
     });
   });
 

@@ -4,6 +4,7 @@ const { google } = require("googleapis");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const helpers = require("../helpers");
+const log = require("../utils/logger");
 require("dotenv").config();
 
 const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET;
@@ -115,18 +116,12 @@ router.post("/google/callback", async (req, res) => {
     // Decode and validate state
     let returnTo = "/";
     if (state) {
-      console.log("state", state);
       try {
         returnTo = Buffer.from(state, "base64").toString();
       } catch (e) {
         console.error("Invalid state parameter:", e);
       }
     }
-    console.log("returnTo", returnTo);
-    console.log({
-      user,
-      returnTo, // Send returnTo back to frontend
-    });
     res.json({
       user,
       returnTo,
@@ -139,7 +134,7 @@ router.post("/google/callback", async (req, res) => {
 });
 
 router.get("/refresh-token", async (req, res) => {
-  console.log(req.cookies);
+  // Deliberately not logging req.cookies here — it carries the refresh token.
   const refreshToken = req.cookies.refreshToken;
   if (!refreshToken) {
     return res.status(403).json({ error: "No refresh token provided" });
@@ -190,7 +185,7 @@ router.get("/refresh-token", async (req, res) => {
       }
     }
   } catch (err) {
-    console.log("Error verifying refresh token:", err);
+    console.error("Error verifying refresh token:", err);
     res.status(403).json({ error: "Invalid or expired token" });
   }
 });
@@ -205,7 +200,7 @@ router.post("/revoke", async (req, res) => {
       return res.status(200).json({ message: "No refresh token to revoke" });
     }
 
-    console.log("Revoking refresh token for user");
+    log.debug("Revoking refresh token for user");
     let userId = null;
     try {
       const reqDecoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET, {
@@ -248,7 +243,7 @@ router.post("/revoke", async (req, res) => {
 
     res.status(200).json({ message: "Tokens revoked successfully" });
   } catch (e) {
-    console.log("Error revoking refresh token:", e);
+    console.error("Error revoking refresh token:", e);
     res.status(200).json({ message: "Tokens revoked successfully" });
   }
 });
