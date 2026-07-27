@@ -48,6 +48,7 @@ import {
 } from "../../utils/lineupMove";
 import { FlexStrip } from "./FlexStrip";
 import { RosterStatusLabel } from "./RosterStatusLabel";
+import { BenchColumn, type BenchSide } from "./BenchColumn";
 
 const getParamString = (param: string | string[] | undefined): string => {
     if (Array.isArray(param)) return param[0] || "";
@@ -174,6 +175,18 @@ const ScoutView: Component = () => {
         param.kind === "slots" ? param.slots : EMPTY_SLOTS;
     const yourSlotPlayers = createMemo(() => slotsOf(yourTeamParam()));
     const enemySlotPlayers = createMemo(() => slotsOf(enemyTeamParam()));
+
+    // The bench is URL state, not team state, so it renders for anonymous
+    // visitors too. While a side is still list-form there are no slots to move
+    // between, so the bench shows as disabled rather than swallowing drags.
+    const benchSide = (side: MatchupSide): BenchSide => {
+        const param = side === "you" ? yourTeamParam() : enemyTeamParam();
+        return {
+            side,
+            players: param.kind === "slots" ? param.bench : [],
+            disabled: param.kind !== "slots"
+        };
+    };
 
     const parsed = createMemo(() => parsePlayersInput(input()));
     const parsedPlayers = createMemo(() => parsed().players);
@@ -474,6 +487,10 @@ const ScoutView: Component = () => {
                                             />
                                         )}
                                     </For>
+                                    <BenchColumn
+                                        you={benchSide("you")}
+                                        onMove={moveInLineup}
+                                    />
                                 </div>
                             </Show>
                         </>
@@ -518,6 +535,18 @@ const ScoutView: Component = () => {
                                     />
                                 )}
                             </For>
+                            <Show
+                                when={
+                                    scout.hasScoutedFor("you") ||
+                                    scout.hasScoutedFor("enemy")
+                                }
+                            >
+                                <BenchColumn
+                                    you={benchSide("you")}
+                                    enemy={benchSide("enemy")}
+                                    onMove={moveInLineup}
+                                />
+                            </Show>
                         </div>
                         <Show when={armedTeam("enemy")}>
                             {(team) => (
