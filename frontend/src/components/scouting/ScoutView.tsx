@@ -40,6 +40,12 @@ import { StyledSelect } from "../StyledSelect";
 import { RoleColumn } from "./RoleColumn";
 import { MatchupColumn } from "./MatchupColumn";
 import { rowRefKey, type MatchupSide } from "./RoleSlot";
+import {
+    applyLineupMove,
+    positionOf,
+    type DragOrigin,
+    type Lineup
+} from "../../utils/lineupMove";
 import { FlexStrip } from "./FlexStrip";
 import { RosterStatusLabel } from "./RosterStatusLabel";
 
@@ -160,6 +166,14 @@ const ScoutView: Component = () => {
     // is what keeps the request inside MAX_SCOUT_PLAYERS.
     const yourPlayers = createMemo(() => slottedPlayers(yourTeamParam()));
     const enemyPlayers = createMemo(() => slottedPlayers(enemyTeamParam()));
+
+    // Slot OCCUPANCY, which is not the same as having a scout row: a starter
+    // must stay draggable when their result is missing.
+    const EMPTY_SLOTS: (PlayerId | null)[] = [null, null, null, null, null];
+    const slotsOf = (param: TeamParam): (PlayerId | null)[] =>
+        param.kind === "slots" ? param.slots : EMPTY_SLOTS;
+    const yourSlotPlayers = createMemo(() => slotsOf(yourTeamParam()));
+    const enemySlotPlayers = createMemo(() => slotsOf(enemyTeamParam()));
 
     const parsed = createMemo(() => parsePlayersInput(input()));
     const parsedPlayers = createMemo(() => parsed().players);
@@ -308,25 +322,30 @@ const ScoutView: Component = () => {
         pulseTimer = setTimeout(() => setPulse(null), 1500);
     };
 
-    const swapRoles = (side: MatchupSide, from: Role, to: Role) => {
+    const moveInLineup = (side: MatchupSide, from: DragOrigin, to: DragOrigin) => {
         const param = side === "you" ? yourTeamParam() : enemyTeamParam();
+        // A list-form param has no slots to move between. The bench renders
+        // visibly disabled in that state rather than swallowing the drag.
         if (param.kind !== "slots") return;
-        const slots = [...param.slots];
-        const fromIndex = ROLE_ORDER.indexOf(from);
-        const toIndex = ROLE_ORDER.indexOf(to);
-        const fromSlot = slots[fromIndex];
-        slots[fromIndex] = slots[toIndex];
-        slots[toIndex] = fromSlot;
+        const current: Lineup = { slots: param.slots, bench: param.bench };
+        const next = applyLineupMove(current, positionOf(from), positionOf(to));
+        // Identity, not deep equality: the transform returns its input when the
+        // move is a no-op (drop on self, empty source, out-of-range slot).
+        if (next === current) return;
+
+        // Only a change to a ROLE SLOT saves. A bench-only reorder is live in
+        // the URL and gets folded into the next promotion's payload, so it
+        // persists late rather than never.
+        const slotsChanged = next.slots.some((slot, i) => slot !== param.slots[i]);
         // Save BEFORE navigating, and fold any disarm into the same
         // setSearchParams: @solidjs/router navigates in a microtask-deferred
         // transition, so a second call this tick would merge against the
-        // pre-swap search string and revert the drag. Pass the array we just
+        // pre-move search string and revert the drag. Pass the arrays we just
         // computed for the same reason — the URL has not settled.
-        const outcome = writeBack(side, slots);
+        const outcome = slotsChanged ? writeBack(side, next.slots, next.bench) : "inert";
+        const serialized = serializeTeamParam(next.slots, next.bench);
         setSearchParams({
-            ...(side === "you"
-                ? { players: serializeTeamParam(slots) }
-                : { enemies: serializeTeamParam(slots) }),
+            ...(side === "you" ? { players: serialized } : { enemies: serialized }),
             ...(outcome === "disarmed" ? disarmPatch(side) : {})
         });
     };
@@ -446,9 +465,12 @@ const ScoutView: Component = () => {
                                             <RoleColumn
                                                 role={role}
                                                 result={yourSlots()[index()]}
+                                                occupied={
+                                                    yourSlotPlayers()[index()] !== null
+                                                }
                                                 rowRefs={rowRefs}
                                                 pulse={pulse()}
-                                                onSwap={swapRoles}
+                                                onMove={moveInLineup}
                                             />
                                         )}
                                     </For>
@@ -483,12 +505,16 @@ const ScoutView: Component = () => {
                                         role={role}
                                         you={yourSlots()[index()]}
                                         enemy={enemySlots()[index()]}
+                                        youOccupied={yourSlotPlayers()[index()] !== null}
+                                        enemyOccupied={
+                                            enemySlotPlayers()[index()] !== null
+                                        }
                                         rowRefs={rowRefs}
                                         highlightYou={highlightFor(index()).you}
                                         highlightEnemy={highlightFor(index()).enemy}
                                         pulse={pulse()}
                                         onChipClick={scrollToRow}
-                                        onSwap={swapRoles}
+                                        onMove={moveInLineup}
                                     />
                                 )}
                             </For>

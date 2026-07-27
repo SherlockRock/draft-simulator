@@ -81,7 +81,11 @@ export type RosterWriteBack = {
      *
      * The caller is responsible for acting on a `"disarmed"` outcome.
      */
-    writeBack: (side: ScoutSide, slots: (PlayerId | null)[]) => WriteBackOutcome;
+    writeBack: (
+        side: ScoutSide,
+        slots: (PlayerId | null)[],
+        bench?: PlayerId[]
+    ) => WriteBackOutcome;
     /**
      * submit()-time URL hygiene (decision 26a): should that side's team param
      * survive this submit? `setSearchParams` merges, so a stale id would
@@ -154,17 +158,26 @@ export function createRosterWriteBack(deps: RosterWriteBackDeps): RosterWriteBac
     // `teamId` is stashed alongside the lineup, NOT re-read at flush time: if
     // the `team` param changes between the drag and the flush, the stashed
     // lineup would otherwise be written onto whatever team the URL names then.
+    // The BENCH is stashed for the identical reason — re-reading it from the
+    // URL at flush time would commit whatever the normalization effect wrote in
+    // the meantime, which is the closest that effect ever gets to the database.
     const [pendingGesture, setPendingGesture] = createSignal<{
         side: ScoutSide;
         teamId: string;
         slots: (PlayerId | null)[];
+        bench: PlayerId[];
     } | null>(null);
 
     // Called ONLY from the drag gesture and from the flush effect below (which
-    // replays an already-made gesture). `slots` is passed in rather than
-    // re-read from the URL because setSearchParams has not settled when this
-    // runs, and the debounce would otherwise persist a stale lineup.
-    const writeBack = (side: ScoutSide, slots: (PlayerId | null)[]): WriteBackOutcome => {
+    // replays an already-made gesture). `slots` and `bench` are passed in rather
+    // than re-read from the URL because setSearchParams has not settled when
+    // this runs, and the debounce would otherwise persist a stale lineup. A
+    // promotion changes both arrays at once, so that reasoning now covers two.
+    const writeBack = (
+        side: ScoutSide,
+        slots: (PlayerId | null)[],
+        bench: PlayerId[] = []
+    ): WriteBackOutcome => {
         const teamId = deps.teamIdFor(side);
         if (!teamId) return "inert";
         const team = resolveWriteBackTeam(teamId, deps.ownedTeams());
@@ -174,7 +187,7 @@ export function createRosterWriteBack(deps: RosterWriteBackDeps): RosterWriteBac
             // (anonymous user) stays pending forever, so keying off that would
             // strand the gesture instead of correctly discarding it.
             if (deps.isSignedIn() && !deps.teamsResolved() && !deps.teamsFailed()) {
-                setPendingGesture({ side, teamId, slots });
+                setPendingGesture({ side, teamId, slots, bench });
                 return "stashed";
             }
             return "inert";
@@ -203,7 +216,7 @@ export function createRosterWriteBack(deps: RosterWriteBackDeps): RosterWriteBac
             );
             return "disarmed";
         }
-        const merged = mergeScoutedRoster(storedPlayers, slots);
+        const merged = mergeScoutedRoster(storedPlayers, slots, bench);
         if (!merged.ok) {
             deps.notifyError(
                 OVER_CAP_TOAST(team.id),
@@ -231,7 +244,7 @@ export function createRosterWriteBack(deps: RosterWriteBackDeps): RosterWriteBac
         if (currentTeamId !== pending.teamId) return;
         // Nothing is navigating on this tick (the flush is driven by ["teams"]
         // resolving, not by a URL change), so a standalone disarm is safe here.
-        if (writeBack(pending.side, pending.slots) === "disarmed") {
+        if (writeBack(pending.side, pending.slots, pending.bench) === "disarmed") {
             deps.disarm(pending.side);
         }
     });

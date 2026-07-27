@@ -5,6 +5,7 @@ import type { Role, RosterInput, Team } from "@draft-sim/shared-types";
 import { SCOUT_REGION_OPTIONS } from "@draft-sim/shared-types";
 import { updateTeamRoster } from "../utils/actions";
 import { parsePlayersInput, ROLE_ORDER } from "../utils/playerStats";
+import { applyLineupMove } from "../utils/lineupMove";
 import { StyledSelect } from "./StyledSelect";
 
 type Slot = { gameName: string; tagLine: string } | null;
@@ -50,44 +51,19 @@ export const TeamRosterEditor: Component<{
 
     const totalPlayers = () => slots().filter((s) => s !== null).length + bench().length;
 
-    // Move the dragged player to a target, displacing whatever was there back
-    // to the bench (slots hold at most one player). Bench drops insert AT the
-    // target index (so dragging reorders the bench, which controls ordinal /
-    // the "first five"), adjusting for the removal when the source was an
-    // earlier bench position.
+    // Every drop exchanges the two positions, via the same pure transform
+    // /scout's bench uses — the two surfaces must not drift. Dropping a player
+    // on an occupied role slot now SWAPS the two rather than pushing the
+    // displaced player to the end of the bench, and a bench-to-bench drag
+    // trades the two positions rather than inserting at the target.
     const moveTo = (target: DragFrom) => {
         const from = dragFrom();
         setDragFrom(null);
         if (!from) return;
 
-        const nextSlots = [...slots()];
-        const nextBench = [...bench()];
-
-        let moving: Slot = null;
-        if (from.kind === "slot") {
-            moving = nextSlots[from.index];
-            nextSlots[from.index] = null;
-        } else {
-            const [p] = nextBench.splice(from.index, 1);
-            moving = p ?? null;
-        }
-        if (!moving) return;
-
-        if (target.kind === "slot") {
-            const displaced = nextSlots[target.index];
-            nextSlots[target.index] = moving;
-            if (displaced) nextBench.push(displaced);
-        } else {
-            // target.index was computed against the pre-removal bench; if we
-            // removed an earlier bench item, shift the insert point left one.
-            const insertAt =
-                from.kind === "bench" && from.index < target.index
-                    ? target.index - 1
-                    : target.index;
-            nextBench.splice(insertAt, 0, moving);
-        }
-        setSlots(nextSlots);
-        setBench(nextBench);
+        const next = applyLineupMove({ slots: slots(), bench: bench() }, from, target);
+        setSlots(next.slots);
+        setBench(next.bench);
     };
 
     // × on a role slot demotes the player to the bench (they leave the role but
