@@ -87,13 +87,11 @@ router.get("/verify-canvas-link", async (req, res) => {
     const user = await getUserFromRequest(req);
 
     if (!user) {
-      console.log("NO USER - Returning 401");
       return res.status(401).json({ error: "Not authenticated" });
     }
 
     const { token } = req.query;
     if (!token) {
-      console.log("No token provided");
       return res.status(400).json({ error: "Share token is required" });
     }
 
@@ -101,7 +99,6 @@ router.get("/verify-canvas-link", async (req, res) => {
     const canvas = await Canvas.findByPk(decoded.canvasId);
 
     if (!canvas) {
-      console.log("CANVAS NOT FOUND for ID:", decoded.canvasId);
       return res.status(404).json({ error: "Canvas not found" });
     }
 

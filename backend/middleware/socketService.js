@@ -1,4 +1,6 @@
 // services/socketService.js
+const log = require("../utils/logger");
+
 class SocketService {
   constructor() {
     this.io = null;
@@ -32,7 +34,9 @@ class SocketService {
       console.warn("Socket service not initialized, skipping emit");
       return;
     }
-    console.log(`Emitting to room ${room}: ${event}`, data);
+    // Payload stays behind the debug gate: canvas broadcasts carry whole
+    // group/draft arrays and dumping one cost ~170 log lines per emit.
+    log.debug(`Emitting to room ${room}: ${event}`, data);
     this.io.to(room).emit(event, data, room);
   }
 

@@ -1,6 +1,7 @@
 const { getActiveDraftIds, getState } = require("./versusStateManager");
 const { processPickLock } = require("../socketHandlers/versusHandlers");
 const { VERSUS_PICK_ORDER } = require("../utils/versusPickOrder");
+const log = require("../utils/logger");
 
 const PICK_TIMER_DURATION = 30000; // 30 seconds in milliseconds
 
@@ -45,10 +46,9 @@ async function checkTimers() {
       const currentPick = VERSUS_PICK_ORDER[state.currentPickIndex];
 
       if (currentPick) {
-        console.log(
+        log.debug(
           `Timer expired for draft ${draftId}, auto-locking for team ${currentPick.team}`
         );
-        console.log(`Hovered champions:`, state.hoveredChampions);
         await processPickLock(io, draftId, currentPick.team);
       }
     }

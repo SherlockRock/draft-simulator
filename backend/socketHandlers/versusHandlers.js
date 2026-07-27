@@ -1,3 +1,4 @@
+const log = require("../utils/logger");
 const Draft = require("../models/Draft");
 const VersusDraft = require("../models/VersusDraft");
 const VersusParticipant = require("../models/VersusParticipant");
@@ -30,12 +31,6 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
   wrap("versusJoin", async (data) => {
     try {
       const { linkToken, versusDraftId, storedRole, defaultToSpectator } = data;
-      console.log("versusJoin:", {
-        linkToken,
-        versusDraftId,
-        storedRole: storedRole,
-        defaultToSpectator,
-      });
 
       let versusDraft;
 
@@ -81,7 +76,7 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
 
       // Join the versus draft room
       socket.join(`versus:${versusDraft.id}`);
-      console.log(`Socket ${socket.id} joined versus:${versusDraft.id}`);
+      log.debug(`Socket ${socket.id} joined versus:${versusDraft.id}`);
 
       // Get current participants from session manager (who's connected now)
       const availableRoles = versusSessionManager.getAvailableRoles(versusDraft.id);
@@ -115,7 +110,7 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
           );
 
           if (captainClaimBlocked) {
-            console.log(
+            log.debug(
               `Reclaim blocked for ${dbParticipant.role} in concluded versus:${versusDraft.id} after completion window`,
             );
           } else if (roleAvailable) {
@@ -136,7 +131,7 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
               lastSeenAt: new Date(),
             });
 
-            console.log(`User reclaimed role: ${dbParticipant.role}`);
+            log.debug(`User reclaimed role: ${dbParticipant.role}`);
 
             // Broadcast participant update to all users in the session
             const updatedParticipants = versusSessionManager.getParticipants(
@@ -146,18 +141,15 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
               participants: updatedParticipants,
             });
           } else {
-            console.log(
+            log.debug(
               `Role ${dbParticipant.role} no longer available, reclaim failed`,
             );
           }
-        } else {
-          console.log("Reclaim token not found in DB");
         }
       }
 
       // If no stored role but defaultToSpectator is requested, auto-join as spectator
       if (!myParticipant && defaultToSpectator) {
-        console.log("No stored role, defaulting to spectator");
         const visitorId = socket.user?.id || socket.id;
 
         // Add as spectator to memory session
@@ -188,8 +180,6 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
         });
       }
 
-      console.log("emitting versusJoinResponse");
-
       const response = {
         success: true,
         versusDraft: versusDraft.toJSON(),
@@ -212,8 +202,6 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
 
       // Send join response
       socket.emit("versusJoinResponse", response);
-
-      console.log("versusJoinResponse emitted to socket", socket.id);
     } catch (error) {
       console.error("Error in versusJoin:", error);
       socket.emit("versusJoinResponse", {
@@ -227,7 +215,6 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
   wrap("versusSelectRole", async (data) => {
     try {
       const { versusDraftId, role } = data;
-      console.log("versusSelectRole:", { versusDraftId, role });
 
       if (!["team1_captain", "team2_captain", "spectator"].includes(role)) {
         socket.emit("versusRoleSelectResponse", {
@@ -282,7 +269,7 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
         role,
       );
 
-      console.log(`Visitor ${visitorId} selected role: ${role}`);
+      log.debug(`Visitor ${visitorId} selected role: ${role}`);
 
       // For captain roles, clear old reclaim tokens before saving new one
       // This invalidates any previous claim to this role
@@ -337,7 +324,6 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
   wrap("versusLeave", async (data) => {
     try {
       const { versusDraftId } = data;
-      console.log("versusLeave:", { versusDraftId, socketId: socket.id });
 
       const participant = versusSessionManager.removeParticipant(
         versusDraftId,
@@ -352,7 +338,7 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
           participants: updatedParticipants,
         });
 
-        console.log(
+        log.debug(
           `Visitor ${participant.visitorId} left versus:${versusDraftId}`,
         );
       }
@@ -368,7 +354,6 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
   wrap("versusReleaseRole", async (data) => {
     try {
       const { versusDraftId } = data;
-      console.log("versusReleaseRole:", { versusDraftId, socketId: socket.id });
 
       const participant = versusSessionManager.removeParticipant(
         versusDraftId,
@@ -391,7 +376,7 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
           participants: updatedParticipants,
         });
 
-        console.log(
+        log.debug(
           `Visitor ${participant.visitorId} released role ${participant.role} in versus:${versusDraftId}`,
         );
       }
@@ -426,7 +411,7 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
             participants: updatedParticipants,
           });
 
-          console.log(
+          log.debug(
             `Visitor ${participant.visitorId} disconnected from versus:${versusDraftId}`,
           );
         }
@@ -476,7 +461,7 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
           );
 
           if (captainClaimBlocked) {
-            console.log(
+            log.debug(
               `Reconnect reclaim blocked for ${dbParticipant.role} in concluded versus:${versusDraftId} after completion window`,
             );
           } else if (roleAvailable) {
@@ -495,7 +480,7 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
               lastSeenAt: new Date(),
             });
 
-            console.log(
+            log.debug(
               `User reclaimed role on reconnect: ${dbParticipant.role}`,
             );
           }
@@ -559,7 +544,7 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
       socket.join(`versus:${versusDraftId}`);
       socket.join(`draft:${draftId}`);
 
-      console.log(
+      log.debug(
         `${socket.id} joined versus:${versusDraftId} and draft:${draftId} as ${role}`,
       );
 
@@ -1359,7 +1344,6 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
   wrap("sendVersusMessage", async (data) => {
     try {
       const { versusDraftId, message, role, username } = data;
-      console.log("sendVersusMessage:", data);
       io.to(`versus:${versusDraftId}`).emit("newVersusMessage", {
         username: username || socket.user?.display_name || socket.user?.name || socket.id,
         role,
@@ -1468,13 +1452,13 @@ function setupVersusHandlers(io, socket, versusSessionManager, wrapSocketHandler
 async function processPickLock(io, draftId, team) {
   const state = getState(draftId);
   if (!state) {
-    console.log(`processPickLock: No state found for draft ${draftId}`);
+    log.debug(`processPickLock: No state found for draft ${draftId}`);
     return;
   }
 
   const draft = await Draft.findByPk(draftId);
   if (!draft || draft.completed) {
-    console.log(`processPickLock: Draft not found or completed`);
+    log.debug(`processPickLock: Draft not found or completed`);
     return;
   }
 

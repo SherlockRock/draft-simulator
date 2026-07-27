@@ -1,27 +1,28 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const log = require("../utils/logger");
 
+// Never log the token or the raw cookie header — this ran on every
+// authenticated request and put live access tokens in plaintext in the
+// production log store. The user id is enough to trace a request.
 const getUserFromRequest = async (req) => {
   try {
-    console.log("getUserFromRequest - All cookies:", req.cookies);
-    console.log("getUserFromRequest - Cookie header:", req.headers.cookie);
     const token = req.cookies.accessToken;
-    console.log("getUserFromRequest - accessToken:", token ? "EXISTS (length: " + token.length + ")" : "MISSING");
 
     if (token) {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      console.log("getUserFromRequest - Token decoded, user ID:", decoded.id);
       if (decoded) {
         const user = await User.findByPk(decoded.id);
-        console.log("getUserFromRequest - User found:", user ? `ID ${user.id}, Email: ${user.email}` : "NULL");
+        log.debug(
+          `getUserFromRequest - user ${decoded.id}: ${user ? "found" : "not found"}`,
+        );
         return user;
       }
     }
-    console.log("getUserFromRequest - Returning null (no token)");
     return null;
   } catch (error) {
     // It's okay if token is invalid or expired, just means user is not logged in.
-    console.log("getUserFromRequest - Error:", error.message);
+    log.debug("getUserFromRequest - rejected:", error.message);
     return null;
   }
 };
