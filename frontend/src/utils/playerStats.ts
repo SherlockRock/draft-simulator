@@ -247,13 +247,28 @@ export function computeMainRole(entries: ChampionStatEntry[]): Role | null {
 const encodeChunk = (p: PlayerId): string =>
     `${encodeURIComponent(p.gameName.trim())}#${encodeURIComponent(p.tagLine.trim())}`;
 
+// Mirrors MAX_ROSTER in backend/routes/teams.js. Lives here because the URL
+// codec caps the bench with it, and rosterWriteBack.ts already imports from
+// this module (re-exported there for its existing consumers).
+export const MAX_ROSTER = 10;
+
 const decodeChunk = (chunk: string): PlayerId | null => {
     const hash = chunk.indexOf("#");
     if (hash === -1) return null;
-    const gameName = decodeURIComponent(chunk.slice(0, hash));
-    const tagLine = decodeURIComponent(chunk.slice(hash + 1));
-    if (!gameName || !tagLine) return null;
-    return { gameName, tagLine };
+    try {
+        // Trim mirrors encodeChunk's own .trim(): without it a " " gameName
+        // parses, re-serializes to a blank field, and then parses to null —
+        // making the parse/serialize round-trip non-idempotent.
+        const gameName = decodeURIComponent(chunk.slice(0, hash)).trim();
+        const tagLine = decodeURIComponent(chunk.slice(hash + 1)).trim();
+        if (!gameName || !tagLine) return null;
+        return { gameName, tagLine };
+    } catch {
+        // An invalid percent-escape ("%ZZ") throws out of decodeURIComponent.
+        // parseTeamParam runs inside a render-time memo, so a hand-edited or
+        // truncated URL must degrade to an empty slot, not blank the page.
+        return null;
+    }
 };
 
 export function serializePlayersParam(players: PlayerId[]): string {
@@ -278,8 +293,10 @@ export function parsePlayersParam(raw: string): PlayerId[] {
 }
 
 export type TeamParam =
-    | { kind: "slots"; slots: (PlayerId | null)[] }
+    | { kind: "slots"; slots: (PlayerId | null)[]; bench: PlayerId[] }
     | { kind: "list"; players: PlayerId[] };
+
+const isNamed = (p: PlayerId): boolean => !!p.gameName.trim() && !!p.tagLine.trim();
 
 // Matchup-mode team param: "s:" prefix + 5 comma-separated slots in ROLE_ORDER,
 // empty slot = unfilled role — the role ASSIGNMENT itself is URL state, so
@@ -287,8 +304,27 @@ export type TeamParam =
 // list and a 5-slot assignment are otherwise byte-identical. ":" is always
 // percent-encoded by encodeURIComponent inside names, so the prefix cannot
 // collide with player data.
-export function serializeTeamParam(slots: (PlayerId | null)[]): string {
-    return `s:${slots.map((p) => (p ? encodeChunk(p) : "")).join(",")}`;
+//
+// Chunks past the fifth are the BENCH, in order. Output is byte-identical to
+// the bench-free form whenever the bench is empty, so every existing link keeps
+// working. The cap is on PLAYERS, not chunks: ten players need 15 - filledSlots
+// chunks when roles are unfilled, so capping chunks at ten would lose players.
+export function serializeTeamParam(
+    slots: (PlayerId | null)[],
+    bench: PlayerId[] = []
+): string {
+    const slotChunks = slots
+        .slice(0, ROLE_ORDER.length)
+        .map((p) => (p && isNamed(p) ? encodeChunk(p) : ""));
+    while (slotChunks.length < ROLE_ORDER.length) slotChunks.push("");
+
+    const filled = slotChunks.filter((c) => c !== "").length;
+    const benchChunks = bench
+        .filter(isNamed)
+        .slice(0, Math.max(0, MAX_ROSTER - filled))
+        .map(encodeChunk);
+
+    return `s:${[...slotChunks, ...benchChunks].join(",")}`;
 }
 
 // "s:" prefix = slot-form, position = role. Anything else = an unordered list
@@ -296,15 +332,20 @@ export function serializeTeamParam(slots: (PlayerId | null)[]): string {
 export function parseTeamParam(raw: string): TeamParam {
     if (!raw) return { kind: "list", players: [] };
     if (raw.startsWith("s:")) {
-        const slots = raw
-            .slice(2)
-            .split(",")
-            .map(decodeChunk)
-            .slice(0, ROLE_ORDER.length);
+        const chunks = raw.slice(2).split(",");
+        const slots = chunks.slice(0, ROLE_ORDER.length).map(decodeChunk);
         while (slots.length < ROLE_ORDER.length) {
             slots.push(null);
         }
-        return { kind: "slots", slots };
+        // Empty chunks are meaningful only as unfilled ROLES; past index 4 they
+        // are dropped, and serialization never emits one there.
+        const filled = slots.filter((s) => s !== null).length;
+        const bench = chunks
+            .slice(ROLE_ORDER.length)
+            .map(decodeChunk)
+            .filter((p): p is PlayerId => p !== null)
+            .slice(0, Math.max(0, MAX_ROSTER - filled));
+        return { kind: "slots", slots, bench };
     }
     return {
         kind: "list",
@@ -316,16 +357,21 @@ export function parseTeamParam(raw: string): TeamParam {
 }
 
 // Submit-time serialization: re-scouting the SAME roster keeps the existing
-// slot assignment (manual drag fixes survive an Enter/Scout press); any roster
-// change falls back to list form so auto-assign runs on the new lineup.
+// slot assignment (manual drag fixes survive an Enter/Scout press) AND its
+// bench; any roster change falls back to list form so auto-assign runs on the
+// new lineup. The comparison is against the full roster, not the slotted five —
+// otherwise re-scouting would silently drop the bench.
 export function serializeSubmitParam(current: TeamParam, ids: PlayerId[]): string {
     const currentPlayers =
         current.kind === "slots"
-            ? current.slots.filter((s): s is PlayerId => s !== null)
+            ? [
+                  ...current.slots.filter((s): s is PlayerId => s !== null),
+                  ...current.bench
+              ]
             : [];
     return current.kind === "slots" &&
         canonicalPlayersKey(currentPlayers) === canonicalPlayersKey(ids)
-        ? serializeTeamParam(current.slots)
+        ? serializeTeamParam(current.slots, current.bench)
         : serializePlayersParam(ids);
 }
 

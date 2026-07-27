@@ -1,8 +1,9 @@
 import type { Team, TeamPlayer, RosterInput } from "@draft-sim/shared-types";
-import { ROLE_ORDER, type PlayerId } from "./playerStats";
+import { MAX_ROSTER, ROLE_ORDER, type PlayerId } from "./playerStats";
 
-// Mirrors MAX_ROSTER in backend/routes/teams.js.
-export const MAX_ROSTER = 10;
+// Mirrors MAX_ROSTER in backend/routes/teams.js. Defined in playerStats.ts,
+// which needs it to cap the URL bench; re-exported here for existing consumers.
+export { MAX_ROSTER };
 
 export type MergeResult =
     | { ok: true; players: RosterInput[] }
