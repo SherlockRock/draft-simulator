@@ -17,17 +17,19 @@ import {
     type Role,
     type Team
 } from "@draft-sim/shared-types";
-import { scoutPlayers } from "../../utils/scoutingApi";
 import { fetchTeams, updateTeamRoster } from "../../utils/actions";
 import { useUser } from "../../userProvider";
 import { createRosterWriteBack } from "./rosterWriteBackState";
+import { createScoutFetch } from "./scoutFetchCoordinator";
 import {
     serializeSubmitParam,
     parsePlayersInput,
     formatPlayersInput,
     parseTeamParam,
     serializeTeamParam,
-    canonicalPlayersKey,
+    slottedPlayers,
+    MAX_ROSTER,
+    fullRoster,
     autoAssignRoles,
     computeSharedChamps,
     ROLE_ORDER,
@@ -39,42 +41,36 @@ import { StyledSelect } from "../StyledSelect";
 import { RoleColumn } from "./RoleColumn";
 import { MatchupColumn } from "./MatchupColumn";
 import { rowRefKey, type MatchupSide } from "./RoleSlot";
+import {
+    applyLineupMove,
+    positionOf,
+    touchesSlot,
+    type DragOrigin,
+    type Lineup
+} from "../../utils/lineupMove";
 import { FlexStrip } from "./FlexStrip";
 import { RosterStatusLabel } from "./RosterStatusLabel";
+import { BenchColumn, type BenchSide } from "./BenchColumn";
 
 const getParamString = (param: string | string[] | undefined): string => {
     if (Array.isArray(param)) return param[0] || "";
     return param || "";
 };
 
-const teamPlayers = (param: TeamParam): PlayerId[] =>
-    param.kind === "list"
-        ? param.players
-        : param.slots.filter((s): s is PlayerId => s !== null);
-
-const playerKey = (p: { gameName: string; tagLine: string }): string =>
-    `${p.gameName.toLowerCase()}#${p.tagLine.toLowerCase()}`;
-
-const resultsFor = (
-    players: PlayerId[],
-    results: PlayerScoutResult[]
-): PlayerScoutResult[] =>
-    players.flatMap((p) => {
-        const result = results.find((r) => playerKey(r.input) === playerKey(p));
-        return result ? [result] : [];
-    });
-
 const slotResults = (
     param: TeamParam,
-    results: PlayerScoutResult[]
+    lookup: (player: PlayerId) => PlayerScoutResult | null
 ): (PlayerScoutResult | null)[] =>
     param.kind === "slots"
-        ? param.slots.map((slot) =>
-              slot
-                  ? (results.find((r) => playerKey(r.input) === playerKey(slot)) ?? null)
-                  : null
-          )
+        ? param.slots.map((slot) => (slot ? lookup(slot) : null))
         : [null, null, null, null, null];
+
+// A throttle rejection is not an upstream outage. Saying "u.gg may be
+// unavailable" when the user simply dragged four times inside ten seconds sends
+// them away instead of making them wait a moment.
+const THROTTLED_HINT =
+    "Scouting too fast — only a few lookups are allowed every 10 seconds. Wait a moment and try again.";
+const OUTAGE_HINT = "u.gg may be unavailable — try again.";
 
 const toAssigned = (slots: (PlayerScoutResult | null)[]): (AssignedPlayer | null)[] =>
     slots.map((slot, index) =>
@@ -157,58 +153,89 @@ const ScoutView: Component = () => {
 
     // Editable state, seeded from the URL so a shared link stays editable.
     const [region, setRegion] = createSignal(activeRegion());
+    // Seeded from the FULL roster, not the slotted five: seeding from the five
+    // would make pressing Scout re-serialize five and delete the bench.
     const [input, setInput] = createSignal(
-        formatPlayersInput(teamPlayers(parseTeamParam(playersParam())))
+        formatPlayersInput(fullRoster(parseTeamParam(playersParam())))
     );
     const [enemyInput, setEnemyInput] = createSignal(
-        formatPlayersInput(teamPlayers(parseTeamParam(enemiesParam())))
+        formatPlayersInput(fullRoster(parseTeamParam(enemiesParam())))
     );
     const [pulse, setPulse] = createSignal<{ keys: Set<string> } | null>(null);
 
     const yourTeamParam = createMemo(() => parseTeamParam(playersParam()));
     const enemyTeamParam = createMemo(() => parseTeamParam(enemiesParam()));
-    const yourPlayers = createMemo(() => teamPlayers(yourTeamParam()));
-    const enemyPlayers = createMemo(() => teamPlayers(enemyTeamParam()));
+    // The scouted five. Bench players are deliberately never fetched, and this
+    // is what keeps the request inside MAX_SCOUT_PLAYERS.
+    const yourPlayers = createMemo(() => slottedPlayers(yourTeamParam()));
+    const enemyPlayers = createMemo(() => slottedPlayers(enemyTeamParam()));
+
+    // Slot OCCUPANCY, which is not the same as having a scout row: a starter
+    // must stay draggable when their result is missing.
+    const EMPTY_SLOTS: (PlayerId | null)[] = [null, null, null, null, null];
+    const slotsOf = (param: TeamParam): (PlayerId | null)[] =>
+        param.kind === "slots" ? param.slots : EMPTY_SLOTS;
+    const yourSlotPlayers = createMemo(() => slotsOf(yourTeamParam()));
+    const enemySlotPlayers = createMemo(() => slotsOf(enemyTeamParam()));
+
+    // The bench is URL state, not team state, so it renders for anonymous
+    // visitors too. While a side is still list-form there are no slots to move
+    // between, so the bench shows as disabled rather than swallowing drags.
+    const benchSide = (side: MatchupSide): BenchSide => {
+        const param = side === "you" ? yourTeamParam() : enemyTeamParam();
+        return {
+            side,
+            players: param.kind === "slots" ? param.bench : [],
+            disabled: param.kind !== "slots"
+        };
+    };
 
     const parsed = createMemo(() => parsePlayersInput(input()));
     const parsedPlayers = createMemo(() => parsed().players);
     const parsedEnemy = createMemo(() => parsePlayersInput(enemyInput()));
     const parsedEnemyPlayers = createMemo(() => parsedEnemy().players);
-    const overCap = createMemo(() => parsedPlayers().length > MAX_SCOUT_PLAYERS);
-    const enemyOverCap = createMemo(
-        () => parsedEnemyPlayers().length > MAX_SCOUT_PLAYERS
-    );
+    // Ten per side now, not five: the first five are scouted and the rest go to
+    // the bench, so only an eleventh player is actually dropped.
+    const overCap = createMemo(() => parsedPlayers().length > MAX_ROSTER);
+    const enemyOverCap = createMemo(() => parsedEnemyPlayers().length > MAX_ROSTER);
 
-    const yourQuery = useQuery(() => ({
-        queryKey: ["scoutPlayers", activeRegion(), canonicalPlayersKey(yourPlayers())],
-        queryFn: () => scoutPlayers({ region: activeRegion(), players: yourPlayers() }),
-        enabled: yourPlayers().length > 0,
-        staleTime: 5 * 60 * 1000
-    }));
-
-    const enemyQuery = useQuery(() => ({
-        queryKey: ["scoutPlayers", enemyRegion(), canonicalPlayersKey(enemyPlayers())],
-        queryFn: () => scoutPlayers({ region: enemyRegion(), players: enemyPlayers() }),
-        enabled: matchupMode() && enemyPlayers().length > 0,
-        staleTime: 5 * 60 * 1000
-    }));
+    // Columns read per-player cache entries; fetching stays batched. Created
+    // unconditionally here, in the component body and OUTSIDE the render gate:
+    // observers made inside `<Show when={hasScoutedFor(...)}>` would have no
+    // observer for the data the gate itself reads, so the gate would never turn
+    // reactive and the page would be permanently blank.
+    const scout = createScoutFetch({
+        queryClient,
+        slottedFor: (side) => (side === "you" ? yourPlayers() : enemyPlayers()),
+        regionFor: (side) => (side === "you" ? activeRegion() : enemyRegion()),
+        isActive: (side) => side === "you" || matchupMode()
+    });
 
     const canScout = createMemo(
         () => parsedPlayers().length > 0 || parsedEnemyPlayers().length > 0
     );
-    const scouting = createMemo(() => yourQuery.isFetching || enemyQuery.isFetching);
+    const scouting = createMemo(
+        () => scout.isFetching("you") || scout.isFetching("enemy")
+    );
     const yourSlots = createMemo(() =>
-        slotResults(yourTeamParam(), yourQuery.data?.results ?? [])
+        slotResults(yourTeamParam(), (p) => scout.resultFor("you", p))
     );
     const enemySlots = createMemo(() =>
-        slotResults(enemyTeamParam(), enemyQuery.data?.results ?? [])
+        slotResults(enemyTeamParam(), (p) => scout.resultFor("enemy", p))
+    );
+    const throttled = createMemo(
+        () =>
+            scout.errorFor("you") === "throttled" ||
+            scout.errorFor("enemy") === "throttled"
     );
 
     const submit = () => {
         const you = parsed();
         const enemy = parsedEnemy();
-        const yourIds = you.players.slice(0, MAX_SCOUT_PLAYERS);
-        const enemyIds = enemy.players.slice(0, MAX_SCOUT_PLAYERS);
+        // Ten per side, matching MAX_ROSTER: a paste of eight no longer hides
+        // anyone, it benches the last three.
+        const yourIds = you.players.slice(0, MAX_ROSTER);
+        const enemyIds = enemy.players.slice(0, MAX_ROSTER);
         if (yourIds.length === 0 && enemyIds.length === 0) return;
         const nextRegion = you.region ?? region();
         if (you.region) setRegion(you.region);
@@ -226,16 +253,23 @@ const ScoutView: Component = () => {
             // setSearchParams MERGES, so a stale team id would outlive the
             // roster it describes (decision 26a).
             // Omitting a key keeps it; passing undefined deletes it.
-            ...(shouldKeepTeamParam("you", yourIds) ? {} : { team: undefined }),
-            ...(shouldKeepTeamParam("enemy", enemyIds) ? {} : { enemyTeam: undefined })
+            //
+            // The overlap test stays SLOTS-ONLY, deliberately narrowed to match
+            // the write-time check rather than widened to the ten `submitted`
+            // now carries — shipping a second submit/write asymmetry would be
+            // worse than the accepted cost, which is that a user whose only
+            // roster overlap sits at text positions 6-10 is silently disarmed.
+            ...(shouldKeepTeamParam("you", yourIds.slice(0, MAX_SCOUT_PLAYERS))
+                ? {}
+                : { team: undefined }),
+            ...(shouldKeepTeamParam("enemy", enemyIds.slice(0, MAX_SCOUT_PLAYERS))
+                ? {}
+                : { enemyTeam: undefined })
         });
     };
 
-    const assignFrom = (
-        players: PlayerId[],
-        results: PlayerScoutResult[]
-    ): (PlayerId | null)[] =>
-        autoAssignRoles(resultsFor(players, results)).map((slot) =>
+    const assignFrom = (side: MatchupSide, players: PlayerId[]): (PlayerId | null)[] =>
+        autoAssignRoles(scout.resultsFor(side, players)).map((slot) =>
             slot ? { gameName: slot.input.gameName, tagLine: slot.input.tagLine } : null
         );
 
@@ -244,6 +278,23 @@ const ScoutView: Component = () => {
     // side) never gets rewritten into an empty slot-form string like "s:,,,,".
     const isDone = (param: TeamParam): boolean =>
         param.kind === "slots" || param.players.length === 0;
+
+    // BOTH branches carry the bench. The slot-form branch is reachable only in
+    // matchup mode while the OTHER side is a non-empty list-form side awaiting
+    // normalization — but there, re-serializing only the slots computes a
+    // five-chunk replacement for a seven-chunk param, `changed` fires, and the
+    // { replace: true } navigation wipes the bench with no back button.
+    const normalized = (side: MatchupSide, param: TeamParam, current: string): string => {
+        if (param.kind === "slots") return serializeTeamParam(param.slots, param.bench);
+        if (param.players.length === 0) return current;
+        // Decision 40: the first five are scouted and auto-assigned, the rest
+        // become bench. Capped at MAX_ROSTER so this first write never emits
+        // more bench chunks than parse will keep.
+        return serializeTeamParam(
+            assignFrom(side, slottedPlayers(param)),
+            fullRoster(param).slice(MAX_SCOUT_PLAYERS)
+        );
+    };
 
     // Normalizes list-form params into slot-form so role assignment is URL
     // state. This runs on load and is NOT a user gesture — write-back must
@@ -254,32 +305,24 @@ const ScoutView: Component = () => {
         const inMatchup = matchupMode();
         if (isDone(you) && (!inMatchup || isDone(enemy))) return;
         // Wait for the data auto-assign needs, but only for a side that has any.
-        if (you.kind === "list" && you.players.length > 0 && !yourQuery.data) return;
+        // The COMPLETE predicate, not the settled-or-failed one: normalizing on
+        // partial data would freeze a half-guessed role assignment into the URL.
+        if (
+            you.kind === "list" &&
+            you.players.length > 0 &&
+            !scout.hasCompleteResultsFor("you")
+        )
+            return;
         if (
             inMatchup &&
             enemy.kind === "list" &&
             enemy.players.length > 0 &&
-            !enemyQuery.data
+            !scout.hasCompleteResultsFor("enemy")
         )
             return;
 
-        const nextPlayers =
-            you.kind === "slots"
-                ? serializeTeamParam(you.slots)
-                : you.players.length === 0
-                  ? playersParam()
-                  : serializeTeamParam(
-                        assignFrom(you.players, yourQuery.data?.results ?? [])
-                    );
-        const nextEnemies = inMatchup
-            ? enemy.kind === "slots"
-                ? serializeTeamParam(enemy.slots)
-                : enemy.players.length === 0
-                  ? enemiesParam()
-                  : serializeTeamParam(
-                        assignFrom(enemy.players, enemyQuery.data?.results ?? [])
-                    )
-            : null;
+        const nextPlayers = normalized("you", you, playersParam());
+        const nextEnemies = inMatchup ? normalized("enemy", enemy, enemiesParam()) : null;
 
         const changed =
             nextPlayers !== playersParam() ||
@@ -312,25 +355,30 @@ const ScoutView: Component = () => {
         pulseTimer = setTimeout(() => setPulse(null), 1500);
     };
 
-    const swapRoles = (side: MatchupSide, from: Role, to: Role) => {
+    const moveInLineup = (side: MatchupSide, from: DragOrigin, to: DragOrigin) => {
         const param = side === "you" ? yourTeamParam() : enemyTeamParam();
+        // A list-form param has no slots to move between. The bench renders
+        // visibly disabled in that state rather than swallowing the drag.
         if (param.kind !== "slots") return;
-        const slots = [...param.slots];
-        const fromIndex = ROLE_ORDER.indexOf(from);
-        const toIndex = ROLE_ORDER.indexOf(to);
-        const fromSlot = slots[fromIndex];
-        slots[fromIndex] = slots[toIndex];
-        slots[toIndex] = fromSlot;
+        const current: Lineup = { slots: param.slots, bench: param.bench };
+        const next = applyLineupMove(current, positionOf(from), positionOf(to));
+        // Identity, not deep equality: the transform returns its input when the
+        // move is a no-op (drop on self, empty source, out-of-range slot).
+        if (next === current) return;
+
+        // Only a change to a ROLE SLOT saves. A bench-only reorder is live in
+        // the URL and gets folded into the next promotion's payload, so it
+        // persists late rather than never.
+        const slotsChanged = touchesSlot(current, next);
         // Save BEFORE navigating, and fold any disarm into the same
         // setSearchParams: @solidjs/router navigates in a microtask-deferred
         // transition, so a second call this tick would merge against the
-        // pre-swap search string and revert the drag. Pass the array we just
+        // pre-move search string and revert the drag. Pass the arrays we just
         // computed for the same reason — the URL has not settled.
-        const outcome = writeBack(side, slots);
+        const outcome = slotsChanged ? writeBack(side, next.slots, next.bench) : "inert";
+        const serialized = serializeTeamParam(next.slots, next.bench);
         setSearchParams({
-            ...(side === "you"
-                ? { players: serializeTeamParam(slots) }
-                : { enemies: serializeTeamParam(slots) }),
+            ...(side === "you" ? { players: serialized } : { enemies: serialized }),
             ...(outcome === "disarmed" ? disarmPatch(side) : {})
         });
     };
@@ -409,14 +457,16 @@ const ScoutView: Component = () => {
 
                     <Show when={overCap()}>
                         <p class="mt-3 text-xs text-amber-400">
-                            Up to {MAX_SCOUT_PLAYERS} players are scouted at once — only
-                            the first {MAX_SCOUT_PLAYERS} will be shown.
+                            A team holds up to {MAX_ROSTER} players — only the first{" "}
+                            {MAX_ROSTER} will be kept. The first {MAX_SCOUT_PLAYERS} are
+                            scouted; the rest go to the bench.
                         </p>
                     </Show>
                     <Show when={enemyOverCap()}>
                         <p class="mt-3 text-xs text-amber-400">
-                            Up to {MAX_SCOUT_PLAYERS} enemy players are scouted at once —
-                            only the first {MAX_SCOUT_PLAYERS} will be shown.
+                            The enemy team holds up to {MAX_ROSTER} players — only the
+                            first {MAX_ROSTER} will be kept. The first {MAX_SCOUT_PLAYERS}{" "}
+                            are scouted; the rest go to the bench.
                         </p>
                     </Show>
                 </section>
@@ -425,14 +475,17 @@ const ScoutView: Component = () => {
                     when={matchupMode()}
                     fallback={
                         <>
-                            <Show when={yourQuery.isError}>
-                                <p class="rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">
-                                    Couldn't scout that squad — u.gg may be unavailable.
-                                    Try again.
-                                </p>
+                            <Show when={scout.errorFor("you")}>
+                                {(kind) => (
+                                    <p class="rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">
+                                        {kind() === "throttled"
+                                            ? THROTTLED_HINT
+                                            : `Couldn't scout that squad — ${OUTAGE_HINT}`}
+                                    </p>
+                                )}
                             </Show>
 
-                            <Show when={yourQuery.data}>
+                            <Show when={scout.hasScoutedFor("you")}>
                                 <Show when={armedTeam("you")}>
                                     {(team) => (
                                         <RosterStatusLabel
@@ -447,12 +500,19 @@ const ScoutView: Component = () => {
                                             <RoleColumn
                                                 role={role}
                                                 result={yourSlots()[index()]}
+                                                occupied={
+                                                    yourSlotPlayers()[index()] !== null
+                                                }
                                                 rowRefs={rowRefs}
                                                 pulse={pulse()}
-                                                onSwap={swapRoles}
+                                                onMove={moveInLineup}
                                             />
                                         )}
                                     </For>
+                                    <BenchColumn
+                                        you={benchSide("you")}
+                                        onMove={moveInLineup}
+                                    />
                                 </div>
                             </Show>
                         </>
@@ -484,15 +544,31 @@ const ScoutView: Component = () => {
                                         role={role}
                                         you={yourSlots()[index()]}
                                         enemy={enemySlots()[index()]}
+                                        youOccupied={yourSlotPlayers()[index()] !== null}
+                                        enemyOccupied={
+                                            enemySlotPlayers()[index()] !== null
+                                        }
                                         rowRefs={rowRefs}
                                         highlightYou={highlightFor(index()).you}
                                         highlightEnemy={highlightFor(index()).enemy}
                                         pulse={pulse()}
                                         onChipClick={scrollToRow}
-                                        onSwap={swapRoles}
+                                        onMove={moveInLineup}
                                     />
                                 )}
                             </For>
+                            <Show
+                                when={
+                                    scout.hasScoutedFor("you") ||
+                                    scout.hasScoutedFor("enemy")
+                                }
+                            >
+                                <BenchColumn
+                                    you={benchSide("you")}
+                                    enemy={benchSide("enemy")}
+                                    onMove={moveInLineup}
+                                />
+                            </Show>
                         </div>
                         <Show when={armedTeam("enemy")}>
                             {(team) => (
@@ -512,13 +588,13 @@ const ScoutView: Component = () => {
                                 )
                             }
                         />
-                        <Show when={yourQuery.isError || enemyQuery.isError}>
+                        <Show when={scout.isError("you") || scout.isError("enemy")}>
                             <p class="rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">
-                                {yourQuery.isError ? "Couldn't scout your team. " : ""}
-                                {enemyQuery.isError
+                                {scout.isError("you") ? "Couldn't scout your team. " : ""}
+                                {scout.isError("enemy")
                                     ? "Couldn't scout the enemy team. "
                                     : ""}
-                                u.gg may be unavailable — try again.
+                                {throttled() ? THROTTLED_HINT : OUTAGE_HINT}
                             </p>
                         </Show>
                     </div>

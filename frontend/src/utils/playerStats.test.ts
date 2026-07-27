@@ -16,9 +16,13 @@ import {
     parseTeamParam,
     serializeTeamParam,
     serializeSubmitParam,
-    canonicalPlayersKey
+    canonicalPlayersKey,
+    slottedPlayers,
+    fullRoster,
+    MAX_ROSTER
 } from "./playerStats";
-import type { AssignedPlayer, TeamParam } from "./playerStats";
+import { MAX_SCOUT_PLAYERS } from "@draft-sim/shared-types";
+import type { AssignedPlayer, PlayerId, TeamParam } from "./playerStats";
 
 const entry = (
     championId: string,
@@ -360,6 +364,8 @@ describe("computeFlexChamps", () => {
 });
 
 describe("team param codec", () => {
+    const p = (gameName: string, tagLine: string): PlayerId => ({ gameName, tagLine });
+
     it("round-trips 5 slots including empties", () => {
         const slots = [
             { gameName: "city mouse", tagLine: "yum" },
@@ -369,7 +375,7 @@ describe("team param codec", () => {
             null
         ];
         const parsed = parseTeamParam(serializeTeamParam(slots));
-        expect(parsed).toEqual({ kind: "slots", slots });
+        expect(parsed).toEqual({ kind: "slots", slots, bench: [] });
     });
 
     it("treats unprefixed chunks as list-form and prefixed chunks as slot-form", () => {
@@ -396,32 +402,225 @@ describe("team param codec", () => {
                 null,
                 null,
                 null
-            ]
+            ],
+            bench: []
         });
     });
 
-    it("truncates overlong prefixed slot params to five slots", () => {
+    it("reads chunks past the five role slots as the bench, in order", () => {
         expect(parseTeamParam("s:a#1,b#2,c#3,d#4,e#5,f#6,g#7")).toEqual({
             kind: "slots",
-            slots: [
-                { gameName: "a", tagLine: "1" },
-                { gameName: "b", tagLine: "2" },
-                { gameName: "c", tagLine: "3" },
-                { gameName: "d", tagLine: "4" },
-                { gameName: "e", tagLine: "5" }
-            ]
+            slots: [p("a", "1"), p("b", "2"), p("c", "3"), p("d", "4"), p("e", "5")],
+            bench: [p("f", "6"), p("g", "7")]
         });
+    });
+
+    it("keeps unfilled roles while still benching later chunks", () => {
+        expect(parseTeamParam("s:a#1,,c#3,,e#5,f#6")).toEqual({
+            kind: "slots",
+            slots: [p("a", "1"), null, p("c", "3"), null, p("e", "5")],
+            bench: [p("f", "6")]
+        });
+    });
+
+    it("drops empty chunks at bench positions", () => {
+        expect(parseTeamParam("s:a#1,b#2,c#3,d#4,e#5,,g#7")).toEqual({
+            kind: "slots",
+            slots: [p("a", "1"), p("b", "2"), p("c", "3"), p("d", "4"), p("e", "5")],
+            bench: [p("g", "7")]
+        });
+    });
+
+    it("round-trips slots plus a bench", () => {
+        const slots = [p("a", "1"), null, p("c", "3"), null, null];
+        const bench = [p("f", "6"), p("g", "7")];
+        expect(parseTeamParam(serializeTeamParam(slots, bench))).toEqual({
+            kind: "slots",
+            slots,
+            bench
+        });
+    });
+
+    it("is byte-identical to the bench-free form when the bench is empty", () => {
+        const slots = [p("a", "1"), p("b", "2"), p("c", "3"), p("d", "4"), p("e", "5")];
+        expect(serializeTeamParam(slots, [])).toBe("s:a#1,b#2,c#3,d#4,e#5");
+        expect(serializeTeamParam(slots)).toBe("s:a#1,b#2,c#3,d#4,e#5");
+    });
+
+    it("re-serializes a legacy five-slot link to the identical string", () => {
+        const raw = "s:a#1,b#2,c#3,d#4,e#5";
+        const parsed = parseTeamParam(raw);
+        expect(parsed).toEqual({
+            kind: "slots",
+            slots: [p("a", "1"), p("b", "2"), p("c", "3"), p("d", "4"), p("e", "5")],
+            bench: []
+        });
+        if (parsed.kind !== "slots") throw new Error("expected slot form");
+        expect(serializeTeamParam(parsed.slots, parsed.bench)).toBe(raw);
+    });
+
+    it("pads a short legacy link out to five slot chunks", () => {
+        const parsed = parseTeamParam("s:a#1,b#2,c#3");
+        if (parsed.kind !== "slots") throw new Error("expected slot form");
+        expect(serializeTeamParam(parsed.slots, parsed.bench)).toBe("s:a#1,b#2,c#3,,");
+    });
+
+    // The cap is on PLAYERS, not chunks: ten players need 15 - filledSlots
+    // chunks when roles are unfilled, so capping chunks at ten loses players.
+    it("caps the bench at MAX_ROSTER minus the filled slots", () => {
+        const fullSlots = "a#1,b#2,c#3,d#4,e#5";
+        const sevenBench = ["f#6", "g#7", "h#8", "i#9", "j#10", "k#11", "l#12"];
+        const capped = parseTeamParam(`s:${fullSlots},${sevenBench.join(",")}`);
+        if (capped.kind !== "slots") throw new Error("expected slot form");
+        expect(capped.slots.filter((s) => s !== null)).toHaveLength(5);
+        expect(capped.bench).toHaveLength(5);
+        expect(capped.bench).toEqual([
+            p("f", "6"),
+            p("g", "7"),
+            p("h", "8"),
+            p("i", "9"),
+            p("j", "10")
+        ]);
+
+        const twelveBench = Array.from({ length: 12 }, (_, i) => `b${i}#${i}`);
+        const oneSlot = parseTeamParam(
+            `s:${["a#1", "", "", "", ""].join(",")},${twelveBench.join(",")}`
+        );
+        if (oneSlot.kind !== "slots") throw new Error("expected slot form");
+        expect(oneSlot.slots.filter((s) => s !== null)).toHaveLength(1);
+        expect(oneSlot.bench).toHaveLength(9);
     });
 
     it("parses empty string to an empty list", () => {
         expect(parseTeamParam("")).toEqual({ kind: "list", players: [] });
     });
 
+    it("returns null for a chunk whose decoded fields are blank", () => {
+        // encodeChunk trims, so a " " gameName would serialize to a chunk that
+        // re-parses to null; decodeChunk must trim too or normalization is lossy.
+        const parsed = parseTeamParam("s:%20#1,b#2,c#3,d#4,e#5");
+        if (parsed.kind !== "slots") throw new Error("expected slot form");
+        expect(parsed.slots[0]).toBeNull();
+    });
+
+    it("degrades an invalid percent-escape to an empty slot instead of throwing", () => {
+        // parseTeamParam runs inside a render-time memo, so a hand-edited or
+        // truncated URL must not blank the page.
+        expect(() => parseTeamParam("s:a%ZZ#1,b#2,c#3,d#4,e#5")).not.toThrow();
+        const parsed = parseTeamParam("s:a%ZZ#1,b#2,c#3,d#4,e#5");
+        if (parsed.kind !== "slots") throw new Error("expected slot form");
+        expect(parsed.slots[0]).toBeNull();
+        expect(parsed.slots[1]).toEqual(p("b", "2"));
+    });
+
+    // parse is lossy for malformed input, so serialize(parse(x)) === x is NOT
+    // true in general. What must hold — or the normalization effect's `changed`
+    // guard re-fires forever — is that parsing is idempotent through a
+    // serialize round-trip.
+    it("is idempotent under parse -> serialize -> parse", () => {
+        const twelveBench = Array.from({ length: 12 }, (_, i) => `b${i}#${i}`);
+        const literals = [
+            "s:a#1,b#2,c#3,d#4,e#5",
+            "s:a#1,b#2,c#3,d#4,e#5,f#6,g#7",
+            "s:a#1,,c#3,,e#5,f#6",
+            "s:a#1,b#2,c#3",
+            "s:a#1,b#2,c#3,d#4,e#5,,g#7",
+            "s:%20#1,b#2,c#3,d#4,e#5",
+            "s:a%ZZ#1,b#2,c#3,d#4,e#5",
+            `s:${["a#1", "", "", "", ""].join(",")},${twelveBench.join(",")}`
+        ];
+        for (const raw of literals) {
+            const once = parseTeamParam(raw);
+            if (once.kind !== "slots") throw new Error(`expected slot form for ${raw}`);
+            const twice = parseTeamParam(serializeTeamParam(once.slots, once.bench));
+            expect(twice).toEqual(once);
+        }
+    });
+
     it("percent-encodes # and , inside names", () => {
         const slots = [{ gameName: "a#b", tagLine: "c,d" }, null, null, null, null];
         const s = serializeTeamParam(slots);
         expect(s.split(",")).toHaveLength(5);
-        expect(parseTeamParam(s)).toEqual({ kind: "slots", slots });
+        expect(parseTeamParam(s)).toEqual({ kind: "slots", slots, bench: [] });
+    });
+
+    // URLSearchParams.get performs the OUTER decode; decodeChunk performs the
+    // inner field decode. A second decodeURIComponent here would turn an
+    // encoded comma inside a name into a structural delimiter.
+    it("survives the real URLSearchParams pipeline for special characters", () => {
+        const slots = [
+            p("a,b", "x#y"),
+            p("colon:name", "semi;tag"),
+            p("city mouse", "yum"),
+            null,
+            null
+        ];
+        const bench = [p("bench,name", "t#1")];
+        const search = new URLSearchParams();
+        search.set("players", serializeTeamParam(slots, bench));
+        const readBack = new URLSearchParams(search.toString()).get("players");
+        expect(parseTeamParam(readBack ?? "")).toEqual({ kind: "slots", slots, bench });
+    });
+});
+
+describe("slottedPlayers / fullRoster", () => {
+    const p = (n: string): PlayerId => ({ gameName: n, tagLine: "1" });
+    const many = (n: number): PlayerId[] =>
+        Array.from({ length: n }, (_, i) => p(`p${i}`));
+
+    it("slot-form: slotted is the non-null slots, excluding the bench", () => {
+        const param: TeamParam = {
+            kind: "slots",
+            slots: [p("a"), null, p("c"), null, p("e")],
+            bench: [p("f"), p("g")]
+        };
+        expect(slottedPlayers(param)).toEqual([p("a"), p("c"), p("e")]);
+    });
+
+    it("slot-form: fullRoster is slots then bench", () => {
+        const param: TeamParam = {
+            kind: "slots",
+            slots: [p("a"), null, p("c"), null, p("e")],
+            bench: [p("f"), p("g")]
+        };
+        expect(fullRoster(param)).toEqual([p("a"), p("c"), p("e"), p("f"), p("g")]);
+    });
+
+    // Without this branch a fresh ten-ID paste has an EMPTY slotted set, so
+    // nothing is fetched and the normalization guard never releases.
+    it("list-form: slotted is the first five by input order", () => {
+        const param: TeamParam = { kind: "list", players: many(10) };
+        expect(slottedPlayers(param)).toEqual(many(10).slice(0, 5));
+    });
+
+    it("list-form: fullRoster is all ten, and caps a twelve-player list at ten", () => {
+        expect(fullRoster({ kind: "list", players: many(10) })).toHaveLength(10);
+        expect(fullRoster({ kind: "list", players: many(12) })).toEqual(
+            many(12).slice(0, MAX_ROSTER)
+        );
+    });
+
+    it("never returns more than MAX_SCOUT_PLAYERS from slotted, for any input", () => {
+        const inputs: TeamParam[] = [
+            { kind: "list", players: many(12) },
+            { kind: "list", players: [] },
+            { kind: "slots", slots: many(5), bench: many(9) },
+            { kind: "slots", slots: [null, null, null, null, null], bench: many(9) }
+        ];
+        for (const param of inputs) {
+            expect(slottedPlayers(param).length).toBeLessThanOrEqual(MAX_SCOUT_PLAYERS);
+        }
+    });
+
+    // Editing the bench must not change the scout query key, or every bench
+    // move would refetch the five starters.
+    it("canonicalPlayersKey over slotted is unchanged by a bench edit", () => {
+        const slots = [p("a"), p("b"), p("c"), p("d"), p("e")];
+        const before: TeamParam = { kind: "slots", slots, bench: [p("f")] };
+        const after: TeamParam = { kind: "slots", slots, bench: [p("g"), p("h")] };
+        expect(canonicalPlayersKey(slottedPlayers(before))).toBe(
+            canonicalPlayersKey(slottedPlayers(after))
+        );
     });
 });
 
@@ -447,7 +646,7 @@ describe("serializeSubmitParam", () => {
         { gameName: "c", tagLine: "3" },
         null
     ];
-    const slotParam: TeamParam = { kind: "slots", slots };
+    const slotParam: TeamParam = { kind: "slots", slots, bench: [] };
 
     it("keeps the slot assignment when the roster is unchanged", () => {
         const ids = [
@@ -488,5 +687,35 @@ describe("serializeSubmitParam", () => {
         const ids = [{ gameName: "a", tagLine: "1" }];
         const listParam: TeamParam = { kind: "list", players: ids };
         expect(serializeSubmitParam(listParam, ids)).toBe(serializePlayersParam(ids));
+    });
+
+    // The comparison is against the FULL roster (slots + bench), so re-scouting
+    // an unchanged lineup keeps the bench as well as the manual role fixes.
+    it("keeps slots AND bench when the full roster is unchanged", () => {
+        const bench = [{ gameName: "f", tagLine: "6" }];
+        const withBench: TeamParam = { kind: "slots", slots, bench };
+        const ids = [
+            { gameName: "f", tagLine: "6" },
+            { gameName: "a", tagLine: "1" },
+            { gameName: "b", tagLine: "2" },
+            { gameName: "c", tagLine: "3" }
+        ];
+        expect(serializeSubmitParam(withBench, ids)).toBe(
+            serializeTeamParam(slots, bench)
+        );
+    });
+
+    it("falls back to list form when only the bench changed", () => {
+        const withBench: TeamParam = {
+            kind: "slots",
+            slots,
+            bench: [{ gameName: "f", tagLine: "6" }]
+        };
+        const ids = [
+            { gameName: "a", tagLine: "1" },
+            { gameName: "b", tagLine: "2" },
+            { gameName: "c", tagLine: "3" }
+        ];
+        expect(serializeSubmitParam(withBench, ids)).toBe(serializePlayersParam(ids));
     });
 });

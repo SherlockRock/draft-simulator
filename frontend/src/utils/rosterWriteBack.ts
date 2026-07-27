@@ -1,8 +1,9 @@
 import type { Team, TeamPlayer, RosterInput } from "@draft-sim/shared-types";
-import { ROLE_ORDER, type PlayerId } from "./playerStats";
+import { MAX_ROSTER, ROLE_ORDER, type PlayerId } from "./playerStats";
 
-// Mirrors MAX_ROSTER in backend/routes/teams.js.
-export const MAX_ROSTER = 10;
+// Mirrors MAX_ROSTER in backend/routes/teams.js. Defined in playerStats.ts,
+// which needs it to cap the URL bench; re-exported here for existing consumers.
+export { MAX_ROSTER };
 
 export type MergeResult =
     | { ok: true; players: RosterInput[] }
@@ -11,55 +12,88 @@ export type MergeResult =
 const key = (p: { gameName: string; tagLine: string }): string =>
     `${p.gameName.trim().toLowerCase()}#${p.tagLine.trim().toLowerCase()}`;
 
-// Folds the (at most 5) scouted role slots into a team's (at most 10) roster.
+// Folds the scouted lineup — 5 role slots plus the URL bench — into a team's
+// (at most 10) roster. The result is a UNION: URL slots, then the URL bench,
+// then any stored player the URL did not account for. A legacy link with no
+// bench therefore cannot delete anyone; those stored players simply come back.
 //
-// Roles come EXCLUSIVELY from the slots: every surviving non-slotted player is
-// emitted with role null. That makes the backend's duplicate-role 400
-// impossible by construction — a stale slot-holder can never collide with a
-// newly-assigned one. The corollary is that a player dropped from the scouted
-// lineup is demoted to the bench, never deleted.
+// Roles come EXCLUSIVELY from the slots: every other emitted player has role
+// null. That makes the backend's duplicate-role 400 impossible by construction
+// — a stale slot-holder can never collide with a newly-assigned one. The
+// corollary is that a player dropped from the scouted lineup is demoted to the
+// bench, never deleted.
 //
-// Dedup is deliberately ONE-WAY: a bench row is dropped only when that same
-// identity was promoted into a slot. The bench is NOT deduped against itself,
-// because two identical rows are legal (no unique constraint; the roster
-// editor's paste accepts them) and collapsing them would be the very data loss
-// this function exists to prevent.
+// Dedup is deliberately ONE-WAY and BY COUNT. A stored row is dropped when that
+// identity was promoted into a slot (decision 27: promotion collapses every
+// copy), and otherwise only as far as the URL bench already represents it. Two
+// identical rows are legal — there is no unique constraint and the roster
+// editor's paste accepts "A#1,A#1" — so a set-membership test would silently
+// delete one, which is the very data loss this function exists to prevent.
 //
-// Output order IS display order: slots in ROLE_ORDER, then surviving bench in
-// existing ordinal order. The server assigns `ordinal` by array index.
+// Output order IS display order: slots in ROLE_ORDER, then the URL bench in URL
+// order, then the remaining stored players in ordinal order. The server assigns
+// `ordinal` by array index.
 export function mergeScoutedRoster(
     existing: TeamPlayer[],
-    slots: (PlayerId | null)[]
+    slots: (PlayerId | null)[],
+    urlBench: PlayerId[] = []
 ): MergeResult {
     const byOrdinal = [...existing].sort((a, b) => a.ordinal - b.ordinal);
 
     // First occurrence wins, so the surviving spelling is deterministic.
     const stored = new Map<string, TeamPlayer>();
+    const storedCount = new Map<string, number>();
     byOrdinal.forEach((p) => {
         const k = key(p);
         if (!stored.has(k)) stored.set(k, p);
+        storedCount.set(k, (storedCount.get(k) ?? 0) + 1);
     });
 
     const players: RosterInput[] = [];
     const slotKeys = new Set<string>();
+
+    // Prefer the stored spelling everywhere below, so a case difference in the
+    // URL never rewrites the roster's canonical casing.
+    const spell = (p: PlayerId): { gameName: string; tagLine: string } => {
+        const known = stored.get(key(p));
+        return {
+            gameName: (known?.gameName ?? p.gameName).trim(),
+            tagLine: (known?.tagLine ?? p.tagLine).trim()
+        };
+    };
 
     slots.slice(0, ROLE_ORDER.length).forEach((slot, index) => {
         if (!slot) return;
         const k = key(slot);
         if (slotKeys.has(k)) return;
         slotKeys.add(k);
-        // Prefer the stored spelling so a case difference in the URL never
-        // rewrites the roster's canonical casing.
-        const known = stored.get(k);
-        players.push({
-            role: ROLE_ORDER[index],
-            gameName: (known?.gameName ?? slot.gameName).trim(),
-            tagLine: (known?.tagLine ?? slot.tagLine).trim()
-        });
+        players.push({ role: ROLE_ORDER[index], ...spell(slot) });
     });
 
+    // The URL bench is NOT deduped against the slots: a roster may legitimately
+    // hold the same identity twice, and the URL saying so is the only evidence
+    // of it that survives a paste.
+    const urlBenchCount = new Map<string, number>();
+    urlBench.forEach((p) => {
+        const k = key(p);
+        urlBenchCount.set(k, (urlBenchCount.get(k) ?? 0) + 1);
+        players.push({ role: null, ...spell(p) });
+    });
+
+    // Stored players the URL did not account for. Per identity: none if it was
+    // promoted into a slot, otherwise however many copies the URL bench is
+    // short of.
+    const carriedOver = new Map<string, number>();
     byOrdinal.forEach((p) => {
-        if (slotKeys.has(key(p))) return;
+        const k = key(p);
+        if (slotKeys.has(k)) return;
+        const quota = Math.max(
+            0,
+            (storedCount.get(k) ?? 0) - (urlBenchCount.get(k) ?? 0)
+        );
+        const already = carriedOver.get(k) ?? 0;
+        if (already >= quota) return;
+        carriedOver.set(k, already + 1);
         players.push({
             role: null,
             gameName: p.gameName.trim(),

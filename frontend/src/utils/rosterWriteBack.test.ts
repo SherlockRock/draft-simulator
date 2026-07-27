@@ -125,6 +125,80 @@ describe("mergeScoutedRoster", () => {
         });
     });
 
+    it("promotes a sub and benches the displaced starter, in URL order", () => {
+        const existing = [
+            player("Alice", 0, "top"),
+            player("Bob", 1, "jungle"),
+            player("Carl", 2, "mid"),
+            player("Dana", 3, "adc"),
+            player("Erin", 4, "support"),
+            player("Fred", 5),
+            player("Gina", 6)
+        ];
+        const slots = [pid("Alice"), pid("Bob"), pid("Fred"), pid("Dana"), pid("Erin")];
+
+        expect(mergeScoutedRoster(existing, slots, [pid("Carl"), pid("Gina")])).toEqual({
+            ok: true,
+            players: [
+                { role: "top", gameName: "Alice", tagLine: "NA1" },
+                { role: "jungle", gameName: "Bob", tagLine: "NA1" },
+                { role: "mid", gameName: "Fred", tagLine: "NA1" },
+                { role: "adc", gameName: "Dana", tagLine: "NA1" },
+                { role: "support", gameName: "Erin", tagLine: "NA1" },
+                { role: null, gameName: "Carl", tagLine: "NA1" },
+                { role: null, gameName: "Gina", tagLine: "NA1" }
+            ]
+        });
+    });
+
+    // The most important test in the slice. "s:a,b,c,d,e" means both "legacy
+    // link, bench unknown" and "bench-aware, bench deliberately empty"; under
+    // union that ambiguity is harmless, because an absent bench just means the
+    // stored players come back. Authoritative-bench semantics would delete
+    // every sub added since a link was bookmarked.
+    it("cannot delete the stored bench when the link carries none", () => {
+        const existing = [
+            player("Alice", 0, "top"),
+            player("Bob", 1, "jungle"),
+            player("Carl", 2, "mid"),
+            player("Dana", 3, "adc"),
+            player("Erin", 4, "support"),
+            player("Fred", 5),
+            player("Gina", 6)
+        ];
+        const slots = [pid("Alice"), pid("Bob"), pid("Carl"), pid("Dana"), pid("Erin")];
+
+        const merged = mergeScoutedRoster(existing, slots, []);
+        expect(merged).toEqual({
+            ok: true,
+            players: [
+                { role: "top", gameName: "Alice", tagLine: "NA1" },
+                { role: "jungle", gameName: "Bob", tagLine: "NA1" },
+                { role: "mid", gameName: "Carl", tagLine: "NA1" },
+                { role: "adc", gameName: "Dana", tagLine: "NA1" },
+                { role: "support", gameName: "Erin", tagLine: "NA1" },
+                { role: null, gameName: "Fred", tagLine: "NA1" },
+                { role: null, gameName: "Gina", tagLine: "NA1" }
+            ]
+        });
+    });
+
+    // Decision 43: reconciliation is BY COUNT, not by set membership. A URL
+    // bench that under-represents a duplicate must not delete the extra row.
+    it("reconciles duplicates by count rather than by identity", () => {
+        const existing = [player("Alice", 0), player("Alice", 1)];
+
+        expect(
+            mergeScoutedRoster(existing, [null, null, null, null, null], [pid("Alice")])
+        ).toEqual({
+            ok: true,
+            players: [
+                { role: null, gameName: "Alice", tagLine: "NA1" },
+                { role: null, gameName: "Alice", tagLine: "NA1" }
+            ]
+        });
+    });
+
     it("refuses to save when the merge would exceed the roster cap", () => {
         const existing = Array.from({ length: 8 }, (_, i) => player(`P${i}`, i));
         const slots = [pid("New1"), pid("New2"), pid("New3"), null, null];
@@ -135,6 +209,20 @@ describe("mergeScoutedRoster", () => {
             count: 11
         });
         expect(MAX_ROSTER).toBe(10);
+    });
+
+    // Union can exceed ten even when neither side does on its own, so the
+    // over-cap refusal stays reachable with a bench in play.
+    it("still refuses over-cap when the URL bench barely overlaps the roster", () => {
+        const existing = Array.from({ length: 10 }, (_, i) => player(`P${i}`, i));
+        const slots = [pid("P0"), pid("X1"), pid("X2"), pid("X3"), pid("X4")];
+        const urlBench = [pid("X5"), pid("X6"), pid("X7"), pid("X8"), pid("X9")];
+
+        expect(mergeScoutedRoster(existing, slots, urlBench)).toEqual({
+            ok: false,
+            reason: "over-cap",
+            count: 19
+        });
     });
 
     it("emits nothing for empty slots and an empty roster", () => {

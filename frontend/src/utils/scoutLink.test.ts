@@ -70,7 +70,11 @@ describe("buildScoutLink", () => {
         });
     });
 
-    it("single team, no roles set → list-form of first 5 by ordinal", () => {
+    // Decision 42: an all-bench roster is the shape of any freshly pasted team,
+    // so stopping at five here would make the bench unreachable from a linked
+    // team. List-form, not slot-form — slot-form would bypass autoAssignRoles
+    // and roles would come from ordinal order.
+    it("single team, no roles set → list-form of the WHOLE roster by ordinal", () => {
         const t = team("na1", [
             player("F", "1", null, 5),
             player("A", "1", null, 0),
@@ -80,8 +84,39 @@ describe("buildScoutLink", () => {
             player("E", "1", null, 4)
         ]);
         const link = buildScoutLink(t, null);
-        expect(link?.players).toBe("A#1,B#1,C#1,D#1,E#1");
+        expect(link?.players).toBe("A#1,B#1,C#1,D#1,E#1,F#1");
         expect(link?.region).toBe("na1");
+    });
+
+    it("caps the no-roles list at MAX_ROSTER", () => {
+        const t = team(
+            "na1",
+            Array.from({ length: 12 }, (_, i) => player(`P${i}`, "1", null, i))
+        );
+        expect(buildScoutLink(t, null)?.players.split(",")).toHaveLength(10);
+    });
+
+    it("emits unroled players as the bench after the slots", () => {
+        const t = team("kr", [
+            player("Kiin", "KR1", "top", 0),
+            player("Faker", "KR2", "mid", 1),
+            player("Sub1", "KR3", null, 2),
+            player("Sub2", "KR4", null, 3)
+        ]);
+        expect(buildScoutLink(t, null)?.players).toBe(
+            "s:Kiin#KR1,,Faker#KR2,,,Sub1#KR3,Sub2#KR4"
+        );
+    });
+
+    // "Bench" means NOT PLACED in a slot, not `role === null`: only the first
+    // match per role is placed, so a second row with the same role would
+    // otherwise vanish from the link entirely.
+    it("benches a duplicate-role row rather than dropping it", () => {
+        const t = team("na1", [
+            player("First", "1", "top", 0),
+            player("Second", "1", "top", 1)
+        ]);
+        expect(buildScoutLink(t, null)?.players).toBe("s:First#1,,,,,Second#1");
     });
 
     it("only team2 has players → single-team in players slot, team2 region", () => {

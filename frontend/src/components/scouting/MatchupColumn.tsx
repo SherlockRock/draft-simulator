@@ -3,6 +3,7 @@ import type { PlayerScoutResult, Role } from "@draft-sim/shared-types";
 import { computeSharedChamps } from "../../utils/playerStats";
 import { ChampChipStrip, type ChipDetail } from "./ChampChipStrip";
 import { DraggableHalf, RoleHeader, HALF_LIST_MAX, type MatchupSide } from "./RoleSlot";
+import type { DragOrigin } from "../../utils/lineupMove";
 
 const entriesOf = (r: PlayerScoutResult | null) =>
     r && r.status === "ok" ? r.envelope.entries : [];
@@ -19,8 +20,10 @@ interface MatchupColumnProps {
     highlightEnemy: Set<string>;
     pulse: { keys: Set<string> } | null;
     onChipClick: (side: MatchupSide, role: Role, championId: string) => void;
-    // Task 8 wires this to role-swap DOM controls.
-    onSwap?: (side: MatchupSide, from: Role, to: Role) => void;
+    /** Whether each side's slot holds a player — see DraggableHalf. */
+    youOccupied?: boolean;
+    enemyOccupied?: boolean;
+    onMove?: (side: MatchupSide, from: DragOrigin, to: DragOrigin) => void;
 }
 
 export const MatchupColumn: Component<MatchupColumnProps> = (props) => {
@@ -43,11 +46,12 @@ export const MatchupColumn: Component<MatchupColumnProps> = (props) => {
                 side="you"
                 role={props.role}
                 result={props.you}
+                occupied={props.youOccupied}
                 rowRefs={props.rowRefs}
                 highlight={props.highlightYou}
                 pulse={props.pulse}
                 maxHeightClass={HALF_LIST_MAX}
-                onSwap={props.onSwap}
+                onMove={props.onMove}
             />
             {/* Divider: the pool intersection, structurally — no verdicts. */}
             <div class="border-y border-slate-700/60 bg-slate-900/60 px-1.5 py-1">
@@ -72,11 +76,12 @@ export const MatchupColumn: Component<MatchupColumnProps> = (props) => {
                 side="enemy"
                 role={props.role}
                 result={props.enemy}
+                occupied={props.enemyOccupied}
                 rowRefs={props.rowRefs}
                 highlight={props.highlightEnemy}
                 pulse={props.pulse}
                 maxHeightClass={HALF_LIST_MAX}
-                onSwap={props.onSwap}
+                onMove={props.onMove}
             />
         </section>
     );

@@ -1,6 +1,6 @@
 import { Component, Show } from "solid-js";
 import type { PlayerScoutResult, Role } from "@draft-sim/shared-types";
-import { ROLE_ORDER } from "../../utils/playerStats";
+import { dragPayload, parseDragPayload, type DragOrigin } from "../../utils/lineupMove";
 import { ROLE_LABELS } from "../../utils/championRoles";
 import { PlayerSummaryHeader, ChampListSection, RoleIcon } from "./PlayerPanel";
 
@@ -12,16 +12,6 @@ export const rowRefKey = (side: MatchupSide, role: Role, championId: string): st
     `${side}:${role}:${championId}`;
 
 export const HALF_LIST_MAX = "max-h-[26vh]";
-
-const dragPayload = (side: MatchupSide, role: Role): string => `${side}:${role}`;
-
-const parseDragPayload = (raw: string): { side: MatchupSide; role: Role } | null => {
-    const parts = raw.split(":");
-    if (parts.length !== 2) return null;
-    const side = parts[0] === "you" || parts[0] === "enemy" ? parts[0] : null;
-    const role = ROLE_ORDER.find((r) => r === parts[1]) ?? null;
-    return side && role ? { side, role } : null;
-};
 
 interface HalfProps {
     side: MatchupSide;
@@ -74,41 +64,51 @@ const PlayerHalf: Component<HalfProps> = (props) => (
 );
 
 interface DraggableHalfProps extends HalfProps {
-    onSwap?: (side: MatchupSide, from: Role, to: Role) => void;
+    /**
+     * Whether the ROLE SLOT holds a player — which is not the same as having a
+     * scout row. Gating the drag on `result` would make a starter undraggable
+     * after a batch-level u.gg failure, so demotion would be unreachable in
+     * exactly the state the bench stays visible for.
+     */
+    occupied?: boolean;
+    onMove?: (side: MatchupSide, from: DragOrigin, to: DragOrigin) => void;
 }
 
-export const DraggableHalf: Component<DraggableHalfProps> = (props) => (
-    <div
-        draggable={props.result !== null}
-        onDragStart={(e) => {
-            if (!props.result) return;
-            e.dataTransfer?.setData("text/plain", dragPayload(props.side, props.role));
-        }}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-            e.preventDefault();
-            const raw = e.dataTransfer?.getData("text/plain");
-            if (!raw) return;
-            const parsed = parseDragPayload(raw);
-            if (!parsed) return;
-            if (parsed.side !== props.side) return;
-            if (parsed.role === props.role) return;
-            props.onSwap?.(props.side, parsed.role, props.role);
-        }}
-        class="flex min-h-0 flex-1 flex-col"
-        classList={{ "cursor-grab": props.result !== null }}
-    >
-        <PlayerHalf
-            side={props.side}
-            role={props.role}
-            result={props.result}
-            rowRefs={props.rowRefs}
-            highlight={props.highlight}
-            pulse={props.pulse}
-            maxHeightClass={props.maxHeightClass}
-        />
-    </div>
-);
+export const DraggableHalf: Component<DraggableHalfProps> = (props) => {
+    const canDrag = () => props.occupied ?? props.result !== null;
+    const self = (): DragOrigin => ({ kind: "slot", role: props.role });
+    return (
+        <div
+            draggable={canDrag()}
+            onDragStart={(e) => {
+                if (!canDrag()) return;
+                e.dataTransfer?.setData("text/plain", dragPayload(props.side, self()));
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+                e.preventDefault();
+                const raw = e.dataTransfer?.getData("text/plain");
+                if (!raw) return;
+                const parsed = parseDragPayload(raw);
+                if (!parsed) return;
+                if (parsed.side !== props.side) return;
+                props.onMove?.(props.side, parsed.origin, self());
+            }}
+            class="flex min-h-0 flex-1 flex-col"
+            classList={{ "cursor-grab": canDrag() }}
+        >
+            <PlayerHalf
+                side={props.side}
+                role={props.role}
+                result={props.result}
+                rowRefs={props.rowRefs}
+                highlight={props.highlight}
+                pulse={props.pulse}
+                maxHeightClass={props.maxHeightClass}
+            />
+        </div>
+    );
+};
 
 export const RoleHeader: Component<{ role: Role }> = (props) => (
     <div class="flex items-center justify-center gap-1.5 border-b border-slate-700/60 py-1.5">

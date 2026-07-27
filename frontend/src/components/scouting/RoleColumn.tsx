@@ -1,15 +1,18 @@
 import { Component } from "solid-js";
 import type { PlayerScoutResult, Role } from "@draft-sim/shared-types";
 import { DraggableHalf, RoleHeader, type MatchupSide } from "./RoleSlot";
+import type { DragOrigin } from "../../utils/lineupMove";
 
 interface RoleColumnProps {
     role: Role;
     result: PlayerScoutResult | null;
+    /** Whether the slot holds a player — see DraggableHalf. */
+    occupied?: boolean;
     rowRefs: Map<string, HTMLDivElement>;
     /** Single-team scouting has nothing to compare against, so this is optional. */
     highlight?: Set<string>;
     pulse: { keys: Set<string> } | null;
-    onSwap?: (side: MatchupSide, from: Role, to: Role) => void;
+    onMove?: (side: MatchupSide, from: DragOrigin, to: DragOrigin) => void;
 }
 
 // Solid compiles JSX props to getters, so an inline `new Set()` default would
@@ -27,10 +30,11 @@ export const RoleColumn: Component<RoleColumnProps> = (props) => (
             side="you"
             role={props.role}
             result={props.result}
+            occupied={props.occupied}
             rowRefs={props.rowRefs}
             highlight={props.highlight ?? NO_HIGHLIGHT}
             pulse={props.pulse}
-            onSwap={props.onSwap}
+            onMove={props.onMove}
         />
     </section>
 );
