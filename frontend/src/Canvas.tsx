@@ -399,6 +399,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const ungroupedDrafts = createMemo(() => canvasDrafts.filter((cd) => !cd.group_id));
 
+    // ONE zoom accessor for every inverse-scale decoration on the canvas.
+    // Reading props.viewport().zoom inside a card subscribes that card to the
+    // whole viewport object, so a pan invalidates all ~50 of them. This memo
+    // recomputes once per pan frame, returns an unchanged number, and
+    // createMemo's default === equality stops the propagation there.
+    // Deliberately NOT one memo per card — that keeps the O(cards) recompute.
+    const viewportZoom = createMemo(() => props.viewport().zoom);
+
     const getDraftsForGroup = (groupId: string) =>
         canvasDrafts.filter((cd) => cd.group_id === groupId);
 
@@ -3953,7 +3961,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     <CustomGroupContainer
                                         group={group}
                                         drafts={getDraftsForGroup(group.id)}
-                                        viewport={props.viewport}
+                                        zoom={viewportZoom}
                                         isPanning={dragState().isPanning}
                                         onGroupMouseDown={onGroupMouseDown}
                                         onBodyMouseDown={onBackgroundMouseDown}
@@ -4009,7 +4017,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                     deleteBox={deleteBox}
                                                     handleNameChange={handleNameChange}
                                                     handlePickChange={handlePickChange}
-                                                    viewport={props.viewport}
+                                                    zoom={viewportZoom}
                                                     onBoxMouseDown={onBoxMouseDown}
                                                     cardLayout={props.cardLayout}
                                                     isConnectionMode={isConnectionMode()}
@@ -4061,7 +4069,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 <SeriesGroupContainer
                                     group={group}
                                     drafts={getDraftsForGroup(group.id)}
-                                    viewport={props.viewport}
+                                    zoom={viewportZoom}
                                     isPanning={dragState().isPanning}
                                     onGroupMouseDown={onGroupMouseDown}
                                     onBodyMouseDown={onBackgroundMouseDown}
@@ -4096,7 +4104,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 deleteBox={deleteBox}
                                                 handleNameChange={handleNameChange}
                                                 handlePickChange={handlePickChange}
-                                                viewport={props.viewport}
+                                                zoom={viewportZoom}
                                                 onBoxMouseDown={onBoxMouseDown}
                                                 cardLayout={props.cardLayout}
                                                 isConnectionMode={isConnectionMode()}
@@ -4158,7 +4166,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 deleteBox={deleteBox}
                                 handleNameChange={handleNameChange}
                                 handlePickChange={handlePickChange}
-                                viewport={props.viewport}
+                                zoom={viewportZoom}
                                 onBoxMouseDown={onBoxMouseDown}
                                 cardLayout={props.cardLayout}
                                 isConnectionMode={isConnectionMode()}

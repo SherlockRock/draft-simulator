@@ -9,7 +9,7 @@ import {
 } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { Eye, Plus, X, Lock } from "lucide-solid";
-import { CanvasDraft, Viewport, AnchorType } from "../utils/schemas";
+import { CanvasDraft, AnchorType } from "../utils/schemas";
 import { AnchorPoints } from "./AnchorPoints";
 import { CanvasSlot, type SlotDisplayMode } from "./CanvasSlot";
 import { PickerTarget } from "./CanvasChampionPicker";
@@ -32,7 +32,7 @@ type CanvasCardProps = {
     handlePickChange: (draftId: string, pickIndex: number, championId: string) => void;
     onBoxMouseDown: (draftId: string, e: MouseEvent) => void;
     cardLayout: () => CardLayout;
-    viewport: () => Viewport;
+    zoom: () => number;
     isConnectionMode: boolean;
     onAnchorClick: (draftId: string, anchorType: AnchorType) => void;
     connectionSource: () => string | null;
@@ -158,7 +158,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
     const actionButtonBaseClass =
         "flex size-7 items-center justify-center rounded-lg border border-solid";
     const actionButtonBorderWidth = createMemo(() => {
-        const zoom = props.viewport().zoom;
+        const zoom = props.zoom();
         if (!Number.isFinite(zoom) || zoom <= 0) return "1px";
         return `${1 / zoom}px`;
     });
@@ -513,7 +513,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                         props.onAnchorClick(props.canvasDraft.Draft.id, anchorType);
                     }}
                     cardLayout={props.cardLayout}
-                    zoom={props.viewport().zoom}
+                    zoom={props.zoom()}
                     selected={selected}
                     sourceAnchor={props.sourceAnchor}
                 />

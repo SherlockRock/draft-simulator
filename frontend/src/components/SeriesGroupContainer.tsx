@@ -11,7 +11,7 @@ import {
     Trophy
 } from "lucide-solid";
 import { buildScoutLink, scoutLinkPath } from "../utils/scoutLink";
-import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/schemas";
+import { CanvasDraft, CanvasGroup, AnchorType } from "../utils/schemas";
 import {
     getSeriesGroupDimensions,
     SERIES_CARD_GAP,
@@ -24,7 +24,7 @@ import type { CardLayout } from "../utils/canvasCardLayout";
 type SeriesGroupContainerProps = {
     group: CanvasGroup;
     drafts: CanvasDraft[];
-    viewport: Accessor<Viewport>;
+    zoom: Accessor<number>;
     isPanning: boolean;
     onGroupMouseDown: (groupId: string, e: MouseEvent) => void;
     onBodyMouseDown: (e: MouseEvent) => void;
@@ -472,7 +472,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                     groupId={props.group.id}
                     width={groupDimensions().width}
                     height={groupDimensions().height}
-                    zoom={props.viewport().zoom}
+                    zoom={props.zoom()}
                     onSelectAnchor={props.onSelectAnchor!}
                     isSelected={props.isGroupSelected ?? false}
                     sourceAnchor={props.sourceAnchor ?? null}

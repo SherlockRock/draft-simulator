@@ -8,7 +8,7 @@ import {
     JSX
 } from "solid-js";
 import { Trash2, Settings, ArrowLeftRight } from "lucide-solid";
-import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/schemas";
+import { CanvasDraft, CanvasGroup, AnchorType } from "../utils/schemas";
 import {
     GRID_HEADER_HEIGHT,
     GRID_PADDING,
@@ -26,7 +26,7 @@ import type { CardLayout } from "../utils/canvasCardLayout";
 type CustomGroupContainerProps = {
     group: CanvasGroup;
     drafts: CanvasDraft[];
-    viewport: Accessor<Viewport>;
+    zoom: Accessor<number>;
     isPanning: boolean;
     onGroupMouseDown: (groupId: string, e: MouseEvent) => void;
     onBodyMouseDown: (e: MouseEvent) => void;
@@ -135,7 +135,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         const startHeight = groupHeight();
         const startPositionX = props.group.positionX;
         const startMaxLeftEdgeDelta = props.maxLeftEdgeDelta;
-        const zoom = props.viewport().zoom;
+        const zoom = props.zoom();
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
             const deltaX = (moveEvent.clientX - startX) / zoom;
@@ -469,7 +469,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                     groupId={props.group.id}
                     width={groupWidth()}
                     height={groupHeight()}
-                    zoom={props.viewport().zoom}
+                    zoom={props.zoom()}
                     onSelectAnchor={props.onSelectAnchor!}
                     isSelected={props.isGroupSelected ?? false}
                     sourceAnchor={props.sourceAnchor ?? null}
