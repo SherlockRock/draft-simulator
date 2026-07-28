@@ -98,6 +98,13 @@ router.get("/recent", async (req, res) => {
       // Get versus drafts where user is owner OR participant
       versusDrafts = await VersusDraft.findAll({
         where: {
+          // Series authored inside a canvas are VersusDraft rows with origin
+          // "manual". They belong to their canvas — they cannot host a live
+          // session (see versusHandlers) and are reachable from the canvas —
+          // so they stay out of activity views entirely. Excluded here in SQL
+          // rather than after the fetch, because the route slices a fixed page
+          // out of the merged result and post-filtering would shorten pages.
+          origin: { [Op.ne]: "manual" },
           [Op.or]: [
             { owner_id: user.id },
             ...(participatedVersusIds.length > 0
