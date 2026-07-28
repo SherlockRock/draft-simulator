@@ -52,16 +52,6 @@ type SeriesGroupContainerProps = {
 export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
     const navigate = useNavigate();
 
-    const worldToScreen = (worldX: number, worldY: number) => {
-        const vp = props.viewport();
-        return {
-            x: (worldX - vp.x) * vp.zoom,
-            y: (worldY - vp.y) * vp.zoom
-        };
-    };
-
-    const screenPos = () => worldToScreen(props.group.positionX, props.group.positionY);
-
     const sortedDrafts = createMemo(() => {
         return [...props.drafts].sort((a, b) => {
             const aIndex = a.Draft.seriesIndex;
@@ -176,10 +166,9 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
             data-group-id={props.group.id}
             class="group-container absolute z-20 rounded-xl border-2 border-darius-border bg-darius-card/90 shadow-xl backdrop-blur-sm"
             style={{
-                left: `${screenPos().x}px`,
-                top: `${screenPos().y}px`,
-                transform: `scale(${props.viewport().zoom})`,
-                "transform-origin": "top left"
+                // World coordinates — .canvas-world applies the viewport transform.
+                left: `${props.group.positionX}px`,
+                top: `${props.group.positionY}px`
             }}
         >
             {/* Header */}

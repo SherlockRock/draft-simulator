@@ -92,16 +92,6 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         }
     });
 
-    const worldToScreen = (worldX: number, worldY: number) => {
-        const vp = props.viewport();
-        return {
-            x: (worldX - vp.x) * vp.zoom,
-            y: (worldY - vp.y) * vp.zoom
-        };
-    };
-
-    const screenPos = () => worldToScreen(props.group.positionX, props.group.positionY);
-
     const groupWidth = () => localWidth() ?? props.group.width ?? 400;
     const groupHeight = () => localHeight() ?? props.group.height ?? 200;
 
@@ -267,12 +257,11 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 "border-dashed": draftCount() === 0
             }}
             style={{
-                left: `${screenPos().x}px`,
-                top: `${screenPos().y}px`,
+                // World coordinates — .canvas-world applies the viewport transform.
+                left: `${props.group.positionX}px`,
+                top: `${props.group.positionY}px`,
                 width: `${groupWidth()}px`,
-                height: `${groupHeight()}px`,
-                transform: `scale(${props.viewport().zoom})`,
-                "transform-origin": "top left"
+                height: `${groupHeight()}px`
             }}
         >
             {/* Header */}

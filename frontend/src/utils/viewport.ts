@@ -36,11 +36,7 @@ export const worldAt = (vp: Viewport, anchor: ScreenPoint): ScreenPoint => ({
  * Returns the input object identity unchanged when the zoom is unchanged, so a
  * wheel event at a clamp cannot manufacture float drift for no visual change.
  */
-export const zoomAt = (
-    vp: Viewport,
-    nextZoom: number,
-    anchor: ScreenPoint
-): Viewport => {
+export const zoomAt = (vp: Viewport, nextZoom: number, anchor: ScreenPoint): Viewport => {
     if (nextZoom === vp.zoom) return vp;
     const world = worldAt(vp, anchor);
     return {

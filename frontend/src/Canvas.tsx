@@ -114,7 +114,7 @@ import {
     createTrailingThrottle,
     presenceSnapshotSchema
 } from "./utils/presence";
-import { clampZoom, zoomAt } from "./utils/viewport";
+import { clampZoom, worldTransform, zoomAt } from "./utils/viewport";
 import { createRemoteCursorTracker } from "./utils/remoteCursors";
 import { createLaserTrailTracker } from "./utils/laserTrails";
 import { createLaserKeyTracker } from "./utils/laserKey";
@@ -3919,13 +3919,146 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         </Show>
                     </svg>
                 </div>
-                {/* Render Groups */}
-                <For each={canvasGroups}>
-                    {(group) => (
-                        <Show
-                            when={group.type === "series"}
-                            fallback={
-                                <CustomGroupContainer
+                {/*
+                  The world layer. Everything positioned in world coordinates
+                  lives here and NOTHING else does — a transformed ancestor makes
+                  position:fixed descendants resolve against this layer instead of
+                  the viewport, so screen-space UI must stay outside it or portal.
+
+                  Sizing: zero-size with visible overflow, so the layer itself has
+                  no hit area and clicks on empty space fall through to
+                  .canvas-background beneath, which owns onBackgroundMouseDown.
+
+                  Stacking: z-30 is deliberate, NOT incidental. The transform makes
+                  this a stacking context, so its children's z-indices no longer
+                  interleave with siblings. The connection SVG is z-30 inside the
+                  non-stacking .canvas-background, so it hoists into the root
+                  context at z-30; matching it here and coming later in DOM order
+                  keeps connections painting BELOW cards, as they do today. The
+                  z-40 overlay band stays above. Do not change this to z-auto.
+                */}
+                <div
+                    class="canvas-world absolute left-0 top-0 z-30 h-0 w-0"
+                    style={{
+                        transform: worldTransform(props.viewport()),
+                        "transform-origin": "0 0"
+                    }}
+                >
+                    {/* Render Groups */}
+                    <For each={canvasGroups}>
+                        {(group) => (
+                            <Show
+                                when={group.type === "series"}
+                                fallback={
+                                    <CustomGroupContainer
+                                        group={group}
+                                        drafts={getDraftsForGroup(group.id)}
+                                        viewport={props.viewport}
+                                        isPanning={dragState().isPanning}
+                                        onGroupMouseDown={onGroupMouseDown}
+                                        onBodyMouseDown={onBackgroundMouseDown}
+                                        onDeleteGroup={handleDeleteGroup}
+                                        onEditDisabledChampions={
+                                            handleEditDisabledChampions
+                                        }
+                                        onRenameGroup={handleRenameGroup}
+                                        onResizeGroup={handleResizeGroup}
+                                        onResizeEnd={handleResizeEnd}
+                                        canEdit={canEdit}
+                                        isConnectionMode={isConnectionMode()}
+                                        isDragTarget={dragOverGroupId() === group.id}
+                                        isDragSource={
+                                            dragState().activeBoxId !== null &&
+                                            dragState().dragGroupId === group.id
+                                        }
+                                        highlightCell={
+                                            gridHighlightFor(group.id)?.cell ?? null
+                                        }
+                                        highlightIsSwap={
+                                            gridHighlightFor(group.id)?.isSwap ?? false
+                                        }
+                                        displacedCell={
+                                            gridHighlightFor(group.id)?.displacedCell ??
+                                            null
+                                        }
+                                        isExitingSource={exitingGroupId() === group.id}
+                                        contentMinWidth={
+                                            computeMinGroupSize(group.id).minWidth
+                                        }
+                                        contentMinHeight={
+                                            computeMinGroupSize(group.id).minHeight
+                                        }
+                                        maxLeftEdgeDelta={
+                                            computeMinGroupSize(group.id).maxLeftEdgeDelta
+                                        }
+                                        onSelectAnchor={onGroupAnchorClick}
+                                        isGroupSelected={
+                                            groupConnectionSource() === group.id
+                                        }
+                                        sourceAnchor={sourceAnchor()}
+                                        editingGroupId={editingGroupId}
+                                        onEditingComplete={() => setEditingGroupId(null)}
+                                        cardLayout={props.cardLayout}
+                                    >
+                                        <For each={getDraftsForGroup(group.id)}>
+                                            {(cd) => (
+                                                <CanvasCard
+                                                    canvasId={canvasId()}
+                                                    canvasDraft={cd}
+                                                    addBox={addBox}
+                                                    deleteBox={deleteBox}
+                                                    handleNameChange={handleNameChange}
+                                                    handlePickChange={handlePickChange}
+                                                    viewport={props.viewport}
+                                                    onBoxMouseDown={onBoxMouseDown}
+                                                    cardLayout={props.cardLayout}
+                                                    isConnectionMode={isConnectionMode()}
+                                                    onAnchorClick={onAnchorClick}
+                                                    connectionSource={connectionSource}
+                                                    sourceAnchor={sourceAnchor}
+                                                    pickerTarget={pickerTarget}
+                                                    onSlotOpen={openPicker}
+                                                    canEdit={canEdit}
+                                                    isGrouped={true}
+                                                    groupType="custom"
+                                                    editingDraftId={editingDraftId}
+                                                    onEditingComplete={() =>
+                                                        setEditingDraftId(null)
+                                                    }
+                                                    restrictedChampions={() =>
+                                                        getRestrictedChampionsForDraft(cd)
+                                                    }
+                                                    searchDimmed={() =>
+                                                        searchActive() &&
+                                                        !searchMatchByDraftId().has(
+                                                            cd.Draft.id
+                                                        )
+                                                    }
+                                                    searchSlotPhase={(pickIndex) =>
+                                                        searchSlotPhaseFor(
+                                                            cd.Draft.id,
+                                                            pickIndex
+                                                        )
+                                                    }
+                                                    searchIsCurrent={() =>
+                                                        currentSearchDraftId() ===
+                                                        cd.Draft.id
+                                                    }
+                                                    searchInProgress={() =>
+                                                        searchMatchByDraftId().get(
+                                                            cd.Draft.id
+                                                        )?.inProgress ?? false
+                                                    }
+                                                    disabledChampions={
+                                                        group.metadata.disabledChampions
+                                                    }
+                                                />
+                                            )}
+                                        </For>
+                                    </CustomGroupContainer>
+                                }
+                            >
+                                <SeriesGroupContainer
                                     group={group}
                                     drafts={getDraftsForGroup(group.id)}
                                     viewport={props.viewport}
@@ -3934,44 +4067,28 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     onBodyMouseDown={onBackgroundMouseDown}
                                     onDeleteGroup={handleDeleteGroup}
                                     onEditDisabledChampions={handleEditDisabledChampions}
-                                    onRenameGroup={handleRenameGroup}
-                                    onResizeGroup={handleResizeGroup}
-                                    onResizeEnd={handleResizeEnd}
                                     canEdit={canEdit}
                                     isConnectionMode={isConnectionMode()}
-                                    isDragTarget={dragOverGroupId() === group.id}
-                                    isDragSource={
-                                        dragState().activeBoxId !== null &&
-                                        dragState().dragGroupId === group.id
-                                    }
-                                    highlightCell={
-                                        gridHighlightFor(group.id)?.cell ?? null
-                                    }
-                                    highlightIsSwap={
-                                        gridHighlightFor(group.id)?.isSwap ?? false
-                                    }
-                                    displacedCell={
-                                        gridHighlightFor(group.id)?.displacedCell ?? null
-                                    }
-                                    isExitingSource={exitingGroupId() === group.id}
-                                    contentMinWidth={
-                                        computeMinGroupSize(group.id).minWidth
-                                    }
-                                    contentMinHeight={
-                                        computeMinGroupSize(group.id).minHeight
-                                    }
-                                    maxLeftEdgeDelta={
-                                        computeMinGroupSize(group.id).maxLeftEdgeDelta
-                                    }
+                                    cardLayout={props.cardLayout}
                                     onSelectAnchor={onGroupAnchorClick}
                                     isGroupSelected={groupConnectionSource() === group.id}
                                     sourceAnchor={sourceAnchor()}
-                                    editingGroupId={editingGroupId}
-                                    onEditingComplete={() => setEditingGroupId(null)}
-                                    cardLayout={props.cardLayout}
-                                >
-                                    <For each={getDraftsForGroup(group.id)}>
-                                        {(cd) => (
+                                    onUpdateDraftMetadata={
+                                        handleUpdateSeriesDraftMetadata
+                                    }
+                                    renderDraftCard={(cd) => {
+                                        // Compute team names based on blueSideTeam
+                                        const bst = cd.Draft.blueSideTeam ?? 1;
+                                        const blueTeamName =
+                                            bst === 1
+                                                ? group.metadata.blueTeamName
+                                                : group.metadata.redTeamName;
+                                        const redTeamName =
+                                            bst === 1
+                                                ? group.metadata.redTeamName
+                                                : group.metadata.blueTeamName;
+
+                                        return (
                                             <CanvasCard
                                                 canvasId={canvasId()}
                                                 canvasDraft={cd}
@@ -3990,11 +4107,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 onSlotOpen={openPicker}
                                                 canEdit={canEdit}
                                                 isGrouped={true}
-                                                groupType="custom"
+                                                groupType="series"
                                                 editingDraftId={editingDraftId}
                                                 onEditingComplete={() =>
                                                     setEditingDraftId(null)
                                                 }
+                                                blueTeamName={blueTeamName}
+                                                redTeamName={redTeamName}
                                                 restrictedChampions={() =>
                                                     getRestrictedChampionsForDraft(cd)
                                                 }
@@ -4022,130 +4141,56 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                     group.metadata.disabledChampions
                                                 }
                                             />
-                                        )}
-                                    </For>
-                                </CustomGroupContainer>
-                            }
-                        >
-                            <SeriesGroupContainer
-                                group={group}
-                                drafts={getDraftsForGroup(group.id)}
+                                        );
+                                    }}
+                                />
+                            </Show>
+                        )}
+                    </For>
+
+                    {/* Render Ungrouped Drafts */}
+                    <For each={ungroupedDrafts()}>
+                        {(cd) => (
+                            <CanvasCard
+                                canvasId={canvasId()}
+                                canvasDraft={cd}
+                                addBox={addBox}
+                                deleteBox={deleteBox}
+                                handleNameChange={handleNameChange}
+                                handlePickChange={handlePickChange}
                                 viewport={props.viewport}
-                                isPanning={dragState().isPanning}
-                                onGroupMouseDown={onGroupMouseDown}
-                                onBodyMouseDown={onBackgroundMouseDown}
-                                onDeleteGroup={handleDeleteGroup}
-                                onEditDisabledChampions={handleEditDisabledChampions}
-                                canEdit={canEdit}
-                                isConnectionMode={isConnectionMode()}
+                                onBoxMouseDown={onBoxMouseDown}
                                 cardLayout={props.cardLayout}
-                                onSelectAnchor={onGroupAnchorClick}
-                                isGroupSelected={groupConnectionSource() === group.id}
-                                sourceAnchor={sourceAnchor()}
-                                onUpdateDraftMetadata={handleUpdateSeriesDraftMetadata}
-                                renderDraftCard={(cd) => {
-                                    // Compute team names based on blueSideTeam
-                                    const bst = cd.Draft.blueSideTeam ?? 1;
-                                    const blueTeamName =
-                                        bst === 1
-                                            ? group.metadata.blueTeamName
-                                            : group.metadata.redTeamName;
-                                    const redTeamName =
-                                        bst === 1
-                                            ? group.metadata.redTeamName
-                                            : group.metadata.blueTeamName;
-
-                                    return (
-                                        <CanvasCard
-                                            canvasId={canvasId()}
-                                            canvasDraft={cd}
-                                            addBox={addBox}
-                                            deleteBox={deleteBox}
-                                            handleNameChange={handleNameChange}
-                                            handlePickChange={handlePickChange}
-                                            viewport={props.viewport}
-                                            onBoxMouseDown={onBoxMouseDown}
-                                            cardLayout={props.cardLayout}
-                                            isConnectionMode={isConnectionMode()}
-                                            onAnchorClick={onAnchorClick}
-                                            connectionSource={connectionSource}
-                                            sourceAnchor={sourceAnchor}
-                                            pickerTarget={pickerTarget}
-                                            onSlotOpen={openPicker}
-                                            canEdit={canEdit}
-                                            isGrouped={true}
-                                            groupType="series"
-                                            editingDraftId={editingDraftId}
-                                            onEditingComplete={() =>
-                                                setEditingDraftId(null)
-                                            }
-                                            blueTeamName={blueTeamName}
-                                            redTeamName={redTeamName}
-                                            restrictedChampions={() =>
-                                                getRestrictedChampionsForDraft(cd)
-                                            }
-                                            searchDimmed={() =>
-                                                searchActive() &&
-                                                !searchMatchByDraftId().has(cd.Draft.id)
-                                            }
-                                            searchSlotPhase={(pickIndex) =>
-                                                searchSlotPhaseFor(cd.Draft.id, pickIndex)
-                                            }
-                                            searchIsCurrent={() =>
-                                                currentSearchDraftId() === cd.Draft.id
-                                            }
-                                            searchInProgress={() =>
-                                                searchMatchByDraftId().get(cd.Draft.id)
-                                                    ?.inProgress ?? false
-                                            }
-                                            disabledChampions={
-                                                group.metadata.disabledChampions
-                                            }
-                                        />
-                                    );
-                                }}
+                                isConnectionMode={isConnectionMode()}
+                                onAnchorClick={onAnchorClick}
+                                connectionSource={connectionSource}
+                                sourceAnchor={sourceAnchor}
+                                pickerTarget={pickerTarget}
+                                onSlotOpen={openPicker}
+                                canEdit={canEdit}
+                                editingDraftId={editingDraftId}
+                                onEditingComplete={() => setEditingDraftId(null)}
+                                restrictedChampions={() =>
+                                    getRestrictedChampionsForDraft(cd)
+                                }
+                                searchDimmed={() =>
+                                    searchActive() &&
+                                    !searchMatchByDraftId().has(cd.Draft.id)
+                                }
+                                searchSlotPhase={(pickIndex) =>
+                                    searchSlotPhaseFor(cd.Draft.id, pickIndex)
+                                }
+                                searchIsCurrent={() =>
+                                    currentSearchDraftId() === cd.Draft.id
+                                }
+                                searchInProgress={() =>
+                                    searchMatchByDraftId().get(cd.Draft.id)?.inProgress ??
+                                    false
+                                }
                             />
-                        </Show>
-                    )}
-                </For>
-
-                {/* Render Ungrouped Drafts */}
-                <For each={ungroupedDrafts()}>
-                    {(cd) => (
-                        <CanvasCard
-                            canvasId={canvasId()}
-                            canvasDraft={cd}
-                            addBox={addBox}
-                            deleteBox={deleteBox}
-                            handleNameChange={handleNameChange}
-                            handlePickChange={handlePickChange}
-                            viewport={props.viewport}
-                            onBoxMouseDown={onBoxMouseDown}
-                            cardLayout={props.cardLayout}
-                            isConnectionMode={isConnectionMode()}
-                            onAnchorClick={onAnchorClick}
-                            connectionSource={connectionSource}
-                            sourceAnchor={sourceAnchor}
-                            pickerTarget={pickerTarget}
-                            onSlotOpen={openPicker}
-                            canEdit={canEdit}
-                            editingDraftId={editingDraftId}
-                            onEditingComplete={() => setEditingDraftId(null)}
-                            restrictedChampions={() => getRestrictedChampionsForDraft(cd)}
-                            searchDimmed={() =>
-                                searchActive() && !searchMatchByDraftId().has(cd.Draft.id)
-                            }
-                            searchSlotPhase={(pickIndex) =>
-                                searchSlotPhaseFor(cd.Draft.id, pickIndex)
-                            }
-                            searchIsCurrent={() => currentSearchDraftId() === cd.Draft.id}
-                            searchInProgress={() =>
-                                searchMatchByDraftId().get(cd.Draft.id)?.inProgress ??
-                                false
-                            }
-                        />
-                    )}
-                </For>
+                        )}
+                    </For>
+                </div>
                 <Show when={searchOpen()}>
                     <CanvasSearchBar
                         championId={searchChampionId}

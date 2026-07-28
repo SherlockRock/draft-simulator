@@ -86,17 +86,6 @@ export const CanvasCard = (props: CanvasCardProps) => {
         navigate(`/canvas/${props.canvasId}/draft/${props.canvasDraft.Draft.id}`);
     };
 
-    const worldToScreen = (worldX: number, worldY: number) => {
-        const vp = props.viewport();
-        return {
-            x: (worldX - vp.x) * vp.zoom,
-            y: (worldY - vp.y) * vp.zoom
-        };
-    };
-
-    const screenPos = () =>
-        worldToScreen(props.canvasDraft.positionX, props.canvasDraft.positionY);
-
     const isHorizontal = createMemo(() => props.cardLayout() === "horizontal");
     const isVertical = createMemo(() => props.cardLayout() === "vertical");
     const isWide = createMemo(() => props.cardLayout() === "wide");
@@ -495,10 +484,10 @@ export const CanvasCard = (props: CanvasCardProps) => {
                     : props.isGrouped
                       ? {}
                       : {
-                            left: `${screenPos().x}px`,
-                            top: `${screenPos().y}px`,
-                            transform: `scale(${props.viewport().zoom})`,
-                            "transform-origin": "top left"
+                            // World coordinates. The .canvas-world layer applies
+                            // the viewport transform for every card at once.
+                            left: `${props.canvasDraft.positionX}px`,
+                            top: `${props.canvasDraft.positionY}px`
                         }),
                 width: `${cardWidth(props.cardLayout())}px`,
                 height: `${cardHeight(props.cardLayout())}px`,
