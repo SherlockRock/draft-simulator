@@ -3942,25 +3942,33 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     </svg>
                 </div>
                 {/*
-                  The world layer. Everything positioned in world coordinates
-                  lives here and NOTHING else does — a transformed ancestor makes
-                  position:fixed descendants resolve against this layer instead of
-                  the viewport, so screen-space UI must stay outside it or portal.
+                  The world layer, deliberately split in TWO. Everything
+                  positioned in world coordinates lives in these two elements and
+                  NOTHING else does — a transformed ancestor makes position:fixed
+                  descendants resolve against the layer instead of the viewport,
+                  so screen-space UI must stay outside them or portal.
 
-                  Sizing: zero-size with visible overflow, so the layer itself has
-                  no hit area and clicks on empty space fall through to
+                  Sizing: zero-size with visible overflow, so neither layer has a
+                  hit area and clicks on empty space fall through to
                   .canvas-background beneath, which owns onBackgroundMouseDown.
 
-                  Stacking: z-30 is deliberate, NOT incidental. The transform makes
-                  this a stacking context, so its children's z-indices no longer
-                  interleave with siblings. The connection SVG is z-30 inside the
-                  non-stacking .canvas-background, so it hoists into the root
-                  context at z-30; matching it here and coming later in DOM order
-                  keeps connections painting BELOW cards, as they do today. The
-                  z-40 overlay band stays above. Do not change this to z-auto.
+                  Stacking — why TWO layers and not one. A transform creates a
+                  stacking context, which collapses its descendants' z-indices
+                  into it. Today groups (z-20), the connection SVG (z-30, inside
+                  the non-stacking .canvas-background so it hoists into the root
+                  context) and cards (z-30, later in DOM) are all siblings in the
+                  root context, so the paint order is groups -> SVG -> cards.
+                  A single z-30 world layer holding both groups and cards lifts
+                  the whole thing above the SVG and hides connections behind
+                  group containers (measured: 522 connection px on main, 0 with
+                  one layer). Two layers at z-20 and z-30 straddle the SVG and
+                  reproduce the original order exactly. Both carry the same
+                  transform, so panning is still two style writes, O(1) in card
+                  count. Slice 2 moves the SVG in here and collapses these back
+                  into one layer. Do not merge them before then.
                 */}
                 <div
-                    class="canvas-world absolute left-0 top-0 z-30 h-0 w-0"
+                    class="canvas-world canvas-world-groups absolute left-0 top-0 z-20 h-0 w-0"
                     style={{
                         transform: worldTransform(props.viewport()),
                         "transform-origin": "0 0"
@@ -4169,7 +4177,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             </Show>
                         )}
                     </For>
-
+                </div>
+                {/* Cards layer — z-30, above the connection SVG, matching the
+                    ungrouped cards' original z-30 sibling position. */}
+                <div
+                    class="canvas-world canvas-world-cards absolute left-0 top-0 z-30 h-0 w-0"
+                    style={{
+                        transform: worldTransform(props.viewport()),
+                        "transform-origin": "0 0"
+                    }}
+                >
                     {/* Render Ungrouped Drafts */}
                     <For each={ungroupedDrafts()}>
                         {(cd) => (
