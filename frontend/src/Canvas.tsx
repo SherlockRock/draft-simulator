@@ -407,6 +407,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // Deliberately NOT one memo per card — that keeps the O(cards) recompute.
     const viewportZoom = createMemo(() => props.viewport().zoom);
 
+    // background-size is the expensive half — changing it re-rasterizes the
+    // gradient tile. It depends only on zoom, so this memo returns an unchanged
+    // string during a pan and Solid writes nothing. background-position is
+    // cheap and genuinely changes every frame.
+    const gridSizeStyle = createMemo(() => {
+        const size = 32 * props.viewport().zoom;
+        return `${size}px ${size}px`;
+    });
+
+    const gridPositionStyle = createMemo(() => {
+        const vp = props.viewport();
+        return `${-vp.x * vp.zoom}px ${-vp.y * vp.zoom}px`;
+    });
+
     const getDraftsForGroup = (groupId: string) =>
         canvasDrafts.filter((cd) => cd.group_id === groupId);
 
@@ -3833,8 +3847,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         "cursor-grabbing": dragState().isPanning
                     }}
                     style={{
-                        "background-size": `${32 * props.viewport().zoom}px ${32 * props.viewport().zoom}px`,
-                        "background-position": `${-props.viewport().x * props.viewport().zoom}px ${-props.viewport().y * props.viewport().zoom}px`
+                        "background-size": gridSizeStyle(),
+                        "background-position": gridPositionStyle()
                     }}
                     onMouseDown={onBackgroundMouseDown}
                 >
