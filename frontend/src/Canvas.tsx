@@ -3085,6 +3085,60 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setIsDeleteDialogOpen(true);
     };
 
+    // Pan input is coalesced to one viewport commit per animation frame. A
+    // high-polling-rate mouse fires several mousemoves per frame and each one
+    // used to commit a viewport. There is exactly ONE flush path so a queued
+    // frame can never land after mouseup and overwrite the final position.
+    let pendingPanPointer: { x: number; y: number } | null = null;
+    let panFrame: number | null = null;
+
+    const commitPan = (pointer: { x: number; y: number }): Viewport | null => {
+        const state = dragState();
+        if (!state.isPanning) return null;
+        const vp = props.viewport();
+        const next = {
+            ...vp,
+            x: state.viewportStartX - (pointer.x - state.panStartX) / vp.zoom,
+            y: state.viewportStartY - (pointer.y - state.panStartY) / vp.zoom
+        };
+        props.setViewport(next);
+        return next;
+    };
+
+    const flushPan = () => {
+        panFrame = null;
+        const pointer = pendingPanPointer;
+        pendingPanPointer = null;
+        if (!pointer) return;
+        const next = commitPan(pointer);
+        if (next) viewportSaver.send(next);
+    };
+
+    const schedulePan = (pointer: { x: number; y: number }) => {
+        pendingPanPointer = pointer;
+        if (panFrame === null) panFrame = requestAnimationFrame(flushPan);
+    };
+
+    // Must run BEFORE dragState is reset to isPanning: false — commitPan reads
+    // it. Consumes the pending pointer exactly once so the pan ends on the
+    // pixel the user released at, then persists that position directly.
+    const endPan = () => {
+        if (panFrame !== null) {
+            cancelAnimationFrame(panFrame);
+            panFrame = null;
+        }
+        const pointer = pendingPanPointer;
+        pendingPanPointer = null;
+        const next = pointer ? commitPan(pointer) : null;
+        persistViewportNow(next ?? props.viewport());
+    };
+
+    onCleanup(() => {
+        if (panFrame !== null) cancelAnimationFrame(panFrame);
+        panFrame = null;
+        pendingPanPointer = null;
+    });
+
     onMount(() => {
         canvasContext.setSetEditingGroupIdCallback(() => setEditingGroupId);
         canvasContext.setDeleteGroupCallback(() => (id: string) => handleDeleteGroup(id));
@@ -3229,16 +3283,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             const state = dragState();
 
             if (state.isPanning) {
-                const deltaX = e.clientX - state.panStartX;
-                const deltaY = e.clientY - state.panStartY;
-                const vp = props.viewport();
-                const holdViewport = {
-                    ...vp,
-                    x: state.viewportStartX - deltaX / vp.zoom,
-                    y: state.viewportStartY - deltaY / vp.zoom
-                };
-                props.setViewport(holdViewport);
-                viewportSaver.send(holdViewport);
+                schedulePan({ x: e.clientX, y: e.clientY });
             } else if (state.activeBoxId !== null) {
                 const worldCoords = screenToWorld(e.clientX, e.clientY);
                 const newWorldX = worldCoords.x - state.offsetX;
@@ -3582,6 +3627,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             setDragOverGroupId(null);
             setExitingGroupId(null);
             setGridDropCell(null);
+
+            if (dragState().isPanning) endPan();
 
             setDragState({
                 activeBoxId: null,
