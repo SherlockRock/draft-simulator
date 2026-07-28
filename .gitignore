@@ -32,3 +32,6 @@ packages/engine-protocol/schema.json
 packages/engine-protocol/dist/
 packages/engine-core/src/protocol_types.rs
 docs/spikes/v*-data/
+
+# Database orphan-cleanup exports (row backups, never committed)
+tmp/
