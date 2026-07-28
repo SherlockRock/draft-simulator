@@ -114,6 +114,7 @@ import {
     createTrailingThrottle,
     presenceSnapshotSchema
 } from "./utils/presence";
+import { clampZoom, zoomAt } from "./utils/viewport";
 import { createRemoteCursorTracker } from "./utils/remoteCursors";
 import { createLaserTrailTracker } from "./utils/laserTrails";
 import { createLaserKeyTracker } from "./utils/laserKey";
@@ -2206,16 +2207,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
-    const debouncedSaveViewport = debounce((viewport: Viewport) => {
+    // Viewport persistence. The old `debounce` helper here was a LEADING-edge
+    // throttle that drops every call inside its window, so a pan persisted the
+    // viewport it STARTED at and discarded where the user actually released.
+    // createTrailingThrottle is leading + trailing, so the resting viewport
+    // always lands. Discrete events (zoom buttons, pan end) persist directly.
+    const persistViewportNow = (viewport: Viewport) => {
         if (isLocalMode()) {
             localUpdateViewport(viewport);
         } else {
-            updateViewportMutation.mutate({
-                canvasId: canvasId(),
-                viewport
-            });
+            updateViewportMutation.mutate({ canvasId: canvasId(), viewport });
         }
-    }, 1000);
+    };
+
+    const viewportSaver = createTrailingThrottle<Viewport>(persistViewportNow, 1000);
+
+    onCleanup(() => viewportSaver.cancel());
 
     // Viewport broadcast (presence slice 4): announce this client's viewport
     // on the presence channel, throttled with a trailing send so receivers
@@ -2293,19 +2300,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 viewportJumpFrame = requestAnimationFrame(step);
             } else {
                 stopViewportJump();
-                // Persist directly, not via debouncedSaveViewport: that
-                // helper is a leading-edge throttle that silently DROPS
-                // calls inside its 1s window, and a jump right after a pan
-                // must still save. A completed jump is a single discrete
-                // event, so there is nothing to throttle.
-                if (isLocalMode()) {
-                    localUpdateViewport(target);
-                } else {
-                    updateViewportMutation.mutate({
-                        canvasId: canvasId(),
-                        viewport: target
-                    });
-                }
+                // Persist directly rather than through the throttle: a jump
+                // right after a pan must still save, and a completed jump is
+                // a single discrete event, so there is nothing to throttle.
+                persistViewportNow(target);
             }
         };
 
@@ -3240,7 +3238,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     y: state.viewportStartY - deltaY / vp.zoom
                 };
                 props.setViewport(holdViewport);
-                debouncedSaveViewport(holdViewport);
+                viewportSaver.send(holdViewport);
             } else if (state.activeBoxId !== null) {
                 const worldCoords = screenToWorld(e.clientX, e.clientY);
                 const newWorldX = worldCoords.x - state.offsetX;
@@ -3601,22 +3599,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         };
 
         const onWindowWheel = (e: WheelEvent) => {
-            const target = e.target as HTMLElement;
-            if (target === canvasContainerRef || canvasContainerRef?.contains(target)) {
-                e.preventDefault();
-                const vp = props.viewport();
-                const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-                const newZoom = Math.max(0.1, Math.min(5, vp.zoom * zoomFactor));
-
-                const mouseWorldBefore = screenToWorld(e.clientX, e.clientY);
-                const mouseWorldAfter = screenToWorld(e.clientX, e.clientY);
-
-                props.setViewport({
-                    zoom: newZoom,
-                    x: vp.x - (mouseWorldAfter.x - mouseWorldBefore.x),
-                    y: vp.y - (mouseWorldAfter.y - mouseWorldBefore.y)
-                });
+            const target = e.target instanceof Node ? e.target : null;
+            if (target !== canvasContainerRef && !canvasContainerRef?.contains(target)) {
+                return;
             }
+            e.preventDefault();
+            const vp = props.viewport();
+            const rect = canvasContainerRef?.getBoundingClientRect();
+            const next = zoomAt(vp, clampZoom(vp.zoom * (e.deltaY > 0 ? 0.9 : 1.1)), {
+                x: e.clientX - (rect?.left ?? 0),
+                y: e.clientY - (rect?.top ?? 0)
+            });
+            if (next === vp) return;
+            props.setViewport(next);
+            viewportSaver.send(next);
         };
 
         window.addEventListener("keydown", onKeyDown);
@@ -3632,17 +3628,23 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     });
 
-    const zoomIn = () => {
+    // Anchored on the container centre so the button zooms where the user is
+    // looking. Uses the container rect, not window.innerWidth/Height — the
+    // canvas does not start at the viewport origin.
+    const zoomByFactor = (factor: number) => {
         const vp = props.viewport();
-        const newZoom = Math.min(5, vp.zoom * 1.2);
-        props.setViewport({ ...vp, zoom: newZoom });
+        const rect = canvasContainerRef?.getBoundingClientRect();
+        const next = zoomAt(vp, clampZoom(vp.zoom * factor), {
+            x: (rect?.width ?? 0) / 2,
+            y: (rect?.height ?? 0) / 2
+        });
+        if (next === vp) return;
+        props.setViewport(next);
+        persistViewportNow(next);
     };
 
-    const zoomOut = () => {
-        const vp = props.viewport();
-        const newZoom = Math.max(0.1, vp.zoom / 1.2);
-        props.setViewport({ ...vp, zoom: newZoom });
-    };
+    const zoomIn = () => zoomByFactor(1.2);
+    const zoomOut = () => zoomByFactor(1 / 1.2);
 
     const onDelete = () => {
         if (draftToDelete()) {
