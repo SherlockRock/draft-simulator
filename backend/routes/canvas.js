@@ -32,6 +32,50 @@ const MIN_SERIES_LENGTH = 1;
 const MAX_SERIES_LENGTH = 7;
 const VALID_DRAFT_MODES = new Set(["standard", "fearless", "ironman"]);
 
+// A canvas series is a real VersusDraft row (origin "manual"), and the only FK
+// between them runs CanvasGroups.versus_draft_id -> VersusDrafts with SET NULL.
+// Nothing in the database ever deletes the series, so every path that removes a
+// group has to destroy it by hand or leak the row forever. Deleting the series
+// cascades to its game Drafts and, through them, to their CanvasDraft cards.
+//
+// Series with origin "live" are never touched: those are real drafting sessions
+// that exist independently of whatever canvas happens to reference them.
+async function destroyManualSeriesForGroups(groups, transaction) {
+  const seriesIds = groups.map((g) => g.versus_draft_id).filter(Boolean);
+  if (seriesIds.length === 0) return 0;
+
+  return VersusDraft.destroy({
+    where: { id: seriesIds, origin: "manual" },
+    transaction,
+  });
+}
+
+// Removing a canvas card destroys the CanvasDraft join row only. Nothing
+// references Drafts.id back, so the Draft itself survives as a row no UI can
+// reach. Destroy the ones no card points at any more.
+//
+// Series games are deliberately skipped: they belong to their series, not to
+// the card, and go away with it via the versus_draft_id cascade.
+async function destroyUnreferencedDrafts(draftIds, transaction) {
+  if (draftIds.length === 0) return 0;
+
+  // The schema allows one draft on several canvases, so losing one card is not
+  // proof the draft is unused.
+  const remainingCards = await CanvasDraft.findAll({
+    where: { draft_id: draftIds },
+    attributes: ["draft_id"],
+    transaction,
+  });
+  const stillReferenced = new Set(remainingCards.map((cd) => cd.draft_id));
+  const unreferenced = draftIds.filter((id) => !stillReferenced.has(id));
+  if (unreferenced.length === 0) return 0;
+
+  return Draft.destroy({
+    where: { id: unreferenced, versus_draft_id: null },
+    transaction,
+  });
+}
+
 // Eager-load the linked Team entities (with rosters) so serialized groups carry
 // the entity name for search resolution and the roster for "Scout this team".
 const TEAM_INCLUDE = [
@@ -796,8 +840,19 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
       }
     }
 
-    // Only delete the specific deletable draft, not all with the same draft_id
-    await deletableDraft.destroy();
+    // Only delete the specific deletable draft, not all with the same draft_id.
+    // This destroys the CanvasDraft join row; nothing references Drafts.id back,
+    // so the Draft itself used to survive as an unreachable orphan. Destroy it
+    // too once no canvas card is left pointing at it.
+    const draftTx = await Canvas.sequelize.transaction();
+    try {
+      await deletableDraft.destroy({ transaction: draftTx });
+      await destroyUnreferencedDrafts([draftId], draftTx);
+      await draftTx.commit();
+    } catch (error) {
+      if (!draftTx.finished) await draftTx.rollback();
+      throw error;
+    }
 
     await touchCanvasTimestamp(canvasId);
 
@@ -1520,6 +1575,16 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
     });
     const draftIdsToRemove = new Set(groupDrafts.map((d) => d.draft_id));
 
+    // The group is going away either way, so its backing series would describe
+    // nothing. Load it now while the link still exists. Only manual series are
+    // ours to delete — a live one is a real drafting session.
+    const backingSeries = group.versus_draft_id
+      ? await VersusDraft.findOne({
+          where: { id: group.versus_draft_id, origin: "manual" },
+          transaction: t,
+        })
+      : null;
+
     if (keepDrafts) {
       // Convert positions to absolute and ungroup
       for (const draft of groupDrafts) {
@@ -1531,6 +1596,30 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
           },
           { transaction: t },
         );
+      }
+
+      // These cards stay on the canvas, so their Drafts must stop pointing at
+      // the series before we destroy it — versus_draft_id cascades, and would
+      // delete the very drafts keepDrafts exists to preserve. Mirrors how the
+      // series-creation path releases drafts it does not convert.
+      if (backingSeries) {
+        const seriesDrafts = await Draft.findAll({
+          where: { versus_draft_id: backingSeries.id },
+          attributes: ["id"],
+          transaction: t,
+        });
+        const seriesDraftIds = seriesDrafts.map((d) => d.id);
+
+        if (seriesDraftIds.length > 0) {
+          await Draft.update(
+            { versus_draft_id: null, seriesIndex: null },
+            { where: { id: seriesDraftIds }, transaction: t },
+          );
+          await CanvasDraft.update(
+            { source_type: "canvas" },
+            { where: { draft_id: seriesDraftIds }, transaction: t },
+          );
+        }
       }
     } else {
       // Clean up connections involving these drafts
@@ -1564,6 +1653,10 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
         where: { group_id: groupId, canvas_id: canvasId },
         transaction: t,
       });
+
+      // Cards a series does not own (drafts left loose inside the group) have
+      // no other owner, so destroying the join rows alone would strand them.
+      await destroyUnreferencedDrafts([...draftIdsToRemove], t);
     }
 
     // Clean up any connection endpoints that reference this group
@@ -1596,6 +1689,12 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
 
     // Delete the group
     await group.destroy({ transaction: t });
+
+    // Then the series it was the only reference to. On the delete-drafts path
+    // this also cascades away the game Drafts the join-row deletion left behind.
+    if (backingSeries) {
+      await backingSeries.destroy({ transaction: t });
+    }
 
     await t.commit();
     await touchCanvasTimestamp(canvasId);
@@ -1829,6 +1928,17 @@ router.delete("/:canvasId", protect, async (req, res) => {
 
     await assertCanvasAccess({ userId: req.user.id, canvasId, level: "admin" });
     t = await Canvas.sequelize.transaction();
+
+    // Groups disappear by DB CASCADE the moment the canvas does, so this is the
+    // last point at which the canvas -> group -> series link is readable. Once
+    // Canvas.destroy runs, the manual series backing these groups is
+    // unreachable and would leak permanently.
+    const canvasGroups = await CanvasGroup.findAll({
+      where: { canvas_id: canvasId },
+      attributes: ["versus_draft_id"],
+      transaction: t,
+    });
+    await destroyManualSeriesForGroups(canvasGroups, t);
 
     await CanvasConnection.destroy({
       where: { canvas_id: canvasId },
