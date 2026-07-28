@@ -121,7 +121,7 @@ import { CursorOverlay } from "./components/CursorOverlay";
 import { LaserOverlay } from "./components/LaserOverlay";
 import CanvasSidebar from "./components/CanvasSidebar";
 import { PresenceStack } from "./components/PresenceStack";
-import { getGroupRestrictedChampions } from "./utils/groupRestrictions";
+import { getRestrictedChampionsForGroup } from "./utils/draftRestrictions";
 import {
     isGridGroup,
     gridColsOf,
@@ -1636,24 +1636,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         if (!canvasDraft.group_id) return [];
 
         const group = canvasGroups.find((g) => g.id === canvasDraft.group_id);
-        if (!group || group.type !== "custom") return [];
-
-        const draftMode = group.metadata.draftMode;
-        if (!draftMode || draftMode === "standard") return [];
+        if (!group) return [];
 
         const siblingDrafts = canvasDrafts
             .filter((cd) => cd.group_id === group.id)
             .map((cd) => ({
                 id: cd.Draft.id,
                 name: cd.Draft.name,
-                picks: cd.Draft.picks
+                picks: cd.Draft.picks,
+                seriesIndex: cd.Draft.seriesIndex
             }));
 
-        return getGroupRestrictedChampions(
-            draftMode,
-            siblingDrafts,
-            canvasDraft.Draft.id
-        );
+        return getRestrictedChampionsForGroup({
+            group,
+            drafts: siblingDrafts,
+            currentDraftId: canvasDraft.Draft.id
+        });
     };
 
     // Slice 1 tile states: everything unavailable is uniformly grey — picked in
