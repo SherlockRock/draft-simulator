@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+    LOD_ENTER_ZOOM,
+    LOD_EXIT_ZOOM,
     MAX_ZOOM,
     MIN_ZOOM,
     clampZoom,
+    nextLodState,
     worldAt,
     worldTransform,
     zoomAt
@@ -114,5 +117,56 @@ describe("clampZoom", () => {
         expect(clampZoom(0.001)).toBe(MIN_ZOOM);
         expect(clampZoom(50)).toBe(MAX_ZOOM);
         expect(clampZoom(1.5)).toBe(1.5);
+    });
+});
+
+describe("nextLodState", () => {
+    it("enters the LOD below the enter threshold", () => {
+        expect(nextLodState(false, LOD_ENTER_ZOOM - 0.001)).toBe(true);
+        expect(nextLodState(false, MIN_ZOOM)).toBe(true);
+    });
+
+    it("does not enter at or above the enter threshold", () => {
+        expect(nextLodState(false, LOD_ENTER_ZOOM)).toBe(false);
+        expect(nextLodState(false, 1)).toBe(false);
+    });
+
+    it("only exits above the higher exit threshold", () => {
+        expect(nextLodState(true, LOD_EXIT_ZOOM + 0.001)).toBe(false);
+        expect(nextLodState(true, MAX_ZOOM)).toBe(false);
+    });
+
+    // The whole point of the band. Without it, sitting between the two thresholds
+    // flips every card interior and the grid on alternate frames.
+    it("holds state inside the hysteresis band, from either direction", () => {
+        const mid = (LOD_ENTER_ZOOM + LOD_EXIT_ZOOM) / 2;
+        expect(nextLodState(true, mid)).toBe(true);
+        expect(nextLodState(false, mid)).toBe(false);
+        // exactly on each boundary, the band still holds whatever it had
+        expect(nextLodState(true, LOD_ENTER_ZOOM)).toBe(true);
+        expect(nextLodState(true, LOD_EXIT_ZOOM)).toBe(true);
+    });
+
+    it("exits only after crossing the full band, never at the enter threshold", () => {
+        // walk up out of the LOD one step at a time
+        let lod = nextLodState(false, 0.15);
+        expect(lod).toBe(true);
+        for (const zoom of [0.2, 0.29, LOD_ENTER_ZOOM, 0.32, LOD_EXIT_ZOOM]) {
+            lod = nextLodState(lod, zoom);
+            expect(lod).toBe(true);
+        }
+        expect(nextLodState(lod, 0.35)).toBe(false);
+    });
+
+    it("holds state for an unusable zoom rather than swapping every card", () => {
+        expect(nextLodState(true, Number.NaN)).toBe(true);
+        expect(nextLodState(false, Number.NaN)).toBe(false);
+        expect(nextLodState(true, 0)).toBe(true);
+        expect(nextLodState(true, -1)).toBe(true);
+        expect(nextLodState(true, Number.POSITIVE_INFINITY)).toBe(true);
+    });
+
+    it("keeps the exit threshold above the enter threshold", () => {
+        expect(LOD_EXIT_ZOOM).toBeGreaterThan(LOD_ENTER_ZOOM);
     });
 });

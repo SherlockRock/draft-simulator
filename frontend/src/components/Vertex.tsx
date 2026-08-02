@@ -1,10 +1,9 @@
-import { Vertex, Viewport } from "../utils/schemas";
-import { worldToScreen } from "../utils/helpers";
+import { Vertex } from "../utils/schemas";
 
 type VertexComponentProps = {
     connectionId: string;
     vertex: Vertex;
-    viewport: () => Viewport;
+    zoom: () => number;
     onDragStart: (
         connectionId: string,
         vertexId: string,
@@ -20,18 +19,21 @@ type VertexComponentProps = {
 };
 
 export const VertexComponent = (props: VertexComponentProps) => {
-    const VERTEX_RADIUS = 6; // Base size in px
+    // The connection SVG lives inside the scaled `.canvas-world` layer, so a
+    // vertex draws at its raw world coordinates and every length below is a
+    // screen-px constant divided by zoom to stay visually fixed.
+    const VERTEX_RADIUS = 6; // Base size in screen px
     const HOVER_RADIUS = 10;
+    const HITBOX_RADIUS = 16;
+    const OUTLINE_WIDTH = 2;
     const colors = {
         idle: "#E03848",
         hover: "#F06830",
         selected: "#9B50C0"
     };
 
-    const screenPos = () => {
-        const vp = props.viewport();
-        return worldToScreen(props.vertex.x, props.vertex.y, vp);
-    };
+    // World px per screen px. zoom is clamped to MIN_ZOOM, so never zero.
+    const invZoom = () => 1 / props.zoom();
 
     return (
         <g>
@@ -39,9 +41,9 @@ export const VertexComponent = (props: VertexComponentProps) => {
             <circle
                 data-connection-id={props.connectionId}
                 data-vertex-id={props.vertex.id}
-                cx={screenPos().x}
-                cy={screenPos().y}
-                r={16}
+                cx={props.vertex.x}
+                cy={props.vertex.y}
+                r={HITBOX_RADIUS * invZoom()}
                 fill="transparent"
                 class={props.isConnectionMode ? "cursor-pointer" : "cursor-move"}
                 onMouseDown={(e) => {
@@ -64,9 +66,12 @@ export const VertexComponent = (props: VertexComponentProps) => {
 
             {/* Visible vertex circle */}
             <circle
-                cx={screenPos().x}
-                cy={screenPos().y}
-                r={props.isHovered || props.isSelected ? HOVER_RADIUS : VERTEX_RADIUS}
+                cx={props.vertex.x}
+                cy={props.vertex.y}
+                r={
+                    (props.isHovered || props.isSelected ? HOVER_RADIUS : VERTEX_RADIUS) *
+                    invZoom()
+                }
                 fill={
                     props.isSelected
                         ? colors.selected
@@ -75,7 +80,7 @@ export const VertexComponent = (props: VertexComponentProps) => {
                           : colors.idle
                 }
                 stroke="white"
-                stroke-width="2"
+                stroke-width={OUTLINE_WIDTH * invZoom()}
                 class="pointer-events-none"
             />
         </g>

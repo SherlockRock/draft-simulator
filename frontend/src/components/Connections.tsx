@@ -1,30 +1,36 @@
 import { createSignal, Show, createMemo, For } from "solid-js";
+import { CanvasDraft, CanvasGroup, Connection, AnchorType } from "../utils/schemas";
 import {
-    CanvasDraft,
-    CanvasGroup,
-    Connection,
-    Viewport,
-    AnchorType
-} from "../utils/schemas";
-import {
-    getAnchorScreenPosition,
-    getGroupAnchorScreenPosition,
+    getAnchorWorldPosition,
+    getGroupAnchorWorldPosition,
     getSeriesGroupDimensions,
     getSeriesDraftWorldPosition,
     getSeriesDraftAnchorWorldPosition,
-    worldToScreen,
-    screenToWorld,
     cardWidth,
     cardHeight
 } from "../utils/helpers";
 import { VertexComponent } from "./Vertex";
 import type { CardLayout } from "../utils/canvasCardLayout";
 
+/*
+ * Connections render in WORLD coordinates. The SVG they live in sits inside the
+ * `.canvas-world` layer, so panning is a compositor transform on that one
+ * element and nothing here recomputes. Nothing in this file may read the
+ * viewport — a `props.viewport()` read would re-run these memos on every pan
+ * frame and undo the whole point.
+ *
+ * `zoom` is still read, because stroke widths, dash patterns and arrowheads are
+ * screen-px constants that must be divided by zoom to survive the layer's
+ * `scale()`. Zoom is stable during a pan, and the shared zoom memo in Canvas.tsx
+ * is `===`-equal across pan frames, so those reads cost nothing while panning.
+ */
+
 export const ConnectionComponent = (props: {
     connection: Connection;
     drafts: CanvasDraft[];
     groups: CanvasGroup[];
-    viewport: () => Viewport;
+    zoom: () => number;
+    screenToWorld: (clientX: number, clientY: number) => { x: number; y: number };
     onCreateVertex: (connectionId: string, x: number, y: number) => void;
     onVertexDragStart: (
         connectionId: string,
@@ -62,17 +68,12 @@ export const ConnectionComponent = (props: {
                     groupDrafts.length,
                     props.cardLayout()
                 );
-                return getGroupAnchorScreenPosition(
+                return getGroupAnchorWorldPosition(
                     { ...group, width: dims.width, height: dims.height },
-                    endpoint.anchor_type,
-                    props.viewport()
+                    endpoint.anchor_type
                 );
             }
-            return getGroupAnchorScreenPosition(
-                group,
-                endpoint.anchor_type,
-                props.viewport()
-            );
+            return getGroupAnchorWorldPosition(group, endpoint.anchor_type);
         }
         const draft = findDraft(endpoint.draft_id);
         if (!draft) return null;
@@ -91,19 +92,17 @@ export const ConnectionComponent = (props: {
                     return aIndex - bIndex;
                 });
             const index = groupDrafts.findIndex((d) => d.Draft.id === draft.Draft.id);
-            const worldPos = getSeriesDraftAnchorWorldPosition(
+            return getSeriesDraftAnchorWorldPosition(
                 group,
                 index,
                 endpoint.anchor_type,
                 props.cardLayout()
             );
-            return worldToScreen(worldPos.x, worldPos.y, props.viewport());
         }
-        return getAnchorScreenPosition(
+        return getAnchorWorldPosition(
             draft,
             endpoint.anchor_type,
             props.cardLayout(),
-            props.viewport(),
             group
         );
     };
@@ -122,13 +121,10 @@ export const ConnectionComponent = (props: {
             .filter(Boolean);
     });
 
-    // Calculate vertex positions in screen coords
+    // Vertices are already stored in world coords, so they need no conversion
     const vertexPositions = createMemo(() => {
         if (!props.connection) return [];
-        return props.connection.vertices.map((v) => {
-            const vp = props.viewport();
-            return worldToScreen(v.x, v.y, vp);
-        });
+        return props.connection.vertices.map((v) => ({ x: v.x, y: v.y }));
     });
 
     // Build SVG path segments
@@ -216,7 +212,8 @@ export const ConnectionComponent = (props: {
                 const dy = tgt.y - prevPoint.y;
                 const angle = Math.atan2(dy, dx);
 
-                const arrowLength = 12;
+                // 12 screen px, expressed in world units
+                const arrowLength = 12 / props.zoom();
 
                 const x1 = tgt.x - arrowLength * Math.cos(angle - Math.PI / 6);
                 const y1 = tgt.y - arrowLength * Math.sin(angle - Math.PI / 6);
@@ -228,32 +225,24 @@ export const ConnectionComponent = (props: {
             .filter(Boolean);
     });
 
+    // Dash patterns are screen-px lengths, so they scale down with zoom
     const strokeDasharray = () => {
-        if (props.connection.style === "dashed") return "8,4";
-        if (props.connection.style === "dotted") return "2,4";
+        const s = 1 / props.zoom();
+        if (props.connection.style === "dashed") return `${8 * s},${4 * s}`;
+        if (props.connection.style === "dotted") return `${2 * s},${4 * s}`;
         return "none";
     };
 
-    // Handle double-click on path to create vertex
+    const strokeWidth = () => (isHovered() ? 3 : 2) / props.zoom();
+
+    // Handle double-click on path to create vertex.
+    // The SVG's own rect is useless here — it is a nominal 1x1 element whose
+    // content paints as overflow — so go through the canvas container instead.
     const handlePathDoubleClick = (e: MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
 
-        // Get SVG element to calculate canvas-relative coordinates
-        const svgElement = (e.currentTarget as SVGPathElement).ownerSVGElement;
-        if (!svgElement) return;
-
-        const svgRect = svgElement.getBoundingClientRect();
-        const canvasRelativeX = e.clientX - svgRect.left;
-        const canvasRelativeY = e.clientY - svgRect.top;
-
-        // Convert canvas-relative coordinates to world coordinates
-        const worldPos = screenToWorld(
-            canvasRelativeX,
-            canvasRelativeY,
-            props.viewport()
-        );
-
+        const worldPos = props.screenToWorld(e.clientX, e.clientY);
         props.onCreateVertex(props.connection.id, worldPos.x, worldPos.y);
     };
 
@@ -267,7 +256,7 @@ export const ConnectionComponent = (props: {
             <path
                 data-connection-id={props.connection.id}
                 d={path()}
-                stroke-width={isHovered() ? "3" : "2"}
+                stroke-width={strokeWidth()}
                 fill="none"
                 stroke-dasharray={strokeDasharray()}
                 class="cursor-pointer"
@@ -296,6 +285,7 @@ export const ConnectionComponent = (props: {
                 {(arrowhead) => (
                     <path
                         d={arrowhead}
+                        stroke-width={1 / props.zoom()}
                         class="pointer-events-none"
                         classList={{
                             "stroke-darius-ember fill-darius-ember": !isHovered(),
@@ -311,7 +301,7 @@ export const ConnectionComponent = (props: {
                     <VertexComponent
                         connectionId={props.connection.id}
                         vertex={vertex}
-                        viewport={props.viewport}
+                        zoom={props.zoom}
                         onDragStart={props.onVertexDragStart}
                         isHovered={hoveredVertex() === vertex.id}
                         onHover={(hover) => setHoveredVertex(hover ? vertex.id : null)}
@@ -329,8 +319,9 @@ export const ConnectionPreview = (props: {
     startDraft: CanvasDraft;
     startGroup?: CanvasGroup | null;
     sourceAnchor: { type: AnchorType } | null;
+    /** World coordinates, like every other point in this file. */
     mousePos: { x: number; y: number } | null;
-    viewport: () => Viewport;
+    zoom: () => number;
     cardLayout: () => CardLayout;
     seriesDraftIndex?: number;
 }) => {
@@ -339,7 +330,6 @@ export const ConnectionPreview = (props: {
         const seriesIndex = props.seriesDraftIndex ?? 0;
 
         if (!props.sourceAnchor) {
-            const vp = props.viewport();
             const currentWidth = cardWidth(props.cardLayout());
             const currentHeight = cardHeight(props.cardLayout());
             let baseX: number;
@@ -361,26 +351,24 @@ export const ConnectionPreview = (props: {
                 }
             }
             return {
-                x: (baseX + currentWidth / 2 - vp.x) * vp.zoom,
-                y: (baseY + currentHeight / 2 - vp.y) * vp.zoom
+                x: baseX + currentWidth / 2,
+                y: baseY + currentHeight / 2
             };
         }
 
         if (isSeriesGroup && props.startGroup) {
-            const worldPos = getSeriesDraftAnchorWorldPosition(
+            return getSeriesDraftAnchorWorldPosition(
                 props.startGroup,
                 seriesIndex,
                 props.sourceAnchor.type,
                 props.cardLayout()
             );
-            return worldToScreen(worldPos.x, worldPos.y, props.viewport());
         }
 
-        return getAnchorScreenPosition(
+        return getAnchorWorldPosition(
             props.startDraft,
             props.sourceAnchor.type,
             props.cardLayout(),
-            props.viewport(),
             props.startGroup
         );
     };
@@ -392,8 +380,8 @@ export const ConnectionPreview = (props: {
                 y1={startPos().y}
                 x2={props.mousePos?.x ?? 0}
                 y2={props.mousePos?.y ?? 0}
-                stroke-width="2"
-                stroke-dasharray="4,4"
+                stroke-width={2 / props.zoom()}
+                stroke-dasharray={`${4 / props.zoom()},${4 / props.zoom()}`}
                 class="pointer-events-none stroke-darius-purple-bright"
             />
         </Show>
@@ -403,8 +391,9 @@ export const ConnectionPreview = (props: {
 export const GroupConnectionPreview = (props: {
     startGroup: CanvasGroup;
     sourceAnchor: { type: AnchorType } | null;
+    /** World coordinates, like every other point in this file. */
     mousePos: { x: number; y: number } | null;
-    viewport: () => Viewport;
+    zoom: () => number;
     seriesDraftCount?: number;
     cardLayout?: () => CardLayout;
 }) => {
@@ -426,20 +415,15 @@ export const GroupConnectionPreview = (props: {
     const startPos = () => {
         const group = effectiveGroup();
         if (!props.sourceAnchor) {
-            const vp = props.viewport();
             const w = group.width ?? 400;
             const h = group.height ?? 200;
             return {
-                x: (group.positionX + w / 2 - vp.x) * vp.zoom,
-                y: (group.positionY + h / 2 - vp.y) * vp.zoom
+                x: group.positionX + w / 2,
+                y: group.positionY + h / 2
             };
         }
 
-        return getGroupAnchorScreenPosition(
-            group,
-            props.sourceAnchor.type,
-            props.viewport()
-        );
+        return getGroupAnchorWorldPosition(group, props.sourceAnchor.type);
     };
 
     return (
@@ -449,8 +433,8 @@ export const GroupConnectionPreview = (props: {
                 y1={startPos().y}
                 x2={props.mousePos?.x ?? 0}
                 y2={props.mousePos?.y ?? 0}
-                stroke-width="2"
-                stroke-dasharray="4,4"
+                stroke-width={2 / props.zoom()}
+                stroke-dasharray={`${4 / props.zoom()},${4 / props.zoom()}`}
                 class="pointer-events-none stroke-darius-purple-bright"
             />
         </Show>

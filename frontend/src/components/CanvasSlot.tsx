@@ -21,6 +21,23 @@ type CanvasSlotProps = {
     onClear: () => void;
 };
 
+const SlotTint: Component<{
+    isPickerTarget: boolean;
+    searchHighlight: SlotPhase | null;
+}> = (props) => (
+    <Show when={props.isPickerTarget || props.searchHighlight !== null}>
+        <div
+            class="pointer-events-none absolute inset-0 z-[2]"
+            classList={{
+                "bg-darius-ember/25":
+                    props.isPickerTarget || props.searchHighlight === "pick",
+                "bg-darius-crimson/25":
+                    !props.isPickerTarget && props.searchHighlight === "ban"
+            }}
+        />
+    </Show>
+);
+
 export const CanvasSlot: Component<CanvasSlotProps> = (props) => {
     const isCompact = createMemo(() => props.displayMode === "compact");
     const isWideArt = createMemo(() => props.displayMode === "wide-art");
@@ -72,7 +89,7 @@ export const CanvasSlot: Component<CanvasSlotProps> = (props) => {
                         fallback={
                             /* ---- full ---- */
                             <div
-                                class="flex h-full min-h-0 w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg border bg-darius-bg px-2 py-1 text-left text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+                                class="relative flex h-full min-h-0 w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg border bg-darius-bg px-2 py-1 text-left text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
                                 onClick={openSlot}
                                 classList={{
                                     "border-darius-border":
@@ -90,8 +107,12 @@ export const CanvasSlot: Component<CanvasSlotProps> = (props) => {
                                     "opacity-60": props.disabled
                                 }}
                             >
+                                <SlotTint
+                                    isPickerTarget={props.isPickerTarget}
+                                    searchHighlight={props.searchHighlight ?? null}
+                                />
                                 <div
-                                    class="flex min-w-0 flex-1 items-center gap-2"
+                                    class="relative z-[3] flex min-w-0 flex-1 items-center gap-2"
                                     classList={{
                                         "flex-row-reverse": props.side === "team2"
                                     }}
@@ -135,7 +156,7 @@ export const CanvasSlot: Component<CanvasSlotProps> = (props) => {
                                         type="button"
                                         onMouseDown={stopMouseDown}
                                         onClick={clear}
-                                        class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-darius-text-primary transition-all hover:text-darius-purple-bright"
+                                        class="relative z-[4] flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-darius-text-primary transition-all hover:text-darius-purple-bright"
                                         classList={{
                                             "order-first": props.side === "team2"
                                         }}
@@ -186,6 +207,10 @@ export const CanvasSlot: Component<CanvasSlotProps> = (props) => {
                                     )}
                                 </Show>
                                 <div class="absolute inset-0 bg-darius-bg/35" />
+                                <SlotTint
+                                    isPickerTarget={props.isPickerTarget}
+                                    searchHighlight={props.searchHighlight ?? null}
+                                />
                                 <div
                                     class="relative z-[3] flex w-full items-end px-3 py-2"
                                     classList={{
@@ -258,6 +283,10 @@ export const CanvasSlot: Component<CanvasSlotProps> = (props) => {
                                 />
                             )}
                         </Show>
+                        <SlotTint
+                            isPickerTarget={props.isPickerTarget}
+                            searchHighlight={props.searchHighlight ?? null}
+                        />
                     </div>
                     <Show when={selectedChampion() !== null && !props.disabled}>
                         <button

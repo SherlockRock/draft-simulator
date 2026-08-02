@@ -9,6 +9,42 @@ export const clampZoom = (zoom: number): number =>
     Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
 
 /**
+ * Level-of-detail thresholds for panning at low zoom.
+ *
+ * Below LOD_ENTER_ZOOM a card's 20 slots stop painting and are replaced by a flat
+ * icon mosaic, and the dot grid stops painting. Measured in Chrome at zoom 0.20,
+ * 40 cards on screen, 164Hz (6.1ms budget), three interleaved reps per row:
+ *
+ *   real slots + dot grid    115 fps    p95 12.2ms   ~1 frame in 5 dropped
+ *   mosaic     + dot grid    132 fps    p95 12.2ms
+ *   mosaic     + no grid     164 fps    p95  6.1ms   ~0 dropped
+ *
+ * The two levers are additive and together reach the vsync budget. The grid is the
+ * bigger half: the cost is having ANY repeating background-image on a translating
+ * layer, and it is unfixable by cheaper means — a coarser pitch, an opaque layer
+ * and a pre-rasterised bitmap tile were each measured at zero.
+ *
+ * EXIT is above ENTER so the state machine has hysteresis: without a band, hovering
+ * on the threshold swaps every card's interior back and forth on alternate frames.
+ */
+export const LOD_ENTER_ZOOM = 0.3;
+export const LOD_EXIT_ZOOM = 0.345;
+
+/**
+ * Hysteresis state machine for the LOD. Pure so it can be tested directly; the
+ * canvas wraps it in a `createMemo` that feeds the previous value back in.
+ *
+ * Anything that is not a usable zoom holds the current state rather than flipping
+ * it — a transient NaN must not swap 40 card interiors.
+ */
+export const nextLodState = (previous: boolean, zoom: number): boolean => {
+    if (!Number.isFinite(zoom) || zoom <= 0) return previous;
+    if (!previous && zoom < LOD_ENTER_ZOOM) return true;
+    if (previous && zoom > LOD_EXIT_ZOOM) return false;
+    return previous;
+};
+
+/**
  * The CSS transform for the single `.canvas-world` layer.
  *
  * This replaces the per-element math every card and group used to run. An

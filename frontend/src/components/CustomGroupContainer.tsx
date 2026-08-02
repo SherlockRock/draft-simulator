@@ -246,7 +246,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
     return (
         <div
             data-group-id={props.group.id}
-            class="group-container absolute z-20 rounded-xl border-2 bg-darius-card/90 shadow-xl backdrop-blur-sm"
+            class="group-container absolute z-20 rounded-xl border-2 bg-darius-card/90 shadow-xl"
             classList={{
                 "border-darius-border":
                     !props.isDragTarget && !props.isExitingSource && !isResizeClamped(),

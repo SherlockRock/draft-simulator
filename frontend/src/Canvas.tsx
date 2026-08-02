@@ -114,7 +114,7 @@ import {
     createTrailingThrottle,
     presenceSnapshotSchema
 } from "./utils/presence";
-import { clampZoom, worldTransform, zoomAt } from "./utils/viewport";
+import { clampZoom, nextLodState, worldTransform, zoomAt } from "./utils/viewport";
 import { createRemoteCursorTracker } from "./utils/remoteCursors";
 import { createLaserTrailTracker } from "./utils/laserTrails";
 import { createLaserKeyTracker } from "./utils/laserKey";
@@ -407,18 +407,55 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // Deliberately NOT one memo per card — that keeps the O(cards) recompute.
     const viewportZoom = createMemo(() => props.viewport().zoom);
 
-    // background-size is the expensive half — changing it re-rasterizes the
-    // gradient tile. It depends only on zoom, so this memo returns an unchanged
-    // string during a pan and Solid writes nothing. background-position is
-    // cheap and genuinely changes every frame.
+    // Low-zoom level of detail, shared by every card and the dot grid. A memo rather
+    // than a signal+effect because the hysteresis needs the PREVIOUS state, which
+    // createMemo hands back as the first argument — so this stays pure, needs no
+    // untrack, and cannot re-enter itself. Like viewportZoom above, a pan recomputes
+    // it to an unchanged boolean and `===` equality stops the propagation there.
+    const lodActive = createMemo(
+        (previous: boolean) => nextLodState(previous, viewportZoom()),
+        false
+    );
+
+    // Screen-space pitch of the dot grid. Zoom-only: during a pan this recomputes to
+    // the same number, so Solid's `===` equality suppresses the style write. That
+    // matters because `background-size` is the expensive half — changing it
+    // re-rasterizes the gradient tile.
+    const gridPitch = createMemo(() => 32 * props.viewport().zoom);
+
     const gridSizeStyle = createMemo(() => {
-        const size = 32 * props.viewport().zoom;
+        const size = gridPitch();
         return `${size}px ${size}px`;
     });
 
-    const gridPositionStyle = createMemo(() => {
+    // The grid plane is oversized on every side so a translation of up to one pitch can
+    // never expose an edge. The extra 1px absorbs device-pixel snapping below, which can
+    // round the offset up by half a device pixel and would otherwise leave a hairline
+    // sliver of undotted background at the top/left edge.
+    const gridInsetStyle = createMemo(() => `${-(gridPitch() + 1)}px`);
+
+    // A repeating pattern is translation-invariant modulo its period, and here the
+    // period IS `background-size` — so translating by `offset mod pitch` is visually
+    // identical to translating by `offset`. Exact, not an approximation.
+    //
+    // This replaces a per-frame `background-position` write on a viewport-sized
+    // element, which invalidated and re-rastered the whole pane every pan frame. A
+    // transform on a composited layer does not invalidate.
+    const gridTransformStyle = createMemo(() => {
         const vp = props.viewport();
-        return `${-vp.x * vp.zoom}px ${-vp.y * vp.zoom}px`;
+        const pitch = gridPitch();
+        const dpr = window.devicePixelRatio || 1;
+        // Recomputed from the viewport each frame rather than accumulated, so there
+        // is no float drift however long the pan runs.
+        const wrap = (value: number) => ((value % pitch) + pitch) % pitch;
+        // Snap to device pixels. A fractional translate makes the compositor resample
+        // the layer bilinearly, and that softness persists after the pan stops. The
+        // resulting sub-pixel offset against world coordinates is invisible, and
+        // nothing in the canvas snaps to the dot grid.
+        const snap = (value: number) => Math.round(value * dpr) / dpr;
+        const x = snap(wrap(-vp.x * vp.zoom));
+        const y = snap(wrap(-vp.y * vp.zoom));
+        return `translate3d(${x}px, ${y}px, 0)`;
     });
 
     const getDraftsForGroup = (groupId: string) =>
@@ -463,7 +500,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     let canvasContainerRef: HTMLDivElement | undefined;
-    let svgRef: SVGSVGElement | undefined;
 
     // Function to navigate viewport to a draft's position
     const navigateToDraft = (positionX: number, positionY: number) => {
@@ -3264,10 +3300,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 (connectionSource() || groupConnectionSource()) &&
                 canvasContainerRef
             ) {
-                const canvasRect = canvasContainerRef.getBoundingClientRect();
-                const canvasRelativeX = e.clientX - canvasRect.left;
-                const canvasRelativeY = e.clientY - canvasRect.top;
-                setPreviewMousePos({ x: canvasRelativeX, y: canvasRelativeY });
+                // World coords: the preview line is drawn inside the world layer
+                setPreviewMousePos(screenToWorld(e.clientX, e.clientY));
             }
 
             const vState = vertexDragState();
@@ -3841,134 +3875,83 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     </div>
                 </Show>
                 <div
-                    class="canvas-background absolute inset-0 bg-darius-card-hover bg-[radial-gradient(circle,rgba(184,168,176,0.08)_1px,transparent_1px)]"
+                    class="canvas-background absolute inset-0 bg-darius-card-hover"
                     classList={{
                         "cursor-grab": !dragState().isPanning,
                         "cursor-grabbing": dragState().isPanning
                     }}
-                    style={{
-                        "background-size": gridSizeStyle(),
-                        "background-position": gridPositionStyle()
-                    }}
                     onMouseDown={onBackgroundMouseDown}
                 >
-                    <svg
-                        ref={svgRef}
-                        class="pointer-events-none absolute inset-0 z-30 h-full w-full"
-                    >
-                        <For each={connections}>
-                            {(connection) => (
-                                <ConnectionComponent
-                                    connection={connection}
-                                    drafts={canvasDrafts}
-                                    groups={canvasGroups}
-                                    viewport={props.viewport}
-                                    onCreateVertex={handleCreateVertex}
-                                    onVertexDragStart={onVertexDragStart}
-                                    isConnectionMode={isConnectionMode()}
-                                    onConnectionClick={handleConnectionClick}
-                                    onVertexClick={handleVertexClick}
-                                    selectedVertexId={
-                                        selectedVertexForConnection()?.vertexId || null
-                                    }
-                                    cardLayout={props.cardLayout}
-                                />
-                            )}
-                        </For>
-                        <Show when={connectionSource()}>
-                            <ConnectionPreview
-                                startDraft={
-                                    canvasDrafts.find(
-                                        (d) => d.Draft.id === connectionSource()!
-                                    )!
-                                }
-                                startGroup={(() => {
-                                    const draft = canvasDrafts.find(
-                                        (d) => d.Draft.id === connectionSource()!
-                                    );
-                                    if (!draft?.group_id) return null;
-                                    return (
-                                        canvasGroups.find(
-                                            (g) => g.id === draft.group_id
-                                        ) ?? null
-                                    );
-                                })()}
-                                seriesDraftIndex={(() => {
-                                    const draft = canvasDrafts.find(
-                                        (d) => d.Draft.id === connectionSource()!
-                                    );
-                                    if (!draft?.group_id) return undefined;
-                                    const group = canvasGroups.find(
-                                        (g) => g.id === draft.group_id
-                                    );
-                                    if (group?.type !== "series") return undefined;
-                                    const groupDrafts = canvasDrafts
-                                        .filter((d) => d.group_id === group.id)
-                                        .sort(
-                                            (a, b) =>
-                                                (a.Draft.seriesIndex ?? 0) -
-                                                (b.Draft.seriesIndex ?? 0)
-                                        );
-                                    return groupDrafts.findIndex(
-                                        (d) => d.Draft.id === draft.Draft.id
-                                    );
-                                })()}
-                                sourceAnchor={sourceAnchor()}
-                                mousePos={previewMousePos()}
-                                viewport={props.viewport}
-                                cardLayout={props.cardLayout}
-                            />
-                        </Show>
-                        <Show when={groupConnectionSource()}>
-                            <GroupConnectionPreview
-                                startGroup={
-                                    canvasGroups.find(
-                                        (g) => g.id === groupConnectionSource()!
-                                    )!
-                                }
-                                sourceAnchor={sourceAnchor()}
-                                mousePos={previewMousePos()}
-                                viewport={props.viewport}
-                                seriesDraftCount={(() => {
-                                    const group = canvasGroups.find(
-                                        (g) => g.id === groupConnectionSource()!
-                                    );
-                                    if (group?.type !== "series") return undefined;
-                                    return getDraftsForGroup(group.id).length;
-                                })()}
-                                cardLayout={props.cardLayout}
-                            />
-                        </Show>
-                    </svg>
+                    {/*
+                      The dot grid gets its own plane so that panning is a compositor
+                      transform instead of a `background-position` rewrite that
+                      invalidated this whole viewport-sized element every frame.
+
+                      The transform MUST stay on this child and never move onto
+                      `.canvas-background`. A transform there would make it a stacking
+                      context and a containing block for `position: fixed`
+                      descendants, and would re-invalidate a viewport-sized element on
+                      every pan — the cost this plane exists to avoid. (Before slice 2
+                      it would also have trapped the connection SVG below the world
+                      layers; the SVG now lives inside `.canvas-world`, so that
+                      particular bug is no longer reachable from here.)
+
+                      Paint order is unchanged: this plane is positioned with
+                      `z-index: auto`, so it paints at the z-0 level, below the world
+                      layer and everything in it.
+                    */}
+                    <div
+                        class="canvas-grid pointer-events-none absolute bg-[radial-gradient(circle,rgba(184,168,176,0.08)_1px,transparent_1px)]"
+                        // Grid LOD. A repeating background-image on this translating
+                        // plane costs ~33fps at low zoom, and the cost is the TILED
+                        // REPEAT itself: a coarser pitch, an opaque layer and a
+                        // pre-rasterised bitmap tile each measured at zero, while a flat
+                        // fill recovered 26fps and removing it entirely recovered 33.
+                        // Below the threshold the dots are 1px marks ~9.6px apart, so
+                        // dropping them is most of the way to the vsync budget for
+                        // almost no visual loss. `!` is needed to beat the
+                        // `bg-[radial-gradient(...)]` class above.
+                        classList={{ "!bg-none": lodActive() }}
+                        style={{
+                            inset: gridInsetStyle(),
+                            "background-size": gridSizeStyle(),
+                            transform: gridTransformStyle(),
+                            "will-change": "transform"
+                        }}
+                    />
                 </div>
                 {/*
-                  The world layer, deliberately split in TWO. Everything
-                  positioned in world coordinates lives in these two elements and
-                  NOTHING else does — a transformed ancestor makes position:fixed
-                  descendants resolve against the layer instead of the viewport,
-                  so screen-space UI must stay outside them or portal.
+                  The world layer. Everything positioned in world coordinates
+                  lives in this ONE element and NOTHING else does — a transformed
+                  ancestor makes position:fixed descendants resolve against the
+                  layer instead of the viewport, so screen-space UI must stay
+                  outside it or portal.
 
-                  Sizing: zero-size with visible overflow, so neither layer has a
-                  hit area and clicks on empty space fall through to
+                  Panning is a single style write on this element, O(1) in card
+                  count. Nothing inside may read the viewport per-frame.
+
+                  Sizing: zero-size with visible overflow, so the layer has no hit
+                  area and clicks on empty space fall through to
                   .canvas-background beneath, which owns onBackgroundMouseDown.
 
-                  Stacking — why TWO layers and not one. A transform creates a
-                  stacking context, which collapses its descendants' z-indices
-                  into it. Today groups (z-20), the connection SVG (z-30, inside
-                  the non-stacking .canvas-background so it hoists into the root
-                  context) and cards (z-30, later in DOM) are all siblings in the
-                  root context, so the paint order is groups -> SVG -> cards.
-                  A single z-30 world layer holding both groups and cards lifts
-                  the whole thing above the SVG and hides connections behind
-                  group containers (measured: 522 connection px on main, 0 with
-                  one layer). Two layers at z-20 and z-30 straddle the SVG and
-                  reproduce the original order exactly. Both carry the same
-                  transform, so panning is still two style writes, O(1) in card
-                  count. Slice 2 moves the SVG in here and collapses these back
-                  into one layer. Do not merge them before then.
+                  Stacking — why the child order matters. A transform creates a
+                  stacking context, so the z-indices below are resolved against
+                  each other inside this layer rather than against the page. The
+                  order groups (z-20) -> connection SVG (z-30) -> cards (z-30,
+                  later in DOM) reproduces the pre-slice-2 root-level paint order
+                  exactly: connections draw over group containers and under
+                  ungrouped cards. Grouped cards are z-30 but nested inside their
+                  z-20 group container, which is itself a stacking context, so
+                  they stay under the connections as before.
+
+                  a1ff629 split this in two because the SVG was still a
+                  screen-space sibling outside the layer, and a single layer
+                  buried every connection behind the group containers (measured:
+                  522 connection px on main, 0 with one layer). Slice 2 moved the
+                  SVG in here in world coordinates, which is what allows the merge.
                 */}
                 <div
-                    class="canvas-world canvas-world-groups absolute left-0 top-0 z-20 h-0 w-0"
+                    class="canvas-world absolute left-0 top-0 z-30 h-0 w-0"
                     style={{
                         transform: worldTransform(props.viewport()),
                         "transform-origin": "0 0"
@@ -4040,6 +4023,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                     handleNameChange={handleNameChange}
                                                     handlePickChange={handlePickChange}
                                                     zoom={viewportZoom}
+                                                    lodActive={lodActive}
                                                     onBoxMouseDown={onBoxMouseDown}
                                                     cardLayout={props.cardLayout}
                                                     isConnectionMode={isConnectionMode()}
@@ -4127,6 +4111,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 handleNameChange={handleNameChange}
                                                 handlePickChange={handlePickChange}
                                                 zoom={viewportZoom}
+                                                lodActive={lodActive}
                                                 onBoxMouseDown={onBoxMouseDown}
                                                 cardLayout={props.cardLayout}
                                                 isConnectionMode={isConnectionMode()}
@@ -4177,16 +4162,106 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             </Show>
                         )}
                     </For>
-                </div>
-                {/* Cards layer — z-30, above the connection SVG, matching the
-                    ungrouped cards' original z-30 sibling position. */}
-                <div
-                    class="canvas-world canvas-world-cards absolute left-0 top-0 z-30 h-0 w-0"
-                    style={{
-                        transform: worldTransform(props.viewport()),
-                        "transform-origin": "0 0"
-                    }}
-                >
+
+                    {/*
+                      Connection layer, in world coordinates. Nominal 1x1 with
+                      `overflow: visible` (Tailwind's author-level rule beats the
+                      UA's `svg:not(:root){overflow:hidden}`) so it paints across
+                      the whole world without claiming a hit area of its own —
+                      `pointer-events-none` here, `pointer-events-auto` on each
+                      connection's <g>.
+
+                      No viewBox: user units are then CSS px of the untransformed
+                      layer, i.e. exactly world coordinates, with the origin at
+                      world (0, 0).
+                    */}
+                    <svg class="pointer-events-none absolute left-0 top-0 z-30 h-px w-px overflow-visible">
+                        <For each={connections}>
+                            {(connection) => (
+                                <ConnectionComponent
+                                    connection={connection}
+                                    drafts={canvasDrafts}
+                                    groups={canvasGroups}
+                                    zoom={viewportZoom}
+                                    screenToWorld={screenToWorld}
+                                    onCreateVertex={handleCreateVertex}
+                                    onVertexDragStart={onVertexDragStart}
+                                    isConnectionMode={isConnectionMode()}
+                                    onConnectionClick={handleConnectionClick}
+                                    onVertexClick={handleVertexClick}
+                                    selectedVertexId={
+                                        selectedVertexForConnection()?.vertexId || null
+                                    }
+                                    cardLayout={props.cardLayout}
+                                />
+                            )}
+                        </For>
+                        <Show when={connectionSource()}>
+                            <ConnectionPreview
+                                startDraft={
+                                    canvasDrafts.find(
+                                        (d) => d.Draft.id === connectionSource()!
+                                    )!
+                                }
+                                startGroup={(() => {
+                                    const draft = canvasDrafts.find(
+                                        (d) => d.Draft.id === connectionSource()!
+                                    );
+                                    if (!draft?.group_id) return null;
+                                    return (
+                                        canvasGroups.find(
+                                            (g) => g.id === draft.group_id
+                                        ) ?? null
+                                    );
+                                })()}
+                                seriesDraftIndex={(() => {
+                                    const draft = canvasDrafts.find(
+                                        (d) => d.Draft.id === connectionSource()!
+                                    );
+                                    if (!draft?.group_id) return undefined;
+                                    const group = canvasGroups.find(
+                                        (g) => g.id === draft.group_id
+                                    );
+                                    if (group?.type !== "series") return undefined;
+                                    const groupDrafts = canvasDrafts
+                                        .filter((d) => d.group_id === group.id)
+                                        .sort(
+                                            (a, b) =>
+                                                (a.Draft.seriesIndex ?? 0) -
+                                                (b.Draft.seriesIndex ?? 0)
+                                        );
+                                    return groupDrafts.findIndex(
+                                        (d) => d.Draft.id === draft.Draft.id
+                                    );
+                                })()}
+                                sourceAnchor={sourceAnchor()}
+                                mousePos={previewMousePos()}
+                                zoom={viewportZoom}
+                                cardLayout={props.cardLayout}
+                            />
+                        </Show>
+                        <Show when={groupConnectionSource()}>
+                            <GroupConnectionPreview
+                                startGroup={
+                                    canvasGroups.find(
+                                        (g) => g.id === groupConnectionSource()!
+                                    )!
+                                }
+                                sourceAnchor={sourceAnchor()}
+                                mousePos={previewMousePos()}
+                                zoom={viewportZoom}
+                                seriesDraftCount={(() => {
+                                    const group = canvasGroups.find(
+                                        (g) => g.id === groupConnectionSource()!
+                                    );
+                                    if (group?.type !== "series") return undefined;
+                                    return getDraftsForGroup(group.id).length;
+                                })()}
+                                cardLayout={props.cardLayout}
+                            />
+                        </Show>
+                    </svg>
+
                     {/* Render Ungrouped Drafts */}
                     <For each={ungroupedDrafts()}>
                         {(cd) => (
@@ -4198,6 +4273,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 handleNameChange={handleNameChange}
                                 handlePickChange={handlePickChange}
                                 zoom={viewportZoom}
+                                lodActive={lodActive}
                                 onBoxMouseDown={onBoxMouseDown}
                                 cardLayout={props.cardLayout}
                                 isConnectionMode={isConnectionMode()}

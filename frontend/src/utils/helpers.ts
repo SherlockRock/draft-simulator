@@ -1,4 +1,4 @@
-import { CanvasDraft, CanvasGroup, AnchorType, Viewport } from "./schemas";
+import { CanvasDraft, CanvasGroup, AnchorType } from "./schemas";
 import { AnchorPosition } from "./types";
 import { CardLayout } from "./canvasCardLayout";
 
@@ -75,34 +75,6 @@ export const getAnchorWorldPosition = (
 };
 
 /**
- * Converts world coordinates to screen coordinates
- */
-export const worldToScreen = (
-    worldX: number,
-    worldY: number,
-    viewport: Viewport
-): AnchorPosition => {
-    return {
-        x: (worldX - viewport.x) * viewport.zoom,
-        y: (worldY - viewport.y) * viewport.zoom
-    };
-};
-
-/**
- * Converts screen coordinates to world coordinates
- */
-export const screenToWorld = (
-    screenX: number,
-    screenY: number,
-    viewport: Viewport
-): AnchorPosition => {
-    return {
-        x: screenX / viewport.zoom + viewport.x,
-        y: screenY / viewport.zoom + viewport.y
-    };
-};
-
-/**
  * Calculates the world coordinates for a group's anchor point,
  * using the group's position, width, and height.
  */
@@ -127,32 +99,6 @@ export const getGroupAnchorWorldPosition = (
         default:
             return { x: baseX + w / 2, y: baseY + h / 2 };
     }
-};
-
-/**
- * Gets the screen position for a group's anchor point
- */
-export const getGroupAnchorScreenPosition = (
-    group: CanvasGroup,
-    anchorType: AnchorType,
-    viewport: Viewport
-): AnchorPosition => {
-    const worldPos = getGroupAnchorWorldPosition(group, anchorType);
-    return worldToScreen(worldPos.x, worldPos.y, viewport);
-};
-
-/**
- * Gets the screen position for an anchor point
- */
-export const getAnchorScreenPosition = (
-    draft: CanvasDraft,
-    anchorType: AnchorType,
-    cardLayout: CardLayout,
-    viewport: Viewport,
-    group?: CanvasGroup | null
-): AnchorPosition => {
-    const worldPos = getAnchorWorldPosition(draft, anchorType, cardLayout, group);
-    return worldToScreen(worldPos.x, worldPos.y, viewport);
 };
 
 // Series group layout constants (must match SeriesGroupContainer.tsx)
