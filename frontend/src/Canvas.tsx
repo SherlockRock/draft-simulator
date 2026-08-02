@@ -114,6 +114,7 @@ import {
     createTrailingThrottle,
     presenceSnapshotSchema
 } from "./utils/presence";
+import { clampZoom, nextLodState, worldTransform, zoomAt } from "./utils/viewport";
 import { createRemoteCursorTracker } from "./utils/remoteCursors";
 import { createLaserTrailTracker } from "./utils/laserTrails";
 import { createLaserKeyTracker } from "./utils/laserKey";
@@ -398,6 +399,65 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const ungroupedDrafts = createMemo(() => canvasDrafts.filter((cd) => !cd.group_id));
 
+    // ONE zoom accessor for every inverse-scale decoration on the canvas.
+    // Reading props.viewport().zoom inside a card subscribes that card to the
+    // whole viewport object, so a pan invalidates all ~50 of them. This memo
+    // recomputes once per pan frame, returns an unchanged number, and
+    // createMemo's default === equality stops the propagation there.
+    // Deliberately NOT one memo per card — that keeps the O(cards) recompute.
+    const viewportZoom = createMemo(() => props.viewport().zoom);
+
+    // Low-zoom level of detail, shared by every card and the dot grid. A memo rather
+    // than a signal+effect because the hysteresis needs the PREVIOUS state, which
+    // createMemo hands back as the first argument — so this stays pure, needs no
+    // untrack, and cannot re-enter itself. Like viewportZoom above, a pan recomputes
+    // it to an unchanged boolean and `===` equality stops the propagation there.
+    const lodActive = createMemo(
+        (previous: boolean) => nextLodState(previous, viewportZoom()),
+        false
+    );
+
+    // Screen-space pitch of the dot grid. Zoom-only: during a pan this recomputes to
+    // the same number, so Solid's `===` equality suppresses the style write. That
+    // matters because `background-size` is the expensive half — changing it
+    // re-rasterizes the gradient tile.
+    const gridPitch = createMemo(() => 32 * props.viewport().zoom);
+
+    const gridSizeStyle = createMemo(() => {
+        const size = gridPitch();
+        return `${size}px ${size}px`;
+    });
+
+    // The grid plane is oversized on every side so a translation of up to one pitch can
+    // never expose an edge. The extra 1px absorbs device-pixel snapping below, which can
+    // round the offset up by half a device pixel and would otherwise leave a hairline
+    // sliver of undotted background at the top/left edge.
+    const gridInsetStyle = createMemo(() => `${-(gridPitch() + 1)}px`);
+
+    // A repeating pattern is translation-invariant modulo its period, and here the
+    // period IS `background-size` — so translating by `offset mod pitch` is visually
+    // identical to translating by `offset`. Exact, not an approximation.
+    //
+    // This replaces a per-frame `background-position` write on a viewport-sized
+    // element, which invalidated and re-rastered the whole pane every pan frame. A
+    // transform on a composited layer does not invalidate.
+    const gridTransformStyle = createMemo(() => {
+        const vp = props.viewport();
+        const pitch = gridPitch();
+        const dpr = window.devicePixelRatio || 1;
+        // Recomputed from the viewport each frame rather than accumulated, so there
+        // is no float drift however long the pan runs.
+        const wrap = (value: number) => ((value % pitch) + pitch) % pitch;
+        // Snap to device pixels. A fractional translate makes the compositor resample
+        // the layer bilinearly, and that softness persists after the pan stops. The
+        // resulting sub-pixel offset against world coordinates is invisible, and
+        // nothing in the canvas snaps to the dot grid.
+        const snap = (value: number) => Math.round(value * dpr) / dpr;
+        const x = snap(wrap(-vp.x * vp.zoom));
+        const y = snap(wrap(-vp.y * vp.zoom));
+        return `translate3d(${x}px, ${y}px, 0)`;
+    });
+
     const getDraftsForGroup = (groupId: string) =>
         canvasDrafts.filter((cd) => cd.group_id === groupId);
 
@@ -440,7 +500,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     let canvasContainerRef: HTMLDivElement | undefined;
-    let svgRef: SVGSVGElement | undefined;
 
     // Function to navigate viewport to a draft's position
     const navigateToDraft = (positionX: number, positionY: number) => {
@@ -2206,16 +2265,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
-    const debouncedSaveViewport = debounce((viewport: Viewport) => {
+    // Viewport persistence. The old `debounce` helper here was a LEADING-edge
+    // throttle that drops every call inside its window, so a pan persisted the
+    // viewport it STARTED at and discarded where the user actually released.
+    // createTrailingThrottle is leading + trailing, so the resting viewport
+    // always lands. Discrete events (zoom buttons, pan end) persist directly.
+    const persistViewportNow = (viewport: Viewport) => {
         if (isLocalMode()) {
             localUpdateViewport(viewport);
         } else {
-            updateViewportMutation.mutate({
-                canvasId: canvasId(),
-                viewport
-            });
+            updateViewportMutation.mutate({ canvasId: canvasId(), viewport });
         }
-    }, 1000);
+    };
+
+    const viewportSaver = createTrailingThrottle<Viewport>(persistViewportNow, 1000);
+
+    onCleanup(() => viewportSaver.cancel());
 
     // Viewport broadcast (presence slice 4): announce this client's viewport
     // on the presence channel, throttled with a trailing send so receivers
@@ -2293,19 +2358,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 viewportJumpFrame = requestAnimationFrame(step);
             } else {
                 stopViewportJump();
-                // Persist directly, not via debouncedSaveViewport: that
-                // helper is a leading-edge throttle that silently DROPS
-                // calls inside its 1s window, and a jump right after a pan
-                // must still save. A completed jump is a single discrete
-                // event, so there is nothing to throttle.
-                if (isLocalMode()) {
-                    localUpdateViewport(target);
-                } else {
-                    updateViewportMutation.mutate({
-                        canvasId: canvasId(),
-                        viewport: target
-                    });
-                }
+                // Persist directly rather than through the throttle: a jump
+                // right after a pan must still save, and a completed jump is
+                // a single discrete event, so there is nothing to throttle.
+                persistViewportNow(target);
             }
         };
 
@@ -3087,6 +3143,60 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setIsDeleteDialogOpen(true);
     };
 
+    // Pan input is coalesced to one viewport commit per animation frame. A
+    // high-polling-rate mouse fires several mousemoves per frame and each one
+    // used to commit a viewport. There is exactly ONE flush path so a queued
+    // frame can never land after mouseup and overwrite the final position.
+    let pendingPanPointer: { x: number; y: number } | null = null;
+    let panFrame: number | null = null;
+
+    const commitPan = (pointer: { x: number; y: number }): Viewport | null => {
+        const state = dragState();
+        if (!state.isPanning) return null;
+        const vp = props.viewport();
+        const next = {
+            ...vp,
+            x: state.viewportStartX - (pointer.x - state.panStartX) / vp.zoom,
+            y: state.viewportStartY - (pointer.y - state.panStartY) / vp.zoom
+        };
+        props.setViewport(next);
+        return next;
+    };
+
+    const flushPan = () => {
+        panFrame = null;
+        const pointer = pendingPanPointer;
+        pendingPanPointer = null;
+        if (!pointer) return;
+        const next = commitPan(pointer);
+        if (next) viewportSaver.send(next);
+    };
+
+    const schedulePan = (pointer: { x: number; y: number }) => {
+        pendingPanPointer = pointer;
+        if (panFrame === null) panFrame = requestAnimationFrame(flushPan);
+    };
+
+    // Must run BEFORE dragState is reset to isPanning: false — commitPan reads
+    // it. Consumes the pending pointer exactly once so the pan ends on the
+    // pixel the user released at, then persists that position directly.
+    const endPan = () => {
+        if (panFrame !== null) {
+            cancelAnimationFrame(panFrame);
+            panFrame = null;
+        }
+        const pointer = pendingPanPointer;
+        pendingPanPointer = null;
+        const next = pointer ? commitPan(pointer) : null;
+        persistViewportNow(next ?? props.viewport());
+    };
+
+    onCleanup(() => {
+        if (panFrame !== null) cancelAnimationFrame(panFrame);
+        panFrame = null;
+        pendingPanPointer = null;
+    });
+
     onMount(() => {
         canvasContext.setSetEditingGroupIdCallback(() => setEditingGroupId);
         canvasContext.setDeleteGroupCallback(() => (id: string) => handleDeleteGroup(id));
@@ -3190,10 +3300,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 (connectionSource() || groupConnectionSource()) &&
                 canvasContainerRef
             ) {
-                const canvasRect = canvasContainerRef.getBoundingClientRect();
-                const canvasRelativeX = e.clientX - canvasRect.left;
-                const canvasRelativeY = e.clientY - canvasRect.top;
-                setPreviewMousePos({ x: canvasRelativeX, y: canvasRelativeY });
+                // World coords: the preview line is drawn inside the world layer
+                setPreviewMousePos(screenToWorld(e.clientX, e.clientY));
             }
 
             const vState = vertexDragState();
@@ -3231,16 +3339,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             const state = dragState();
 
             if (state.isPanning) {
-                const deltaX = e.clientX - state.panStartX;
-                const deltaY = e.clientY - state.panStartY;
-                const vp = props.viewport();
-                const holdViewport = {
-                    ...vp,
-                    x: state.viewportStartX - deltaX / vp.zoom,
-                    y: state.viewportStartY - deltaY / vp.zoom
-                };
-                props.setViewport(holdViewport);
-                debouncedSaveViewport(holdViewport);
+                schedulePan({ x: e.clientX, y: e.clientY });
             } else if (state.activeBoxId !== null) {
                 const worldCoords = screenToWorld(e.clientX, e.clientY);
                 const newWorldX = worldCoords.x - state.offsetX;
@@ -3585,6 +3684,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             setExitingGroupId(null);
             setGridDropCell(null);
 
+            if (dragState().isPanning) endPan();
+
             setDragState({
                 activeBoxId: null,
                 offsetX: 0,
@@ -3601,22 +3702,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         };
 
         const onWindowWheel = (e: WheelEvent) => {
-            const target = e.target as HTMLElement;
-            if (target === canvasContainerRef || canvasContainerRef?.contains(target)) {
-                e.preventDefault();
-                const vp = props.viewport();
-                const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-                const newZoom = Math.max(0.1, Math.min(5, vp.zoom * zoomFactor));
-
-                const mouseWorldBefore = screenToWorld(e.clientX, e.clientY);
-                const mouseWorldAfter = screenToWorld(e.clientX, e.clientY);
-
-                props.setViewport({
-                    zoom: newZoom,
-                    x: vp.x - (mouseWorldAfter.x - mouseWorldBefore.x),
-                    y: vp.y - (mouseWorldAfter.y - mouseWorldBefore.y)
-                });
+            const target = e.target instanceof Node ? e.target : null;
+            if (target !== canvasContainerRef && !canvasContainerRef?.contains(target)) {
+                return;
             }
+            e.preventDefault();
+            const vp = props.viewport();
+            const rect = canvasContainerRef?.getBoundingClientRect();
+            const next = zoomAt(vp, clampZoom(vp.zoom * (e.deltaY > 0 ? 0.9 : 1.1)), {
+                x: e.clientX - (rect?.left ?? 0),
+                y: e.clientY - (rect?.top ?? 0)
+            });
+            if (next === vp) return;
+            props.setViewport(next);
+            viewportSaver.send(next);
         };
 
         window.addEventListener("keydown", onKeyDown);
@@ -3632,17 +3731,23 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     });
 
-    const zoomIn = () => {
+    // Anchored on the container centre so the button zooms where the user is
+    // looking. Uses the container rect, not window.innerWidth/Height — the
+    // canvas does not start at the viewport origin.
+    const zoomByFactor = (factor: number) => {
         const vp = props.viewport();
-        const newZoom = Math.min(5, vp.zoom * 1.2);
-        props.setViewport({ ...vp, zoom: newZoom });
+        const rect = canvasContainerRef?.getBoundingClientRect();
+        const next = zoomAt(vp, clampZoom(vp.zoom * factor), {
+            x: (rect?.width ?? 0) / 2,
+            y: (rect?.height ?? 0) / 2
+        });
+        if (next === vp) return;
+        props.setViewport(next);
+        persistViewportNow(next);
     };
 
-    const zoomOut = () => {
-        const vp = props.viewport();
-        const newZoom = Math.max(0.1, vp.zoom / 1.2);
-        props.setViewport({ ...vp, zoom: newZoom });
-    };
+    const zoomIn = () => zoomByFactor(1.2);
+    const zoomOut = () => zoomByFactor(1 / 1.2);
 
     const onDelete = () => {
         if (draftToDelete()) {
@@ -3770,28 +3875,315 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     </div>
                 </Show>
                 <div
-                    class="canvas-background absolute inset-0 bg-darius-card-hover bg-[radial-gradient(circle,rgba(184,168,176,0.08)_1px,transparent_1px)]"
+                    class="canvas-background absolute inset-0 bg-darius-card-hover"
                     classList={{
                         "cursor-grab": !dragState().isPanning,
                         "cursor-grabbing": dragState().isPanning
                     }}
-                    style={{
-                        "background-size": `${32 * props.viewport().zoom}px ${32 * props.viewport().zoom}px`,
-                        "background-position": `${-props.viewport().x * props.viewport().zoom}px ${-props.viewport().y * props.viewport().zoom}px`
-                    }}
                     onMouseDown={onBackgroundMouseDown}
                 >
-                    <svg
-                        ref={svgRef}
-                        class="pointer-events-none absolute inset-0 z-30 h-full w-full"
-                    >
+                    {/*
+                      The dot grid gets its own plane so that panning is a compositor
+                      transform instead of a `background-position` rewrite that
+                      invalidated this whole viewport-sized element every frame.
+
+                      The transform MUST stay on this child and never move onto
+                      `.canvas-background`. A transform there would make it a stacking
+                      context and a containing block for `position: fixed`
+                      descendants, and would re-invalidate a viewport-sized element on
+                      every pan — the cost this plane exists to avoid. (Before slice 2
+                      it would also have trapped the connection SVG below the world
+                      layers; the SVG now lives inside `.canvas-world`, so that
+                      particular bug is no longer reachable from here.)
+
+                      Paint order is unchanged: this plane is positioned with
+                      `z-index: auto`, so it paints at the z-0 level, below the world
+                      layer and everything in it.
+                    */}
+                    <div
+                        class="canvas-grid pointer-events-none absolute bg-[radial-gradient(circle,rgba(184,168,176,0.08)_1px,transparent_1px)]"
+                        // Grid LOD. A repeating background-image on this translating
+                        // plane costs ~33fps at low zoom, and the cost is the TILED
+                        // REPEAT itself: a coarser pitch, an opaque layer and a
+                        // pre-rasterised bitmap tile each measured at zero, while a flat
+                        // fill recovered 26fps and removing it entirely recovered 33.
+                        // Below the threshold the dots are 1px marks ~9.6px apart, so
+                        // dropping them is most of the way to the vsync budget for
+                        // almost no visual loss. `!` is needed to beat the
+                        // `bg-[radial-gradient(...)]` class above.
+                        classList={{ "!bg-none": lodActive() }}
+                        style={{
+                            inset: gridInsetStyle(),
+                            "background-size": gridSizeStyle(),
+                            transform: gridTransformStyle(),
+                            "will-change": "transform"
+                        }}
+                    />
+                </div>
+                {/*
+                  The world layer. Everything positioned in world coordinates
+                  lives in this ONE element and NOTHING else does — a transformed
+                  ancestor makes position:fixed descendants resolve against the
+                  layer instead of the viewport, so screen-space UI must stay
+                  outside it or portal.
+
+                  Panning is a single style write on this element, O(1) in card
+                  count. Nothing inside may read the viewport per-frame.
+
+                  Sizing: zero-size with visible overflow, so the layer has no hit
+                  area and clicks on empty space fall through to
+                  .canvas-background beneath, which owns onBackgroundMouseDown.
+
+                  Stacking — why the child order matters. A transform creates a
+                  stacking context, so the z-indices below are resolved against
+                  each other inside this layer rather than against the page. The
+                  order groups (z-20) -> connection SVG (z-30) -> cards (z-30,
+                  later in DOM) reproduces the pre-slice-2 root-level paint order
+                  exactly: connections draw over group containers and under
+                  ungrouped cards. Grouped cards are z-30 but nested inside their
+                  z-20 group container, which is itself a stacking context, so
+                  they stay under the connections as before.
+
+                  a1ff629 split this in two because the SVG was still a
+                  screen-space sibling outside the layer, and a single layer
+                  buried every connection behind the group containers (measured:
+                  522 connection px on main, 0 with one layer). Slice 2 moved the
+                  SVG in here in world coordinates, which is what allows the merge.
+                */}
+                <div
+                    class="canvas-world absolute left-0 top-0 z-30 h-0 w-0"
+                    style={{
+                        transform: worldTransform(props.viewport()),
+                        "transform-origin": "0 0"
+                    }}
+                >
+                    {/* Render Groups */}
+                    <For each={canvasGroups}>
+                        {(group) => (
+                            <Show
+                                when={group.type === "series"}
+                                fallback={
+                                    <CustomGroupContainer
+                                        group={group}
+                                        drafts={getDraftsForGroup(group.id)}
+                                        zoom={viewportZoom}
+                                        isPanning={dragState().isPanning}
+                                        onGroupMouseDown={onGroupMouseDown}
+                                        onBodyMouseDown={onBackgroundMouseDown}
+                                        onDeleteGroup={handleDeleteGroup}
+                                        onEditDisabledChampions={
+                                            handleEditDisabledChampions
+                                        }
+                                        onRenameGroup={handleRenameGroup}
+                                        onResizeGroup={handleResizeGroup}
+                                        onResizeEnd={handleResizeEnd}
+                                        canEdit={canEdit}
+                                        isConnectionMode={isConnectionMode()}
+                                        isDragTarget={dragOverGroupId() === group.id}
+                                        isDragSource={
+                                            dragState().activeBoxId !== null &&
+                                            dragState().dragGroupId === group.id
+                                        }
+                                        highlightCell={
+                                            gridHighlightFor(group.id)?.cell ?? null
+                                        }
+                                        highlightIsSwap={
+                                            gridHighlightFor(group.id)?.isSwap ?? false
+                                        }
+                                        displacedCell={
+                                            gridHighlightFor(group.id)?.displacedCell ??
+                                            null
+                                        }
+                                        isExitingSource={exitingGroupId() === group.id}
+                                        contentMinWidth={
+                                            computeMinGroupSize(group.id).minWidth
+                                        }
+                                        contentMinHeight={
+                                            computeMinGroupSize(group.id).minHeight
+                                        }
+                                        maxLeftEdgeDelta={
+                                            computeMinGroupSize(group.id).maxLeftEdgeDelta
+                                        }
+                                        onSelectAnchor={onGroupAnchorClick}
+                                        isGroupSelected={
+                                            groupConnectionSource() === group.id
+                                        }
+                                        sourceAnchor={sourceAnchor()}
+                                        editingGroupId={editingGroupId}
+                                        onEditingComplete={() => setEditingGroupId(null)}
+                                        cardLayout={props.cardLayout}
+                                    >
+                                        <For each={getDraftsForGroup(group.id)}>
+                                            {(cd) => (
+                                                <CanvasCard
+                                                    canvasId={canvasId()}
+                                                    canvasDraft={cd}
+                                                    addBox={addBox}
+                                                    deleteBox={deleteBox}
+                                                    handleNameChange={handleNameChange}
+                                                    handlePickChange={handlePickChange}
+                                                    zoom={viewportZoom}
+                                                    lodActive={lodActive}
+                                                    onBoxMouseDown={onBoxMouseDown}
+                                                    cardLayout={props.cardLayout}
+                                                    isConnectionMode={isConnectionMode()}
+                                                    onAnchorClick={onAnchorClick}
+                                                    connectionSource={connectionSource}
+                                                    sourceAnchor={sourceAnchor}
+                                                    pickerTarget={pickerTarget}
+                                                    onSlotOpen={openPicker}
+                                                    canEdit={canEdit}
+                                                    isGrouped={true}
+                                                    groupType="custom"
+                                                    editingDraftId={editingDraftId}
+                                                    onEditingComplete={() =>
+                                                        setEditingDraftId(null)
+                                                    }
+                                                    restrictedChampions={() =>
+                                                        getRestrictedChampionsForDraft(cd)
+                                                    }
+                                                    searchDimmed={() =>
+                                                        searchActive() &&
+                                                        !searchMatchByDraftId().has(
+                                                            cd.Draft.id
+                                                        )
+                                                    }
+                                                    searchSlotPhase={(pickIndex) =>
+                                                        searchSlotPhaseFor(
+                                                            cd.Draft.id,
+                                                            pickIndex
+                                                        )
+                                                    }
+                                                    searchIsCurrent={() =>
+                                                        currentSearchDraftId() ===
+                                                        cd.Draft.id
+                                                    }
+                                                    searchInProgress={() =>
+                                                        searchMatchByDraftId().get(
+                                                            cd.Draft.id
+                                                        )?.inProgress ?? false
+                                                    }
+                                                    disabledChampions={
+                                                        group.metadata.disabledChampions
+                                                    }
+                                                />
+                                            )}
+                                        </For>
+                                    </CustomGroupContainer>
+                                }
+                            >
+                                <SeriesGroupContainer
+                                    group={group}
+                                    drafts={getDraftsForGroup(group.id)}
+                                    zoom={viewportZoom}
+                                    isPanning={dragState().isPanning}
+                                    onGroupMouseDown={onGroupMouseDown}
+                                    onBodyMouseDown={onBackgroundMouseDown}
+                                    onDeleteGroup={handleDeleteGroup}
+                                    onEditDisabledChampions={handleEditDisabledChampions}
+                                    canEdit={canEdit}
+                                    isConnectionMode={isConnectionMode()}
+                                    cardLayout={props.cardLayout}
+                                    onSelectAnchor={onGroupAnchorClick}
+                                    isGroupSelected={groupConnectionSource() === group.id}
+                                    sourceAnchor={sourceAnchor()}
+                                    onUpdateDraftMetadata={
+                                        handleUpdateSeriesDraftMetadata
+                                    }
+                                    renderDraftCard={(cd) => {
+                                        // Compute team names based on blueSideTeam
+                                        const bst = cd.Draft.blueSideTeam ?? 1;
+                                        const blueTeamName =
+                                            bst === 1
+                                                ? group.metadata.blueTeamName
+                                                : group.metadata.redTeamName;
+                                        const redTeamName =
+                                            bst === 1
+                                                ? group.metadata.redTeamName
+                                                : group.metadata.blueTeamName;
+
+                                        return (
+                                            <CanvasCard
+                                                canvasId={canvasId()}
+                                                canvasDraft={cd}
+                                                addBox={addBox}
+                                                deleteBox={deleteBox}
+                                                handleNameChange={handleNameChange}
+                                                handlePickChange={handlePickChange}
+                                                zoom={viewportZoom}
+                                                lodActive={lodActive}
+                                                onBoxMouseDown={onBoxMouseDown}
+                                                cardLayout={props.cardLayout}
+                                                isConnectionMode={isConnectionMode()}
+                                                onAnchorClick={onAnchorClick}
+                                                connectionSource={connectionSource}
+                                                sourceAnchor={sourceAnchor}
+                                                pickerTarget={pickerTarget}
+                                                onSlotOpen={openPicker}
+                                                canEdit={canEdit}
+                                                isGrouped={true}
+                                                groupType="series"
+                                                editingDraftId={editingDraftId}
+                                                onEditingComplete={() =>
+                                                    setEditingDraftId(null)
+                                                }
+                                                blueTeamName={blueTeamName}
+                                                redTeamName={redTeamName}
+                                                restrictedChampions={() =>
+                                                    getRestrictedChampionsForDraft(cd)
+                                                }
+                                                searchDimmed={() =>
+                                                    searchActive() &&
+                                                    !searchMatchByDraftId().has(
+                                                        cd.Draft.id
+                                                    )
+                                                }
+                                                searchSlotPhase={(pickIndex) =>
+                                                    searchSlotPhaseFor(
+                                                        cd.Draft.id,
+                                                        pickIndex
+                                                    )
+                                                }
+                                                searchIsCurrent={() =>
+                                                    currentSearchDraftId() === cd.Draft.id
+                                                }
+                                                searchInProgress={() =>
+                                                    searchMatchByDraftId().get(
+                                                        cd.Draft.id
+                                                    )?.inProgress ?? false
+                                                }
+                                                disabledChampions={
+                                                    group.metadata.disabledChampions
+                                                }
+                                            />
+                                        );
+                                    }}
+                                />
+                            </Show>
+                        )}
+                    </For>
+
+                    {/*
+                      Connection layer, in world coordinates. Nominal 1x1 with
+                      `overflow: visible` (Tailwind's author-level rule beats the
+                      UA's `svg:not(:root){overflow:hidden}`) so it paints across
+                      the whole world without claiming a hit area of its own —
+                      `pointer-events-none` here, `pointer-events-auto` on each
+                      connection's <g>.
+
+                      No viewBox: user units are then CSS px of the untransformed
+                      layer, i.e. exactly world coordinates, with the origin at
+                      world (0, 0).
+                    */}
+                    <svg class="pointer-events-none absolute left-0 top-0 z-30 h-px w-px overflow-visible">
                         <For each={connections}>
                             {(connection) => (
                                 <ConnectionComponent
                                     connection={connection}
                                     drafts={canvasDrafts}
                                     groups={canvasGroups}
-                                    viewport={props.viewport}
+                                    zoom={viewportZoom}
+                                    screenToWorld={screenToWorld}
                                     onCreateVertex={handleCreateVertex}
                                     onVertexDragStart={onVertexDragStart}
                                     isConnectionMode={isConnectionMode()}
@@ -3844,7 +4236,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 })()}
                                 sourceAnchor={sourceAnchor()}
                                 mousePos={previewMousePos()}
-                                viewport={props.viewport}
+                                zoom={viewportZoom}
                                 cardLayout={props.cardLayout}
                             />
                         </Show>
@@ -3857,7 +4249,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 }
                                 sourceAnchor={sourceAnchor()}
                                 mousePos={previewMousePos()}
-                                viewport={props.viewport}
+                                zoom={viewportZoom}
                                 seriesDraftCount={(() => {
                                     const group = canvasGroups.find(
                                         (g) => g.id === groupConnectionSource()!
@@ -3869,234 +4261,51 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             />
                         </Show>
                     </svg>
-                </div>
-                {/* Render Groups */}
-                <For each={canvasGroups}>
-                    {(group) => (
-                        <Show
-                            when={group.type === "series"}
-                            fallback={
-                                <CustomGroupContainer
-                                    group={group}
-                                    drafts={getDraftsForGroup(group.id)}
-                                    viewport={props.viewport}
-                                    isPanning={dragState().isPanning}
-                                    onGroupMouseDown={onGroupMouseDown}
-                                    onBodyMouseDown={onBackgroundMouseDown}
-                                    onDeleteGroup={handleDeleteGroup}
-                                    onEditDisabledChampions={handleEditDisabledChampions}
-                                    onRenameGroup={handleRenameGroup}
-                                    onResizeGroup={handleResizeGroup}
-                                    onResizeEnd={handleResizeEnd}
-                                    canEdit={canEdit}
-                                    isConnectionMode={isConnectionMode()}
-                                    isDragTarget={dragOverGroupId() === group.id}
-                                    isDragSource={
-                                        dragState().activeBoxId !== null &&
-                                        dragState().dragGroupId === group.id
-                                    }
-                                    highlightCell={
-                                        gridHighlightFor(group.id)?.cell ?? null
-                                    }
-                                    highlightIsSwap={
-                                        gridHighlightFor(group.id)?.isSwap ?? false
-                                    }
-                                    displacedCell={
-                                        gridHighlightFor(group.id)?.displacedCell ?? null
-                                    }
-                                    isExitingSource={exitingGroupId() === group.id}
-                                    contentMinWidth={
-                                        computeMinGroupSize(group.id).minWidth
-                                    }
-                                    contentMinHeight={
-                                        computeMinGroupSize(group.id).minHeight
-                                    }
-                                    maxLeftEdgeDelta={
-                                        computeMinGroupSize(group.id).maxLeftEdgeDelta
-                                    }
-                                    onSelectAnchor={onGroupAnchorClick}
-                                    isGroupSelected={groupConnectionSource() === group.id}
-                                    sourceAnchor={sourceAnchor()}
-                                    editingGroupId={editingGroupId}
-                                    onEditingComplete={() => setEditingGroupId(null)}
-                                    cardLayout={props.cardLayout}
-                                >
-                                    <For each={getDraftsForGroup(group.id)}>
-                                        {(cd) => (
-                                            <CanvasCard
-                                                canvasId={canvasId()}
-                                                canvasDraft={cd}
-                                                addBox={addBox}
-                                                deleteBox={deleteBox}
-                                                handleNameChange={handleNameChange}
-                                                handlePickChange={handlePickChange}
-                                                viewport={props.viewport}
-                                                onBoxMouseDown={onBoxMouseDown}
-                                                cardLayout={props.cardLayout}
-                                                isConnectionMode={isConnectionMode()}
-                                                onAnchorClick={onAnchorClick}
-                                                connectionSource={connectionSource}
-                                                sourceAnchor={sourceAnchor}
-                                                pickerTarget={pickerTarget}
-                                                onSlotOpen={openPicker}
-                                                canEdit={canEdit}
-                                                isGrouped={true}
-                                                groupType="custom"
-                                                editingDraftId={editingDraftId}
-                                                onEditingComplete={() =>
-                                                    setEditingDraftId(null)
-                                                }
-                                                restrictedChampions={() =>
-                                                    getRestrictedChampionsForDraft(cd)
-                                                }
-                                                searchDimmed={() =>
-                                                    searchActive() &&
-                                                    !searchMatchByDraftId().has(
-                                                        cd.Draft.id
-                                                    )
-                                                }
-                                                searchSlotPhase={(pickIndex) =>
-                                                    searchSlotPhaseFor(
-                                                        cd.Draft.id,
-                                                        pickIndex
-                                                    )
-                                                }
-                                                searchIsCurrent={() =>
-                                                    currentSearchDraftId() === cd.Draft.id
-                                                }
-                                                searchInProgress={() =>
-                                                    searchMatchByDraftId().get(
-                                                        cd.Draft.id
-                                                    )?.inProgress ?? false
-                                                }
-                                                disabledChampions={
-                                                    group.metadata.disabledChampions
-                                                }
-                                            />
-                                        )}
-                                    </For>
-                                </CustomGroupContainer>
-                            }
-                        >
-                            <SeriesGroupContainer
-                                group={group}
-                                drafts={getDraftsForGroup(group.id)}
-                                viewport={props.viewport}
-                                isPanning={dragState().isPanning}
-                                onGroupMouseDown={onGroupMouseDown}
-                                onBodyMouseDown={onBackgroundMouseDown}
-                                onDeleteGroup={handleDeleteGroup}
-                                onEditDisabledChampions={handleEditDisabledChampions}
-                                canEdit={canEdit}
-                                isConnectionMode={isConnectionMode()}
+
+                    {/* Render Ungrouped Drafts */}
+                    <For each={ungroupedDrafts()}>
+                        {(cd) => (
+                            <CanvasCard
+                                canvasId={canvasId()}
+                                canvasDraft={cd}
+                                addBox={addBox}
+                                deleteBox={deleteBox}
+                                handleNameChange={handleNameChange}
+                                handlePickChange={handlePickChange}
+                                zoom={viewportZoom}
+                                lodActive={lodActive}
+                                onBoxMouseDown={onBoxMouseDown}
                                 cardLayout={props.cardLayout}
-                                onSelectAnchor={onGroupAnchorClick}
-                                isGroupSelected={groupConnectionSource() === group.id}
-                                sourceAnchor={sourceAnchor()}
-                                onUpdateDraftMetadata={handleUpdateSeriesDraftMetadata}
-                                renderDraftCard={(cd) => {
-                                    // Compute team names based on blueSideTeam
-                                    const bst = cd.Draft.blueSideTeam ?? 1;
-                                    const blueTeamName =
-                                        bst === 1
-                                            ? group.metadata.blueTeamName
-                                            : group.metadata.redTeamName;
-                                    const redTeamName =
-                                        bst === 1
-                                            ? group.metadata.redTeamName
-                                            : group.metadata.blueTeamName;
-
-                                    return (
-                                        <CanvasCard
-                                            canvasId={canvasId()}
-                                            canvasDraft={cd}
-                                            addBox={addBox}
-                                            deleteBox={deleteBox}
-                                            handleNameChange={handleNameChange}
-                                            handlePickChange={handlePickChange}
-                                            viewport={props.viewport}
-                                            onBoxMouseDown={onBoxMouseDown}
-                                            cardLayout={props.cardLayout}
-                                            isConnectionMode={isConnectionMode()}
-                                            onAnchorClick={onAnchorClick}
-                                            connectionSource={connectionSource}
-                                            sourceAnchor={sourceAnchor}
-                                            pickerTarget={pickerTarget}
-                                            onSlotOpen={openPicker}
-                                            canEdit={canEdit}
-                                            isGrouped={true}
-                                            groupType="series"
-                                            editingDraftId={editingDraftId}
-                                            onEditingComplete={() =>
-                                                setEditingDraftId(null)
-                                            }
-                                            blueTeamName={blueTeamName}
-                                            redTeamName={redTeamName}
-                                            restrictedChampions={() =>
-                                                getRestrictedChampionsForDraft(cd)
-                                            }
-                                            searchDimmed={() =>
-                                                searchActive() &&
-                                                !searchMatchByDraftId().has(cd.Draft.id)
-                                            }
-                                            searchSlotPhase={(pickIndex) =>
-                                                searchSlotPhaseFor(cd.Draft.id, pickIndex)
-                                            }
-                                            searchIsCurrent={() =>
-                                                currentSearchDraftId() === cd.Draft.id
-                                            }
-                                            searchInProgress={() =>
-                                                searchMatchByDraftId().get(cd.Draft.id)
-                                                    ?.inProgress ?? false
-                                            }
-                                            disabledChampions={
-                                                group.metadata.disabledChampions
-                                            }
-                                        />
-                                    );
-                                }}
+                                isConnectionMode={isConnectionMode()}
+                                onAnchorClick={onAnchorClick}
+                                connectionSource={connectionSource}
+                                sourceAnchor={sourceAnchor}
+                                pickerTarget={pickerTarget}
+                                onSlotOpen={openPicker}
+                                canEdit={canEdit}
+                                editingDraftId={editingDraftId}
+                                onEditingComplete={() => setEditingDraftId(null)}
+                                restrictedChampions={() =>
+                                    getRestrictedChampionsForDraft(cd)
+                                }
+                                searchDimmed={() =>
+                                    searchActive() &&
+                                    !searchMatchByDraftId().has(cd.Draft.id)
+                                }
+                                searchSlotPhase={(pickIndex) =>
+                                    searchSlotPhaseFor(cd.Draft.id, pickIndex)
+                                }
+                                searchIsCurrent={() =>
+                                    currentSearchDraftId() === cd.Draft.id
+                                }
+                                searchInProgress={() =>
+                                    searchMatchByDraftId().get(cd.Draft.id)?.inProgress ??
+                                    false
+                                }
                             />
-                        </Show>
-                    )}
-                </For>
-
-                {/* Render Ungrouped Drafts */}
-                <For each={ungroupedDrafts()}>
-                    {(cd) => (
-                        <CanvasCard
-                            canvasId={canvasId()}
-                            canvasDraft={cd}
-                            addBox={addBox}
-                            deleteBox={deleteBox}
-                            handleNameChange={handleNameChange}
-                            handlePickChange={handlePickChange}
-                            viewport={props.viewport}
-                            onBoxMouseDown={onBoxMouseDown}
-                            cardLayout={props.cardLayout}
-                            isConnectionMode={isConnectionMode()}
-                            onAnchorClick={onAnchorClick}
-                            connectionSource={connectionSource}
-                            sourceAnchor={sourceAnchor}
-                            pickerTarget={pickerTarget}
-                            onSlotOpen={openPicker}
-                            canEdit={canEdit}
-                            editingDraftId={editingDraftId}
-                            onEditingComplete={() => setEditingDraftId(null)}
-                            restrictedChampions={() => getRestrictedChampionsForDraft(cd)}
-                            searchDimmed={() =>
-                                searchActive() && !searchMatchByDraftId().has(cd.Draft.id)
-                            }
-                            searchSlotPhase={(pickIndex) =>
-                                searchSlotPhaseFor(cd.Draft.id, pickIndex)
-                            }
-                            searchIsCurrent={() => currentSearchDraftId() === cd.Draft.id}
-                            searchInProgress={() =>
-                                searchMatchByDraftId().get(cd.Draft.id)?.inProgress ??
-                                false
-                            }
-                        />
-                    )}
-                </For>
+                        )}
+                    </For>
+                </div>
                 <Show when={searchOpen()}>
                     <CanvasSearchBar
                         championId={searchChampionId}

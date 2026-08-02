@@ -11,7 +11,7 @@ import {
     Trophy
 } from "lucide-solid";
 import { buildScoutLink, scoutLinkPath } from "../utils/scoutLink";
-import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/schemas";
+import { CanvasDraft, CanvasGroup, AnchorType } from "../utils/schemas";
 import {
     getSeriesGroupDimensions,
     SERIES_CARD_GAP,
@@ -24,7 +24,7 @@ import type { CardLayout } from "../utils/canvasCardLayout";
 type SeriesGroupContainerProps = {
     group: CanvasGroup;
     drafts: CanvasDraft[];
-    viewport: Accessor<Viewport>;
+    zoom: Accessor<number>;
     isPanning: boolean;
     onGroupMouseDown: (groupId: string, e: MouseEvent) => void;
     onBodyMouseDown: (e: MouseEvent) => void;
@@ -51,16 +51,6 @@ type SeriesGroupContainerProps = {
 
 export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
     const navigate = useNavigate();
-
-    const worldToScreen = (worldX: number, worldY: number) => {
-        const vp = props.viewport();
-        return {
-            x: (worldX - vp.x) * vp.zoom,
-            y: (worldY - vp.y) * vp.zoom
-        };
-    };
-
-    const screenPos = () => worldToScreen(props.group.positionX, props.group.positionY);
 
     const sortedDrafts = createMemo(() => {
         return [...props.drafts].sort((a, b) => {
@@ -174,12 +164,11 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
     return (
         <div
             data-group-id={props.group.id}
-            class="group-container absolute z-20 rounded-xl border-2 border-darius-border bg-darius-card/90 shadow-xl backdrop-blur-sm"
+            class="group-container absolute z-20 rounded-xl border-2 border-darius-border bg-darius-card/90 shadow-xl"
             style={{
-                left: `${screenPos().x}px`,
-                top: `${screenPos().y}px`,
-                transform: `scale(${props.viewport().zoom})`,
-                "transform-origin": "top left"
+                // World coordinates — .canvas-world applies the viewport transform.
+                left: `${props.group.positionX}px`,
+                top: `${props.group.positionY}px`
             }}
         >
             {/* Header */}
@@ -483,7 +472,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                     groupId={props.group.id}
                     width={groupDimensions().width}
                     height={groupDimensions().height}
-                    zoom={props.viewport().zoom}
+                    zoom={props.zoom()}
                     onSelectAnchor={props.onSelectAnchor!}
                     isSelected={props.isGroupSelected ?? false}
                     sourceAnchor={props.sourceAnchor ?? null}

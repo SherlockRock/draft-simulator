@@ -8,7 +8,7 @@ import {
     JSX
 } from "solid-js";
 import { Trash2, Settings, ArrowLeftRight } from "lucide-solid";
-import { CanvasDraft, CanvasGroup, Viewport, AnchorType } from "../utils/schemas";
+import { CanvasDraft, CanvasGroup, AnchorType } from "../utils/schemas";
 import {
     GRID_HEADER_HEIGHT,
     GRID_PADDING,
@@ -26,7 +26,7 @@ import type { CardLayout } from "../utils/canvasCardLayout";
 type CustomGroupContainerProps = {
     group: CanvasGroup;
     drafts: CanvasDraft[];
-    viewport: Accessor<Viewport>;
+    zoom: Accessor<number>;
     isPanning: boolean;
     onGroupMouseDown: (groupId: string, e: MouseEvent) => void;
     onBodyMouseDown: (e: MouseEvent) => void;
@@ -92,16 +92,6 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         }
     });
 
-    const worldToScreen = (worldX: number, worldY: number) => {
-        const vp = props.viewport();
-        return {
-            x: (worldX - vp.x) * vp.zoom,
-            y: (worldY - vp.y) * vp.zoom
-        };
-    };
-
-    const screenPos = () => worldToScreen(props.group.positionX, props.group.positionY);
-
     const groupWidth = () => localWidth() ?? props.group.width ?? 400;
     const groupHeight = () => localHeight() ?? props.group.height ?? 200;
 
@@ -145,7 +135,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         const startHeight = groupHeight();
         const startPositionX = props.group.positionX;
         const startMaxLeftEdgeDelta = props.maxLeftEdgeDelta;
-        const zoom = props.viewport().zoom;
+        const zoom = props.zoom();
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
             const deltaX = (moveEvent.clientX - startX) / zoom;
@@ -256,7 +246,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
     return (
         <div
             data-group-id={props.group.id}
-            class="group-container absolute z-20 rounded-xl border-2 bg-darius-card/90 shadow-xl backdrop-blur-sm"
+            class="group-container absolute z-20 rounded-xl border-2 bg-darius-card/90 shadow-xl"
             classList={{
                 "border-darius-border":
                     !props.isDragTarget && !props.isExitingSource && !isResizeClamped(),
@@ -267,12 +257,11 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 "border-dashed": draftCount() === 0
             }}
             style={{
-                left: `${screenPos().x}px`,
-                top: `${screenPos().y}px`,
+                // World coordinates — .canvas-world applies the viewport transform.
+                left: `${props.group.positionX}px`,
+                top: `${props.group.positionY}px`,
                 width: `${groupWidth()}px`,
-                height: `${groupHeight()}px`,
-                transform: `scale(${props.viewport().zoom})`,
-                "transform-origin": "top left"
+                height: `${groupHeight()}px`
             }}
         >
             {/* Header */}
@@ -480,7 +469,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                     groupId={props.group.id}
                     width={groupWidth()}
                     height={groupHeight()}
-                    zoom={props.viewport().zoom}
+                    zoom={props.zoom()}
                     onSelectAnchor={props.onSelectAnchor!}
                     isSelected={props.isGroupSelected ?? false}
                     sourceAnchor={props.sourceAnchor ?? null}

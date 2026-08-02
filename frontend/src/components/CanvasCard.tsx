@@ -9,7 +9,7 @@ import {
 } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { Eye, Plus, X, Lock } from "lucide-solid";
-import { CanvasDraft, Viewport, AnchorType } from "../utils/schemas";
+import { CanvasDraft, AnchorType } from "../utils/schemas";
 import { AnchorPoints } from "./AnchorPoints";
 import { CanvasSlot, type SlotDisplayMode } from "./CanvasSlot";
 import { PickerTarget } from "./CanvasChampionPicker";
@@ -22,6 +22,7 @@ import {
 } from "../utils/canvasCardLayout";
 import { cardHeight, cardWidth } from "../utils/helpers";
 import type { SlotPhase } from "../utils/canvasSearch";
+import { CanvasCardMosaic } from "./CanvasCardMosaic";
 
 type CanvasCardProps = {
     canvasId: string;
@@ -32,7 +33,9 @@ type CanvasCardProps = {
     handlePickChange: (draftId: string, pickIndex: number, championId: string) => void;
     onBoxMouseDown: (draftId: string, e: MouseEvent) => void;
     cardLayout: () => CardLayout;
-    viewport: () => Viewport;
+    zoom: () => number;
+    /** Low-zoom level of detail: paint the flat mosaic instead of the 20 slots. */
+    lodActive: () => boolean;
     isConnectionMode: boolean;
     onAnchorClick: (draftId: string, anchorType: AnchorType) => void;
     connectionSource: () => string | null;
@@ -85,17 +88,6 @@ export const CanvasCard = (props: CanvasCardProps) => {
     const handleViewClick = () => {
         navigate(`/canvas/${props.canvasId}/draft/${props.canvasDraft.Draft.id}`);
     };
-
-    const worldToScreen = (worldX: number, worldY: number) => {
-        const vp = props.viewport();
-        return {
-            x: (worldX - vp.x) * vp.zoom,
-            y: (worldY - vp.y) * vp.zoom
-        };
-    };
-
-    const screenPos = () =>
-        worldToScreen(props.canvasDraft.positionX, props.canvasDraft.positionY);
 
     const isHorizontal = createMemo(() => props.cardLayout() === "horizontal");
     const isVertical = createMemo(() => props.cardLayout() === "vertical");
@@ -169,10 +161,16 @@ export const CanvasCard = (props: CanvasCardProps) => {
     const actionButtonBaseClass =
         "flex size-7 items-center justify-center rounded-lg border border-solid";
     const actionButtonBorderWidth = createMemo(() => {
-        const zoom = props.viewport().zoom;
+        const zoom = props.zoom();
         if (!Number.isFinite(zoom) || zoom <= 0) return "1px";
         return `${1 / zoom}px`;
     });
+
+    // Wide slots carry full-bleed splash art, which is what makes their interiors
+    // expensive enough to replace; compact's 30px icons do not need another LOD.
+    const showMosaic = createMemo(
+        () => props.lodActive() && (isWide() || isWideDraftOrder())
+    );
 
     const getPhaseRailClass = (label: string) =>
         label === "Bans" ? "bg-darius-crimson/80" : "bg-darius-ember/80";
@@ -495,10 +493,10 @@ export const CanvasCard = (props: CanvasCardProps) => {
                     : props.isGrouped
                       ? {}
                       : {
-                            left: `${screenPos().x}px`,
-                            top: `${screenPos().y}px`,
-                            transform: `scale(${props.viewport().zoom})`,
-                            "transform-origin": "top left"
+                            // World coordinates. The .canvas-world layer applies
+                            // the viewport transform for every card at once.
+                            left: `${props.canvasDraft.positionX}px`,
+                            top: `${props.canvasDraft.positionY}px`
                         }),
                 width: `${cardWidth(props.cardLayout())}px`,
                 height: `${cardHeight(props.cardLayout())}px`,
@@ -524,7 +522,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                         props.onAnchorClick(props.canvasDraft.Draft.id, anchorType);
                     }}
                     cardLayout={props.cardLayout}
-                    zoom={props.viewport().zoom}
+                    zoom={props.zoom()}
                     selected={selected}
                     sourceAnchor={props.sourceAnchor}
                 />
@@ -662,77 +660,110 @@ export const CanvasCard = (props: CanvasCardProps) => {
                 <div class={teamHeaderMarginClass()}>{renderTeamHeaders()}</div>
             </div>
 
-            <div class={bodyPaddingClass()}>
-                <Show
-                    when={isHorizontal()}
-                    fallback={
-                        <Show
-                            when={isDraftOrder()}
-                            fallback={
-                                <Show
-                                    when={isWideDraftOrder()}
-                                    fallback={
-                                        <Show
-                                            when={isWide()}
-                                            fallback={
-                                                <div class="grid h-full min-h-0 grid-cols-2 gap-3">
-                                                    {renderStandardTeamColumn(
-                                                        blueBanIndices,
-                                                        bluePickIndices,
-                                                        false
-                                                    )}
-                                                    {renderStandardTeamColumn(
-                                                        redBanIndices,
-                                                        redPickIndices,
-                                                        true
-                                                    )}
+            <div class={`relative ${bodyPaddingClass()}`}>
+                {/* The slots are HIDDEN below the LOD threshold, never unmounted.
+                    Unmounting throws away the 1280x720 splash <img> elements, so zooming
+                    back in re-fetches and re-decodes all 20 per card and the interiors
+                    visibly load back in. Hiding costs the same per frame — the measured
+                    ceiling is itself `visibility:hidden` on this subtree — and keeps them
+                    decoded. Node count is higher this way, which only works because the
+                    cost here is painted area, not element count. */}
+                <div class="h-full min-h-0" classList={{ invisible: showMosaic() }}>
+                    <Show
+                        when={isHorizontal()}
+                        fallback={
+                            <Show
+                                when={isDraftOrder()}
+                                fallback={
+                                    <Show
+                                        when={isWideDraftOrder()}
+                                        fallback={
+                                            <Show
+                                                when={isWide()}
+                                                fallback={
+                                                    <div class="grid h-full min-h-0 grid-cols-2 gap-3">
+                                                        {renderStandardTeamColumn(
+                                                            blueBanIndices,
+                                                            bluePickIndices,
+                                                            false
+                                                        )}
+                                                        {renderStandardTeamColumn(
+                                                            redBanIndices,
+                                                            redPickIndices,
+                                                            true
+                                                        )}
+                                                    </div>
+                                                }
+                                            >
+                                                <div class="h-full min-h-0">
+                                                    <div class={wideSectionClass}>
+                                                        {renderWideTeamColumn(
+                                                            blueBanIndices,
+                                                            bluePickIndices,
+                                                            false
+                                                        )}
+                                                        {renderWideTeamColumn(
+                                                            redBanIndices,
+                                                            redPickIndices,
+                                                            true
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            }
-                                        >
-                                            <div class="h-full min-h-0">
-                                                <div class={wideSectionClass}>
-                                                    {renderWideTeamColumn(
-                                                        blueBanIndices,
-                                                        bluePickIndices,
-                                                        false
-                                                    )}
-                                                    {renderWideTeamColumn(
-                                                        redBanIndices,
-                                                        redPickIndices,
-                                                        true
-                                                    )}
-                                                </div>
+                                            </Show>
+                                        }
+                                    >
+                                        <div class="h-full min-h-0">
+                                            <div class={wideSectionClass}>
+                                                {renderWideDraftOrderColumn(
+                                                    draftOrderTeam1Sections,
+                                                    false
+                                                )}
+                                                {renderWideDraftOrderColumn(
+                                                    draftOrderTeam2Sections,
+                                                    true
+                                                )}
                                             </div>
-                                        </Show>
-                                    }
-                                >
-                                    <div class="h-full min-h-0">
-                                        <div class={wideSectionClass}>
-                                            {renderWideDraftOrderColumn(
-                                                draftOrderTeam1Sections,
-                                                false
-                                            )}
-                                            {renderWideDraftOrderColumn(
-                                                draftOrderTeam2Sections,
-                                                true
-                                            )}
                                         </div>
-                                    </div>
-                                </Show>
-                            }
-                        >
-                            <div class="grid h-full min-h-0 grid-cols-2 gap-3">
-                                {renderDraftOrderColumn(draftOrderTeam1Sections, false)}
-                                {renderDraftOrderColumn(draftOrderTeam2Sections, true)}
-                            </div>
-                        </Show>
-                    }
-                >
-                    <div class={classicHorizontalGridClass}>
-                        {renderHorizontalColumn(blueBanIndices, "bg-darius-crimson/80")}
-                        {renderHorizontalColumn(bluePickIndices, "bg-darius-ember/80")}
-                        {renderHorizontalColumn(redPickIndices, "bg-darius-ember/80")}
-                        {renderHorizontalColumn(redBanIndices, "bg-darius-crimson/80")}
+                                    </Show>
+                                }
+                            >
+                                <div class="grid h-full min-h-0 grid-cols-2 gap-3">
+                                    {renderDraftOrderColumn(
+                                        draftOrderTeam1Sections,
+                                        false
+                                    )}
+                                    {renderDraftOrderColumn(
+                                        draftOrderTeam2Sections,
+                                        true
+                                    )}
+                                </div>
+                            </Show>
+                        }
+                    >
+                        <div class={classicHorizontalGridClass}>
+                            {renderHorizontalColumn(
+                                blueBanIndices,
+                                "bg-darius-crimson/80"
+                            )}
+                            {renderHorizontalColumn(
+                                bluePickIndices,
+                                "bg-darius-ember/80"
+                            )}
+                            {renderHorizontalColumn(redPickIndices, "bg-darius-ember/80")}
+                            {renderHorizontalColumn(
+                                redBanIndices,
+                                "bg-darius-crimson/80"
+                            )}
+                        </div>
+                    </Show>
+                </div>
+                <Show when={showMosaic()}>
+                    <div class={`absolute inset-0 ${bodyPaddingClass()}`}>
+                        <CanvasCardMosaic
+                            picks={props.canvasDraft.Draft.picks}
+                            searchSlotPhase={props.searchSlotPhase}
+                            isPickerTarget={isSlotTargeted}
+                        />
                     </div>
                 </Show>
             </div>
