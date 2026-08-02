@@ -757,8 +757,15 @@ export const CanvasCard = (props: CanvasCardProps) => {
                         </div>
                     </Show>
                 </div>
+                {/* z-10 clears the slots' own z-[3] name row and z-[4] clear button.
+                    Nothing between those and the card root creates a stacking context
+                    (they are all `position: relative; z-index: auto`), so at z-auto this
+                    overlay would paint UNDER the slot text. That was visible for ~150ms
+                    on every crossing, because `transition-all` on the slot delays the
+                    inherited `visibility: hidden` — a visibility transition holds the old
+                    value for its whole duration. */}
                 <Show when={showMosaic()}>
-                    <div class={`absolute inset-0 ${bodyPaddingClass()}`}>
+                    <div class={`absolute inset-0 z-10 ${bodyPaddingClass()}`}>
                         <CanvasCardMosaic
                             picks={props.canvasDraft.Draft.picks}
                             searchSlotPhase={props.searchSlotPhase}

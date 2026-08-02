@@ -1,6 +1,7 @@
 import { Component, For, Show, createMemo } from "solid-js";
 import { resolveChampion } from "../utils/constants";
 import type { SlotPhase } from "../utils/canvasSearch";
+import BlankSquare from "/src/assets/BlankSquare.webp";
 
 /**
  * The low-zoom rendering of a card's interior: a flat grid of champion icons.
@@ -58,10 +59,21 @@ const MosaicTile: Component<{
 
     return (
         <div class="relative min-h-0 min-w-0 overflow-hidden bg-darius-bg">
-            {/* Named rather than decorative: `visibility: hidden` takes the real slots
-                out of the accessibility tree along with their alt text, so without a
-                name here the picks have no accessible equivalent at low zoom. */}
-            <Show when={champion()}>
+            {/* Picks are NAMED rather than decorative: `visibility: hidden` takes the
+                real slots out of the accessibility tree along with their alt text, so
+                without a name here they have no accessible equivalent at low zoom. The
+                empty placeholder stays decorative — an unfilled slot has nothing to
+                announce, and naming it would put one for every gap on the canvas. */}
+            <Show
+                when={champion()}
+                fallback={
+                    <img
+                        src={BlankSquare}
+                        alt=""
+                        class="h-full w-full object-cover opacity-70"
+                    />
+                }
+            >
                 {(champ) => (
                     <img
                         src={champ().img}
