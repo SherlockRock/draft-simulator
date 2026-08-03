@@ -375,6 +375,8 @@ export const ExternalCanvasImportDraftSchema = z.object({
   positionY: z.number().optional(),
   firstPick: z.enum(["blue", "red"]).optional(),
   blueSideTeam: z.union([z.literal(1), z.literal(2)]).optional(),
+  team1Name: z.string().nullable().optional(),
+  team2Name: z.string().nullable().optional(),
 });
 
 export const ExternalVersusImportDraftSchema = z.object({

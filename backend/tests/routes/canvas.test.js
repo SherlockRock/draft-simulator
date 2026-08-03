@@ -14,7 +14,7 @@ const {
   CanvasConnection,
   CanvasGroup,
 } = require("../../models/Canvas.js");
-require("../../models/Draft.js");
+const Draft = require("../../models/Draft.js");
 
 const EDIT_FORBIDDEN =
   "Forbidden: You don't have permission to edit this canvas";
@@ -116,6 +116,45 @@ describe("canvas route mutation access", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: true, message: "Draft updated" });
+  });
+
+  it("POST /:canvasId/draft/:draftId/copy preserves per-card team names", async () => {
+    mockCanvasAccess("edit");
+    vi.spyOn(CanvasDraft, "findOne").mockResolvedValue({
+      positionX: 10,
+      positionY: 20,
+      group_id: null,
+      team1Name: "T1",
+      team2Name: "Gen.G",
+      Draft: {
+        name: "Finals Game 1",
+        picks: Array(20).fill(""),
+      },
+    });
+    vi.spyOn(Draft, "create").mockResolvedValue({
+      id: "d-2",
+      toJSON() {
+        return { id: this.id };
+      },
+    });
+    vi.spyOn(CanvasDraft, "create").mockResolvedValue({
+      toJSON() {
+        return { draft_id: "d-2" };
+      },
+    });
+    vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+    vi.spyOn(Canvas, "findByPk").mockResolvedValue(mockCanvasJson());
+
+    const res = await request(buildApp()).post(
+      "/api/canvas/c-1/draft/d-1/copy",
+    );
+
+    expect(res.status).toBe(201);
+    expect(CanvasDraft.create).toHaveBeenCalledWith(
+      expect.objectContaining({ team1Name: "T1", team2Name: "Gen.G" }),
+    );
   });
 
   it("DELETE /:canvasId/users/:userId returns original admin 403 text for edit permission", async () => {

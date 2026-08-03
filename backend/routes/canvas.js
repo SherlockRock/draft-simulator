@@ -653,6 +653,8 @@ router.post("/:canvasId/draft/:draftId/copy", protect, async (req, res) => {
           : group_id === null
             ? null
             : existingCanvasDraft.group_id,
+      team1Name: existingCanvasDraft.team1Name,
+      team2Name: existingCanvasDraft.team2Name,
       source_type: "canvas",
     });
 

@@ -135,6 +135,8 @@ export const localCopyDraft = (
                 ? placement.positionY
                 : originalDraft.positionY + COPY_OFFSET,
             group_id: placement ? placement.group_id : (originalDraft.group_id ?? null),
+            team1Name: originalDraft.team1Name,
+            team2Name: originalDraft.team2Name,
             source_type: "canvas",
             Draft: {
                 id: newDraftId,
