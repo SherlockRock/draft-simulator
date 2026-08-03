@@ -4,6 +4,10 @@ const router = express.Router();
 // const { DraftSchema } = require("@draft-sim/shared-types");
 // Usage: const result = DraftSchema.safeParse(req.body);
 const Draft = require("../models/Draft");
+const {
+  CANVAS_DRAFT_ATTRIBUTES,
+  DRAFT_ATTRIBUTES,
+} = require("./canvasProjections");
 const VersusDraft = require("../models/VersusDraft");
 const {
   CanvasDraft,
@@ -173,26 +177,11 @@ router.post("/", protect, async (req, res) => {
 
       const canvasDrafts = await CanvasDraft.findAll({
         where: { canvas_id: canvas_id },
-        attributes: [
-          "positionX",
-          "positionY",
-          "is_locked",
-          "group_id",
-          "source_type",
-        ],
+        attributes: CANVAS_DRAFT_ATTRIBUTES,
         include: [
           {
             model: Draft,
-            attributes: [
-              "name",
-              "id",
-              "picks",
-              "type",
-              "versus_draft_id",
-              "seriesIndex",
-              "completed",
-              "winner",
-            ],
+            attributes: DRAFT_ATTRIBUTES,
           },
         ],
         raw: true,
@@ -351,26 +340,11 @@ router.put("/:id", protect, async (req, res) => {
 
         const canvasDrafts = await CanvasDraft.findAll({
           where: { canvas_id },
-          attributes: [
-            "positionX",
-            "positionY",
-            "is_locked",
-            "group_id",
-            "source_type",
-          ],
+          attributes: CANVAS_DRAFT_ATTRIBUTES,
           include: [
             {
               model: Draft,
-              attributes: [
-                "name",
-                "id",
-                "picks",
-                "type",
-                "versus_draft_id",
-                "seriesIndex",
-                "completed",
-                "winner",
-              ],
+              attributes: DRAFT_ATTRIBUTES,
             },
           ],
           raw: true,

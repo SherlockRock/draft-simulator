@@ -11,6 +11,10 @@ const {
   CanvasConnection,
 } = require("../models/Canvas");
 const Draft = require("../models/Draft");
+const {
+  CANVAS_DRAFT_ATTRIBUTES,
+  DRAFT_ATTRIBUTES,
+} = require("./canvasProjections");
 const VersusDraft = require("../models/VersusDraft");
 const VersusParticipant = require("../models/VersusParticipant");
 const UserToken = require("../models/UserToken");
@@ -295,28 +299,11 @@ async function broadcastCanvasUpdate(canvasId) {
 
   const canvasDrafts = await CanvasDraft.findAll({
     where: { canvas_id: canvasId },
-    attributes: [
-      "positionX",
-      "positionY",
-      "is_locked",
-      "group_id",
-      "source_type",
-    ],
+    attributes: CANVAS_DRAFT_ATTRIBUTES,
     include: [
       {
         model: Draft,
-        attributes: [
-          "name",
-          "id",
-          "picks",
-          "type",
-          "versus_draft_id",
-          "seriesIndex",
-          "completed",
-          "winner",
-          "blueSideTeam",
-          "firstPick",
-        ],
+        attributes: DRAFT_ATTRIBUTES,
       },
     ],
     raw: true,

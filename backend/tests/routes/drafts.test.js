@@ -102,6 +102,34 @@ describe("draft route canvas access", () => {
     expect(draft.save).toHaveBeenCalled();
   });
 
+  it("keeps blueSideTeam and firstPick in the canvas broadcast", async () => {
+    const emitted = [];
+    socketService.emitToRoom.mockImplementation((room, event, payload) => {
+      emitted.push({ room, event, payload });
+    });
+
+    const draft = mockDraft({ ownerId: "u1" });
+    vi.spyOn(Draft, "findByPk").mockResolvedValue(draft);
+    vi.spyOn(Canvas, "findByPk").mockResolvedValue({
+      toJSON: () => ({ id: "c-1" }),
+    });
+    vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+
+    await request(buildApp())
+      .put("/api/drafts/d-1?canvas_id=c-1")
+      .send({ description: "changed" })
+      .expect(200);
+
+    const update = emitted.find((event) => event.event === "canvasUpdate");
+    expect(update).toBeDefined();
+    const projected = CanvasDraft.findAll.mock.calls.at(-1)[0];
+    const draftAttrs = projected.include[0].attributes;
+    expect(draftAttrs).toContain("blueSideTeam");
+    expect(draftAttrs).toContain("firstPick");
+  });
+
   it("PUT /:id keeps the existing draft 403 for non-owner view permission", async () => {
     const draft = mockDraft({ ownerId: "owner-1" });
     vi.spyOn(Draft, "findByPk").mockResolvedValue(draft);
