@@ -85,6 +85,9 @@ type TeamNameInputProps = {
     blueSideTeam: 1 | 2;
     disabled: boolean;
     colourClass: string;
+    /** Focus underline, in this column's team colour. A literal Tailwind class,
+     *  not composed at runtime, so the JIT emits it. */
+    accentBorderClass: string;
     spanClass?: string;
     onCommit: (field: "team1Name" | "team2Name", value: string) => void;
 };
@@ -103,20 +106,30 @@ const TeamNameInput = (props: TeamNameInputProps) => {
         if (!isFocused() && value() !== raw) setValue(raw);
     });
 
-    const commit = () => {
+    const commit = (typed: string) => {
         // Only persist a real change. Without this, focusing an INHERITED label
         // and blurring would write the inherited text back as an explicit
         // override and freeze the card against future group renames.
-        if (value() === entryValue) return;
-        props.onCommit(targetField, value());
+        if (typed === entryValue) return;
+        props.onCommit(targetField, typed);
     };
 
     return (
         <div class={`min-w-0 px-1 ${props.spanClass ?? ""}`}>
-            {/* overflow-hidden because the sizer span is whitespace-pre and so
+            {/* Same active treatment as the draft-name field directly above:
+                the row fills in and grows an underline on focus, so it reads as
+                an editable field only while you are in it. The underline takes
+                the column's team colour rather than the name field's purple.
+                overflow-hidden because the sizer span is whitespace-pre and so
                 has intrinsic width — without it a long override spills over the
-                neighbouring column. Mirrors the draft-name field's wrapper. */}
-            <div class="relative overflow-hidden">
+                neighbouring column. */}
+            <div
+                class={`relative overflow-hidden rounded-b-sm rounded-t-md border-b-2 transition-all duration-200 ${
+                    isFocused()
+                        ? `bg-darius-card/60 ${props.accentBorderClass}`
+                        : "border-transparent bg-transparent"
+                }`}
+            >
                 <span
                     aria-hidden="true"
                     class="invisible block whitespace-pre px-1 text-center text-sm font-semibold"
@@ -153,8 +166,18 @@ const TeamNameInput = (props: TeamNameInputProps) => {
                         }
                     }}
                     onBlur={() => {
+                        // Read the typed value into a local BEFORE touching
+                        // isFocused. Solid flushes the resync effect
+                        // synchronously on that write, and while the card is
+                        // still inheriting `props.raw` is null — so clearing the
+                        // flag first replaced the typed text with "" and the
+                        // equality guard below then correctly suppressed the
+                        // send, losing the edit with no error anywhere.
+                        // Snapshotting makes the commit independent of effect
+                        // scheduling rather than dependent on statement order.
+                        const typed = value();
                         setIsFocused(false);
-                        commit();
+                        commit(typed);
                     }}
                 />
             </div>
@@ -566,6 +589,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                     // fades. Both variants are spelled out literally so Tailwind
                     // emits them.
                     colourClass="text-darius-purple-bright placeholder:text-darius-purple-bright"
+                    accentBorderClass="border-darius-purple-bright"
                     spanClass={isHorizontal() ? "col-span-2" : undefined}
                     onCommit={(field, value) =>
                         props.onTeamNameChange?.(props.canvasDraft.Draft.id, field, value)
@@ -578,6 +602,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
                     blueSideTeam={bst()}
                     disabled={headerDisabled()}
                     colourClass="text-darius-crimson placeholder:text-darius-crimson"
+                    accentBorderClass="border-darius-crimson"
                     spanClass={isHorizontal() ? "col-span-2" : undefined}
                     onCommit={(field, value) =>
                         props.onTeamNameChange?.(props.canvasDraft.Draft.id, field, value)
