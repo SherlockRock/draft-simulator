@@ -7,6 +7,7 @@ type GroupContextMenuProps = {
     position: { x: number; y: number };
     group: CanvasGroup;
     onRename?: () => void;
+    onSetTeamNames?: () => void;
     onViewSeries?: () => void;
     onArrangeGrid?: () => void;
     onConvertToFree?: () => void;
@@ -25,6 +26,13 @@ export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
                 label: "Rename",
                 action: () => props.onRename?.()
             });
+
+            if (props.onSetTeamNames) {
+                menuActions.push({
+                    label: "Set team names…",
+                    action: () => props.onSetTeamNames?.()
+                });
+            }
 
             if (props.group.metadata.layout !== "grid") {
                 menuActions.push({

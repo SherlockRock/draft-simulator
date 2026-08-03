@@ -141,6 +141,7 @@ import {
 } from "./utils/gridLayout";
 import { resolveCopyPlacement } from "./utils/copyPlacement";
 import { GridSettingsDialog } from "./components/GridSettingsDialog";
+import { GroupTeamNamesDialog } from "./components/GroupTeamNamesDialog";
 import { DraftPositionsUpdatedSchema, type DraftMode } from "@draft-sim/shared-types";
 import { type CardLayout } from "./utils/canvasCardLayout";
 
@@ -371,6 +372,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [gridSettingsGroup, setGridSettingsGroup] = createSignal<CanvasGroup | null>(
         null
     );
+    const [teamNamesGroup, setTeamNamesGroup] = createSignal<CanvasGroup | null>(null);
     const [editingDraftId, setEditingDraftId] = createSignal<string | null>(null);
 
     // Layout switches resize every card and re-map slot geometry, so the
@@ -917,6 +919,24 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     metadata
                 });
             }
+        }
+    };
+
+    const handleSetGroupTeamNames = (metadata: {
+        blueTeamName: string;
+        redTeamName: string;
+    }) => {
+        const group = teamNamesGroup();
+        if (!group || !canEdit()) return;
+        if (isLocalMode()) {
+            localUpdateGroup({ groupId: group.id, metadata });
+            refreshFromLocal();
+        } else {
+            updateGroupMutation.mutate({
+                canvasId: canvasId(),
+                groupId: group.id,
+                metadata
+            });
         }
     };
 
@@ -4528,6 +4548,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     onSave={saveGridSettings}
                     rowCount={gridRowCount}
                 />
+                <GroupTeamNamesDialog
+                    group={teamNamesGroup}
+                    isOpen={() => teamNamesGroup() !== null}
+                    onClose={() => setTeamNamesGroup(null)}
+                    onSave={handleSetGroupTeamNames}
+                />
                 {/* Context Menu */}
                 <Show when={contextMenuPosition()}>
                     {(pos) => (
@@ -4646,6 +4672,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             onArrangeGrid={() => setGridSettingsGroup(menu().group)}
                             onConvertToFree={() => convertGroupToFree(menu().group)}
                             onGridSettings={() => setGridSettingsGroup(menu().group)}
+                            onSetTeamNames={() => setTeamNamesGroup(menu().group)}
                             onGoTo={() => {
                                 const group = menu().group;
                                 props.setViewport({
