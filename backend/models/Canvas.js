@@ -72,6 +72,12 @@ const CanvasDraft = sequelize.define("CanvasDraft", {
     type: DataTypes.ENUM("canvas", "versus"),
     defaultValue: "canvas",
   },
+  // Display-only labels for this card on this canvas. Deliberately NOT on
+  // Draft: live series cards point at the VersusDraft's own Draft rows, and
+  // CanvasDraft is a plain join table, so a per-Draft field would mutate the
+  // live versus game and leak across every canvas showing that draft.
+  team1Name: { type: DataTypes.STRING, allowNull: true, defaultValue: null },
+  team2Name: { type: DataTypes.STRING, allowNull: true, defaultValue: null },
 }, {
   indexes: [
     {

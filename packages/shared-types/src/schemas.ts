@@ -72,6 +72,8 @@ export const CanvasDraftSchema = z.object({
   is_locked: z.boolean().optional(),
   group_id: z.string().nullable().optional(),
   source_type: z.enum(["canvas", "versus"]).optional(),
+  team1Name: z.string().nullable().optional(),
+  team2Name: z.string().nullable().optional(),
   Draft: CanvasDraftInnerSchema,
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
