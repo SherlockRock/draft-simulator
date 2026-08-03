@@ -5,7 +5,8 @@ import {
     createMemo,
     For,
     Accessor,
-    JSX
+    JSX,
+    untrack
 } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { Eye, Plus, X, Lock } from "lucide-solid";
@@ -22,6 +23,7 @@ import {
 } from "../utils/canvasCardLayout";
 import { cardHeight, cardWidth } from "../utils/helpers";
 import type { SlotPhase } from "../utils/canvasSearch";
+import { fieldForColumn } from "../utils/teamNames";
 import { CanvasCardMosaic } from "./CanvasCardMosaic";
 
 type CanvasCardProps = {
@@ -49,6 +51,15 @@ type CanvasCardProps = {
     onEditingComplete?: () => void;
     blueTeamName?: string;
     redTeamName?: string;
+    /** Raw per-card overrides. Empty/absent means "inheriting" — distinct from
+     *  blueTeamName/redTeamName, which are the RESOLVED display values. */
+    team1NameRaw?: string | null;
+    team2NameRaw?: string | null;
+    onTeamNameChange?: (
+        draftId: string,
+        field: "team1Name" | "team2Name",
+        value: string
+    ) => void;
     restrictedChampions?: () => string[];
     disabledChampions?: string[];
     searchDimmed?: () => boolean;
@@ -64,6 +75,92 @@ const redPickIndices = [15, 16, 17, 18, 19];
 const getTeamSide = (pickIndex: number): "team1" | "team2" =>
     pickIndex < 5 || (pickIndex >= 10 && pickIndex < 15) ? "team1" : "team2";
 const DRAFT_NAME_PLACEHOLDER = "Enter Draft Name";
+
+type TeamNameInputProps = {
+    column: "left" | "right";
+    /** Resolved display value — used as the placeholder, never as the value. */
+    resolved?: string;
+    /** Raw override for THIS column — the editable value. */
+    raw?: string | null;
+    blueSideTeam: 1 | 2;
+    disabled: boolean;
+    colourClass: string;
+    spanClass?: string;
+    onCommit: (field: "team1Name" | "team2Name", value: string) => void;
+};
+
+const TeamNameInput = (props: TeamNameInputProps) => {
+    const [value, setValue] = createSignal(untrack(() => props.raw ?? ""));
+    const [isFocused, setIsFocused] = createSignal(false);
+    // Snapshotted on focus: blueSideTeam can change mid-edit (a collaborator
+    // swaps sides), and committing against the new value would write the text
+    // to the opposite team.
+    let targetField: "team1Name" | "team2Name" = "team1Name";
+    let entryValue = "";
+
+    createEffect(() => {
+        const raw = props.raw ?? "";
+        if (!isFocused() && value() !== raw) setValue(raw);
+    });
+
+    const commit = () => {
+        // Only persist a real change. Without this, focusing an INHERITED label
+        // and blurring would write the inherited text back as an explicit
+        // override and freeze the card against future group renames.
+        if (value() === entryValue) return;
+        props.onCommit(targetField, value());
+    };
+
+    return (
+        <div class={`min-w-0 px-1 ${props.spanClass ?? ""}`}>
+            {/* overflow-hidden because the sizer span is whitespace-pre and so
+                has intrinsic width — without it a long override spills over the
+                neighbouring column. Mirrors the draft-name field's wrapper. */}
+            <div class="relative overflow-hidden">
+                <span
+                    aria-hidden="true"
+                    class="invisible block whitespace-pre px-1 text-center text-sm font-semibold"
+                >
+                    {value() || props.resolved || "Team"}
+                </span>
+                <input
+                    type="text"
+                    value={value()}
+                    placeholder={
+                        props.resolved ?? (props.column === "left" ? "Team 1" : "Team 2")
+                    }
+                    disabled={props.disabled}
+                    class={`absolute inset-0 w-full select-text truncate bg-transparent px-1 text-center text-sm font-semibold tracking-[0.02em] outline-none disabled:cursor-not-allowed ${props.colourClass}`}
+                    onFocus={() => {
+                        setIsFocused(true);
+                        targetField = fieldForColumn(props.column, props.blueSideTeam);
+                        entryValue = value();
+                    }}
+                    onInput={(e) => setValue(e.currentTarget.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                            e.currentTarget.blur();
+                            return;
+                        }
+                        if (e.key === "Escape") {
+                            // Cancel, unlike the draft-name field which commits on
+                            // Escape. stopPropagation keeps this Escape from also
+                            // closing canvas search.
+                            e.stopPropagation();
+                            setValue(entryValue);
+                            setIsFocused(false);
+                            e.currentTarget.blur();
+                        }
+                    }}
+                    onBlur={() => {
+                        setIsFocused(false);
+                        commit();
+                    }}
+                />
+            </div>
+        </div>
+    );
+};
 
 export const CanvasCard = (props: CanvasCardProps) => {
     const navigate = useNavigate();
@@ -445,30 +542,50 @@ export const CanvasCard = (props: CanvasCardProps) => {
         </div>
     );
 
-    const renderTeamHeaders = () => (
-        <div class={teamHeaderGridClass()}>
-            <div
-                class="min-w-0 px-1 text-center"
-                classList={{
-                    "col-span-2": isHorizontal()
-                }}
-            >
-                <div class="truncate text-sm font-semibold tracking-[0.02em] text-darius-purple-bright">
-                    {props.blueTeamName?.trim() || "Team 1"}
-                </div>
+    const renderTeamHeaders = () => {
+        const bst = () => props.canvasDraft.Draft.blueSideTeam ?? 1;
+        // The lock protects PICKS, which the versus game owns. A canvas-scoped
+        // display label is not the versus game's business, so `is_locked` is
+        // deliberately absent here — unlike slotDisabled(). Editing is off under
+        // LOD because the header is still rendered (the mosaic only covers the
+        // card BODY), and a sub-pixel input invites accidental overrides.
+        const headerDisabled = () =>
+            props.isConnectionMode || !props.canEdit() || props.lodActive();
+
+        return (
+            <div class={teamHeaderGridClass()}>
+                <TeamNameInput
+                    column="left"
+                    resolved={props.blueTeamName}
+                    raw={bst() === 1 ? props.team1NameRaw : props.team2NameRaw}
+                    blueSideTeam={bst()}
+                    disabled={headerDisabled()}
+                    // The placeholder carries the INHERITED name, which is the
+                    // common case — it has to look like real text, not like a
+                    // greyed-out hint, or every existing series card visibly
+                    // fades. Both variants are spelled out literally so Tailwind
+                    // emits them.
+                    colourClass="text-darius-purple-bright placeholder:text-darius-purple-bright"
+                    spanClass={isHorizontal() ? "col-span-2" : undefined}
+                    onCommit={(field, value) =>
+                        props.onTeamNameChange?.(props.canvasDraft.Draft.id, field, value)
+                    }
+                />
+                <TeamNameInput
+                    column="right"
+                    resolved={props.redTeamName}
+                    raw={bst() === 1 ? props.team2NameRaw : props.team1NameRaw}
+                    blueSideTeam={bst()}
+                    disabled={headerDisabled()}
+                    colourClass="text-darius-crimson placeholder:text-darius-crimson"
+                    spanClass={isHorizontal() ? "col-span-2" : undefined}
+                    onCommit={(field, value) =>
+                        props.onTeamNameChange?.(props.canvasDraft.Draft.id, field, value)
+                    }
+                />
             </div>
-            <div
-                class="min-w-0 px-1 text-center"
-                classList={{
-                    "col-span-2": isHorizontal()
-                }}
-            >
-                <div class="truncate text-sm font-semibold tracking-[0.02em] text-darius-crimson">
-                    {props.redTeamName?.trim() || "Team 2"}
-                </div>
-            </div>
-        </div>
-    );
+        );
+    };
 
     return (
         <div

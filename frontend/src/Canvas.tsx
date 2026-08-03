@@ -4060,6 +4060,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                     redTeamName={
                                                         resolveTeamNames(cd, group).right
                                                     }
+                                                    team1NameRaw={cd.team1Name}
+                                                    team2NameRaw={cd.team2Name}
+                                                    onTeamNameChange={(
+                                                        draftId,
+                                                        field,
+                                                        value
+                                                    ) =>
+                                                        handleUpdateDraftMetadata(
+                                                            draftId,
+                                                            {
+                                                                [field]: value
+                                                            }
+                                                        )
+                                                    }
                                                     restrictedChampions={() =>
                                                         getRestrictedChampionsForDraft(cd)
                                                     }
@@ -4140,6 +4154,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 }
                                                 redTeamName={
                                                     resolveTeamNames(cd, group).right
+                                                }
+                                                team1NameRaw={cd.team1Name}
+                                                team2NameRaw={cd.team2Name}
+                                                onTeamNameChange={(
+                                                    draftId,
+                                                    field,
+                                                    value
+                                                ) =>
+                                                    handleUpdateDraftMetadata(draftId, {
+                                                        [field]: value
+                                                    })
                                                 }
                                                 restrictedChampions={() =>
                                                     getRestrictedChampionsForDraft(cd)
@@ -4299,6 +4324,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 onEditingComplete={() => setEditingDraftId(null)}
                                 blueTeamName={resolveTeamNames(cd, groupForCard(cd)).left}
                                 redTeamName={resolveTeamNames(cd, groupForCard(cd)).right}
+                                team1NameRaw={cd.team1Name}
+                                team2NameRaw={cd.team2Name}
+                                onTeamNameChange={(draftId, field, value) =>
+                                    handleUpdateDraftMetadata(draftId, {
+                                        [field]: value
+                                    })
+                                }
                                 restrictedChampions={() =>
                                     getRestrictedChampionsForDraft(cd)
                                 }
