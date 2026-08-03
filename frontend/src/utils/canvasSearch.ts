@@ -71,10 +71,18 @@ const normalizeName = (name: string | undefined): string | null => {
  * Effective team names for a group: the linked Team entity's name wins, else
  * the free-text metadata string. Keeps unlinked groups and anonymous/local
  * canvases (no Team entity) working via the fallback.
+ *
+ * SERIES ONLY, deliberately. Search aggregates per-team win/loss records and
+ * pick/ban buckets across every draft it can attribute to a team. Custom groups
+ * hold scratch work, so letting their names resolve here would silently count
+ * throwaway drafts toward a real team's record. Lifting this gate requires the
+ * game-classification work (scrim/official tagging) — see the design doc's
+ * "out of scope" section. Until then this stays closed.
  */
 export const resolveGroupTeamNames = (
     group: CanvasGroup
 ): { team1: string | null; team2: string | null } => {
+    if (group.type !== "series") return { team1: null, team2: null };
     const team1 =
         group.Team1?.name?.trim() || group.metadata.blueTeamName?.trim() || null;
     const team2 = group.Team2?.name?.trim() || group.metadata.redTeamName?.trim() || null;

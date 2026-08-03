@@ -49,12 +49,13 @@ const makeDraft = (
 const makeGroup = (
     id: string,
     metadata: CanvasGroup["metadata"] = {},
-    teams: { Team1?: CanvasGroup["Team1"]; Team2?: CanvasGroup["Team2"] } = {}
+    teams: { Team1?: CanvasGroup["Team1"]; Team2?: CanvasGroup["Team2"] } = {},
+    type: CanvasGroup["type"] = "series"
 ): CanvasGroup => ({
     id,
     canvas_id: "canvas-1",
     name: id,
-    type: "series",
+    type,
     positionX: 0,
     positionY: 0,
     metadata,
@@ -521,5 +522,48 @@ describe("computeSearchResults — team filter", () => {
         if (buckets === null) return;
         expect(buckets.pickedBy.games).toBe(1);
         expect(buckets.bannedBy.games).toBe(1);
+    });
+});
+
+describe("custom groups are excluded from team identity", () => {
+    const customGroup = makeGroup(
+        "g1",
+        { blueTeamName: "T1", redTeamName: "GenG" },
+        {},
+        "custom"
+    );
+
+    it("resolves no team names for a named custom group", () => {
+        expect(resolveGroupTeamNames(customGroup)).toEqual({
+            team1: null,
+            team2: null
+        });
+    });
+
+    it("offers no team filter options from custom groups", () => {
+        expect(getTeamNameOptions([customGroup])).toEqual([]);
+    });
+
+    it("matches no side for a draft in a named custom group", () => {
+        const draft = makeDraft("d1", fullPicks(), { group_id: "g1" });
+        expect(teamSideInDraft(draft, customGroup, "T1")).toBeNull();
+    });
+
+    it("ignores a linked Team entity on a custom group", () => {
+        const linked = makeGroup(
+            "g2",
+            {},
+            { Team1: makeTeam("t1", "T1") },
+            "custom"
+        );
+        expect(resolveGroupTeamNames(linked)).toEqual({ team1: null, team2: null });
+    });
+
+    it("still resolves names for series groups", () => {
+        const series = makeGroup("g3", { blueTeamName: "T1", redTeamName: "GenG" });
+        expect(resolveGroupTeamNames(series)).toEqual({
+            team1: "T1",
+            team2: "GenG"
+        });
     });
 });
