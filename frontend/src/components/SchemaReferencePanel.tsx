@@ -34,6 +34,13 @@ const STANDALONE_DRAFT_FIELDS: SchemaField[] = [
         description: "Defaults to 1"
     },
     {
+        name: "team1Name / team2Name",
+        type: "string | null",
+        required: false,
+        description:
+            "Per-card display labels. Account and group-metadata exports do not include these fields yet."
+    },
+    {
         name: "positionX / positionY",
         type: "number",
         required: false,
@@ -154,7 +161,9 @@ const AGENT_EXAMPLE_JSON = `{
         "Alistar"
       ],
       "firstPick": "blue",
-      "blueSideTeam": 1
+      "blueSideTeam": 1,
+      "team1Name": "KT Rolster",
+      "team2Name": "Invictus Gaming"
     }
   ],
   "versusSeries": [

@@ -10,6 +10,7 @@ import {
     getRestrictedChampionsForGroup,
     resolveGroupMode
 } from "../utils/draftRestrictions";
+import { resolveTeamNames } from "../utils/teamNames";
 
 const DraftDetailView: Component = () => {
     const { draft, mutateDraft } = useDraftContext();
@@ -50,21 +51,18 @@ const DraftDetailView: Component = () => {
         return groups.find((g) => g.id === canvasDraft.group_id);
     });
 
-    // Compute team names from series groups
+    // Team names for the full-screen view. No longer series-only: custom-group
+    // defaults and per-card overrides show here too.
     const teamNames = createMemo(() => {
         const draftData = draft();
-        const group = currentGroup();
-        if (!draftData || !group || group.type !== "series") {
-            return { blue: undefined, red: undefined };
-        }
+        if (!draftData) return { blue: undefined, red: undefined };
 
         const drafts: CanvasDraft[] = canvas()?.drafts ?? [];
         const canvasDraft = drafts.find((cd) => cd.Draft.id === draftData.id);
-        const bst = canvasDraft?.Draft.blueSideTeam ?? 1;
-        return {
-            blue: bst === 1 ? group.metadata.blueTeamName : group.metadata.redTeamName,
-            red: bst === 1 ? group.metadata.redTeamName : group.metadata.blueTeamName
-        };
+        if (!canvasDraft) return { blue: undefined, red: undefined };
+
+        const names = resolveTeamNames(canvasDraft, currentGroup());
+        return { blue: names.left, red: names.right };
     });
 
     const siblingDrafts = createMemo(() => {

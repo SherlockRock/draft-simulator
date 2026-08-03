@@ -72,6 +72,8 @@ export const CanvasDraftSchema = z.object({
   is_locked: z.boolean().optional(),
   group_id: z.string().nullable().optional(),
   source_type: z.enum(["canvas", "versus"]).optional(),
+  team1Name: z.string().nullable().optional(),
+  team2Name: z.string().nullable().optional(),
   Draft: CanvasDraftInnerSchema,
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
@@ -373,6 +375,8 @@ export const ExternalCanvasImportDraftSchema = z.object({
   positionY: z.number().optional(),
   firstPick: z.enum(["blue", "red"]).optional(),
   blueSideTeam: z.union([z.literal(1), z.literal(2)]).optional(),
+  team1Name: z.string().nullable().optional(),
+  team2Name: z.string().nullable().optional(),
 });
 
 export const ExternalVersusImportDraftSchema = z.object({

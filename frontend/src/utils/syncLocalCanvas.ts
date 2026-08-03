@@ -68,16 +68,18 @@ export const syncLocalCanvasToServer = async (): Promise<string | null> => {
         });
         draftIdMap.set(draft.Draft.id, result.id);
 
-        // If draft was in a group, assign it
-        if (draft.group_id) {
-            const serverGroupId = groupIdMap.get(draft.group_id);
-            if (serverGroupId) {
-                await updateCanvasDraft({
-                    canvasId,
-                    draftId: result.id,
-                    group_id: serverGroupId
-                });
-            }
+        const serverGroupId = draft.group_id ? groupIdMap.get(draft.group_id) : undefined;
+        const team1Name = draft.team1Name?.trim();
+        const team2Name = draft.team2Name?.trim();
+
+        if (serverGroupId || team1Name || team2Name) {
+            await updateCanvasDraft({
+                canvasId,
+                draftId: result.id,
+                ...(serverGroupId && { group_id: serverGroupId }),
+                ...(team1Name && { team1Name }),
+                ...(team2Name && { team2Name })
+            });
         }
     }
 

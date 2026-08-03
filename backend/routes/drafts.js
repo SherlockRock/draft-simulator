@@ -4,6 +4,10 @@ const router = express.Router();
 // const { DraftSchema } = require("@draft-sim/shared-types");
 // Usage: const result = DraftSchema.safeParse(req.body);
 const Draft = require("../models/Draft");
+const {
+  CANVAS_DRAFT_ATTRIBUTES,
+  DRAFT_ATTRIBUTES,
+} = require("./canvasProjections");
 const VersusDraft = require("../models/VersusDraft");
 const {
   CanvasDraft,
@@ -173,26 +177,11 @@ router.post("/", protect, async (req, res) => {
 
       const canvasDrafts = await CanvasDraft.findAll({
         where: { canvas_id: canvas_id },
-        attributes: [
-          "positionX",
-          "positionY",
-          "is_locked",
-          "group_id",
-          "source_type",
-        ],
+        attributes: CANVAS_DRAFT_ATTRIBUTES,
         include: [
           {
             model: Draft,
-            attributes: [
-              "name",
-              "id",
-              "picks",
-              "type",
-              "versus_draft_id",
-              "seriesIndex",
-              "completed",
-              "winner",
-            ],
+            attributes: DRAFT_ATTRIBUTES,
           },
         ],
         raw: true,
@@ -246,6 +235,9 @@ router.delete("/:id", protect, async (req, res) => {
 router.put("/:id", protect, async (req, res) => {
   try {
     const { name, description, public: publicStatus, icon } = req.body;
+    // The canvas this edit is happening on, when there is one. Hoisted because
+    // both the authorization check and the name-uniqueness check need it.
+    const { canvas_id } = req.query;
     const draft = await Draft.findByPk(req.params.id);
 
     if (!draft) {
@@ -257,7 +249,6 @@ router.put("/:id", protect, async (req, res) => {
 
     if (!authorized) {
       // Check canvas-based edit access if canvas_id is provided
-      const { canvas_id } = req.query;
       if (canvas_id) {
         // Verify draft is actually on this canvas
         const canvasDraftAssoc = await CanvasDraft.findOne({
@@ -296,16 +287,22 @@ router.put("/:id", protect, async (req, res) => {
       });
 
       if (canvasAssociations.length > 0) {
-        // For canvas drafts, validate uniqueness on the first canvas it's associated with
-        const firstCanvasId = canvasAssociations[0].canvas_id;
+        // De-duplicate against the canvas the edit is actually happening on. A
+        // draft can sit on several canvases (copy-to-canvas, JSON import), and
+        // this used to always take canvasAssociations[0] — so renaming on
+        // canvas B was validated against canvas A, which both invented "(2)"
+        // suffixes for names that were free on B and let real duplicates
+        // through on B. Falls back to the first association when the request
+        // carries no canvas_id, or names a canvas this draft is not on.
+        const targetCanvasId =
+          canvasAssociations.find((assoc) => assoc.canvas_id === canvas_id)
+            ?.canvas_id ?? canvasAssociations[0].canvas_id;
         const { generateUniqueCanvasDraftName } = require("../helpers");
-        const uniqueName = await generateUniqueCanvasDraftName(
+        draft.name = await generateUniqueCanvasDraftName(
           name,
-          firstCanvasId,
+          targetCanvasId,
           draft.id,
         );
-
-        draft.name = uniqueName;
       } else {
         draft.name = name;
       }
@@ -330,7 +327,6 @@ router.put("/:id", protect, async (req, res) => {
     socketService.emitToRoom(draft.id, "draftUpdate", draft.toJSON());
 
     // Broadcast to canvas room so other canvas users see the edit
-    const { canvas_id } = req.query;
     if (canvas_id) {
       const canvas = await Canvas.findByPk(canvas_id);
       if (canvas) {
@@ -351,26 +347,11 @@ router.put("/:id", protect, async (req, res) => {
 
         const canvasDrafts = await CanvasDraft.findAll({
           where: { canvas_id },
-          attributes: [
-            "positionX",
-            "positionY",
-            "is_locked",
-            "group_id",
-            "source_type",
-          ],
+          attributes: CANVAS_DRAFT_ATTRIBUTES,
           include: [
             {
               model: Draft,
-              attributes: [
-                "name",
-                "id",
-                "picks",
-                "type",
-                "versus_draft_id",
-                "seriesIndex",
-                "completed",
-                "winner",
-              ],
+              attributes: DRAFT_ATTRIBUTES,
             },
           ],
           raw: true,

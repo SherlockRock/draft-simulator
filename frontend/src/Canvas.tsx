@@ -118,6 +118,7 @@ import { clampZoom, nextLodState, worldTransform, zoomAt } from "./utils/viewpor
 import { createRemoteCursorTracker } from "./utils/remoteCursors";
 import { createLaserTrailTracker } from "./utils/laserTrails";
 import { createLaserKeyTracker } from "./utils/laserKey";
+import { resolveTeamNames } from "./utils/teamNames";
 import { CursorOverlay } from "./components/CursorOverlay";
 import { LaserOverlay } from "./components/LaserOverlay";
 import CanvasSidebar from "./components/CanvasSidebar";
@@ -140,6 +141,7 @@ import {
 } from "./utils/gridLayout";
 import { resolveCopyPlacement } from "./utils/copyPlacement";
 import { GridSettingsDialog } from "./components/GridSettingsDialog";
+import { GroupTeamNamesDialog } from "./components/GroupTeamNamesDialog";
 import { DraftPositionsUpdatedSchema, type DraftMode } from "@draft-sim/shared-types";
 import { type CardLayout } from "./utils/canvasCardLayout";
 
@@ -370,6 +372,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [gridSettingsGroup, setGridSettingsGroup] = createSignal<CanvasGroup | null>(
         null
     );
+    const [teamNamesGroup, setTeamNamesGroup] = createSignal<CanvasGroup | null>(null);
     const [editingDraftId, setEditingDraftId] = createSignal<string | null>(null);
 
     // Layout switches resize every card and re-map slot geometry, so the
@@ -460,6 +463,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const getDraftsForGroup = (groupId: string) =>
         canvasDrafts.filter((cd) => cd.group_id === groupId);
+
+    const groupForCard = (cd: CanvasDraft): CanvasGroup | undefined =>
+        cd.group_id ? canvasGroups.find((g) => g.id === cd.group_id) : undefined;
 
     const upsertCanvasGroup = (group: CanvasGroup) => {
         setCanvasGroups((groups) => {
@@ -714,14 +720,21 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     }));
 
     const editDraftMutation = useMutation(() => ({
-        mutationFn: (data: { id: string; name: string; public: boolean }) => {
+        // Deliberately no `public` field. Sending `public: false` on a rename
+        // silently un-published any public draft, and it also made the server
+        // treat the edit as more-than-a-rename, so it broadcast a whole
+        // canvasUpdate instead of the narrow draftNameUpdated event.
+        mutationFn: (data: { id: string; name: string }) => {
             return editDraft(data.id, data, canvasId());
         },
         onSuccess: () => {
             toast.success("Successfully edited draft!");
         },
         onError: (error) => {
-            toast.error(`Error creating new draft: ${error.message}`);
+            // handleNameChange wrote the new name into the store optimistically,
+            // so a failure has to put the old one back.
+            toast.error(`Error editing draft: ${error.message}`);
+            canvasContext.refetchCanvas();
         }
     }));
 
@@ -913,6 +926,24 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     metadata
                 });
             }
+        }
+    };
+
+    const handleSetGroupTeamNames = (metadata: {
+        blueTeamName: string;
+        redTeamName: string;
+    }) => {
+        const group = teamNamesGroup();
+        if (!group || !canEdit()) return;
+        if (isLocalMode()) {
+            localUpdateGroup({ groupId: group.id, metadata });
+            refreshFromLocal();
+        } else {
+            updateGroupMutation.mutate({
+                canvasId: canvasId(),
+                groupId: group.id,
+                metadata
+            });
         }
     };
 
@@ -1737,6 +1768,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const currentDraft = canvasDrafts.find((cd) => cd.Draft.id === draftId);
         if (!currentDraft) return;
         if (currentDraft.Draft.name === newName) return;
+        // Optimistic, like every other canvas mutation. Rename was the only one
+        // without it: the card's name input resyncs from the store the moment it
+        // loses focus, so it snapped back to the old name and sat there until the
+        // socket echo returned. Targeted leaf path, so the card keeps its store
+        // proxy identity and <For> does not rebuild its DOM.
+        setCanvasDrafts((cd) => cd.Draft.id === draftId, "Draft", "name", newName);
         if (isLocalMode()) {
             localEditDraft(draftId, { name: newName });
             refreshFromLocal();
@@ -1744,8 +1781,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         } else {
             editDraftMutation.mutate({
                 id: draftId,
-                name: newName,
-                public: false
+                name: newName
             });
         }
     };
@@ -2692,27 +2728,38 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setPendingGroupSettingsPosition(null);
     };
 
-    const handleUpdateSeriesDraftMetadata = (
+    const handleUpdateDraftMetadata = (
         draftId: string,
         metadata: {
             winner?: "blue" | "red" | null;
             blueSideTeam?: 1 | 2;
             firstPick?: "blue" | "red";
+            team1Name?: string;
+            team2Name?: string;
         }
     ) => {
         if (!canEdit()) return;
 
-        setCanvasDrafts(
-            (cd) => cd.Draft.id === draftId,
-            "Draft",
-            (draft) => ({
+        const { team1Name, team2Name, ...draftMetadata } = metadata;
+        const matches = (cd: CanvasDraft) => cd.Draft.id === draftId;
+
+        if (Object.keys(draftMetadata).length > 0) {
+            setCanvasDrafts(matches, "Draft", (draft) => ({
                 ...draft,
-                ...metadata,
-                ...(metadata.winner !== undefined
-                    ? { completed: metadata.winner !== null }
+                ...draftMetadata,
+                ...(draftMetadata.winner !== undefined
+                    ? { completed: draftMetadata.winner !== null }
                     : {})
-            })
-        );
+            }));
+        }
+
+        // Empty string means inherit — mirror the server's normalisation.
+        if (team1Name !== undefined) {
+            setCanvasDrafts(matches, "team1Name", team1Name.trim() || null);
+        }
+        if (team2Name !== undefined) {
+            setCanvasDrafts(matches, "team2Name", team2Name.trim() || null);
+        }
 
         if (isLocalMode()) {
             localUpdateDraftMetadata({ draftId, ...metadata });
@@ -4039,6 +4086,26 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                     onEditingComplete={() =>
                                                         setEditingDraftId(null)
                                                     }
+                                                    blueTeamName={
+                                                        resolveTeamNames(cd, group).left
+                                                    }
+                                                    redTeamName={
+                                                        resolveTeamNames(cd, group).right
+                                                    }
+                                                    team1NameRaw={cd.team1Name}
+                                                    team2NameRaw={cd.team2Name}
+                                                    onTeamNameChange={(
+                                                        draftId,
+                                                        field,
+                                                        value
+                                                    ) =>
+                                                        handleUpdateDraftMetadata(
+                                                            draftId,
+                                                            {
+                                                                [field]: value
+                                                            }
+                                                        )
+                                                    }
                                                     restrictedChampions={() =>
                                                         getRestrictedChampionsForDraft(cd)
                                                     }
@@ -4087,21 +4154,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     onSelectAnchor={onGroupAnchorClick}
                                     isGroupSelected={groupConnectionSource() === group.id}
                                     sourceAnchor={sourceAnchor()}
-                                    onUpdateDraftMetadata={
-                                        handleUpdateSeriesDraftMetadata
-                                    }
+                                    onUpdateDraftMetadata={handleUpdateDraftMetadata}
                                     renderDraftCard={(cd) => {
-                                        // Compute team names based on blueSideTeam
-                                        const bst = cd.Draft.blueSideTeam ?? 1;
-                                        const blueTeamName =
-                                            bst === 1
-                                                ? group.metadata.blueTeamName
-                                                : group.metadata.redTeamName;
-                                        const redTeamName =
-                                            bst === 1
-                                                ? group.metadata.redTeamName
-                                                : group.metadata.blueTeamName;
-
                                         return (
                                             <CanvasCard
                                                 canvasId={canvasId()}
@@ -4127,8 +4181,23 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 onEditingComplete={() =>
                                                     setEditingDraftId(null)
                                                 }
-                                                blueTeamName={blueTeamName}
-                                                redTeamName={redTeamName}
+                                                blueTeamName={
+                                                    resolveTeamNames(cd, group).left
+                                                }
+                                                redTeamName={
+                                                    resolveTeamNames(cd, group).right
+                                                }
+                                                team1NameRaw={cd.team1Name}
+                                                team2NameRaw={cd.team2Name}
+                                                onTeamNameChange={(
+                                                    draftId,
+                                                    field,
+                                                    value
+                                                ) =>
+                                                    handleUpdateDraftMetadata(draftId, {
+                                                        [field]: value
+                                                    })
+                                                }
                                                 restrictedChampions={() =>
                                                     getRestrictedChampionsForDraft(cd)
                                                 }
@@ -4285,6 +4354,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 canEdit={canEdit}
                                 editingDraftId={editingDraftId}
                                 onEditingComplete={() => setEditingDraftId(null)}
+                                blueTeamName={resolveTeamNames(cd, groupForCard(cd)).left}
+                                redTeamName={resolveTeamNames(cd, groupForCard(cd)).right}
+                                team1NameRaw={cd.team1Name}
+                                team2NameRaw={cd.team2Name}
+                                onTeamNameChange={(draftId, field, value) =>
+                                    handleUpdateDraftMetadata(draftId, {
+                                        [field]: value
+                                    })
+                                }
                                 restrictedChampions={() =>
                                     getRestrictedChampionsForDraft(cd)
                                 }
@@ -4482,6 +4560,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     onSave={saveGridSettings}
                     rowCount={gridRowCount}
                 />
+                <GroupTeamNamesDialog
+                    group={teamNamesGroup}
+                    isOpen={() => teamNamesGroup() !== null}
+                    onClose={() => setTeamNamesGroup(null)}
+                    onSave={handleSetGroupTeamNames}
+                />
                 {/* Context Menu */}
                 <Show when={contextMenuPosition()}>
                     {(pos) => (
@@ -4600,6 +4684,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             onArrangeGrid={() => setGridSettingsGroup(menu().group)}
                             onConvertToFree={() => convertGroupToFree(menu().group)}
                             onGridSettings={() => setGridSettingsGroup(menu().group)}
+                            onSetTeamNames={() => setTeamNamesGroup(menu().group)}
                             onGoTo={() => {
                                 const group = menu().group;
                                 props.setViewport({

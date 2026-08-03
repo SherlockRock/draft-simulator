@@ -8,6 +8,10 @@ const {
   CanvasGroup,
 } = require("../models/Canvas.js");
 const Draft = require("../models/Draft.js");
+const {
+  CANVAS_DRAFT_ATTRIBUTES,
+  DRAFT_ATTRIBUTES,
+} = require("./canvasProjections");
 const User = require("../models/User.js");
 const VersusDraft = require("../models/VersusDraft.js");
 const Team = require("../models/Team.js");
@@ -163,28 +167,11 @@ async function getCanvasBroadcastPayload(canvasId) {
   });
   const canvasDrafts = await CanvasDraft.findAll({
     where: { canvas_id: canvasId },
-    attributes: [
-      "positionX",
-      "positionY",
-      "is_locked",
-      "group_id",
-      "source_type",
-    ],
+    attributes: CANVAS_DRAFT_ATTRIBUTES,
     include: [
       {
         model: Draft,
-        attributes: [
-          "name",
-          "id",
-          "picks",
-          "type",
-          "versus_draft_id",
-          "seriesIndex",
-          "completed",
-          "winner",
-          "blueSideTeam",
-          "firstPick",
-        ],
+        attributes: DRAFT_ATTRIBUTES,
       },
     ],
     raw: true,
@@ -365,28 +352,11 @@ router.get("/:canvasId", async (req, res) => {
 
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvas.id },
-      attributes: [
-        "positionX",
-        "positionY",
-        "is_locked",
-        "group_id",
-        "source_type",
-      ],
+      attributes: CANVAS_DRAFT_ATTRIBUTES,
       include: [
         {
           model: Draft,
-          attributes: [
-            "name",
-            "id",
-            "picks",
-            "type",
-            "versus_draft_id",
-            "seriesIndex",
-            "completed",
-            "winner",
-            "blueSideTeam",
-            "firstPick",
-          ],
+          attributes: DRAFT_ATTRIBUTES,
         },
       ],
       raw: true,
@@ -439,8 +409,16 @@ router.get("/:canvasId", async (req, res) => {
 
 router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
   try {
-    const { positionX, positionY, group_id, winner, blueSideTeam, firstPick } =
-      req.body;
+    const {
+      positionX,
+      positionY,
+      group_id,
+      winner,
+      blueSideTeam,
+      firstPick,
+      team1Name,
+      team2Name,
+    } = req.body;
     const { canvasId, draftId } = req.params;
 
     await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
@@ -449,6 +427,14 @@ router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
     if (typeof positionX === "number") canvasDraftUpdates.positionX = positionX;
     if (typeof positionY === "number") canvasDraftUpdates.positionY = positionY;
     if (group_id !== undefined) canvasDraftUpdates.group_id = group_id; // null to ungroup
+    // Empty string means "inherit again", so normalise it to null rather than
+    // persisting a blank label that would render as "Team 1".
+    if (typeof team1Name === "string") {
+      canvasDraftUpdates.team1Name = team1Name.trim() || null;
+    }
+    if (typeof team2Name === "string") {
+      canvasDraftUpdates.team2Name = team2Name.trim() || null;
+    }
 
     const draftUpdates = {};
     if (winner === "blue" || winner === "red" || winner === null) {
@@ -488,52 +474,21 @@ router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
       }
       await touchCanvasTimestamp(canvasId);
 
-      // If group assignment or draft metadata changed, emit full canvas update
-      if (group_id !== undefined || Object.keys(draftUpdates).length > 0) {
-        const canvasDrafts = await CanvasDraft.findAll({
-          where: { canvas_id: canvasId },
-          attributes: [
-            "positionX",
-            "positionY",
-            "is_locked",
-            "group_id",
-            "source_type",
-          ],
-          include: [
-            {
-              model: Draft,
-              attributes: [
-                "name",
-                "id",
-                "picks",
-                "type",
-                "versus_draft_id",
-                "seriesIndex",
-                "completed",
-                "winner",
-                "blueSideTeam",
-                "firstPick",
-              ],
-            },
-          ],
-          raw: true,
-          nest: true,
-        });
-        const connections = await CanvasConnection.findAll({
-          where: { canvas_id: canvasId },
-          raw: true,
-        });
-        const groups = await CanvasGroup.findAll({
-          where: { canvas_id: canvasId },
-        });
-        const canvas = await Canvas.findByPk(canvasId);
+      const nameChanged =
+        canvasDraftUpdates.team1Name !== undefined ||
+        canvasDraftUpdates.team2Name !== undefined;
 
-        socketService.emitToRoom(canvasId, "canvasUpdate", {
-          canvas: canvas.toJSON(),
-          drafts: canvasDrafts,
-          connections: connections,
-          groups: groups.map((g) => g.toJSON()),
-        });
+      if (
+        group_id !== undefined ||
+        Object.keys(draftUpdates).length > 0 ||
+        nameChanged
+      ) {
+        // Use the shared builder: the old hand-built payload fetched groups
+        // without TEAM_INCLUDE, so every broadcast stripped Team1/Team2 and
+        // their rosters from the client store — which made the Scout button
+        // disappear until reload.
+        const payload = await getCanvasBroadcastPayload(canvasId);
+        socketService.emitToRoom(canvasId, "canvasUpdate", payload);
       }
 
       res.status(200).json({ success: true, message: "Draft updated" });
@@ -698,6 +653,8 @@ router.post("/:canvasId/draft/:draftId/copy", protect, async (req, res) => {
           : group_id === null
             ? null
             : existingCanvasDraft.group_id,
+      team1Name: existingCanvasDraft.team1Name,
+      team2Name: existingCanvasDraft.team2Name,
       source_type: "canvas",
     });
 
@@ -706,28 +663,11 @@ router.post("/:canvasId/draft/:draftId/copy", protect, async (req, res) => {
     // Fetch full canvas data for socket broadcast
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvasId },
-      attributes: [
-        "positionX",
-        "positionY",
-        "is_locked",
-        "group_id",
-        "source_type",
-      ],
+      attributes: CANVAS_DRAFT_ATTRIBUTES,
       include: [
         {
           model: Draft,
-          attributes: [
-            "name",
-            "id",
-            "picks",
-            "type",
-            "versus_draft_id",
-            "seriesIndex",
-            "completed",
-            "winner",
-            "blueSideTeam",
-            "firstPick",
-          ],
+          attributes: DRAFT_ATTRIBUTES,
         },
       ],
       raw: true,
@@ -859,28 +799,11 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
     const canvas = await Canvas.findByPk(canvasId);
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvasId },
-      attributes: [
-        "positionX",
-        "positionY",
-        "is_locked",
-        "group_id",
-        "source_type",
-      ],
+      attributes: CANVAS_DRAFT_ATTRIBUTES,
       include: [
         {
           model: Draft,
-          attributes: [
-            "name",
-            "id",
-            "picks",
-            "type",
-            "versus_draft_id",
-            "seriesIndex",
-            "completed",
-            "winner",
-            "blueSideTeam",
-            "firstPick",
-          ],
+          attributes: DRAFT_ATTRIBUTES,
         },
       ],
       raw: true,
@@ -1037,28 +960,11 @@ router.post("/:canvasId/import/draft", protect, async (req, res) => {
     // Fetch the full canvas data for socket broadcast
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvasId },
-      attributes: [
-        "positionX",
-        "positionY",
-        "is_locked",
-        "group_id",
-        "source_type",
-      ],
+      attributes: CANVAS_DRAFT_ATTRIBUTES,
       include: [
         {
           model: Draft,
-          attributes: [
-            "name",
-            "id",
-            "picks",
-            "type",
-            "versus_draft_id",
-            "seriesIndex",
-            "completed",
-            "winner",
-            "blueSideTeam",
-            "firstPick",
-          ],
+          attributes: DRAFT_ATTRIBUTES,
         },
       ],
       raw: true,
@@ -1187,28 +1093,11 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
     // Fetch full canvas data for socket broadcast
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvasId },
-      attributes: [
-        "positionX",
-        "positionY",
-        "is_locked",
-        "group_id",
-        "source_type",
-      ],
+      attributes: CANVAS_DRAFT_ATTRIBUTES,
       include: [
         {
           model: Draft,
-          attributes: [
-            "name",
-            "id",
-            "picks",
-            "type",
-            "versus_draft_id",
-            "seriesIndex",
-            "completed",
-            "winner",
-            "blueSideTeam",
-            "firstPick",
-          ],
+          attributes: DRAFT_ATTRIBUTES,
         },
       ],
       raw: true,
@@ -1489,28 +1378,11 @@ router.post("/:canvasId/group", protect, async (req, res) => {
 
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvasId },
-      attributes: [
-        "positionX",
-        "positionY",
-        "is_locked",
-        "group_id",
-        "source_type",
-      ],
+      attributes: CANVAS_DRAFT_ATTRIBUTES,
       include: [
         {
           model: Draft,
-          attributes: [
-            "name",
-            "id",
-            "picks",
-            "type",
-            "versus_draft_id",
-            "seriesIndex",
-            "completed",
-            "winner",
-            "blueSideTeam",
-            "firstPick",
-          ],
+          attributes: DRAFT_ATTRIBUTES,
         },
       ],
       raw: true,
@@ -1702,28 +1574,11 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
     // Fetch updated canvas data
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvasId },
-      attributes: [
-        "positionX",
-        "positionY",
-        "is_locked",
-        "group_id",
-        "source_type",
-      ],
+      attributes: CANVAS_DRAFT_ATTRIBUTES,
       include: [
         {
           model: Draft,
-          attributes: [
-            "name",
-            "id",
-            "picks",
-            "type",
-            "versus_draft_id",
-            "seriesIndex",
-            "completed",
-            "winner",
-            "blueSideTeam",
-            "firstPick",
-          ],
+          attributes: DRAFT_ATTRIBUTES,
         },
       ],
       raw: true,
@@ -2055,28 +1910,11 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
 
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvas.id },
-      attributes: [
-        "positionX",
-        "positionY",
-        "is_locked",
-        "group_id",
-        "source_type",
-      ],
+      attributes: CANVAS_DRAFT_ATTRIBUTES,
       include: [
         {
           model: Draft,
-          attributes: [
-            "name",
-            "id",
-            "picks",
-            "type",
-            "versus_draft_id",
-            "seriesIndex",
-            "completed",
-            "winner",
-            "blueSideTeam",
-            "firstPick",
-          ],
+          attributes: DRAFT_ATTRIBUTES,
         },
       ],
       raw: true,
@@ -2150,28 +1988,11 @@ router.patch("/:canvasId/card-layout", protect, async (req, res) => {
 
     const canvasDrafts = await CanvasDraft.findAll({
       where: { canvas_id: canvas.id },
-      attributes: [
-        "positionX",
-        "positionY",
-        "is_locked",
-        "group_id",
-        "source_type",
-      ],
+      attributes: CANVAS_DRAFT_ATTRIBUTES,
       include: [
         {
           model: Draft,
-          attributes: [
-            "name",
-            "id",
-            "picks",
-            "type",
-            "versus_draft_id",
-            "seriesIndex",
-            "completed",
-            "winner",
-            "blueSideTeam",
-            "firstPick",
-          ],
+          attributes: DRAFT_ATTRIBUTES,
         },
       ],
       raw: true,

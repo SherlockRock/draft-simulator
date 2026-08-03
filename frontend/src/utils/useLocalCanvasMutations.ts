@@ -135,6 +135,8 @@ export const localCopyDraft = (
                 ? placement.positionY
                 : originalDraft.positionY + COPY_OFFSET,
             group_id: placement ? placement.group_id : (originalDraft.group_id ?? null),
+            team1Name: originalDraft.team1Name,
+            team2Name: originalDraft.team2Name,
             source_type: "canvas",
             Draft: {
                 id: newDraftId,
@@ -509,6 +511,8 @@ export const localUpdateDraftMetadata = (data: {
     winner?: "blue" | "red" | null;
     blueSideTeam?: 1 | 2;
     firstPick?: "blue" | "red";
+    team1Name?: string;
+    team2Name?: string;
 }) => {
     return mutateLocal((canvas) => {
         const draft = canvas.drafts.find((d) => d.Draft.id === data.draftId);
@@ -520,6 +524,11 @@ export const localUpdateDraftMetadata = (data: {
             if (data.blueSideTeam !== undefined)
                 draft.Draft.blueSideTeam = data.blueSideTeam;
             if (data.firstPick !== undefined) draft.Draft.firstPick = data.firstPick;
+            // Empty string means inherit — mirror the server's normalisation.
+            if (data.team1Name !== undefined)
+                draft.team1Name = data.team1Name.trim() || null;
+            if (data.team2Name !== undefined)
+                draft.team2Name = data.team2Name.trim() || null;
         }
         return { canvas, result: { success: true } };
     });
