@@ -6,6 +6,7 @@ import {
     Match,
     onCleanup,
     createSignal,
+    createEffect,
     createMemo
 } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
@@ -128,19 +129,35 @@ const ActivityList: Component<ActivityListProps> = (props) => {
         initialPageParam: 0
     }));
 
-    // Intersection observer for infinite scroll
+    // Intersection observer for infinite scroll.
+    // The observer only reports visibility; the fetch is driven by an effect so
+    // that a sentinel which stays visible after a page lands (tall viewport, or
+    // an edge that arrived mid-fetch) keeps pulling pages instead of stalling.
+    const [sentinelVisible, setSentinelVisible] = createSignal(false);
+
     const setupObserver = (element: HTMLDivElement) => {
         const observer = new IntersectionObserver(
             (entries) => {
-                if (entries[0].isIntersecting && !activitiesQuery.isFetchingNextPage) {
-                    activitiesQuery.fetchNextPage();
-                }
+                const latest = entries[entries.length - 1];
+                setSentinelVisible(latest.isIntersecting);
             },
             { threshold: 0.1 }
         );
         observer.observe(element);
-        onCleanup(() => observer.disconnect());
+        onCleanup(() => {
+            observer.disconnect();
+            setSentinelVisible(false);
+        });
     };
+
+    createEffect(() => {
+        const visible = sentinelVisible();
+        const hasNext = activitiesQuery.hasNextPage;
+        const fetching = activitiesQuery.isFetchingNextPage;
+        if (visible && hasNext && !fetching) {
+            activitiesQuery.fetchNextPage();
+        }
+    });
 
     const selectTheme = (): SelectTheme => {
         switch (props.accentColor) {

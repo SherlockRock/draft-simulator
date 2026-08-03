@@ -506,7 +506,7 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       }
       const snapshot = draft ? await findLatestSnapshot(draft.id) : null;
 
-      await emitDraftUpdate(io, sessionId, {
+      await emitDraftUpdate(io, session.id, {
         session,
         draft,
         events,

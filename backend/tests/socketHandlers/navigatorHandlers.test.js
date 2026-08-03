@@ -270,3 +270,29 @@ describe("loadAuthorizedContext", () => {
     expect(eventsSpy).not.toHaveBeenCalled();
   });
 });
+
+describe("navigatorStartDraft", () => {
+  it("broadcasts the draft update to the session room instead of throwing", async () => {
+    const { socket, handlers } = buildFakeSocket();
+    const { io } = installHandlers({ socket });
+
+    const session = { id: "s-1", user_id: "user-1", status: "setup", save: vi.fn() };
+    const draft = { id: "d-1", session_id: "s-1", status: "active", game_number: 1 };
+    vi.spyOn(NavigatorSession, "findByPk").mockResolvedValue(session);
+    vi.spyOn(NavigatorDraft, "findOne").mockResolvedValue(draft);
+    vi.spyOn(NavigatorEvent, "findAll").mockResolvedValue([]);
+    vi.spyOn(NavigatorSnapshot, "findOne").mockResolvedValue(null);
+
+    await handlers.get("navigatorStartDraft")({ sessionId: "s-1" });
+
+    // Regression: the handler used a `sessionId` binding that no longer existed
+    // after the loadAuthorizedContext refactor, so every start threw a
+    // ReferenceError and the client only ever saw "Failed to start navigator
+    // draft". Nothing must be emitted on the error channel.
+    const errorEmits = socket.emit.mock.calls.filter(([event]) => event === "navigatorError");
+    expect(errorEmits).toEqual([]);
+    expect(io.to).toHaveBeenCalledWith("navigator:s-1");
+    expect(session.status).toBe("active");
+    expect(session.save).toHaveBeenCalled();
+  });
+});

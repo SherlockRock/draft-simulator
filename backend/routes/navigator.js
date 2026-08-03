@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { protect } = require("../middleware/auth");
+const sequelize = require("../config/database");
 const NavigatorSession = require("../models/NavigatorSession");
 const NavigatorDraft = require("../models/NavigatorDraft");
 const NavigatorEvent = require("../models/NavigatorEvent");
@@ -53,31 +54,45 @@ router.post("/", protect, async (req, res) => {
       side_swap_mode,
     } = req.body;
 
-    const session = await NavigatorSession.create({
-      name,
-      user_id: req.user.id,
-      our_side,
-      blue_pool,
-      red_pool,
-      opponent_pool,
-      draft_mode,
-      series_length,
-      side_swap_mode,
-    });
-
-    await NavigatorDraft.create({
-      session_id: session.id,
-      game_number: 1,
-    });
-
-    const createdSession = await NavigatorSession.findByPk(session.id, {
-      include: [
+    // A session is only meaningful with its game-1 draft, so create both in one
+    // transaction. Without it, a failure after the session insert committed left
+    // an orphaned draft-less session behind while the caller got a 500 — the
+    // client showed "failed to create" and stayed put, yet the session appeared
+    // on the dashboard.
+    const createdSession = await sequelize.transaction(async (tx) => {
+      const session = await NavigatorSession.create(
         {
-          model: NavigatorDraft,
-          attributes: ["id", "game_number", "status", "our_side_override"],
+          name,
+          user_id: req.user.id,
+          our_side,
+          blue_pool,
+          red_pool,
+          opponent_pool,
+          draft_mode,
+          series_length,
+          side_swap_mode,
         },
-      ],
-      order: [[NavigatorDraft, "game_number", "ASC"]],
+        { transaction: tx },
+      );
+
+      await NavigatorDraft.create(
+        {
+          session_id: session.id,
+          game_number: 1,
+        },
+        { transaction: tx },
+      );
+
+      return NavigatorSession.findByPk(session.id, {
+        include: [
+          {
+            model: NavigatorDraft,
+            attributes: ["id", "game_number", "status", "our_side_override"],
+          },
+        ],
+        order: [[NavigatorDraft, "game_number", "ASC"]],
+        transaction: tx,
+      });
     });
 
     res.status(201).json(createdSession);
