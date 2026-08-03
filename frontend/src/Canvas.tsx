@@ -2696,27 +2696,38 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setPendingGroupSettingsPosition(null);
     };
 
-    const handleUpdateSeriesDraftMetadata = (
+    const handleUpdateDraftMetadata = (
         draftId: string,
         metadata: {
             winner?: "blue" | "red" | null;
             blueSideTeam?: 1 | 2;
             firstPick?: "blue" | "red";
+            team1Name?: string;
+            team2Name?: string;
         }
     ) => {
         if (!canEdit()) return;
 
-        setCanvasDrafts(
-            (cd) => cd.Draft.id === draftId,
-            "Draft",
-            (draft) => ({
+        const { team1Name, team2Name, ...draftMetadata } = metadata;
+        const matches = (cd: CanvasDraft) => cd.Draft.id === draftId;
+
+        if (Object.keys(draftMetadata).length > 0) {
+            setCanvasDrafts(matches, "Draft", (draft) => ({
                 ...draft,
-                ...metadata,
-                ...(metadata.winner !== undefined
-                    ? { completed: metadata.winner !== null }
+                ...draftMetadata,
+                ...(draftMetadata.winner !== undefined
+                    ? { completed: draftMetadata.winner !== null }
                     : {})
-            })
-        );
+            }));
+        }
+
+        // Empty string means inherit — mirror the server's normalisation.
+        if (team1Name !== undefined) {
+            setCanvasDrafts(matches, "team1Name", team1Name.trim() || null);
+        }
+        if (team2Name !== undefined) {
+            setCanvasDrafts(matches, "team2Name", team2Name.trim() || null);
+        }
 
         if (isLocalMode()) {
             localUpdateDraftMetadata({ draftId, ...metadata });
@@ -4097,9 +4108,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     onSelectAnchor={onGroupAnchorClick}
                                     isGroupSelected={groupConnectionSource() === group.id}
                                     sourceAnchor={sourceAnchor()}
-                                    onUpdateDraftMetadata={
-                                        handleUpdateSeriesDraftMetadata
-                                    }
+                                    onUpdateDraftMetadata={handleUpdateDraftMetadata}
                                     renderDraftCard={(cd) => {
                                         return (
                                             <CanvasCard
