@@ -720,7 +720,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     }));
 
     const editDraftMutation = useMutation(() => ({
-        mutationFn: (data: { id: string; name: string; public: boolean }) => {
+        // Deliberately no `public` field. Sending `public: false` on a rename
+        // silently un-published any public draft, and it also made the server
+        // treat the edit as more-than-a-rename, so it broadcast a whole
+        // canvasUpdate instead of the narrow draftNameUpdated event.
+        mutationFn: (data: { id: string; name: string }) => {
             return editDraft(data.id, data, canvasId());
         },
         onSuccess: () => {
@@ -1777,8 +1781,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         } else {
             editDraftMutation.mutate({
                 id: draftId,
-                name: newName,
-                public: false
+                name: newName
             });
         }
     };
