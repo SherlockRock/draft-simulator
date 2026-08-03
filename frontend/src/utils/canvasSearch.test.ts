@@ -550,12 +550,7 @@ describe("custom groups are excluded from team identity", () => {
     });
 
     it("ignores a linked Team entity on a custom group", () => {
-        const linked = makeGroup(
-            "g2",
-            {},
-            { Team1: makeTeam("t1", "T1") },
-            "custom"
-        );
+        const linked = makeGroup("g2", {}, { Team1: makeTeam("t1", "T1") }, "custom");
         expect(resolveGroupTeamNames(linked)).toEqual({ team1: null, team2: null });
     });
 
