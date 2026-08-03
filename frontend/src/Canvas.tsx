@@ -118,6 +118,7 @@ import { clampZoom, nextLodState, worldTransform, zoomAt } from "./utils/viewpor
 import { createRemoteCursorTracker } from "./utils/remoteCursors";
 import { createLaserTrailTracker } from "./utils/laserTrails";
 import { createLaserKeyTracker } from "./utils/laserKey";
+import { resolveTeamNames } from "./utils/teamNames";
 import { CursorOverlay } from "./components/CursorOverlay";
 import { LaserOverlay } from "./components/LaserOverlay";
 import CanvasSidebar from "./components/CanvasSidebar";
@@ -460,6 +461,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const getDraftsForGroup = (groupId: string) =>
         canvasDrafts.filter((cd) => cd.group_id === groupId);
+
+    const groupForCard = (cd: CanvasDraft): CanvasGroup | undefined =>
+        cd.group_id ? canvasGroups.find((g) => g.id === cd.group_id) : undefined;
 
     const upsertCanvasGroup = (group: CanvasGroup) => {
         setCanvasGroups((groups) => {
@@ -4039,6 +4043,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                     onEditingComplete={() =>
                                                         setEditingDraftId(null)
                                                     }
+                                                    blueTeamName={
+                                                        resolveTeamNames(cd, group).left
+                                                    }
+                                                    redTeamName={
+                                                        resolveTeamNames(cd, group).right
+                                                    }
                                                     restrictedChampions={() =>
                                                         getRestrictedChampionsForDraft(cd)
                                                     }
@@ -4091,17 +4101,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         handleUpdateSeriesDraftMetadata
                                     }
                                     renderDraftCard={(cd) => {
-                                        // Compute team names based on blueSideTeam
-                                        const bst = cd.Draft.blueSideTeam ?? 1;
-                                        const blueTeamName =
-                                            bst === 1
-                                                ? group.metadata.blueTeamName
-                                                : group.metadata.redTeamName;
-                                        const redTeamName =
-                                            bst === 1
-                                                ? group.metadata.redTeamName
-                                                : group.metadata.blueTeamName;
-
                                         return (
                                             <CanvasCard
                                                 canvasId={canvasId()}
@@ -4127,8 +4126,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 onEditingComplete={() =>
                                                     setEditingDraftId(null)
                                                 }
-                                                blueTeamName={blueTeamName}
-                                                redTeamName={redTeamName}
+                                                blueTeamName={
+                                                    resolveTeamNames(cd, group).left
+                                                }
+                                                redTeamName={
+                                                    resolveTeamNames(cd, group).right
+                                                }
                                                 restrictedChampions={() =>
                                                     getRestrictedChampionsForDraft(cd)
                                                 }
@@ -4285,6 +4288,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 canEdit={canEdit}
                                 editingDraftId={editingDraftId}
                                 onEditingComplete={() => setEditingDraftId(null)}
+                                blueTeamName={resolveTeamNames(cd, groupForCard(cd)).left}
+                                redTeamName={resolveTeamNames(cd, groupForCard(cd)).right}
                                 restrictedChampions={() =>
                                     getRestrictedChampionsForDraft(cd)
                                 }
