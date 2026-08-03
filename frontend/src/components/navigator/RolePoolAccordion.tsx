@@ -87,7 +87,10 @@ export const RolePoolAccordion: Component<RolePoolAccordionProps> = (props) => {
                             Clear
                         </button>
                     </div>
-                    <div class="grid grid-cols-6 gap-1.5">
+                    {/* Cap the panel and scroll it internally: an uncapped grid is
+                        ~1000px tall, so opening one role threw every role below it
+                        off-screen. Bounded, the other role headers stay reachable. */}
+                    <div class="custom-scrollbar grid max-h-80 grid-cols-6 gap-1.5 overflow-y-auto">
                         <For each={roleChampions()}>
                             {(champ) => (
                                 <button
