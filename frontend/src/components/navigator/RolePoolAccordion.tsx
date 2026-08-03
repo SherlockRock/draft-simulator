@@ -19,9 +19,11 @@ const TEAM_ACCENT: Record<"blue" | "red", string> = {
     red: "border-red-500 bg-red-500/10 text-red-100"
 };
 
-const TEAM_BORDER: Record<"blue" | "red", string> = {
-    blue: "border-blue-500",
-    red: "border-red-500"
+// Written out in full because Tailwind only sees class names that appear
+// literally in the source — a concatenated `"hover:" + border` never generates.
+const TEAM_IDLE: Record<"blue" | "red", string> = {
+    blue: "border-slate-700 hover:border-blue-500",
+    red: "border-slate-700 hover:border-red-500"
 };
 
 export const RolePoolAccordion: Component<RolePoolAccordionProps> = (props) => {
@@ -100,8 +102,7 @@ export const RolePoolAccordion: Component<RolePoolAccordionProps> = (props) => {
                                     class={`relative aspect-square overflow-hidden rounded border-2 transition-all ${
                                         isSelected(champ.id)
                                             ? TEAM_ACCENT[props.teamColor]
-                                            : "hover: border-slate-700" +
-                                              TEAM_BORDER[props.teamColor]
+                                            : TEAM_IDLE[props.teamColor]
                                     }`}
                                 >
                                     <img
