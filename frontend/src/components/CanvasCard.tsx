@@ -699,11 +699,17 @@ export const CanvasCard = (props: CanvasCardProps) => {
                                 }
                             }}
                             onBlur={() => {
+                                // Snapshot BEFORE clearing the focus flag. Solid
+                                // flushes the resync effect above synchronously
+                                // on that write, and it restores the OLD store
+                                // name into nameSignal — so reading the signal
+                                // afterwards handed handleNameChange the name it
+                                // already had, which then bailed silently at its
+                                // equality check. That was the whole rename
+                                // regression: no request, no toast, name reverts.
+                                const typed = nameSignal();
                                 setIsNameFocused(false);
-                                props.handleNameChange(
-                                    props.canvasDraft.Draft.id,
-                                    nameSignal()
-                                );
+                                props.handleNameChange(props.canvasDraft.Draft.id, typed);
                                 props.onEditingComplete?.();
                             }}
                             class={titleInputClass()}

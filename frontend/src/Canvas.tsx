@@ -727,7 +727,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             toast.success("Successfully edited draft!");
         },
         onError: (error) => {
-            toast.error(`Error creating new draft: ${error.message}`);
+            // handleNameChange wrote the new name into the store optimistically,
+            // so a failure has to put the old one back.
+            toast.error(`Error editing draft: ${error.message}`);
+            canvasContext.refetchCanvas();
         }
     }));
 
@@ -1761,6 +1764,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const currentDraft = canvasDrafts.find((cd) => cd.Draft.id === draftId);
         if (!currentDraft) return;
         if (currentDraft.Draft.name === newName) return;
+        // Optimistic, like every other canvas mutation. Rename was the only one
+        // without it: the card's name input resyncs from the store the moment it
+        // loses focus, so it snapped back to the old name and sat there until the
+        // socket echo returned. Targeted leaf path, so the card keeps its store
+        // proxy identity and <For> does not rebuild its DOM.
+        setCanvasDrafts((cd) => cd.Draft.id === draftId, "Draft", "name", newName);
         if (isLocalMode()) {
             localEditDraft(draftId, { name: newName });
             refreshFromLocal();
