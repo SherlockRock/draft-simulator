@@ -9,6 +9,28 @@ import {
     updateCanvasViewport
 } from "./actions";
 import { ConnectionEndpoint } from "./schemas";
+import type { CanvasGroupMetadata } from "@draft-sim/shared-types";
+
+/**
+ * Drops `gameType` from local group metadata on its way to the server.
+ *
+ * This looks like a bug. It is not — see design D6. Sync creates every local
+ * group through `createCanvasGroup`, which hardcodes `type: "custom"`; there is
+ * no series path in sync at all. So any gameType here, including one the user
+ * deliberately set, would land on the server attached to a CUSTOM group and be
+ * counted toward a real team's record, in the database, with no migration
+ * guarding it. Tagging works while local; the tag does not survive sync.
+ *
+ * The information loss mirrors one that already exists: a synced local series
+ * becomes a custom group and stops counting regardless. Fixing that belongs to
+ * whoever owns local-canvas sync.
+ */
+export const stripUnsyncableGroupMetadata = (
+    metadata: CanvasGroupMetadata
+): CanvasGroupMetadata => {
+    const { gameType: _gameType, ...rest } = metadata;
+    return rest;
+};
 
 export const syncLocalCanvasToServer = async (): Promise<string | null> => {
     // Skip sync if canvas is empty (no drafts, no groups, not renamed)
@@ -43,15 +65,18 @@ export const syncLocalCanvasToServer = async (): Promise<string | null> => {
         });
         groupIdMap.set(group.id, result.group.id);
 
-        // Sync width/height and metadata if they were customized
+        // Sync width/height and metadata if they were customized. The metadata
+        // is stripped first, so a group whose ONLY customization was a gameType
+        // correctly sends nothing.
+        const syncedMetadata = stripUnsyncableGroupMetadata(group.metadata ?? {});
         const hasSize = group.width != null || group.height != null;
-        const hasMetadata = group.metadata && Object.keys(group.metadata).length > 0;
+        const hasMetadata = Object.keys(syncedMetadata).length > 0;
         if (hasSize || hasMetadata) {
             await updateCanvasGroup({
                 canvasId,
                 groupId: result.group.id,
                 ...(hasSize && { width: group.width, height: group.height }),
-                ...(hasMetadata && { metadata: group.metadata })
+                ...(hasMetadata && { metadata: syncedMetadata })
             });
         }
     }
