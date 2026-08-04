@@ -45,6 +45,25 @@ export const nextLodState = (previous: boolean, zoom: number): boolean => {
 };
 
 /**
+ * Width, in world px, for a stroke that must stay a constant DEVICE size.
+ *
+ * Everything inside `.canvas-world` is multiplied by `scale(zoom)`, so a stroke
+ * authored at N css px paints at `N * zoom` device px. Below roughly one device
+ * pixel it rasterises inconsistently — edges round away independently, so the
+ * stroke thins on some sides and disappears on others rather than fading. At
+ * MIN_ZOOM a 4px highlight ring is 0.4 device px and a 1px border is 0.1.
+ *
+ * Dividing by zoom cancels the layer scale. Applies to any hairline UI
+ * affordance drawn in world space — highlight rings, hairline borders — but NOT
+ * to content, which should scale with the canvas like everything else.
+ *
+ * An unusable zoom returns the authored width: a transient NaN or a zoom of 0
+ * must not produce an Infinity-wide ring.
+ */
+export const screenConstantPx = (cssPx: number, zoom: number): number =>
+    Number.isFinite(zoom) && zoom > 0 ? cssPx / zoom : cssPx;
+
+/**
  * The CSS transform for the single `.canvas-world` layer.
  *
  * This replaces the per-element math every card and group used to run. An

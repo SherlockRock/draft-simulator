@@ -6,6 +6,7 @@ import {
     MIN_ZOOM,
     clampZoom,
     nextLodState,
+    screenConstantPx,
     worldAt,
     worldTransform,
     zoomAt
@@ -168,5 +169,36 @@ describe("nextLodState", () => {
 
     it("keeps the exit threshold above the enter threshold", () => {
         expect(LOD_EXIT_ZOOM).toBeGreaterThan(LOD_ENTER_ZOOM);
+    });
+});
+
+describe("screenConstantPx", () => {
+    it("is a no-op at zoom 1", () => {
+        expect(screenConstantPx(4, 1)).toBe(4);
+    });
+
+    it("keeps a stroke at a constant DEVICE size across the zoom range", () => {
+        // The whole point: everything inside .canvas-world is multiplied by
+        // scale(zoom), so a stroke authored at N css px paints at N * zoom
+        // device px. Below ~1 device px it rasterises inconsistently and edges
+        // round away entirely — which is why a ring-4 highlight vanishes at low
+        // zoom while the card it surrounds stays visible.
+        for (const zoom of [MIN_ZOOM, 0.25, 0.3, 0.5, 1, 2, MAX_ZOOM]) {
+            expect(screenConstantPx(4, zoom) * zoom).toBeCloseTo(4, 10);
+        }
+    });
+
+    it("would otherwise go sub-pixel at the low end", () => {
+        // Guards the premise rather than the fix: 4 * 0.1 is 0.4 device px.
+        expect(4 * MIN_ZOOM).toBeLessThan(1);
+        expect(screenConstantPx(4, MIN_ZOOM)).toBe(40);
+    });
+
+    it("falls back to the authored width for an unusable zoom", () => {
+        // A transient NaN must not blow the ring up to Infinity px.
+        expect(screenConstantPx(4, 0)).toBe(4);
+        expect(screenConstantPx(4, -1)).toBe(4);
+        expect(screenConstantPx(4, Number.NaN)).toBe(4);
+        expect(screenConstantPx(4, Number.POSITIVE_INFINITY)).toBe(4);
     });
 });

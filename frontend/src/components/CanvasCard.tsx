@@ -25,6 +25,7 @@ import { cardHeight, cardWidth } from "../utils/helpers";
 import type { SlotPhase } from "../utils/canvasSearch";
 import { fieldForColumn } from "../utils/teamNames";
 import { CanvasCardMosaic } from "./CanvasCardMosaic";
+import { screenConstantPx } from "../utils/viewport";
 
 type CanvasCardProps = {
     canvasId: string;
@@ -280,10 +281,24 @@ export const CanvasCard = (props: CanvasCardProps) => {
     );
     const actionButtonBaseClass =
         "flex size-7 items-center justify-center rounded-lg border border-solid";
-    const actionButtonBorderWidth = createMemo(() => {
-        const zoom = props.zoom();
-        if (!Number.isFinite(zoom) || zoom <= 0) return "1px";
-        return `${1 / zoom}px`;
+    const actionButtonBorderWidth = createMemo(
+        () => `${screenConstantPx(1, props.zoom())}px`
+    );
+
+    // Selection wins over the connection/search highlight, matching the order
+    // the two ring-4 classList entries used to resolve in.
+    const highlightOutline = createMemo((): JSX.CSSProperties => {
+        const color = selected()
+            ? "rgb(240 104 48)" // darius-ember
+            : props.isConnectionMode || (props.searchIsCurrent?.() ?? false)
+              ? "rgb(155 80 192)" // darius-purple-bright
+              : null;
+        if (color === null) return {};
+        return {
+            "outline-style": "solid",
+            "outline-color": color,
+            "outline-width": `${screenConstantPx(4, props.zoom())}px`
+        };
     });
 
     // Wide slots carry full-bleed splash art, which is what makes their interiors
@@ -619,14 +634,19 @@ export const CanvasCard = (props: CanvasCardProps) => {
             class="canvas-card flex flex-col rounded-xl border border-darius-border/90 bg-darius-card-hover/95 shadow-[0_16px_40px_rgba(15,23,42,0.42)] transition-opacity duration-150"
             classList={{
                 "absolute z-30": !props.isGrouped || props.groupType === "custom",
-                "ring-4 ring-darius-purple-bright":
-                    !selected() &&
-                    (props.isConnectionMode || (props.searchIsCurrent?.() ?? false)),
-                "ring-4 ring-darius-ember": selected(),
                 "relative flex-shrink-0": props.isGrouped && props.groupType === "series",
                 "opacity-40": props.searchDimmed?.() ?? false
             }}
             style={{
+                // Drawn as a zoom-compensated outline rather than Tailwind's
+                // ring-4: a ring is a box-shadow authored in world px, so the
+                // scaled world layer painted it at 4 * zoom device px and it
+                // thinned and dropped out edge-by-edge below ~1px — from 0.3
+                // zoom down, and entirely at MIN_ZOOM. Outline is used instead
+                // of an inline box-shadow so it composes with the card's drop
+                // shadow without having to restate it. Same compensation the
+                // action buttons' borders already use.
+                ...highlightOutline(),
                 ...(props.isGrouped && props.groupType === "custom"
                     ? {
                           left: `${props.canvasDraft.positionX}px`,
