@@ -1,6 +1,6 @@
 import { createSignal, createEffect, Show, Component } from "solid-js";
 import { ChevronDown, ChevronUp } from "lucide-solid";
-import type { DraftMode, Team } from "@draft-sim/shared-types";
+import type { DraftMode, GameType, Team } from "@draft-sim/shared-types";
 import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./Dialog";
 import { ChampionToggleGrid } from "./ChampionToggleGrid";
 import { StyledSelect } from "./StyledSelect";
@@ -21,6 +21,8 @@ interface GroupSettingsDialogProps {
     initialTeam1Id?: string | null;
     initialTeam2Id?: string | null;
     initialLength?: number;
+    /** Absent = untagged. */
+    initialGameType?: GameType;
     defaultSeriesEnabled?: boolean;
     primaryLabel?: string;
     /** The user's owned teams for autocomplete linking. */
@@ -38,6 +40,8 @@ interface GroupSettingsDialogProps {
         team1_id: string | null;
         team2_id: string | null;
         length: number;
+        /** null clears a stored classification; see the clear protocol (D3). */
+        gameType: GameType | null;
     }) => void;
 }
 
@@ -46,6 +50,19 @@ const DRAFT_MODE_OPTIONS = [
     { value: "fearless", label: "Fearless" },
     { value: "ironman", label: "Ironman" }
 ];
+
+/** "" is Untagged; it emits null so the backend deletes the stored key (D3). */
+const GAME_TYPE_OPTIONS = [
+    { value: "", label: "Untagged" },
+    { value: "scrim", label: "Scrim" },
+    { value: "official", label: "Official" },
+    { value: "scratch", label: "Scratch" }
+];
+
+const parseGameType = (value: string): GameType | null =>
+    value === "scrim" || value === "official" || value === "scratch"
+        ? value
+        : null;
 
 const SERIES_LENGTH_OPTIONS = [
     { value: "1", label: "1 game" },
@@ -72,6 +89,7 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
     const [team1Id, setTeam1Id] = createSignal<string | null>(null);
     const [team2Id, setTeam2Id] = createSignal<string | null>(null);
     const [length, setLength] = createSignal(3);
+    const [gameType, setGameType] = createSignal<GameType | null>(null);
     const [disabledExpanded, setDisabledExpanded] = createSignal(false);
 
     createEffect(() => {
@@ -87,6 +105,7 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
             setTeam1Id(props.initialTeam1Id ?? null);
             setTeam2Id(props.initialTeam2Id ?? null);
             setLength(clampSeriesLength(props.initialLength || 3));
+            setGameType(props.initialGameType ?? null);
             setDisabledExpanded(false);
         }
     });
@@ -108,7 +127,8 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
             redTeamName: red.name,
             team1_id: blue.teamId,
             team2_id: red.teamId,
-            length: clampSeriesLength(length())
+            length: clampSeriesLength(length()),
+            gameType: gameType()
         });
         props.onClose();
     };
@@ -177,6 +197,31 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                                 </p>
                             </Show>
                         </div>
+
+                        {/*
+                          Deliberately outside BOTH the seriesEnabled() and the
+                          canEditSeriesSettings conditions below. Gating on
+                          canEditSeriesSettings would hide it for live-imported
+                          series, which D2 exists to make correctable; gating on
+                          seriesEnabled() would hide it for custom groups, which
+                          is the entire point of tagging one so it counts.
+                        */}
+                        <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
+                            Game Type
+                            <div class="mt-2">
+                                <StyledSelect
+                                    value={gameType() ?? ""}
+                                    onChange={(v) => setGameType(parseGameType(v))}
+                                    options={GAME_TYPE_OPTIONS}
+                                    theme="purple"
+                                />
+                            </div>
+                        </label>
+                        <p class="-mt-2 text-xs text-darius-text-secondary">
+                            Scrims and official matches count toward a team's record and
+                            pick/ban tendencies in canvas search. Scratch and untagged
+                            groups do not.
+                        </p>
 
                         <Show when={!props.isSeries}>
                             <label class="flex cursor-pointer items-start justify-between gap-4 rounded-md border border-darius-border bg-darius-card-hover/40 px-3 py-3 transition-colors hover:border-darius-purple-bright/60">

@@ -143,7 +143,11 @@ import {
 import { resolveCopyPlacement } from "./utils/copyPlacement";
 import { GridSettingsDialog } from "./components/GridSettingsDialog";
 import { GroupTeamNamesDialog } from "./components/GroupTeamNamesDialog";
-import { DraftPositionsUpdatedSchema, type DraftMode } from "@draft-sim/shared-types";
+import {
+    DraftPositionsUpdatedSchema,
+    type DraftMode,
+    type GameType
+} from "@draft-sim/shared-types";
 import { type CardLayout } from "./utils/canvasCardLayout";
 
 const debounce = <T extends unknown[]>(func: (...args: T) => void, limit: number) => {
@@ -2523,7 +2527,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         team1_id: string | null;
         team2_id: string | null;
         length: number;
+        gameType: GameType | null;
     }) => {
+        // A classification set while CREATING a group is otherwise dropped, so
+        // all eight write paths below carry it. `null` clears (D3); on the
+        // conversion routes only a real value is sent, since there is nothing
+        // stored yet to clear.
         const pendingPosition = pendingGroupSettingsPosition();
         if (pendingPosition) {
             const groupName = data.name || "Custom Series";
@@ -2540,7 +2549,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         redTeamName: data.redTeamName,
                         length: data.length,
                         draftMode: data.draftMode,
-                        disabledChampions: data.disabledChampions
+                        disabledChampions: data.disabledChampions,
+                        gameType: data.gameType
                     });
                 } else {
                     localUpdateGroup({
@@ -2548,7 +2558,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         name: groupName,
                         metadata: {
                             disabledChampions: data.disabledChampions,
-                            draftMode: data.draftMode
+                            draftMode: data.draftMode,
+                            gameType: data.gameType
                         }
                     });
                 }
@@ -2568,7 +2579,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 groupId: result.group.id,
                                 metadata: {
                                     disabledChampions: data.disabledChampions,
-                                    draftMode: data.draftMode
+                                    draftMode: data.draftMode,
+                                    gameType: data.gameType
                                 }
                             });
                         }
@@ -2582,7 +2594,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             type: data.draftMode,
                             disabledChampions: data.disabledChampions,
                             team1_id: data.team1_id,
-                            team2_id: data.team2_id
+                            team2_id: data.team2_id,
+                            ...(data.gameType !== null
+                                ? { gameType: data.gameType }
+                                : {})
                         });
                     })
                     .then((result) => {
@@ -2614,7 +2629,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         redTeamName: data.redTeamName,
                         length: data.length,
                         draftMode: data.draftMode,
-                        disabledChampions: data.disabledChampions
+                        disabledChampions: data.disabledChampions,
+                        gameType: data.gameType
                     });
                 } else {
                     localUpdateGroup({
@@ -2623,7 +2639,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         metadata: {
                             ...group.metadata,
                             disabledChampions: data.disabledChampions,
-                            draftMode: data.draftMode
+                            draftMode: data.draftMode,
+                            gameType: data.gameType
                         }
                     });
                 }
@@ -2640,7 +2657,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 type: data.draftMode,
                 disabledChampions: data.disabledChampions,
                 team1_id: data.team1_id,
-                team2_id: data.team2_id
+                team2_id: data.team2_id,
+                ...(data.gameType !== null ? { gameType: data.gameType } : {})
             });
         } else {
             const group = canvasGroups.find((g) => g.id === groupId);
@@ -2653,6 +2671,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 metadata: {
                     disabledChampions: data.disabledChampions,
                     draftMode: data.draftMode,
+                    gameType: data.gameType,
                     ...(isManualSeries
                         ? {
                               blueTeamName: data.blueTeamName,
@@ -4553,6 +4572,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     teamsEnabled={teamsEnabled()}
                     onTeamCreated={handleTeamCreated}
                     initialLength={settingsGroup()?.metadata.length ?? 3}
+                    initialGameType={settingsGroup()?.metadata.gameType}
                     onSave={handleSaveGroupSettings}
                 />
                 <GridSettingsDialog
