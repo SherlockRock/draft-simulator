@@ -25,7 +25,7 @@ import { cardHeight, cardWidth } from "../utils/helpers";
 import type { SlotPhase } from "../utils/canvasSearch";
 import { fieldForColumn } from "../utils/teamNames";
 import { CanvasCardMosaic } from "./CanvasCardMosaic";
-import { screenConstantPx } from "../utils/viewport";
+import { scaledStrokePx, screenConstantPx } from "../utils/viewport";
 
 type CanvasCardProps = {
     canvasId: string;
@@ -297,7 +297,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
         return {
             "outline-style": "solid",
             "outline-color": color,
-            "outline-width": `${screenConstantPx(4, props.zoom())}px`
+            "outline-width": `${scaledStrokePx(4, props.zoom())}px`
         };
     });
 
@@ -638,14 +638,14 @@ export const CanvasCard = (props: CanvasCardProps) => {
                 "opacity-40": props.searchDimmed?.() ?? false
             }}
             style={{
-                // Drawn as a zoom-compensated outline rather than Tailwind's
-                // ring-4: a ring is a box-shadow authored in world px, so the
-                // scaled world layer painted it at 4 * zoom device px and it
-                // thinned and dropped out edge-by-edge below ~1px — from 0.3
-                // zoom down, and entirely at MIN_ZOOM. Outline is used instead
-                // of an inline box-shadow so it composes with the card's drop
-                // shadow without having to restate it. Same compensation the
-                // action buttons' borders already use.
+                // Drawn as an outline rather than Tailwind's ring-4: a ring is a
+                // box-shadow authored in world px, so the scaled world layer
+                // painted it at 4 * zoom device px and it thinned and dropped
+                // out edge-by-edge below ~1px — from 0.3 zoom down, and entirely
+                // at MIN_ZOOM. scaledStrokePx keeps the familiar 4px weight
+                // wherever it is legible and only holds a floor below the
+                // crossover. Outline rather than an inline box-shadow so it
+                // composes with the card's drop shadow without restating it.
                 ...highlightOutline(),
                 ...(props.isGrouped && props.groupType === "custom"
                     ? {

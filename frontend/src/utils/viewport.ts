@@ -63,6 +63,34 @@ export const nextLodState = (previous: boolean, zoom: number): boolean => {
 export const screenConstantPx = (cssPx: number, zoom: number): number =>
     Number.isFinite(zoom) && zoom > 0 ? cssPx / zoom : cssPx;
 
+/** Thinnest a world-space stroke may render, in post-transform css px. */
+export const MIN_VISIBLE_STROKE_PX = 2;
+
+/**
+ * Width, in world px, for a stroke that should scale with the canvas like the
+ * content it decorates, but never thin out to the point of disappearing.
+ *
+ * Rendered width is `max(basePx * zoom, minDevicePx)`. Above the crossover it is
+ * exactly the authored width — a highlight keeps the weight it has always had
+ * when zoomed in — and below it the stroke holds at the floor instead of
+ * rasterising away edge-by-edge.
+ *
+ * This is the middle ground between the two obvious options, both of which are
+ * wrong on their own: a plain css width vanishes at low zoom, and
+ * screenConstantPx (constant on-screen size) stays legible but reads as absurdly
+ * heavy when the card it surrounds is 34px wide. Prefer this for anything that
+ * decorates content; prefer screenConstantPx only for chrome that is genuinely
+ * zoom-independent, like the action buttons' hairline borders.
+ */
+export const scaledStrokePx = (
+    basePx: number,
+    zoom: number,
+    minDevicePx: number = MIN_VISIBLE_STROKE_PX
+): number => {
+    if (!Number.isFinite(zoom) || zoom <= 0) return basePx;
+    return Math.max(basePx, minDevicePx / zoom);
+};
+
 /**
  * The CSS transform for the single `.canvas-world` layer.
  *

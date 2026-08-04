@@ -9,7 +9,7 @@ import {
 } from "solid-js";
 import { Trash2, Settings, ArrowLeftRight } from "lucide-solid";
 import { GameTypeChip } from "./GameTypeChip";
-import { screenConstantPx } from "../utils/viewport";
+import { scaledStrokePx } from "../utils/viewport";
 import { CanvasDraft, CanvasGroup, AnchorType } from "../utils/schemas";
 import {
     GRID_HEADER_HEIGHT,
@@ -257,7 +257,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         return {
             "outline-style": "solid",
             "outline-color": color,
-            "outline-width": `${screenConstantPx(2, props.zoom())}px`
+            "outline-width": `${scaledStrokePx(2, props.zoom())}px`
         };
     });
 
@@ -279,9 +279,9 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 top: `${props.group.positionY}px`,
                 width: `${groupWidth()}px`,
                 height: `${groupHeight()}px`,
-                // Zoom-compensated outline, for the same reason as the card's
-                // highlight ring: a Tailwind ring is a world-space box-shadow,
-                // so it painted at 2 * zoom device px and dropped out below ~1px.
+                // Floored outline, for the same reason as the card's highlight
+                // ring: a Tailwind ring is a world-space box-shadow, so it
+                // painted at 2 * zoom device px and dropped out below ~1px.
                 // The structural `border-2` is deliberately NOT compensated — it
                 // reads as part of the group rather than as an affordance, and
                 // scaling it would change how the canvas looks at every zoom.
