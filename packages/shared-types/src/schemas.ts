@@ -85,6 +85,11 @@ export const CanvasDraftSchema = z.object({
 
 export const DraftModeSchema = z.enum(["standard", "fearless", "ironman"]);
 
+// What a group's drafts represent. Absent = untagged. `scrim` and `official`
+// count toward a team's canvas search record; `scratch` and absent do not.
+// See docs/designs/canvas-game-classification-design.md (D1).
+export const GameTypeSchema = z.enum(["scrim", "official", "scratch"]);
+
 export const CanvasGroupMetadataSchema = z.object({
   blueTeamName: z.string().optional(),
   redTeamName: z.string().optional(),
@@ -98,7 +103,26 @@ export const CanvasGroupMetadataSchema = z.object({
   gridCols: z.number().int().min(1).optional(),
   rowLabels: z.array(z.string()).optional(),
   colLabels: z.array(z.string()).optional(),
+  // `.catch(undefined)` is load-bearing (design §5): the whole canvas payload is
+  // parsed through CanvasResponseSchema (actions.ts) and apiClient throws a
+  // ValidationError on failure, so one unexpected string would take down the
+  // entire canvas load. Degrading to untagged is the safe direction — an unknown
+  // value can never inflate a team's record.
+  gameType: GameTypeSchema.optional().catch(undefined),
 });
+
+// Write-side shape for group metadata updates. It differs from the read schema
+// deliberately: `null` means "delete this key" (design D3's clear protocol),
+// because the update is a shallow merge over a JSON-serialized payload and an
+// `undefined` simply drops out of the request. The backend strips the null
+// before saving, so stored metadata stays enum-or-absent.
+export const CanvasGroupMetadataUpdateSchema = CanvasGroupMetadataSchema.omit({
+  gameType: true,
+})
+  .partial()
+  .extend({
+    gameType: GameTypeSchema.nullable().optional(),
+  });
 
 // =============================================================================
 // Scout Regions (for team roster management)
@@ -845,7 +869,11 @@ export type Draft = z.infer<typeof DraftSchema>;
 export type draft = Draft;
 export type CanvasDraft = z.infer<typeof CanvasDraftSchema>;
 export type CanvasGroupMetadata = z.infer<typeof CanvasGroupMetadataSchema>;
+export type CanvasGroupMetadataUpdate = z.infer<
+  typeof CanvasGroupMetadataUpdateSchema
+>;
 export type DraftMode = z.infer<typeof DraftModeSchema>;
+export type GameType = z.infer<typeof GameTypeSchema>;
 export type CanvasGroup = z.infer<typeof CanvasGroupSchema>;
 export type DraftPositionUpdate = z.infer<typeof DraftPositionUpdateSchema>;
 export type DraftPositionsUpdated = z.infer<
