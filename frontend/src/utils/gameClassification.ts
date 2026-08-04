@@ -48,6 +48,35 @@ export const isCountedGroup = (group: CanvasGroup | undefined): boolean =>
     isCountedDraft(undefined, group);
 
 /**
+ * One line telling the user what the selected classification actually does to
+ * THIS group. It lives here, beside the rule it describes, because it is a
+ * statement of the model rather than dialog chrome.
+ *
+ * The untagged case branches on group type on purpose: Untagged and Scratch are
+ * both uncounted on a CUSTOM group, but on a SERIES group untagged falls back to
+ * scrim and counts (D6). Collapsing the two branches would make the dropdown
+ * offer two options that look interchangeable and never say otherwise — which is
+ * exactly the confusion this exists to remove. Do not "simplify" it.
+ */
+export const gameTypeHint = (
+    gameType: GameType | null,
+    willBeSeries: boolean
+): string => {
+    switch (gameType) {
+        case "official":
+            return "Official — counts toward team records and pick/ban tendencies.";
+        case "scrim":
+            return "Scrim — counts toward team records and pick/ban tendencies.";
+        case "scratch":
+            return "Scratch — deliberately excluded from team records.";
+        default:
+            return willBeSeries
+                ? "Untagged — a series with no tag still counts as a scrim."
+                : "Untagged — not counted. Tag it Scrim or Official to include it.";
+    }
+};
+
+/**
  * Scope predicate for canvas search. Takes the EFFECTIVE type (never the raw
  * stored field), so "all" accepts untagged series — the population the D6
  * fallback exists to protect.

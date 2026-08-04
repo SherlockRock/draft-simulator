@@ -7,6 +7,7 @@ import { StyledSelect } from "./StyledSelect";
 import { TeamNameSelect } from "./TeamNameSelect";
 import { resolveChampionId } from "../utils/constants";
 import { resolveTeamLink } from "../utils/teamLink";
+import { gameTypeHint } from "../utils/gameClassification";
 
 interface GroupSettingsDialogProps {
     isOpen: () => boolean;
@@ -23,6 +24,15 @@ interface GroupSettingsDialogProps {
     initialLength?: number;
     /** Absent = untagged. */
     initialGameType?: GameType;
+    /**
+     * True while the dialog is creating a group rather than editing one. New
+     * groups default to Scratch: most are made to try something out, and an
+     * explicit "not a real game" is a better starting point than a value that
+     * silently counts. Note this DOES change behaviour for new manual series —
+     * they used to count via D6's untagged-series fallback and now do not,
+     * until the user classifies them.
+     */
+    isNewGroup?: boolean;
     defaultSeriesEnabled?: boolean;
     primaryLabel?: string;
     /** The user's owned teams for autocomplete linking. */
@@ -60,9 +70,7 @@ const GAME_TYPE_OPTIONS = [
 ];
 
 const parseGameType = (value: string): GameType | null =>
-    value === "scrim" || value === "official" || value === "scratch"
-        ? value
-        : null;
+    value === "scrim" || value === "official" || value === "scratch" ? value : null;
 
 const SERIES_LENGTH_OPTIONS = [
     { value: "1", label: "1 game" },
@@ -105,7 +113,7 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
             setTeam1Id(props.initialTeam1Id ?? null);
             setTeam2Id(props.initialTeam2Id ?? null);
             setLength(clampSeriesLength(props.initialLength || 3));
-            setGameType(props.initialGameType ?? null);
+            setGameType(props.initialGameType ?? (props.isNewGroup ? "scratch" : null));
             setDisabledExpanded(false);
         }
     });
@@ -217,10 +225,11 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                                 />
                             </div>
                         </label>
-                        <p class="-mt-2 text-xs text-darius-text-secondary">
-                            Scrims and official matches count toward a team's record and
-                            pick/ban tendencies in canvas search. Scratch and untagged
-                            groups do not.
+                        <p class="-mt-2 min-h-[2rem] text-xs text-darius-text-secondary">
+                            {gameTypeHint(
+                                gameType(),
+                                (props.isSeries ?? false) || seriesEnabled()
+                            )}
                         </p>
 
                         <Show when={!props.isSeries}>

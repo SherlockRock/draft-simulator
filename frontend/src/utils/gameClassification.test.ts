@@ -3,6 +3,7 @@ import type { CanvasDraft, CanvasGroup } from "./schemas";
 import {
     SCOPE_VALUES,
     effectiveGameType,
+    gameTypeHint,
     isCountedDraft,
     isCountedGroup,
     matchesScope
@@ -36,9 +37,7 @@ describe("effectiveGameType", () => {
     });
 
     it("falls back to scrim for an untagged series group (D6 structural fallback)", () => {
-        expect(effectiveGameType(undefined, makeGroup("g", {}, "series"))).toBe(
-            "scrim"
-        );
+        expect(effectiveGameType(undefined, makeGroup("g", {}, "series"))).toBe("scrim");
     });
 
     it("stays undefined for an untagged custom group", () => {
@@ -133,6 +132,28 @@ describe("matchesScope", () => {
     });
 });
 
+describe("gameTypeHint", () => {
+    it("distinguishes untagged on a series from untagged on a custom group", () => {
+        // The whole reason the hint exists. If someone collapses these two
+        // branches, the dropdown goes back to offering Untagged and Scratch as
+        // apparently-interchangeable options on a series group, where they are
+        // NOT interchangeable — untagged counts as a scrim, scratch does not.
+        const series = gameTypeHint(null, true);
+        const custom = gameTypeHint(null, false);
+        expect(series).not.toBe(custom);
+        expect(series).toMatch(/scrim/i);
+        expect(custom).toMatch(/not counted/i);
+    });
+
+    it("says counted for the two counted values and excluded for scratch", () => {
+        expect(gameTypeHint("scrim", true)).toMatch(/counts/i);
+        expect(gameTypeHint("official", true)).toMatch(/counts/i);
+        expect(gameTypeHint("scratch", true)).toMatch(/excluded/i);
+        // Scratch means the same thing on both group types, unlike untagged.
+        expect(gameTypeHint("scratch", true)).toBe(gameTypeHint("scratch", false));
+    });
+});
+
 describe("the wiring the two review rounds converged on", () => {
     it("accepts an untagged series group under scope 'all'", () => {
         // This only passes when matchesScope reads the EFFECTIVE type. Feeding it
@@ -146,8 +167,6 @@ describe("the wiring the two review rounds converged on", () => {
     it("treats an untagged series as scrim under a scrim scope", () => {
         const group = makeGroup("g", {}, "series");
         expect(matchesScope(effectiveGameType(undefined, group), "scrim")).toBe(true);
-        expect(matchesScope(effectiveGameType(undefined, group), "official")).toBe(
-            false
-        );
+        expect(matchesScope(effectiveGameType(undefined, group), "official")).toBe(false);
     });
 });

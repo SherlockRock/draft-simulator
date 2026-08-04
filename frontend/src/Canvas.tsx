@@ -4581,6 +4581,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     onTeamCreated={handleTeamCreated}
                     initialLength={settingsGroup()?.metadata.length ?? 3}
                     initialGameType={settingsGroup()?.metadata.gameType}
+                    isNewGroup={pendingGroupSettingsPosition() !== null}
                     onSave={handleSaveGroupSettings}
                 />
                 <GridSettingsDialog
