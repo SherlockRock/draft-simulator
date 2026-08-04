@@ -322,14 +322,20 @@ export const PickChangeModal: Component<PickChangeModalProps> = (props) => {
                         <h2 class="mb-4 text-2xl font-bold text-darius-text-primary">
                             Request Pick Change
                         </h2>
+                        {/*
+                          Describes the approval RULE rather than naming the
+                          mode. At this moment the user cares about what will
+                          happen, and under D2's relabel "Scrim Mode" as the
+                          negation of "Official match" would be misleading.
+                        */}
                         <Show when={props.isCompetitive}>
                             <p class="mb-4 text-sm text-yellow-400">
-                                Competitive Mode: The other team must approve this change
+                                The other team must approve this change
                             </p>
                         </Show>
                         <Show when={!props.isCompetitive}>
                             <p class="mb-4 text-sm text-darius-crimson">
-                                Scrim Mode: Change will be applied immediately
+                                This change will be applied immediately, without approval
                             </p>
                         </Show>
 

@@ -523,7 +523,7 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                     <span
                                         class={`rounded-md px-2 py-0.5 text-xs font-medium ${colors.badge}`}
                                     >
-                                        Competitive
+                                        Official
                                     </span>
                                 </Show>
                                 <Show when={versus()?.type}>
@@ -813,11 +813,12 @@ const ActivityItem: Component<ActivityItemProps> = (props) => {
                                         }
                                         class="h-4 w-4 rounded border-darius-border bg-darius-card-hover accent-darius-crimson focus:ring-2 focus:ring-darius-crimson"
                                     />
-                                    Competitive Mode
+                                    Official match
                                 </label>
                                 <p class="mt-1 text-xs text-darius-text-secondary">
-                                    Pauses and pick changes require approval from both
-                                    teams
+                                    Marks this as a real match rather than a scrim. Pauses
+                                    and pick changes will require approval from both
+                                    teams.
                                 </p>
                             </div>
                             <Show when={!versus()?.hasStarted}>
