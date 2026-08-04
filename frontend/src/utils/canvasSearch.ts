@@ -1,3 +1,9 @@
+import {
+    effectiveGameType,
+    isCountedGroup,
+    matchesScope,
+    type SearchScope
+} from "./gameClassification";
 import type { CanvasDraft, CanvasGroup } from "./schemas";
 
 export type SlotPhase = "ban" | "pick";
@@ -13,6 +19,13 @@ export type SearchQuery = {
     teamName: string | null;
     /** Restrict match highlights to one bucket; null = all buckets. */
     bucket: SearchBucket | null;
+    /**
+     * Narrows aggregation to one class of game. Applies ONLY when `teamName` is
+     * set — a champion-only query is navigation across the whole canvas, not
+     * aggregation (D8). "all" means every counted game, i.e. it still excludes
+     * scratch and untagged-custom.
+     */
+    scope: SearchScope;
 };
 
 export type MatchSlot = {
@@ -72,17 +85,20 @@ const normalizeName = (name: string | undefined): string | null => {
  * the free-text metadata string. Keeps unlinked groups and anonymous/local
  * canvases (no Team entity) working via the fallback.
  *
- * SERIES ONLY, deliberately. Search aggregates per-team win/loss records and
- * pick/ban buckets across every draft it can attribute to a team. Custom groups
- * hold scratch work, so letting their names resolve here would silently count
- * throwaway drafts toward a real team's record. Lifting this gate requires the
- * game-classification work (scrim/official tagging) — see the design doc's
- * "out of scope" section. Until then this stays closed.
+ * COUNTED GROUPS ONLY, deliberately. Search aggregates per-team win/loss
+ * records and pick/ban buckets across every draft it can attribute to a team,
+ * so a group whose drafts are scratch work must not resolve names at all —
+ * otherwise throwaway drafts count toward a real team's record.
+ *
+ * The gate is the game classification (D6/D8): `scrim` or `official`, or an
+ * untagged group whose type is `series`. It replaced a provisional
+ * `type !== "series"` check, which was a holding action.
+ * See docs/designs/canvas-game-classification-design.md.
  */
 export const resolveGroupTeamNames = (
     group: CanvasGroup
 ): { team1: string | null; team2: string | null } => {
-    if (group.type !== "series") return { team1: null, team2: null };
+    if (!isCountedGroup(group)) return { team1: null, team2: null };
     const team1 =
         group.Team1?.name?.trim() || group.metadata.blueTeamName?.trim() || null;
     const team2 = group.Team2?.name?.trim() || group.metadata.redTeamName?.trim() || null;
@@ -155,7 +171,8 @@ const computeOutcome = (
 const computeTeamOnlyResults = (
     drafts: readonly CanvasDraft[],
     groupById: Map<string, CanvasGroup>,
-    teamName: string
+    teamName: string,
+    scope: SearchScope
 ): SearchResults => {
     const matches: DraftMatch[] = [];
     const teamRecord = emptyBucketSummary();
@@ -164,6 +181,8 @@ const computeTeamOnlyResults = (
         const group = canvasDraft.group_id
             ? groupById.get(canvasDraft.group_id)
             : undefined;
+        // Unconditional here: this path only runs under a team filter.
+        if (!matchesScope(effectiveGameType(canvasDraft, group), scope)) continue;
         const teamSide = teamSideInDraft(canvasDraft, group, teamName);
         if (teamSide === null) continue;
 
@@ -201,7 +220,7 @@ export const computeSearchResults = (
         if (query.teamName === null) {
             return { matches: [], buckets: null, teamRecord: null };
         }
-        return computeTeamOnlyResults(drafts, groupById, query.teamName);
+        return computeTeamOnlyResults(drafts, groupById, query.teamName, query.scope);
     }
 
     const buckets =
@@ -222,6 +241,10 @@ export const computeSearchResults = (
 
         let teamSide: SlotSide | null = null;
         if (query.teamName !== null) {
+            // Scope only applies under a team filter: a champion-only query is
+            // navigation and must keep spanning loose cards and custom groups.
+            if (!matchesScope(effectiveGameType(canvasDraft, group), query.scope))
+                continue;
             teamSide = teamSideInDraft(canvasDraft, group, query.teamName);
             if (teamSide === null) continue;
         }

@@ -63,6 +63,7 @@ import {
     type SearchResults,
     type SlotPhase
 } from "./utils/canvasSearch";
+import type { SearchScope } from "./utils/gameClassification";
 import {
     CanvasChampionPicker,
     type PickerTarget
@@ -559,6 +560,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [searchChampionId, setSearchChampionId] = createSignal<string | null>(null);
     const [searchTeamName, setSearchTeamName] = createSignal<string | null>(null);
     const [searchBucket, setSearchBucket] = createSignal<SearchBucket | null>(null);
+    const [searchScope, setSearchScope] = createSignal<SearchScope>("all");
     const [searchMatchIndex, setSearchMatchIndex] = createSignal(0);
     const [searchFocusNonce, setSearchFocusNonce] = createSignal(0);
 
@@ -570,7 +572,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         return computeSearchResults(
             canvasDrafts,
             canvasGroups,
-            { championId, teamName, bucket: searchBucket() },
+            { championId, teamName, bucket: searchBucket(), scope: searchScope() },
             resolveChampionId
         );
     });
