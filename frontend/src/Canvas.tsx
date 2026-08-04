@@ -634,6 +634,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const setSearchQueryTeam = (teamName: string | null) => {
         setSearchTeamName(teamName);
         setSearchBucket(null);
+        // Harmless today (scope is ignored for champion-only queries), but
+        // leaving it would keep sticky hidden state that reappears the next
+        // time a team is selected.
+        setSearchScope("all");
+        setSearchMatchIndex(0);
+    };
+    const setSearchQueryScope = (scope: SearchScope) => {
+        setSearchScope(scope);
         setSearchMatchIndex(0);
     };
     const setSearchQueryBucket = (bucket: SearchBucket | null) => {
@@ -2595,9 +2603,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             disabledChampions: data.disabledChampions,
                             team1_id: data.team1_id,
                             team2_id: data.team2_id,
-                            ...(data.gameType !== null
-                                ? { gameType: data.gameType }
-                                : {})
+                            ...(data.gameType !== null ? { gameType: data.gameType } : {})
                         });
                     })
                     .then((result) => {
@@ -4414,6 +4420,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         teamOptions={searchTeamOptions}
                         activeBucket={searchBucket}
                         onBucketChange={setSearchQueryBucket}
+                        scope={searchScope}
+                        onScopeChange={setSearchQueryScope}
                         results={searchResults}
                         currentIndex={currentSearchIndex}
                         onNavigate={goToSearchMatch}

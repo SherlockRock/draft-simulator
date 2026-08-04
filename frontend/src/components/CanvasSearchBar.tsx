@@ -12,6 +12,7 @@ import { ChevronDown, ChevronUp, X } from "lucide-solid";
 import { SearchableSelect } from "./SearchableSelect";
 import { champions } from "../utils/constants";
 import type { SearchBucket, SearchResults } from "../utils/canvasSearch";
+import { SCOPE_VALUES, type SearchScope } from "../utils/gameClassification";
 
 const BUCKET_ORDER: SearchBucket[] = [
     "pickedBy",
@@ -29,6 +30,12 @@ const BUCKET_LABELS: Record<SearchBucket, string> = {
 
 const PICK_BUCKETS: SearchBucket[] = ["pickedBy", "pickedAgainst"];
 
+const SCOPE_LABELS: Record<SearchScope, string> = {
+    all: "All",
+    official: "Official",
+    scrim: "Scrims"
+};
+
 type CanvasSearchBarProps = {
     championId: Accessor<string | null>;
     onChampionChange: (championId: string | null) => void;
@@ -37,6 +44,8 @@ type CanvasSearchBarProps = {
     teamOptions: Accessor<string[]>;
     activeBucket: Accessor<SearchBucket | null>;
     onBucketChange: (bucket: SearchBucket | null) => void;
+    scope: Accessor<SearchScope>;
+    onScopeChange: (scope: SearchScope) => void;
     results: Accessor<SearchResults | null>;
     currentIndex: Accessor<number>;
     onNavigate: (direction: 1 | -1) => void;
@@ -181,6 +190,33 @@ export const CanvasSearchBar = (props: CanvasSearchBarProps) => {
                     <X size={16} />
                 </button>
             </div>
+
+            {/*
+              Only under a team filter, matching the filter's own gating in
+              canvasSearch: without a team there is no record and no buckets,
+              so scope has nothing to narrow.
+            */}
+            <Show when={props.teamName() !== null}>
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <For each={SCOPE_VALUES}>
+                        {(scope) => (
+                            <button
+                                type="button"
+                                onClick={() => props.onScopeChange(scope)}
+                                class="rounded-full border px-2.5 py-0.5 text-xs transition-colors"
+                                classList={{
+                                    "border-darius-purple-bright bg-darius-purple/25 text-darius-text-primary":
+                                        props.scope() === scope,
+                                    "border-darius-border bg-darius-card text-darius-text-secondary hover:border-darius-purple-bright/60":
+                                        props.scope() !== scope
+                                }}
+                            >
+                                {SCOPE_LABELS[scope]}
+                            </button>
+                        )}
+                    </For>
+                </div>
+            </Show>
 
             <Show when={props.results()?.teamRecord}>
                 {(record) => (
