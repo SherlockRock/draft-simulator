@@ -8,6 +8,7 @@ import {
     JSX
 } from "solid-js";
 import { Trash2, Settings, ArrowLeftRight } from "lucide-solid";
+import { GameTypeChip } from "./GameTypeChip";
 import { CanvasDraft, CanvasGroup, AnchorType } from "../utils/schemas";
 import {
     GRID_HEADER_HEIGHT,
@@ -302,6 +303,8 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                     <span class="flex-shrink-0 text-xs text-darius-text-secondary">
                         {draftCount()} draft{draftCount() !== 1 ? "s" : ""}
                     </span>
+                    {/* Only when tagged — an untagged custom group looks as before. */}
+                    <GameTypeChip gameType={props.group.metadata.gameType} />
                 </div>
 
                 <Show when={props.canEdit()}>
