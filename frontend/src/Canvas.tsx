@@ -580,7 +580,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             resolveChampionId
         );
     });
-    const searchTeamOptions = createMemo(() => getTeamNameOptions(canvasGroups));
+    // Scope-aware: only offer teams the current scope would actually search,
+    // so picking one can never hand back an empty record with no explanation.
+    const searchTeamOptions = createMemo(() =>
+        getTeamNameOptions(canvasGroups, searchScope())
+    );
     const orderedSearchMatches = createMemo(() => {
         const results = searchResults();
         if (results === null) return [];
@@ -634,10 +638,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const setSearchQueryTeam = (teamName: string | null) => {
         setSearchTeamName(teamName);
         setSearchBucket(null);
-        // Harmless today (scope is ignored for champion-only queries), but
-        // leaving it would keep sticky hidden state that reappears the next
-        // time a team is selected.
-        setSearchScope("all");
+        // Scope is deliberately NOT reset here. It used to be, to avoid sticky
+        // hidden state back when the scope row only appeared under a team
+        // filter. Now scope decides which teams the dropdown offers, so
+        // resetting it would drop the scope the instant you picked one of the
+        // teams only that scope could surface.
         setSearchMatchIndex(0);
     };
     const setSearchQueryScope = (scope: SearchScope) => {

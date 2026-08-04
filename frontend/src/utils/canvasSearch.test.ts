@@ -576,14 +576,17 @@ describe("team identity is gated on game classification, not group type", () => 
         expect(teamSideInDraft(draft, tagged, "T1")).toBe("blue");
     });
 
-    it("resolves nothing for a series group tagged scratch", () => {
+    it("resolves names for a scratch group but keeps it out of the default scope", () => {
+        // Names must resolve or a scratch-scoped search could never find its
+        // games. Exclusion happens at the scope filter instead.
         const scratch = makeGroup("g5", {
             blueTeamName: "T1",
             redTeamName: "GenG",
             gameType: "scratch"
         });
-        expect(resolveGroupTeamNames(scratch)).toEqual({ team1: null, team2: null });
-        expect(getTeamNameOptions([scratch])).toEqual([]);
+        expect(resolveGroupTeamNames(scratch)).toEqual({ team1: "T1", team2: "GenG" });
+        expect(getTeamNameOptions([scratch], "all")).toEqual([]);
+        expect(getTeamNameOptions([scratch], "scratch")).toEqual(["GenG", "T1"]);
     });
 
     it("still resolves names for untagged series groups", () => {
@@ -726,6 +729,44 @@ describe("scope filter", () => {
         expect(scrim.matches.map((m) => m.draftId)).toEqual(["d-scr"]);
         expect(scrim.buckets?.pickedBy.games).toBe(1);
         expect(scrim.buckets?.pickedBy.losses).toBe(1);
+    });
+
+    it("'scratch' finds only scratch games, and 'all' excludes them", () => {
+        const scratchGroups = [
+            makeGroup("s1", {
+                blueTeamName: "T1",
+                redTeamName: "GenG",
+                gameType: "scratch"
+            }),
+            ...groups
+        ];
+        const scratchDrafts = [
+            makeDraft("d-scratch", fullPicks({ 12: "Jinx" }), {
+                group_id: "s1",
+                completed: true,
+                winner: "blue"
+            }),
+            ...drafts
+        ];
+
+        const scratchOnly = computeSearchResults(
+            scratchDrafts,
+            scratchGroups,
+            teamOnly("scratch"),
+            identity
+        );
+        expect(scratchOnly.matches.map((m) => m.draftId)).toEqual(["d-scratch"]);
+        expect(scratchOnly.teamRecord?.games).toBe(1);
+
+        // and the scratch draft never leaks into the default scope
+        const all = computeSearchResults(
+            scratchDrafts,
+            scratchGroups,
+            teamOnly("all"),
+            identity
+        );
+        expect(all.matches.map((m) => m.draftId)).toEqual(["d-off", "d-scr"]);
+        expect(all.teamRecord?.games).toBe(2);
     });
 
     it("still produces a record for a legacy untagged series under 'all'", () => {

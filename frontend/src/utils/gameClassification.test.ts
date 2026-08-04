@@ -4,9 +4,8 @@ import {
     SCOPE_VALUES,
     effectiveGameType,
     gameTypeHint,
-    isCountedDraft,
-    isCountedGroup,
-    matchesScope
+    matchesScope,
+    resolvesTeamNames
 } from "./gameClassification";
 
 /** Mirrors the fixture style in canvasSearch.test.ts. */
@@ -76,59 +75,102 @@ describe("effectiveGameType", () => {
         // if a third type is ever added it must NOT inherit the series fallback.
         const custom = makeGroup("g", {}, "custom");
         expect(effectiveGameType(undefined, custom)).toBeUndefined();
-        expect(isCountedGroup(custom)).toBe(false);
+        expect(matchesScope(effectiveGameType(undefined, custom), "all")).toBe(false);
     });
 });
 
-describe("isCountedDraft / isCountedGroup", () => {
+describe("the counted rule, now expressed as scope 'all'", () => {
+    const counted = (group: CanvasGroup | undefined) =>
+        matchesScope(effectiveGameType(undefined, group), "all");
+
     it("counts scrim and official, not scratch or untagged", () => {
-        expect(isCountedGroup(makeGroup("a", { gameType: "scrim" }, "custom"))).toBe(
-            true
-        );
-        expect(isCountedGroup(makeGroup("b", { gameType: "official" }, "custom"))).toBe(
-            true
-        );
-        expect(isCountedGroup(makeGroup("c", { gameType: "scratch" }, "series"))).toBe(
-            false
-        );
-        expect(isCountedGroup(undefined)).toBe(false);
+        expect(counted(makeGroup("a", { gameType: "scrim" }, "custom"))).toBe(true);
+        expect(counted(makeGroup("b", { gameType: "official" }, "custom"))).toBe(true);
+        expect(counted(makeGroup("c", { gameType: "scratch" }, "series"))).toBe(false);
+        expect(counted(undefined)).toBe(false);
     });
 
     it("is asymmetric on untagged: a series counts, a custom group does not", () => {
         // Deliberate (D6). A series group asserts by its structure that it holds
         // real games; a custom group asserts nothing. Do not "fix" this.
-        expect(isCountedGroup(makeGroup("s", {}, "series"))).toBe(true);
-        expect(isCountedGroup(makeGroup("c", {}, "custom"))).toBe(false);
+        expect(counted(makeGroup("s", {}, "series"))).toBe(true);
+        expect(counted(makeGroup("c", {}, "custom"))).toBe(false);
     });
 
-    it("isCountedDraft agrees with isCountedGroup while there is no card override", () => {
+    it("is card-aware through effectiveGameType, the single source of truth", () => {
+        // D4's invariant survives the removal of the isCounted* predicates: the
+        // scope filter and the name resolver both go through effectiveGameType,
+        // so they cannot disagree about a draft once the override column lands.
         const group = makeGroup("g", { gameType: "scratch" }, "series");
-        expect(isCountedDraft(makeDraft("d", "g"), group)).toBe(false);
-        expect(isCountedDraft(makeDraft("d", "g"), makeGroup("g2", {}, "series"))).toBe(
+        const card = makeDraft("d", "g");
+        expect(matchesScope(effectiveGameType(card, group), "all")).toBe(false);
+        expect(matchesScope(effectiveGameType(card, group), "scratch")).toBe(true);
+    });
+});
+
+describe("resolvesTeamNames", () => {
+    it("resolves for anything classified, including scratch", () => {
+        // Scratch MUST resolve, or a scratch-scoped search finds nothing: the
+        // team would never match a side and would never reach the scope filter.
+        expect(resolvesTeamNames(makeGroup("a", { gameType: "scratch" }, "series"))).toBe(
             true
         );
+        expect(resolvesTeamNames(makeGroup("b", { gameType: "scratch" }, "custom"))).toBe(
+            true
+        );
+        expect(resolvesTeamNames(makeGroup("c", { gameType: "scrim" }, "custom"))).toBe(
+            true
+        );
+    });
+
+    it("resolves for an untagged series via the structural fallback", () => {
+        expect(resolvesTeamNames(makeGroup("s", {}, "series"))).toBe(true);
+    });
+
+    it("refuses only the untagged custom group", () => {
+        // The one case that must stay closed — otherwise every scratch-work group
+        // fills the team dropdown and attaches drafts to real teams.
+        expect(resolvesTeamNames(makeGroup("c", {}, "custom"))).toBe(false);
+        expect(resolvesTeamNames(undefined)).toBe(false);
     });
 });
 
 describe("matchesScope", () => {
-    it("exposes the three scope values", () => {
-        expect(SCOPE_VALUES).toEqual(["all", "official", "scrim"]);
+    it("exposes the four scope values", () => {
+        expect(SCOPE_VALUES).toEqual(["all", "official", "scrim", "scratch"]);
     });
 
-    it("'all' accepts counted types and rejects scratch and untagged", () => {
+    it("'all' means all COUNTED — it still rejects scratch and untagged", () => {
+        // "all" is not "everything": scratch is deliberately excluded, which is
+        // what keeps the default scope behaviour-preserving. Scratch is reachable
+        // only by asking for it explicitly.
         expect(matchesScope("scrim", "all")).toBe(true);
         expect(matchesScope("official", "all")).toBe(true);
         expect(matchesScope("scratch", "all")).toBe(false);
         expect(matchesScope(undefined, "all")).toBe(false);
     });
 
-    it("'official' and 'scrim' accept only themselves", () => {
+    it("every named scope accepts only itself", () => {
         expect(matchesScope("official", "official")).toBe(true);
         expect(matchesScope("scrim", "official")).toBe(false);
+        expect(matchesScope("scratch", "official")).toBe(false);
         expect(matchesScope(undefined, "official")).toBe(false);
         expect(matchesScope("scrim", "scrim")).toBe(true);
         expect(matchesScope("official", "scrim")).toBe(false);
+        expect(matchesScope("scratch", "scrim")).toBe(false);
         expect(matchesScope(undefined, "scrim")).toBe(false);
+        expect(matchesScope("scratch", "scratch")).toBe(true);
+        expect(matchesScope("scrim", "scratch")).toBe(false);
+        expect(matchesScope("official", "scratch")).toBe(false);
+        expect(matchesScope(undefined, "scratch")).toBe(false);
+    });
+
+    it("never matches an untagged custom group under any scope", () => {
+        // undefined is the one effective value with no scope that accepts it —
+        // there is no way to ask for "groups nobody has classified".
+        for (const scope of SCOPE_VALUES) {
+            expect(matchesScope(undefined, scope)).toBe(false);
+        }
     });
 });
 

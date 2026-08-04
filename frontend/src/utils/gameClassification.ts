@@ -9,9 +9,14 @@ import type { CanvasDraft, CanvasGroup, GameType } from "./schemas";
  * import the search module.
  */
 
-export type SearchScope = "all" | "official" | "scrim";
+export type SearchScope = "all" | "official" | "scrim" | "scratch";
 
-export const SCOPE_VALUES: readonly SearchScope[] = ["all", "official", "scrim"];
+export const SCOPE_VALUES: readonly SearchScope[] = [
+    "all",
+    "official",
+    "scrim",
+    "scratch"
+];
 
 /** Effective classification of one draft, with the structural fallback applied. */
 export const effectiveGameType = (
@@ -34,18 +39,24 @@ export const effectiveGameType = (
     return group.type === "series" ? "scrim" : undefined;
 };
 
-/** Does this draft contribute to a team's record and pick/ban buckets? */
-export const isCountedDraft = (
-    canvasDraft: CanvasDraft | undefined,
-    group: CanvasGroup | undefined
-): boolean => {
-    const effective = effectiveGameType(canvasDraft, group);
-    return effective === "scrim" || effective === "official";
-};
-
-/** Card-free wrapper for the two call sites that only have a group. */
-export const isCountedGroup = (group: CanvasGroup | undefined): boolean =>
-    isCountedDraft(undefined, group);
+/**
+ * Should this group's team names resolve at all?
+ *
+ * True for anything classified — including `scratch`, so a scratch-scoped
+ * search can find its games. Whether a draft actually COUNTS is decided
+ * separately, by the scope filter (see matchesScope): under every scope except
+ * "scratch", a scratch group is dropped there instead.
+ *
+ * False only for an untagged CUSTOM group, which is the case that must never
+ * resolve: its names would otherwise fill the team dropdown with junk and let
+ * throwaway drafts attach themselves to a real team.
+ *
+ * Group-level by nature — names live on the group, not the card. D4's card
+ * override affects which drafts count, not whose name they carry; that gap is
+ * the card-override slice's problem and is documented in the design.
+ */
+export const resolvesTeamNames = (group: CanvasGroup | undefined): boolean =>
+    effectiveGameType(undefined, group) !== undefined;
 
 /**
  * One line telling the user what the selected classification actually does to
@@ -85,6 +96,13 @@ export const matchesScope = (
     effective: GameType | undefined,
     scope: SearchScope
 ): boolean => {
-    if (effective === undefined || effective === "scratch") return false;
-    return scope === "all" || effective === scope;
+    // Untagged never matches anything: there is no "unclassified" scope, and an
+    // untagged custom group must stay out of every aggregate.
+    if (effective === undefined) return false;
+    // "all" means all COUNTED, not everything. Excluding scratch here is what
+    // keeps the default scope behaviour-preserving; scratch is reachable only by
+    // asking for it by name. This single line is also the counted rule itself —
+    // there is no separate isCounted predicate that could drift from it.
+    if (scope === "all") return effective !== "scratch";
+    return effective === scope;
 };

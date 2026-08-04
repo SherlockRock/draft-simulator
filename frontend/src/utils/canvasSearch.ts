@@ -1,7 +1,7 @@
 import {
     effectiveGameType,
-    isCountedGroup,
     matchesScope,
+    resolvesTeamNames,
     type SearchScope
 } from "./gameClassification";
 import type { CanvasDraft, CanvasGroup } from "./schemas";
@@ -85,20 +85,24 @@ const normalizeName = (name: string | undefined): string | null => {
  * the free-text metadata string. Keeps unlinked groups and anonymous/local
  * canvases (no Team entity) working via the fallback.
  *
- * COUNTED GROUPS ONLY, deliberately. Search aggregates per-team win/loss
- * records and pick/ban buckets across every draft it can attribute to a team,
- * so a group whose drafts are scratch work must not resolve names at all —
- * otherwise throwaway drafts count toward a real team's record.
+ * CLASSIFIED GROUPS ONLY, deliberately. Search aggregates per-team win/loss
+ * records across every draft it can attribute to a team, so an unclassified
+ * custom group must not resolve names at all — otherwise throwaway drafts
+ * attach themselves to a real team and its dropdown fills with junk.
  *
- * The gate is the game classification (D6/D8): `scrim` or `official`, or an
- * untagged group whose type is `series`. It replaced a provisional
- * `type !== "series"` check, which was a holding action.
- * See docs/designs/canvas-game-classification-design.md.
+ * Note this admits `scratch`, which does NOT count. Resolving names and
+ * counting are two different questions: a scratch group has to resolve names so
+ * that a scratch-scoped search can find its games, and it is then excluded by
+ * the scope filter under every other scope. Folding the two together — as an
+ * earlier revision did — makes a scratch scope structurally impossible, because
+ * the team never matches a side and never reaches the filter.
+ *
+ * See docs/designs/canvas-game-classification-design.md (D6/D8).
  */
 export const resolveGroupTeamNames = (
     group: CanvasGroup
 ): { team1: string | null; team2: string | null } => {
-    if (!isCountedGroup(group)) return { team1: null, team2: null };
+    if (!resolvesTeamNames(group)) return { team1: null, team2: null };
     const team1 =
         group.Team1?.name?.trim() || group.metadata.blueTeamName?.trim() || null;
     const team2 = group.Team2?.name?.trim() || group.metadata.redTeamName?.trim() || null;
@@ -129,10 +133,23 @@ export const bucketFor = (kind: SlotKind, teamSide: SlotSide): SearchBucket => {
     return kind.side === teamSide ? "bannedBy" : "bannedAgainst";
 };
 
-/** Distinct team names across all groups (case-insensitive, first casing wins), sorted. */
-export const getTeamNameOptions = (groups: readonly CanvasGroup[]): string[] => {
+/**
+ * Distinct team names across all groups (case-insensitive, first casing wins),
+ * sorted.
+ *
+ * Scope-aware: a team is only offered if it appears in a group the current scope
+ * would actually search. Without this, selecting scope "scratch" would still
+ * list every scrim-only team and hand you an empty record with no explanation —
+ * and now that scratch groups resolve names, the reverse would happen under
+ * "all".
+ */
+export const getTeamNameOptions = (
+    groups: readonly CanvasGroup[],
+    scope: SearchScope = "all"
+): string[] => {
     const seen = new Map<string, string>();
     for (const group of groups) {
+        if (!matchesScope(effectiveGameType(undefined, group), scope)) continue;
         const { team1, team2 } = resolveGroupTeamNames(group);
         for (const raw of [team1, team2]) {
             const trimmed = raw?.trim();

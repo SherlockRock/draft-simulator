@@ -33,7 +33,8 @@ const PICK_BUCKETS: SearchBucket[] = ["pickedBy", "pickedAgainst"];
 const SCOPE_LABELS: Record<SearchScope, string> = {
     all: "All",
     official: "Official",
-    scrim: "Scrims"
+    scrim: "Scrims",
+    scratch: "Scratch"
 };
 
 type CanvasSearchBarProps = {
@@ -192,31 +193,36 @@ export const CanvasSearchBar = (props: CanvasSearchBarProps) => {
             </div>
 
             {/*
-              Only under a team filter, matching the filter's own gating in
-              canvasSearch: without a team there is no record and no buckets,
-              so scope has nothing to narrow.
+              Always visible, NOT gated on a team filter. It used to be gated,
+              on the reasoning that scope has nothing to narrow without a team.
+              That stopped being true when the team dropdown became scope-aware:
+              scope now decides which teams are offered, so gating it made
+              scratch-only teams unreachable — no team means no scope row, and
+              the default scope does not list them.
+
+              Results-side behaviour is unchanged: a champion-only query still
+              ignores scope and spans the whole canvas.
             */}
-            <Show when={props.teamName() !== null}>
-                <div class="flex flex-wrap items-center gap-1.5">
-                    <For each={SCOPE_VALUES}>
-                        {(scope) => (
-                            <button
-                                type="button"
-                                onClick={() => props.onScopeChange(scope)}
-                                class="rounded-full border px-2.5 py-0.5 text-xs transition-colors"
-                                classList={{
-                                    "border-darius-purple-bright bg-darius-purple/25 text-darius-text-primary":
-                                        props.scope() === scope,
-                                    "border-darius-border bg-darius-card text-darius-text-secondary hover:border-darius-purple-bright/60":
-                                        props.scope() !== scope
-                                }}
-                            >
-                                {SCOPE_LABELS[scope]}
-                            </button>
-                        )}
-                    </For>
-                </div>
-            </Show>
+            <div class="flex flex-wrap items-center gap-1.5">
+                <span class="text-xs text-darius-text-secondary">Teams from</span>
+                <For each={SCOPE_VALUES}>
+                    {(scope) => (
+                        <button
+                            type="button"
+                            onClick={() => props.onScopeChange(scope)}
+                            class="rounded-full border px-2.5 py-0.5 text-xs transition-colors"
+                            classList={{
+                                "border-darius-purple-bright bg-darius-purple/25 text-darius-text-primary":
+                                    props.scope() === scope,
+                                "border-darius-border bg-darius-card text-darius-text-secondary hover:border-darius-purple-bright/60":
+                                    props.scope() !== scope
+                            }}
+                        >
+                            {SCOPE_LABELS[scope]}
+                        </button>
+                    )}
+                </For>
+            </div>
 
             <Show when={props.results()?.teamRecord}>
                 {(record) => (
