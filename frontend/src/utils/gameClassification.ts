@@ -88,16 +88,21 @@ export const gameTypeHint = (
 };
 
 /**
- * Scope predicate for canvas search. Takes the EFFECTIVE type (never the raw
- * stored field), so "all" accepts untagged series — the population the D6
- * fallback exists to protect.
+ * Scope predicate for AGGREGATION — anything that feeds a team's record, its
+ * pick/ban buckets, or the team dropdown.
+ *
+ * Takes the EFFECTIVE type (never the raw stored field), so "all" accepts
+ * untagged series — the population the D6 fallback exists to protect.
+ *
+ * Differs from appearsInScope in exactly one way, and the difference is the
+ * point: see the note there.
  */
-export const matchesScope = (
+export const countsInScope = (
     effective: GameType | undefined,
     scope: SearchScope
 ): boolean => {
-    // Untagged never matches anything: there is no "unclassified" scope, and an
-    // untagged custom group must stay out of every aggregate.
+    // Untagged never counts: an untagged custom group must stay out of every
+    // aggregate, and there is no "unclassified" scope to ask for it by.
     if (effective === undefined) return false;
     // "all" means all COUNTED, not everything. Excluding scratch here is what
     // keeps the default scope behaviour-preserving; scratch is reachable only by
@@ -106,3 +111,22 @@ export const matchesScope = (
     if (scope === "all") return effective !== "scratch";
     return effective === scope;
 };
+
+/**
+ * Scope predicate for NAVIGATION — a champion-only query, which answers "where
+ * does this champion appear on the canvas" rather than aggregating anything.
+ *
+ * Under "all" this accepts EVERYTHING, including drafts with no classification
+ * at all: loose cards with no group, and untagged custom groups. countsInScope
+ * rejects those, and using it here would silently drop most of a canvas from
+ * champion search — a canvas is mostly unclassified by design.
+ *
+ * Under a named scope the two agree. So the whole difference is what "all"
+ * means: "everything I could show you" when navigating, "everything that counts"
+ * when aggregating. Keep them as two named functions rather than one with a
+ * flag — a single predicate silently meaning two things is how this goes wrong.
+ */
+export const appearsInScope = (
+    effective: GameType | undefined,
+    scope: SearchScope
+): boolean => scope === "all" || effective === scope;

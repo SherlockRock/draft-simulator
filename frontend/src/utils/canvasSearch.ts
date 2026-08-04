@@ -1,6 +1,7 @@
 import {
+    appearsInScope,
+    countsInScope,
     effectiveGameType,
-    matchesScope,
     resolvesTeamNames,
     type SearchScope
 } from "./gameClassification";
@@ -20,10 +21,16 @@ export type SearchQuery = {
     /** Restrict match highlights to one bucket; null = all buckets. */
     bucket: SearchBucket | null;
     /**
-     * Narrows aggregation to one class of game. Applies ONLY when `teamName` is
-     * set — a champion-only query is navigation across the whole canvas, not
-     * aggregation (D8). "all" means every counted game, i.e. it still excludes
-     * scratch and untagged-custom.
+     * Narrows the search to one class of game. Applies to EVERY query, but "all"
+     * means something different either side of a team filter:
+     *
+     * - with a team (aggregation): "all" is the counted rule — scratch and
+     *   unclassified drafts are excluded, so records stay behaviour-preserving.
+     * - without one (navigation): "all" is no filter, so champion-only search
+     *   still spans loose cards and unclassified groups.
+     *
+     * A named scope means the same thing on both sides. See countsInScope and
+     * appearsInScope.
      */
     scope: SearchScope;
 };
@@ -149,7 +156,7 @@ export const getTeamNameOptions = (
 ): string[] => {
     const seen = new Map<string, string>();
     for (const group of groups) {
-        if (!matchesScope(effectiveGameType(undefined, group), scope)) continue;
+        if (!countsInScope(effectiveGameType(undefined, group), scope)) continue;
         const { team1, team2 } = resolveGroupTeamNames(group);
         for (const raw of [team1, team2]) {
             const trimmed = raw?.trim();
@@ -199,7 +206,7 @@ const computeTeamOnlyResults = (
             ? groupById.get(canvasDraft.group_id)
             : undefined;
         // Unconditional here: this path only runs under a team filter.
-        if (!matchesScope(effectiveGameType(canvasDraft, group), scope)) continue;
+        if (!countsInScope(effectiveGameType(canvasDraft, group), scope)) continue;
         const teamSide = teamSideInDraft(canvasDraft, group, teamName);
         if (teamSide === null) continue;
 
@@ -256,12 +263,19 @@ export const computeSearchResults = (
             ? groupById.get(canvasDraft.group_id)
             : undefined;
 
+        // Scope applies to EVERY query, but means different things either side
+        // of a team filter. Aggregating: "all" is the counted rule. Navigating:
+        // "all" is no filter at all, so a champion-only search still spans loose
+        // cards and unclassified groups — most of a typical canvas.
+        const effective = effectiveGameType(canvasDraft, group);
+        const inScope =
+            query.teamName !== null
+                ? countsInScope(effective, query.scope)
+                : appearsInScope(effective, query.scope);
+        if (!inScope) continue;
+
         let teamSide: SlotSide | null = null;
         if (query.teamName !== null) {
-            // Scope only applies under a team filter: a champion-only query is
-            // navigation and must keep spanning loose cards and custom groups.
-            if (!matchesScope(effectiveGameType(canvasDraft, group), query.scope))
-                continue;
             teamSide = teamSideInDraft(canvasDraft, group, query.teamName);
             if (teamSide === null) continue;
         }

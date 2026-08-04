@@ -193,18 +193,14 @@ export const CanvasSearchBar = (props: CanvasSearchBarProps) => {
             </div>
 
             {/*
-              Always visible, NOT gated on a team filter. It used to be gated,
-              on the reasoning that scope has nothing to narrow without a team.
-              That stopped being true when the team dropdown became scope-aware:
-              scope now decides which teams are offered, so gating it made
-              scratch-only teams unreachable — no team means no scope row, and
-              the default scope does not list them.
-
-              Results-side behaviour is unchanged: a champion-only query still
-              ignores scope and spans the whole canvas.
+              Always visible, and it now filters every query rather than only
+              team-filtered ones — a chip row that visibly did nothing without a
+              team read as broken. "All" still means no filter when there is no
+              team, so champion search keeps spanning loose cards and unclassified
+              groups.
             */}
             <div class="flex flex-wrap items-center gap-1.5">
-                <span class="text-xs text-darius-text-secondary">Teams from</span>
+                <span class="text-xs text-darius-text-secondary">Show</span>
                 <For each={SCOPE_VALUES}>
                     {(scope) => (
                         <button

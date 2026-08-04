@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CanvasDraft, CanvasGroup } from "./schemas";
+import { SCOPE_VALUES } from "./gameClassification";
 import {
     bucketFor,
     classifySlot,
@@ -612,7 +613,7 @@ describe("champion-only search spans the whole canvas regardless of classificati
         makeDraft("inSeries", fullPicks({ 12: "Jinx" }), { group_id: "series" })
     ];
 
-    it("returns loose, custom-group and series drafts alike", () => {
+    it("returns loose, custom-group and series drafts alike under 'all'", () => {
         const results = computeSearchResults(
             drafts,
             groups,
@@ -624,6 +625,77 @@ describe("champion-only search spans the whole canvas regardless of classificati
             "inCustom",
             "inSeries"
         ]);
+    });
+});
+
+describe("champion-only search honours a NAMED scope", () => {
+    // Scope used to be ignored entirely without a team filter, which made the
+    // chips look broken: picking Scratch still returned every instance.
+    const groups = [
+        makeGroup("scratchGrp", { gameType: "scratch" }, {}, "custom"),
+        makeGroup("scrimGrp", { gameType: "scrim" }, {}, "custom"),
+        makeGroup("officialGrp", { gameType: "official" })
+    ];
+    const drafts = [
+        makeDraft("loose", fullPicks({ 12: "Jinx" })),
+        makeDraft("inScratch", fullPicks({ 12: "Jinx" }), { group_id: "scratchGrp" }),
+        makeDraft("inScrim", fullPicks({ 12: "Jinx" }), { group_id: "scrimGrp" }),
+        makeDraft("inOfficial", fullPicks({ 12: "Jinx" }), { group_id: "officialGrp" })
+    ];
+    const query = (scope: SearchQuery["scope"]): SearchQuery => ({
+        championId: "Jinx",
+        teamName: null,
+        bucket: null,
+        scope
+    });
+
+    it("'scratch' returns only the scratch group's draft", () => {
+        const results = computeSearchResults(drafts, groups, query("scratch"), identity);
+        expect(results.matches.map((m) => m.draftId)).toEqual(["inScratch"]);
+    });
+
+    it("'scrim' and 'official' each return only their own", () => {
+        expect(
+            computeSearchResults(drafts, groups, query("scrim"), identity).matches.map(
+                (m) => m.draftId
+            )
+        ).toEqual(["inScrim"]);
+        expect(
+            computeSearchResults(drafts, groups, query("official"), identity).matches.map(
+                (m) => m.draftId
+            )
+        ).toEqual(["inOfficial"]);
+    });
+
+    it("a named scope drops the loose card, which has no classification at all", () => {
+        for (const scope of ["scratch", "scrim", "official"] as const) {
+            const ids = computeSearchResults(
+                drafts,
+                groups,
+                query(scope),
+                identity
+            ).matches.map((m) => m.draftId);
+            expect(ids).not.toContain("loose");
+        }
+    });
+
+    it("but 'all' still returns every one of them, loose card included", () => {
+        // The guarantee that must survive: "all" is no filter when navigating.
+        // Reusing the aggregation predicate here would drop the loose card and
+        // every untagged custom group — most of a real canvas.
+        expect(
+            computeSearchResults(drafts, groups, query("all"), identity).matches.map(
+                (m) => m.draftId
+            )
+        ).toEqual(["loose", "inScratch", "inScrim", "inOfficial"]);
+    });
+
+    it("leaves buckets and teamRecord null regardless of scope", () => {
+        for (const scope of SCOPE_VALUES) {
+            const results = computeSearchResults(drafts, groups, query(scope), identity);
+            expect(results.buckets).toBeNull();
+            expect(results.teamRecord).toBeNull();
+        }
     });
 });
 
