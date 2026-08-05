@@ -116,6 +116,31 @@ function resolveTeamLinkUpdate(body, ownedTeamIds) {
   return { updates };
 }
 
+const VALID_GAME_TYPES = new Set(["scrim", "official", "scratch"]);
+
+/** What an untagged series group is worth. Mirrors D2's derivation rule. */
+function deriveGameType(competitive) {
+  return competitive ? "official" : "scrim";
+}
+
+/**
+ * Merge client-supplied group metadata over what is stored, honouring the
+ * clear protocol (design D3): `gameType: null` means "delete this key".
+ *
+ * The update is a shallow merge over a JSON-serialized payload, so `undefined`
+ * simply drops out of the request and cannot clear a stored value — hence the
+ * explicit null. Deleting rather than storing JSON null keeps stored metadata
+ * enum-or-absent, which is what the read schema expects.
+ *
+ * Shared by BOTH merge points on purpose. Inline at one site leaves the other
+ * able to store a JSON null.
+ */
+function mergeGroupMetadata(storedMetadata, incomingMetadata) {
+  const merged = { ...(storedMetadata || {}), ...(incomingMetadata || {}) };
+  if (merged.gameType === null) delete merged.gameType;
+  return merged;
+}
+
 function isValidSeriesLength(length) {
   return (
     Number.isInteger(length) &&
@@ -127,6 +152,12 @@ function isValidSeriesLength(length) {
 function normalizeSeriesData(body) {
   const length = Number(body.length);
   return {
+    // Carried so a conversion request can classify the group it is creating.
+    // Consumed by the metadata build only — the caller also spreads this object
+    // into VersusDraft.create, where Sequelize drops unknown attributes.
+    ...(VALID_GAME_TYPES.has(body.gameType)
+      ? { gameType: body.gameType }
+      : {}),
     name:
       typeof body.name === "string" && body.name.trim()
         ? body.name.trim()
@@ -572,7 +603,10 @@ router.put("/:canvasId/draft-positions", protect, async (req, res) => {
       if (typeof group.width === "number") groupUpdates.width = group.width;
       if (typeof group.height === "number") groupUpdates.height = group.height;
       if (group.metadata && typeof group.metadata === "object") {
-        groupUpdates.metadata = { ...groupRow.metadata, ...group.metadata };
+        groupUpdates.metadata = mergeGroupMetadata(
+          groupRow.metadata,
+          group.metadata,
+        );
       }
       if (Object.keys(groupUpdates).length > 0) {
         await groupRow.update(groupUpdates, { transaction: t });
@@ -1050,6 +1084,11 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
           origin: versusDraft.origin || "live",
           disabledChampions: versusDraft.disabledChampions || [],
           draftMode: versusDraft.type,
+          // Seeded here rather than in getSeriesMetadata: that helper's output
+          // is spread LAST over merged metadata on the manual-series settings
+          // save, so a derived value there would reset a user's correction in
+          // the very request that saved it (R1 path 1).
+          gameType: deriveGameType(versusDraft.competitive),
         },
       },
       { transaction: t },
@@ -1285,12 +1324,26 @@ router.post(
         convertedCanvasDrafts.push(canvasDraft);
       }
 
+      // Merge over the stored metadata rather than replacing it (R1 path 2).
+      // The old wholesale replacement discarded the group's gameType — turning
+      // a custom group the user had tagged "official" into a scrim on
+      // conversion — along with layout, gridCols, rowLabels and origin.
+      // Precedence: explicit body value, then whatever the group already
+      // carried, then derived from the new versus draft.
+      const convertedGameType =
+        data.gameType ||
+        group.metadata?.gameType ||
+        deriveGameType(versusDraft.competitive);
       await group.update(
         {
           name: data.name,
           type: "series",
           versus_draft_id: versusDraft.id,
-          metadata: getSeriesMetadata(versusDraft),
+          metadata: {
+            ...group.metadata,
+            ...getSeriesMetadata(versusDraft),
+            gameType: convertedGameType,
+          },
           ...teamLinkUpdates,
         },
         { transaction: t },
@@ -1652,7 +1705,7 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
     if (typeof width === "number" || width === null) updates.width = width;
     if (typeof height === "number" || height === null) updates.height = height;
     if (metadata && typeof metadata === "object") {
-      updates.metadata = { ...group.metadata, ...metadata };
+      updates.metadata = mergeGroupMetadata(group.metadata, metadata);
     }
 
     // Team linking (owner-validated). team1_id/team2_id may be string|null.
@@ -1724,8 +1777,20 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
 
         if (Object.keys(seriesUpdates).length > 0) {
           await versusDraft.update(seriesUpdates, { transaction: t });
+          // R1 path 1. This branch runs on EVERY manual-series settings save,
+          // including a rename alone — where `metadata` was never sent, so
+          // `updates.metadata` is undefined and the old spread was a full
+          // replacement that wiped gameType, layout, gridCols, rowLabels and
+          // origin.
+          //
+          // The base is `updates.metadata` when the request carried metadata
+          // (it is ALREADY merged over group.metadata, clear protocol applied)
+          // and the stored metadata otherwise. Re-spreading group.metadata on
+          // top of updates.metadata would resurrect a gameType the same request
+          // just cleared.
+          const baseMetadata = updates.metadata ?? group.metadata ?? {};
           updates.metadata = {
-            ...updates.metadata,
+            ...baseMetadata,
             ...getSeriesMetadata({ ...versusDraft.toJSON(), ...seriesUpdates }),
           };
         }

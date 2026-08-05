@@ -293,12 +293,12 @@ export const CreateVersusDraftDialog = (props: CreateVersusDraftDialogProps) => 
                                     class="h-4 w-4 rounded border-darius-border bg-darius-card-hover text-darius-crimson focus:ring-darius-crimson"
                                 />
                                 <span class="text-sm text-darius-text-secondary">
-                                    Competitive Mode
+                                    Official match
                                 </span>
                             </label>
                             <p class="mt-1 text-xs text-darius-text-secondary">
-                                In competitive mode, pauses and pick changes require
-                                approval from both teams
+                                Marks this as a real match rather than a scrim. Pauses and
+                                pick changes will require approval from both teams.
                             </p>
                         </div>
 

@@ -19,6 +19,7 @@ import {
     SERIES_PADDING
 } from "../utils/helpers";
 import { GroupAnchorPoints } from "./CustomGroupContainer";
+import { GameTypeChip } from "./GameTypeChip";
 import type { CardLayout } from "../utils/canvasCardLayout";
 
 type SeriesGroupContainerProps = {
@@ -104,7 +105,6 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
     const supportsLiveSeries = createMemo(
         () => props.group.versus_draft_id && props.group.metadata.origin !== "manual"
     );
-    const isManualSeries = createMemo(() => props.group.metadata.origin === "manual");
     // "Scout this team" — prefill /scout from the linked Team entities' rosters.
     // Null (no rostered team linked) hides the button entirely. Keyed on
     // non-empty roster count so the sole rostered team scouts single-team.
@@ -231,21 +231,13 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                         </span>
                     </Show>
 
-                    {/* Competitive Badge */}
-                    <Show when={!isManualSeries()}>
-                        <Show
-                            when={props.group.metadata.competitive}
-                            fallback={
-                                <span class="rounded bg-darius-card-hover px-2 py-0.5 text-xs text-darius-text-secondary">
-                                    Scrim
-                                </span>
-                            }
-                        >
-                            <span class="rounded bg-darius-ember/20 px-2 py-0.5 text-xs text-darius-ember">
-                                Competitive
-                            </span>
-                        </Show>
-                    </Show>
+                    {/*
+                      Game type chip (D9), replacing the old Scrim/Competitive
+                      badge. The old !isManualSeries() wrapper is gone on
+                      purpose: manual series were excluded from that badge and
+                      now show a chip like everything else.
+                    */}
+                    <GameTypeChip gameType={props.group.metadata.gameType} />
 
                     {/* Status Indicator */}
                     <Show

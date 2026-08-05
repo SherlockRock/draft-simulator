@@ -1,7 +1,12 @@
 import { CanvasDraft, Connection, CanvasGroup, Viewport, AnchorType } from "./schemas";
 import { getLocalCanvas, saveLocalCanvas, LocalCanvas } from "./localCanvasStore";
 import type { CardLayout } from "./canvasCardLayout";
-import type { CanvasGroupMetadata, DraftPositionUpdate } from "@draft-sim/shared-types";
+import type {
+    CanvasGroupMetadata,
+    CanvasGroupMetadataUpdate,
+    DraftPositionUpdate,
+    GameType
+} from "@draft-sim/shared-types";
 import { getManualSeriesGameDefaults } from "./manualSeriesDefaults";
 
 // Helper to safely cast anchor type with default
@@ -336,6 +341,22 @@ export const localUpdateGroupPosition = (data: {
     });
 };
 
+/**
+ * Local mirror of the backend's clear protocol (D3): an inbound
+ * `gameType: null` deletes the key rather than storing a null, so local
+ * metadata keeps the same enum-or-absent shape the read schema expects.
+ */
+const mergeLocalGroupMetadata = (
+    stored: CanvasGroupMetadata,
+    incoming: CanvasGroupMetadataUpdate
+): CanvasGroupMetadata => {
+    const { gameType, ...rest } = incoming;
+    const merged: CanvasGroupMetadata = { ...stored, ...rest };
+    if (gameType === null) delete merged.gameType;
+    else if (gameType !== undefined) merged.gameType = gameType;
+    return merged;
+};
+
 export const localUpdateGroup = (data: {
     groupId: string;
     name?: string;
@@ -343,7 +364,7 @@ export const localUpdateGroup = (data: {
     positionY?: number;
     width?: number | null;
     height?: number | null;
-    metadata?: Partial<CanvasGroupMetadata>;
+    metadata?: CanvasGroupMetadataUpdate;
 }) => {
     return mutateLocal((canvas) => {
         const group = canvas.groups.find((g) => g.id === data.groupId);
@@ -354,7 +375,10 @@ export const localUpdateGroup = (data: {
             if (data.width !== undefined) group.width = data.width;
             if (data.height !== undefined) group.height = data.height;
             if (data.metadata !== undefined)
-                group.metadata = { ...group.metadata, ...data.metadata };
+                group.metadata = mergeLocalGroupMetadata(
+                    group.metadata,
+                    data.metadata
+                );
         }
         return { canvas, result: { success: true, group } };
     });
@@ -368,6 +392,14 @@ export const localConvertGroupToSeries = (data: {
     length: number;
     draftMode: "standard" | "fearless" | "ironman";
     disabledChampions: string[];
+    /**
+     * Carried because this is the ONLY path for editing an existing local
+     * series (Canvas.tsx routes here whenever group.type === "series"), so
+     * without it a local user's choice is silently dropped on save. `null`
+     * clears. Deliberately NOT defaulted to a value — D6 keeps local groups
+     * untagged unless the user says otherwise.
+     */
+    gameType?: GameType | null;
 }) => {
     return mutateLocal((canvas) => {
         const group = canvas.groups.find((g) => g.id === data.groupId);
@@ -378,8 +410,9 @@ export const localConvertGroupToSeries = (data: {
         const isInitialConversion = group.type === "custom";
         group.name = data.name || group.name;
         group.type = "series";
-        group.metadata = {
-            ...group.metadata,
+        group.metadata = mergeLocalGroupMetadata(group.metadata, {
+            // undefined leaves whatever the group already had; null clears.
+            ...(data.gameType !== undefined ? { gameType: data.gameType } : {}),
             blueTeamName: data.blueTeamName,
             redTeamName: data.redTeamName,
             length: data.length,
@@ -387,7 +420,7 @@ export const localConvertGroupToSeries = (data: {
             origin: "manual",
             disabledChampions: data.disabledChampions,
             draftMode: data.draftMode
-        } as CanvasGroupMetadata & { origin: "manual" };
+        });
 
         const groupDrafts = canvas.drafts
             .filter((d) => d.group_id === data.groupId)

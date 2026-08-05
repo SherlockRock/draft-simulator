@@ -35,7 +35,9 @@ import {
 } from "./schemas";
 import type {
     CanvasGroupMetadata,
+    CanvasGroupMetadataUpdate,
     DraftPositionUpdate,
+    GameType,
     RosterInput
 } from "@draft-sim/shared-types";
 
@@ -312,6 +314,8 @@ export const convertGroupToSeries = async (data: {
     disabledChampions: string[];
     team1_id?: string | null;
     team2_id?: string | null;
+    /** Classification chosen in the same dialog that triggers the conversion. */
+    gameType?: GameType;
 }) => {
     const result = await apiPost(
         `/canvas/${data.canvasId}/group/${data.groupId}/convert-to-series`,
@@ -322,6 +326,7 @@ export const convertGroupToSeries = async (data: {
             length: data.length,
             type: data.type,
             disabledChampions: data.disabledChampions,
+            ...(data.gameType !== undefined ? { gameType: data.gameType } : {}),
             // Omitted (not null) when absent so the server leaves links alone.
             ...(data.team1_id !== undefined ? { team1_id: data.team1_id } : {}),
             ...(data.team2_id !== undefined ? { team2_id: data.team2_id } : {})
@@ -504,7 +509,13 @@ export const updateCanvasGroup = async (data: {
     positionY?: number;
     width?: number | null;
     height?: number | null;
-    metadata?: Partial<CanvasGroupMetadata>;
+    // The WRITE shape, not the read one: `gameType: null` means "delete this
+    // key" (D3). Partial<CanvasGroupMetadata> infers gameType as
+    // `GameType | undefined`, so null would not be assignable — and undefined
+    // just drops out of the JSON payload, which cannot clear a stored value.
+    // There is no request-side Zod schema stripping it, so null reaches the
+    // backend intact.
+    metadata?: CanvasGroupMetadataUpdate;
     team1_id?: string | null;
     team2_id?: string | null;
 }) => {

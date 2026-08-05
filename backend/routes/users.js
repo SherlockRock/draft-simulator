@@ -1141,6 +1141,9 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
         seriesType: series.type,
         disabledChampions: series.disabledChampions || [],
       };
+      // This object is shared by both branches below, so gameType is applied
+      // per branch: the create branch has no existing group to read from.
+      const derivedGameType = series.competitive ? "official" : "scrim";
 
       if (existingGroup) {
         await existingGroup.update(
@@ -1154,7 +1157,15 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
               dedupeStrategy === "overwrite"
                 ? groupPositionY
                 : existingGroup.positionY,
-            metadata,
+            // Merge over the stored metadata (R1 path 3). Re-import used to
+            // replace it wholesale, reverting a corrected gameType — and
+            // wiping layout/gridCols/rowLabels/origin — under BOTH dedupe
+            // strategies, since this write precedes the overwrite branch.
+            metadata: {
+              ...existingGroup.metadata,
+              ...metadata,
+              gameType: existingGroup.metadata?.gameType || derivedGameType,
+            },
           },
           { transaction },
         );
@@ -1185,7 +1196,7 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
             positionX: groupPositionX,
             positionY: groupPositionY,
             versus_draft_id: series.id,
-            metadata,
+            metadata: { ...metadata, gameType: derivedGameType },
           },
           { transaction },
         );

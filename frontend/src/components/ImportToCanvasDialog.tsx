@@ -238,7 +238,7 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                                                                 }}
                                                             >
                                                                 {series.competitive
-                                                                    ? "Competitive"
+                                                                    ? "Official"
                                                                     : "Scrim"}
                                                             </span>
                                                         </div>

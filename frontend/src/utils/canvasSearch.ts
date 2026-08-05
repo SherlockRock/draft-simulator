@@ -1,3 +1,10 @@
+import {
+    appearsInScope,
+    countsInScope,
+    effectiveGameType,
+    resolvesTeamNames,
+    type SearchScope
+} from "./gameClassification";
 import type { CanvasDraft, CanvasGroup } from "./schemas";
 
 export type SlotPhase = "ban" | "pick";
@@ -13,6 +20,19 @@ export type SearchQuery = {
     teamName: string | null;
     /** Restrict match highlights to one bucket; null = all buckets. */
     bucket: SearchBucket | null;
+    /**
+     * Narrows the search to one class of game. Applies to EVERY query, but "all"
+     * means something different either side of a team filter:
+     *
+     * - with a team (aggregation): "all" is the counted rule — scratch and
+     *   unclassified drafts are excluded, so records stay behaviour-preserving.
+     * - without one (navigation): "all" is no filter, so champion-only search
+     *   still spans loose cards and unclassified groups.
+     *
+     * A named scope means the same thing on both sides. See countsInScope and
+     * appearsInScope.
+     */
+    scope: SearchScope;
 };
 
 export type MatchSlot = {
@@ -72,17 +92,24 @@ const normalizeName = (name: string | undefined): string | null => {
  * the free-text metadata string. Keeps unlinked groups and anonymous/local
  * canvases (no Team entity) working via the fallback.
  *
- * SERIES ONLY, deliberately. Search aggregates per-team win/loss records and
- * pick/ban buckets across every draft it can attribute to a team. Custom groups
- * hold scratch work, so letting their names resolve here would silently count
- * throwaway drafts toward a real team's record. Lifting this gate requires the
- * game-classification work (scrim/official tagging) — see the design doc's
- * "out of scope" section. Until then this stays closed.
+ * CLASSIFIED GROUPS ONLY, deliberately. Search aggregates per-team win/loss
+ * records across every draft it can attribute to a team, so an unclassified
+ * custom group must not resolve names at all — otherwise throwaway drafts
+ * attach themselves to a real team and its dropdown fills with junk.
+ *
+ * Note this admits `scratch`, which does NOT count. Resolving names and
+ * counting are two different questions: a scratch group has to resolve names so
+ * that a scratch-scoped search can find its games, and it is then excluded by
+ * the scope filter under every other scope. Folding the two together — as an
+ * earlier revision did — makes a scratch scope structurally impossible, because
+ * the team never matches a side and never reaches the filter.
+ *
+ * See docs/designs/canvas-game-classification-design.md (D6/D8).
  */
 export const resolveGroupTeamNames = (
     group: CanvasGroup
 ): { team1: string | null; team2: string | null } => {
-    if (group.type !== "series") return { team1: null, team2: null };
+    if (!resolvesTeamNames(group)) return { team1: null, team2: null };
     const team1 =
         group.Team1?.name?.trim() || group.metadata.blueTeamName?.trim() || null;
     const team2 = group.Team2?.name?.trim() || group.metadata.redTeamName?.trim() || null;
@@ -113,10 +140,23 @@ export const bucketFor = (kind: SlotKind, teamSide: SlotSide): SearchBucket => {
     return kind.side === teamSide ? "bannedBy" : "bannedAgainst";
 };
 
-/** Distinct team names across all groups (case-insensitive, first casing wins), sorted. */
-export const getTeamNameOptions = (groups: readonly CanvasGroup[]): string[] => {
+/**
+ * Distinct team names across all groups (case-insensitive, first casing wins),
+ * sorted.
+ *
+ * Scope-aware: a team is only offered if it appears in a group the current scope
+ * would actually search. Without this, selecting scope "scratch" would still
+ * list every scrim-only team and hand you an empty record with no explanation —
+ * and now that scratch groups resolve names, the reverse would happen under
+ * "all".
+ */
+export const getTeamNameOptions = (
+    groups: readonly CanvasGroup[],
+    scope: SearchScope = "all"
+): string[] => {
     const seen = new Map<string, string>();
     for (const group of groups) {
+        if (!countsInScope(effectiveGameType(undefined, group), scope)) continue;
         const { team1, team2 } = resolveGroupTeamNames(group);
         for (const raw of [team1, team2]) {
             const trimmed = raw?.trim();
@@ -155,7 +195,8 @@ const computeOutcome = (
 const computeTeamOnlyResults = (
     drafts: readonly CanvasDraft[],
     groupById: Map<string, CanvasGroup>,
-    teamName: string
+    teamName: string,
+    scope: SearchScope
 ): SearchResults => {
     const matches: DraftMatch[] = [];
     const teamRecord = emptyBucketSummary();
@@ -164,6 +205,8 @@ const computeTeamOnlyResults = (
         const group = canvasDraft.group_id
             ? groupById.get(canvasDraft.group_id)
             : undefined;
+        // Unconditional here: this path only runs under a team filter.
+        if (!countsInScope(effectiveGameType(canvasDraft, group), scope)) continue;
         const teamSide = teamSideInDraft(canvasDraft, group, teamName);
         if (teamSide === null) continue;
 
@@ -201,7 +244,7 @@ export const computeSearchResults = (
         if (query.teamName === null) {
             return { matches: [], buckets: null, teamRecord: null };
         }
-        return computeTeamOnlyResults(drafts, groupById, query.teamName);
+        return computeTeamOnlyResults(drafts, groupById, query.teamName, query.scope);
     }
 
     const buckets =
@@ -219,6 +262,17 @@ export const computeSearchResults = (
         const group = canvasDraft.group_id
             ? groupById.get(canvasDraft.group_id)
             : undefined;
+
+        // Scope applies to EVERY query, but means different things either side
+        // of a team filter. Aggregating: "all" is the counted rule. Navigating:
+        // "all" is no filter at all, so a champion-only search still spans loose
+        // cards and unclassified groups — most of a typical canvas.
+        const effective = effectiveGameType(canvasDraft, group);
+        const inScope =
+            query.teamName !== null
+                ? countsInScope(effective, query.scope)
+                : appearsInScope(effective, query.scope);
+        if (!inScope) continue;
 
         let teamSide: SlotSide | null = null;
         if (query.teamName !== null) {

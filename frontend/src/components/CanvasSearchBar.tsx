@@ -12,6 +12,7 @@ import { ChevronDown, ChevronUp, X } from "lucide-solid";
 import { SearchableSelect } from "./SearchableSelect";
 import { champions } from "../utils/constants";
 import type { SearchBucket, SearchResults } from "../utils/canvasSearch";
+import { SCOPE_VALUES, type SearchScope } from "../utils/gameClassification";
 
 const BUCKET_ORDER: SearchBucket[] = [
     "pickedBy",
@@ -29,6 +30,13 @@ const BUCKET_LABELS: Record<SearchBucket, string> = {
 
 const PICK_BUCKETS: SearchBucket[] = ["pickedBy", "pickedAgainst"];
 
+const SCOPE_LABELS: Record<SearchScope, string> = {
+    all: "All",
+    official: "Official",
+    scrim: "Scrims",
+    scratch: "Scratch"
+};
+
 type CanvasSearchBarProps = {
     championId: Accessor<string | null>;
     onChampionChange: (championId: string | null) => void;
@@ -37,6 +45,8 @@ type CanvasSearchBarProps = {
     teamOptions: Accessor<string[]>;
     activeBucket: Accessor<SearchBucket | null>;
     onBucketChange: (bucket: SearchBucket | null) => void;
+    scope: Accessor<SearchScope>;
+    onScopeChange: (scope: SearchScope) => void;
     results: Accessor<SearchResults | null>;
     currentIndex: Accessor<number>;
     onNavigate: (direction: 1 | -1) => void;
@@ -180,6 +190,34 @@ export const CanvasSearchBar = (props: CanvasSearchBarProps) => {
                 >
                     <X size={16} />
                 </button>
+            </div>
+
+            {/*
+              Always visible, and it now filters every query rather than only
+              team-filtered ones — a chip row that visibly did nothing without a
+              team read as broken. "All" still means no filter when there is no
+              team, so champion search keeps spanning loose cards and unclassified
+              groups.
+            */}
+            <div class="flex flex-wrap items-center gap-1.5">
+                <span class="text-xs text-darius-text-secondary">Show</span>
+                <For each={SCOPE_VALUES}>
+                    {(scope) => (
+                        <button
+                            type="button"
+                            onClick={() => props.onScopeChange(scope)}
+                            class="rounded-full border px-2.5 py-0.5 text-xs transition-colors"
+                            classList={{
+                                "border-darius-purple-bright bg-darius-purple/25 text-darius-text-primary":
+                                    props.scope() === scope,
+                                "border-darius-border bg-darius-card text-darius-text-secondary hover:border-darius-purple-bright/60":
+                                    props.scope() !== scope
+                            }}
+                        >
+                            {SCOPE_LABELS[scope]}
+                        </button>
+                    )}
+                </For>
             </div>
 
             <Show when={props.results()?.teamRecord}>

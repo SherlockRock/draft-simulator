@@ -132,7 +132,7 @@ const VersusRoleSelection: Component = () => {
                                         </span>
                                         <span class="bg-darius-crimson/12 rounded-md px-2 py-0.5 text-darius-crimson">
                                             {versusDraft()?.competitive
-                                                ? "Competitive"
+                                                ? "Official"
                                                 : "Scrim"}
                                         </span>
                                         <Show when={versusDraft()?.type}>

@@ -3,9 +3,12 @@ import {
     LOD_ENTER_ZOOM,
     LOD_EXIT_ZOOM,
     MAX_ZOOM,
+    MIN_VISIBLE_STROKE_PX,
     MIN_ZOOM,
     clampZoom,
     nextLodState,
+    scaledStrokePx,
+    screenConstantPx,
     worldAt,
     worldTransform,
     zoomAt
@@ -168,5 +171,88 @@ describe("nextLodState", () => {
 
     it("keeps the exit threshold above the enter threshold", () => {
         expect(LOD_EXIT_ZOOM).toBeGreaterThan(LOD_ENTER_ZOOM);
+    });
+});
+
+describe("screenConstantPx", () => {
+    it("is a no-op at zoom 1", () => {
+        expect(screenConstantPx(4, 1)).toBe(4);
+    });
+
+    it("keeps a stroke at a constant DEVICE size across the zoom range", () => {
+        // The whole point: everything inside .canvas-world is multiplied by
+        // scale(zoom), so a stroke authored at N css px paints at N * zoom
+        // device px. Below ~1 device px it rasterises inconsistently and edges
+        // round away entirely — which is why a ring-4 highlight vanishes at low
+        // zoom while the card it surrounds stays visible.
+        for (const zoom of [MIN_ZOOM, 0.25, 0.3, 0.5, 1, 2, MAX_ZOOM]) {
+            expect(screenConstantPx(4, zoom) * zoom).toBeCloseTo(4, 10);
+        }
+    });
+
+    it("would otherwise go sub-pixel at the low end", () => {
+        // Guards the premise rather than the fix: 4 * 0.1 is 0.4 device px.
+        expect(4 * MIN_ZOOM).toBeLessThan(1);
+        expect(screenConstantPx(4, MIN_ZOOM)).toBe(40);
+    });
+
+    it("falls back to the authored width for an unusable zoom", () => {
+        // A transient NaN must not blow the ring up to Infinity px.
+        expect(screenConstantPx(4, 0)).toBe(4);
+        expect(screenConstantPx(4, -1)).toBe(4);
+        expect(screenConstantPx(4, Number.NaN)).toBe(4);
+        expect(screenConstantPx(4, Number.POSITIVE_INFINITY)).toBe(4);
+    });
+});
+
+describe("scaledStrokePx", () => {
+    const deviceWidth = (base: number, zoom: number) => scaledStrokePx(base, zoom) * zoom;
+
+    it("scales naturally with zoom while the stroke is comfortably visible", () => {
+        // Above the floor it must behave EXACTLY like the plain css width would
+        // have, so a highlight keeps its familiar weight when zoomed in.
+        for (const zoom of [0.5, 1, 2, MAX_ZOOM]) {
+            expect(deviceWidth(4, zoom)).toBeCloseTo(4 * zoom, 10);
+        }
+    });
+
+    it("stops thinning once it would drop below the floor", () => {
+        // The band where a ring-4 used to vanish edge-by-edge: 1.2 device px at
+        // the LOD threshold, 0.4 at MIN_ZOOM.
+        for (const zoom of [MIN_ZOOM, 0.2, LOD_ENTER_ZOOM, 0.4]) {
+            expect(deviceWidth(4, zoom)).toBeCloseTo(MIN_VISIBLE_STROKE_PX, 10);
+        }
+    });
+
+    it("never renders thinner than the floor anywhere in the zoom range", () => {
+        for (const base of [1, 2, 4]) {
+            for (let zoom = MIN_ZOOM; zoom <= MAX_ZOOM; zoom += 0.05) {
+                expect(deviceWidth(base, zoom)).toBeGreaterThanOrEqual(
+                    Math.min(MIN_VISIBLE_STROKE_PX, base * zoom) - 1e-9
+                );
+                expect(deviceWidth(base, zoom)).toBeGreaterThanOrEqual(1);
+            }
+        }
+    });
+
+    it("is far thinner at low zoom than a constant-screen-size stroke", () => {
+        // The complaint about the first fix: screenConstantPx held it at the full
+        // 4px on a card only 34px wide at MIN_ZOOM.
+        expect(deviceWidth(4, MIN_ZOOM)).toBeLessThan(
+            screenConstantPx(4, MIN_ZOOM) * MIN_ZOOM
+        );
+    });
+
+    it("crosses over exactly where the natural width meets the floor", () => {
+        const crossover = MIN_VISIBLE_STROKE_PX / 4;
+        expect(deviceWidth(4, crossover)).toBeCloseTo(MIN_VISIBLE_STROKE_PX, 10);
+        expect(deviceWidth(4, crossover * 2)).toBeCloseTo(MIN_VISIBLE_STROKE_PX * 2, 10);
+    });
+
+    it("falls back to the authored width for an unusable zoom", () => {
+        expect(scaledStrokePx(4, 0)).toBe(4);
+        expect(scaledStrokePx(4, -1)).toBe(4);
+        expect(scaledStrokePx(4, Number.NaN)).toBe(4);
+        expect(scaledStrokePx(4, Number.POSITIVE_INFINITY)).toBe(4);
     });
 });

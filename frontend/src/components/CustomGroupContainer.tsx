@@ -8,6 +8,8 @@ import {
     JSX
 } from "solid-js";
 import { Trash2, Settings, ArrowLeftRight } from "lucide-solid";
+import { GameTypeChip } from "./GameTypeChip";
+import { scaledStrokePx } from "../utils/viewport";
 import { CanvasDraft, CanvasGroup, AnchorType } from "../utils/schemas";
 import {
     GRID_HEADER_HEIGHT,
@@ -243,6 +245,22 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         return out;
     });
 
+    // Resize-clamped wins over drag-target, matching the order the two ring-2
+    // classList entries used to resolve in.
+    const highlightOutline = createMemo((): JSX.CSSProperties => {
+        const color = isResizeClamped()
+            ? "rgb(239 68 68 / 0.3)" // red-500/30
+            : props.isDragTarget
+              ? "rgb(155 80 192 / 0.3)" // purple-bright/30
+              : null;
+        if (color === null) return {};
+        return {
+            "outline-style": "solid",
+            "outline-color": color,
+            "outline-width": `${scaledStrokePx(2, props.zoom())}px`
+        };
+    });
+
     return (
         <div
             data-group-id={props.group.id}
@@ -250,9 +268,8 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
             classList={{
                 "border-darius-border":
                     !props.isDragTarget && !props.isExitingSource && !isResizeClamped(),
-                "border-red-500 ring-2 ring-red-500/30": isResizeClamped(),
-                "border-darius-purple-bright ring-2 ring-darius-purple-bright/30":
-                    props.isDragTarget,
+                "border-red-500": isResizeClamped(),
+                "border-darius-purple-bright": props.isDragTarget,
                 "border-darius-border opacity-75": props.isExitingSource,
                 "border-dashed": draftCount() === 0
             }}
@@ -261,7 +278,14 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 left: `${props.group.positionX}px`,
                 top: `${props.group.positionY}px`,
                 width: `${groupWidth()}px`,
-                height: `${groupHeight()}px`
+                height: `${groupHeight()}px`,
+                // Floored outline, for the same reason as the card's highlight
+                // ring: a Tailwind ring is a world-space box-shadow, so it
+                // painted at 2 * zoom device px and dropped out below ~1px.
+                // The structural `border-2` is deliberately NOT compensated — it
+                // reads as part of the group rather than as an affordance, and
+                // scaling it would change how the canvas looks at every zoom.
+                ...highlightOutline()
             }}
         >
             {/* Header */}
@@ -302,6 +326,8 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                     <span class="flex-shrink-0 text-xs text-darius-text-secondary">
                         {draftCount()} draft{draftCount() !== 1 ? "s" : ""}
                     </span>
+                    {/* Only when tagged — an untagged custom group looks as before. */}
+                    <GameTypeChip gameType={props.group.metadata.gameType} />
                 </div>
 
                 <Show when={props.canEdit()}>
