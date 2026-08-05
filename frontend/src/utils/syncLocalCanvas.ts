@@ -28,7 +28,8 @@ import type { CanvasGroupMetadata } from "@draft-sim/shared-types";
 export const stripUnsyncableGroupMetadata = (
     metadata: CanvasGroupMetadata
 ): CanvasGroupMetadata => {
-    const { gameType: _gameType, ...rest } = metadata;
+    const rest = { ...metadata };
+    delete rest.gameType;
     return rest;
 };
 
