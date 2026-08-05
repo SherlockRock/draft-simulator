@@ -71,7 +71,7 @@ router.post("/:canvasId/generate-canvas-link", protect, async (req, res) => {
     const shareToken = jwt.sign(
       { canvasId: canvas.id, permissions: sharePermissions },
       process.env.SHARE_JWT_SECRET,
-      { expiresIn: "1h" },
+      { expiresIn: "7d" },
     );
     const shareLink = `${process.env.FRONTEND_ORIGIN}/share/canvas?token=${shareToken}`;
 
@@ -95,7 +95,22 @@ router.get("/verify-canvas-link", async (req, res) => {
       return res.status(400).json({ error: "Share token is required" });
     }
 
-    const decoded = jwt.verify(token, process.env.SHARE_JWT_SECRET);
+    // Expiry gates handing out NEW access, so an expired token still has to be
+    // read: someone who already has access should be let through on it.
+    let decoded;
+    let expired = false;
+    try {
+      decoded = jwt.verify(token, process.env.SHARE_JWT_SECRET);
+    } catch (err) {
+      if (err.name !== "TokenExpiredError") {
+        return res.status(400).json({ error: "Invalid share link." });
+      }
+      expired = true;
+      decoded = jwt.verify(token, process.env.SHARE_JWT_SECRET, {
+        ignoreExpiration: true,
+      });
+    }
+
     const canvas = await Canvas.findByPk(decoded.canvasId);
 
     if (!canvas) {
@@ -111,27 +126,30 @@ router.get("/verify-canvas-link", async (req, res) => {
       },
     });
 
-    if (!existingAccess) {
-      await UserCanvas.create({
-        canvas_id: canvas.id,
-        user_id: user.id,
-        permissions: sharePermissions,
-      });
-    } else if (
-      existingAccess.permissions === "view" &&
-      sharePermissions === "edit"
-    ) {
-      await existingAccess.update({ permissions: "edit" });
+    if (existingAccess) {
+      if (
+        !expired &&
+        existingAccess.permissions === "view" &&
+        sharePermissions === "edit"
+      ) {
+        await existingAccess.update({ permissions: "edit" });
+      }
+      return res.json({ success: true, canvasId: canvas.id });
     }
+
+    if (expired) {
+      return res.status(410).json({ error: "Share link has expired." });
+    }
+
+    await UserCanvas.create({
+      canvas_id: canvas.id,
+      user_id: user.id,
+      permissions: sharePermissions,
+    });
 
     res.json({ success: true, canvasId: canvas.id });
   } catch (err) {
     console.error("CANVAS SHARE VERIFICATION ERROR:", err);
-    if (err.name === "TokenExpiredError") {
-      return res.status(401).json({ error: "Share link has expired." });
-    } else if (err.name === "JsonWebTokenError") {
-      return res.status(401).json({ error: "Invalid share link." });
-    }
     res.status(500).json({ error: "Server Error" });
   }
 });

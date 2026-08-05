@@ -3,13 +3,15 @@ import { createSignal, onMount, Show } from "solid-js";
 import { Title, Meta } from "@solidjs/meta";
 import { useMutation } from "@tanstack/solid-query";
 import { toast } from "solid-toast";
-import { Lock } from "lucide-solid";
+import { Lock, Link2Off } from "lucide-solid";
 import { verifyShareCanvasLink, handleLogin } from "./utils/actions";
+import { ApiError } from "./utils/apiClient";
 
 const ShareCanvasPage = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const [needsAuth, setNeedsAuth] = createSignal(false);
+    const [isExpired, setIsExpired] = createSignal(false);
 
     const mutation = useMutation(() => ({
         mutationFn: verifyShareCanvasLink,
@@ -18,8 +20,12 @@ const ShareCanvasPage = () => {
             navigate(`/canvas/${data.canvasId}`);
         },
         onError: (error: Error) => {
-            if (error.message.includes("401")) {
+            if (error instanceof ApiError && error.status === 401) {
                 setNeedsAuth(true);
+                return;
+            }
+            if (error instanceof ApiError && error.status === 410) {
+                setIsExpired(true);
                 return;
             }
             toast.error(`Share verification failed: ${error.message}`);
@@ -64,6 +70,23 @@ const ShareCanvasPage = () => {
                         Go to homepage
                     </button>
                 </div>
+            </Show>
+            <Show when={isExpired()}>
+                <div class="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-darius-card-hover/50 ring-1 ring-darius-border">
+                    <Link2Off size={28} class="text-darius-text-secondary" />
+                </div>
+                <h2 class="mb-2 text-lg font-medium text-darius-text-primary">
+                    This share link has expired
+                </h2>
+                <p class="mb-6 max-w-xs text-center text-sm text-darius-text-secondary">
+                    Ask whoever shared this canvas for a new link.
+                </p>
+                <button
+                    onClick={() => navigate("/")}
+                    class="rounded-md px-5 py-2 text-sm text-darius-text-secondary transition-colors"
+                >
+                    Go to homepage
+                </button>
             </Show>
             <Show when={mutation.isPending}>
                 <p class="text-sm text-darius-text-secondary">Verifying share link...</p>
