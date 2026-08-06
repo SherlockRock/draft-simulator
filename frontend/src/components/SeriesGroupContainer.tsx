@@ -18,6 +18,7 @@ import {
     SERIES_HEADER_HEIGHT,
     SERIES_PADDING
 } from "../utils/helpers";
+import { sortedSeriesDrafts } from "../utils/canvasWorldPosition";
 import { GroupAnchorPoints } from "./CustomGroupContainer";
 import { GameTypeChip } from "./GameTypeChip";
 import type { CardLayout } from "../utils/canvasCardLayout";
@@ -53,17 +54,11 @@ type SeriesGroupContainerProps = {
 export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
     const navigate = useNavigate();
 
-    const sortedDrafts = createMemo(() => {
-        return [...props.drafts].sort((a, b) => {
-            const aIndex = a.Draft.seriesIndex;
-            const bIndex = b.Draft.seriesIndex;
-            if (aIndex === null || aIndex === undefined) {
-                return bIndex === null || bIndex === undefined ? 0 : 1;
-            }
-            if (bIndex === null || bIndex === undefined) return -1;
-            return aIndex - bIndex;
-        });
-    });
+    // The order the games actually paint in — the flexbox below follows DOM
+    // order. This was a fourth verbatim copy of the same comparator; the panel's
+    // copy had drifted to `seriesIndex ?? 0`, which sorts an index-less game
+    // first here and last everywhere else.
+    const sortedDrafts = createMemo(() => sortedSeriesDrafts(props.drafts));
 
     const groupDimensions = createMemo(() =>
         getSeriesGroupDimensions(props.drafts.length, props.cardLayout())

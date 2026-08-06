@@ -55,6 +55,7 @@ import {
 } from "../utils/groupRestrictions";
 import type { RestrictionGroup } from "../components/ChampionPanel";
 import { getDraftWorldPosition } from "../utils/canvasWorldPosition";
+import { childCardsOf } from "../utils/canvasTree";
 import { resolveCopyPlacement } from "../utils/copyPlacement";
 
 const ChampionStrip: Component<{
@@ -823,23 +824,11 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                             }
                                             return null;
                                         });
-                                        const getDraftsForGroup = (groupId: string) => {
-                                            const group = groups().find(
-                                                (g) => g.id === groupId
+                                        const getDraftsForGroup = (groupId: string) =>
+                                            childCardsOf(
+                                                { groups: groups(), drafts: drafts() },
+                                                groupId
                                             );
-                                            const groupDrafts = drafts().filter(
-                                                (d) => d.group_id === groupId
-                                            );
-                                            // Sort by seriesIndex if it's a series group
-                                            if (group?.type === "series") {
-                                                return [...groupDrafts].sort(
-                                                    (a, b) =>
-                                                        (a.Draft.seriesIndex ?? 0) -
-                                                        (b.Draft.seriesIndex ?? 0)
-                                                );
-                                            }
-                                            return groupDrafts;
-                                        };
 
                                         return (
                                             <div class="flex min-h-0 flex-1 flex-col p-3">

@@ -77,6 +77,7 @@ import {
 } from "./components/Connections";
 import { cardHeight, cardWidth } from "./utils/helpers";
 import { getDraftWorldPosition as draftWorldPosition } from "./utils/canvasWorldPosition";
+import { childCardsOf, type CanvasTree } from "./utils/canvasTree";
 import {
     localNewDraft,
     localEditDraft,
@@ -467,8 +468,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         return `translate3d(${x}px, ${y}px, 0)`;
     });
 
-    const getDraftsForGroup = (groupId: string) =>
-        canvasDrafts.filter((cd) => cd.group_id === groupId);
+    // The two stores as one tree. Read inside the tracking scope of whoever
+    // calls it, so the child queries below stay reactive.
+    const canvasTree = (): CanvasTree => ({ groups: canvasGroups, drafts: canvasDrafts });
+
+    const getDraftsForGroup = (groupId: string) => childCardsOf(canvasTree(), groupId);
 
     const groupForCard = (cd: CanvasDraft): CanvasGroup | undefined =>
         cd.group_id ? canvasGroups.find((g) => g.id === cd.group_id) : undefined;
