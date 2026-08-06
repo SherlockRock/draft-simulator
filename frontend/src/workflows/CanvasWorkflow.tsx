@@ -527,9 +527,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         const placement = resolveCopyPlacement({
             draft,
             group: sourceGroup,
-            groupDrafts: sourceGroup
-                ? drafts.filter((canvasDraft) => canvasDraft.group_id === sourceGroup.id)
-                : [],
+            tree: { groups, drafts },
             layout: cardLayout()
         });
 

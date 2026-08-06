@@ -16,11 +16,9 @@ import {
     GRID_PADDING,
     GRID_CELL_GAP,
     GridCell,
+    GridItem,
     isGridGroup,
-    gridColsOf,
-    colsFromWidth,
-    cellToPosition,
-    positionToCell
+    cellToPosition
 } from "../utils/gridLayout";
 import { cardWidth, cardHeight } from "../utils/helpers";
 import type { CardLayout } from "../utils/canvasCardLayout";
@@ -62,6 +60,14 @@ type CustomGroupContainerProps = {
     // Where the displaced card will move on a swap drop.
     displacedCell: GridCell | null;
     isExitingSource: boolean;
+    // Children as footprint stamps, and the column count they were stamped
+    // against. Both come from the parent rather than being recomputed here:
+    // this overlay is what the user aims at, so it must not be able to disagree
+    // with the resolver about which columns exist. It used to carry its own
+    // inlined `max(gridCols + 1, colsFromWidth(...))`, which is now one term
+    // short of `effectiveGridCols`.
+    gridItems: GridItem[];
+    gridCols: number;
     contentMinWidth: number;
     contentMinHeight: number;
     maxLeftEdgeDelta: number;
@@ -202,13 +208,15 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
     // it larger — so empty rows/columns read as drop targets.
     const hintCells = createMemo<GridCell[]>(() => {
         if (!isGrid()) return [];
-        const cols = gridColsOf(props.group);
         const layout = props.cardLayout();
+        // The BOTTOM row of each footprint: a 2-row child in row 0 makes the
+        // grid two rows tall, and hinting only its top row would offer a drop
+        // target the child already covers.
         let maxRow = 0;
-        for (const d of props.drafts) {
+        for (const item of props.gridItems) {
             maxRow = Math.max(
                 maxRow,
-                positionToCell(d.positionX, d.positionY, layout, cols).row
+                item.cell.row + Math.max(1, item.footprint.rows) - 1
             );
         }
         const cellH = cardHeight(layout) + GRID_CELL_GAP;
@@ -216,7 +224,12 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
             groupHeight() - GRID_HEADER_HEIGHT - 2 * GRID_PADDING + GRID_CELL_GAP;
         const rowsFromHeight = Math.max(1, Math.floor(availH / cellH));
         const totalRows = Math.max(maxRow + 2, rowsFromHeight);
-        const totalCols = Math.max(cols + 1, colsFromWidth(groupWidth(), layout));
+        // Columns come from the parent's effectiveGridCols, which reads the
+        // STORE width — and that tracks a live resize, because
+        // handleResizeGroup writes width on every mousemove. localWidth() would
+        // only differ if the store write were dropped, and then the resolver
+        // would be the one that is wrong.
+        const totalCols = props.gridCols;
         const cells: GridCell[] = [];
         for (let row = 0; row < totalRows; row++) {
             for (let col = 0; col < totalCols; col++) {

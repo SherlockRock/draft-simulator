@@ -531,7 +531,10 @@ export const localUpdateDraftPositions = (data: {
 }) => {
     return mutateLocal((canvas) => {
         for (const p of data.positions) {
-            const draft = canvas.drafts.find((d) => d.Draft.id === p.draft_id);
+            // Matched on draft_id, the Card's placement identity — the field
+            // the payload actually carries. Every other lookup in this file
+            // takes a `draftId` that really is a Draft.id.
+            const draft = canvas.drafts.find((d) => d.draft_id === p.draft_id);
             if (draft) {
                 draft.positionX = p.positionX;
                 draft.positionY = p.positionY;

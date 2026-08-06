@@ -1,7 +1,12 @@
 import type { CanvasDraft, CanvasGroup } from "./schemas";
 import type { CardLayout } from "./canvasCardLayout";
 import { cardHeight, cardWidth, getSeriesGroupDimensions } from "./helpers";
-import { GRID_CELL_GAP, positionToCell, type GridCell } from "./gridLayout";
+import {
+    GRID_CELL_GAP,
+    positionToCell,
+    type GridFootprint,
+    type GridItem
+} from "./gridLayout";
 import { sortedSeriesDrafts } from "./canvasWorldPosition";
 
 /**
@@ -48,16 +53,13 @@ export type TreeNode =
     | { kind: "group"; id: string; group: CanvasGroup }
     | { kind: "card"; id: string; card: CanvasDraft };
 
-export type GridFootprint = { rows: number; cols: number };
-
-export type GridItem = {
-    id: string;
-    kind: TreeNode["kind"];
-    footprint: GridFootprint;
-    /** Top-left in CONTAINER-relative px — what `cell` was derived from. */
-    position: { x: number; y: number };
-    cell: GridCell;
-};
+/**
+ * Both shapes are declared in `gridLayout.ts` — the layout engine owns the item
+ * contract, this module owns how a node becomes one. Re-exported here because
+ * `gridItemsOf` is where they come from in practice, and because the dependency
+ * only runs one way (this module imports gridLayout, never the reverse).
+ */
+export type { GridFootprint, GridItem };
 
 /**
  * Fallback size for a Group with no stored width/height. These mirror

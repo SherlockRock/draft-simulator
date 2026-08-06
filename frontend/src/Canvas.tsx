@@ -77,7 +77,12 @@ import {
 } from "./components/Connections";
 import { cardHeight, cardWidth } from "./utils/helpers";
 import { getDraftWorldPosition as draftWorldPosition } from "./utils/canvasWorldPosition";
-import { childCardsOf, type CanvasTree } from "./utils/canvasTree";
+import {
+    childCardsOf,
+    gridItemsOf,
+    maxChildSpanCols,
+    type CanvasTree
+} from "./utils/canvasTree";
 import {
     localNewDraft,
     localEditDraft,
@@ -138,7 +143,10 @@ import {
     growGridDims,
     resolveGridSave,
     arrangedRowCount,
+    toPositionUpdates,
+    CARD_FOOTPRINT,
     type GridCell,
+    type GridItem,
     type GridSettingsInput,
     type GridMetadata
 } from "./utils/gridLayout";
@@ -474,6 +482,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const getDraftsForGroup = (groupId: string) => childCardsOf(canvasTree(), groupId);
 
+    // Columns a grid Group actually offers as drop targets. Everything that
+    // paints or resolves a grid cell must come through here, or the hint
+    // overlay ends up offering columns the resolver won't use.
+    const gridColsFor = (group: CanvasGroup): number => {
+        const layout = props.cardLayout();
+        return effectiveGridCols(
+            group,
+            layout,
+            maxChildSpanCols(canvasTree(), group.id, layout)
+        );
+    };
+
+    // Children of a grid Group as footprint stamps. The order matters and is
+    // not negotiable: footprints -> maxChildSpanCols -> effective cols -> cells
+    // (canvasTree.ts, step-2 amendment 3). Deriving the span from the items
+    // would be circular, since an item's cell is clamped by the column count.
+    const gridItemsFor = (group: CanvasGroup): GridItem[] =>
+        gridItemsOf(canvasTree(), group.id, props.cardLayout(), gridColsFor(group));
+
     const groupForCard = (cd: CanvasDraft): CanvasGroup | undefined =>
         cd.group_id ? canvasGroups.find((g) => g.id === cd.group_id) : undefined;
 
@@ -779,6 +806,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // Snap/swap commit for a drop inside a grid-mode custom group. Applies
     // optimistic store updates, then persists positions + derived group
     // dimensions in one atomic request (or the local-storage equivalent).
+    //
+    // `draggedDraftId` is the Card's `draft_id` — its PLACEMENT identity, which
+    // is what canvasTree's items and the store's keyed reconcile both use.
     const commitGridDrop = (
         group: CanvasGroup,
         draggedDraftId: string,
@@ -787,38 +817,62 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         origin: { x: number; y: number } | null,
         groupIdChange: string | undefined
     ) => {
-        const groupDrafts = canvasDrafts.filter(
-            (cd) => cd.group_id === group.id || cd.Draft.id === draggedDraftId
-        );
         const layout = props.cardLayout();
+        const items = gridItemsFor(group);
         // Columns can grow like rows do: a drop in the growth column (or a
-        // width-exposed column) bumps gridCols, persisted with the batch.
-        const targetCell = positionToCell(
-            relX,
-            relY,
-            layout,
-            effectiveGridCols(group, layout)
+        // width-exposed column) bumps gridCols, persisted with the batch. The
+        // widest child is a floor on the persisted count too — the resolver
+        // cannot lay out a child that does not fit the columns it is given.
+        const targetCell = positionToCell(relX, relY, layout, gridColsFor(group));
+        // Two counts, deliberately: `configuredCols` is the floor persisted to
+        // metadata, `cols` the count the layout actually runs on. A wide child
+        // widens the second — it must fit — without ratcheting the first.
+        const configuredCols = Math.max(gridColsOf(group), targetCell.col + 1);
+        const cols = Math.max(
+            configuredCols,
+            maxChildSpanCols(canvasTree(), group.id, layout)
         );
-        const cols = Math.max(gridColsOf(group), targetCell.col + 1);
-        const updates = resolveGridDrop({
-            groupDrafts,
-            draggedDraftId,
+        const placements = resolveGridDrop({
+            items,
+            dragged: {
+                id: draggedDraftId,
+                kind: "card",
+                footprint: CARD_FOOTPRINT
+            },
             draggedOrigin: origin,
             dropX: relX,
             dropY: relY,
             layout,
             cols
         });
+        const updates = toPositionUpdates(placements);
         if (groupIdChange !== undefined) {
             const dragged = updates.find((u) => u.draft_id === draggedDraftId);
             if (dragged) dragged.group_id = groupIdChange;
         }
-        const rows = rowCountAfter(updates, groupDrafts, layout, cols);
+        // The dragged Card may be entering from outside, in which case it is
+        // not among the group's items yet; its footprint still has to count.
+        const projected = items.some((i) => i.id === draggedDraftId)
+            ? items
+            : [
+                  ...items,
+                  {
+                      id: draggedDraftId,
+                      kind: "card" as const,
+                      footprint: CARD_FOOTPRINT,
+                      position: { x: relX, y: relY },
+                      cell: targetCell
+                  }
+              ];
+        const rows = rowCountAfter(placements, projected, layout, cols);
         const dims = growGridDims(group, rows, cols, props.cardLayout());
-        const metadata = cols !== gridColsOf(group) ? { gridCols: cols } : undefined;
+        const metadata =
+            configuredCols !== gridColsOf(group)
+                ? { gridCols: configuredCols }
+                : undefined;
 
         for (const u of updates) {
-            setCanvasDrafts((cd) => cd.Draft.id === u.draft_id, {
+            setCanvasDrafts((cd) => cd.draft_id === u.draft_id, {
                 positionX: u.positionX,
                 positionY: u.positionY,
                 ...(u.group_id !== undefined ? { group_id: u.group_id } : {})
@@ -847,14 +901,21 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // Quantize all member cards to cells and flip the group into grid mode,
     // atomically (positions + metadata + dimensions in one request).
     const arrangeGroupAsGrid = (group: CanvasGroup, metadata: GridMetadata) => {
-        const cols = metadata.gridCols;
-        const groupDrafts = canvasDrafts.filter((cd) => cd.group_id === group.id);
-        const updates = arrangeGrid(groupDrafts, props.cardLayout(), cols);
-        const rows = rowCountAfter(updates, groupDrafts, props.cardLayout(), cols);
-        const dims = growGridDims(group, rows, cols, props.cardLayout());
+        const layout = props.cardLayout();
+        // The configured count is a floor, not a ceiling: a child wider than it
+        // still has to fit, exactly as effectiveGridCols re-derives on read.
+        const cols = Math.max(
+            metadata.gridCols,
+            maxChildSpanCols(canvasTree(), group.id, layout)
+        );
+        const items = gridItemsOf(canvasTree(), group.id, layout, cols);
+        const placements = arrangeGrid(items, layout, cols);
+        const updates = toPositionUpdates(placements);
+        const rows = rowCountAfter(placements, items, layout, cols);
+        const dims = growGridDims(group, rows, cols, layout);
 
         for (const u of updates) {
-            setCanvasDrafts((cd) => cd.Draft.id === u.draft_id, {
+            setCanvasDrafts((cd) => cd.draft_id === u.draft_id, {
                 positionX: u.positionX,
                 positionY: u.positionY
             });
@@ -907,8 +968,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const gridRowCount = (group: CanvasGroup, cols: number): number => {
-        const groupDrafts = canvasDrafts.filter((cd) => cd.group_id === group.id);
-        return arrangedRowCount(groupDrafts, props.cardLayout(), cols);
+        const layout = props.cardLayout();
+        return arrangedRowCount(
+            gridItemsOf(canvasTree(), group.id, layout, cols),
+            layout,
+            cols
+        );
     };
 
     const saveGridSettings = (settings: GridSettingsInput) => {
@@ -1543,7 +1608,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             );
             if (!data) return;
             for (const p of data.positions) {
-                setCanvasDrafts((cd) => cd.Draft.id === p.draft_id, {
+                // `draft_id` names the CanvasDraft row (the Card's placement),
+                // not the Draft — the two hold the same value today but only
+                // one of them is what the server sent.
+                setCanvasDrafts((cd) => cd.draft_id === p.draft_id, {
                     positionX: p.positionX,
                     positionY: p.positionY,
                     ...(p.group_id !== undefined ? { group_id: p.group_id } : {})
@@ -3180,9 +3248,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const placement = resolveCopyPlacement({
             draft,
             group: sourceGroup,
-            groupDrafts: sourceGroup
-                ? canvasDrafts.filter((cd) => cd.group_id === sourceGroup.id)
-                : [],
+            tree: canvasTree(),
             layout: props.cardLayout()
         });
 
@@ -3441,10 +3507,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 // Check for group hover during draft drag (always in world coords)
                 const hoverPoint = getCardCenterPoint(newWorldX, newWorldY);
                 const hoverGroup = findGroupAtPosition(hoverPoint.x, hoverPoint.y);
-                const currentGroupId =
-                    state.dragGroupId ||
-                    canvasDrafts.find((cd) => cd.Draft.id === state.activeBoxId)
-                        ?.group_id;
+                const draggedCard = canvasDrafts.find(
+                    (cd) => cd.Draft.id === state.activeBoxId
+                );
+                const currentGroupId = state.dragGroupId || draggedCard?.group_id;
 
                 if (hoverGroup && hoverGroup.id !== currentGroupId) {
                     setDragOverGroupId(hoverGroup.id);
@@ -3472,7 +3538,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         hoverGroup.id === state.dragGroupId)
                         ? hoverGroup
                         : null;
-                if (gridHoverGroup) {
+                if (gridHoverGroup && draggedCard) {
                     const layout = props.cardLayout();
                     const relX = newWorldX - gridHoverGroup.positionX;
                     const relY = newWorldY - gridHoverGroup.positionY;
@@ -3480,17 +3546,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         relX,
                         relY,
                         layout,
-                        effectiveGridCols(gridHoverGroup, layout)
+                        gridColsFor(gridHoverGroup)
                     );
-                    const cols = Math.max(gridColsOf(gridHoverGroup), targetCell.col + 1);
+                    const cols = Math.max(
+                        gridColsOf(gridHoverGroup),
+                        targetCell.col + 1,
+                        maxChildSpanCols(canvasTree(), gridHoverGroup.id, layout)
+                    );
                     const isIntraGroup = gridHoverGroup.id === state.dragGroupId;
-                    const updates = resolveGridDrop({
-                        groupDrafts: canvasDrafts.filter(
-                            (cd) =>
-                                cd.group_id === gridHoverGroup.id ||
-                                cd.Draft.id === state.activeBoxId
-                        ),
-                        draggedDraftId: state.activeBoxId,
+                    const placements = resolveGridDrop({
+                        items: gridItemsFor(gridHoverGroup),
+                        // The layout engine keys on draft_id (the Card's
+                        // PLACEMENT identity); activeBoxId is a Draft.id. Same
+                        // value today, different meanings — see step-1's
+                        // identity split.
+                        dragged: {
+                            id: draggedCard.draft_id,
+                            kind: "card",
+                            footprint: CARD_FOOTPRINT
+                        },
                         draggedOrigin: isIntraGroup
                             ? { x: state.dragOriginX, y: state.dragOriginY }
                             : null,
@@ -3499,10 +3573,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         layout,
                         cols
                     });
-                    const displaced = updates.length > 1 ? updates[1] : null;
+                    const landing = placements[0];
+                    const displaced = placements.length > 1 ? placements[1] : null;
                     setGridDropCell({
                         groupId: gridHoverGroup.id,
-                        cell: targetCell,
+                        // Read from the placement, not from targetCell: a
+                        // footprint that collides without being able to swap
+                        // lands on the nearest free rect instead, and the
+                        // overlay has to point at where it will actually go.
+                        cell: landing
+                            ? positionToCell(
+                                  landing.positionX,
+                                  landing.positionY,
+                                  layout,
+                                  cols
+                              )
+                            : targetCell,
                         isSwap: displaced !== null,
                         displacedCell: displaced
                             ? positionToCell(
@@ -3643,7 +3729,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             // Grid destination: snap/swap and derive dimensions.
                             commitGridDrop(
                                 dropGroup,
-                                finalDraft.Draft.id,
+                                finalDraft.draft_id,
                                 relativeX,
                                 relativeY,
                                 null,
@@ -3715,7 +3801,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             // relative to where the card started.
                             commitGridDrop(
                                 sameGroup,
-                                finalDraft.Draft.id,
+                                finalDraft.draft_id,
                                 finalDraft.positionX,
                                 finalDraft.positionY,
                                 { x: state.dragOriginX, y: state.dragOriginY },
@@ -4066,6 +4152,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                             null
                                         }
                                         isExitingSource={exitingGroupId() === group.id}
+                                        gridItems={
+                                            isGridGroup(group) ? gridItemsFor(group) : []
+                                        }
+                                        gridCols={gridColsFor(group)}
                                         contentMinWidth={
                                             computeMinGroupSize(group.id).minWidth
                                         }
@@ -4316,14 +4406,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         (g) => g.id === draft.group_id
                                     );
                                     if (group?.type !== "series") return undefined;
-                                    const groupDrafts = canvasDrafts
-                                        .filter((d) => d.group_id === group.id)
-                                        .sort(
-                                            (a, b) =>
-                                                (a.Draft.seriesIndex ?? 0) -
-                                                (b.Draft.seriesIndex ?? 0)
-                                        );
-                                    return groupDrafts.findIndex(
+                                    // childCardsOf carries the one series sort;
+                                    // the `seriesIndex ?? 0` copy that used to
+                                    // live here put an index-less game first,
+                                    // so the preview line anchored to the
+                                    // wrong game.
+                                    return getDraftsForGroup(group.id).findIndex(
                                         (d) => d.Draft.id === draft.Draft.id
                                     );
                                 })()}

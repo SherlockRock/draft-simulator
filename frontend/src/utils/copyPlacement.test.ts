@@ -82,7 +82,7 @@ describe("resolveCopyPlacement", () => {
         const placement = resolveCopyPlacement({
             draft: drafts[0],
             group,
-            groupDrafts: drafts,
+            tree: { groups: [group], drafts },
             layout
         });
 
@@ -104,7 +104,12 @@ describe("resolveCopyPlacement", () => {
         const draft = draftAt("a", 120, 160, group.id);
 
         expect(
-            resolveCopyPlacement({ draft, group, groupDrafts: [draft], layout })
+            resolveCopyPlacement({
+                draft,
+                group,
+                tree: { groups: [group], drafts: [draft] },
+                layout
+            })
         ).toEqual({
             positionX: 120,
             positionY: 160 + cardHeight(layout) + GRID_CELL_GAP,
@@ -124,7 +129,7 @@ describe("resolveCopyPlacement", () => {
         const placement = resolveCopyPlacement({
             draft,
             group,
-            groupDrafts: [draft],
+            tree: { groups: [group], drafts: [draft] },
             layout
         });
 
@@ -148,7 +153,14 @@ describe("resolveCopyPlacement", () => {
         const groupDrafts = [draft, firstDraft];
         const seriesDims = getSeriesGroupDimensions(groupDrafts.length, layout);
 
-        expect(resolveCopyPlacement({ draft, group, groupDrafts, layout })).toEqual({
+        expect(
+            resolveCopyPlacement({
+                draft,
+                group,
+                tree: { groups: [group], drafts: groupDrafts },
+                layout
+            })
+        ).toEqual({
             positionX: 300 + SERIES_PADDING + cardWidth(layout) + SERIES_CARD_GAP,
             positionY: 400 + seriesDims.height + GRID_CELL_GAP,
             group_id: null
@@ -159,7 +171,12 @@ describe("resolveCopyPlacement", () => {
         const draft = draftAt("a", 800, 900, null);
 
         expect(
-            resolveCopyPlacement({ draft, group: undefined, groupDrafts: [], layout })
+            resolveCopyPlacement({
+                draft,
+                group: undefined,
+                tree: { groups: [], drafts: [draft] },
+                layout
+            })
         ).toEqual({
             positionX: 800,
             positionY: 900 + cardHeight(layout) + GRID_CELL_GAP,

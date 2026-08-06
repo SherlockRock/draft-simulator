@@ -8,13 +8,16 @@ import {
     SERIES_PADDING
 } from "./helpers";
 import {
+    CARD_FOOTPRINT,
     cellToPosition,
-    firstEmptyCell,
+    firstEmptyRect,
     GRID_CELL_GAP,
     gridColsOf,
     growGridDims,
-    rowCountAfter
+    rowCountAfter,
+    type GridItem
 } from "./gridLayout";
+import { childCardsOf, gridItemsOf, type CanvasTree } from "./canvasTree";
 
 const GROUP_PADDING = 16;
 
@@ -33,23 +36,35 @@ const growsGroup = (
     dims: { width: number; height: number }
 ): boolean => dims.width > (group.width ?? 0) || dims.height > (group.height ?? 0);
 
+/**
+ * Takes the whole tree rather than a pre-filtered `groupDrafts` because both
+ * branches that need children need them shaped differently — the grid branch
+ * wants footprint stamps, the series branch wants play order — and both are
+ * `canvasTree`'s job (design §7). The two callers were each hand-writing
+ * `drafts.filter((d) => d.group_id === group.id)`, which is the query that had
+ * already drifted three ways.
+ */
 export const resolveCopyPlacement = (args: {
     draft: CanvasDraft;
     group: CanvasGroup | undefined;
-    groupDrafts: CanvasDraft[];
+    tree: CanvasTree;
     layout: CardLayout;
 }): CopyPlacement => {
-    const { draft, group, groupDrafts, layout } = args;
+    const { draft, group, tree, layout } = args;
 
     if (group?.type === "custom" && group.metadata.layout === "grid") {
         const cols = gridColsOf(group);
-        const cell = firstEmptyCell(groupDrafts, layout, cols);
+        const items = gridItemsOf(tree, group.id, layout, cols);
+        const cell = firstEmptyRect(items, CARD_FOOTPRINT, cols);
         const position = cellToPosition(cell, layout);
-        const projected = [
-            ...groupDrafts,
-            { ...draft, positionX: position.x, positionY: position.y }
-        ];
-        const rows = rowCountAfter([], projected, layout, cols);
+        const copy: GridItem = {
+            id: `${draft.draft_id}-copy`,
+            kind: "card",
+            footprint: CARD_FOOTPRINT,
+            position: { x: position.x, y: position.y },
+            cell
+        };
+        const rows = rowCountAfter([], [...items, copy], layout, cols);
         const dims = growGridDims(group, rows, cols, layout);
         return {
             positionX: position.x,
@@ -83,14 +98,16 @@ export const resolveCopyPlacement = (args: {
     }
 
     if (group?.type === "series") {
-        const sortedDrafts = [...groupDrafts].sort(
-            (a, b) => (a.Draft.seriesIndex ?? 0) - (b.Draft.seriesIndex ?? 0)
-        );
+        // `childCardsOf` sorts a series into play order, which puts an
+        // index-less game LAST — this file carried a fifth copy of the
+        // `seriesIndex ?? 0` comparator that sorted it first, so a copy of a
+        // game in such a series landed under the wrong slot.
+        const sortedDrafts = childCardsOf(tree, group.id);
         const draftIndex = sortedDrafts.findIndex(
             (groupDraft) => groupDraft.Draft.id === draft.Draft.id
         );
         const sourceIndex = Math.max(0, draftIndex);
-        const seriesDims = getSeriesGroupDimensions(groupDrafts.length, layout);
+        const seriesDims = getSeriesGroupDimensions(sortedDrafts.length, layout);
         return {
             positionX:
                 group.positionX +
