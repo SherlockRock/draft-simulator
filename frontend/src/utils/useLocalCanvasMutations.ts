@@ -8,6 +8,7 @@ import type {
     GameType
 } from "@draft-sim/shared-types";
 import { getManualSeriesGameDefaults } from "./manualSeriesDefaults";
+import { SERIES_HEADER_HEIGHT, SERIES_PADDING } from "./helpers";
 
 // Helper to safely cast anchor type with default
 const toAnchorType = (
@@ -61,6 +62,7 @@ export const localNewDraft = (data: {
     return mutateLocal((canvas) => {
         const draftId = crypto.randomUUID();
         const newDraft: CanvasDraft = {
+            draft_id: draftId,
             positionX: data.positionX,
             positionY: data.positionY,
             group_id: data.group_id ?? null,
@@ -133,6 +135,7 @@ export const localCopyDraft = (
 
         const newDraftId = crypto.randomUUID();
         const newDraft: CanvasDraft = {
+            draft_id: newDraftId,
             positionX: placement
                 ? placement.positionX
                 : originalDraft.positionX + COPY_OFFSET,
@@ -442,12 +445,21 @@ export const localConvertGroupToSeries = (data: {
         }
 
         const lastDraft = groupDrafts[Math.min(groupDrafts.length, data.length) - 1];
-        const startX = lastDraft ? lastDraft.positionX + 380 : group.positionX + 24;
-        const startY = lastDraft ? lastDraft.positionY : group.positionY + 64;
+        // Cards are stored relative to their immediate container, so both
+        // branches must be container-relative. The empty-group branch used to
+        // add group.positionX/Y — a world coordinate. Series rendering ignores
+        // these stored values (it lays games out from seriesIndex), so the only
+        // symptom was on ungroup, where the Card jumped by the group's position.
+        // The seed matches the series layout in helpers.ts.
+        const startX = lastDraft ? lastDraft.positionX + 380 : SERIES_PADDING;
+        const startY = lastDraft
+            ? lastDraft.positionY
+            : SERIES_HEADER_HEIGHT + SERIES_PADDING;
 
         for (let i = groupDrafts.length; i < data.length; i += 1) {
             const draftId = crypto.randomUUID();
             canvas.drafts.push({
+                draft_id: draftId,
                 positionX: startX + (i - groupDrafts.length) * 380,
                 positionY: startY,
                 group_id: data.groupId,

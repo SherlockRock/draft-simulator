@@ -47,6 +47,25 @@ _History_: MCTS also supported warm-restart via napi `applyPick` (ADR-0005) and 
 **Canvas** (DB: `Canvas`):
 A collaborative workspace holding **Drafts** (via `CanvasDraft` placements), groups, and connections. Per-user access via `UserCanvas` with permission levels `view` / `edit` / `admin`.
 
+**Card** (DB: `CanvasDraft`):
+One **Draft** placed on one **Canvas**, carrying its position and its display-only team labels.
+_Avoid_: "canvas draft" in prose (it is the table name, not the thing on screen); "box" (survives in older handler names like `onBoxMouseDown`).
+
+**Canvas Group** (DB: `CanvasGroup`):
+A titled frame on a **Canvas** that contains **Cards** and, when `type` is `custom`, other **Canvas Groups**.
+- `custom` — general container; may hold Groups and Cards.
+- `series` — **leaf container**, bound to a `VersusDraft`; holds only its game Cards, ordered by `seriesIndex`, and can never contain a Group.
+
+Container capability is exactly `type === 'custom'`; there is no separate nesting type.
+_Avoid_: **"Folder"**. See Flagged ambiguities.
+
+**Footprint**:
+The integer cell rectangle a node occupies inside a grid **Canvas Group** — `1×1` for a Card, and for anything larger derived from its rendered size (`ceil(w / cellWidth) × ceil(h / cellHeight)`). One rule, no per-type special case: series chrome and grid chrome use different constants, so an N-game Series is `2 × (N+1)` cells, never `1×N`.
+
+**Game Type** (`CanvasGroup.metadata.gameType`):
+What a **Canvas Group**'s games are — `scrim` / `official` / `scratch`, or absent meaning untagged. Decides whether its Cards count toward a Team's canvas record. Resolution stops at a Card's *immediate* Group and never walks ancestors.
+_Avoid_: "competitive" for this concept — `VersusDraft.competitive` is the adjacent but distinct ruleset-lockdown flag.
+
 **Canvas Mutation Gate** (planned module, design settled 2026-07-01):
 The single seam for "may this actor change this Canvas-related thing, and apply it if so." Two mutation classes behind one interface:
 - _Persisted mutations_ (picks, rename, positions-at-drag-end, group settings) — run the full pipeline: authorize → validate (lock, disabled champions, series restrictions) → persist → broadcast.
@@ -63,9 +82,13 @@ _Known quirk (kept, documented)_: draft-pick permission is "edit on **any** canv
 - One **Navigator Draft** has many **Navigator Events** and many **Navigator Snapshots**.
 - At any moment a Series has *at most one* live **Compute** (in-memory, not in DB).
 - A **Compute** is *for* one **Navigator Draft** at a time; switching drafts within a Series supersedes.
+- One **Canvas** has many **Cards** and many **Canvas Groups**.
+- One **Card** belongs to at most one **Canvas Group** (its immediate container).
+- One `custom` **Canvas Group** may contain many **Canvas Groups** and many **Cards**; a `series` Group contains only **Cards**.
 
 ## Flagged ambiguities
 
+- **"folder"**: rejected 2026-08-04. The recursive-nesting design used it for "a custom **Canvas Group** that contains child Groups", but every custom Group contains something, so the word distinguished nothing — the design itself called it "a description, not a schema type". It also implies drill-in navigation, which that design explicitly rejects (nesting renders inline as frames on one infinite canvas). Canonical: a **Canvas Group** can contain **Canvas Groups**. The UI already says "Group" throughout ("Create Group", "Drafts & Groups") and does not change.
 - **"session"**: overloaded across two layers — (1) `NavigatorSession` DB model = the Series, (2) "sessionId" in socket events / `activeTokens` map = the Series id. Canonical: call the DB row a **Navigator Series**, call the in-memory αβ search a **Compute**. (A third sense, the napi `NavigatorSession` struct, existed under MCTS and was removed 2026-06.)
 
 ## Example dialogue

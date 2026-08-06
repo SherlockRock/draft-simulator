@@ -30,10 +30,12 @@ const LAYOUTS: CardLayout[] = [
     "draft-order"
 ];
 
-// Minimal CanvasDraft factory - only fields the grid math reads. NOTE:
-// frontend CanvasDraft has NO top-level draft_id/id; identity is Draft.id.
+// Minimal CanvasDraft factory - only fields the grid math reads. NOTE: the
+// grid math keys off Draft.id, not the top-level draft_id (they hold the same
+// value; draft_id exists for the store's keyed reconcile).
 function draftAt(id: string, x: number, y: number): CanvasDraft {
     return {
+        draft_id: id,
         positionX: x,
         positionY: y,
         is_locked: false,
@@ -193,6 +195,24 @@ describe("arrangeGrid", () => {
         );
         expect(cells).toContainEqual({ row: 0, col: 0 });
         expect(cells).toContainEqual({ row: 0, col: 1 });
+    });
+
+    // Converting an EMPTY group to grid is a real user action ("Arrange as
+    // grid" on a group with no cards), and it produces no position updates at
+    // all — the whole request is carried by the group's dims + metadata. The
+    // backend guard used to reject that as "positions must be a non-empty
+    // array", so the conversion silently failed to persist behind an
+    // optimistic store write.
+    it("returns no updates for an empty group, leaving the group to carry the work", () => {
+        const updates = arrangeGrid([], "wide", 3);
+        expect(updates).toEqual([]);
+
+        const rows = rowCountAfter(updates, [], "wide", 3);
+        expect(rows).toBe(1);
+
+        const dims = gridDimensions(rows, 3, "wide");
+        expect(dims.width).toBeGreaterThan(0);
+        expect(dims.height).toBeGreaterThan(0);
     });
 
     it("assigns every draft a unique cell", () => {

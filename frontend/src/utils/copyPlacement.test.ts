@@ -21,6 +21,7 @@ function draftAt(
     seriesIndex?: number
 ): CanvasDraft {
     return {
+        draft_id: id,
         positionX,
         positionY,
         group_id: groupId,
