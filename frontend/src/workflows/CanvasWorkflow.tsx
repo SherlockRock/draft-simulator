@@ -54,7 +54,7 @@ import {
     parseDraftMode
 } from "../utils/groupRestrictions";
 import type { RestrictionGroup } from "../components/ChampionPanel";
-import { cardWidth, SERIES_CARD_GAP, SERIES_PADDING } from "../utils/helpers";
+import { getDraftWorldPosition } from "../utils/canvasWorldPosition";
 import { resolveCopyPlacement } from "../utils/copyPlacement";
 
 const ChampionStrip: Component<{
@@ -503,26 +503,13 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         const drafts = (canvas()?.drafts ?? []) as CanvasDraft[];
         const group = draft.group_id ? groups.find((g) => g.id === draft.group_id) : null;
 
-        if (group && group.type === "custom") {
-            callback(
-                group.positionX + draft.positionX,
-                group.positionY + draft.positionY
-            );
-        } else if (group && group.type === "series") {
-            // Series groups position drafts horizontally
-            const groupDrafts = drafts.filter((cd) => cd.group_id === group.id);
-            const sortedDrafts = [...groupDrafts].sort(
-                (a, b) => (a.Draft.seriesIndex ?? 0) - (b.Draft.seriesIndex ?? 0)
-            );
-            const draftIndex = sortedDrafts.findIndex(
-                (cd) => cd.Draft.id === draft.Draft.id
-            );
-            const cw = cardWidth(cardLayout());
-            const offsetX = SERIES_PADDING + draftIndex * (cw + SERIES_CARD_GAP);
-            callback(group.positionX + offsetX, group.positionY);
-        } else {
-            callback(draft.positionX, draft.positionY);
-        }
+        const target = getDraftWorldPosition(
+            draft,
+            group,
+            group ? drafts.filter((cd) => cd.group_id === group.id) : [],
+            cardLayout()
+        );
+        callback(target.x, target.y);
     };
 
     const handleSidebarDraftCopy = (draft: CanvasDraft) => {
@@ -947,36 +934,15 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                                                 index
                                                                             ) => {
                                                                                 const getNavPosition =
-                                                                                    () => {
-                                                                                        if (
-                                                                                            group.type ===
-                                                                                            "custom"
-                                                                                        ) {
-                                                                                            return {
-                                                                                                x:
-                                                                                                    group.positionX +
-                                                                                                    canvasDraft.positionX,
-                                                                                                y:
-                                                                                                    group.positionY +
-                                                                                                    canvasDraft.positionY
-                                                                                            };
-                                                                                        }
-                                                                                        const cw =
-                                                                                            cardWidth(
-                                                                                                cardLayout()
-                                                                                            );
-                                                                                        const offsetX =
-                                                                                            SERIES_PADDING +
-                                                                                            index() *
-                                                                                                (cw +
-                                                                                                    SERIES_CARD_GAP);
-                                                                                        return {
-                                                                                            x:
-                                                                                                group.positionX +
-                                                                                                offsetX,
-                                                                                            y: group.positionY
-                                                                                        };
-                                                                                    };
+                                                                                    () =>
+                                                                                        getDraftWorldPosition(
+                                                                                            canvasDraft,
+                                                                                            group,
+                                                                                            getDraftsForGroup(
+                                                                                                group.id
+                                                                                            ),
+                                                                                            cardLayout()
+                                                                                        );
 
                                                                                 const isLast =
                                                                                     () =>

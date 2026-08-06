@@ -25,6 +25,7 @@ const makeGroup = (
 });
 
 const makeDraft = (id: string, group_id: string | null = null): CanvasDraft => ({
+    draft_id: id,
     positionX: 0,
     positionY: 0,
     group_id,

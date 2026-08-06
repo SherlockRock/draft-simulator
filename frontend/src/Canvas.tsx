@@ -75,7 +75,8 @@ import {
     ConnectionPreview,
     GroupConnectionPreview
 } from "./components/Connections";
-import { cardHeight, cardWidth, SERIES_CARD_GAP, SERIES_PADDING } from "./utils/helpers";
+import { cardHeight, cardWidth } from "./utils/helpers";
+import { getDraftWorldPosition as draftWorldPosition } from "./utils/canvasWorldPosition";
 import {
     localNewDraft,
     localEditDraft,
@@ -536,28 +537,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const group = draft.group_id
             ? canvasGroups.find((g) => g.id === draft.group_id)
             : null;
-        if (group && group.type === "custom") {
-            return {
-                x: group.positionX + draft.positionX,
-                y: group.positionY + draft.positionY
-            };
-        }
-        if (group && group.type === "series") {
-            const groupDrafts = canvasDrafts.filter((cd) => cd.group_id === group.id);
-            const sortedDrafts = [...groupDrafts].sort(
-                (a, b) => (a.Draft.seriesIndex ?? 0) - (b.Draft.seriesIndex ?? 0)
-            );
-            const draftIndex = Math.max(
-                0,
-                sortedDrafts.findIndex((cd) => cd.Draft.id === draft.Draft.id)
-            );
-            const cw = cardWidth(props.cardLayout());
-            return {
-                x: group.positionX + SERIES_PADDING + draftIndex * (cw + SERIES_CARD_GAP),
-                y: group.positionY
-            };
-        }
-        return { x: draft.positionX, y: draft.positionY };
+        return draftWorldPosition(
+            draft,
+            group,
+            group ? canvasDrafts.filter((cd) => cd.group_id === group.id) : [],
+            props.cardLayout()
+        );
     };
 
     const [searchOpen, setSearchOpen] = createSignal(false);
@@ -712,6 +697,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         onMutate: (variables) => {
             const tempId = `temp-${Date.now()}`;
             const tempDraft: CanvasDraft = {
+                draft_id: tempId,
                 positionX: variables.positionX,
                 positionY: variables.positionY,
                 group_id: variables.group_id ?? null,
@@ -1472,10 +1458,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 // references for every draft/group, so it destroys and recreates
                 // every series row + container — including the swap button that
                 // may be under the cursor — which leaves its :hover/cursor stale
-                // until the next real mousemove. CanvasDraft has no top-level id
-                // (its id is nested at `Draft.id`), so reconcile positionally
-                // (`key: null`); CanvasGroup has a stable top-level `id`.
-                setCanvasDrafts(reconcile(data.drafts, { key: null }));
+                // until the next real mousemove. Both arrays key on a stable
+                // top-level id: `draft_id` for Cards, `id` for Groups. Keying
+                // Cards positionally used to bind the wrong Card to retained DOM
+                // whenever the server returned them in a different order — the
+                // payload has no ORDER BY, so any drag's UPDATE can reorder it.
+                setCanvasDrafts(reconcile(data.drafts, { key: "draft_id" }));
                 setConnections(data.connections);
                 setCanvasGroups(reconcile(data.groups ?? [], { key: "id" }));
                 canvasContext.mutateCanvas((prev: CanvasResposnse | undefined) => {

@@ -36,6 +36,28 @@ const MIN_SERIES_LENGTH = 1;
 const MAX_SERIES_LENGTH = 7;
 const VALID_DRAFT_MODES = new Set(["standard", "fearless", "ironman"]);
 
+// Series chrome, mirroring SERIES_PADDING / SERIES_HEADER_HEIGHT in
+// frontend/src/utils/helpers.ts. A Card's positionX/Y are relative to its
+// immediate container, so the first game of a brand-new series seeds at the
+// series' own padding — NOT at the group's world position, which is what the
+// three series-creation paths below used to add on top of it.
+const SERIES_PADDING = 20;
+const SERIES_HEADER_HEIGHT = 56;
+const SERIES_GAME_STEP = 380;
+
+// Where the next game Card goes, given the last one already placed (if any).
+// Both coordinates stay container-relative in either branch.
+function nextSeriesCardOrigin(lastCanvasDraft) {
+  return {
+    x: lastCanvasDraft
+      ? lastCanvasDraft.positionX + SERIES_GAME_STEP
+      : SERIES_PADDING,
+    y: lastCanvasDraft
+      ? lastCanvasDraft.positionY
+      : SERIES_HEADER_HEIGHT + SERIES_PADDING,
+  };
+}
+
 // A canvas series is a real VersusDraft row (origin "manual"), and the only FK
 // between them runs CanvasGroups.versus_draft_id -> VersusDrafts with SET NULL.
 // Nothing in the database ever deletes the series, so every path that removes a
@@ -247,8 +269,7 @@ async function syncManualSeriesLength({
       transaction,
     });
     const lastDraft = groupDrafts[groupDrafts.length - 1];
-    const startX = lastDraft ? lastDraft.positionX + 380 : group.positionX + 24;
-    const startY = lastDraft ? lastDraft.positionY : group.positionY + 64;
+    const { x: startX, y: startY } = nextSeriesCardOrigin(lastDraft);
 
     for (let i = currentLength; i < targetLength; i += 1) {
       const draft = await Draft.create(
@@ -269,7 +290,7 @@ async function syncManualSeriesLength({
         {
           canvas_id: canvasId,
           draft_id: draft.id,
-          positionX: startX + (i - currentLength) * 380,
+          positionX: startX + (i - currentLength) * SERIES_GAME_STEP,
           positionY: startY,
           is_locked: false,
           group_id: group.id,
@@ -548,27 +569,52 @@ router.put("/:canvasId/draft-positions", protect, async (req, res) => {
   let t;
   try {
     const { canvasId } = req.params;
-    const { positions, group } = req.body;
+    const { group } = req.body;
 
     await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
 
-    const validPositions =
-      Array.isArray(positions) &&
-      positions.length > 0 &&
-      positions.every(
-        (p) =>
-          p &&
-          typeof p.draft_id === "string" &&
-          typeof p.positionX === "number" &&
-          typeof p.positionY === "number" &&
-          (p.group_id === undefined ||
-            p.group_id === null ||
-            typeof p.group_id === "string"),
-      );
+    // Normalize before validating: the loop below iterates `positions`
+    // unconditionally, so an omitted array must become [] here or it throws a
+    // 500 instead of returning a 400.
+    const rawPositions = req.body.positions;
+    if (rawPositions !== undefined && !Array.isArray(rawPositions)) {
+      return res.status(400).json({
+        error: "positions must be an array of {draft_id, positionX, positionY}",
+      });
+    }
+    const positions = rawPositions ?? [];
+
+    const validPositions = positions.every(
+      (p) =>
+        p &&
+        typeof p.draft_id === "string" &&
+        typeof p.positionX === "number" &&
+        typeof p.positionY === "number" &&
+        (p.group_id === undefined ||
+          p.group_id === null ||
+          typeof p.group_id === "string"),
+    );
     if (!validPositions) {
       return res.status(400).json({
+        error: "positions must be an array of {draft_id, positionX, positionY}",
+      });
+    }
+
+    // Emptiness is validated separately from shape: an empty group has no
+    // cards to place, so "Arrange as grid" legitimately sends positions: []
+    // with only the group's layout/dimensions. Requiring a non-empty
+    // positions array 400d that case.
+    const groupCarriesWork =
+      group &&
+      typeof group === "object" &&
+      typeof group.id === "string" &&
+      (typeof group.width === "number" ||
+        typeof group.height === "number" ||
+        (group.metadata && typeof group.metadata === "object"));
+    if (positions.length === 0 && !groupCarriesWork) {
+      return res.status(400).json({
         error:
-          "positions must be a non-empty array of {draft_id, positionX, positionY}",
+          "Nothing to update: provide positions, or a group with width/height/metadata",
       });
     }
 
@@ -1107,8 +1153,10 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
         {
           canvas_id: canvasId,
           draft_id: draft.id,
-          positionX: (positionX ?? 50) + i * 380, // Horizontal layout with spacing
-          positionY: positionY ?? 50,
+          // Container-relative, like every other Card: the group already
+          // carries the world position these used to add a second time.
+          positionX: SERIES_PADDING + i * SERIES_GAME_STEP,
+          positionY: SERIES_HEADER_HEIGHT + SERIES_PADDING,
           is_locked: true,
           group_id: group.id,
           source_type: "versus",
@@ -1286,12 +1334,7 @@ router.post(
       }
 
       const lastCanvasDraft = existingToConvert[existingToConvert.length - 1];
-      const startX = lastCanvasDraft
-        ? lastCanvasDraft.positionX + 380
-        : group.positionX + 24;
-      const startY = lastCanvasDraft
-        ? lastCanvasDraft.positionY
-        : group.positionY + 64;
+      const { x: startX, y: startY } = nextSeriesCardOrigin(lastCanvasDraft);
 
       for (let i = existingToConvert.length; i < data.length; i += 1) {
         const draft = await Draft.create(
@@ -1312,7 +1355,7 @@ router.post(
           {
             canvas_id: canvasId,
             draft_id: draft.id,
-            positionX: startX + (i - existingToConvert.length) * 380,
+            positionX: startX + (i - existingToConvert.length) * SERIES_GAME_STEP,
             positionY: startY,
             is_locked: false,
             group_id: groupId,

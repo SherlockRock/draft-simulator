@@ -67,6 +67,10 @@ export const CanvasDraftInnerSchema = z.object({
 });
 
 export const CanvasDraftSchema = z.object({
+  // Stable wire identity for a Card. Required: clients key their reconcile on
+  // it, and a missing value would silently key every Card on `undefined` —
+  // worse than the positional reconcile it replaces.
+  draft_id: z.string(),
   positionX: z.number(),
   positionY: z.number(),
   is_locked: z.boolean().optional(),

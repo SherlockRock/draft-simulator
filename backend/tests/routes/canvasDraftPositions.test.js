@@ -83,6 +83,82 @@ describe("PUT /:canvasId/draft-positions", () => {
     expect(res.status).toBe(400);
   });
 
+  // An empty group has no cards to quantize, so "Arrange as grid" sends
+  // positions: [] with a real group. The old non-empty guard 400d it, and the
+  // optimistic store write made it look like it worked until a reload.
+  it("accepts empty positions when the group carries the work", async () => {
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
+    mockTransaction();
+    const update = vi.spyOn(CanvasDraft, "update").mockResolvedValue([1]);
+    const groupRow = {
+      id: "g1",
+      metadata: { layout: "free" },
+      update: vi.fn().mockResolvedValue(undefined),
+      toJSON: () => ({ id: "g1", metadata: { layout: "grid" } }),
+    };
+    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(groupRow);
+
+    const res = await request(buildApp())
+      .put("/api/canvas/c1/draft-positions")
+      .send({
+        positions: [],
+        group: {
+          id: "g1",
+          width: 1200,
+          height: 800,
+          metadata: { layout: "grid", gridCols: 3 },
+        },
+      });
+
+    expect(res.status).toBe(200);
+    expect(update).not.toHaveBeenCalled();
+    expect(groupRow.update).toHaveBeenCalled();
+    expect(socketService.emitToRoom).toHaveBeenCalledWith(
+      "c1",
+      "draftPositionsUpdated",
+      expect.objectContaining({
+        positions: [],
+        group: { id: "g1", metadata: { layout: "grid" } },
+      })
+    );
+  });
+
+  // Relaxing the boolean guard alone would let an omitted array reach the
+  // `for (const p of positions)` loop and 500 instead of 400.
+  it("400s rather than 500s when positions is omitted and no group is sent", async () => {
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
+    const transaction = vi.spyOn(Canvas.sequelize, "transaction");
+
+    const res = await request(buildApp())
+      .put("/api/canvas/c1/draft-positions")
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it("400s when positions is empty and the group carries no updatable props", async () => {
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
+    const transaction = vi.spyOn(Canvas.sequelize, "transaction");
+
+    const res = await request(buildApp())
+      .put("/api/canvas/c1/draft-positions")
+      .send({ positions: [], group: { id: "g1" } });
+
+    expect(res.status).toBe(400);
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it("400s when positions is not an array", async () => {
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
+
+    const res = await request(buildApp())
+      .put("/api/canvas/c1/draft-positions")
+      .send({ positions: "nope", group: { id: "g1", width: 100 } });
+
+    expect(res.status).toBe(400);
+  });
+
   it("updates every draft in one transaction and emits draftPositionsUpdated", async () => {
     vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
     const t = mockTransaction();

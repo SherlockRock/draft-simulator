@@ -6,6 +6,7 @@ const makeCard = (
     overrides: Partial<CanvasDraft> = {},
     blueSideTeam: 1 | 2 = 1
 ): CanvasDraft => ({
+    draft_id: "d1",
     positionX: 0,
     positionY: 0,
     group_id: null,

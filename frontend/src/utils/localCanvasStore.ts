@@ -26,7 +26,12 @@ export const getLocalCanvas = (): LocalCanvas | null => {
             description: parsed.description ?? "",
             icon: parsed.icon ?? "",
             cardLayout: parsed.cardLayout ?? "vertical",
-            drafts: parsed.drafts ?? [],
+            // Canvases saved before Cards carried a top-level draft_id have to
+            // be backfilled on read: the store reconciles keyed on draft_id, and
+            // a legacy Card would key on `undefined`.
+            drafts: (parsed.drafts ?? []).map((d) =>
+                d.draft_id ? d : { ...d, draft_id: d.Draft.id }
+            ),
             connections: parsed.connections ?? [],
             groups: parsed.groups ?? [],
             viewport: parsed.viewport ?? { x: 0, y: 0, zoom: 1 },

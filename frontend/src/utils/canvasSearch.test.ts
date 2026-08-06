@@ -41,6 +41,7 @@ const makeDraft = (
 ): CanvasDraft => {
     const { group_id, ...inner } = extra;
     return {
+        draft_id: id,
         positionX: 0,
         positionY: 0,
         group_id: group_id ?? null,

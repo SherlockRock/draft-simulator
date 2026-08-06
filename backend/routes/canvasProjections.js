@@ -5,6 +5,13 @@
 // every client's series team names reverted to base orientation on any
 // non-rename draft edit. Add a field here, not at a call site.
 const CANVAS_DRAFT_ATTRIBUTES = [
+  // The Card's stable wire identity. Clients reconcile canvasDrafts keyed on
+  // this; without it the store reconciles positionally, and since this payload
+  // has no ORDER BY (Postgres gives no order guarantee on an unordered SELECT,
+  // and any drag's UPDATE can relocate a heap row) the wrong Card gets bound to
+  // retained DOM — hover, inline edit and open pickers follow array position
+  // instead of Draft identity.
+  "draft_id",
   "positionX",
   "positionY",
   "is_locked",
