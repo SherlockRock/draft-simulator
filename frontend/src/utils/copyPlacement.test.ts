@@ -45,6 +45,8 @@ function groupWith(args: {
     height?: number | null;
     layout?: "free" | "grid";
     gridCols?: number;
+    manualWidth?: number;
+    manualHeight?: number;
 }): CanvasGroup {
     return {
         id: args.id,
@@ -57,7 +59,9 @@ function groupWith(args: {
         height: args.height,
         metadata: {
             layout: args.layout,
-            gridCols: args.gridCols
+            gridCols: args.gridCols,
+            manualWidth: args.manualWidth,
+            manualHeight: args.manualHeight
         }
     };
 }
@@ -94,12 +98,17 @@ describe("resolveCopyPlacement", () => {
     });
 
     it("keeps free-layout copies in the same group directly below the source", () => {
+        // The manual floor is what "the user made this group 1000x1200" looks
+        // like since 5a-0 — without it the copy would resolve the group DOWN to
+        // its content bounds, which is the point of the slice.
         const group = groupWith({
             id: "g1",
             type: "custom",
             width: 1000,
             height: 1200,
-            layout: "free"
+            layout: "free",
+            manualWidth: 1000,
+            manualHeight: 1200
         });
         const draft = draftAt("a", 120, 160, group.id);
 
@@ -123,7 +132,9 @@ describe("resolveCopyPlacement", () => {
             type: "custom",
             width: 450,
             height: 500,
-            layout: "free"
+            layout: "free",
+            manualWidth: 450,
+            manualHeight: 500
         });
         const draft = draftAt("a", 40, 40, group.id);
         const placement = resolveCopyPlacement({
@@ -136,6 +147,31 @@ describe("resolveCopyPlacement", () => {
         expect(placement.group_id).toBe(group.id);
         expect(placement.groupDims).toEqual({
             width: 450,
+            height: 40 + cardHeight(layout) + GRID_CELL_GAP + cardHeight(layout) + 16
+        });
+    });
+
+    it("shrinks a free-layout group the user never resized back to its contents", () => {
+        // The 5a-0 ratchet removal, from the copy surface: `growsGroup` used to
+        // suppress any dimension that was not larger, leaving a container stuck
+        // at whatever an earlier auto-grow had made it.
+        const group = groupWith({
+            id: "g1",
+            type: "custom",
+            width: 4000,
+            height: 4000,
+            layout: "free"
+        });
+        const draft = draftAt("a", 40, 40, group.id);
+        const placement = resolveCopyPlacement({
+            draft,
+            group,
+            tree: { groups: [group], drafts: [draft] },
+            layout
+        });
+
+        expect(placement.groupDims).toEqual({
+            width: 40 + cardWidth(layout) + 16,
             height: 40 + cardHeight(layout) + GRID_CELL_GAP + cardHeight(layout) + 16
         });
     });

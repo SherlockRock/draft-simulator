@@ -107,6 +107,15 @@ export const CanvasGroupMetadataSchema = z.object({
   gridCols: z.number().int().min(1).optional(),
   rowLabels: z.array(z.string()).optional(),
   colLabels: z.array(z.string()).optional(),
+  // The size the user last set by HAND-resizing this container; absent means
+  // they never have. Design §6: "manual resize sets a floor >= the auto-widen
+  // floor; never narrower." The stored `width`/`height` stay the rendered size
+  // and are re-derived on every sizing path as max(manual floor, content) —
+  // which is what lets a container SHRINK when its contents leave. Without a
+  // stored floor the only available rule is max(current, content), and that
+  // can never shrink (the ratchet 5a-0 removes).
+  manualWidth: z.number().optional(),
+  manualHeight: z.number().optional(),
   // `.catch(undefined)` is load-bearing (design §5): the whole canvas payload is
   // parsed through CanvasResponseSchema (actions.ts) and apiClient throws a
   // ValidationError on failure, so one unexpected string would take down the

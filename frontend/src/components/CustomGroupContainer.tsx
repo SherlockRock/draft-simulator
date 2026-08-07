@@ -18,7 +18,11 @@ import {
     GridCell,
     GridItem,
     isGridGroup,
-    cellToPosition
+    cellToPosition,
+    MIN_GROUP_WIDTH,
+    MIN_GROUP_HEIGHT,
+    DEFAULT_GROUP_WIDTH,
+    DEFAULT_GROUP_HEIGHT
 } from "../utils/gridLayout";
 import { cardWidth, cardHeight } from "../utils/helpers";
 import type { CardLayout } from "../utils/canvasCardLayout";
@@ -80,8 +84,10 @@ type CustomGroupContainerProps = {
     children: JSX.Element;
 };
 
-const MIN_WIDTH = 200;
-const MIN_HEIGHT = 150;
+// The resize clamp and the sizing rule must agree, or a container could be
+// auto-sized below the smallest size the user can drag it back to (5a-0).
+const MIN_WIDTH = MIN_GROUP_WIDTH;
+const MIN_HEIGHT = MIN_GROUP_HEIGHT;
 export const CUSTOM_GROUP_HEADER_HEIGHT = GRID_HEADER_HEIGHT;
 const HEADER_HEIGHT = CUSTOM_GROUP_HEADER_HEIGHT;
 const PADDING = 16;
@@ -100,8 +106,8 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         }
     });
 
-    const groupWidth = () => localWidth() ?? props.group.width ?? 400;
-    const groupHeight = () => localHeight() ?? props.group.height ?? 200;
+    const groupWidth = () => localWidth() ?? props.group.width ?? DEFAULT_GROUP_WIDTH;
+    const groupHeight = () => localHeight() ?? props.group.height ?? DEFAULT_GROUP_HEIGHT;
 
     const handleNameClick = () => {
         if (!props.canEdit()) return;

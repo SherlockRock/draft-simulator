@@ -140,7 +140,11 @@ import {
     rowCountAfter,
     positionToCell,
     effectiveGridCols,
-    growGridDims,
+    resolveGridDims,
+    resolveContainerDims,
+    contentBoundsOf,
+    DEFAULT_GROUP_WIDTH,
+    DEFAULT_GROUP_HEIGHT,
     resolveGridSave,
     arrangedRowCount,
     toPositionUpdates,
@@ -865,7 +869,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                   }
               ];
         const rows = rowCountAfter(placements, projected, layout, cols);
-        const dims = growGridDims(group, rows, cols, props.cardLayout());
+        const dims = resolveGridDims(group, rows, cols, props.cardLayout());
         const metadata =
             configuredCols !== gridColsOf(group)
                 ? { gridCols: configuredCols }
@@ -912,7 +916,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const placements = arrangeGrid(items, layout, cols);
         const updates = toPositionUpdates(placements);
         const rows = rowCountAfter(placements, items, layout, cols);
-        const dims = growGridDims(group, rows, cols, layout);
+        const dims = resolveGridDims(group, rows, cols, layout);
 
         for (const u of updates) {
             setCanvasDrafts((cd) => cd.draft_id === u.draft_id, {
@@ -1052,6 +1056,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             setCanvasDrafts(canvasDrafts.filter((d) => d.Draft.id !== variables.draft));
             setIsDeleteDialogOpen(false);
             setDraftToDelete(null);
+            // After the store write, so the container is measured without it.
+            if (removedDraft?.group_id) resyncGroupSize(removedDraft.group_id);
             return { removedDraft };
         },
         onSuccess: () => {
@@ -2936,8 +2942,21 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             ? canvasDrafts.filter((draft) => draft.group_id === groupId)
             : [];
 
+        // The ONLY writer of the manual floor (5a-0). Every other sizing path
+        // derives `width`/`height` as max(floor, content), so if any of them
+        // also wrote the floor, an auto-grow would be indistinguishable from a
+        // deliberate resize and the ratchet would come straight back.
+        const metadata = { manualWidth: width, manualHeight: height };
+        setCanvasGroups(
+            (g) => g.id === groupId,
+            (g) => ({
+                ...g,
+                metadata: { ...g.metadata, ...metadata }
+            })
+        );
+
         if (isLocalMode()) {
-            localUpdateGroup({ groupId, width, height, positionX });
+            localUpdateGroup({ groupId, width, height, positionX, metadata });
             for (const draft of groupedDrafts) {
                 localUpdateDraftPosition({
                     draftId: draft.Draft.id,
@@ -2952,7 +2971,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 groupId,
                 positionX,
                 width,
-                height
+                height,
+                metadata
             });
             for (const draft of groupedDrafts) {
                 updateDraftGroupMutation.mutate({
@@ -2965,54 +2985,88 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
-    const GROUP_PADDING = 16;
-
-    const computeMinGroupSize = (groupId: string) => {
-        const drafts = getDraftsForGroup(groupId);
-        if (drafts.length === 0) {
-            return { minWidth: 0, minHeight: 0, maxLeftEdgeDelta: Infinity };
-        }
-
+    // Container-relative rects of a Group's child Cards. Child Group rects join
+    // this list in 5a-1 (design §6.2 / plan A10); everything downstream already
+    // takes rects rather than Cards so that addition is local to here.
+    const childRectsOf = (groupId: string) => {
         const cw = cardWidth(props.cardLayout());
         const ch = cardHeight(props.cardLayout());
+        return getDraftsForGroup(groupId).map((d) => ({
+            x: d.positionX,
+            y: d.positionY,
+            width: cw,
+            height: ch
+        }));
+    };
 
-        let maxRight = 0;
-        let maxBottom = 0;
-        let minLeft = Infinity;
-        for (const d of drafts) {
-            minLeft = Math.min(minLeft, d.positionX);
-            maxRight = Math.max(maxRight, d.positionX + cw + GROUP_PADDING);
-            maxBottom = Math.max(maxBottom, d.positionY + ch + GROUP_PADDING);
-        }
-
+    const computeMinGroupSize = (groupId: string) => {
+        const bounds = contentBoundsOf(childRectsOf(groupId));
         return {
-            minWidth: maxRight,
-            minHeight: maxBottom,
-            maxLeftEdgeDelta: Math.max(0, minLeft - GROUP_PADDING)
+            minWidth: bounds.width,
+            minHeight: bounds.height,
+            maxLeftEdgeDelta: bounds.maxLeftEdgeDelta
         };
     };
 
-    const maybeExpandGroup = (
-        group: CanvasGroup,
-        draftRelX: number,
-        draftRelY: number
-    ) => {
-        const cw = cardWidth(props.cardLayout());
-        const ch = cardHeight(props.cardLayout());
-        const expandLeft = Math.max(0, GROUP_PADDING - draftRelX);
-        const currentWidth = group.width ?? 400;
-        const currentHeight = group.height ?? 200;
+    /**
+     * Re-derive a container's size from its contents and its manual floor, in
+     * BOTH directions, and pull its left edge out over any child that sits past
+     * it (rebasing the children by the same amount, since a Card's coordinates
+     * are relative to its container).
+     *
+     * This replaces `maybeExpandGroup`, which could only ever grow: every
+     * sizing path ran while something was being *added*, and every one of them
+     * was `Math.max(current, content)` — so nothing recomputed a container after
+     * a child left, and it could not have shrunk it if it had. Call it whenever
+     * a container's contents change, in either direction.
+     *
+     * §9.1a's locked rule ("never grow to chase a child that is leaving") is a
+     * rule about the CALL SITES, and it holds here by construction: a child
+     * leaving can only raise `minLeft`, so the removal calls never expand left.
+     */
+    const resyncGroupSize = (groupId: string) => {
+        const group = canvasGroups.find((g) => g.id === groupId);
+        if (!group || group.type !== "custom") return;
+        const layout = props.cardLayout();
 
-        const neededWidth = draftRelX + cw + GROUP_PADDING + expandLeft;
-        const neededHeight = draftRelY + ch + GROUP_PADDING;
+        if (isGridGroup(group)) {
+            // Cells are non-negative by construction, so a grid never expands
+            // left; its content bounds are just its lattice.
+            const cols = Math.max(
+                gridColsOf(group),
+                maxChildSpanCols(canvasTree(), group.id, layout)
+            );
+            const items = gridItemsOf(canvasTree(), group.id, layout, cols);
+            const dims = resolveGridDims(
+                group,
+                rowCountAfter([], items, layout, cols),
+                cols,
+                layout
+            );
+            if (dims.width === group.width && dims.height === group.height) return;
+            persistGroupDimensions(group, dims);
+            return;
+        }
+
+        const currentWidth = group.width ?? DEFAULT_GROUP_WIDTH;
+        const currentHeight = group.height ?? DEFAULT_GROUP_HEIGHT;
+        // A dropped Card is already in the store by the time this runs, so the
+        // union below includes it. A left expansion shifts every child by
+        // `expandLeft`, and the right edge travels with them.
+        const content = contentBoundsOf(childRectsOf(groupId));
+        const expandLeft = content.expandLeft;
+        const resolved = resolveContainerDims(group, {
+            width: content.width + expandLeft,
+            height: content.height
+        });
 
         if (
             expandLeft > 0 ||
-            neededWidth > currentWidth ||
-            neededHeight > currentHeight
+            resolved.width !== currentWidth ||
+            resolved.height !== currentHeight
         ) {
-            const newWidth = Math.max(currentWidth, neededWidth);
-            const newHeight = Math.max(currentHeight, neededHeight);
+            const newWidth = resolved.width;
+            const newHeight = resolved.height;
             const newPositionX = group.positionX - expandLeft;
             const groupedDrafts =
                 expandLeft > 0
@@ -3719,6 +3773,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
                     const dropPoint = getCardCenterPoint(worldX, worldY);
                     const dropGroup = findGroupAtPosition(dropPoint.x, dropPoint.y);
+                    // Captured before the store write below clears it: a Card
+                    // leaving is the gesture that lets its old container shrink
+                    // back to the user's manual floor (5a-0).
+                    const sourceGroupId = finalDraft.group_id;
 
                     if (dropGroup && dropGroup.id !== finalDraft.group_id) {
                         // Moving to a different group
@@ -3759,8 +3817,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 });
                             }
 
-                            maybeExpandGroup(dropGroup, relativeX, relativeY);
+                            resyncGroupSize(dropGroup.id);
                         }
+                        if (sourceGroupId) resyncGroupSize(sourceGroupId);
                     } else if (!dropGroup && finalDraft.group_id) {
                         // Dropped outside all groups - ungroup if in a custom group
                         const currentGroup = canvasGroups.find(
@@ -3790,6 +3849,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     group_id: null
                                 });
                             }
+                            if (sourceGroupId) resyncGroupSize(sourceGroupId);
                         }
                     } else {
                         // Same group or ungrouped — save position
@@ -3823,13 +3883,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 });
                             }
 
-                            // Auto-expand if repositioned within a custom group
+                            // Re-fit the container after a reposition inside it
+                            // — which since 5a-0 can shrink it as well as grow.
                             if (state.dragGroupId && dropGroup) {
-                                maybeExpandGroup(
-                                    dropGroup,
-                                    finalDraft.positionX,
-                                    finalDraft.positionY
-                                );
+                                resyncGroupSize(dropGroup.id);
                             }
                         }
                     }
@@ -3909,10 +3966,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const onDelete = () => {
         if (draftToDelete()) {
             if (isLocalMode()) {
+                const sourceGroupId = draftToDelete()?.group_id ?? null;
                 localDeleteDraft(draftToDelete()?.Draft?.id ?? "");
                 setIsDeleteDialogOpen(false);
                 setDraftToDelete(null);
                 refreshFromLocal();
+                if (sourceGroupId) resyncGroupSize(sourceGroupId);
                 toast.success("Successfully deleted draft");
             } else {
                 deleteDraftMutation.mutate({

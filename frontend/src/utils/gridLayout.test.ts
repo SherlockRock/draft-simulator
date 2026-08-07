@@ -21,6 +21,14 @@ import {
     arrangedRowCount,
     resolveGridSave,
     toPositionUpdates,
+    manualFloorOf,
+    resolveContainerDims,
+    resolveGridDims,
+    contentBoundsOf,
+    MIN_GROUP_WIDTH,
+    MIN_GROUP_HEIGHT,
+    DEFAULT_GROUP_WIDTH,
+    DEFAULT_GROUP_HEIGHT,
     type GridFootprint,
     type GridItem
 } from "./gridLayout";
@@ -730,5 +738,223 @@ describe("resolveGridSave", () => {
         expect(reflow).toBe(false);
         expect(metadata.rowLabels).toEqual(["r"]);
         expect(metadata.colLabels).toEqual(["c1", "c2", "c3"]);
+    });
+});
+
+// 5a-0. Every sizing path used to be Math.max(current, content), which cannot
+// shrink: a container that grew once stayed grown, and because
+// effectiveGridCols reads colsFromWidth, a 3-column grid that briefly held a
+// Bo5 stayed 6-column forever with metadata.gridCols === 3 and no gesture that
+// undid it. The fix is a STORED manual floor, so "the user chose this width"
+// and "we grew to this width for something that has since left" stop being the
+// same number.
+describe("container sizing", () => {
+    function container(
+        metadata: CanvasGroup["metadata"],
+        width: number | null = null,
+        height: number | null = null
+    ): CanvasGroup {
+        return {
+            id: "g1",
+            canvas_id: "c1",
+            name: "Container",
+            type: "custom",
+            positionX: 0,
+            positionY: 0,
+            width,
+            height,
+            metadata
+        };
+    }
+
+    const gridOf = (cols: number) => ({ layout: "grid" as const, gridCols: cols });
+
+    describe("manualFloorOf", () => {
+        it("is zero until the user resizes", () => {
+            expect(manualFloorOf(container(gridOf(3)))).toEqual({
+                width: 0,
+                height: 0
+            });
+        });
+
+        it("reads the stored floor, not the rendered size", () => {
+            const group = container(
+                { ...gridOf(3), manualWidth: 900, manualHeight: 700 },
+                4000,
+                3000
+            );
+            expect(manualFloorOf(group)).toEqual({ width: 900, height: 700 });
+        });
+    });
+
+    describe("resolveContainerDims", () => {
+        it("falls back to the default container size when never resized", () => {
+            expect(resolveContainerDims(container({}), { width: 0, height: 0 })).toEqual({
+                width: DEFAULT_GROUP_WIDTH,
+                height: DEFAULT_GROUP_HEIGHT
+            });
+        });
+
+        it("honours a manual floor smaller than the default", () => {
+            expect(
+                resolveContainerDims(container({ manualWidth: 250, manualHeight: 160 }), {
+                    width: 0,
+                    height: 0
+                })
+            ).toEqual({ width: 250, height: 160 });
+        });
+
+        it("never goes below the resize clamp", () => {
+            expect(
+                resolveContainerDims(container({ manualWidth: 10, manualHeight: 10 }), {
+                    width: 0,
+                    height: 0
+                })
+            ).toEqual({ width: MIN_GROUP_WIDTH, height: MIN_GROUP_HEIGHT });
+        });
+
+        it("lets content that does not fit the manual floor widen it (design §6)", () => {
+            expect(
+                resolveContainerDims(container({ manualWidth: 500, manualHeight: 500 }), {
+                    width: 1200,
+                    height: 300
+                })
+            ).toEqual({ width: 1200, height: 500 });
+        });
+
+        it("ignores the container's own current size", () => {
+            // The ratchet, stated as a property: a container stored at 4000px
+            // with a 500px floor and 600px of content resolves to 600, not 4000.
+            expect(
+                resolveContainerDims(
+                    container({ manualWidth: 500, manualHeight: 500 }, 4000, 4000),
+                    { width: 600, height: 600 }
+                )
+            ).toEqual({ width: 600, height: 600 });
+        });
+    });
+
+    describe("resolveGridDims", () => {
+        it("round-trips grow-then-shrink back to the manual floor", () => {
+            for (const layout of LAYOUTS) {
+                const floor = gridDimensions(1, 5, layout);
+                const group = container({
+                    ...gridOf(3),
+                    manualWidth: floor.width,
+                    manualHeight: floor.height
+                });
+
+                // A Bo5 arrives: six columns, two rows. Content wins.
+                const grown = resolveGridDims(group, 2, 6, layout);
+                expect(grown).toEqual(gridDimensions(2, 6, layout));
+
+                // It leaves. Back to the user's width, NOT the grown one.
+                const shrunk = resolveGridDims(
+                    container({
+                        ...gridOf(3),
+                        manualWidth: floor.width,
+                        manualHeight: floor.height
+                    }),
+                    1,
+                    3,
+                    layout
+                );
+                expect(shrunk).toEqual(floor);
+                expect(shrunk.width).toBeLessThan(grown.width);
+            }
+        });
+
+        it("never undoes a manual resize when content changes", () => {
+            const layout: CardLayout = "wide";
+            const floor = gridDimensions(4, 6, layout);
+            const group = container({
+                ...gridOf(3),
+                manualWidth: floor.width,
+                manualHeight: floor.height
+            });
+            // One card in a 3-column grid: far smaller than the floor.
+            expect(resolveGridDims(group, 1, 3, layout)).toEqual(floor);
+        });
+
+        it("returns effectiveGridCols to its pre-drop value once a wide child leaves", () => {
+            const layout: CardLayout = "wide";
+            const metadata = gridOf(3);
+
+            const before = resolveGridDims(container(metadata), 1, 3, layout);
+            const beforeCols = effectiveGridCols(
+                container(metadata, before.width, before.height),
+                layout,
+                0
+            );
+            expect(beforeCols).toBe(4); // 3 configured + the growth column
+
+            // A Bo5 (6 columns wide) is dropped in.
+            const grown = resolveGridDims(container(metadata), 2, 6, layout);
+            expect(
+                effectiveGridCols(
+                    container(metadata, grown.width, grown.height),
+                    layout,
+                    BO5.cols
+                )
+            ).toBe(6);
+
+            // It is dragged back out: cols fall back to the configured count,
+            // the width follows, and so does effectiveGridCols.
+            const after = resolveGridDims(container(metadata), 1, 3, layout);
+            expect(after).toEqual(before);
+            expect(
+                effectiveGridCols(
+                    container(metadata, after.width, after.height),
+                    layout,
+                    0
+                )
+            ).toBe(beforeCols);
+        });
+    });
+
+    describe("contentBoundsOf", () => {
+        it("reports no bounds and an unbounded left edge when empty", () => {
+            expect(contentBoundsOf([])).toEqual({
+                width: 0,
+                height: 0,
+                maxLeftEdgeDelta: Infinity,
+                expandLeft: 0
+            });
+        });
+
+        it("unions child rects and adds padding on the right and bottom", () => {
+            expect(
+                contentBoundsOf([
+                    { x: 16, y: 16, width: 100, height: 50 },
+                    { x: 200, y: 40, width: 100, height: 300 }
+                ])
+            ).toEqual({
+                width: 300 + GRID_PADDING,
+                height: 340 + GRID_PADDING,
+                maxLeftEdgeDelta: 0,
+                expandLeft: 0
+            });
+        });
+
+        it("reports how far the left edge must move OUT for a child past it", () => {
+            const bounds = contentBoundsOf([{ x: -34, y: 0, width: 10, height: 10 }]);
+            expect(bounds.expandLeft).toBe(GRID_PADDING + 34);
+            // Mirror images: exactly one of the two is ever nonzero.
+            expect(bounds.maxLeftEdgeDelta).toBe(0);
+        });
+
+        it("measures how far the left edge may travel before it crosses a child", () => {
+            expect(
+                contentBoundsOf([{ x: 116, y: 0, width: 10, height: 10 }])
+                    .maxLeftEdgeDelta
+            ).toBe(100);
+        });
+
+        it("never reports a negative left-edge budget for a child outside the frame", () => {
+            expect(
+                contentBoundsOf([{ x: -400, y: 0, width: 10, height: 10 }])
+                    .maxLeftEdgeDelta
+            ).toBe(0);
+        });
     });
 });

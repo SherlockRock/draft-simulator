@@ -2,6 +2,8 @@ import type { CanvasDraft, CanvasGroup } from "./schemas";
 import type { CardLayout } from "./canvasCardLayout";
 import { cardHeight, cardWidth, getSeriesGroupDimensions } from "./helpers";
 import {
+    DEFAULT_GROUP_HEIGHT,
+    DEFAULT_GROUP_WIDTH,
     GRID_CELL_GAP,
     positionToCell,
     type GridFootprint,
@@ -62,13 +64,12 @@ export type TreeNode =
 export type { GridFootprint, GridItem };
 
 /**
- * Fallback size for a Group with no stored width/height. These mirror
- * `groupWidth()`/`groupHeight()` in `CustomGroupContainer.tsx` and
- * `isPointInGroup` in `Canvas.tsx`; hit-testing is only correct while all three
- * agree (design §12).
+ * Fallback size for a Group with no stored width/height. Declared in
+ * `gridLayout.ts` (which also uses them as the sizing baseline for a container
+ * the user has never resized) and re-exported here, where every consumer
+ * already looks for them — the dependency runs one way, as with `GridItem`.
  */
-export const DEFAULT_GROUP_WIDTH = 400;
-export const DEFAULT_GROUP_HEIGHT = 200;
+export { DEFAULT_GROUP_WIDTH, DEFAULT_GROUP_HEIGHT };
 
 const groupById = (tree: CanvasTree, id: string): CanvasGroup | undefined =>
     tree.groups.find((g) => g.id === id);

@@ -2193,8 +2193,19 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
     });
     res.status(200).json({ success: true, group: groupWithTeams.toJSON() });
 
-    // Emit appropriate socket event
-    if (updates.positionX !== undefined || updates.positionY !== undefined) {
+    // Emit appropriate socket event.
+    //
+    // A metadata change ALWAYS takes the full-payload branch: `groupMoved`
+    // carries only a position (its Zod schema strips everything else), so a
+    // request that moves the frame AND edits metadata would leave every other
+    // client on stale metadata until reload. The one caller that sends both is
+    // a left-edge resize, which since 5a-0 also persists the manual size floor
+    // — and a stale floor makes another client resolve this container to the
+    // wrong size on its next drop.
+    if (
+      updates.metadata === undefined &&
+      (updates.positionX !== undefined || updates.positionY !== undefined)
+    ) {
       socketService.emitToRoom(canvasId, "groupMoved", {
         groupId,
         positionX: group.positionX,

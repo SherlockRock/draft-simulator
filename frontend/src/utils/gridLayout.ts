@@ -453,16 +453,113 @@ export const gridDimensions = (rowCount: number, cols: number, layout: CardLayou
         Math.max(0, rowCount - 1) * GRID_CELL_GAP
 });
 
-export const growGridDims = (
+/**
+ * Smallest size a container may be resized to. Shared with the resize handles
+ * (`CustomGroupContainer`) on purpose: if the sizing rule below could shrink a
+ * container past the resize clamp, it would end up smaller than the user is
+ * able to make it again.
+ */
+export const MIN_GROUP_WIDTH = 200;
+export const MIN_GROUP_HEIGHT = 150;
+
+/**
+ * Fallback size for a Group with no stored width/height, and the sizing
+ * baseline for one the user has never resized. Re-exported by `canvasTree.ts`,
+ * where the hit-test and footprint code reads them; they must also agree with
+ * `groupWidth()`/`groupHeight()` in `CustomGroupContainer.tsx` (design §12).
+ */
+export const DEFAULT_GROUP_WIDTH = 400;
+export const DEFAULT_GROUP_HEIGHT = 200;
+
+/**
+ * The size the user last set by hand, or 0 where they never have.
+ *
+ * `width`/`height` cannot answer this: they are the *rendered* size, which
+ * every auto-sizing path also writes, so "the user wanted 900px" and "we grew
+ * to 900px for something that has since left" are indistinguishable there.
+ * That conflation is the whole reason every sizing path had to be
+ * `Math.max(current, content)` and could therefore only ratchet.
+ */
+export const manualFloorOf = (group: CanvasGroup): { width: number; height: number } => ({
+    width: group.metadata.manualWidth ?? 0,
+    height: group.metadata.manualHeight ?? 0
+});
+
+/**
+ * The one container-sizing rule: **max(manual floor, content bounds)**, never
+ * a term reading the container's own current size.
+ *
+ * Both directions follow from it. Content that grows past the floor widens the
+ * container; content that leaves lets it fall back to the floor — and to the
+ * content bounds when the user never resized it. A manual resize is never
+ * undone, because the floor is only ever written by `handleResizeEnd`.
+ *
+ * Design §6 also fixes the precedence when they disagree: a child that does not
+ * fit the manual width widens it anyway ("a child must fit"), which is exactly
+ * `max`.
+ */
+export const resolveContainerDims = (
+    group: CanvasGroup,
+    content: { width: number; height: number }
+) => {
+    const floor = manualFloorOf(group);
+    // Never resized: the container's birth size is the floor, so emptying one
+    // returns it to the size it was created at rather than collapsing it to the
+    // resize minimum. Once the user has set a floor, theirs wins all the way
+    // down to MIN_GROUP_*.
+    const baseWidth = floor.width || DEFAULT_GROUP_WIDTH;
+    const baseHeight = floor.height || DEFAULT_GROUP_HEIGHT;
+    return {
+        width: Math.max(MIN_GROUP_WIDTH, baseWidth, content.width),
+        height: Math.max(MIN_GROUP_HEIGHT, baseHeight, content.height)
+    };
+};
+
+/** `resolveContainerDims` for a grid container, whose content bounds are its lattice. */
+export const resolveGridDims = (
     group: CanvasGroup,
     rows: number,
     cols: number,
     layout: CardLayout
-) => {
-    const content = gridDimensions(rows, cols, layout);
+) => resolveContainerDims(group, gridDimensions(rows, cols, layout));
+
+/**
+ * Content bounds of a free-layout container: the union of its children's rects
+ * plus padding, and how far its left edge may travel right before it would
+ * cross the leftmost child.
+ *
+ * `rects` are CONTAINER-relative. Cards are all this sees in 5a-0; child Group
+ * rects join them in 5a-1 (design §6.2 / plan A10), which is why it takes rects
+ * rather than `CanvasDraft`s.
+ */
+export const contentBoundsOf = (
+    rects: { x: number; y: number; width: number; height: number }[]
+): {
+    width: number;
+    height: number;
+    maxLeftEdgeDelta: number;
+    expandLeft: number;
+} => {
+    if (rects.length === 0) {
+        return { width: 0, height: 0, maxLeftEdgeDelta: Infinity, expandLeft: 0 };
+    }
+    let maxRight = 0;
+    let maxBottom = 0;
+    let minLeft = Infinity;
+    for (const rect of rects) {
+        minLeft = Math.min(minLeft, rect.x);
+        maxRight = Math.max(maxRight, rect.x + rect.width + GRID_PADDING);
+        maxBottom = Math.max(maxBottom, rect.y + rect.height + GRID_PADDING);
+    }
     return {
-        width: Math.max(group.width ?? 0, content.width),
-        height: Math.max(group.height ?? 0, content.height)
+        width: maxRight,
+        height: maxBottom,
+        // Mirror images of the same number, so exactly one is ever nonzero:
+        // how far the left edge may move IN before it crosses the leftmost
+        // child, and how far it must move OUT because a child is already past
+        // it. The second is what a drop near the frame's left edge produces.
+        maxLeftEdgeDelta: Math.max(0, minLeft - GRID_PADDING),
+        expandLeft: Math.max(0, GRID_PADDING - minLeft)
     };
 };
 

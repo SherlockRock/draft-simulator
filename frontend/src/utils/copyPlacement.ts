@@ -10,16 +10,16 @@ import {
 import {
     CARD_FOOTPRINT,
     cellToPosition,
+    contentBoundsOf,
     firstEmptyRect,
     GRID_CELL_GAP,
     gridColsOf,
-    growGridDims,
+    resolveContainerDims,
+    resolveGridDims,
     rowCountAfter,
     type GridItem
 } from "./gridLayout";
 import { childCardsOf, gridItemsOf, type CanvasTree } from "./canvasTree";
-
-const GROUP_PADDING = 16;
 
 export type CopyPlacement = {
     positionX: number;
@@ -31,10 +31,16 @@ export type CopyPlacement = {
     };
 };
 
-const growsGroup = (
+/**
+ * Persist the derived dimensions whenever they DIFFER, not only when they grow.
+ * Since 5a-0 a container's size is `max(manual floor, content)` rather than
+ * `max(current, content)`, so a copy can legitimately resolve it smaller — a
+ * grow-only test would leave the stale, ratcheted size on the row.
+ */
+const resizesGroup = (
     group: CanvasGroup,
     dims: { width: number; height: number }
-): boolean => dims.width > (group.width ?? 0) || dims.height > (group.height ?? 0);
+): boolean => dims.width !== (group.width ?? 0) || dims.height !== (group.height ?? 0);
 
 /**
  * Takes the whole tree rather than a pre-filtered `groupDrafts` because both
@@ -65,35 +71,43 @@ export const resolveCopyPlacement = (args: {
             cell
         };
         const rows = rowCountAfter([], [...items, copy], layout, cols);
-        const dims = growGridDims(group, rows, cols, layout);
+        const dims = resolveGridDims(group, rows, cols, layout);
         return {
             positionX: position.x,
             positionY: position.y,
             group_id: group.id,
-            ...(growsGroup(group, dims) ? { groupDims: dims } : {})
+            ...(resizesGroup(group, dims) ? { groupDims: dims } : {})
         };
     }
 
     if (group?.type === "custom") {
         const positionX = draft.positionX;
         const positionY = draft.positionY + cardHeight(layout) + GRID_CELL_GAP;
-        const currentWidth = group.width ?? 400;
-        const currentHeight = group.height ?? 200;
-        const width = Math.max(
-            currentWidth,
-            positionX + cardWidth(layout) + GROUP_PADDING
-        );
-        const height = Math.max(
-            currentHeight,
-            positionY + cardHeight(layout) + GROUP_PADDING
+        // The union of what is already in the container plus the copy, rather
+        // than the copy alone against the container's current size — the same
+        // content-bounds rule the drop path uses, so the two agree.
+        const dims = resolveContainerDims(
+            group,
+            contentBoundsOf([
+                ...childCardsOf(tree, group.id).map((child) => ({
+                    x: child.positionX,
+                    y: child.positionY,
+                    width: cardWidth(layout),
+                    height: cardHeight(layout)
+                })),
+                {
+                    x: positionX,
+                    y: positionY,
+                    width: cardWidth(layout),
+                    height: cardHeight(layout)
+                }
+            ])
         );
         return {
             positionX,
             positionY,
             group_id: group.id,
-            ...(width > currentWidth || height > currentHeight
-                ? { groupDims: { width, height } }
-                : {})
+            ...(resizesGroup(group, dims) ? { groupDims: dims } : {})
         };
     }
 
