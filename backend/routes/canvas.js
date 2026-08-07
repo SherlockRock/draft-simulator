@@ -19,6 +19,12 @@ const TeamPlayer = require("../models/TeamPlayer.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
 const { assertCanvasAccess } = require("../services/canvasMutations");
+const {
+  depthOf,
+  descendantGroupsOf,
+  subtreeHeight,
+  wouldCreateCycle,
+} = require("../services/canvasTree");
 const presenceEjection = require("../services/presenceEjection");
 const {
   respondCanvasMutationError,
@@ -562,20 +568,286 @@ router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
   }
 });
 
-// Batch position commit: grid snap/swap and arrange-as-grid. Updates all
-// drafts (and optionally the containing group's metadata/dimensions) in one
-// transaction, then broadcasts a surgical draftPositionsUpdated event.
-router.put("/:canvasId/draft-positions", protect, async (req, res) => {
+// Soft nesting cap (recursive-groups decision 6). Measured in ANCESTORS, so 4
+// permits five levels of containment. Checked against the deepest leaf of the
+// moved subtree, not the moved Group alone — dropping a two-level subtree under
+// a depth-3 parent puts its leaves at depth 5.
+const MAX_GROUP_DEPTH = 4;
+
+// Canonical acquisition order for CanvasGroup row locks (design §8.1). Postgres
+// puts LockRows above Sort, so `ORDER BY id FOR UPDATE` locks in id order and
+// two overlapping subtree moves queue instead of deadlocking.
+const GROUP_LOCK_ORDER = [["id", "ASC"]];
+
+// Deadlock retry is defence in depth behind the lock ordering, and it is only
+// safe because the whole commit is idempotent: positions are absolute on the
+// wire and a replayed container move re-derives dx against the re-read row.
+const COMMIT_RETRIES = 2;
+
+function isRetryableTransactionError(error) {
+  const code = error?.parent?.code ?? error?.original?.code;
+  // 40P01 deadlock_detected, 40001 serialization_failure.
+  return code === "40P01" || code === "40001";
+}
+
+const hasKey = (object, key) =>
+  Object.prototype.hasOwnProperty.call(object, key);
+
+/**
+ * The transactional half of PUT /:canvasId/draft-positions.
+ *
+ * Returns `{ status, error }` for a rejection the caller should send, or
+ * `{ updatedGroup, groupMoves }` on success. It owns its own transaction so the
+ * caller can retry the whole thing on a deadlock.
+ */
+async function commitDraftPositions({ canvasId, positions, groups, group }) {
   let t;
+  try {
+    t = await Canvas.sequelize.transaction();
+
+    // ---- Locks and validation come before any write (design §8.1) ----
+    //
+    // The lock covers EVERY Group on the canvas, not just the resolved affected
+    // set. The design asks for "the affected set, sorted by id" — but that set
+    // is data-dependent on the very rows being locked (a descendant is only a
+    // descendant according to parent pointers we have not locked yet), so
+    // resolving it from an unlocked read leaves a window where a concurrent
+    // reparent moves a Group into the subtree and the fan-out silently skips
+    // it. Canvas-wide is a superset in one stable order, and it only runs when
+    // Groups are actually moving — a Card-only commit (every grid drag, by far
+    // the hot path) takes no Group lock at all and keeps today's query plan.
+    let lockedById = null;
+    if (groups.length > 0) {
+      const rows = await CanvasGroup.findAll({
+        where: { canvas_id: canvasId },
+        order: GROUP_LOCK_ORDER,
+        lock: true,
+        transaction: t,
+      });
+      lockedById = new Map(rows.map((row) => [row.id, row]));
+
+      for (const entry of groups) {
+        if (!lockedById.has(entry.id)) {
+          await t.rollback();
+          return {
+            status: 404,
+            error: `Group ${entry.id} not found on canvas`,
+          };
+        }
+      }
+    }
+
+    // Cards may only be dropped into a container on THIS canvas. Nothing
+    // validated this before, on any batch path — a crafted group_id could park
+    // a Card in a foreign canvas's Group (or a deleted one), where it renders
+    // on neither canvas.
+    const cardGroupIds = [
+      ...new Set(
+        positions
+          .map((p) => p.group_id)
+          .filter((groupId) => typeof groupId === "string"),
+      ),
+    ];
+    if (cardGroupIds.length > 0) {
+      const known = lockedById
+        ? new Set(lockedById.keys())
+        : new Set(
+            (
+              await CanvasGroup.findAll({
+                where: { canvas_id: canvasId, id: cardGroupIds },
+                attributes: ["id"],
+                transaction: t,
+              })
+            ).map((row) => row.id),
+          );
+      const missing = cardGroupIds.find((groupId) => !known.has(groupId));
+      if (missing) {
+        await t.rollback();
+        return { status: 404, error: `Group ${missing} not found on canvas` };
+      }
+    }
+
+    const groupWrites = new Map();
+    if (groups.length > 0) {
+      // Parentage changes are validated against the tree they would PRODUCE,
+      // not the stored one. Two entries in one request can each look legal
+      // alone and form a cycle together (A under B, B under A).
+      const pendingParent = new Map();
+      for (const entry of groups) {
+        if (hasKey(entry, "parentId")) {
+          pendingParent.set(entry.id, entry.parentId ?? null);
+        }
+      }
+      const nextTree = {
+        groups: [...lockedById.values()].map((row) => ({
+          id: row.id,
+          type: row.type,
+          parent_group_id: pendingParent.has(row.id)
+            ? pendingParent.get(row.id)
+            : (row.parent_group_id ?? null),
+        })),
+      };
+
+      for (const [id, parentId] of pendingParent) {
+        if (parentId !== null) {
+          const parentRow = lockedById.get(parentId);
+          // Existence and same-canvas are one check: the locked map holds this
+          // canvas's Groups and nothing else.
+          if (!parentRow) {
+            await t.rollback();
+            return {
+              status: 400,
+              error: "That group isn't on this canvas",
+            };
+          }
+          if (parentRow.type === "series") {
+            await t.rollback();
+            return {
+              status: 400,
+              error: "Can't put a group inside a series",
+            };
+          }
+        }
+        if (wouldCreateCycle(nextTree, id, parentId)) {
+          await t.rollback();
+          return {
+            status: 400,
+            error: "Can't put a group inside itself",
+          };
+        }
+      }
+      // Depth is only meaningful once the result is known to be acyclic, which
+      // is why this is a second pass rather than a clause in the first.
+      for (const id of pendingParent.keys()) {
+        if (
+          depthOf(nextTree, id) + subtreeHeight(nextTree, id) >
+          MAX_GROUP_DEPTH
+        ) {
+          await t.rollback();
+          return { status: 400, error: "Too deeply nested" };
+        }
+      }
+
+      // ---- Derive the delta, fan it out, and only then write ----
+      //
+      // Every position in `groups` is an absolute target; `dx` comes from the
+      // locked stored row. Descendants that carry their own entry are pruned
+      // together with their subtrees, so each row takes its delta from exactly
+      // one source: its nearest explicitly-moved ancestor, or itself.
+      const explicitIds = new Set(groups.map((entry) => entry.id));
+      for (const entry of groups) {
+        const row = lockedById.get(entry.id);
+        const updates = {
+          positionX: entry.positionX,
+          positionY: entry.positionY,
+        };
+        if (pendingParent.has(entry.id)) {
+          updates.parent_group_id = pendingParent.get(entry.id);
+        }
+        groupWrites.set(entry.id, updates);
+
+        const dx = entry.positionX - row.positionX;
+        const dy = entry.positionY - row.positionY;
+        if (dx === 0 && dy === 0) continue;
+        for (const descendant of descendantGroupsOf(
+          nextTree,
+          entry.id,
+          explicitIds,
+        )) {
+          const descendantRow = lockedById.get(descendant.id);
+          groupWrites.set(descendant.id, {
+            positionX: descendantRow.positionX + dx,
+            positionY: descendantRow.positionY + dy,
+          });
+        }
+      }
+    }
+
+    for (const p of positions) {
+      const updates = { positionX: p.positionX, positionY: p.positionY };
+      if (p.group_id !== undefined) updates.group_id = p.group_id;
+      const [updated] = await CanvasDraft.update(updates, {
+        where: { canvas_id: canvasId, draft_id: p.draft_id },
+        transaction: t,
+      });
+      if (updated === 0) {
+        await t.rollback();
+        return {
+          status: 404,
+          error: `Draft ${p.draft_id} not found on canvas`,
+        };
+      }
+    }
+
+    for (const [groupId, updates] of groupWrites) {
+      await lockedById.get(groupId).update(updates, { transaction: t });
+    }
+
+    let updatedGroup = null;
+    if (group && typeof group === "object" && typeof group.id === "string") {
+      // Reuse the locked instance when there is one: re-reading a row this
+      // transaction may have just moved would be a second source of truth for
+      // the same fields.
+      const groupRow =
+        lockedById?.get(group.id) ??
+        (await CanvasGroup.findOne({
+          where: { id: group.id, canvas_id: canvasId },
+          transaction: t,
+        }));
+      if (!groupRow) {
+        await t.rollback();
+        return { status: 404, error: "Group not found" };
+      }
+      const groupUpdates = {};
+      if (typeof group.width === "number") groupUpdates.width = group.width;
+      if (typeof group.height === "number") groupUpdates.height = group.height;
+      if (group.metadata && typeof group.metadata === "object") {
+        groupUpdates.metadata = mergeGroupMetadata(
+          groupRow.metadata,
+          group.metadata,
+        );
+      }
+      if (Object.keys(groupUpdates).length > 0) {
+        await groupRow.update(groupUpdates, { transaction: t });
+      }
+      updatedGroup = groupRow;
+    }
+
+    await t.commit();
+
+    // The wire shape is the live relay's (`canvasMutations.js` relayGroupMove),
+    // not the single-group route's — width/height are unchanged by a move, and
+    // the client handler reads position only. `parentId` rides along only when
+    // parentage actually changed; it is the sole channel carrying it.
+    const groupMoves = [...groupWrites].map(([groupId, updates]) => ({
+      groupId,
+      positionX: updates.positionX,
+      positionY: updates.positionY,
+      ...(hasKey(updates, "parent_group_id")
+        ? { parentId: updates.parent_group_id }
+        : {}),
+    }));
+
+    return { updatedGroup, groupMoves };
+  } catch (error) {
+    if (t && !t.finished) await t.rollback();
+    throw error;
+  }
+}
+
+// Batch position commit: grid snap/swap, arrange-as-grid, and container moves.
+// Updates all drafts, any moved Groups plus their descendants, and optionally
+// one group's metadata/dimensions in a single transaction, then broadcasts.
+router.put("/:canvasId/draft-positions", protect, async (req, res) => {
   try {
     const { canvasId } = req.params;
     const { group } = req.body;
 
     await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
 
-    // Normalize before validating: the loop below iterates `positions`
-    // unconditionally, so an omitted array must become [] here or it throws a
-    // 500 instead of returning a 400.
+    // Normalize before validating: the loops below iterate `positions` and
+    // `groups` unconditionally, so an omitted array must become [] here or it
+    // throws a 500 instead of returning a 400.
     const rawPositions = req.body.positions;
     if (rawPositions !== undefined && !Array.isArray(rawPositions)) {
       return res.status(400).json({
@@ -600,6 +872,38 @@ router.put("/:canvasId/draft-positions", protect, async (req, res) => {
       });
     }
 
+    const rawGroups = req.body.groups;
+    if (rawGroups !== undefined && !Array.isArray(rawGroups)) {
+      return res.status(400).json({
+        error: "groups must be an array of {id, positionX, positionY}",
+      });
+    }
+    const groups = rawGroups ?? [];
+
+    // positionX/Y are the container's ABSOLUTE target (ADR-0006). parentId is
+    // tri-state on key PRESENCE: absent leaves parentage alone, null moves to
+    // top level, a string reparents.
+    const validGroups = groups.every(
+      (g) =>
+        g &&
+        typeof g.id === "string" &&
+        typeof g.positionX === "number" &&
+        typeof g.positionY === "number" &&
+        (!hasKey(g, "parentId") ||
+          g.parentId === null ||
+          typeof g.parentId === "string"),
+    );
+    if (!validGroups) {
+      return res.status(400).json({
+        error: "groups must be an array of {id, positionX, positionY}",
+      });
+    }
+    if (new Set(groups.map((g) => g.id)).size !== groups.length) {
+      return res
+        .status(400)
+        .json({ error: "groups must not contain the same id twice" });
+    }
+
     // Emptiness is validated separately from shape: an empty group has no
     // cards to place, so "Arrange as grid" legitimately sends positions: []
     // with only the group's layout/dimensions. Requiring a non-empty
@@ -611,66 +915,57 @@ router.put("/:canvasId/draft-positions", protect, async (req, res) => {
       (typeof group.width === "number" ||
         typeof group.height === "number" ||
         (group.metadata && typeof group.metadata === "object"));
-    if (positions.length === 0 && !groupCarriesWork) {
+    if (positions.length === 0 && groups.length === 0 && !groupCarriesWork) {
       return res.status(400).json({
         error:
-          "Nothing to update: provide positions, or a group with width/height/metadata",
+          "Nothing to update: provide positions, groups, or a group with width/height/metadata",
       });
     }
 
-    t = await Canvas.sequelize.transaction();
-
-    for (const p of positions) {
-      const updates = { positionX: p.positionX, positionY: p.positionY };
-      if (p.group_id !== undefined) updates.group_id = p.group_id;
-      const [updated] = await CanvasDraft.update(updates, {
-        where: { canvas_id: canvasId, draft_id: p.draft_id },
-        transaction: t,
-      });
-      if (updated === 0) {
-        await t.rollback();
-        return res
-          .status(404)
-          .json({ error: `Draft ${p.draft_id} not found on canvas` });
+    let result;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        result = await commitDraftPositions({
+          canvasId,
+          positions,
+          groups,
+          group,
+        });
+        break;
+      } catch (error) {
+        if (attempt >= COMMIT_RETRIES || !isRetryableTransactionError(error)) {
+          throw error;
+        }
       }
     }
 
-    let updatedGroup = null;
-    if (group && typeof group === "object" && typeof group.id === "string") {
-      const groupRow = await CanvasGroup.findOne({
-        where: { id: group.id, canvas_id: canvasId },
-        transaction: t,
-      });
-      if (!groupRow) {
-        await t.rollback();
-        return res.status(404).json({ error: "Group not found" });
-      }
-      const groupUpdates = {};
-      if (typeof group.width === "number") groupUpdates.width = group.width;
-      if (typeof group.height === "number") groupUpdates.height = group.height;
-      if (group.metadata && typeof group.metadata === "object") {
-        groupUpdates.metadata = mergeGroupMetadata(
-          groupRow.metadata,
-          group.metadata,
-        );
-      }
-      if (Object.keys(groupUpdates).length > 0) {
-        await groupRow.update(groupUpdates, { transaction: t });
-      }
-      updatedGroup = groupRow;
+    if (result.error) {
+      return res.status(result.status).json({ error: result.error });
     }
 
-    await t.commit();
     await touchCanvasTimestamp(canvasId);
 
     res.status(200).json({ success: true });
 
-    socketService.emitToRoom(canvasId, "draftPositionsUpdated", {
-      positions,
-      group: updatedGroup ? updatedGroup.toJSON() : null,
-    });
+    // Group events go FIRST. A mixed commit tears for one frame either way, but
+    // the two tears are not the same size: under ADR-0006 a Card's world
+    // position is container + relative offset, so applying Cards first can
+    // render them at the OLD container position — off by the whole drag
+    // distance — while applying Groups first bounds the error to the
+    // intra-container reflow the same commit is making.
+    for (const move of result.groupMoves) {
+      socketService.emitToRoom(canvasId, "groupMoved", move);
+    }
+
+    // Suppressed on a groups-only commit: schema-valid and a client no-op, but
+    // it would broadcast `positions: []` for a change that moved no Cards.
+    if (positions.length > 0 || result.updatedGroup) {
+      socketService.emitToRoom(canvasId, "draftPositionsUpdated", {
+        positions,
+        group: result.updatedGroup ? result.updatedGroup.toJSON() : null,
+      });
+    }
   } catch (error) {
-    if (t && !t.finished) await t.rollback();
     if (
       respondCanvasMutationError(res, error, {
         NOT_AUTHORIZED:

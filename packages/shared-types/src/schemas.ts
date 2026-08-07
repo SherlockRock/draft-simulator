@@ -253,6 +253,25 @@ export const DraftPositionsUpdatedSchema = z.object({
   group: CanvasGroupSchema.nullable(),
 });
 
+/**
+ * The Group sibling of `DraftPositionUpdateSchema` for the `groups[]` array on
+ * `PUT /:canvasId/draft-positions` (recursive-groups design §4.4).
+ *
+ * `positionX/Y` are the container's ABSOLUTE TARGET position (ADR-0006), never
+ * a delta: the server derives `dx` against the locked stored row and fans that
+ * out over descendants. A delta on the wire sums under concurrent drags and is
+ * not replay-safe; see design decision 11.
+ *
+ * `parentId` is tri-state and the distinction is key PRESENCE, not value:
+ * absent = leave parentage alone, `null` = move to top level, string = reparent.
+ */
+export const GroupPositionUpdateSchema = z.object({
+  id: z.string(),
+  positionX: z.number(),
+  positionY: z.number(),
+  parentId: z.string().nullable().optional(),
+});
+
 // =============================================================================
 // Connection Schemas
 // =============================================================================
@@ -838,10 +857,15 @@ export const VertexMovedSchema = z.object({
   y: z.number(),
 });
 
+// Emitted by the live drag relay (position only) and by both REST commit paths.
+// `parentId` is present only on a commit that actually changed parentage; the
+// live channel stays position-only (design 3.1c). Handling it in the client is
+// step 5a — declared here so the wire contract is one thing, not two.
 export const GroupMovedSchema = z.object({
   groupId: z.string(),
   positionX: z.number(),
   positionY: z.number(),
+  parentId: z.string().nullable().optional(),
 });
 
 export const GroupResizedSchema = z.object({
@@ -883,6 +907,7 @@ export type DraftPositionUpdate = z.infer<typeof DraftPositionUpdateSchema>;
 export type DraftPositionsUpdated = z.infer<
   typeof DraftPositionsUpdatedSchema
 >;
+export type GroupPositionUpdate = z.infer<typeof GroupPositionUpdateSchema>;
 export type Connection = z.infer<typeof ConnectionSchema>;
 export type ConnectionEndpoint = z.infer<typeof ConnectionEndpointSchema>;
 export type Vertex = z.infer<typeof VertexSchema>;
