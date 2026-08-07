@@ -94,6 +94,7 @@ import {
     type GroupPositionWrite
 } from "./utils/groupSubtreeMove";
 import { parentageRejection } from "./utils/groupParentage";
+import { resolveGroupDrop, type GroupDropResolution } from "./utils/groupDropResolver";
 import {
     localNewDraft,
     localEditDraft,
@@ -2990,18 +2991,54 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         if (!groupId) return;
         const group = canvasGroups.find((g) => g.id === groupId);
         if (!group) return;
+
+        // A click is not a drop. Without this, mousedown+mouseup on a top-level
+        // Group whose corner happens to overlap a container would adopt it.
+        const moved =
+            group.positionX !== gState.originX || group.positionY !== gState.originY;
+        // The SAME resolver the hover preview ran, on the same point.
+        const resolution: GroupDropResolution = moved
+            ? resolveGroupDrop(canvasTree(), {
+                  groupId,
+                  point: { x: group.positionX, y: group.positionY }
+              })
+            : { nextParentId: group.parent_group_id ?? null };
+        if (resolution.rejection) toast.error(resolution.rejection);
+        const currentParentId = group.parent_group_id ?? null;
+        // Key PRESENCE is the protocol: an absent `parentId` leaves parentage
+        // alone, `null` moves to top level. A rejected drop commits the
+        // position only, so the Group stays where the user let go rather than
+        // snapping back with no explanation.
+        const parentageChanged =
+            !resolution.rejection && resolution.nextParentId !== currentParentId;
         const entry = {
             id: groupId,
             positionX: group.positionX,
-            positionY: group.positionY
+            positionY: group.positionY,
+            ...(parentageChanged ? { parentId: resolution.nextParentId } : {})
         };
+        if (parentageChanged) {
+            setCanvasGroups((g) => g.id === groupId, {
+                parent_group_id: resolution.nextParentId ?? null
+            });
+        }
+        // §9.1a's locked rule: grow the container only when the drop CHANGES
+        // parentage INTO it. Never to chase a child that is leaving, and never
+        // mid-drag — that ratchet is what made drag-out unusable as an un-nest
+        // path in the first place (A5).
+        if (parentageChanged && resolution.nextParentId) {
+            resyncGroupSize(resolution.nextParentId);
+        }
+
         if (isLocalMode()) {
             // Local has nothing to fan the delta out for it and the live drag
-            // only touched the in-memory store, so it gets every row.
-            localUpdateDraftPositions({
-                positions: [],
-                groups: subtreeRows(canvasTree(), groupId)
-            });
+            // only touched the in-memory store, so it gets every row — with the
+            // parentage change riding on the dragged Group's own row.
+            const rows = subtreeRows(canvasTree(), groupId).map((row) =>
+                row.id === groupId ? { ...row, ...entry } : row
+            );
+            localUpdateDraftPositions({ positions: [], groups: rows });
+            refreshFromLocal();
             return;
         }
         updateGroupSubtreeMutation.mutate({
@@ -3830,6 +3867,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         )
                     );
                 }
+                // The preview runs the REAL resolver, at the real drop point —
+                // the dragged Group's top-left corner — so the accept highlight
+                // cannot promise a landing the drop refuses.
+                const resolution = resolveGroupDrop(canvasTree(), {
+                    groupId: gState.activeGroupId,
+                    point: { x: newX, y: newY }
+                });
+                setDragOverGroupId(
+                    resolution.nextParentId &&
+                        resolution.nextParentId !== dragged?.parent_group_id
+                        ? resolution.nextParentId
+                        : null
+                );
                 // One absolute event for the dragged Group only; receivers
                 // derive their own delta and fan out (3.1c).
                 debouncedEmitGroupMove(gState.activeGroupId, newX, newY);
@@ -4037,6 +4087,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             const gState = groupDragState();
             if (gState.activeGroupId) {
                 commitGroupDrag(gState);
+                setDragOverGroupId(null);
                 setGroupDragState({
                     activeGroupId: null,
                     offsetX: 0,
