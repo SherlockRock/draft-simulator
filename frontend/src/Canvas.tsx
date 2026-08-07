@@ -80,6 +80,7 @@ import { getDraftWorldPosition as draftWorldPosition } from "./utils/canvasWorld
 import {
     childCardsOf,
     childGroupsOf,
+    footprintOf,
     gridItemsOf,
     maxChildSpanCols,
     nodeSize,
@@ -160,6 +161,7 @@ import {
     resolveGridSave,
     arrangedRowCount,
     CARD_FOOTPRINT,
+    type GridFootprint,
     type GridItem,
     type GridSettingsInput,
     type GridMetadata
@@ -856,20 +858,31 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     };
 
-    // Snap/swap commit for a drop inside a grid-mode custom group. Applies
-    // optimistic store updates, then persists positions + derived group
-    // dimensions in one atomic request (or the local-storage equivalent).
-    //
-    // `draggedDraftId` is the Card's `draft_id` — its PLACEMENT identity, which
-    // is what canvasTree's items and the store's keyed reconcile both use.
-    const commitGridDrop = (
-        group: CanvasGroup,
-        draggedDraftId: string,
-        relX: number,
-        relY: number,
-        origin: { x: number; y: number } | null,
-        groupIdChange: string | undefined
-    ) => {
+    /**
+     * Snap/swap commit for a drop inside a grid-mode custom group, for a Card or
+     * a nested Group alike. Applies optimistic store updates, then persists
+     * positions + parentage + derived container dimensions in one atomic
+     * request (or the local-storage equivalent).
+     *
+     * `dragged.id` is the node's PLACEMENT identity — a Card's `draft_id`, a
+     * Group's `id` — which is what `canvasTree`'s items and the store's keyed
+     * reconcile both use.
+     *
+     * `relX/relY` and `origin` are CONTAINER-relative. For a Group the caller
+     * has to rebase them from absolute world (ADR-0006) BEFORE calling: the
+     * resolver's swap and relocation math runs on those numbers, so rebasing
+     * the output would be too late.
+     */
+    const commitGridDrop = (args: {
+        group: CanvasGroup;
+        dragged: { id: string; kind: GridItem["kind"]; footprint: GridFootprint };
+        relX: number;
+        relY: number;
+        origin: { x: number; y: number } | null;
+        /** The drop changes membership into `group`. */
+        joinsContainer: boolean;
+    }) => {
+        const { group, dragged, relX, relY, origin, joinsContainer } = args;
         const layout = props.cardLayout();
         const items = gridItemsFor(group);
         // THREE counts, and conflating any two of them is a bug this path has
@@ -878,54 +891,68 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         //  - `layoutCols` is the lattice everything on the drop path runs on —
         //    the items, the target cell, the resolver, the row count. They used
         //    to run on two different counts, so the overlay offered a column
-        //    the resolver refused.
-        //  - `configuredCols` is the floor PERSISTED to metadata. A drop past
-        //    the configured count bumps it. Never the layout count: that one
-        //    carries the growth column, and persisting it would widen the grid
-        //    by a column on every drop.
+        //    the resolver refused. A node entering from OUTSIDE is not among
+        //    the container's children yet, so its own footprint has to widen
+        //    this explicitly or the resolver runs with too few columns.
+        //  - `configuredCols` is the floor PERSISTED to metadata. Never the
+        //    layout count: that one carries the growth column, and persisting it
+        //    would widen the grid by a column on every drop.
         //  - `sizeCols` is what the container's SIZE comes from — configured
-        //    plus the must-fit term, and no growth column, or the container
+        //    plus the must-fit terms, and no growth column, or the container
         //    grows a column wider than it needs.
-        const layoutCols = gridColsFor(group);
+        const layoutCols = Math.max(gridColsFor(group), dragged.footprint.cols);
         const targetCell = positionToCell(relX, relY, layout, layoutCols);
-        const configuredCols = Math.max(gridColsOf(group), targetCell.col + 1);
-        const sizeCols = Math.max(
-            configuredCols,
-            maxChildSpanCols(canvasTree(), group.id, layout)
-        );
         const placements = resolveGridDrop({
             items,
-            dragged: {
-                id: draggedDraftId,
-                kind: "card",
-                footprint: CARD_FOOTPRINT
-            },
+            dragged,
             draggedOrigin: origin,
             dropX: relX,
             dropY: relY,
             layout,
             cols: layoutCols
         });
+        // Measured from where the node actually LANDED, not from the raw drop
+        // point: a wide node is clamped to `lastStartCol`, and a collision can
+        // relocate it to a lower column. Bumping the user's configured count
+        // for a landing that never happened is the same class of mistake as
+        // sizing the container from the layout count.
+        const landing = placements.find((p) => p.id === dragged.id);
+        const landingCell = landing
+            ? positionToCell(landing.positionX, landing.positionY, layout, layoutCols)
+            : targetCell;
+        const configuredCols = Math.max(gridColsOf(group), landingCell.col + 1);
+        const sizeCols = Math.max(
+            configuredCols,
+            maxChildSpanCols(canvasTree(), group.id, layout),
+            dragged.footprint.cols
+        );
         const writes = splitGridPlacements({
             tree: canvasTree(),
             parent: group,
             placements
         });
         const updates = writes.positions;
-        if (groupIdChange !== undefined) {
-            const dragged = updates.find((u) => u.draft_id === draggedDraftId);
-            if (dragged) dragged.group_id = groupIdChange;
+        if (joinsContainer && dragged.kind === "card") {
+            const entry = updates.find((u) => u.draft_id === dragged.id);
+            if (entry) entry.group_id = group.id;
         }
-        // The dragged Card may be entering from outside, in which case it is
+        if (dragged.kind === "group") {
+            // Rebasing the placement says where it sits; it does not say that
+            // it is a MEMBER. `parentId` is the only thing that does, and key
+            // presence is the protocol — absent leaves parentage alone.
+            const entry = writes.groups.find((g) => g.id === dragged.id);
+            if (entry && joinsContainer) entry.parentId = group.id;
+        }
+        // The dragged node may be entering from outside, in which case it is
         // not among the group's items yet; its footprint still has to count.
-        const projected = items.some((i) => i.id === draggedDraftId)
+        const projected = items.some((i) => i.id === dragged.id)
             ? items
             : [
                   ...items,
                   {
-                      id: draggedDraftId,
-                      kind: "card" as const,
-                      footprint: CARD_FOOTPRINT,
+                      id: dragged.id,
+                      kind: dragged.kind,
+                      footprint: dragged.footprint,
                       position: { x: relX, y: relY },
                       cell: targetCell
                   }
@@ -945,6 +972,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             });
         }
         applyGroupPositionWrites(writes.groupStoreWrites);
+        if (joinsContainer && dragged.kind === "group") {
+            setCanvasGroups((g) => g.id === dragged.id, {
+                parent_group_id: group.id
+            });
+        }
         setCanvasGroups((g) => g.id === group.id, {
             width: dims.width,
             height: dims.height,
@@ -3017,6 +3049,44 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             positionY: group.positionY,
             ...(parentageChanged ? { parentId: resolution.nextParentId } : {})
         };
+
+        // A GRID container lays its children out; it does not accept them
+        // wherever they were released. Route the drop — including a same-parent
+        // reposition — through the same resolver Cards use, with the dragged
+        // Group's real footprint. Without this the Group never snaps and no
+        // rectangular preview ever appears, however rectangular the overlay is
+        // (round 2, V5).
+        const nextParent = resolution.nextParentId
+            ? canvasGroups.find((g) => g.id === resolution.nextParentId)
+            : undefined;
+        if (!resolution.rejection && nextParent && isGridGroup(nextParent)) {
+            // Container-relative BEFORE the resolver, both of them: a Group's
+            // stored origin is absolute world at every depth (ADR-0006), and
+            // the swap/relocation math runs on these numbers.
+            commitGridDrop({
+                group: nextParent,
+                dragged: {
+                    id: groupId,
+                    kind: "group",
+                    footprint: footprintOf(
+                        canvasTree(),
+                        { kind: "group", id: groupId, group },
+                        props.cardLayout()
+                    )
+                },
+                relX: group.positionX - nextParent.positionX,
+                relY: group.positionY - nextParent.positionY,
+                origin: parentageChanged
+                    ? null
+                    : {
+                          x: gState.originX - nextParent.positionX,
+                          y: gState.originY - nextParent.positionY
+                      },
+                joinsContainer: parentageChanged
+            });
+            return;
+        }
+
         if (parentageChanged) {
             setCanvasGroups((g) => g.id === groupId, {
                 parent_group_id: resolution.nextParentId ?? null
@@ -3880,6 +3950,61 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         ? resolution.nextParentId
                         : null
                 );
+                // Rectangular landing preview when the target is a grid. Runs
+                // the SAME resolver on the SAME container-relative numbers the
+                // commit will use, so what the user sees is where it lands.
+                const previewParent = resolution.nextParentId
+                    ? canvasGroups.find((g) => g.id === resolution.nextParentId)
+                    : undefined;
+                if (dragged && previewParent && isGridGroup(previewParent)) {
+                    const layout = props.cardLayout();
+                    const footprint = footprintOf(
+                        canvasTree(),
+                        { kind: "group", id: gState.activeGroupId, group: dragged },
+                        layout
+                    );
+                    const cols = Math.max(gridColsFor(previewParent), footprint.cols);
+                    const relX = newX - previewParent.positionX;
+                    const relY = newY - previewParent.positionY;
+                    const joins = previewParent.id !== (dragged.parent_group_id ?? null);
+                    const placements = resolveGridDrop({
+                        items: gridItemsFor(previewParent),
+                        dragged: { id: gState.activeGroupId, kind: "group", footprint },
+                        draggedOrigin: joins
+                            ? null
+                            : {
+                                  x: gState.originX - previewParent.positionX,
+                                  y: gState.originY - previewParent.positionY
+                              },
+                        dropX: relX,
+                        dropY: relY,
+                        layout,
+                        cols
+                    });
+                    const landing = placements.find((p) => p.id === gState.activeGroupId);
+                    setGridDropCell(
+                        landing
+                            ? {
+                                  groupId: previewParent.id,
+                                  landing: {
+                                      cell: positionToCell(
+                                          landing.positionX,
+                                          landing.positionY,
+                                          layout,
+                                          cols
+                                      ),
+                                      footprint
+                                  },
+                                  // A Group never swaps (decision 7, amended):
+                                  // both sides must be Cards.
+                                  isSwap: false,
+                                  displaced: null
+                              }
+                            : null
+                    );
+                } else {
+                    setGridDropCell(null);
+                }
                 // One absolute event for the dragged Group only; receivers
                 // derive their own delta and fan out (3.1c).
                 debouncedEmitGroupMove(gState.activeGroupId, newX, newY);
@@ -4088,6 +4213,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             if (gState.activeGroupId) {
                 commitGroupDrag(gState);
                 setDragOverGroupId(null);
+                setGridDropCell(null);
                 setGroupDragState({
                     activeGroupId: null,
                     offsetX: 0,
@@ -4135,14 +4261,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
                         if (isGridGroup(dropGroup)) {
                             // Grid destination: snap/swap and derive dimensions.
-                            commitGridDrop(
-                                dropGroup,
-                                finalDraft.draft_id,
-                                relativeX,
-                                relativeY,
-                                null,
-                                dropGroup.id
-                            );
+                            commitGridDrop({
+                                group: dropGroup,
+                                dragged: {
+                                    id: finalDraft.draft_id,
+                                    kind: "card",
+                                    footprint: CARD_FOOTPRINT
+                                },
+                                relX: relativeX,
+                                relY: relativeY,
+                                origin: null,
+                                joinsContainer: true
+                            });
                         } else {
                             setCanvasDrafts((cd) => cd.Draft.id === state.activeBoxId, {
                                 positionX: relativeX,
@@ -4209,14 +4339,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         if (sameGroup && isGridGroup(sameGroup)) {
                             // Repositioning within a grid group: snap/swap
                             // relative to where the card started.
-                            commitGridDrop(
-                                sameGroup,
-                                finalDraft.draft_id,
-                                finalDraft.positionX,
-                                finalDraft.positionY,
-                                { x: state.dragOriginX, y: state.dragOriginY },
-                                undefined
-                            );
+                            commitGridDrop({
+                                group: sameGroup,
+                                dragged: {
+                                    id: finalDraft.draft_id,
+                                    kind: "card",
+                                    footprint: CARD_FOOTPRINT
+                                },
+                                relX: finalDraft.positionX,
+                                relY: finalDraft.positionY,
+                                origin: { x: state.dragOriginX, y: state.dragOriginY },
+                                joinsContainer: false
+                            });
                         } else {
                             if (isLocalMode()) {
                                 localUpdateDraftPosition({

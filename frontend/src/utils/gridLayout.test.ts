@@ -349,6 +349,94 @@ describe("resolveGridDrop", () => {
     });
 });
 
+// 5a-4b's north star, at the engine level: a rectangular dragged node entering
+// a grid container.
+describe("resolveGridDrop with a rectangular dragged Group", () => {
+    it("places a Bo3 at the cell under the drop when the rectangle is free", () => {
+        const target = cellToPosition({ row: 2, col: 0 }, "wide");
+        const placements = resolveGridDrop({
+            items: [itemInCell("card", 0, 0, "wide")],
+            dragged: { id: "bo3", kind: "group", footprint: BO3 },
+            draggedOrigin: null,
+            dropX: target.x,
+            dropY: target.y,
+            layout: "wide",
+            cols: 4
+        });
+        expect(placements).toEqual([
+            { id: "bo3", kind: "group", positionX: target.x, positionY: target.y }
+        ]);
+    });
+
+    // V1's expectation correction, as arithmetic: `effectiveGridCols` owes its
+    // `+1` to the CONFIGURED term only, so a Bo3 (4 cols) in a 4-column lattice
+    // has `lastStartCol` 0 and lands in column 0 wherever it is released.
+    it("clamps a full-width rectangle to column 0 however far right it is dropped", () => {
+        const target = cellToPosition({ row: 1, col: 3 }, "wide");
+        const placements = resolveGridDrop({
+            items: [],
+            dragged: { id: "bo3", kind: "group", footprint: BO3 },
+            draggedOrigin: null,
+            dropX: target.x,
+            dropY: target.y,
+            layout: "wide",
+            cols: 4
+        });
+        expect(cellOf(placements[0], "wide", 4)).toEqual({ row: 1, col: 0 });
+    });
+
+    it("relocates the DRAGGED rectangle on a collision and leaves occupants alone", () => {
+        // A Card at (0,1) sits inside the Bo3's 2x4 rectangle at (0,0).
+        const card = itemInCell("card", 0, 1, "wide");
+        const target = cellToPosition({ row: 0, col: 0 }, "wide");
+        const placements = resolveGridDrop({
+            items: [card],
+            dragged: { id: "bo3", kind: "group", footprint: BO3 },
+            draggedOrigin: null,
+            dropX: target.x,
+            dropY: target.y,
+            layout: "wide",
+            cols: 4
+        });
+        expect(placements).toHaveLength(1);
+        expect(placements[0].id).toBe("bo3");
+        expect(cellOf(placements[0], "wide", 4).row).toBeGreaterThan(0);
+    });
+
+    it("overhangs from column 0 when the child is wider than the grid", () => {
+        // A Bo5 is 6 columns; the grid offers 4. `lastStartCol` clamps to 0
+        // rather than scanning forever for a column that fits (step-3 fix).
+        const target = cellToPosition({ row: 0, col: 2 }, "wide");
+        const placements = resolveGridDrop({
+            items: [],
+            dragged: { id: "bo5", kind: "group", footprint: BO5 },
+            draggedOrigin: null,
+            dropX: target.x,
+            dropY: target.y,
+            layout: "wide",
+            cols: 4
+        });
+        expect(cellOf(placements[0], "wide", 4)).toEqual({ row: 0, col: 0 });
+    });
+
+    it("does not evict a series when a rectangle lands on one", () => {
+        const series = itemInCell("bo3", 0, 0, "wide", BO3, "group");
+        const target = cellToPosition({ row: 0, col: 0 }, "wide");
+        const placements = resolveGridDrop({
+            items: [series],
+            dragged: { id: "bo5", kind: "group", footprint: BO5 },
+            draggedOrigin: null,
+            dropX: target.x,
+            dropY: target.y,
+            layout: "wide",
+            cols: 6
+        });
+        expect(placements.map((p) => p.id)).toEqual(["bo5"]);
+        // Below the series' two rows, which is the only free band.
+        expect(cellOf(placements[0], "wide", 6).row).toBe(2);
+    });
+});
+
 describe("kind-gated swap (decision 7, amended round 2)", () => {
     it("swaps two 1x1 CARDS, as before", () => {
         const occupant = itemInCell("occupant", 0, 1, "wide");
