@@ -40,9 +40,7 @@ const {
     localDeleteGroup,
     localUpdateDraftPositions
 } = await import("./useLocalCanvasMutations");
-const { MAX_GROUP_DEPTH } = await import(
-    "@draft-sim/shared-types/canvas-tree-vector"
-);
+const { MAX_GROUP_DEPTH } = await import("@draft-sim/shared-types/canvas-tree-vector");
 const { SERIES_HEADER_HEIGHT, SERIES_PADDING } = await import("./helpers");
 
 beforeEach(() => {
@@ -291,9 +289,7 @@ describe("local group nesting", () => {
 
         localUpdateDraftPositions({
             positions: [],
-            groups: [
-                { id: child.id, positionX: 700, positionY: 800, parentId: null }
-            ]
+            groups: [{ id: child.id, positionX: 700, positionY: 800, parentId: null }]
         });
 
         const stored = (getLocalCanvas()?.groups ?? []).find((g) => g.id === child.id);

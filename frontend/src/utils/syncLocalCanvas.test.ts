@@ -18,9 +18,7 @@ describe("stripUnsyncableGroupMetadata", () => {
             seriesType: "fearless"
         });
 
-        expect(Object.prototype.hasOwnProperty.call(stripped, "gameType")).toBe(
-            false
-        );
+        expect(Object.prototype.hasOwnProperty.call(stripped, "gameType")).toBe(false);
         expect(stripped).toEqual({
             blueTeamName: "T1",
             redTeamName: "GenG",
@@ -40,7 +38,8 @@ describe("stripUnsyncableGroupMetadata", () => {
     it("empties metadata whose only customization was the tag", () => {
         // The sync loop keys `hasMetadata` off this result, so a group tagged
         // and nothing else must send no metadata at all.
-        expect(Object.keys(stripUnsyncableGroupMetadata({ gameType: "official" })))
-            .toHaveLength(0);
+        expect(
+            Object.keys(stripUnsyncableGroupMetadata({ gameType: "official" }))
+        ).toHaveLength(0);
     });
 });

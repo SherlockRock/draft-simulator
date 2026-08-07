@@ -1,5 +1,6 @@
 import {
     For,
+    batch,
     onMount,
     onCleanup,
     createSignal,
@@ -87,6 +88,8 @@ import {
     type CanvasTree
 } from "./utils/canvasTree";
 import { findDropContainer } from "./utils/canvasHitTest";
+import { splitGridPlacements } from "./utils/gridPersistence";
+import type { GroupPositionWrite } from "./utils/groupSubtreeMove";
 import { parentageRejection } from "./utils/groupParentage";
 import {
     localNewDraft,
@@ -153,7 +156,6 @@ import {
     DEFAULT_GROUP_HEIGHT,
     resolveGridSave,
     arrangedRowCount,
-    toPositionUpdates,
     CARD_FOOTPRINT,
     type GridItem,
     type GridSettingsInput,
@@ -818,6 +820,27 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     }));
 
+    /**
+     * Apply Group position writes to the store — the optimistic half of every
+     * Group move.
+     *
+     * Always fed by `subtreeMoveWrites` (via `splitGridPlacements` or the drag),
+     * never by a bare row: the server fans a container's delta out over its
+     * descendants, so a client that writes only the container makes its own
+     * subtree lag until the broadcast lands.
+     */
+    const applyGroupPositionWrites = (writes: GroupPositionWrite[]) => {
+        if (writes.length === 0) return;
+        batch(() => {
+            for (const write of writes) {
+                setCanvasGroups((g) => g.id === write.id, {
+                    positionX: write.positionX,
+                    positionY: write.positionY
+                });
+            }
+        });
+    };
+
     // Snap/swap commit for a drop inside a grid-mode custom group. Applies
     // optimistic store updates, then persists positions + derived group
     // dimensions in one atomic request (or the local-storage equivalent).
@@ -834,16 +857,24 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     ) => {
         const layout = props.cardLayout();
         const items = gridItemsFor(group);
-        // Columns can grow like rows do: a drop in the growth column (or a
-        // width-exposed column) bumps gridCols, persisted with the batch. The
-        // widest child is a floor on the persisted count too — the resolver
-        // cannot lay out a child that does not fit the columns it is given.
-        const targetCell = positionToCell(relX, relY, layout, gridColsFor(group));
-        // Two counts, deliberately: `configuredCols` is the floor persisted to
-        // metadata, `cols` the count the layout actually runs on. A wide child
-        // widens the second — it must fit — without ratcheting the first.
+        // THREE counts, and conflating any two of them is a bug this path has
+        // had at least one of (round 2, V4):
+        //
+        //  - `layoutCols` is the lattice everything on the drop path runs on —
+        //    the items, the target cell, the resolver, the row count. They used
+        //    to run on two different counts, so the overlay offered a column
+        //    the resolver refused.
+        //  - `configuredCols` is the floor PERSISTED to metadata. A drop past
+        //    the configured count bumps it. Never the layout count: that one
+        //    carries the growth column, and persisting it would widen the grid
+        //    by a column on every drop.
+        //  - `sizeCols` is what the container's SIZE comes from — configured
+        //    plus the must-fit term, and no growth column, or the container
+        //    grows a column wider than it needs.
+        const layoutCols = gridColsFor(group);
+        const targetCell = positionToCell(relX, relY, layout, layoutCols);
         const configuredCols = Math.max(gridColsOf(group), targetCell.col + 1);
-        const cols = Math.max(
+        const sizeCols = Math.max(
             configuredCols,
             maxChildSpanCols(canvasTree(), group.id, layout)
         );
@@ -858,9 +889,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             dropX: relX,
             dropY: relY,
             layout,
-            cols
+            cols: layoutCols
         });
-        const updates = toPositionUpdates(placements);
+        const writes = splitGridPlacements({
+            tree: canvasTree(),
+            parent: group,
+            placements
+        });
+        const updates = writes.positions;
         if (groupIdChange !== undefined) {
             const dragged = updates.find((u) => u.draft_id === draggedDraftId);
             if (dragged) dragged.group_id = groupIdChange;
@@ -879,8 +915,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                       cell: targetCell
                   }
               ];
-        const rows = rowCountAfter(placements, projected, layout, cols);
-        const dims = resolveGridDims(group, rows, cols, props.cardLayout());
+        const rows = rowCountAfter(placements, projected, layout, layoutCols);
+        const dims = resolveGridDims(group, rows, sizeCols, layout);
         const metadata =
             configuredCols !== gridColsOf(group)
                 ? { gridCols: configuredCols }
@@ -893,23 +929,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 ...(u.group_id !== undefined ? { group_id: u.group_id } : {})
             });
         }
+        applyGroupPositionWrites(writes.groupStoreWrites);
         setCanvasGroups((g) => g.id === group.id, {
             width: dims.width,
             height: dims.height,
             ...(metadata ? { metadata: { ...group.metadata, ...metadata } } : {})
         });
 
+        const payload = {
+            positions: updates,
+            ...(writes.groups.length > 0 ? { groups: writes.groups } : {}),
+            group: { id: group.id, width: dims.width, height: dims.height, metadata }
+        };
         if (isLocalMode()) {
-            localUpdateDraftPositions({
-                positions: updates,
-                group: { id: group.id, width: dims.width, height: dims.height, metadata }
-            });
+            localUpdateDraftPositions(payload);
         } else {
-            updateDraftPositionsMutation.mutate({
-                canvasId: canvasId(),
-                positions: updates,
-                group: { id: group.id, width: dims.width, height: dims.height, metadata }
-            });
+            updateDraftPositionsMutation.mutate({ canvasId: canvasId(), ...payload });
         }
     };
 
@@ -925,7 +960,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         );
         const items = gridItemsOf(canvasTree(), group.id, layout, cols);
         const placements = arrangeGrid(items, layout, cols);
-        const updates = toPositionUpdates(placements);
+        // `arrangeGrid` assigns cells to child GROUPS as well as Cards, and
+        // `toPositionUpdates` used to drop that half on the floor — so a nested
+        // Group kept its old position while Cards were written around the cells
+        // it had been assigned, and `rowCountAfter` sized the container from a
+        // layout that never happened. One menu click, a persisted write.
+        const writes = splitGridPlacements({
+            tree: canvasTree(),
+            parent: group,
+            placements
+        });
+        const updates = writes.positions;
         const rows = rowCountAfter(placements, items, layout, cols);
         const dims = resolveGridDims(group, rows, cols, layout);
 
@@ -935,33 +980,27 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 positionY: u.positionY
             });
         }
+        applyGroupPositionWrites(writes.groupStoreWrites);
         setCanvasGroups((g) => g.id === group.id, {
             width: dims.width,
             height: dims.height,
             metadata: { ...group.metadata, ...metadata }
         });
 
+        const payload = {
+            positions: updates,
+            ...(writes.groups.length > 0 ? { groups: writes.groups } : {}),
+            group: {
+                id: group.id,
+                width: dims.width,
+                height: dims.height,
+                metadata
+            }
+        };
         if (isLocalMode()) {
-            localUpdateDraftPositions({
-                positions: updates,
-                group: {
-                    id: group.id,
-                    width: dims.width,
-                    height: dims.height,
-                    metadata
-                }
-            });
+            localUpdateDraftPositions(payload);
         } else {
-            updateDraftPositionsMutation.mutate({
-                canvasId: canvasId(),
-                positions: updates,
-                group: {
-                    id: group.id,
-                    width: dims.width,
-                    height: dims.height,
-                    metadata
-                }
-            });
+            updateDraftPositionsMutation.mutate({ canvasId: canvasId(), ...payload });
         }
     };
 
@@ -3756,17 +3795,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     const layout = props.cardLayout();
                     const relX = newWorldX - gridHoverGroup.positionX;
                     const relY = newWorldY - gridHoverGroup.positionY;
-                    const targetCell = positionToCell(
-                        relX,
-                        relY,
-                        layout,
-                        gridColsFor(gridHoverGroup)
-                    );
-                    const cols = Math.max(
-                        gridColsOf(gridHoverGroup),
-                        targetCell.col + 1,
-                        maxChildSpanCols(canvasTree(), gridHoverGroup.id, layout)
-                    );
+                    // The SAME lattice the commit will use — the preview and
+                    // the drop have to agree about which columns exist, or the
+                    // overlay offers one the resolver refuses (round 2, V4).
+                    const cols = gridColsFor(gridHoverGroup);
+                    const targetCell = positionToCell(relX, relY, layout, cols);
                     const isIntraGroup = gridHoverGroup.id === state.dragGroupId;
                     const placements = resolveGridDrop({
                         items: gridItemsFor(gridHoverGroup),

@@ -151,6 +151,52 @@ describe("resolveCopyPlacement", () => {
         });
     });
 
+    // Plan A11: this call passed the CONFIGURED count, and `gridItemsOf` derives
+    // each item's cell through `positionToCell`, which clamps `col` to
+    // `cols - 1` — so a child WIDER than the configured grid registered two
+    // columns left of where it is, and the copy was handed a cell it covers.
+    it("counts a child wider than the configured grid at its real column", () => {
+        const group = groupWith({
+            id: "g1",
+            type: "custom",
+            width: 4000,
+            height: 4000,
+            layout: "grid",
+            gridCols: 2,
+            manualWidth: 4000,
+            manualHeight: 4000
+        });
+        // Three columns wide, parked with its top-left at column 2 — so it
+        // covers columns 2..4 and leaves column 1 free.
+        const childOrigin = cellToPosition({ row: 0, col: 2 }, layout);
+        const wideChild: CanvasGroup = {
+            id: "wide",
+            canvas_id: "canvas-1",
+            name: "wide",
+            type: "custom",
+            positionX: childOrigin.x,
+            positionY: childOrigin.y,
+            width: 3 * cardWidth(layout) + 2 * GRID_CELL_GAP,
+            height: cardHeight(layout),
+            parent_group_id: "g1",
+            metadata: {}
+        };
+        const occupant = cellToPosition({ row: 0, col: 0 }, layout);
+        const draft = draftAt("a", occupant.x, occupant.y, "g1");
+
+        const placement = resolveCopyPlacement({
+            draft,
+            group,
+            tree: { groups: [group, wideChild], drafts: [draft] },
+            layout
+        });
+
+        // Column 1. Clamped to the configured count the child registers at
+        // column 1 and covers 1..3, which pushes the copy down to row 1.
+        expect(placement.positionX).toBe(cellToPosition({ row: 0, col: 1 }, layout).x);
+        expect(placement.positionY).toBe(cellToPosition({ row: 0, col: 1 }, layout).y);
+    });
+
     it("shrinks a free-layout group the user never resized back to its contents", () => {
         // The 5a-0 ratchet removal, from the copy surface: `growsGroup` used to
         // suppress any dimension that was not larger, leaving a container stuck

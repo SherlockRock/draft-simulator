@@ -290,9 +290,19 @@ const isUnit = (footprint: GridFootprint): boolean =>
  * Where a drop lands, and what (if anything) it displaces.
  *
  * Target = the top-left cell under the drop. Footprint fits free → place it.
- * Collision → **swap only when both nodes are `1×1`**; anything else relocates
- * the DRAGGED node to the nearest free rect and leaves the occupants alone
- * (decision 7). A `1×1` dragged onto a `2×4` series must not evict the series.
+ * Collision → **swap only when both nodes are `1×1` CARDS**; anything else
+ * relocates the DRAGGED node to the nearest free rect and leaves the occupants
+ * alone (decision 7). A `1×1` dragged onto a `2×4` series must not evict the
+ * series.
+ *
+ * ⚠️ The `kind` half of that test is not redundant with `isUnit` (decision 7,
+ * amended round 2). `isUnit` tests the FOOTPRINT, and a default 400×200 nested
+ * Group is `1×1` in four of the six card layouts and `2×1` in the other two —
+ * so without the `kind` gate the swap was reachable for containers *and* its
+ * availability depended on `cardLayout`, which is canvas-level and broadcast.
+ * One user flipping a display toggle would have changed what everyone's drop
+ * gesture did to containers. A Card dropped onto a nested Group now relocates
+ * the **Card**; the Group is never evicted.
  *
  * The dragged node's footprint comes in separately from `items` because a node
  * entering from outside the group is not in `items` at all, and one that is has
@@ -324,6 +334,8 @@ export const resolveGridDrop = (args: {
     const occupant = collisions[0];
     if (
         collisions.length === 1 &&
+        dragged.kind === "card" &&
+        occupant.kind === "card" &&
         isUnit(dragged.footprint) &&
         isUnit(occupant.footprint)
     ) {

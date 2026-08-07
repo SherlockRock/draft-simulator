@@ -1,0 +1,114 @@
+import { describe, it, expect } from "vitest";
+import { splitGridPlacements } from "./gridPersistence";
+import type { CanvasTree } from "./canvasTree";
+import type { CanvasGroup } from "./schemas";
+import type { GridPlacement } from "./gridLayout";
+
+const group = (
+    id: string,
+    opts: { parent?: string | null; x?: number; y?: number } = {}
+): CanvasGroup => ({
+    id,
+    canvas_id: "c1",
+    name: id,
+    type: "custom",
+    positionX: opts.x ?? 0,
+    positionY: opts.y ?? 0,
+    parent_group_id: opts.parent ?? null,
+    metadata: {}
+});
+
+const treeOf = (groups: CanvasGroup[]): CanvasTree => ({ groups, drafts: [] });
+
+const card = (id: string, x: number, y: number): GridPlacement => ({
+    id,
+    kind: "card",
+    positionX: x,
+    positionY: y
+});
+
+const nested = (id: string, x: number, y: number): GridPlacement => ({
+    id,
+    kind: "group",
+    positionX: x,
+    positionY: y
+});
+
+describe("splitGridPlacements", () => {
+    it("keeps Card placements container-relative and verbatim", () => {
+        const parent = group("P", { x: 1000, y: 500 });
+        const { positions, groups } = splitGridPlacements({
+            tree: treeOf([parent]),
+            parent,
+            placements: [card("c1", 16, 64)]
+        });
+        expect(positions).toEqual([{ draft_id: "c1", positionX: 16, positionY: 64 }]);
+        expect(groups).toEqual([]);
+    });
+
+    it("rebases Group placements to absolute world (ADR-0006)", () => {
+        const parent = group("P", { x: 1000, y: 500 });
+        const child = group("C", { parent: "P", x: 1200, y: 700 });
+        const { groups, positions } = splitGridPlacements({
+            tree: treeOf([parent, child]),
+            parent,
+            placements: [nested("C", 16, 64)]
+        });
+        expect(positions).toEqual([]);
+        expect(groups).toEqual([{ id: "C", positionX: 1016, positionY: 564 }]);
+    });
+
+    it("carries the moved Group's whole subtree in the store writes", () => {
+        const parent = group("P", { x: 0, y: 0 });
+        const child = group("C", { parent: "P", x: 100, y: 100 });
+        const grandchild = group("G", { parent: "C", x: 140, y: 160 });
+        const { groupStoreWrites } = splitGridPlacements({
+            tree: treeOf([parent, child, grandchild]),
+            parent,
+            placements: [nested("C", 16, 64)]
+        });
+        // C moves by (-84, -36); G rides along from ITS OWN stored position.
+        expect(groupStoreWrites).toEqual([
+            { id: "C", positionX: 16, positionY: 64 },
+            { id: "G", positionX: 56, positionY: 124 }
+        ]);
+    });
+
+    it("writes nothing to the store for a Group that did not actually move", () => {
+        const parent = group("P", { x: 0, y: 0 });
+        const child = group("C", { parent: "P", x: 16, y: 64 });
+        const { groups, groupStoreWrites } = splitGridPlacements({
+            tree: treeOf([parent, child]),
+            parent,
+            placements: [nested("C", 16, 64)]
+        });
+        // Still on the wire — the commit is what makes it authoritative.
+        expect(groups).toEqual([{ id: "C", positionX: 16, positionY: 64 }]);
+        expect(groupStoreWrites).toEqual([]);
+    });
+
+    it("handles a Group entering the grid from outside the store", () => {
+        const parent = group("P", { x: 200, y: 200 });
+        const { groups, groupStoreWrites } = splitGridPlacements({
+            tree: treeOf([parent]),
+            parent,
+            placements: [nested("incoming", 16, 64)]
+        });
+        expect(groups).toEqual([{ id: "incoming", positionX: 216, positionY: 264 }]);
+        expect(groupStoreWrites).toEqual([
+            { id: "incoming", positionX: 216, positionY: 264 }
+        ]);
+    });
+
+    it("splits a mixed batch by kind", () => {
+        const parent = group("P", { x: 10, y: 10 });
+        const child = group("C", { parent: "P", x: 0, y: 0 });
+        const { positions, groups } = splitGridPlacements({
+            tree: treeOf([parent, child]),
+            parent,
+            placements: [card("c1", 16, 64), nested("C", 400, 64), card("c2", 800, 64)]
+        });
+        expect(positions.map((p) => p.draft_id)).toEqual(["c1", "c2"]);
+        expect(groups).toEqual([{ id: "C", positionX: 410, positionY: 74 }]);
+    });
+});

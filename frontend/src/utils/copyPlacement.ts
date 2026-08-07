@@ -19,7 +19,12 @@ import {
     rowCountAfter,
     type GridItem
 } from "./gridLayout";
-import { childCardsOf, gridItemsOf, type CanvasTree } from "./canvasTree";
+import {
+    childCardsOf,
+    gridItemsOf,
+    maxChildSpanCols,
+    type CanvasTree
+} from "./canvasTree";
 
 export type CopyPlacement = {
     positionX: number;
@@ -59,7 +64,21 @@ export const resolveCopyPlacement = (args: {
     const { draft, group, tree, layout } = args;
 
     if (group?.type === "custom" && group.metadata.layout === "grid") {
-        const cols = gridColsOf(group);
+        // The MUST-FIT term was missing here, and only that (plan A11). A copy
+        // has no drop point, so no growth column is owed — but `gridItemsOf`
+        // derives each item's cell through `positionToCell`, which clamps `col`
+        // to `cols - 1`, so a 6-column child in a 3-column configured grid
+        // registered at col 2. Occupancy was then wrong and `firstEmptyRect`
+        // handed the copy a cell the child actually covered.
+        //
+        // Deliberately NOT `effectiveGridCols`: that carries the +1 growth
+        // column, and a copy placed there would sit outside the container,
+        // since the container's size comes from this same count and
+        // `copyPlacement` never bumps `metadata.gridCols`.
+        const cols = Math.max(
+            gridColsOf(group),
+            maxChildSpanCols(tree, group.id, layout)
+        );
         const items = gridItemsOf(tree, group.id, layout, cols);
         const cell = firstEmptyRect(items, CARD_FOOTPRINT, cols);
         const position = cellToPosition(cell, layout);

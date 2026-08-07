@@ -349,6 +349,63 @@ describe("resolveGridDrop", () => {
     });
 });
 
+describe("kind-gated swap (decision 7, amended round 2)", () => {
+    it("swaps two 1x1 CARDS, as before", () => {
+        const occupant = itemInCell("occupant", 0, 1, "wide");
+        const origin = cellToPosition({ row: 0, col: 0 }, "wide");
+        const target = cellToPosition({ row: 0, col: 1 }, "wide");
+        const placements = resolveGridDrop({
+            items: [occupant],
+            dragged: { id: "dragged", kind: "card", footprint: CARD_FOOTPRINT },
+            draggedOrigin: { x: origin.x, y: origin.y },
+            dropX: target.x,
+            dropY: target.y,
+            layout: "wide",
+            cols: 3
+        });
+        expect(placements).toHaveLength(2);
+        expect(cellOf(placements[1], "wide", 3)).toEqual({ row: 0, col: 0 });
+    });
+
+    // A default 400x200 Group is 1x1 in four of the six layouts, so `isUnit`
+    // alone made the swap layout-dependent — and cardLayout is canvas-level and
+    // broadcast, so one user's display toggle changed everyone's drop gesture.
+    it("never evicts a 1x1 GROUP; the dragged Card relocates instead", () => {
+        const occupant = itemInCell("nested", 0, 1, "wide", CARD_FOOTPRINT, "group");
+        const origin = cellToPosition({ row: 0, col: 0 }, "wide");
+        const target = cellToPosition({ row: 0, col: 1 }, "wide");
+        const placements = resolveGridDrop({
+            items: [occupant],
+            dragged: { id: "dragged", kind: "card", footprint: CARD_FOOTPRINT },
+            draggedOrigin: { x: origin.x, y: origin.y },
+            dropX: target.x,
+            dropY: target.y,
+            layout: "wide",
+            cols: 3
+        });
+        expect(placements).toHaveLength(1);
+        expect(placements[0].id).toBe("dragged");
+        expect(cellOf(placements[0], "wide", 3)).not.toEqual({ row: 0, col: 1 });
+    });
+
+    it("never lets a 1x1 GROUP evict a Card either", () => {
+        const occupant = itemInCell("card", 0, 1, "wide");
+        const origin = cellToPosition({ row: 0, col: 0 }, "wide");
+        const target = cellToPosition({ row: 0, col: 1 }, "wide");
+        const placements = resolveGridDrop({
+            items: [occupant],
+            dragged: { id: "dragged", kind: "group", footprint: CARD_FOOTPRINT },
+            draggedOrigin: { x: origin.x, y: origin.y },
+            dropX: target.x,
+            dropY: target.y,
+            layout: "wide",
+            cols: 3
+        });
+        expect(placements).toHaveLength(1);
+        expect(placements[0].id).toBe("dragged");
+    });
+});
+
 describe("arrangeGrid", () => {
     it("keeps already-tidy items in place", () => {
         const items = [itemInCell("a", 0, 0, "wide"), itemInCell("b", 0, 1, "wide")];
