@@ -6,10 +6,11 @@ import {
     updateCanvasGroup,
     updateCanvasDraft,
     createConnection,
-    updateCanvasViewport
+    updateCanvasViewport,
+    updateCanvasDraftPositions
 } from "./actions";
-import { ConnectionEndpoint } from "./schemas";
-import type { CanvasGroupMetadata } from "@draft-sim/shared-types";
+import { CanvasGroup, ConnectionEndpoint } from "./schemas";
+import type { CanvasGroupMetadata, GroupPositionUpdate } from "@draft-sim/shared-types";
 
 /**
  * Drops `gameType` from local group metadata on its way to the server.
@@ -32,6 +33,31 @@ export const stripUnsyncableGroupMetadata = (
     delete rest.gameType;
     return rest;
 };
+
+/**
+ * The `groups[]` payload for sync's parentage pass: one entry per LOCAL group
+ * that had a parent, with both ids remapped to their server rows.
+ *
+ * Pure and exported because `syncLocalCanvasToServer` drives eight network
+ * actions end to end and has no harness — this is the cheapest seam that can be
+ * tested, in the same spirit as `stripUnsyncableGroupMetadata`.
+ *
+ * Positions are carried unchanged: the batch route takes them as absolute world
+ * targets and they are already what the create wrote, so this pass moves
+ * nothing (ADR-0006 — reparenting writes no coordinates).
+ */
+export const nestedGroupSyncEntries = (
+    groups: readonly CanvasGroup[],
+    idMap: ReadonlyMap<string, string>
+): GroupPositionUpdate[] =>
+    groups
+        .filter((group) => group.parent_group_id)
+        .map((group) => ({
+            id: idMap.get(group.id) ?? group.id,
+            positionX: group.positionX,
+            positionY: group.positionY,
+            parentId: idMap.get(group.parent_group_id ?? "") ?? null
+        }));
 
 export const syncLocalCanvasToServer = async (): Promise<string | null> => {
     // Skip sync if canvas is empty (no drafts, no groups, not renamed)
@@ -80,6 +106,29 @@ export const syncLocalCanvasToServer = async (): Promise<string | null> => {
                 ...(hasMetadata && { metadata: syncedMetadata })
             });
         }
+    }
+
+    // Step 3b: Re-parent the nested groups, in ONE batch call.
+    //
+    // A second pass rather than a parents-first ordering: `createCanvasGroup`
+    // does take a `parentId` since 5a-1, so an ordered create would also work —
+    // but this needs no ordering guarantee at all, and one request is cheaper
+    // than N ordered ones. Reparenting writes no coordinates (ADR-0006), so the
+    // positions are the ones already created.
+    //
+    // ⚠️ This is a new mid-sync failure point: the batch route validates the
+    // whole tree at once, and local storage is not cleared until the end, so a
+    // 400 here leaves a half-built server canvas AND intact local state. Local
+    // parentage is guarded by the same predicate on every write, so a rejection
+    // means the tree changed underneath us rather than that it was ever
+    // illegal.
+    const nestedEntries = nestedGroupSyncEntries(local.groups, groupIdMap);
+    if (nestedEntries.length > 0) {
+        await updateCanvasDraftPositions({
+            canvasId,
+            positions: [],
+            groups: nestedEntries
+        });
     }
 
     // Step 3: Create drafts
