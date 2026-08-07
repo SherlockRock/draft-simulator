@@ -118,6 +118,43 @@ describe("canvas route mutation access", () => {
     expect(res.body).toEqual({ success: true, message: "Draft updated" });
   });
 
+  // A Card's group_id is a container reference: pointing it at another canvas's
+  // Group parked the Card where it rendered on neither canvas. Same rule as the
+  // batch endpoint and the copy route — one helper, three call sites.
+  it("PUT /:canvasId/draft/:draftId 404s on a group from another canvas", async () => {
+    mockCanvasAccess("edit");
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+    const findOne = vi.spyOn(CanvasDraft, "findOne");
+
+    const res = await request(buildApp())
+      .put("/api/canvas/c-1/draft/d-1")
+      .send({ group_id: "on-another-canvas" });
+
+    expect(res.status).toBe(404);
+    expect(findOne).not.toHaveBeenCalled();
+  });
+
+  it("PUT /:canvasId/draft/:draftId accepts an explicit null group_id", async () => {
+    mockCanvasAccess("edit");
+    const update = vi.fn().mockResolvedValue();
+    vi.spyOn(CanvasDraft, "findOne").mockResolvedValue({ update });
+    vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
+    const findAll = vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+    vi.spyOn(Canvas, "findByPk").mockResolvedValue(mockCanvasJson());
+
+    const res = await request(buildApp())
+      .put("/api/canvas/c-1/draft/d-1")
+      .send({ group_id: null });
+
+    expect(res.status).toBe(200);
+    expect(update).toHaveBeenCalledWith({ group_id: null });
+    // Ungrouping names no container, so it must cost no lookup.
+    expect(findAll).not.toHaveBeenCalledWith(
+      expect.objectContaining({ attributes: ["id"] })
+    );
+  });
+
   it("POST /:canvasId/draft/:draftId/copy preserves per-card team names", async () => {
     mockCanvasAccess("edit");
     vi.spyOn(CanvasDraft, "findOne").mockResolvedValue({

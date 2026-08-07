@@ -745,7 +745,7 @@ describe("POST /:canvasId/draft/:draftId/copy grid placement", () => {
   // The source row as the DB actually returns it: group_id is a real column, so
   // an ungrouped draft carries null, never a missing key. Getting that wrong is
   // what let the group-inheritance branch look tested when it was not.
-  const mockCopyDeps = (original) => {
+  const mockCopyDeps = (original, canvasGroups = []) => {
     vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
     vi.spyOn(CanvasDraft, "findOne").mockResolvedValue({
       group_id: null,
@@ -759,7 +759,11 @@ describe("POST /:canvasId/draft/:draftId/copy grid placement", () => {
     // Broadcast fetches — return empty sets.
     vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
     vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
-    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+    // Doubles as the container-reference lookup: an explicit group_id must name
+    // a Group on THIS canvas.
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue(
+      canvasGroups.map((id) => ({ id, toJSON: () => ({ id }) }))
+    );
     // touchCanvasTimestamp + broadcast both call Canvas.findByPk.
     vi.spyOn(Canvas, "findByPk").mockResolvedValue({
       changed: vi.fn(),
@@ -770,7 +774,10 @@ describe("POST /:canvasId/draft/:draftId/copy grid placement", () => {
   };
 
   it("copy honors explicit position and group_id", async () => {
-    const createCanvasDraft = mockCopyDeps({ positionX: 100, positionY: 100 });
+    const createCanvasDraft = mockCopyDeps(
+      { positionX: 100, positionY: 100 },
+      ["g1"]
+    );
 
     const res = await request(buildApp())
       .post("/api/canvas/c1/draft/d1/copy")
@@ -838,6 +845,44 @@ describe("POST /:canvasId/draft/:draftId/copy grid placement", () => {
     expect(res.status).toBe(201);
     expect(createCanvasDraft).toHaveBeenCalledWith(
       expect.objectContaining({ group_id: null })
+    );
+  });
+
+  // Same container-reference rule as the batch endpoint: a Card may only be
+  // placed in a Group on this canvas.
+  it("404s when the requested group is not on this canvas", async () => {
+    const createCanvasDraft = mockCopyDeps({ positionX: 100, positionY: 200 });
+
+    const res = await request(buildApp())
+      .post("/api/canvas/c1/draft/d1/copy")
+      .send({ group_id: "on-another-canvas" });
+
+    expect(res.status).toBe(404);
+    expect(createCanvasDraft).not.toHaveBeenCalled();
+  });
+
+  // The route has no transaction, so the check has to precede Draft.create or
+  // the rejection strands a Draft row nothing points at.
+  it("creates no Draft row when the group check rejects", async () => {
+    mockCopyDeps({ positionX: 100, positionY: 200 });
+
+    await request(buildApp())
+      .post("/api/canvas/c1/draft/d1/copy")
+      .send({ group_id: "on-another-canvas" });
+
+    expect(Draft.create).not.toHaveBeenCalled();
+  });
+
+  // The inherited container came off a row on this canvas and cannot be
+  // foreign, so it must not cost a lookup per copy.
+  it("does not look up the inherited group", async () => {
+    mockCopyDeps({ positionX: 100, positionY: 200, group_id: "g9" });
+
+    await request(buildApp()).post("/api/canvas/c1/draft/d1/copy").send({});
+
+    // Only the broadcast's fetch, never a validation fetch scoped to ids.
+    expect(CanvasGroup.findAll).not.toHaveBeenCalledWith(
+      expect.objectContaining({ attributes: ["id"] })
     );
   });
 });

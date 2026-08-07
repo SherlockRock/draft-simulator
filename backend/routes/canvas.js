@@ -514,6 +514,16 @@ router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
       return res.status(400).json({ error: "No valid fields to update" });
     }
 
+    const foreignGroup = await findGroupNotOnCanvas({
+      canvasId,
+      groupIds: [group_id],
+    });
+    if (foreignGroup) {
+      return res
+        .status(404)
+        .json({ error: `Group ${foreignGroup} not found on canvas` });
+    }
+
     const canvasDraft = await CanvasDraft.findOne({
       where: {
         canvas_id: canvasId,
@@ -594,6 +604,44 @@ const hasKey = (object, key) =>
   Object.prototype.hasOwnProperty.call(object, key);
 
 /**
+ * A Card's `group_id` is a container reference, and until step 4 nothing
+ * validated it on any path: a crafted id could park a Card in another canvas's
+ * Group — or a deleted one — where it renders on neither canvas.
+ *
+ * One helper rather than a check per route, because the three write paths
+ * (`PUT /draft-positions`, `PUT /draft/:draftId`, `POST /draft/:draftId/copy`)
+ * drifting apart is the failure mode this whole area keeps reproducing.
+ *
+ * Returns the first id that is not on the canvas, or null. Non-strings (an
+ * explicit `null` to ungroup, an absent key) are ignored, and an empty set
+ * costs no query. Pass `known` when the caller already holds the canvas's
+ * Groups — the batch endpoint locks them all and must not re-read.
+ */
+async function findGroupNotOnCanvas({
+  canvasId,
+  groupIds,
+  transaction,
+  known,
+}) {
+  const wanted = [
+    ...new Set(groupIds.filter((groupId) => typeof groupId === "string")),
+  ];
+  if (wanted.length === 0) return null;
+  const onCanvas =
+    known ??
+    new Set(
+      (
+        await CanvasGroup.findAll({
+          where: { canvas_id: canvasId, id: wanted },
+          attributes: ["id"],
+          transaction,
+        })
+      ).map((row) => row.id),
+    );
+  return wanted.find((groupId) => !onCanvas.has(groupId)) ?? null;
+}
+
+/**
  * The transactional half of PUT /:canvasId/draft-positions.
  *
  * Returns `{ status, error }` for a rejection the caller should send, or
@@ -637,34 +685,20 @@ async function commitDraftPositions({ canvasId, positions, groups, group }) {
       }
     }
 
-    // Cards may only be dropped into a container on THIS canvas. Nothing
-    // validated this before, on any batch path — a crafted group_id could park
-    // a Card in a foreign canvas's Group (or a deleted one), where it renders
-    // on neither canvas.
-    const cardGroupIds = [
-      ...new Set(
-        positions
-          .map((p) => p.group_id)
-          .filter((groupId) => typeof groupId === "string"),
-      ),
-    ];
-    if (cardGroupIds.length > 0) {
-      const known = lockedById
-        ? new Set(lockedById.keys())
-        : new Set(
-            (
-              await CanvasGroup.findAll({
-                where: { canvas_id: canvasId, id: cardGroupIds },
-                attributes: ["id"],
-                transaction: t,
-              })
-            ).map((row) => row.id),
-          );
-      const missing = cardGroupIds.find((groupId) => !known.has(groupId));
-      if (missing) {
-        await t.rollback();
-        return { status: 404, error: `Group ${missing} not found on canvas` };
-      }
+    // Cards may only be dropped into a container on THIS canvas. The locked map
+    // already holds every Group here, so a groups[] commit needs no second read.
+    const foreignCardGroup = await findGroupNotOnCanvas({
+      canvasId,
+      groupIds: positions.map((p) => p.group_id),
+      transaction: t,
+      known: lockedById ? new Set(lockedById.keys()) : undefined,
+    });
+    if (foreignCardGroup) {
+      await t.rollback();
+      return {
+        status: 404,
+        error: `Group ${foreignCardGroup} not found on canvas`,
+      };
     }
 
     const groupWrites = new Map();
@@ -995,6 +1029,22 @@ router.post("/:canvasId/draft/:draftId/copy", protect, async (req, res) => {
       return res.status(404).json({ error: "Draft not found on canvas" });
     }
 
+    const { positionX, positionY, group_id } = req.body ?? {};
+
+    // Ahead of Draft.create, not after it: this route has no transaction, so a
+    // rejection between the two creates would strand an ownerless Draft row.
+    // Only an explicitly requested container needs checking — the inherited one
+    // came off a row on this canvas and cannot be foreign.
+    const foreignGroup = await findGroupNotOnCanvas({
+      canvasId,
+      groupIds: [group_id],
+    });
+    if (foreignGroup) {
+      return res
+        .status(404)
+        .json({ error: `Group ${foreignGroup} not found on canvas` });
+    }
+
     // Create a new draft with copied data
     const originalDraft = existingCanvasDraft.Draft;
     const newDraft = await Draft.create({
@@ -1004,8 +1054,6 @@ router.post("/:canvasId/draft/:draftId/copy", protect, async (req, res) => {
       type: "canvas",
       owner_id: req.user.id,
     });
-
-    const { positionX, positionY, group_id } = req.body ?? {};
 
     // Create the canvas draft at the requested position (grid placement) or
     // offset from the original (default).
