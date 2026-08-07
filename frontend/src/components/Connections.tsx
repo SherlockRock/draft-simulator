@@ -9,6 +9,7 @@ import {
     cardWidth,
     cardHeight
 } from "../utils/helpers";
+import { sortedSeriesDrafts } from "../utils/canvasWorldPosition";
 import { VertexComponent } from "./Vertex";
 import type { CardLayout } from "../utils/canvasCardLayout";
 
@@ -80,17 +81,13 @@ export const ConnectionComponent = (props: {
         const group = findGroupForDraft(draft);
         // Series group drafts: compute position from flexbox layout
         if (group?.type === "series") {
-            const groupDrafts = props.drafts
-                .filter((d) => d.group_id === group.id)
-                .sort((a, b) => {
-                    const aIndex = a.Draft.seriesIndex;
-                    const bIndex = b.Draft.seriesIndex;
-                    if (aIndex === null || aIndex === undefined) {
-                        return bIndex === null || bIndex === undefined ? 0 : 1;
-                    }
-                    if (bIndex === null || bIndex === undefined) return -1;
-                    return aIndex - bIndex;
-                });
+            // A seventh verbatim copy of the series comparator used to live
+            // here. Behaviourally identical to `sortedSeriesDrafts`, which is
+            // exactly why it was one edit away from being the eighth divergence
+            // (plan A11).
+            const groupDrafts = sortedSeriesDrafts(
+                props.drafts.filter((d) => d.group_id === group.id)
+            );
             const index = groupDrafts.findIndex((d) => d.Draft.id === draft.Draft.id);
             return getSeriesDraftAnchorWorldPosition(
                 group,

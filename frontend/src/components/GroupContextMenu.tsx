@@ -12,6 +12,7 @@ type GroupContextMenuProps = {
     onArrangeGrid?: () => void;
     onConvertToFree?: () => void;
     onGridSettings?: () => void;
+    onMoveToTopLevel?: () => void;
     onGoTo: () => void;
     onDelete: () => void;
     onClose: () => void;
@@ -53,6 +54,18 @@ export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
                     }
                 );
             }
+        }
+
+        // The guaranteed un-nest affordance, and the escape hatch for a child
+        // dragged outside its parent — which would otherwise sit there locking
+        // the parent's left edge with no way back (design decision 9, pulled
+        // forward from 5a-3). Series can be nested too, so this is not inside
+        // the custom-only block.
+        if (props.group.parent_group_id && props.onMoveToTopLevel) {
+            menuActions.push({
+                label: "Move to top level",
+                action: () => props.onMoveToTopLevel?.()
+            });
         }
 
         if (props.group.type === "series" && props.group.metadata.origin !== "manual") {

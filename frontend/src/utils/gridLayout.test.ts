@@ -25,6 +25,7 @@ import {
     resolveContainerDims,
     resolveGridDims,
     contentBoundsOf,
+    footprintPixelSize,
     MIN_GROUP_WIDTH,
     MIN_GROUP_HEIGHT,
     DEFAULT_GROUP_WIDTH,
@@ -513,6 +514,30 @@ describe("toPositionUpdates", () => {
                 { id: "group", kind: "group", positionX: 3, positionY: 4 }
             ])
         ).toEqual([{ draft_id: "card", positionX: 1, positionY: 2 }]);
+    });
+});
+
+describe("footprintPixelSize", () => {
+    it("is exactly one card for a unit footprint, in every layout", () => {
+        for (const layout of LAYOUTS) {
+            expect(footprintPixelSize(CARD_FOOTPRINT, layout)).toEqual({
+                width: cardWidth(layout),
+                height: cardHeight(layout)
+            });
+        }
+    });
+
+    it("puts the gaps INSIDE the span, inverting spanFor", () => {
+        const size = footprintPixelSize(BO3, "wide");
+        expect(size.width).toBe(4 * cardWidth("wide") + 3 * GRID_CELL_GAP);
+        expect(size.height).toBe(2 * cardHeight("wide") + 1 * GRID_CELL_GAP);
+    });
+
+    it("clamps a degenerate footprint to one cell", () => {
+        expect(footprintPixelSize({ rows: 0, cols: 0 }, "wide")).toEqual({
+            width: cardWidth("wide"),
+            height: cardHeight("wide")
+        });
     });
 });
 

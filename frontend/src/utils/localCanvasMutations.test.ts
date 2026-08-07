@@ -32,8 +32,17 @@ Object.defineProperty(globalThis, "localStorage", {
 
 const { getLocalCanvas, saveLocalCanvas, createEmptyLocalCanvas } =
     await import("./localCanvasStore");
-const { localNewDraft, localCopyDraft, localCreateGroup, localConvertGroupToSeries } =
-    await import("./useLocalCanvasMutations");
+const {
+    localNewDraft,
+    localCopyDraft,
+    localCreateGroup,
+    localConvertGroupToSeries,
+    localDeleteGroup,
+    localUpdateDraftPositions
+} = await import("./useLocalCanvasMutations");
+const { MAX_GROUP_DEPTH } = await import(
+    "@draft-sim/shared-types/canvas-tree-vector"
+);
 const { SERIES_HEADER_HEIGHT, SERIES_PADDING } = await import("./helpers");
 
 beforeEach(() => {
@@ -180,5 +189,149 @@ describe("local series Card placement", () => {
         );
         expect(added?.positionX).toBe(16 + 380);
         expect(added?.positionY).toBe(64);
+    });
+});
+
+/**
+ * The local runtime is the one with no server to fall back on: a tree it
+ * accepts here is a tree the user keeps until sign-up, when the batch route
+ * would reject it (5a-5).
+ */
+describe("local group nesting", () => {
+    const create = (parentId?: string | null) =>
+        localCreateGroup({ positionX: 100, positionY: 100, parentId }).group;
+
+    it("nests a new group under a parent, keeping ABSOLUTE coordinates", () => {
+        const parent = create();
+        const child = localCreateGroup({
+            positionX: 540,
+            positionY: 460,
+            parentId: parent.id
+        }).group;
+
+        expect(child.parent_group_id).toBe(parent.id);
+        // ADR-0006: not rebased against the parent's origin.
+        expect(child.positionX).toBe(540);
+        expect(child.positionY).toBe(460);
+    });
+
+    it("leaves an unparented create at top level", () => {
+        expect(create().parent_group_id ?? null).toBe(null);
+    });
+
+    it("refuses a series parent with the server's wording", () => {
+        const group = create();
+        localConvertGroupToSeries({
+            groupId: group.id,
+            name: "Bo3",
+            blueTeamName: "A",
+            redTeamName: "B",
+            length: 3,
+            draftMode: "standard",
+            disabledChampions: []
+        });
+
+        expect(() => create(group.id)).toThrow("Can't put a group inside a series");
+    });
+
+    it("refuses a create past the depth cap", () => {
+        let parentId: string | null = null;
+        for (let depth = 0; depth <= MAX_GROUP_DEPTH; depth++) {
+            parentId = create(parentId).id;
+        }
+        expect(() => create(parentId)).toThrow("Too deeply nested");
+    });
+
+    it("refuses converting a container that holds groups", () => {
+        const parent = create();
+        create(parent.id);
+
+        expect(() =>
+            localConvertGroupToSeries({
+                groupId: parent.id,
+                name: "Bo3",
+                blueTeamName: "A",
+                redTeamName: "B",
+                length: 3,
+                draftMode: "standard",
+                disabledChampions: []
+            })
+        ).toThrow("Can't convert a group that contains groups");
+    });
+
+    it("promotes direct children when their container is deleted", () => {
+        const top = create();
+        const mid = create(top.id);
+        const leaf = create(mid.id);
+
+        localDeleteGroup(mid.id, true);
+
+        const groups = getLocalCanvas()?.groups ?? [];
+        expect(groups.map((g) => g.id)).not.toContain(mid.id);
+        expect(groups.find((g) => g.id === leaf.id)?.parent_group_id).toBe(top.id);
+    });
+
+    it("promotes to top level when the deleted container was top level", () => {
+        const top = create();
+        const child = create(top.id);
+
+        localDeleteGroup(top.id, true);
+
+        const groups = getLocalCanvas()?.groups ?? [];
+        expect(groups.find((g) => g.id === child.id)?.parent_group_id ?? null).toBe(null);
+    });
+
+    it("moves a group to top level without touching its coordinates", () => {
+        const parent = create();
+        const child = localCreateGroup({
+            positionX: 700,
+            positionY: 800,
+            parentId: parent.id
+        }).group;
+
+        localUpdateDraftPositions({
+            positions: [],
+            groups: [
+                { id: child.id, positionX: 700, positionY: 800, parentId: null }
+            ]
+        });
+
+        const stored = (getLocalCanvas()?.groups ?? []).find((g) => g.id === child.id);
+        expect(stored?.parent_group_id ?? null).toBe(null);
+        expect(stored?.positionX).toBe(700);
+        expect(stored?.positionY).toBe(800);
+    });
+
+    it("refuses a reparent that would create a cycle", () => {
+        const root = create();
+        const child = create(root.id);
+
+        expect(() =>
+            localUpdateDraftPositions({
+                positions: [],
+                groups: [
+                    {
+                        id: root.id,
+                        positionX: 0,
+                        positionY: 0,
+                        parentId: child.id
+                    }
+                ]
+            })
+        ).toThrow("Can't put a group inside itself");
+    });
+
+    it("leaves parentage alone when the entry carries no parentId key", () => {
+        const parent = create();
+        const child = create(parent.id);
+
+        localUpdateDraftPositions({
+            positions: [],
+            groups: [{ id: child.id, positionX: 5, positionY: 6 }]
+        });
+
+        const stored = (getLocalCanvas()?.groups ?? []).find((g) => g.id === child.id);
+        expect(stored?.parent_group_id).toBe(parent.id);
+        expect(stored?.positionX).toBe(5);
     });
 });

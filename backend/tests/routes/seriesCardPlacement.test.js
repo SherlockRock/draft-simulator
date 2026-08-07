@@ -80,6 +80,7 @@ beforeEach(() => {
 
   vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(group);
   vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+  vi.spyOn(CanvasGroup, "count").mockResolvedValue(0);
   vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasDraft, "create").mockImplementation(async (values) => ({
     ...values,

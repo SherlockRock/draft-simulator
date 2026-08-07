@@ -31,6 +31,20 @@
  *    `g-root, g-solo, g-a, g-b, g-a1`.
  */
 
+/**
+ * Soft nesting cap (design decision 6), measured in ANCESTORS — so 4 permits
+ * five levels of containment. Checked against the deepest leaf of the moved
+ * subtree, not the moved Group alone: dropping a two-level subtree under a
+ * depth-3 parent puts its leaves at depth 5.
+ *
+ * Lives with the vector because it is the same kind of thing — a value three
+ * runtimes must agree on. `backend/routes/canvas.js` keeps its own literal (it
+ * is CommonJS and cannot require this ESM package); the backend route tests
+ * import this constant and derive their fixtures from it, so a drift is a test
+ * failure rather than a convention.
+ */
+export const MAX_GROUP_DEPTH = 4;
+
 export type CanvasTreeVectorNode = {
   id: string;
   kind: "group" | "card";

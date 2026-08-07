@@ -441,6 +441,22 @@ export const reflowAfterGrowth = (args: {
     });
 };
 
+/**
+ * Painted size of a footprint rectangle, in px — `n` cells with the gaps
+ * INSIDE the span, the same arithmetic `spanFor` inverts.
+ *
+ * `cellToPosition` gives the rectangle's top-left; together they are what the
+ * drop overlay draws, which is why this is `1×1` = one card and not
+ * `gridDimensions` (that one adds the container's header and padding).
+ */
+export const footprintPixelSize = (footprint: GridFootprint, layout: CardLayout) => {
+    const { rows, cols } = spanOf(footprint);
+    return {
+        width: cols * cardWidth(layout) + (cols - 1) * GRID_CELL_GAP,
+        height: rows * cardHeight(layout) + (rows - 1) * GRID_CELL_GAP
+    };
+};
+
 export const gridDimensions = (rowCount: number, cols: number, layout: CardLayout) => ({
     width:
         2 * GRID_PADDING +

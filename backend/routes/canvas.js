@@ -582,6 +582,10 @@ router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
 // permits five levels of containment. Checked against the deepest leaf of the
 // moved subtree, not the moved Group alone — dropping a two-level subtree under
 // a depth-3 parent puts its leaves at depth 5.
+//
+// Duplicated from `MAX_GROUP_DEPTH` in `@draft-sim/shared-types/canvas-tree-vector`,
+// which this file cannot require (ESM). `canvasGroupNesting.test.js` imports the
+// shared constant and derives its fixtures from it, so drift fails a test.
 const MAX_GROUP_DEPTH = 4;
 
 // Canonical acquisition order for CanvasGroup row locks (design §8.1). Postgres
@@ -602,6 +606,78 @@ function isRetryableTransactionError(error) {
 
 const hasKey = (object, key) =>
   Object.prototype.hasOwnProperty.call(object, key);
+
+/**
+ * The single parentage predicate, shared by every route that writes
+ * `parent_group_id` (design §8.1, plan A6). Two hand-written copies of these
+ * four checks is the drift §7 exists to stop, and this area has reproduced it
+ * once per step.
+ *
+ * **Validated against the tree the writes would PRODUCE, not the stored one.**
+ * Two entries in one request can each look legal alone and form a cycle
+ * together (A under B, B under A).
+ *
+ * `lockedById` is every Group on the canvas, already locked FOR UPDATE — which
+ * is what makes "exists" and "is on this canvas" one check, and what makes the
+ * answer still true at write time. `pending` maps a Group id to its next parent
+ * (`null` = top level). An id in `pending` that is NOT in `lockedById` is a row
+ * that does not exist yet (the create route): it is spliced into the
+ * prospective tree as a `custom` Group, because `depthOf` cannot measure a node
+ * that is not there.
+ *
+ * Returns `{ nextTree, rejection }`; `rejection` is `{ status, error }` or null.
+ * Rolling back is the caller's job — it owns the transaction.
+ */
+function resolveParentage({ lockedById, pending }) {
+  const nextTree = {
+    groups: [...lockedById.values()].map((row) => ({
+      id: row.id,
+      type: row.type,
+      parent_group_id: pending.has(row.id)
+        ? pending.get(row.id)
+        : (row.parent_group_id ?? null),
+    })),
+  };
+  for (const [id, parentId] of pending) {
+    if (!lockedById.has(id)) {
+      nextTree.groups.push({
+        id,
+        type: "custom",
+        parent_group_id: parentId,
+      });
+    }
+  }
+
+  const reject = (rejection) => ({ nextTree, rejection });
+
+  for (const [id, parentId] of pending) {
+    if (parentId !== null) {
+      const parentRow = lockedById.get(parentId);
+      // Existence and same-canvas are one check: the locked map holds this
+      // canvas's Groups and nothing else.
+      if (!parentRow) {
+        return reject({ status: 400, error: "That group isn't on this canvas" });
+      }
+      if (parentRow.type === "series") {
+        return reject({
+          status: 400,
+          error: "Can't put a group inside a series",
+        });
+      }
+    }
+    if (wouldCreateCycle(nextTree, id, parentId)) {
+      return reject({ status: 400, error: "Can't put a group inside itself" });
+    }
+  }
+  // Depth is only meaningful once the result is known to be acyclic, which is
+  // why this is a second pass rather than a clause in the first.
+  for (const id of pending.keys()) {
+    if (depthOf(nextTree, id) + subtreeHeight(nextTree, id) > MAX_GROUP_DEPTH) {
+      return reject({ status: 400, error: "Too deeply nested" });
+    }
+  }
+  return { nextTree, rejection: null };
+}
 
 /**
  * A Card's `group_id` is a container reference, and until step 4 nothing
@@ -702,64 +778,19 @@ async function commitDraftPositions({ canvasId, positions, groups, group }) {
     }
 
     const groupWrites = new Map();
+    let nextTree = null;
     if (groups.length > 0) {
-      // Parentage changes are validated against the tree they would PRODUCE,
-      // not the stored one. Two entries in one request can each look legal
-      // alone and form a cycle together (A under B, B under A).
       const pendingParent = new Map();
       for (const entry of groups) {
         if (hasKey(entry, "parentId")) {
           pendingParent.set(entry.id, entry.parentId ?? null);
         }
       }
-      const nextTree = {
-        groups: [...lockedById.values()].map((row) => ({
-          id: row.id,
-          type: row.type,
-          parent_group_id: pendingParent.has(row.id)
-            ? pendingParent.get(row.id)
-            : (row.parent_group_id ?? null),
-        })),
-      };
-
-      for (const [id, parentId] of pendingParent) {
-        if (parentId !== null) {
-          const parentRow = lockedById.get(parentId);
-          // Existence and same-canvas are one check: the locked map holds this
-          // canvas's Groups and nothing else.
-          if (!parentRow) {
-            await t.rollback();
-            return {
-              status: 400,
-              error: "That group isn't on this canvas",
-            };
-          }
-          if (parentRow.type === "series") {
-            await t.rollback();
-            return {
-              status: 400,
-              error: "Can't put a group inside a series",
-            };
-          }
-        }
-        if (wouldCreateCycle(nextTree, id, parentId)) {
-          await t.rollback();
-          return {
-            status: 400,
-            error: "Can't put a group inside itself",
-          };
-        }
-      }
-      // Depth is only meaningful once the result is known to be acyclic, which
-      // is why this is a second pass rather than a clause in the first.
-      for (const id of pendingParent.keys()) {
-        if (
-          depthOf(nextTree, id) + subtreeHeight(nextTree, id) >
-          MAX_GROUP_DEPTH
-        ) {
-          await t.rollback();
-          return { status: 400, error: "Too deeply nested" };
-        }
+      const parentage = resolveParentage({ lockedById, pending: pendingParent });
+      nextTree = parentage.nextTree;
+      if (parentage.rejection) {
+        await t.rollback();
+        return parentage.rejection;
       }
 
       // ---- Derive the delta, fan it out, and only then write ----
@@ -1602,6 +1633,24 @@ router.post(
           .json({ error: "Only custom groups can be converted" });
       }
 
+      // The series-leaf invariant (decision 6) was enforced on every PARENTAGE
+      // write and on no TYPE write, so this route could turn a container full
+      // of Groups into a series — a persisted taxonomy violation one dialog
+      // save away, found independently by both round-1 reviewers (plan A13).
+      // `SeriesGroupContainer` renders only Cards, `nodeSize` sizes a series
+      // from its game count, and §8.1 then rejects every new parentage into it
+      // while the illegal state persists.
+      const childGroupCount = await CanvasGroup.count({
+        where: { parent_group_id: groupId, canvas_id: canvasId },
+        transaction: t,
+      });
+      if (childGroupCount > 0) {
+        await t.rollback();
+        return res
+          .status(400)
+          .json({ error: "Can't convert a group that contains groups" });
+      }
+
       // Team links picked in the Group Settings dialog arrive with the very
       // request that creates the series, so they must persist here — the group
       // is not yet a series and cannot be linked by the PUT-group path.
@@ -1785,11 +1834,13 @@ router.post(
   },
 );
 
-// Create a custom group
+// Create a custom group. `parentId` nests it (design §9.1c, plan A6) — creation
+// is a parentage write like any other and goes through `resolveParentage`.
 router.post("/:canvasId/group", protect, async (req, res) => {
+  let t;
   try {
     const { canvasId } = req.params;
-    const { name, positionX, positionY } = req.body;
+    const { name, positionX, positionY, parentId } = req.body;
 
     await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
 
@@ -1798,7 +1849,11 @@ router.post("/:canvasId/group", protect, async (req, res) => {
         ? name.trim()
         : await generateUniqueCanvasGroupName("New Group", canvasId);
 
-    const group = await CanvasGroup.create({
+    // ADR-0006: a Group stores ABSOLUTE world coordinates at every depth, so a
+    // nested create writes the position it was given, unrewritten. The Draft
+    // branch of the same context menu subtracts the container origin because a
+    // Card's coordinates are container-relative; a Group's are not.
+    const attributes = {
       canvas_id: canvasId,
       name: groupName,
       type: "custom",
@@ -1806,7 +1861,44 @@ router.post("/:canvasId/group", protect, async (req, res) => {
       positionY: positionY ?? 50,
       width: 400,
       height: 200,
-    });
+    };
+
+    let group;
+    if (typeof parentId === "string") {
+      // Only the nested create takes the canvas-wide lock; an unparented create
+      // keeps its lock-free plan. Validating depth and series-leaf and THEN
+      // inserting without the lock is a TOCTOU window against a concurrent
+      // reparent, conversion or delete — the same hole the batch route pays for
+      // (plan A6, round 1). Same lock, same order, so the two queue rather than
+      // deadlock.
+      t = await Canvas.sequelize.transaction();
+      const rows = await CanvasGroup.findAll({
+        where: { canvas_id: canvasId },
+        order: GROUP_LOCK_ORDER,
+        lock: true,
+        transaction: t,
+      });
+      const lockedById = new Map(rows.map((row) => [row.id, row]));
+      // A fresh row cannot be in a cycle, but it can be too deep or under a
+      // series, and `resolveParentage` splices it into the tree so `depthOf`
+      // can measure a node that does not exist yet.
+      const pendingId = "__new__";
+      const { rejection } = resolveParentage({
+        lockedById,
+        pending: new Map([[pendingId, parentId]]),
+      });
+      if (rejection) {
+        await t.rollback();
+        return res.status(rejection.status).json({ error: rejection.error });
+      }
+      group = await CanvasGroup.create(
+        { ...attributes, parent_group_id: parentId },
+        { transaction: t },
+      );
+      await t.commit();
+    } else {
+      group = await CanvasGroup.create(attributes);
+    }
 
     await touchCanvasTimestamp(canvasId);
 
@@ -1847,6 +1939,7 @@ router.post("/:canvasId/group", protect, async (req, res) => {
       groups: groups.map((g) => g.toJSON()),
     });
   } catch (error) {
+    if (t && !t.finished) await t.rollback();
     if (
       respondCanvasMutationError(res, error, {
         NOT_AUTHORIZED:
@@ -1997,6 +2090,21 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
         await conn.save({ transaction: t });
       }
     }
+
+    // Promote direct child Groups before the destroy (design §8.2.0, plan A2).
+    // `parent_group_id` is declared with no `onDelete`, so Postgres applies
+    // NO ACTION: without this, deleting a container that holds a Group is a 500
+    // and the container becomes undeletable. Only the direct children move —
+    // the rest of decision 10 (delete-with-contents, promote-into-a-surviving-
+    // parent's coordinate rebase) stays in 5b. Groups store absolute world
+    // coordinates at every depth (ADR-0006), so a promotion writes no position.
+    await CanvasGroup.update(
+      { parent_group_id: group.parent_group_id ?? null },
+      {
+        where: { parent_group_id: groupId, canvas_id: canvasId },
+        transaction: t,
+      },
+    );
 
     // Delete the group
     await group.destroy({ transaction: t });

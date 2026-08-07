@@ -37,6 +37,7 @@ import type {
     CanvasGroupMetadata,
     CanvasGroupMetadataUpdate,
     DraftPositionUpdate,
+    GroupPositionUpdate,
     GameType,
     RosterInput
 } from "@draft-sim/shared-types";
@@ -253,6 +254,14 @@ export const updateCanvasDraft = async (data: {
 export const updateCanvasDraftPositions = async (data: {
     canvasId: string;
     positions: DraftPositionUpdate[];
+    /**
+     * Group rows to move and/or reparent, absolute world (ADR-0006). The server
+     * fans a container's delta out over its descendants, so a subtree move
+     * carries ONE entry and the payload stays O(1) in subtree size.
+     *
+     * `parentId` absent leaves parentage alone, `null` moves to top level.
+     */
+    groups?: GroupPositionUpdate[];
     group?: {
         id: string;
         width?: number;
@@ -262,7 +271,11 @@ export const updateCanvasDraftPositions = async (data: {
 }) => {
     return apiPut(
         `/canvas/${data.canvasId}/draft-positions`,
-        { positions: data.positions, group: data.group },
+        {
+            positions: data.positions,
+            ...(data.groups ? { groups: data.groups } : {}),
+            group: data.group
+        },
         SuccessSchema
     );
 };
@@ -487,13 +500,20 @@ export const createCanvasGroup = async (data: {
     name?: string;
     positionX: number;
     positionY: number;
+    /**
+     * Nests the new Group (design §9.1c). The position stays ABSOLUTE world
+     * (ADR-0006) — unlike a Draft created inside a container, whose position is
+     * rebased against the container origin.
+     */
+    parentId?: string | null;
 }) => {
     const result = await apiPost(
         `/canvas/${data.canvasId}/group`,
         {
             name: data.name,
             positionX: data.positionX,
-            positionY: data.positionY
+            positionY: data.positionY,
+            ...(data.parentId ? { parentId: data.parentId } : {})
         },
         z.object({ success: z.boolean(), group: CanvasGroupSchema })
     );

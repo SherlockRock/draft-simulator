@@ -99,6 +99,10 @@ beforeEach(() => {
   vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasConnection, "destroy").mockResolvedValue(0);
   vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+  // The delete route promotes direct child Groups before the destroy
+  // (design §8.2.0): `parent_group_id` has no `onDelete`, so a container
+  // holding a Group would otherwise violate the FK.
+  vi.spyOn(CanvasGroup, "update").mockResolvedValue([0]);
   vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasDraft, "destroy").mockResolvedValue(0);
   vi.spyOn(CanvasDraft, "update").mockResolvedValue([0]);

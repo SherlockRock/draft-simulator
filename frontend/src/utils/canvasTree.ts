@@ -211,6 +211,32 @@ export const descendantGroupsOf = (tree: CanvasTree, groupId: string): CanvasGro
 };
 
 /**
+ * The deepest node in `groupId`'s subtree, measured in levels BELOW it. 0 when
+ * the Group has no child Groups.
+ *
+ * The depth cap has to be checked against `depthOf(next) + subtreeHeight`, not
+ * against the moved Group alone: dropping a two-level subtree under a depth-3
+ * parent puts its leaves at depth 5. Design §8.1 says "reject if the move would
+ * exceed the cap" without saying which node's depth that is.
+ *
+ * Twin of `subtreeHeight` in `backend/services/canvasTree.js`.
+ */
+export const subtreeHeight = (tree: CanvasTree, groupId: string): number => {
+    let height = 0;
+    const visited = new Set<string>([groupId]);
+    const walk = (parentId: string, level: number) => {
+        if (level > height) height = level;
+        for (const child of childGroupsOf(tree, parentId)) {
+            if (visited.has(child.id)) continue;
+            visited.add(child.id);
+            walk(child.id, level + 1);
+        }
+    };
+    walk(groupId, 0);
+    return height;
+};
+
+/**
  * Paint order for the flat `<For each={canvasGroups}>` (decision 12): parent,
  * then its whole subtree, then the next sibling's subtree.
  *

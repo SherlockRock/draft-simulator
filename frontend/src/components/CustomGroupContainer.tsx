@@ -7,7 +7,7 @@ import {
     Accessor,
     JSX
 } from "solid-js";
-import { Trash2, Settings, ArrowLeftRight } from "lucide-solid";
+import { Trash2, Settings } from "lucide-solid";
 import { GameTypeChip } from "./GameTypeChip";
 import { scaledStrokePx } from "../utils/viewport";
 import { CanvasDraft, CanvasGroup, AnchorType } from "../utils/schemas";
@@ -57,12 +57,6 @@ type CustomGroupContainerProps = {
     // A member of this group is being dragged (intra-group drag) — the
     // grid hints should show even though the group isn't the drag target.
     isDragSource: boolean;
-    // Cell the dragged card would land in, or null when none applies.
-    highlightCell: GridCell | null;
-    // The landing cell is occupied — the drop will swap the two cards.
-    highlightIsSwap: boolean;
-    // Where the displaced card will move on a swap drop.
-    displacedCell: GridCell | null;
     isExitingSource: boolean;
     // Children as footprint stamps, and the column count they were stamped
     // against. Both come from the parent rather than being recomputed here:
@@ -245,25 +239,6 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         return cells;
     });
 
-    // Landing/swap cells rendered in a second overlay above the cards
-    // (grouped cards sit at z-30), so the swap target reads over the
-    // occupant card instead of hiding behind it.
-    type HighlightKind = "landing" | "swap-target" | "swap-displaced";
-    const highlightCells = createMemo<{ cell: GridCell; kind: HighlightKind }[]>(() => {
-        if (!isGrid()) return [];
-        const out: { cell: GridCell; kind: HighlightKind }[] = [];
-        if (props.highlightCell) {
-            out.push({
-                cell: props.highlightCell,
-                kind: props.highlightIsSwap ? "swap-target" : "landing"
-            });
-        }
-        if (props.displacedCell) {
-            out.push({ cell: props.displacedCell, kind: "swap-displaced" });
-        }
-        return out;
-    });
-
     // Resize-clamped wins over drag-target, matching the order the two ring-2
     // classList entries used to resolve in.
     const highlightOutline = createMemo((): JSX.CSSProperties => {
@@ -391,42 +366,6 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                                         height: `${cardHeight(props.cardLayout())}px`
                                     }}
                                 />
-                            );
-                        }}
-                    </For>
-                </div>
-            </Show>
-
-            {/* Landing/swap highlight (above the cards) */}
-            <Show when={highlightCells().length > 0}>
-                <div class="pointer-events-none absolute inset-0 z-40">
-                    <For each={highlightCells()}>
-                        {(hc) => {
-                            const pos = cellToPosition(hc.cell, props.cardLayout());
-                            return (
-                                <div
-                                    class="absolute rounded-lg border-2"
-                                    classList={{
-                                        "border-darius-purple-bright bg-darius-purple-bright/10":
-                                            hc.kind === "landing",
-                                        "border-darius-ember bg-darius-ember/10":
-                                            hc.kind === "swap-target",
-                                        "border-dashed border-darius-ember/70 bg-darius-ember/5":
-                                            hc.kind === "swap-displaced"
-                                    }}
-                                    style={{
-                                        left: `${pos.x}px`,
-                                        top: `${pos.y}px`,
-                                        width: `${cardWidth(props.cardLayout())}px`,
-                                        height: `${cardHeight(props.cardLayout())}px`
-                                    }}
-                                >
-                                    <Show when={hc.kind === "swap-target"}>
-                                        <div class="absolute right-1.5 top-1.5 rounded-full border border-darius-ember/60 bg-darius-bg/90 p-1 text-darius-ember">
-                                            <ArrowLeftRight size={14} />
-                                        </div>
-                                    </Show>
-                                </div>
                             );
                         }}
                     </For>

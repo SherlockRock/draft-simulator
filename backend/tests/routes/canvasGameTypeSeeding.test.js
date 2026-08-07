@@ -67,6 +67,9 @@ beforeEach(() => {
     toJSON: () => ({ id: "c-1" }),
   });
   vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+  // convert-to-series refuses a container holding Groups (series-leaf
+  // invariant); none of these fixtures nest, so the count is zero.
+  vi.spyOn(CanvasGroup, "count").mockResolvedValue(0);
   vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasDraft, "create").mockImplementation(async (values) => ({

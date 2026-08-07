@@ -5,9 +5,12 @@ import type {
     CanvasGroupMetadata,
     CanvasGroupMetadataUpdate,
     DraftPositionUpdate,
-    GameType
+    GameType,
+    GroupPositionUpdate
 } from "@draft-sim/shared-types";
 import { getManualSeriesGameDefaults } from "./manualSeriesDefaults";
+import { childGroupsOf } from "./canvasTree";
+import { parentageRejection } from "./groupParentage";
 import { SERIES_HEADER_HEIGHT, SERIES_PADDING } from "./helpers";
 
 // Helper to safely cast anchor type with default
@@ -304,7 +307,17 @@ export const localDeleteVertex = (data: { connectionId: string; vertexId: string
     });
 };
 
-export const localCreateGroup = (data: { positionX: number; positionY: number }) => {
+/**
+ * `parentId` nests the new Group. A local canvas has no server to validate
+ * against, so the same predicate the routes use runs here and THROWS the
+ * server's own wording — otherwise an anonymous user can build a tree the
+ * server would have refused, and only find out at sign-up (5a-5).
+ */
+export const localCreateGroup = (data: {
+    positionX: number;
+    positionY: number;
+    parentId?: string | null;
+}) => {
     return mutateLocal((canvas) => {
         const existingNames = new Set(canvas.groups.map((g) => g.name));
         let name = "New Group";
@@ -315,13 +328,26 @@ export const localCreateGroup = (data: { positionX: number; positionY: number })
             }
             name = `New Group ${counter}`;
         }
+        const id = crypto.randomUUID();
+        const parentId = data.parentId ?? null;
+        if (parentId !== null) {
+            const rejection = parentageRejection(
+                { groups: canvas.groups, drafts: canvas.drafts },
+                id,
+                parentId
+            );
+            if (rejection) throw new Error(rejection);
+        }
         const group: CanvasGroup = {
-            id: crypto.randomUUID(),
+            id,
             canvas_id: "local",
             name,
             type: "custom",
             positionX: data.positionX,
             positionY: data.positionY,
+            // ADR-0006: absolute world at every depth, so a nested create
+            // stores the position it was given, unrebased.
+            parent_group_id: parentId,
             metadata: {}
         };
         canvas.groups.push(group);
@@ -378,10 +404,7 @@ export const localUpdateGroup = (data: {
             if (data.width !== undefined) group.width = data.width;
             if (data.height !== undefined) group.height = data.height;
             if (data.metadata !== undefined)
-                group.metadata = mergeLocalGroupMetadata(
-                    group.metadata,
-                    data.metadata
-                );
+                group.metadata = mergeLocalGroupMetadata(group.metadata, data.metadata);
         }
         return { canvas, result: { success: true, group } };
     });
@@ -408,6 +431,16 @@ export const localConvertGroupToSeries = (data: {
         const group = canvas.groups.find((g) => g.id === data.groupId);
         if (!group) {
             throw new Error("Group not found");
+        }
+
+        // The series-leaf invariant is enforced on TYPE writes too, not only on
+        // parentage writes (plan A13) — the server refuses this conversion, and
+        // a local canvas has no server.
+        if (
+            childGroupsOf({ groups: canvas.groups, drafts: canvas.drafts }, data.groupId)
+                .length > 0
+        ) {
+            throw new Error("Can't convert a group that contains groups");
         }
 
         const isInitialConversion = group.type === "custom";
@@ -488,6 +521,15 @@ export const localDeleteGroup = (groupId: string, keepDrafts?: boolean) => {
                 d.group_id === groupId ? { ...d, group_id: null } : d
             );
         }
+        // Promote direct child Groups before the row goes (design §8.2.0): the
+        // server does the same UPDATE, and without it a local delete strands a
+        // subtree pointing at a row that no longer exists. Coordinates are
+        // absolute at every depth (ADR-0006), so a promotion writes no position.
+        const deleted = canvas.groups.find((g) => g.id === groupId);
+        const promoteTo = deleted?.parent_group_id ?? null;
+        for (const child of canvas.groups) {
+            if (child.parent_group_id === groupId) child.parent_group_id = promoteTo;
+        }
         canvas.groups = canvas.groups.filter((g) => g.id !== groupId);
         // Remove connections referencing this group
         canvas.connections = canvas.connections.filter((c) => {
@@ -522,6 +564,16 @@ export const localUpdateDraftGroup = (data: {
 
 export const localUpdateDraftPositions = (data: {
     positions: DraftPositionUpdate[];
+    /**
+     * Group rows to move and/or reparent, absolute world (ADR-0006).
+     *
+     * Unlike the server, this applies each entry verbatim and fans NOTHING out:
+     * a local canvas has no concurrency, so the client has already computed
+     * every row it wants written and there is no delta to derive. Parentage is
+     * validated first, with the server's own wording, because there is no
+     * server here to do it.
+     */
+    groups?: GroupPositionUpdate[];
     group?: {
         id: string;
         width?: number;
@@ -530,6 +582,26 @@ export const localUpdateDraftPositions = (data: {
     };
 }) => {
     return mutateLocal((canvas) => {
+        for (const entry of data.groups ?? []) {
+            if (!Object.prototype.hasOwnProperty.call(entry, "parentId")) continue;
+            const rejection = parentageRejection(
+                { groups: canvas.groups, drafts: canvas.drafts },
+                entry.id,
+                entry.parentId ?? null
+            );
+            if (rejection) throw new Error(rejection);
+        }
+        for (const entry of data.groups ?? []) {
+            const group = canvas.groups.find((g) => g.id === entry.id);
+            if (!group) continue;
+            group.positionX = entry.positionX;
+            group.positionY = entry.positionY;
+            // Key PRESENCE decides, not the value: `parentId: null` means "move
+            // to top level" while an absent key means "leave parentage alone".
+            if (Object.prototype.hasOwnProperty.call(entry, "parentId")) {
+                group.parent_group_id = entry.parentId ?? null;
+            }
+        }
         for (const p of data.positions) {
             // Matched on draft_id, the Card's placement identity — the field
             // the payload actually carries. Every other lookup in this file

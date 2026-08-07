@@ -79,10 +79,15 @@ import { cardHeight, cardWidth } from "./utils/helpers";
 import { getDraftWorldPosition as draftWorldPosition } from "./utils/canvasWorldPosition";
 import {
     childCardsOf,
+    childGroupsOf,
     gridItemsOf,
     maxChildSpanCols,
+    nodeSize,
+    renderOrder,
     type CanvasTree
 } from "./utils/canvasTree";
+import { findDropContainer } from "./utils/canvasHitTest";
+import { parentageRejection } from "./utils/groupParentage";
 import {
     localNewDraft,
     localEditDraft,
@@ -114,6 +119,7 @@ import { GroupSettingsDialog } from "./components/GroupDisabledChampionsDialog";
 import { ContextMenu } from "./components/ContextMenu";
 import { DraftContextMenu } from "./components/DraftContextMenu";
 import { GroupContextMenu } from "./components/GroupContextMenu";
+import { GridDropHighlight, type GridDropTarget } from "./components/GridDropHighlight";
 import { useCanvasContext, type ShareAnchor } from "./contexts/CanvasContext";
 import { useCanvasSocket } from "./providers/CanvasSocketProvider";
 import { useUser } from "./userProvider";
@@ -149,7 +155,6 @@ import {
     arrangedRowCount,
     toPositionUpdates,
     CARD_FOOTPRINT,
-    type GridCell,
     type GridItem,
     type GridSettingsInput,
     type GridMetadata
@@ -340,25 +345,31 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             : "standard";
     };
     const [createGroupPosition, setCreateGroupPosition] = createSignal({ x: 0, y: 0 });
+    // Where a context-menu "Create Group" will place the new Group, and which
+    // container it lands in — resolved at menu time by the same deepest-first
+    // hit test the drop paths use (§9.1c).
     const [pendingGroupSettingsPosition, setPendingGroupSettingsPosition] = createSignal<{
         x: number;
         y: number;
+        parentId: string | null;
     } | null>(null);
     const [dragOverGroupId, setDragOverGroupId] = createSignal<string | null>(null);
     const [exitingGroupId, setExitingGroupId] = createSignal<string | null>(null);
-    // Cell the dragged card would land in, mirroring the drop math in
-    // onWindowMouseUp. When the cell is occupied the drop swaps, so the
+    // Where the dragged node would land, mirroring the drop math in
+    // onWindowMouseUp. When the target is occupied the drop swaps, so the
     // displaced card's destination rides along for the swap preview.
-    const [gridDropCell, setGridDropCell] = createSignal<{
-        groupId: string;
-        cell: GridCell;
-        isSwap: boolean;
-        displacedCell: GridCell | null;
-    } | null>(null);
-    const gridHighlightFor = (groupId: string) => {
+    //
+    // A RECTANGLE, not a bare cell: 5a-4 drops nodes with `2×4` footprints, and
+    // building this overlay around 1×1 cells would only mean rebuilding it.
+    const [gridDropCell, setGridDropCell] = createSignal<GridDropTarget | null>(null);
+    // Resolved once, at the world level — the overlay cannot live inside the
+    // target container any more (see GridDropHighlight).
+    const gridDropHighlight = createMemo(() => {
         const target = gridDropCell();
-        return target && target.groupId === groupId ? target : null;
-    };
+        if (!target) return null;
+        const group = canvasGroups.find((g) => g.id === target.groupId);
+        return group ? { group, target } : null;
+    });
     const [contextMenuPosition, setContextMenuPosition] = createSignal<{
         x: number;
         y: number;
@@ -1220,6 +1231,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 width: null,
                 height: null,
                 versus_draft_id: null,
+                // Without this the optimistic row flashes at TOP LEVEL, and
+                // under DFS that means the wrong paint stratum, until the
+                // server responds (plan A7).
+                parent_group_id: variables.parentId ?? null,
                 metadata: {}
             };
             setCanvasGroups([...canvasGroups, tempGroup]);
@@ -1714,7 +1729,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             if (gState.activeGroupId !== data.groupId) {
                 setCanvasGroups((g) => g.id === data.groupId, {
                     positionX: data.positionX,
-                    positionY: data.positionY
+                    positionY: data.positionY,
+                    // Key PRESENCE, never `=== undefined`: Zod's optional leaves
+                    // the key present with value `undefined`, and this shallow
+                    // merge would then clobber `parent_group_id` with undefined
+                    // on every ordinary move. The server puts `parentId` on the
+                    // payload only when parentage actually changed.
+                    ...(Object.prototype.hasOwnProperty.call(data, "parentId")
+                        ? { parent_group_id: data.parentId ?? null }
+                        : {})
                 });
             }
         });
@@ -2282,23 +2305,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
-    const isPointInGroup = (x: number, y: number, group: CanvasGroup): boolean => {
-        const width = group.width ?? 400;
-        const height = group.height ?? 200;
-        return (
-            x >= group.positionX &&
-            x <= group.positionX + width &&
-            y >= group.positionY &&
-            y <= group.positionY + height
-        );
-    };
+    // See the `<For>` that consumes this for why it is cheap during a drag.
+    const groupsInPaintOrder = createMemo(() => renderOrder(canvasTree()));
 
-    const findGroupAtPosition = (x: number, y: number): CanvasGroup | null => {
-        return (
-            canvasGroups.find((g) => g.type === "custom" && isPointInGroup(x, y, g)) ??
-            null
-        );
-    };
+    // Deepest-first by PAINT ORDER (3.1b; `canvasHitTest.findDropContainer`).
+    // All three callers — card hover, card drop, context-menu Create — change
+    // behaviour once containers can nest, and that is the point: they resolve
+    // the container the user can actually see under the cursor.
+    const findGroupAtPosition = (x: number, y: number): CanvasGroup | null =>
+        findDropContainer(canvasTree(), { x, y }, { paintOrder: groupsInPaintOrder() });
 
     const getCardCenterPoint = (worldX: number, worldY: number) => {
         const cw = cardWidth(props.cardLayout());
@@ -2616,10 +2631,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         if (pendingPosition) {
             const groupName = data.name || "Custom Series";
             if (isLocalMode()) {
-                const result = localCreateGroup({
-                    positionX: pendingPosition.x,
-                    positionY: pendingPosition.y
-                });
+                // The local mutations enforce parentage and the series-leaf
+                // invariant themselves — there is no server here to do it — and
+                // report a rejection by throwing the server's own wording. The
+                // container was resolved when the menu opened, so the tree can
+                // have changed since.
+                let result;
+                try {
+                    result = localCreateGroup({
+                        positionX: pendingPosition.x,
+                        positionY: pendingPosition.y,
+                        parentId: pendingPosition.parentId
+                    });
+                } catch (error) {
+                    toast.error(
+                        error instanceof Error ? error.message : "Failed to create group"
+                    );
+                    setPendingGroupSettingsPosition(null);
+                    return;
+                }
                 if (data.convertToSeries) {
                     localConvertGroupToSeries({
                         groupId: result.group.id,
@@ -2649,7 +2679,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     canvasId: canvasId(),
                     name: groupName,
                     positionX: pendingPosition.x,
-                    positionY: pendingPosition.y
+                    positionY: pendingPosition.y,
+                    parentId: pendingPosition.parentId
                 })
                     .then((result) => {
                         if (!data.convertToSeries) {
@@ -2694,6 +2725,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
         const groupId = disabledChampionsGroupId();
         if (!groupId) return;
+
+        // The series-leaf invariant is enforced on TYPE writes as well as on
+        // parentage writes (plan A13). The server and the local mutation both
+        // refuse this; the client check exists so the user reads the reason
+        // instead of a "Failed to..." wrapper, and so the dialog stays open.
+        if (data.convertToSeries && childGroupsOf(canvasTree(), groupId).length > 0) {
+            toast.error("Can't convert a group that contains groups");
+            return;
+        }
 
         if (isLocalMode()) {
             const group = canvasGroups.find((g) => g.id === groupId);
@@ -2799,12 +2839,36 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setGroupToDelete(null);
     };
 
+    /**
+     * Which container a Group created at `point` belongs to, or null.
+     *
+     * Returns `undefined` when the resolved container would refuse it — the
+     * caller has already been told why — so a rejected create is distinguishable
+     * from a legal top-level one.
+     */
+    const resolveCreateParent = (point: {
+        x: number;
+        y: number;
+    }): string | null | undefined => {
+        const container = findGroupAtPosition(point.x, point.y);
+        if (!container) return null;
+        const rejection = parentageRejection(canvasTree(), "__new__", container.id);
+        if (rejection) {
+            toast.error(rejection);
+            return undefined;
+        }
+        return container.id;
+    };
+
     const handleCreateGroup = () => {
         const pos = createGroupPosition();
+        const parentId = resolveCreateParent(pos);
+        if (parentId === undefined) return;
         if (isLocalMode()) {
             localCreateGroup({
                 positionX: pos.x,
-                positionY: pos.y
+                positionY: pos.y,
+                parentId
             });
             refreshFromLocal();
             toast.success("Group created");
@@ -2812,13 +2876,45 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             createGroupMutation.mutate({
                 canvasId: canvasId(),
                 positionX: pos.x,
-                positionY: pos.y
+                positionY: pos.y,
+                parentId
+            });
+        }
+    };
+
+    /**
+     * The un-nest action (design decision 9). Reparenting writes NO coordinates
+     * — a Group's stored position is absolute world at every depth (ADR-0006),
+     * so a Group that leaves its parent stays exactly where it is on screen.
+     */
+    const handleMoveGroupToTopLevel = (groupId: string) => {
+        if (!canEdit()) return;
+        const group = canvasGroups.find((g) => g.id === groupId);
+        if (!group || !group.parent_group_id) return;
+        const entry = {
+            id: groupId,
+            positionX: group.positionX,
+            positionY: group.positionY,
+            parentId: null
+        };
+        setCanvasGroups((g) => g.id === groupId, { parent_group_id: null });
+        if (isLocalMode()) {
+            localUpdateDraftPositions({ positions: [], groups: [entry] });
+            refreshFromLocal();
+        } else {
+            updateDraftPositionsMutation.mutate({
+                canvasId: canvasId(),
+                positions: [],
+                groups: [entry]
             });
         }
     };
 
     const handleCreateGroupFromContextMenu = () => {
-        setPendingGroupSettingsPosition(createGroupPosition());
+        const pos = createGroupPosition();
+        const parentId = resolveCreateParent(pos);
+        if (parentId === undefined) return;
+        setPendingGroupSettingsPosition({ x: pos.x, y: pos.y, parentId });
     };
 
     const closeGroupSettingsDialog = () => {
@@ -2985,28 +3081,92 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
-    // Container-relative rects of a Group's child Cards. Child Group rects join
-    // this list in 5a-1 (design §6.2 / plan A10); everything downstream already
-    // takes rects rather than Cards so that addition is local to here.
-    const childRectsOf = (groupId: string) => {
-        const cw = cardWidth(props.cardLayout());
-        const ch = cardHeight(props.cardLayout());
-        return getDraftsForGroup(groupId).map((d) => ({
-            x: d.positionX,
-            y: d.positionY,
-            width: cw,
-            height: ch
-        }));
-    };
-
-    const computeMinGroupSize = (groupId: string) => {
-        const bounds = contentBoundsOf(childRectsOf(groupId));
-        return {
-            minWidth: bounds.width,
-            minHeight: bounds.height,
-            maxLeftEdgeDelta: bounds.maxLeftEdgeDelta
+    /**
+     * Content bounds for every container on the canvas, in ONE pass (plan A10).
+     *
+     * The obvious shape — a `createMemo` per Group inside the `<For>` — does not
+     * help: each one reads the whole `canvasDrafts` array, so every Group's memo
+     * invalidates on every Card write. This is O(cards + groups) per
+     * invalidation instead of O(groups × cards) per render.
+     *
+     * Unlike the paint-order memo, this one reads POSITIONS and therefore does
+     * re-run on every drag frame. That is part of the drag cost, not exempt from
+     * it (A10, round 1) — count it in 5a-2's perf gate.
+     */
+    const contentBounds = createMemo(() => {
+        const layout = props.cardLayout();
+        const cw = cardWidth(layout);
+        const ch = cardHeight(layout);
+        const rects = new Map<
+            string,
+            { x: number; y: number; width: number; height: number }[]
+        >();
+        const add = (
+            groupId: string,
+            rect: { x: number; y: number; width: number; height: number }
+        ) => {
+            const list = rects.get(groupId);
+            if (list) list.push(rect);
+            else rects.set(groupId, [rect]);
         };
-    };
+
+        for (const draft of canvasDrafts) {
+            if (draft.group_id) {
+                add(draft.group_id, {
+                    x: draft.positionX,
+                    y: draft.positionY,
+                    width: cw,
+                    height: ch
+                });
+            }
+        }
+
+        const tree = canvasTree();
+        const byId = new Map(canvasGroups.map((g) => [g.id, g]));
+        for (const child of canvasGroups) {
+            const parent = child.parent_group_id
+                ? byId.get(child.parent_group_id)
+                : undefined;
+            if (!parent) continue;
+            // ADR-0006: a Group's stored position is ABSOLUTE at every depth, so
+            // it has to be rebased into the parent's frame before it can be
+            // unioned with container-relative Card rects. `nodeSize` rather than
+            // `width ?? 400`, because a series' stored size is meaningless.
+            const size = nodeSize(
+                tree,
+                { kind: "group", id: child.id, group: child },
+                layout
+            );
+            const rect = {
+                x: child.positionX - parent.positionX,
+                y: child.positionY - parent.positionY,
+                width: size.width,
+                height: size.height
+            };
+            // A child dragged clear of its parent must not dictate the parent's
+            // minimum size: `maxLeftEdgeDelta` goes to 0 the moment any child
+            // sits at negative relative x, which would lock the parent's left
+            // edge from off-screen. Only children still overlapping the frame
+            // count (5a-1 boundary note, round 1).
+            const pw = parent.width ?? DEFAULT_GROUP_WIDTH;
+            const ph = parent.height ?? DEFAULT_GROUP_HEIGHT;
+            const overlaps =
+                rect.x < pw &&
+                rect.y < ph &&
+                rect.x + rect.width > 0 &&
+                rect.y + rect.height > 0;
+            if (!overlaps) continue;
+            add(parent.id, rect);
+        }
+
+        const out = new Map<string, ReturnType<typeof contentBoundsOf>>();
+        for (const [groupId, list] of rects) out.set(groupId, contentBoundsOf(list));
+        return out;
+    });
+
+    const EMPTY_CONTENT_BOUNDS = contentBoundsOf([]);
+    const groupContentBounds = (groupId: string) =>
+        contentBounds().get(groupId) ?? EMPTY_CONTENT_BOUNDS;
 
     /**
      * Re-derive a container's size from its contents and its manual floor, in
@@ -3053,7 +3213,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         // A dropped Card is already in the store by the time this runs, so the
         // union below includes it. A left expansion shifts every child by
         // `expandLeft`, and the right edge travels with them.
-        const content = contentBoundsOf(childRectsOf(groupId));
+        const content = groupContentBounds(groupId);
         const expandLeft = content.expandLeft;
         const resolved = resolveContainerDims(group, {
             width: content.width + expandLeft,
@@ -3629,28 +3789,38 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     });
                     const landing = placements[0];
                     const displaced = placements.length > 1 ? placements[1] : null;
+                    const occupantFootprint = displaced
+                        ? (gridItemsFor(gridHoverGroup).find((i) => i.id === displaced.id)
+                              ?.footprint ?? CARD_FOOTPRINT)
+                        : CARD_FOOTPRINT;
                     setGridDropCell({
                         groupId: gridHoverGroup.id,
-                        // Read from the placement, not from targetCell: a
-                        // footprint that collides without being able to swap
-                        // lands on the nearest free rect instead, and the
-                        // overlay has to point at where it will actually go.
-                        cell: landing
-                            ? positionToCell(
-                                  landing.positionX,
-                                  landing.positionY,
-                                  layout,
-                                  cols
-                              )
-                            : targetCell,
+                        landing: {
+                            // Read from the placement, not from targetCell: a
+                            // footprint that collides without being able to swap
+                            // lands on the nearest free rect instead, and the
+                            // overlay has to point at where it will actually go.
+                            cell: landing
+                                ? positionToCell(
+                                      landing.positionX,
+                                      landing.positionY,
+                                      layout,
+                                      cols
+                                  )
+                                : targetCell,
+                            footprint: CARD_FOOTPRINT
+                        },
                         isSwap: displaced !== null,
-                        displacedCell: displaced
-                            ? positionToCell(
-                                  displaced.positionX,
-                                  displaced.positionY,
-                                  layout,
-                                  cols
-                              )
+                        displaced: displaced
+                            ? {
+                                  cell: positionToCell(
+                                      displaced.positionX,
+                                      displaced.positionY,
+                                      layout,
+                                      cols
+                                  ),
+                                  footprint: occupantFootprint
+                              }
                             : null
                     });
                 } else {
@@ -4173,8 +4343,21 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         "transform-origin": "0 0"
                     }}
                 >
-                    {/* Render Groups */}
-                    <For each={canvasGroups}>
+                    {/* Render Groups, parent-then-subtree (decision 12).
+
+                        Pre-order DFS, NOT a depth sort: a depth sort paints
+                        every depth-1 node above every depth-0 node, so a child
+                        of container A would float above unrelated container B
+                        and a dragged top-level container would be pinned
+                        beneath every nested Group on the canvas.
+
+                        This memo is cheap during a drag, and deliberately so
+                        (plan A9): `renderOrder` reads only `id` and
+                        `parent_group_id`, and Solid stores track per property —
+                        so a position write, including the O(descendants)
+                        subtree fan-out on every mousemove, does NOT invalidate
+                        it. Do not widen what it reads. */}
+                    <For each={groupsInPaintOrder()}>
                         {(group) => (
                             <Show
                                 when={group.type === "series"}
@@ -4200,29 +4383,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                             dragState().activeBoxId !== null &&
                                             dragState().dragGroupId === group.id
                                         }
-                                        highlightCell={
-                                            gridHighlightFor(group.id)?.cell ?? null
-                                        }
-                                        highlightIsSwap={
-                                            gridHighlightFor(group.id)?.isSwap ?? false
-                                        }
-                                        displacedCell={
-                                            gridHighlightFor(group.id)?.displacedCell ??
-                                            null
-                                        }
                                         isExitingSource={exitingGroupId() === group.id}
                                         gridItems={
                                             isGridGroup(group) ? gridItemsFor(group) : []
                                         }
                                         gridCols={gridColsFor(group)}
                                         contentMinWidth={
-                                            computeMinGroupSize(group.id).minWidth
+                                            groupContentBounds(group.id).width
                                         }
                                         contentMinHeight={
-                                            computeMinGroupSize(group.id).minHeight
+                                            groupContentBounds(group.id).height
                                         }
                                         maxLeftEdgeDelta={
-                                            computeMinGroupSize(group.id).maxLeftEdgeDelta
+                                            groupContentBounds(group.id).maxLeftEdgeDelta
                                         }
                                         onSelectAnchor={onGroupAnchorClick}
                                         isGroupSelected={
@@ -4404,6 +4577,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             </Show>
                         )}
                     </For>
+
+                    {/* Grid drop affordance — see GridDropHighlight for why it
+                        lives here rather than inside the target container. */}
+                    <Show when={gridDropHighlight()}>
+                        {(highlight) => (
+                            <GridDropHighlight
+                                group={highlight().group}
+                                target={highlight().target}
+                                cardLayout={props.cardLayout}
+                            />
+                        )}
+                    </Show>
 
                     {/*
                       Connection layer, in world coordinates. Nominal 1x1 with
@@ -4860,6 +5045,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             onConvertToFree={() => convertGroupToFree(menu().group)}
                             onGridSettings={() => setGridSettingsGroup(menu().group)}
                             onSetTeamNames={() => setTeamNamesGroup(menu().group)}
+                            onMoveToTopLevel={() => {
+                                handleMoveGroupToTopLevel(menu().group.id);
+                                closeGroupContextMenu();
+                            }}
                             onGoTo={() => {
                                 const group = menu().group;
                                 props.setViewport({

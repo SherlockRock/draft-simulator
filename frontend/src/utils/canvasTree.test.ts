@@ -18,6 +18,7 @@ import {
     parentIdOf,
     renderOrder,
     spanFor,
+    subtreeHeight,
     wouldCreateCycle,
     type CanvasTree
 } from "./canvasTree";
@@ -180,6 +181,22 @@ describe("renderOrder", () => {
         expect(renderOrder(t).map((g) => g.id)).toEqual(["root", "a", "a1", "b", "solo"]);
     });
 
+    // The property that makes decision 12 cheap during a drag (plan A9): the
+    // paint-order memo in Canvas.tsx reads only `id` and `parent_group_id`, so
+    // Solid's per-property store tracking does NOT invalidate it on a position
+    // write — including the per-frame subtree fan-out. Pinned here at the data
+    // level so widening what renderOrder reads breaks a test rather than a
+    // frame budget.
+    it("is unchanged by a position-only edit", () => {
+        const groups = [
+            group("root", { x: 0, y: 0 }),
+            group("a", { parent: "root", x: 10, y: 10 })
+        ];
+        const before = renderOrder(tree(groups)).map((g) => g.id);
+        const moved = groups.map((g) => ({ ...g, positionX: g.positionX + 500 }));
+        expect(renderOrder(tree(moved)).map((g) => g.id)).toEqual(before);
+    });
+
     it("keeps a whole sibling subtree together", () => {
         const t = tree([
             group("root"),
@@ -284,6 +301,25 @@ describe("ancestry", () => {
         expect(wouldCreateCycle(t, "a", "a")).toBe(true);
         expect(wouldCreateCycle(t, "root", "a")).toBe(true);
         expect(wouldCreateCycle(t, "a", null)).toBe(false);
+    });
+
+    it("measures subtree height in levels below the node", () => {
+        const t = tree([
+            group("root"),
+            group("a", { parent: "root" }),
+            group("a1", { parent: "a" }),
+            group("b", { parent: "root" }),
+            group("flat")
+        ]);
+        expect(subtreeHeight(t, "root")).toBe(2);
+        expect(subtreeHeight(t, "a")).toBe(1);
+        expect(subtreeHeight(t, "a1")).toBe(0);
+        expect(subtreeHeight(t, "flat")).toBe(0);
+    });
+
+    it("bounds subtree height inside a cycle instead of hanging", () => {
+        const t = tree([group("x", { parent: "y" }), group("y", { parent: "x" })]);
+        expect(subtreeHeight(t, "x")).toBe(1);
     });
 
     it("collects descendant groups pre-order, excluding self and Cards", () => {
