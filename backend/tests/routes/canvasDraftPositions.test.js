@@ -493,6 +493,25 @@ describe("PUT /:canvasId/draft-positions — groups[]", () => {
 
   // Cards render at container + relative offset, so a client applying the Card
   // message first can paint them at the OLD container position.
+  // The commit broadcast is a set of COMPLETE absolute row-setters, one per
+  // written row. A receiver that fanned out on these would move an explicitly
+  // listed child twice — and for a multi-entry payload the child's event is
+  // emitted before its parent's, so nothing would correct it (plan A3).
+  it("never marks a commit groupMoved as a subtree move", async () => {
+    mockTransaction();
+    mockCanvasGroups([
+      groupRow("g-root", { x: 0, y: 0 }),
+      groupRow("g-child", { parent: "g-root", x: 10, y: 10 })
+    ]);
+
+    await putGroups({ groups: [{ id: "g-root", positionX: 40, positionY: 0 }] });
+
+    for (const call of socketService.emitToRoom.mock.calls) {
+      if (call[1] !== "groupMoved") continue;
+      expect(call[2]).not.toHaveProperty("subtree");
+    }
+  });
+
   it("emits every groupMoved before draftPositionsUpdated", async () => {
     mockTransaction();
     mockCanvasGroups([groupRow("g1", { x: 0, y: 0 })]);

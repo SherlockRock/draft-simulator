@@ -30,7 +30,6 @@ import {
     deleteVertex,
     editDraft,
     deleteCanvasGroup,
-    updateCanvasGroupPosition,
     createCanvasGroup,
     updateCanvasGroup,
     updateCanvasDraft,
@@ -89,7 +88,11 @@ import {
 } from "./utils/canvasTree";
 import { findDropContainer } from "./utils/canvasHitTest";
 import { splitGridPlacements } from "./utils/gridPersistence";
-import type { GroupPositionWrite } from "./utils/groupSubtreeMove";
+import {
+    subtreeMoveWrites,
+    subtreeRows,
+    type GroupPositionWrite
+} from "./utils/groupSubtreeMove";
 import { parentageRejection } from "./utils/groupParentage";
 import {
     localNewDraft,
@@ -105,7 +108,6 @@ import {
     localUpdateVertex,
     localDeleteVertex,
     localCreateGroup,
-    localUpdateGroupPosition,
     localUpdateGroup,
     localConvertGroupToSeries,
     localDeleteGroup,
@@ -167,7 +169,9 @@ import { GroupTeamNamesDialog } from "./components/GroupTeamNamesDialog";
 import {
     DraftPositionsUpdatedSchema,
     type DraftMode,
-    type GameType
+    type DraftPositionUpdate,
+    type GameType,
+    type GroupPositionUpdate
 } from "@draft-sim/shared-types";
 import { type CardLayout } from "./utils/canvasCardLayout";
 
@@ -315,14 +319,24 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         offsetX: 0,
         offsetY: 0
     });
+    // `originX/originY` are the container's position at MOUSEDOWN, and they are
+    // what makes rollback possible at all (plan A1). `onMutate` runs at
+    // mouse-up, after the live drag has already written the final position to
+    // the store on every mousemove — so a snapshot taken there restores the
+    // failed drag to itself. It has been a no-op on `main` for flat canvases;
+    // nesting only makes it visible, subtree-sized.
     const [groupDragState, setGroupDragState] = createSignal<{
         activeGroupId: string | null;
         offsetX: number;
         offsetY: number;
+        originX: number;
+        originY: number;
     }>({
         activeGroupId: null,
         offsetX: 0,
-        offsetY: 0
+        offsetY: 0,
+        originX: 0,
+        originY: 0
     });
     const [pickerTarget, setPickerTarget] = createSignal<PickerTarget | null>(null);
     const [pickerAnchorSession, setPickerAnchorSession] = createSignal(0);
@@ -1200,24 +1214,31 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     }));
 
-    const updateGroupPositionMutation = useMutation(() => ({
-        mutationFn: updateCanvasGroupPosition,
-        onMutate: (variables) => {
-            const group = canvasGroups.find((g) => g.id === variables.groupId);
-            return { prevX: group?.positionX, prevY: group?.positionY };
-        },
-        onError: (error: Error, variables, context) => {
-            const prevX = context?.prevX;
-            const prevY = context?.prevY;
-            if (prevX != null && prevY != null) {
-                setCanvasGroups(
-                    canvasGroups.map((g) =>
-                        g.id === variables.groupId
-                            ? { ...g, positionX: prevX, positionY: prevY }
-                            : g
-                    )
-                );
-            }
+    /**
+     * A container drag, committed through the batch endpoint so the server can
+     * fan the delta out over the subtree (step-4 amendment 9). `PUT
+     * /group/:groupId` never learns to do that — it is the resize route.
+     *
+     * `rollback` carries the TOTAL delta since mousedown, because the failure
+     * this has to undo is the whole drag. The old `onMutate` snapshot ran at
+     * mouse-up, after the live drag had already written the final position, so
+     * it restored the failed drag to itself (A1).
+     */
+    const updateGroupSubtreeMutation = useMutation(() => ({
+        mutationFn: (variables: {
+            canvasId: string;
+            positions: DraftPositionUpdate[];
+            groups: GroupPositionUpdate[];
+            rollback: { groupId: string; dx: number; dy: number };
+        }) =>
+            updateCanvasDraftPositions({
+                canvasId: variables.canvasId,
+                positions: variables.positions,
+                groups: variables.groups
+            }),
+        onError: (error: Error, variables) => {
+            const { groupId, dx, dy } = variables.rollback;
+            applyGroupPositionWrites(subtreeMoveWrites(canvasTree(), groupId, -dx, -dy));
             toast.error(`Failed to save group position: ${error.message}`);
         }
     }));
@@ -1766,6 +1787,32 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             if (!data) return;
             const gState = groupDragState();
             if (gState.activeGroupId !== data.groupId) {
+                // LIVE events only (A3 revised). `subtree` is set by
+                // `relayGroupMove` and by nothing else: a commit broadcast is a
+                // complete set of absolute row-setters, one per written row, and
+                // fanning out on those would move an explicitly-listed child a
+                // second time — the child's event is emitted BEFORE its parent's
+                // for a multi-entry payload, so nothing would correct it.
+                //
+                // The guard is "the Group I am dragging", deliberately not
+                // extended to descendants: a remote user's concurrent move of a
+                // descendant is legitimate, and A8's per-frame increments
+                // preserve it. The cost is a receiver actively dragging a child
+                // seeing it jitter for one frame while a remote user drags the
+                // parent.
+                if (data.subtree) {
+                    const stored = canvasGroups.find((g) => g.id === data.groupId);
+                    if (stored) {
+                        applyGroupPositionWrites(
+                            subtreeMoveWrites(
+                                canvasTree(),
+                                data.groupId,
+                                data.positionX - stored.positionX,
+                                data.positionY - stored.positionY
+                            )
+                        );
+                    }
+                }
                 setCanvasGroups((g) => g.id === data.groupId, {
                     positionX: data.positionX,
                     positionY: data.positionY,
@@ -2640,7 +2687,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             setGroupDragState({
                 activeGroupId: groupId,
                 offsetX: worldCoords.x - group.positionX,
-                offsetY: worldCoords.y - group.positionY
+                offsetY: worldCoords.y - group.positionY,
+                originX: group.positionX,
+                originY: group.positionY
             });
         }
     };
@@ -2919,6 +2968,52 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 parentId
             });
         }
+    };
+
+    /**
+     * Commit a container drag.
+     *
+     * ONE entry on the wire, whatever the subtree's size: the server derives
+     * `dx` from the locked stored row and fans it out over descendants itself
+     * (design 3.1c). The client has already written the same subtree
+     * optimistically, per frame.
+     *
+     * The rollback delta comes from the drag ORIGIN captured at mousedown, not
+     * from a snapshot taken in `onMutate` — see `groupDragState` (A1).
+     */
+    const commitGroupDrag = (gState: {
+        activeGroupId: string | null;
+        originX: number;
+        originY: number;
+    }) => {
+        const groupId = gState.activeGroupId;
+        if (!groupId) return;
+        const group = canvasGroups.find((g) => g.id === groupId);
+        if (!group) return;
+        const entry = {
+            id: groupId,
+            positionX: group.positionX,
+            positionY: group.positionY
+        };
+        if (isLocalMode()) {
+            // Local has nothing to fan the delta out for it and the live drag
+            // only touched the in-memory store, so it gets every row.
+            localUpdateDraftPositions({
+                positions: [],
+                groups: subtreeRows(canvasTree(), groupId)
+            });
+            return;
+        }
+        updateGroupSubtreeMutation.mutate({
+            canvasId: canvasId(),
+            positions: [],
+            groups: [entry],
+            rollback: {
+                groupId,
+                dx: group.positionX - gState.originX,
+                dy: group.positionY - gState.originY
+            }
+        });
     };
 
     /**
@@ -3718,10 +3813,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 const worldCoords = screenToWorld(e.clientX, e.clientY);
                 const newX = worldCoords.x - gState.offsetX;
                 const newY = worldCoords.y - gState.offsetY;
-                setCanvasGroups((g) => g.id === gState.activeGroupId, {
-                    positionX: newX,
-                    positionY: newY
-                });
+                const dragged = canvasGroups.find((g) => g.id === gState.activeGroupId);
+                if (dragged) {
+                    // PER-FRAME increment, never cumulative-from-origin (A8).
+                    // Recomputing descendants as `origin + total` would destroy a
+                    // concurrent remote move of a descendant on the next
+                    // mousemove — the exact failure the derived-delta mechanism
+                    // exists to prevent, reproduced locally. It also agrees with
+                    // what the server computes at commit (`stored + dx`).
+                    applyGroupPositionWrites(
+                        subtreeMoveWrites(
+                            canvasTree(),
+                            gState.activeGroupId,
+                            newX - dragged.positionX,
+                            newY - dragged.positionY
+                        )
+                    );
+                }
+                // One absolute event for the dragged Group only; receivers
+                // derive their own delta and fan out (3.1c).
                 debouncedEmitGroupMove(gState.activeGroupId, newX, newY);
                 return;
             }
@@ -3926,27 +4036,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
             const gState = groupDragState();
             if (gState.activeGroupId) {
-                const group = canvasGroups.find((g) => g.id === gState.activeGroupId);
-                if (group) {
-                    if (isLocalMode()) {
-                        localUpdateGroupPosition({
-                            groupId: gState.activeGroupId,
-                            positionX: group.positionX,
-                            positionY: group.positionY
-                        });
-                    } else {
-                        updateGroupPositionMutation.mutate({
-                            canvasId: canvasId(),
-                            groupId: gState.activeGroupId,
-                            positionX: group.positionX,
-                            positionY: group.positionY
-                        });
-                    }
-                }
+                commitGroupDrag(gState);
                 setGroupDragState({
                     activeGroupId: null,
                     offsetX: 0,
-                    offsetY: 0
+                    offsetY: 0,
+                    originX: 0,
+                    originY: 0
                 });
                 return;
             }

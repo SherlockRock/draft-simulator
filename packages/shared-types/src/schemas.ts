@@ -875,6 +875,20 @@ export const GroupMovedSchema = z.object({
   positionX: z.number(),
   positionY: z.number(),
   parentId: z.string().nullable().optional(),
+  /**
+   * "Move this Group's whole subtree by the delta you derive." Set by the LIVE
+   * relay (`relayGroupMove`) and by nothing else.
+   *
+   * A commit broadcast emits one complete absolute event per written row —
+   * including every descendant — so fanning out on those would move an
+   * explicitly-listed child twice, and for a multi-entry payload the child's
+   * event arrives BEFORE its parent's, so nothing corrects it. Permanent
+   * client/DB divergence (design 3.1c, corrected in review round 1).
+   *
+   * Additive and optional: a tab that has not reloaded ignores it and keeps
+   * today's single-row behaviour, which is exactly right for one.
+   */
+  subtree: z.boolean().optional(),
 });
 
 export const GroupResizedSchema = z.object({

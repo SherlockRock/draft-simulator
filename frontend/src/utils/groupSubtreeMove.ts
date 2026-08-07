@@ -32,11 +32,28 @@ export const subtreeMoveWrites = (
     dy: number
 ): GroupPositionWrite[] => {
     if (dx === 0 && dy === 0) return [];
+    return subtreeRows(tree, groupId).map((row) => ({
+        id: row.id,
+        positionX: row.positionX + dx,
+        positionY: row.positionY + dy
+    }));
+};
+
+/**
+ * The subtree exactly as it stands — the dragged Group plus its descendants, at
+ * their current absolute positions.
+ *
+ * The **local** commit needs this and the server commit does not. A local
+ * canvas has nothing to fan a delta out for it, and the live drag writes only
+ * the in-memory store, so without every row the descendants are lost on reload.
+ * The server commit stays one entry: it derives `dx` from the locked row.
+ */
+export const subtreeRows = (tree: CanvasTree, groupId: string): GroupPositionWrite[] => {
     const moved = tree.groups.find((g) => g.id === groupId);
     if (!moved) return [];
     return [moved, ...descendantGroupsOf(tree, groupId)].map((group) => ({
         id: group.id,
-        positionX: group.positionX + dx,
-        positionY: group.positionY + dy
+        positionX: group.positionX,
+        positionY: group.positionY
     }));
 };

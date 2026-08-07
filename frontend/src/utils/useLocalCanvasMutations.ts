@@ -355,21 +355,6 @@ export const localCreateGroup = (data: {
     });
 };
 
-export const localUpdateGroupPosition = (data: {
-    groupId: string;
-    positionX: number;
-    positionY: number;
-}) => {
-    return mutateLocal((canvas) => {
-        const group = canvas.groups.find((g) => g.id === data.groupId);
-        if (group) {
-            group.positionX = data.positionX;
-            group.positionY = data.positionY;
-        }
-        return { canvas, result: { success: true } };
-    });
-};
-
 /**
  * Local mirror of the backend's clear protocol (D3): an inbound
  * `gameType: null` deletes the key rather than storing a null, so local

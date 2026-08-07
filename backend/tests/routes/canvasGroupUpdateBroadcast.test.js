@@ -56,7 +56,11 @@ beforeEach(() => {
     height: 400,
     versus_draft_id: null,
     metadata: { layout: "grid", gridCols: 3 },
-    update: vi.fn().mockResolvedValue(),
+    // Sequelize's `update` mutates the instance, and the route reads
+    // `group.width` / `group.positionX` back out for the broadcast.
+    update: vi.fn(async function (values) {
+      Object.assign(this, values);
+    }),
     toJSON() {
       return { ...this };
     },
@@ -86,13 +90,43 @@ const emittedEvents = () =>
   socketService.emitToRoom.mock.calls.map((call) => call[1]);
 
 describe("PUT /:canvasId/group/:groupId broadcast selection", () => {
-  it("emits groupMoved for a bare move", async () => {
+  // This is the RESIZE route. The container drag — the only caller that ever
+  // sent a bare position — commits through `PUT /draft-positions` since 5a-2,
+  // where the server fans the delta out over the subtree. A `groupMoved` from
+  // here would tell receivers to move child Groups by a left-edge delta that
+  // moved the frame's edge, not world space.
+  it("never emits groupMoved, even for a bare move", async () => {
     const res = await request(buildCanvasApp())
       .put("/api/canvas/c-1/group/g-1")
       .send({ positionX: 250, positionY: 300 });
 
     expect(res.status).toBe(200);
-    expect(emittedEvents()).toEqual(["groupMoved"]);
+    expect(emittedEvents()).not.toContain("groupMoved");
+  });
+
+  it("emits groupResized with the new left edge for a left-edge resize", async () => {
+    const res = await request(buildCanvasApp())
+      .put("/api/canvas/c-1/group/g-1")
+      .send({ positionX: 60, width: 640, height: 400 });
+
+    expect(res.status).toBe(200);
+    expect(emittedEvents()).toEqual(["groupResized"]);
+    expect(socketService.emitToRoom).toHaveBeenCalledWith(
+      "c-1",
+      "groupResized",
+      expect.objectContaining({ groupId: "g-1", positionX: 60 }),
+    );
+  });
+
+  // GroupResizedSchema requires BOTH dimensions numeric, and the route accepts
+  // one or an explicit null — so this would emit an event every client drops.
+  it("falls back to canvasUpdate when only one dimension is a number", async () => {
+    const res = await request(buildCanvasApp())
+      .put("/api/canvas/c-1/group/g-1")
+      .send({ positionX: 60, width: 640, height: null });
+
+    expect(res.status).toBe(200);
+    expect(emittedEvents()).toEqual(["canvasUpdate"]);
   });
 
   it("emits canvasUpdate when a left-edge resize also stores the manual floor", async () => {
@@ -115,10 +149,24 @@ describe("PUT /:canvasId/group/:groupId broadcast selection", () => {
     });
   });
 
-  it("emits canvasUpdate for a size-only change, as before", async () => {
+  it("emits groupResized for a size-only change", async () => {
     const res = await request(buildCanvasApp())
       .put("/api/canvas/c-1/group/g-1")
       .send({ width: 640, height: 400 });
+
+    expect(res.status).toBe(200);
+    expect(emittedEvents()).toEqual(["groupResized"]);
+    expect(socketService.emitToRoom).toHaveBeenCalledWith("c-1", "groupResized", {
+      groupId: "g-1",
+      width: 640,
+      height: 400,
+    });
+  });
+
+  it("emits canvasUpdate for a rename", async () => {
+    const res = await request(buildCanvasApp())
+      .put("/api/canvas/c-1/group/g-1")
+      .send({ name: "Renamed" });
 
     expect(res.status).toBe(200);
     expect(emittedEvents()).toEqual(["canvasUpdate"]);

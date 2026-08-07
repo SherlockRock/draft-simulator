@@ -420,7 +420,11 @@ describe("ephemeral relays — authorize → broadcast only", () => {
 
     expect(to).toHaveBeenCalledWith("c-1");
     expect(except).toHaveBeenCalledWith("sock-1");
+    // `subtree: true` marks this as the LIVE channel: receivers derive their own
+    // delta and move the whole subtree. No other producer of `groupMoved` sets
+    // it — a commit broadcast is a set of complete absolute row-setters.
     expect(exceptEmit).toHaveBeenCalledWith("groupMoved", {
+      subtree: true,
       groupId: "g-1",
       positionX: 1,
       positionY: 2,

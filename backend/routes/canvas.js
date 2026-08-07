@@ -2303,26 +2303,44 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
 
     // Emit appropriate socket event.
     //
-    // A metadata change ALWAYS takes the full-payload branch: `groupMoved`
-    // carries only a position (its Zod schema strips everything else), so a
-    // request that moves the frame AND edits metadata would leave every other
-    // client on stale metadata until reload. The one caller that sends both is
-    // a left-edge resize, which since 5a-0 also persists the manual size floor
-    // — and a stale floor makes another client resolve this container to the
-    // wrong size on its next drop.
+    // This route is the RESIZE route; it never emits `groupMoved`. The only
+    // caller that ever sent a bare position was the container drag, and since
+    // 5a-2 that commits through `PUT /draft-positions`, where the server can
+    // fan the delta out over the subtree. The `groupMoved` this used to emit
+    // was a left-edge resize telling every other client "the frame moved" — and
+    // a receiver that fanned that out would drag the child Groups left by
+    // `expandLeft` with nothing to correct it, because a left-edge resize moves
+    // the frame's edge and NOT world space (design 3.1c, plan A3).
+    //
+    // Two branches, in this order:
+    //
+    //  - A metadata change takes the full payload, because `groupResized`
+    //    carries dimensions only. Since 5a-0 a resize also persists the manual
+    //    size floor, and a client left on a stale floor resolves this container
+    //    to the wrong size on its next drop.
+    //  - Otherwise a resize emits `groupResized`, whose handler rebases child
+    //    CARDS by the left-edge delta and correctly leaves child Groups alone
+    //    (they are absolute at every depth, ADR-0006).
+    //
+    // The dimension guard is on BOTH being numbers: the route accepts one
+    // dimension or an explicit `null`, while `GroupResizedSchema` requires both
+    // numeric — so `{positionX, width: null}` would emit an event every client
+    // silently drops.
     if (
       updates.metadata === undefined &&
-      (updates.positionX !== undefined || updates.positionY !== undefined)
+      typeof updates.width === "number" &&
+      typeof updates.height === "number"
     ) {
-      socketService.emitToRoom(canvasId, "groupMoved", {
+      socketService.emitToRoom(canvasId, "groupResized", {
         groupId,
-        positionX: group.positionX,
-        positionY: group.positionY,
         width: group.width,
         height: group.height,
+        ...(updates.positionX !== undefined
+          ? { positionX: group.positionX }
+          : {}),
       });
     } else {
-      // For name/size changes, emit full canvas update
+      // Name / metadata / partial-dimension changes: full canvas update.
       const payload = await getCanvasBroadcastPayload(canvasId);
 
       socketService.emitToRoom(canvasId, "canvasUpdate", {

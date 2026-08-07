@@ -557,22 +557,6 @@ export const updateCanvasGroup = async (data: {
     );
 };
 
-export const updateCanvasGroupPosition = async (data: {
-    canvasId: string;
-    groupId: string;
-    positionX: number;
-    positionY: number;
-}) => {
-    return apiPut(
-        `/canvas/${data.canvasId}/group/${data.groupId}`,
-        {
-            positionX: data.positionX,
-            positionY: data.positionY
-        },
-        SuccessSchema
-    );
-};
-
 export const deleteCanvasGroup = async (data: {
     canvasId: string;
     groupId: string;

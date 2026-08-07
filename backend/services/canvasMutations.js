@@ -256,11 +256,21 @@ function createCanvasMutationGate({ io }) {
   // Group move/resize exclude the sender: the dragging client already renders
   // the group at the target position and an echo would fight the drag.
 
+  /**
+   * The LIVE channel for a container drag, and the only producer of
+   * `groupMoved` that means "move the whole subtree".
+   *
+   * Receivers derive `dx` against their own stored row and fan it out over the
+   * descendants they know about (design 3.1c). The commit broadcast must NOT
+   * carry this flag: it emits one complete absolute event per written row,
+   * descendants included, so a fan-out there would move an explicitly-listed
+   * child twice with nothing to correct it.
+   */
   async function relayGroupMove({ actor, canvasId, groupId, positionX, positionY }) {
     await assertCanvasAccess({ userId: actor.userId, canvasId });
     io.to(canvasId)
       .except(actor.socketId)
-      .emit("groupMoved", { groupId, positionX, positionY });
+      .emit("groupMoved", { groupId, positionX, positionY, subtree: true });
   }
 
   async function relayGroupResize({ actor, canvasId, groupId, width, height, positionX }) {
