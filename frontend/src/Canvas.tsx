@@ -1286,7 +1286,23 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             const removedDrafts = deletedGroupId
                 ? canvasDrafts.filter((cd) => cd.group_id === deletedGroupId)
                 : [];
+            // Direct child Groups are PROMOTED, not dropped, mirroring the
+            // route (design §8.2.0). `renderOrder` tolerates the orphan this
+            // would otherwise leave for a round trip — but the promotion is
+            // where they are going anyway, so showing it now avoids a visible
+            // flash into and back out of the top-level paint stratum.
+            const promotedChildren = deletedGroupId
+                ? canvasGroups
+                      .filter((g) => g.parent_group_id === deletedGroupId)
+                      .map((g) => g.id)
+                : [];
             if (deletedGroupId) {
+                const promoteTo = removedGroup?.parent_group_id ?? null;
+                setCanvasGroups(
+                    (g) => g.parent_group_id === deletedGroupId,
+                    "parent_group_id",
+                    promoteTo
+                );
                 setCanvasGroups(canvasGroups.filter((g) => g.id !== deletedGroupId));
                 setCanvasDrafts(
                     canvasDrafts.filter((cd) => cd.group_id !== deletedGroupId)
@@ -1294,7 +1310,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             }
             setIsDeleteGroupDialogOpen(false);
             setGroupToDelete(null);
-            return { removedGroup, removedDrafts };
+            return { removedGroup, removedDrafts, promotedChildren };
         },
         onSuccess: () => {
             toast.success("Group removed from canvas");
@@ -1302,6 +1318,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         onError: (error, _vars, context) => {
             if (context?.removedGroup) {
                 setCanvasGroups([...canvasGroups, context.removedGroup]);
+                // Un-promote too, or a failed delete leaves the children at top
+                // level with their container back around them.
+                for (const childId of context.promotedChildren ?? []) {
+                    setCanvasGroups((g) => g.id === childId, {
+                        parent_group_id: context.removedGroup?.id ?? null
+                    });
+                }
             }
             if (context?.removedDrafts?.length) {
                 setCanvasDrafts([...canvasDrafts, ...context.removedDrafts]);
@@ -1875,6 +1898,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 height: data.height
             });
             if (draftPositionDelta !== undefined && draftPositionDelta !== 0) {
+                // CARDS ONLY, and that is correct under nesting — do not "fix"
+                // this by widening it to child Groups. A Card's coordinates are
+                // relative to its container, so a left-edge move has to rebase
+                // them; a Group's are absolute world at every depth (ADR-0006),
+                // so a child Group must NOT move when its parent's edge does.
                 setCanvasDrafts(
                     (draft) => draft.group_id === data.groupId,
                     (draft) => ({
