@@ -11,7 +11,11 @@ import type {
 import { getManualSeriesGameDefaults } from "./manualSeriesDefaults";
 import { childGroupsOf } from "./canvasTree";
 import { parentageRejection } from "./groupParentage";
-import { SERIES_HEADER_HEIGHT, SERIES_PADDING } from "./helpers";
+import {
+    SERIES_HEADER_HEIGHT,
+    SERIES_PADDING_X,
+    SERIES_PADDING_Y
+} from "./helpers";
 
 // Helper to safely cast anchor type with default
 const toAnchorType = (
@@ -469,10 +473,10 @@ export const localConvertGroupToSeries = (data: {
         // these stored values (it lays games out from seriesIndex), so the only
         // symptom was on ungroup, where the Card jumped by the group's position.
         // The seed matches the series layout in helpers.ts.
-        const startX = lastDraft ? lastDraft.positionX + 380 : SERIES_PADDING;
+        const startX = lastDraft ? lastDraft.positionX + 380 : SERIES_PADDING_X;
         const startY = lastDraft
             ? lastDraft.positionY
-            : SERIES_HEADER_HEIGHT + SERIES_PADDING;
+            : SERIES_HEADER_HEIGHT + SERIES_PADDING_Y;
 
         for (let i = groupDrafts.length; i < data.length; i += 1) {
             const draftId = crypto.randomUUID();

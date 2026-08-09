@@ -5,7 +5,7 @@ import {
     cardWidth,
     getSeriesGroupDimensions,
     SERIES_CARD_GAP,
-    SERIES_PADDING
+    SERIES_PADDING_X
 } from "./helpers";
 import {
     CARD_FOOTPRINT,
@@ -144,7 +144,7 @@ export const resolveCopyPlacement = (args: {
         return {
             positionX:
                 group.positionX +
-                SERIES_PADDING +
+                SERIES_PADDING_X +
                 sourceIndex * (cardWidth(layout) + SERIES_CARD_GAP),
             positionY: group.positionY + seriesDims.height + GRID_CELL_GAP,
             group_id: null

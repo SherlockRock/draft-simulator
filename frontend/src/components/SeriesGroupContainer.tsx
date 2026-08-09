@@ -16,7 +16,8 @@ import {
     getSeriesGroupDimensions,
     SERIES_CARD_GAP,
     SERIES_HEADER_HEIGHT,
-    SERIES_PADDING
+    SERIES_PADDING_X,
+    SERIES_PADDING_Y
 } from "../utils/helpers";
 import { sortedSeriesDrafts } from "../utils/canvasWorldPosition";
 import { GroupAnchorPoints } from "./CustomGroupContainer";
@@ -301,7 +302,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                     "cursor-grabbing": props.isPanning
                 }}
                 style={{
-                    padding: `${SERIES_PADDING}px`,
+                    padding: `${SERIES_PADDING_Y}px ${SERIES_PADDING_X}px`,
                     gap: `${SERIES_CARD_GAP}px`
                 }}
                 onMouseDown={(e) => {

@@ -103,7 +103,11 @@ export const getGroupAnchorWorldPosition = (
 
 // Series group layout constants (must match SeriesGroupContainer.tsx)
 export const SERIES_HEADER_HEIGHT = 56;
-export const SERIES_PADDING = 20;
+// Horizontal padding is ZERO so a Bo-N series measures exactly N grid columns:
+// SERIES_CARD_GAP and GRID_CELL_GAP are both 24, so the games then land on the
+// grid's own column rhythm (design §6, superseding block).
+export const SERIES_PADDING_X = 0;
+export const SERIES_PADDING_Y = 20;
 export const SERIES_CARD_GAP = 24;
 
 /**
@@ -118,10 +122,10 @@ export const getSeriesGroupDimensions = (
     const ch = cardHeight(cardLayout);
     return {
         width:
-            2 * SERIES_PADDING +
+            2 * SERIES_PADDING_X +
             draftCount * cw +
             Math.max(0, draftCount - 1) * SERIES_CARD_GAP,
-        height: SERIES_HEADER_HEIGHT + 2 * SERIES_PADDING + ch
+        height: SERIES_HEADER_HEIGHT + 2 * SERIES_PADDING_Y + ch
     };
 };
 
@@ -136,8 +140,11 @@ export const getSeriesDraftWorldPosition = (
 ): { x: number; y: number } => {
     const cw = cardWidth(cardLayout);
     return {
-        x: group.positionX + SERIES_PADDING + draftIndex * (cw + SERIES_CARD_GAP),
-        y: group.positionY + SERIES_HEADER_HEIGHT + SERIES_PADDING
+        x:
+            group.positionX +
+            SERIES_PADDING_X +
+            draftIndex * (cw + SERIES_CARD_GAP),
+        y: group.positionY + SERIES_HEADER_HEIGHT + SERIES_PADDING_Y
     };
 };
 

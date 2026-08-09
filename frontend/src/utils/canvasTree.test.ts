@@ -430,7 +430,10 @@ describe("footprints", () => {
         ).toEqual(getSeriesGroupDimensions(2, LAYOUT));
     });
 
-    it.each(ALL_LAYOUTS)("makes a Bo3 2x4 and a Bo5 2x6 in %s", (layout) => {
+    // 5a-6 retired the 2x4 / 2x6 contract: with SERIES_PADDING_X at 0 a Bo-N
+    // series is exactly N columns. The second row is chrome and stays until
+    // design §6.0a.
+    it.each(ALL_LAYOUTS)("makes a Bo3 2x3 and a Bo5 2x5 in %s", (layout) => {
         const games = (n: number) =>
             Array.from({ length: n }, (_, i) =>
                 card(`c${i}`, { group_id: "s1", seriesIndex: i + 1 })
@@ -445,8 +448,14 @@ describe("footprints", () => {
             [group("root"), group("s1", { type: "series", parent: "root" })],
             games(5)
         );
-        expect(footprintOf(bo3, seriesNode(bo3), layout)).toEqual({ rows: 2, cols: 4 });
-        expect(footprintOf(bo5, seriesNode(bo5), layout)).toEqual({ rows: 2, cols: 6 });
+        expect(footprintOf(bo3, seriesNode(bo3), layout)).toEqual({
+            rows: 2,
+            cols: 3
+        });
+        expect(footprintOf(bo5, seriesNode(bo5), layout)).toEqual({
+            rows: 2,
+            cols: 5
+        });
     });
 
     it("stamps a footprint that actually contains the node it describes", () => {
@@ -490,7 +499,7 @@ describe("footprints", () => {
                 )
             ]
         );
-        expect(maxChildSpanCols(t, "root", LAYOUT)).toBe(4);
+        expect(maxChildSpanCols(t, "root", LAYOUT)).toBe(3);
         expect(maxChildSpanCols(t, "s1", LAYOUT)).toBe(1);
         expect(maxChildSpanCols(t, "nope", LAYOUT)).toBe(0);
     });
@@ -542,5 +551,19 @@ describe("gridItemsOf", () => {
 
     it("returns nothing for a group that is not in the tree", () => {
         expect(gridItemsOf(tree([group("root")]), "gone", LAYOUT, 3)).toEqual([]);
+    });
+});
+
+// The assertion this whole slice exists for: a series must measure a whole
+// number of grid columns, so its games land on the grid's own column rhythm.
+describe("a series is exactly N grid columns wide", () => {
+    it.each(ALL_LAYOUTS)("holds for %s at Bo1, Bo3 and Bo5", (layout) => {
+        for (const games of [1, 3, 5]) {
+            const columnSpan =
+                games * cardWidth(layout) + (games - 1) * GRID_CELL_GAP;
+            expect(getSeriesGroupDimensions(games, layout).width).toBe(
+                columnSpan
+            );
+        }
     });
 });

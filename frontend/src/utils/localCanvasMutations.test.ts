@@ -41,7 +41,8 @@ const {
     localUpdateDraftPositions
 } = await import("./useLocalCanvasMutations");
 const { MAX_GROUP_DEPTH } = await import("@draft-sim/shared-types/canvas-tree-vector");
-const { SERIES_HEADER_HEIGHT, SERIES_PADDING } = await import("./helpers");
+const { SERIES_HEADER_HEIGHT, SERIES_PADDING_X, SERIES_PADDING_Y } =
+    await import("./helpers");
 
 beforeEach(() => {
     localStorage.clear();
@@ -130,8 +131,8 @@ describe("local series Card placement", () => {
         });
 
         const card = (getLocalCanvas()?.drafts ?? [])[0];
-        expect(card.positionX).toBe(SERIES_PADDING);
-        expect(card.positionY).toBe(SERIES_HEADER_HEIGHT + SERIES_PADDING);
+        expect(card.positionX).toBe(SERIES_PADDING_X);
+        expect(card.positionY).toBe(SERIES_HEADER_HEIGHT + SERIES_PADDING_Y);
     });
 
     it("keeps later games on the same relative convention as the first", () => {
@@ -151,12 +152,12 @@ describe("local series Card placement", () => {
             (a, b) => (a.Draft.seriesIndex ?? 0) - (b.Draft.seriesIndex ?? 0)
         );
         expect(cards.map((c) => c.positionX)).toEqual([
-            SERIES_PADDING,
-            SERIES_PADDING + 380,
-            SERIES_PADDING + 760
+            SERIES_PADDING_X,
+            SERIES_PADDING_X + 380,
+            SERIES_PADDING_X + 760
         ]);
         for (const card of cards) {
-            expect(card.positionY).toBe(SERIES_HEADER_HEIGHT + SERIES_PADDING);
+            expect(card.positionY).toBe(SERIES_HEADER_HEIGHT + SERIES_PADDING_Y);
         }
     });
 

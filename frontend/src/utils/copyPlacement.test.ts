@@ -7,7 +7,7 @@ import {
     cardWidth,
     getSeriesGroupDimensions,
     SERIES_CARD_GAP,
-    SERIES_PADDING
+    SERIES_PADDING_X
 } from "./helpers";
 import { cellToPosition, GRID_CELL_GAP, gridDimensions } from "./gridLayout";
 
@@ -243,7 +243,8 @@ describe("resolveCopyPlacement", () => {
                 layout
             })
         ).toEqual({
-            positionX: 300 + SERIES_PADDING + cardWidth(layout) + SERIES_CARD_GAP,
+            positionX:
+                300 + SERIES_PADDING_X + cardWidth(layout) + SERIES_CARD_GAP,
             positionY: 400 + seriesDims.height + GRID_CELL_GAP,
             group_id: null
         });

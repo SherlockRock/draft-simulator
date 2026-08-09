@@ -3,7 +3,8 @@ import { getDraftWorldPosition, sortedSeriesDrafts } from "./canvasWorldPosition
 import {
     SERIES_CARD_GAP,
     SERIES_HEADER_HEIGHT,
-    SERIES_PADDING,
+    SERIES_PADDING_X,
+    SERIES_PADDING_Y,
     cardWidth,
     getSeriesDraftWorldPosition
 } from "./helpers";
@@ -74,10 +75,12 @@ describe("getDraftWorldPosition", () => {
 
         const pos = getDraftWorldPosition(games[1], g, games, LAYOUT);
 
-        expect(pos.y).toBe(g.positionY + SERIES_HEADER_HEIGHT + SERIES_PADDING);
+        expect(pos.y).toBe(g.positionY + SERIES_HEADER_HEIGHT + SERIES_PADDING_Y);
         expect(pos.y).not.toBe(g.positionY);
         expect(pos.x).toBe(
-            g.positionX + SERIES_PADDING + (cardWidth(LAYOUT) + SERIES_CARD_GAP)
+            g.positionX +
+                SERIES_PADDING_X +
+                (cardWidth(LAYOUT) + SERIES_CARD_GAP)
         );
     });
 
