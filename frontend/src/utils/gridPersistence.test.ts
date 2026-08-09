@@ -112,3 +112,31 @@ describe("splitGridPlacements", () => {
         expect(groups).toEqual([{ id: "C", positionX: 410, positionY: 74 }]);
     });
 });
+
+// The contract the two grid commit seams depend on. `groups` is the WIRE
+// payload -- direct placements only, because the server fans the delta out over
+// descendantGroupsOf. `groupStoreWrites` is the whole subtree, which is what a
+// local canvas must persist: localUpdateDraftPositions applies entries verbatim
+// and fans nothing out, so sending `groups` there strands the grandchildren.
+describe("local payloads need the subtree, not just the direct placements", () => {
+    it("carries every descendant Group row in groupStoreWrites", () => {
+        const parent = group("P", { x: 1000, y: 500 });
+        const child = group("C", { parent: "P", x: 1200, y: 700 });
+        const grandchild = group("G", { parent: "C", x: 1250, y: 750 });
+
+        const writes = splitGridPlacements({
+            tree: treeOf([parent, child, grandchild]),
+            parent,
+            placements: [nested("C", 16, 64)]
+        });
+
+        expect(writes.groups.map((g) => g.id)).toEqual(["C"]);
+        expect(writes.groupStoreWrites.map((g) => g.id)).toEqual(["C", "G"]);
+        // The grandchild travels by the same delta as the moved container.
+        expect(writes.groupStoreWrites).toContainEqual({
+            id: "G",
+            positionX: 1250 + (1016 - 1200),
+            positionY: 750 + (564 - 700)
+        });
+    });
+});

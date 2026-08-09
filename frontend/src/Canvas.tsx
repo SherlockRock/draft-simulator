@@ -88,7 +88,10 @@ import {
     type CanvasTree
 } from "./utils/canvasTree";
 import { findDropContainer } from "./utils/canvasHitTest";
-import { splitGridPlacements } from "./utils/gridPersistence";
+import {
+    splitGridPlacements,
+    type GridWrites
+} from "./utils/gridPersistence";
 import {
     subtreeMoveWrites,
     subtreeRows,
@@ -861,6 +864,27 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     /**
+     * Swap a grid payload's `groups` for the whole moved subtree, for the local
+     * path only.
+     *
+     * `localUpdateDraftPositions` applies entries verbatim and fans NOTHING
+     * out, while the server derives `dy` and fans it over `descendantGroupsOf`.
+     * So the direct placements that are exactly right on the wire strand a
+     * moved container's grandchildren on reload in a local canvas. The
+     * container-drag path already worked around this; these seams never got the
+     * same treatment.
+     */
+    const withLocalSubtree = <T,>(
+        payload: T,
+        writes: GridWrites
+    ): T & { groups?: GroupPositionUpdate[] } => ({
+        ...payload,
+        ...(writes.groupStoreWrites.length > 0
+            ? { groups: writes.groupStoreWrites }
+            : {})
+    });
+
+    /**
      * Snap/swap commit for a drop inside a grid-mode custom group, for a Card or
      * a nested Group alike. Applies optimistic store updates, then persists
      * positions + parentage + derived container dimensions in one atomic
@@ -991,7 +1015,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             group: { id: group.id, width: dims.width, height: dims.height, metadata }
         };
         if (isLocalMode()) {
-            localUpdateDraftPositions(payload);
+            localUpdateDraftPositions(withLocalSubtree(payload, writes));
         } else {
             updateDraftPositionsMutation.mutate({ canvasId: canvasId(), ...payload });
         }
@@ -1047,7 +1071,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             }
         };
         if (isLocalMode()) {
-            localUpdateDraftPositions(payload);
+            localUpdateDraftPositions(withLocalSubtree(payload, writes));
         } else {
             updateDraftPositionsMutation.mutate({ canvasId: canvasId(), ...payload });
         }
@@ -1062,9 +1086,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
      * how the parent resizes (the series-growth seam uses `resyncGroupSize`,
      * which re-derives the grid's own lattice).
      *
-     * The local branch sends `groupStoreWrites`, not `groups`:
-     * `localUpdateDraftPositions` applies entries verbatim and fans nothing
-     * out, while the server derives the delta over `descendantGroupsOf`.
+     * The local branch goes through `withLocalSubtree` for the same reason the
+     * other two seams do. It deliberately does NOT call `refreshFromLocal`: the
+     * optimistic writes above already cover the UI, and that helper replaces
+     * the group store wholesale, which recreates the `<For>` DOM and strands
+     * `:hover`. `persistGroupDimensions` sets the same precedent.
      */
     const commitReflowPlacements = (
         parentId: string,
@@ -1088,13 +1114,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         applyGroupPositionWrites(writes.groupStoreWrites);
 
         if (isLocalMode()) {
-            localUpdateDraftPositions({
-                positions: writes.positions,
-                ...(writes.groupStoreWrites.length > 0
-                    ? { groups: writes.groupStoreWrites }
-                    : {})
-            });
-            refreshFromLocal();
+            localUpdateDraftPositions(
+                withLocalSubtree({ positions: writes.positions }, writes)
+            );
         } else {
             updateDraftPositionsMutation.mutate({
                 canvasId: canvasId(),
