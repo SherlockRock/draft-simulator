@@ -163,9 +163,11 @@ import {
     CARD_FOOTPRINT,
     type GridFootprint,
     type GridItem,
+    type GridPlacement,
     type GridSettingsInput,
     type GridMetadata
 } from "./utils/gridLayout";
+import { seriesGrowthReflow } from "./utils/seriesGrowthReflow";
 import { resolveCopyPlacement } from "./utils/copyPlacement";
 import { GridSettingsDialog } from "./components/GridSettingsDialog";
 import { GroupTeamNamesDialog } from "./components/GroupTeamNamesDialog";
@@ -1051,6 +1053,82 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
+    /**
+     * Persist a reflow's displaced siblings — the third caller of
+     * `splitGridPlacements`, alongside `commitGridDrop` and
+     * `arrangeGroupAsGrid`, and the one its docblock already anticipated.
+     *
+     * Unlike those two this writes no container dimensions: the caller decides
+     * how the parent resizes (the series-growth seam uses `resyncGroupSize`,
+     * which re-derives the grid's own lattice).
+     *
+     * The local branch sends `groupStoreWrites`, not `groups`:
+     * `localUpdateDraftPositions` applies entries verbatim and fans nothing
+     * out, while the server derives the delta over `descendantGroupsOf`.
+     */
+    const commitReflowPlacements = (
+        parentId: string,
+        placements: GridPlacement[]
+    ) => {
+        const parent = canvasGroups.find((g) => g.id === parentId);
+        if (!parent || placements.length === 0) return;
+
+        const writes = splitGridPlacements({
+            tree: canvasTree(),
+            parent,
+            placements
+        });
+
+        for (const u of writes.positions) {
+            setCanvasDrafts((cd) => cd.draft_id === u.draft_id, {
+                positionX: u.positionX,
+                positionY: u.positionY
+            });
+        }
+        applyGroupPositionWrites(writes.groupStoreWrites);
+
+        if (isLocalMode()) {
+            localUpdateDraftPositions({
+                positions: writes.positions,
+                ...(writes.groupStoreWrites.length > 0
+                    ? { groups: writes.groupStoreWrites }
+                    : {})
+            });
+            refreshFromLocal();
+        } else {
+            updateDraftPositionsMutation.mutate({
+                canvasId: canvasId(),
+                positions: writes.positions,
+                ...(writes.groups.length > 0 ? { groups: writes.groups } : {})
+            });
+        }
+    };
+
+    /**
+     * A manual series' game count just changed, so its column span changed with
+     * it. Displace whatever the wider span now covers, then resize the parent.
+     *
+     * `resyncGroupSize` must be called on the PARENT grid, not the series: it
+     * returns early for `type !== "custom"`, so calling it on a series id is a
+     * silent no-op (§6.2 gap 2).
+     */
+    const reflowAfterSeriesGrowth = (seriesId: string) => {
+        const reflow = seriesGrowthReflow({
+            tree: canvasTree(),
+            seriesId,
+            layout: props.cardLayout()
+        });
+        if (reflow) {
+            commitReflowPlacements(reflow.parentId, reflow.placements);
+        }
+        // The wider span raises effectiveGridCols' must-fit term, so the
+        // container has to grow with it — even when nothing was displaced.
+        const parentId = canvasGroups.find(
+            (g) => g.id === seriesId
+        )?.parent_group_id;
+        if (parentId) resyncGroupSize(parentId);
+    };
+
     // Lossless: positions are already real floats; only the mode flag flips.
     const convertGroupToFree = (group: CanvasGroup) => {
         const metadata = { layout: "free" as const };
@@ -1374,6 +1452,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         mutationFn: updateCanvasGroup,
         onSuccess: (data, variables) => {
             setCanvasGroups((g) => g.id === variables.groupId, data.group);
+            // A manual series' length change returns its Cards (5a-6). Absorb
+            // them BEFORE reflowing: footprintOf derives a series' span from the
+            // Cards in the store, so reflowing first would use the old count.
+            // The key is present only on a real length change, which is also
+            // what elects this client the single writer.
+            if (data.group.CanvasDrafts?.length) {
+                const returnedDrafts = data.group.CanvasDrafts;
+                const returnedIds = new Set(returnedDrafts.map((d) => d.Draft.id));
+                setCanvasDrafts([
+                    ...canvasDrafts.filter((d) => !returnedIds.has(d.Draft.id)),
+                    ...returnedDrafts
+                ]);
+                reflowAfterSeriesGrowth(variables.groupId);
+            }
             canvasContext.mutateCanvas((prev: CanvasResposnse | undefined) => {
                 if (!prev) return prev;
                 return {
@@ -2911,6 +3003,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     });
                 }
                 refreshFromLocal();
+                // Local needs no writer election: localConvertGroupToSeries
+                // pushes the new Cards synchronously and refreshFromLocal has
+                // just landed them, so the count is already current. It never
+                // reaches updateGroupMutation, which is where the server path
+                // wires the same call.
+                if (data.convertToSeries || group.type === "series") {
+                    reflowAfterSeriesGrowth(groupId);
+                }
             }
         } else if (data.convertToSeries) {
             convertGroupToSeriesMutation.mutate({
