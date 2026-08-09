@@ -19,7 +19,8 @@ const Team = require("../../models/Team");
 
 // Series chrome from frontend/src/utils/helpers.ts, restated so a drift in the
 // route's own constants fails here instead of silently.
-const SERIES_PADDING = 20;
+const SERIES_PADDING_X = 0;
+const SERIES_PADDING_Y = 20;
 const SERIES_HEADER_HEIGHT = 56;
 const SERIES_GAME_STEP = 380;
 
@@ -132,8 +133,8 @@ describe("series game Cards are placed relative to their group", () => {
       expect(res.status).toBe(201);
       expect(CanvasDraft.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          positionX: SERIES_PADDING,
-          positionY: SERIES_HEADER_HEIGHT + SERIES_PADDING,
+          positionX: SERIES_PADDING_X,
+          positionY: SERIES_HEADER_HEIGHT + SERIES_PADDING_Y,
           group_id: "g-1",
         }),
         expect.anything(),
@@ -146,12 +147,12 @@ describe("series game Cards are placed relative to their group", () => {
       expect(res.status).toBe(201);
       const placed = CanvasDraft.create.mock.calls.map(([values]) => values);
       expect(placed.map((v) => v.positionX)).toEqual([
-        SERIES_PADDING,
-        SERIES_PADDING + SERIES_GAME_STEP,
-        SERIES_PADDING + 2 * SERIES_GAME_STEP,
+        SERIES_PADDING_X,
+        SERIES_PADDING_X + SERIES_GAME_STEP,
+        SERIES_PADDING_X + 2 * SERIES_GAME_STEP,
       ]);
       for (const values of placed) {
-        expect(values.positionY).toBe(SERIES_HEADER_HEIGHT + SERIES_PADDING);
+        expect(values.positionY).toBe(SERIES_HEADER_HEIGHT + SERIES_PADDING_Y);
       }
     });
 
@@ -214,11 +215,11 @@ describe("series game Cards are placed relative to their group", () => {
       expect(res.status).toBe(201);
       const placed = CanvasDraft.create.mock.calls.map(([values]) => values);
       expect(placed.map((v) => v.positionX)).toEqual([
-        SERIES_PADDING,
-        SERIES_PADDING + SERIES_GAME_STEP,
+        SERIES_PADDING_X,
+        SERIES_PADDING_X + SERIES_GAME_STEP,
       ]);
       for (const values of placed) {
-        expect(values.positionY).toBe(SERIES_HEADER_HEIGHT + SERIES_PADDING);
+        expect(values.positionY).toBe(SERIES_HEADER_HEIGHT + SERIES_PADDING_Y);
         expect(values.group_id).toBe("g-new");
       }
     });

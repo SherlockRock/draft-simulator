@@ -42,12 +42,17 @@ const MIN_SERIES_LENGTH = 1;
 const MAX_SERIES_LENGTH = 7;
 const VALID_DRAFT_MODES = new Set(["standard", "fearless", "ironman"]);
 
-// Series chrome, mirroring SERIES_PADDING / SERIES_HEADER_HEIGHT in
-// frontend/src/utils/helpers.ts. A Card's positionX/Y are relative to its
-// immediate container, so the first game of a brand-new series seeds at the
-// series' own padding — NOT at the group's world position, which is what the
-// three series-creation paths below used to add on top of it.
-const SERIES_PADDING = 20;
+// Series chrome, mirroring SERIES_PADDING_X / SERIES_PADDING_Y /
+// SERIES_HEADER_HEIGHT in frontend/src/utils/helpers.ts. A Card's positionX/Y
+// are relative to its immediate container, so the first game of a brand-new
+// series seeds at the series' own padding — NOT at the group's world position,
+// which is what the three series-creation paths below used to add on top of it.
+//
+// X is 0 so a Bo-N series measures exactly N grid columns (design §6). These
+// three runtimes — here, the frontend, and useLocalCanvasMutations — must move
+// together or a Card jumps the moment it leaves a series.
+const SERIES_PADDING_X = 0;
+const SERIES_PADDING_Y = 20;
 const SERIES_HEADER_HEIGHT = 56;
 const SERIES_GAME_STEP = 380;
 
@@ -57,10 +62,10 @@ function nextSeriesCardOrigin(lastCanvasDraft) {
   return {
     x: lastCanvasDraft
       ? lastCanvasDraft.positionX + SERIES_GAME_STEP
-      : SERIES_PADDING,
+      : SERIES_PADDING_X,
     y: lastCanvasDraft
       ? lastCanvasDraft.positionY
-      : SERIES_HEADER_HEIGHT + SERIES_PADDING,
+      : SERIES_HEADER_HEIGHT + SERIES_PADDING_Y,
   };
 }
 
@@ -1529,8 +1534,8 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
           draft_id: draft.id,
           // Container-relative, like every other Card: the group already
           // carries the world position these used to add a second time.
-          positionX: SERIES_PADDING + i * SERIES_GAME_STEP,
-          positionY: SERIES_HEADER_HEIGHT + SERIES_PADDING,
+          positionX: SERIES_PADDING_X + i * SERIES_GAME_STEP,
+          positionY: SERIES_HEADER_HEIGHT + SERIES_PADDING_Y,
           is_locked: true,
           group_id: group.id,
           source_type: "versus",
