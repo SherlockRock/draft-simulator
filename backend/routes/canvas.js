@@ -2232,6 +2232,10 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
     }
 
     let versusDraft = null;
+    // Declared out here because the response builder below reads it: a length
+    // change creates or destroys game Cards server-side, and the saving client
+    // needs them back to reflow the parent grid against the new footprint.
+    let lengthChanged = false;
     if (
       group.versus_draft_id &&
       ((metadata && typeof metadata === "object") || updates.name)
@@ -2272,6 +2276,7 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
             transaction: t,
           });
           seriesUpdates.length = nextLength;
+          lengthChanged = true;
         }
 
         if (Object.keys(seriesUpdates).length > 0) {
@@ -2304,7 +2309,32 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
       where: { id: groupId },
       include: TEAM_INCLUDE,
     });
-    res.status(200).json({ success: true, group: groupWithTeams.toJSON() });
+
+    // A length change creates or destroys game Cards server-side. The saving
+    // client needs them to run the parent grid's reflow as the SINGLE writer —
+    // the canvasUpdate broadcast below reaches every editor and names no group,
+    // so reflowing from it would have N clients each commit (design §6.1).
+    // Same shape as convertGroupToSeries, which the client already consumes.
+    let responseGroup = groupWithTeams.toJSON();
+    if (lengthChanged) {
+      const groupCanvasDrafts = await CanvasDraft.findAll({
+        where: { canvas_id: canvasId, group_id: groupId },
+        include: [{ model: Draft }],
+        order: [
+          ["positionX", "ASC"],
+          ["positionY", "ASC"],
+          ["createdAt", "ASC"],
+        ],
+      });
+      responseGroup = {
+        ...responseGroup,
+        CanvasDrafts: groupCanvasDrafts.map((cd) => ({
+          ...cd.toJSON(),
+          Draft: cd.Draft.toJSON(),
+        })),
+      };
+    }
+    res.status(200).json({ success: true, group: responseGroup });
 
     // Emit appropriate socket event.
     //
