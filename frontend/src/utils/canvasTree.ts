@@ -324,11 +324,17 @@ export const spanFor = (size: number, cell: number, gap: number): number => {
  * The cell rectangle a node occupies inside a grid Group (design §6).
  *
  * One rule for all three kinds, no series special case. A Card is 1×1 because a
- * cell IS a card. A series is bigger than its game count suggests — series
- * chrome (header 56 / padding 20) and grid chrome (header 48 / padding 16 /
- * gap 24) disagree, so a Bo-N series is 40px wider than N cells and
- * `96 + cardHeight` tall: a Bo3 is 2×4 and a Bo5 is 2×6, in every card layout.
- * The `1×N` rule earlier revisions used was arithmetically wrong.
+ * cell IS a card.
+ *
+ * Since 5a-6 a Bo-N series is exactly N columns: `SERIES_PADDING_X` is 0 and
+ * `SERIES_CARD_GAP` equals `GRID_CELL_GAP`, so its games land on the grid's own
+ * column rhythm. It is still **2 rows** — its height is
+ * `SERIES_HEADER_HEIGHT + 2·SERIES_PADDING_Y + cardHeight` = `96 + cardHeight`,
+ * and unlike the side padding those 96px cannot go to zero: 56 of them are a
+ * header that has to exist. Making a series one row needs rows that auto-size to
+ * their tallest child — design §6.0a, parked.
+ *
+ * So a Bo3 is 2×3 and a Bo5 is 2×5, in every card layout.
  */
 export const footprintOf = (
     tree: CanvasTree,
