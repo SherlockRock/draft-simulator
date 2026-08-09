@@ -164,20 +164,26 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
             style={{
                 // World coordinates — .canvas-world applies the viewport transform.
                 left: `${props.group.positionX}px`,
-                top: `${props.group.positionY}px`
+                top: `${props.group.positionY}px`,
+                // The arithmetic IS the width, not a prediction of it. With
+                // SERIES_PADDING_X at 0 the header's intrinsic width would
+                // otherwise widen this shrink-to-fit frame past what
+                // getSeriesGroupDimensions reports, and footprintOf would then
+                // allocate the series too few columns — a silent overlap.
+                width: `${groupDimensions().width}px`
             }}
         >
             {/* Header */}
             <div
-                class="flex items-center justify-between rounded-t-xl border-b border-darius-border/80 bg-darius-bg/70 px-4"
+                class="flex items-center justify-between overflow-hidden rounded-t-xl border-b border-darius-border/80 bg-darius-bg/70 px-4"
                 style={{
                     height: `${SERIES_HEADER_HEIGHT}px`,
                     cursor: props.canEdit() ? "move" : "default"
                 }}
                 onMouseDown={(e) => props.onGroupMouseDown(props.group.id, e)}
             >
-                <div class="flex items-center gap-3">
-                    <span class="font-semibold text-darius-text-primary">
+                <div class="flex min-w-0 items-center gap-3">
+                    <span class="min-w-0 truncate font-semibold text-darius-text-primary">
                         {props.group.name}
                     </span>
 
@@ -209,7 +215,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                     </div>
                 </div>
 
-                <div class="flex items-center gap-2">
+                <div class="flex shrink-0 items-center gap-2">
                     {/* Versus Type Badge */}
                     <Show when={versusTypeLabel()}>
                         <span
