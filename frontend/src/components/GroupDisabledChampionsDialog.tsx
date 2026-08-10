@@ -38,6 +38,23 @@ interface GroupSettingsDialogProps {
     isNewGroup?: boolean;
     defaultSeriesEnabled?: boolean;
     primaryLabel?: string;
+    /** The group's stored layout; a new Group has none and defaults to grid. */
+    initialLayout?: "free" | "grid";
+    /** The group's stored grid config, seeded into the form when editing. */
+    initialGrid?: {
+        gridCols?: number;
+        gridRows?: number;
+        rowLabels?: string[];
+        colLabels?: string[];
+    };
+    /**
+     * How many rows this container's CONTENT occupies at a given column count —
+     * `arrangedRowCount`, supplied by Canvas because it needs the tree. Row
+     * inputs are offered for at least this many, so a grid that already spills
+     * past its configured row count can still label those rows. A new Group has
+     * no content and omits it.
+     */
+    contentRowCount?: (cols: number) => number;
     /** The user's owned teams for autocomplete linking. */
     teams?: Team[];
     /** Enable entity linking; false on local/anonymous canvases. */
@@ -56,10 +73,12 @@ interface GroupSettingsDialogProps {
         /** null clears a stored classification; see the clear protocol (D3). */
         gameType: GameType | null;
         /**
-         * Columns and labels for a new CUSTOM Group, which is born `grid`
-         * (decision 13). `null` whenever the grid fields were not on screen —
-         * editing an existing Group, or creating a series, whose interior is
-         * computed rather than laid out by a container grid.
+         * The grid this CUSTOM Group should have, or `null` for free layout.
+         *
+         * Ignored for a series, whose interior is computed from its length
+         * (§5.1) rather than laid out by a container grid — the grid section is
+         * not rendered at all in that case, so `null` there means "not
+         * applicable" rather than "convert to free".
          */
         grid: GridSettingsInput | null;
     }) => void;
@@ -109,20 +128,40 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
     const [length, setLength] = createSignal(3);
     const [gameType, setGameType] = createSignal<GameType | null>(null);
     const [disabledExpanded, setDisabledExpanded] = createSignal(false);
+    const [gridEnabled, setGridEnabled] = createSignal(false);
     const gridForm = createGridSettingsForm();
 
     /**
-     * Grid configuration is offered at CREATION only, and only once the user
-     * has said this is not a series — that is the one moment decision 13's
-     * `grid` default is observable. An existing Group edits its grid through
-     * the context menu's "Grid settings…", which stays the single place to
-     * change columns after the fact.
+     * This dialog owns layout for every custom Group, creating or editing —
+     * there is no separate grid dialog and no grid entry in the group context
+     * menu. A series is excluded because its interior is computed from its
+     * length (§5.1) rather than laid out by a container grid.
      */
-    const showGrid = createMemo(() => (props.isNewGroup ?? false) && !seriesEnabled());
+    const showLayout = createMemo(() => !(props.isSeries ?? false) && !seriesEnabled());
 
-    // A brand-new Group has no members, so a reflow produces exactly one row.
-    // Row labels beyond it become reachable once it holds something.
-    const gridRowInputCount = createMemo(() => Math.max(1, gridForm.rowLabels().length));
+    /**
+     * Draft mode is a SERIES setting only.
+     *
+     * It does function on custom groups — `draftRestrictions` runs those
+     * symmetrically and the backend gate reads the same key — which is exactly
+     * why it is not offered for one: a custom group is a container, and a
+     * container silently restricting champions across everything inside it is
+     * not what anyone means by dropping drafts into a folder. Saving a custom
+     * group CLEARS any stored mode (see Canvas's save handler).
+     */
+    const showDraftMode = createMemo(() => (props.isSeries ?? false) || seriesEnabled());
+
+    // At least the configured rows, at least what the content already occupies,
+    // and at least as many as there are stored labels — otherwise `mergeLabels`
+    // silently trims the labels beyond the visible inputs.
+    const gridRowInputCount = createMemo(() =>
+        Math.max(
+            gridForm.rows(),
+            props.contentRowCount?.(gridForm.cols()) ?? 0,
+            gridForm.rowLabels().length,
+            1
+        )
+    );
 
     createEffect(() => {
         if (props.isOpen()) {
@@ -139,7 +178,12 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
             setLength(clampSeriesLength(props.initialLength || 3));
             setGameType(props.initialGameType ?? (props.isNewGroup ? "scratch" : null));
             setDisabledExpanded(false);
-            gridForm.seed(newGroupGridSettings());
+            // Decision 13: a new custom Group is a grid. An existing one keeps
+            // whatever it stored, `free` being the legacy default.
+            setGridEnabled(
+                props.isNewGroup ? true : (props.initialLayout ?? "free") === "grid"
+            );
+            gridForm.seed(props.initialGrid ?? newGroupGridSettings());
         }
     });
 
@@ -162,7 +206,8 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
             team2_id: red.teamId,
             length: clampSeriesLength(length()),
             gameType: gameType(),
-            grid: showGrid() ? gridForm.read(gridRowInputCount()) : null
+            grid:
+                showLayout() && gridEnabled() ? gridForm.read(gridRowInputCount()) : null
         });
         props.onClose();
     };
@@ -197,40 +242,6 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                                 class="mt-2 w-full rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary focus:border-darius-purple-bright focus:outline-none"
                             />
                         </label>
-
-                        <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
-                            Draft Mode
-                            <div class="mt-2">
-                                <StyledSelect
-                                    value={draftMode()}
-                                    onChange={(v) => {
-                                        if (
-                                            v === "standard" ||
-                                            v === "fearless" ||
-                                            v === "ironman"
-                                        ) {
-                                            setDraftMode(v);
-                                        }
-                                    }}
-                                    options={DRAFT_MODE_OPTIONS}
-                                    theme="purple"
-                                />
-                            </div>
-                        </label>
-                        <div class="-mt-2 min-h-[2.5rem] text-xs text-darius-text-secondary">
-                            <Show when={draftMode() === "fearless"}>
-                                <p>
-                                    Champions picked in one draft cannot be picked in
-                                    other drafts within this group.
-                                </p>
-                            </Show>
-                            <Show when={draftMode() === "ironman"}>
-                                <p>
-                                    Champions picked or banned in one draft cannot be used
-                                    in other drafts within this group.
-                                </p>
-                            </Show>
-                        </div>
 
                         {/*
                           Deliberately outside BOTH the seriesEnabled() and the
@@ -281,6 +292,50 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                                     <span class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform peer-checked:translate-x-5" />
                                 </div>
                             </label>
+                        </Show>
+
+                        {/*
+                          Deliberately OUTSIDE canEditSeriesSettings, like Game
+                          Type: gating on it would hide draft mode for a
+                          live-imported series, which is exactly the series most
+                          likely to need it corrected.
+                        */}
+                        <Show when={showDraftMode()}>
+                            <div>
+                                <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
+                                    Draft Mode
+                                    <div class="mt-2">
+                                        <StyledSelect
+                                            value={draftMode()}
+                                            onChange={(v) => {
+                                                if (
+                                                    v === "standard" ||
+                                                    v === "fearless" ||
+                                                    v === "ironman"
+                                                ) {
+                                                    setDraftMode(v);
+                                                }
+                                            }}
+                                            options={DRAFT_MODE_OPTIONS}
+                                            theme="purple"
+                                        />
+                                    </div>
+                                </label>
+                                <div class="min-h-[2.5rem] text-xs text-darius-text-secondary">
+                                    <Show when={draftMode() === "fearless"}>
+                                        <p>
+                                            Champions picked in one draft cannot be picked
+                                            in other drafts within this series.
+                                        </p>
+                                    </Show>
+                                    <Show when={draftMode() === "ironman"}>
+                                        <p>
+                                            Champions picked or banned in one draft cannot
+                                            be used in other drafts within this series.
+                                        </p>
+                                    </Show>
+                                </div>
+                            </div>
                         </Show>
 
                         <Show
@@ -342,29 +397,45 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                         </Show>
 
                         {/*
-                          The complement of the series box above. Turning
-                          Enable Series OFF is the only moment decision 13's
-                          `grid` default is observable, so the columns it
-                          implies are editable right there rather than behind a
-                          second trip through the context menu.
+                          The complement of the series box above, and the ONE
+                          place a Group's layout is set — creating or editing.
+                          There is no separate grid dialog and no grid entry in
+                          the group context menu.
                         */}
-                        <Show when={showGrid()}>
-                            <div class="space-y-3 rounded-md border border-darius-border bg-darius-card-hover/30 p-3">
-                                <div>
+                        <Show when={showLayout()}>
+                            <label class="flex cursor-pointer items-start justify-between gap-4 rounded-md border border-darius-border bg-darius-card-hover/40 px-3 py-3 transition-colors hover:border-darius-purple-bright/60">
+                                <div class="min-w-0">
                                     <div class="text-sm font-medium text-darius-text-primary">
                                         Grid layout
                                     </div>
                                     <p class="mt-1 text-xs text-darius-text-secondary">
-                                        Drafts dropped into this group snap to a grid.
-                                        Change it later from the group menu.
+                                        Drafts snap to rows and columns. Off, they sit
+                                        wherever you drop them.
                                     </p>
                                 </div>
-                                <GridSettingsFields
-                                    form={gridForm}
-                                    rowInputCount={gridRowInputCount}
-                                    idPrefix="new-group-grid"
-                                />
-                            </div>
+                                <div class="relative mt-0.5 shrink-0">
+                                    <input
+                                        type="checkbox"
+                                        checked={gridEnabled()}
+                                        onChange={(e) =>
+                                            setGridEnabled(e.currentTarget.checked)
+                                        }
+                                        class="peer sr-only"
+                                    />
+                                    <span class="block h-6 w-11 rounded-full bg-darius-border transition-colors peer-checked:bg-darius-purple" />
+                                    <span class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform peer-checked:translate-x-5" />
+                                </div>
+                            </label>
+
+                            <Show when={gridEnabled()}>
+                                <div class="rounded-md border border-darius-border bg-darius-card-hover/30 p-3">
+                                    <GridSettingsFields
+                                        form={gridForm}
+                                        rowInputCount={gridRowInputCount}
+                                        idPrefix="group-grid"
+                                    />
+                                </div>
+                            </Show>
                         </Show>
 
                         <div class="rounded-md border border-darius-border bg-darius-card-hover/50">

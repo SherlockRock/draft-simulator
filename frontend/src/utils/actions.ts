@@ -513,6 +513,12 @@ export const createCanvasGroup = async (data: {
      * the same `mergeGroupMetadata`.
      */
     metadata?: CanvasGroupMetadataUpdate;
+    /**
+     * The size to create it at. Omitted falls back to the server's 400x200 —
+     * a grid container sends the size its configured rows and columns need.
+     */
+    width?: number;
+    height?: number;
 }) => {
     const result = await apiPost(
         `/canvas/${data.canvasId}/group`,
@@ -521,7 +527,9 @@ export const createCanvasGroup = async (data: {
             positionX: data.positionX,
             positionY: data.positionY,
             ...(data.parentId ? { parentId: data.parentId } : {}),
-            ...(data.metadata ? { metadata: data.metadata } : {})
+            ...(data.metadata ? { metadata: data.metadata } : {}),
+            ...(data.width !== undefined ? { width: data.width } : {}),
+            ...(data.height !== undefined ? { height: data.height } : {})
         },
         z.object({ success: z.boolean(), group: CanvasGroupSchema })
     );

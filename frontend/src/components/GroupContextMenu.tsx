@@ -9,9 +9,6 @@ type GroupContextMenuProps = {
     onRename?: () => void;
     onSetTeamNames?: () => void;
     onViewSeries?: () => void;
-    onArrangeGrid?: () => void;
-    onConvertToFree?: () => void;
-    onGridSettings?: () => void;
     onMoveToTopLevel?: () => void;
     onGoTo: () => void;
     onDelete: () => void;
@@ -35,25 +32,11 @@ export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
                 });
             }
 
-            if (props.group.metadata.layout !== "grid") {
-                menuActions.push({
-                    label: "Arrange as grid…",
-                    action: () => props.onArrangeGrid?.()
-                });
-            }
-
-            if (props.group.metadata.layout === "grid") {
-                menuActions.push(
-                    {
-                        label: "Grid settings…",
-                        action: () => props.onGridSettings?.()
-                    },
-                    {
-                        label: "Convert to free layout",
-                        action: () => props.onConvertToFree?.()
-                    }
-                );
-            }
+            // Layout — grid on/off, columns, rows and labels — lives entirely
+            // in the group settings dialog now. It used to be three entries
+            // here ("Arrange as grid…", "Grid settings…", "Convert to free
+            // layout") against a separate dialog, which meant an existing grid
+            // group had two places to edit the same columns.
         }
 
         // The guaranteed un-nest affordance, and the escape hatch for a child

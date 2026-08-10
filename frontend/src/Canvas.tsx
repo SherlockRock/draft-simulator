@@ -44,6 +44,7 @@ import {
     Viewport,
     Connection,
     CanvasGroup,
+    CanvasGroupMetadataUpdate,
     Vertex,
     AnchorType,
     CanvasObjectMovedSchema,
@@ -151,6 +152,8 @@ import { getRestrictedChampionsForGroup } from "./utils/draftRestrictions";
 import {
     isGridGroup,
     gridColsOf,
+    gridRowsOf,
+    gridMetadataEquals,
     configuredColsAfterDrop,
     resolveGridDrop,
     arrangeGrid,
@@ -176,13 +179,17 @@ import {
 } from "./utils/gridLayout";
 import {
     NEW_GROUP_DRAFT_MODE,
+    newGroupDimensions,
     newGroupGridSettings,
     resolveNewGroupMetadata
 } from "./utils/groupCreation";
-import { gridContentHeight, rowMetricsAt, type RowMetrics } from "./utils/gridRows";
+import {
+    gridContentHeightForRows,
+    rowMetricsAt,
+    type RowMetrics
+} from "./utils/gridRows";
 import { seriesGrowthReflow } from "./utils/seriesGrowthReflow";
 import { resolveCopyPlacement } from "./utils/copyPlacement";
-import { GridSettingsDialog } from "./components/GridSettingsDialog";
 import { GroupTeamNamesDialog } from "./components/GroupTeamNamesDialog";
 import {
     DraftPositionsUpdatedSchema,
@@ -433,9 +440,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     } | null>(null);
 
     const [editingGroupId, setEditingGroupId] = createSignal<string | null>(null);
-    const [gridSettingsGroup, setGridSettingsGroup] = createSignal<CanvasGroup | null>(
-        null
-    );
     const [teamNamesGroup, setTeamNamesGroup] = createSignal<CanvasGroup | null>(null);
     const [editingDraftId, setEditingDraftId] = createSignal<string | null>(null);
 
@@ -1161,7 +1165,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
         const dims = resolveGridDims(
             group,
-            gridContentHeight(landedRows),
+            gridContentHeightForRows(landedRows, gridRowsOf(group), layout),
             sizeCols,
             layout
         );
@@ -1225,7 +1229,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             placements
         });
         const updates = writes.positions;
-        const dims = resolveGridDims(group, gridContentHeight(rows), cols, layout);
+        // The metadata being APPLIED, not the stored row count — this is the
+        // path a row-count change takes, so reading the group would size it to
+        // the count it is leaving behind.
+        const dims = resolveGridDims(
+            group,
+            gridContentHeightForRows(rows, metadata.gridRows, layout),
+            cols,
+            layout
+        );
 
         for (const u of updates) {
             setCanvasDrafts((cd) => cd.draft_id === u.draft_id, {
@@ -1341,53 +1353,66 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         if (parentId) resyncGroupSize(parentId);
     };
 
-    // Lossless: positions are already real floats; only the mode flag flips.
-    const convertGroupToFree = (group: CanvasGroup) => {
-        const metadata = { layout: "free" as const };
-        setCanvasGroups((g) => g.id === group.id, {
-            metadata: { ...group.metadata, ...metadata }
-        });
-        if (isLocalMode()) {
-            localUpdateGroup({ groupId: group.id, metadata });
-        } else {
-            updateGroupMutation.mutate({
-                canvasId: canvasId(),
-                groupId: group.id,
-                metadata
-            });
-        }
-    };
-
     const gridRowCount = (group: CanvasGroup, cols: number): number => {
         const layout = props.cardLayout();
         return arrangedRowCount(gridItemsOf(canvasTree(), group.id, layout, cols), cols);
     };
 
-    const saveGridSettings = (settings: GridSettingsInput) => {
-        const group = gridSettingsGroup();
-        if (!group) return;
-        const { metadata, reflow } = resolveGridSave(group.metadata, settings);
-        setGridSettingsGroup(null);
-
-        if (reflow) {
-            // Creating a grid, or the column count changed: arrange/reflow, and the
-            // arrange path persists the full metadata (layout, gridCols, labels).
-            arrangeGroupAsGrid(group, metadata);
-        } else {
-            // Labels-only edit on an existing grid: persist metadata directly.
-            setCanvasGroups((g) => g.id === group.id, {
-                metadata: { ...group.metadata, ...metadata }
-            });
-            if (isLocalMode()) {
-                localUpdateGroup({ groupId: group.id, metadata });
-            } else {
-                updateGroupMutation.mutate({
-                    canvasId: canvasId(),
-                    groupId: group.id,
-                    metadata
-                });
-            }
+    /**
+     * What the settings dialog's layout section asks of a CUSTOM Group, or
+     * `null` when it asks for nothing it does not already have.
+     *
+     * That null is the point: a rename or a classification change on a group
+     * whose grid nobody touched stays ONE request. Folding the layout keys into
+     * that same request — rather than firing a second write — also removes a
+     * race, since two partial metadata merges can otherwise have their
+     * responses arrive out of order and the loser replaces the row.
+     *
+     * A `reflow` is the one case that cannot be folded: re-arranging members
+     * writes positions, which only the draft-positions route carries.
+     */
+    const resolveLayoutChange = (
+        group: CanvasGroup,
+        settings: GridSettingsInput | null
+    ):
+        | { reflow: false; metadata: CanvasGroupMetadataUpdate }
+        | { reflow: true; metadata: GridMetadata }
+        | null => {
+        if (!settings) {
+            // Lossless: positions are already real floats; only the flag flips.
+            return isGridGroup(group)
+                ? { reflow: false, metadata: { layout: "free" } }
+                : null;
         }
+        const { metadata, reflow } = resolveGridSave(group.metadata, settings);
+        if (reflow) return { reflow: true, metadata };
+        return gridMetadataEquals(group.metadata, metadata)
+            ? null
+            : { reflow: false, metadata };
+    };
+
+    /**
+     * The size a grid container should be for `metadata`, without re-arranging
+     * anything — the row count is a height floor, not an arrangement input, so
+     * changing it resizes the frame and moves nothing.
+     */
+    const gridDimsFor = (group: CanvasGroup, metadata: GridMetadata) => {
+        const layout = props.cardLayout();
+        const cols = Math.max(
+            metadata.gridCols,
+            maxChildSpanCols(canvasTree(), group.id, layout)
+        );
+        const items = gridItemsOf(canvasTree(), group.id, layout, cols);
+        return resolveGridDims(
+            group,
+            gridContentHeightForRows(
+                rowsOfItems(items, layout),
+                metadata.gridRows,
+                layout
+            ),
+            cols,
+            layout
+        );
     };
 
     const handleSetGroupTeamNames = (metadata: {
@@ -3067,6 +3092,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 gameType: data.gameType,
                 grid: data.grid ?? newGroupGridSettings()
             });
+            // A grid container is born at the size its configured rows and
+            // columns need, rather than at a flat 400x200 it only grows out of
+            // on the first drop. `null` for a series and for free layout, whose
+            // sizes the server's defaults already describe.
+            const newDims =
+                data.grid && !data.convertToSeries
+                    ? newGroupDimensions({
+                          isSeries: false,
+                          grid: data.grid,
+                          layout: props.cardLayout()
+                      })
+                    : null;
             if (isLocalMode()) {
                 // The local mutations enforce parentage and the series-leaf
                 // invariant themselves — there is no server here to do it — and
@@ -3083,7 +3120,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         // A series' metadata is written by the conversion
                         // below, which owns it; a custom Group is born with
                         // everything the dialog decided.
-                        ...(data.convertToSeries ? {} : { metadata: newMetadata })
+                        ...(data.convertToSeries ? {} : { metadata: newMetadata }),
+                        ...(newDims
+                            ? { width: newDims.width, height: newDims.height }
+                            : {})
                     });
                 } catch (error) {
                     toast.error(
@@ -3116,7 +3156,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     // See the local branch: the create carries the metadata, so
                     // a custom Group is never briefly `free` and a failed
                     // follow-up can no longer leave one that way.
-                    ...(data.convertToSeries ? {} : { metadata: newMetadata })
+                    ...(data.convertToSeries ? {} : { metadata: newMetadata }),
+                    ...(newDims ? { width: newDims.width, height: newDims.height } : {})
                 })
                     .then((result) => {
                         if (!data.convertToSeries) return result;
@@ -3161,10 +3202,41 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             return;
         }
 
+        const editing = canvasGroups.find((g) => g.id === groupId);
+        const staysSeries = data.convertToSeries || editing?.type === "series";
+        // Layout belongs to CUSTOM groups. A series' interior is computed from
+        // its length (§5.1), so the dialog does not offer it one.
+        const layoutChange =
+            !staysSeries && editing ? resolveLayoutChange(editing, data.grid) : null;
+        const layoutDims =
+            editing && layoutChange && !layoutChange.reflow && data.grid
+                ? gridDimsFor(editing, {
+                      layout: "grid",
+                      gridCols: data.grid.gridCols,
+                      gridRows: data.grid.gridRows,
+                      rowLabels: data.grid.rowLabels,
+                      colLabels: data.grid.colLabels
+                  })
+                : null;
+        /**
+         * Draft mode is a SERIES setting. It does function on a custom group —
+         * `draftRestrictions` runs those symmetrically and the backend gate
+         * reads the same key — so saving a custom group CLEARS any stored mode
+         * rather than leaving one the dialog no longer shows and the user can
+         * no longer reach. `null` is the D3 clear protocol; `undefined` would
+         * just drop out of the request.
+         */
+        const editedMetadata: CanvasGroupMetadataUpdate = {
+            disabledChampions: data.disabledChampions,
+            gameType: data.gameType,
+            draftMode: staysSeries ? data.draftMode : null,
+            ...(layoutChange && !layoutChange.reflow ? layoutChange.metadata : {})
+        };
+
         if (isLocalMode()) {
-            const group = canvasGroups.find((g) => g.id === groupId);
+            const group = editing;
             if (group) {
-                if (data.convertToSeries || group.type === "series") {
+                if (staysSeries) {
                     localConvertGroupToSeries({
                         groupId,
                         name: data.name || group.name,
@@ -3179,15 +3251,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     localUpdateGroup({
                         groupId,
                         name: data.name || undefined,
-                        metadata: {
-                            ...group.metadata,
-                            disabledChampions: data.disabledChampions,
-                            draftMode: data.draftMode,
-                            gameType: data.gameType
-                        }
+                        metadata: editedMetadata,
+                        ...(layoutDims
+                            ? { width: layoutDims.width, height: layoutDims.height }
+                            : {})
                     });
                 }
                 refreshFromLocal();
+                if (layoutChange?.reflow) {
+                    const fresh = canvasGroups.find((g) => g.id === groupId);
+                    if (fresh) arrangeGroupAsGrid(fresh, layoutChange.metadata);
+                }
                 // Local needs no writer election: localConvertGroupToSeries
                 // pushes the new Cards synchronously and refreshFromLocal has
                 // just landed them, so the count is already current. It never
@@ -3212,17 +3286,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 ...(data.gameType !== null ? { gameType: data.gameType } : {})
             });
         } else {
-            const group = canvasGroups.find((g) => g.id === groupId);
             const isManualSeries =
-                group?.type === "series" && group.metadata.origin === "manual";
+                editing?.type === "series" && editing.metadata.origin === "manual";
             updateGroupMutation.mutate({
                 canvasId: canvasId(),
                 groupId,
                 name: data.name || undefined,
                 metadata: {
-                    disabledChampions: data.disabledChampions,
-                    draftMode: data.draftMode,
-                    gameType: data.gameType,
+                    ...editedMetadata,
                     ...(isManualSeries
                         ? {
                               blueTeamName: data.blueTeamName,
@@ -3232,11 +3303,21 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                           }
                         : {})
                 },
+                ...(layoutDims
+                    ? { width: layoutDims.width, height: layoutDims.height }
+                    : {}),
                 // Team linking persists on manual series groups only.
                 ...(isManualSeries
                     ? { team1_id: data.team1_id, team2_id: data.team2_id }
                     : {})
             });
+            // The one layout change that cannot ride along: re-arranging
+            // members writes POSITIONS, which only the draft-positions route
+            // carries. `editing` is the pre-save row, which is what
+            // `arrangeGroupAsGrid` wants — it re-derives everything else.
+            if (editing && layoutChange?.reflow) {
+                arrangeGroupAsGrid(editing, layoutChange.metadata);
+            }
         }
     };
 
@@ -3771,7 +3852,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             const items = gridItemsOf(canvasTree(), group.id, layout, cols);
             const dims = resolveGridDims(
                 group,
-                gridContentHeight(rowsOfItems(items, layout)),
+                gridContentHeightForRows(
+                    rowsOfItems(items, layout),
+                    gridRowsOf(group),
+                    layout
+                ),
                 cols,
                 layout
             );
@@ -5647,14 +5732,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     initialLength={settingsGroup()?.metadata.length ?? 3}
                     initialGameType={settingsGroup()?.metadata.gameType}
                     isNewGroup={pendingGroupSettingsPosition() !== null}
+                    initialLayout={settingsGroup()?.metadata.layout}
+                    initialGrid={settingsGroup()?.metadata}
+                    contentRowCount={(cols) => {
+                        const group = settingsGroup();
+                        return group ? gridRowCount(group, cols) : 0;
+                    }}
                     onSave={handleSaveGroupSettings}
-                />
-                <GridSettingsDialog
-                    group={gridSettingsGroup}
-                    isOpen={() => gridSettingsGroup() !== null}
-                    onCancel={() => setGridSettingsGroup(null)}
-                    onSave={saveGridSettings}
-                    rowCount={gridRowCount}
                 />
                 <GroupTeamNamesDialog
                     group={teamNamesGroup}
@@ -5777,9 +5861,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 }
                                 closeGroupContextMenu();
                             }}
-                            onArrangeGrid={() => setGridSettingsGroup(menu().group)}
-                            onConvertToFree={() => convertGroupToFree(menu().group)}
-                            onGridSettings={() => setGridSettingsGroup(menu().group)}
                             onSetTeamNames={() => setTeamNamesGroup(menu().group)}
                             onMoveToTopLevel={() => {
                                 handleMoveGroupToTopLevel(menu().group.id);
