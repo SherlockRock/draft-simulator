@@ -15,6 +15,9 @@ if (env.OTEL_EXPORTER_OTLP_ENDPOINT) {
   const { BatchLogRecordProcessor, LoggerProvider } = require("@opentelemetry/sdk-logs");
   const { logs } = require("@opentelemetry/api-logs");
   const { resourceFromAttributes } = require("@opentelemetry/resources");
+  const {
+    seedHttpRouteFallback,
+  } = require("./observability/httpRouteAttribution");
 
   const serviceName = env.OTEL_SERVICE_NAME || "firstpick-backend";
   const resource = resourceFromAttributes({ "service.name": serviceName });
@@ -64,6 +67,11 @@ if (env.OTEL_EXPORTER_OTLP_ENDPOINT) {
     metricReader,
     instrumentations: [
       getNodeAutoInstrumentations({
+        "@opentelemetry/instrumentation-http": {
+          requestHook: (_span, request) => {
+            seedHttpRouteFallback(request);
+          },
+        },
         // Disable fs instrumentation (noisy, low value)
         "@opentelemetry/instrumentation-fs": { enabled: false },
         // Disable DNS (noisy)
