@@ -14,6 +14,7 @@ import {
     gridDimensions,
     colsFromWidth,
     effectiveGridCols,
+    configuredColsAfterDrop,
     mergeLabels,
     buildGridMetadata,
     arrangedRowCount,
@@ -1181,6 +1182,101 @@ describe("column growth", () => {
 
     it("effectiveGridCols keeps the growth column when no child dominates", () => {
         expect(effectiveGridCols(gridGroup(3, null), "wide", 1)).toBe(4);
+    });
+
+    describe("configuredColsAfterDrop", () => {
+        it("is the configured count when the landing already fits", () => {
+            expect(
+                configuredColsAfterDrop(gridGroup(3, null), { row: 0, col: 0 }, SPAN4)
+            ).toBe(4);
+            expect(
+                configuredColsAfterDrop(
+                    gridGroup(5, null),
+                    { row: 2, col: 1 },
+                    CARD_FOOTPRINT
+                )
+            ).toBe(5);
+        });
+
+        it("counts to the last column the landing OCCUPIES, not to its start", () => {
+            // A Bo3 is three columns. Landing at column 1 it covers 1, 2 and 3.
+            expect(
+                configuredColsAfterDrop(
+                    gridGroup(3, null),
+                    { row: 0, col: 1 },
+                    {
+                        cols: 3
+                    }
+                )
+            ).toBe(4);
+            expect(
+                configuredColsAfterDrop(gridGroup(3, null), { row: 0, col: 2 }, SPAN4)
+            ).toBe(6);
+        });
+
+        it("still bumps by one for a Card, exactly as `col + 1` did", () => {
+            for (const col of [0, 1, 2, 3, 7]) {
+                expect(
+                    configuredColsAfterDrop(
+                        gridGroup(3, null),
+                        { row: 0, col },
+                        CARD_FOOTPRINT
+                    )
+                ).toBe(Math.max(3, col + 1));
+            }
+        });
+
+        /**
+         * The invariant the defect broke, stated in PIXELS because that is where
+         * it was visible: the container is sized from the persisted count, so
+         * that count has to cover the child's painted right edge.
+         *
+         * Browser-reproduced before the fix — `vertical`, a 3-column grid, a Bo3
+         * dropped at column 1: container 1220px, series right edge 1608px, an
+         * overflow of exactly one column. `landing.col + 1` persisted 3.
+         */
+        it("sizes a container that contains the child it just accepted", () => {
+            for (const layout of LAYOUTS) {
+                for (const span of [1, 2, 3, 4, 6]) {
+                    for (const col of [0, 1, 2, 3]) {
+                        const footprint: GridFootprint = { cols: span };
+                        const cols = configuredColsAfterDrop(
+                            gridGroup(3, null),
+                            { row: 0, col },
+                            footprint
+                        );
+                        const right =
+                            cellToPosition({ row: 0, col }, layout).x +
+                            footprintPixelWidth(footprint, layout) +
+                            GRID_PADDING;
+                        expect(
+                            gridDimensions(0, cols, layout).width
+                        ).toBeGreaterThanOrEqual(right);
+                    }
+                }
+            }
+        });
+
+        /**
+         * It can never exceed the layout count it resolved against, so a drop
+         * cannot persist a grid wider than the lattice the user aimed at.
+         * `clampToGrid` and `nearestFreeRectIn` both bound the landing column by
+         * `lastStartCol(cols, footprint)`, which is exactly this statement.
+         */
+        it("never exceeds the layout count the drop resolved against", () => {
+            for (const span of [1, 3, 4]) {
+                const footprint: GridFootprint = { cols: span };
+                const layoutCols = Math.max(4, span);
+                const lastStart = Math.max(0, layoutCols - span);
+                expect(
+                    configuredColsAfterDrop(
+                        gridGroup(3, null),
+                        { row: 0, col: lastStart },
+                        footprint
+                    )
+                ).toBeLessThanOrEqual(layoutCols);
+            }
+        });
     });
 
     it("resolveGridDrop lands in a growth column when cols allow it", () => {

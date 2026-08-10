@@ -151,6 +151,7 @@ import { getRestrictedChampionsForGroup } from "./utils/draftRestrictions";
 import {
     isGridGroup,
     gridColsOf,
+    configuredColsAfterDrop,
     resolveGridDrop,
     arrangeGrid,
     cellAt,
@@ -1115,7 +1116,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         // sizing the container from the layout count.
         const landing = assignments.find((a) => a.id === dragged.id);
         const landingCell = landing ? landing.cell : targetCell;
-        const configuredCols = Math.max(gridColsOf(group), landingCell.col + 1);
+        const configuredCols = configuredColsAfterDrop(
+            group,
+            landingCell,
+            dragged.footprint
+        );
         const sizeCols = Math.max(
             configuredCols,
             maxChildSpanCols(canvasTree(), group.id, layout),

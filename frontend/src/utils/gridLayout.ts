@@ -169,6 +169,30 @@ const spanOf = (footprint: GridFootprint) => ({
 });
 
 /**
+ * The column count to PERSIST after a drop — the configured floor raised, when
+ * needed, to cover the last column the landing actually occupies.
+ *
+ * `landing.col + 1` was right only for a one-column Card. A 3-column series
+ * landing at column 1 occupies through column 3 and needs FOUR, and persisting
+ * three sized the container 404px — exactly one column — narrower than its own
+ * child (browser-reproduced, `vertical`, container 1220 vs a right edge of
+ * 1608). Column 1 became reachable in 5a-6, which made a Bo-N series exactly N
+ * columns: before that a Bo3 measured 4, so `lastStartCol` was `4 - 4 = 0` and
+ * column 0 was the only legal start.
+ *
+ * Still the CONFIGURED count and never the layout one: the layout count carries
+ * the +1 growth column, and persisting that would widen the grid by a column on
+ * every drop. `nearestFreeRectIn` and `clampToGrid` both bound the landing by
+ * `lastStartCol`, so this can never exceed the layout count it resolved
+ * against.
+ */
+export const configuredColsAfterDrop = (
+    group: CanvasGroup,
+    landing: GridCell,
+    footprint: GridFootprint
+): number => Math.max(gridColsOf(group), landing.col + spanOf(footprint).cols);
+
+/**
  * Every cell a footprint stamped at `cell` covers — ONE row, `cols` wide.
  *
  * Replaces `rectCells`. §6.0a rule 1: nothing spans rows, because a row grows
