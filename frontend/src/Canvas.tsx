@@ -90,6 +90,7 @@ import {
     type TreeNode
 } from "./utils/canvasTree";
 import { findDropContainer } from "./utils/canvasHitTest";
+import { resizeChainOf } from "./utils/containerResizeChain";
 import { splitGridPlacements, type GridWrites } from "./utils/gridPersistence";
 import {
     subtreeMoveWrites,
@@ -3789,7 +3790,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         commitGridMaterialization(group.id, []);
     };
 
-    const resyncGroupSize = (groupId: string) => {
+    const resyncOneGroupSize = (groupId: string) => {
         const group = canvasGroups.find((g) => g.id === groupId);
         if (!group || group.type !== "custom") return;
         const layout = props.cardLayout();
@@ -3891,6 +3892,30 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 }
             }
         }
+    };
+
+    /**
+     * Resize a container and every ancestor it sits in, innermost first.
+     *
+     * §6.2 gap 1, pulled into scope by §6.0a. Before this branch a nested
+     * container's height only reached its parent through `spanFor`'s ceil,
+     * which absorbed anything under a whole cell. Rule 2 makes the parent's row
+     * height a CONTINUOUS function of the child's height, so every pixel a
+     * nested container gains must now reach the root — the gap went from
+     * rarely-visible to visible on almost every nested edit, and stopped being
+     * separable.
+     *
+     * The order is not optional: a child's new size is what its parent's row
+     * height is measured from. Only `resyncOneGroupSize` on the container whose
+     * MEMBERSHIP changed rematerializes; ancestors need resizing, not
+     * rematerializing, which is what keeps one drop in a depth-3 nest from
+     * emitting four separate non-atomic layout requests.
+     *
+     * The name is deliberately unchanged, so all ten existing call sites now
+     * mean "and its ancestors" — which is what every one of them wants.
+     */
+    const resyncGroupSize = (groupId: string) => {
+        for (const id of resizeChainOf(canvasTree(), groupId)) resyncOneGroupSize(id);
     };
 
     // Right/middle-drag pan + mouse-up context menu dispatch. A right or
