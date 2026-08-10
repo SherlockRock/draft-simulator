@@ -18,10 +18,9 @@ import {
     materializeGrid,
     resolveContainerDims,
     resolveGridDims,
-    rowCountAfter,
     type GridItem
 } from "./gridLayout";
-import { memberY } from "./gridRows";
+import { gridContentHeight, memberY } from "./gridRows";
 import {
     childCardsOf,
     gridItemsOf,
@@ -104,6 +103,9 @@ export const resolveCopyPlacement = (args: {
             assignments: [{ id: copy.id, kind: "card", cell }],
             layout
         });
+        // §6.0a rule 2: the container's height is the sum of its ROW BANDS, so
+        // a copy landing beside a Bo3 adds no height at all — under the retired
+        // row count it added a whole card's worth.
         // Rule 3: the copy's y is its ROW's, not the uniform lattice's. Landing
         // beside a Bo3 puts it at that row's baseline, level with the series'
         // first game, rather than at the row's top edge.
@@ -112,12 +114,7 @@ export const resolveCopyPlacement = (args: {
             x: cellToPosition(cell, layout).x,
             y: copyRow ? memberY(copyRow, copy.inset) : cellToPosition(cell, layout).y
         };
-        const dims = resolveGridDims(
-            group,
-            rowCountAfter([], projected, layout, cols),
-            cols,
-            layout
-        );
+        const dims = resolveGridDims(group, gridContentHeight(rows), cols, layout);
         return {
             positionX: position.x,
             positionY: position.y,

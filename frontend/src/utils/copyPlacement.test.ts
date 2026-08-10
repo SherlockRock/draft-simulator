@@ -9,7 +9,13 @@ import {
     SERIES_CARD_GAP,
     SERIES_PADDING_X
 } from "./helpers";
-import { cellToPosition, GRID_CELL_GAP, gridDimensions } from "./gridLayout";
+import {
+    cellToPosition,
+    GRID_CELL_GAP,
+    GRID_HEADER_HEIGHT,
+    GRID_PADDING,
+    gridDimensions
+} from "./gridLayout";
 
 const layout: CardLayout = "compact";
 
@@ -94,7 +100,18 @@ describe("resolveCopyPlacement", () => {
         expect(placement.positionX).toBe(target.x);
         expect(placement.positionY).toBe(target.y);
         expect(placement.group_id).toBe(group.id);
-        expect(placement.groupDims).toEqual(gridDimensions(2, 2, layout));
+        // §6.0a rule 2: the height is the sum of the row BANDS, so two
+        // uniform Card rows is header + 2*padding + 2*ch + gap.
+        expect(placement.groupDims).toEqual(
+            gridDimensions(
+                GRID_HEADER_HEIGHT +
+                    2 * GRID_PADDING +
+                    2 * cardHeight(layout) +
+                    GRID_CELL_GAP,
+                2,
+                layout
+            )
+        );
     });
 
     it("keeps free-layout copies in the same group directly below the source", () => {
@@ -243,8 +260,7 @@ describe("resolveCopyPlacement", () => {
                 layout
             })
         ).toEqual({
-            positionX:
-                300 + SERIES_PADDING_X + cardWidth(layout) + SERIES_CARD_GAP,
+            positionX: 300 + SERIES_PADDING_X + cardWidth(layout) + SERIES_CARD_GAP,
             positionY: 400 + seriesDims.height + GRID_CELL_GAP,
             group_id: null
         });

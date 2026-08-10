@@ -5,7 +5,6 @@ import {
     GRID_HEADER_HEIGHT,
     CARD_FOOTPRINT,
     cellToPosition,
-    positionToCell,
     firstEmptyRect,
     nearestFreeRect,
     rowCells,
@@ -13,7 +12,6 @@ import {
     reflowAfterGrowth,
     arrangeGrid,
     gridDimensions,
-    rowCountAfter,
     colsFromWidth,
     effectiveGridCols,
     mergeLabels,
@@ -30,6 +28,8 @@ import {
     MIN_GROUP_HEIGHT,
     DEFAULT_GROUP_WIDTH,
     DEFAULT_GROUP_HEIGHT,
+    cellAt,
+    colAt,
     materializeGrid,
     rowsOfItems,
     type GridAssignment,
@@ -37,7 +37,7 @@ import {
     type GridFootprint,
     type GridItem
 } from "./gridLayout";
-import { memberY, rowsOfIndexed } from "./gridRows";
+import { gridContentHeight, memberY, rowAtY, rowsOfIndexed } from "./gridRows";
 import {
     GROUP_BORDER_WIDTH,
     SERIES_GAME_CONTROLS_HEIGHT,
@@ -116,7 +116,17 @@ function itemAt(
         kind,
         footprint,
         position: { x, y },
-        cell: positionToCell(x, y, layout, cols),
+        cell: {
+            row: rowAtY(
+                rowsOfIndexed(
+                    [{ id, index: 0, inset: chrome.inset, height: chrome.height }],
+                    layout
+                ),
+                y,
+                layout
+            ),
+            col: colAt(x, layout, cols)
+        },
         inset: chrome.inset,
         height: chrome.height
     };
@@ -217,6 +227,10 @@ const drop = (args: Omit<Parameters<typeof resolveGridDrop>[0], "rows">) =>
 const SPAN4: GridFootprint = { cols: 4 };
 const SPAN6: GridFootprint = { cols: 6 };
 
+// `positionToCell` is gone: the row half can no longer be a division, because
+// rows have different heights. `cellAt` needs the actual bands. On an EMPTY
+// container the bands are uniform again, which is what keeps these assertions
+// meaningful — they are the parity check against the retired inverse.
 describe("cell math", () => {
     it("round-trips cell -> position -> cell for every layout", () => {
         for (const layout of LAYOUTS) {
@@ -226,20 +240,22 @@ describe("cell math", () => {
                 { row: 5, col: 2 }
             ]) {
                 const pos = cellToPosition(cell, layout);
-                expect(positionToCell(pos.x, pos.y, layout, 3)).toEqual(cell);
+                expect(cellAt([], pos.x, pos.y, layout, 3)).toEqual(cell);
             }
         }
     });
 
     it("snaps a position offset by less than half a cell back to the same cell", () => {
         const pos = cellToPosition({ row: 1, col: 1 }, "wide");
-        const cell = positionToCell(pos.x + 100, pos.y - 100, "wide", 3);
-        expect(cell).toEqual({ row: 1, col: 1 });
+        expect(cellAt([], pos.x + 100, pos.y - 100, "wide", 3)).toEqual({
+            row: 1,
+            col: 1
+        });
     });
 
     it("clamps col into [0, cols-1] and row to >= 0", () => {
-        expect(positionToCell(-500, -500, "wide", 3)).toEqual({ row: 0, col: 0 });
-        expect(positionToCell(99999, 0, "wide", 3).col).toBe(2);
+        expect(cellAt([], -500, -500, "wide", 3)).toEqual({ row: 0, col: 0 });
+        expect(cellAt([], 99999, 0, "wide", 3).col).toBe(2);
     });
 });
 
@@ -916,10 +932,7 @@ describe("arrangeGrid", () => {
         const assignments = arrangeGrid([], 3);
         expect(assignments).toEqual([]);
 
-        const rows = rowCountAfter([], [], "wide", 3);
-        expect(rows).toBe(1);
-
-        const dims = gridDimensions(rows, 3, "wide");
+        const dims = gridDimensions(gridContentHeight([]), 3, "wide");
         expect(dims.width).toBeGreaterThan(0);
         expect(dims.height).toBeGreaterThan(0);
     });
@@ -1071,8 +1084,14 @@ describe("footprintPixelWidth", () => {
 });
 
 describe("gridDimensions", () => {
-    it("computes container size incl. header for rows x cols", () => {
-        const dims = gridDimensions(2, 3, "wide");
+    it("takes a CONTENT HEIGHT, and does not re-add the header or padding", () => {
+        // gridContentHeight already includes header + both paddings. Adding
+        // them again here is the one arithmetic trap in this signature.
+        const rows = rowsOfItems(
+            [itemInCell("a", 0, 0, "wide"), itemInCell("b", 1, 0, "wide")],
+            "wide"
+        );
+        const dims = gridDimensions(gridContentHeight(rows), 3, "wide");
         expect(dims.width).toBe(
             2 * GRID_PADDING + 3 * cardWidth("wide") + 2 * GRID_CELL_GAP
         );
@@ -1083,27 +1102,26 @@ describe("gridDimensions", () => {
                 1 * GRID_CELL_GAP
         );
     });
-});
 
-describe("rowCountAfter", () => {
-    it("counts rows from both pending placements and untouched items", () => {
-        const settled = itemInCell("settled", 2, 0, "wide");
-        const moving = itemInCell("moving", 4, 0, "wide");
-        const p = cellToPosition({ row: 0, col: 1 }, "wide");
-        const placements = [
-            { id: "moving", kind: "card" as const, positionX: p.x, positionY: p.y }
-        ];
-        expect(rowCountAfter(placements, [settled, moving], "wide", 3)).toBe(3);
-    });
-
-    // §6.0a rule 1 retired the multi-row stamp, so a footprint's bottom row IS
-    // its top row and this collapses to "the deepest occupied row, plus one".
-    // Task 5 deletes the function outright when gridContentHeight takes over.
-    it("counts the deepest occupied row, which no footprint extends past", () => {
-        const series = itemInCell("bo3", 1, 0, "wide", SPAN4, "group");
-        expect(rowCountAfter([], [series], "wide", 6)).toBe(2);
-        const card = itemInCell("c", 1, 0, "wide");
-        expect(rowCountAfter([], [card], "wide", 6)).toBe(2);
+    // §6.0a's headline result, as container arithmetic: a Bo3 costs ONE row
+    // band, not two, and that band is exactly as tall as the series paints.
+    it("makes a lone Bo3 one row tall, not two", () => {
+        const bo3 = itemInCell(
+            "s",
+            0,
+            0,
+            "wide",
+            { cols: 3 },
+            "group",
+            seriesChrome(3, "wide")
+        );
+        const rows = rowsOfItems([bo3], "wide");
+        expect(rows).toHaveLength(1);
+        expect(gridDimensions(gridContentHeight(rows), 3, "wide").height).toBe(
+            GRID_HEADER_HEIGHT +
+                2 * GRID_PADDING +
+                getSeriesGroupDimensions(3, "wide").height
+        );
     });
 });
 
@@ -1389,9 +1407,20 @@ describe("container sizing", () => {
     });
 
     describe("resolveGridDims", () => {
+        /** `n` uniform Card rows, as a CONTENT HEIGHT (§6.0a rule 2). */
+        const cardRows = (n: number, layout: CardLayout) =>
+            gridContentHeight(
+                rowsOfItems(
+                    Array.from({ length: n }, (_, i) =>
+                        itemInCell(`r${i}`, i, 0, layout)
+                    ),
+                    layout
+                )
+            );
+
         it("round-trips grow-then-shrink back to the manual floor", () => {
             for (const layout of LAYOUTS) {
-                const floor = gridDimensions(1, 5, layout);
+                const floor = gridDimensions(cardRows(1, layout), 5, layout);
                 const group = container({
                     ...gridOf(3),
                     manualWidth: floor.width,
@@ -1399,8 +1428,8 @@ describe("container sizing", () => {
                 });
 
                 // A Bo5 arrives: six columns, two rows. Content wins.
-                const grown = resolveGridDims(group, 2, 6, layout);
-                expect(grown).toEqual(gridDimensions(2, 6, layout));
+                const grown = resolveGridDims(group, cardRows(2, layout), 6, layout);
+                expect(grown).toEqual(gridDimensions(cardRows(2, layout), 6, layout));
 
                 // It leaves. Back to the user's width, NOT the grown one.
                 const shrunk = resolveGridDims(
@@ -1409,7 +1438,7 @@ describe("container sizing", () => {
                         manualWidth: floor.width,
                         manualHeight: floor.height
                     }),
-                    1,
+                    cardRows(1, layout),
                     3,
                     layout
                 );
@@ -1420,21 +1449,26 @@ describe("container sizing", () => {
 
         it("never undoes a manual resize when content changes", () => {
             const layout: CardLayout = "wide";
-            const floor = gridDimensions(4, 6, layout);
+            const floor = gridDimensions(cardRows(4, layout), 6, layout);
             const group = container({
                 ...gridOf(3),
                 manualWidth: floor.width,
                 manualHeight: floor.height
             });
             // One card in a 3-column grid: far smaller than the floor.
-            expect(resolveGridDims(group, 1, 3, layout)).toEqual(floor);
+            expect(resolveGridDims(group, cardRows(1, layout), 3, layout)).toEqual(floor);
         });
 
         it("returns effectiveGridCols to its pre-drop value once a wide child leaves", () => {
             const layout: CardLayout = "wide";
             const metadata = gridOf(3);
 
-            const before = resolveGridDims(container(metadata), 1, 3, layout);
+            const before = resolveGridDims(
+                container(metadata),
+                cardRows(1, layout),
+                3,
+                layout
+            );
             const beforeCols = effectiveGridCols(
                 container(metadata, before.width, before.height),
                 layout,
@@ -1443,7 +1477,12 @@ describe("container sizing", () => {
             expect(beforeCols).toBe(4); // 3 configured + the growth column
 
             // A Bo5 (6 columns wide) is dropped in.
-            const grown = resolveGridDims(container(metadata), 2, 6, layout);
+            const grown = resolveGridDims(
+                container(metadata),
+                cardRows(2, layout),
+                6,
+                layout
+            );
             expect(
                 effectiveGridCols(
                     container(metadata, grown.width, grown.height),
@@ -1454,7 +1493,12 @@ describe("container sizing", () => {
 
             // It is dragged back out: cols fall back to the configured count,
             // the width follows, and so does effectiveGridCols.
-            const after = resolveGridDims(container(metadata), 1, 3, layout);
+            const after = resolveGridDims(
+                container(metadata),
+                cardRows(1, layout),
+                3,
+                layout
+            );
             expect(after).toEqual(before);
             expect(
                 effectiveGridCols(

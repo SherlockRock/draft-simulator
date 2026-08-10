@@ -171,7 +171,7 @@ import {
     type GridAssignment,
     type GridMetadata
 } from "./utils/gridLayout";
-import type { RowMetrics } from "./utils/gridRows";
+import { gridContentHeight } from "./utils/gridRows";
 import { seriesGrowthReflow } from "./utils/seriesGrowthReflow";
 import { resolveCopyPlacement } from "./utils/copyPlacement";
 import { GridSettingsDialog } from "./components/GridSettingsDialog";
@@ -540,6 +540,28 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // (canvasTree.ts, step-2 amendment 3). Deriving the span from the items
     // would be circular, since an item's cell is clamped by the column count.
     /**
+     * Containers whose membership the CURRENT gesture already resolved, and
+     * which must therefore not be rematerialized behind it.
+     *
+     * `resyncGroupSize(dropGroup.id)` runs immediately after `commitGridDrop`,
+     * which already wrote a coherent layout through the EXACT path. Re-deriving
+     * it a tick later runs the INFERENTIAL path (`rowsOf` over stored pixels)
+     * over the exact path's own output; if they ever disagreed the just-dropped
+     * card would visibly snap.
+     */
+    const settledByGesture = new Set<string>();
+
+    /**
+     * The §6.1 growth path's entry point: `assignments` name DISPLACED siblings
+     * only, and an empty list means nothing was displaced, which is a genuine
+     * no-op rather than a request to rematerialize the container.
+     */
+    const commitReflowPlacements = (parentId: string, assignments: GridAssignment[]) => {
+        if (assignments.length === 0) return;
+        commitGridMaterialization(parentId, assignments);
+    };
+
+    /**
      * Nodes whose stored position is being rewritten every mousemove, keyed by
      * placement id, valued with the timestamp of the last relayed frame.
      *
@@ -579,18 +601,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
         return ids;
     });
-
-    /**
-     * Lattice rows a set of row metrics spans — the LAST row's absolute index
-     * plus one, so an empty middle row still counts. Read off the metrics
-     * rather than inverted out of pixels: `positionToCell`'s uniform inverse is
-     * wrong for a row that a series has made taller.
-     *
-     * TODO(6.0a Task 5): container height stops being a row COUNT entirely and
-     * becomes `gridRows.gridContentHeight(rows)`, at which point this goes.
-     */
-    const rowCountOf = (rows: RowMetrics[]): number =>
-        rows.length === 0 ? 1 : rows[rows.length - 1].index + 1;
 
     /**
      * The geometry `commitGridDrop` needs for a dragged node: its column span
@@ -1012,6 +1022,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     }) => {
         const { group, dragged, relX, relY, origin, joinsContainer } = args;
         const layout = props.cardLayout();
+        // This container's layout is about to be written by the EXACT path.
+        // `resyncGroupSize(group.id)` runs immediately after, in the same
+        // handler, and must resize without re-deriving — see `settledByGesture`.
+        settledByGesture.add(group.id);
+        queueMicrotask(() => settledByGesture.delete(group.id));
         const items = gridItemsFor(group);
         // THREE counts, and conflating any two of them is a bug this path has
         // had at least one of (round 2, V4):
@@ -1102,7 +1117,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             const entry = writes.groups.find((g) => g.id === dragged.id);
             if (entry && joinsContainer) entry.parentId = group.id;
         }
-        const dims = resolveGridDims(group, rowCountOf(landedRows), sizeCols, layout);
+        const dims = resolveGridDims(
+            group,
+            gridContentHeight(landedRows),
+            sizeCols,
+            layout
+        );
         const metadata =
             configuredCols !== gridColsOf(group)
                 ? { gridCols: configuredCols }
@@ -1163,7 +1183,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             placements
         });
         const updates = writes.positions;
-        const dims = resolveGridDims(group, rowCountOf(rows), cols, layout);
+        const dims = resolveGridDims(group, gridContentHeight(rows), cols, layout);
 
         for (const u of updates) {
             setCanvasDrafts((cd) => cd.draft_id === u.draft_id, {
@@ -1210,9 +1230,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
      * the group store wholesale, which recreates the `<For>` DOM and strands
      * `:hover`. `persistGroupDimensions` sets the same precedent.
      */
-    const commitReflowPlacements = (parentId: string, assignments: GridAssignment[]) => {
+    const commitGridMaterialization = (
+        parentId: string,
+        assignments: GridAssignment[]
+    ) => {
         const parent = canvasGroups.find((g) => g.id === parentId);
-        if (!parent || assignments.length === 0) return;
+        if (!parent) return;
 
         // Materialized HERE and only here, so there is exactly one point where
         // a cell becomes a pixel on this path. The assignments name displaced
@@ -3701,22 +3724,63 @@ const CanvasComponent = (props: CanvasComponentProps) => {
      * rule about the CALL SITES, and it holds here by construction: a child
      * leaving can only raise `minLeft`, so the removal calls never expand left.
      */
+    /**
+     * Rewrite a grid's members to the layout its CURRENT membership implies.
+     *
+     * Needed whenever membership changes without a drop resolving it — a child
+     * moved to another container, reparented, or deleted. **This is a
+     * normal-user correctness bug without it, not an edge case.** Row 0 holds a
+     * series (inset ~172) and a Card (inset 2, stored ~171px lower). Drag the
+     * series out: `resyncGroupSize` recomputes the container's DIMENSIONS only,
+     * so the Card stays painted 171px down while the new Card-only row puts it
+     * at the top — and `gridContentHeight` shrinks the frame as though it had
+     * moved, leaving the Card outside it.
+     *
+     * It is also the repair path for a concurrent split: it re-derives the
+     * whole container from whatever pixels are stored and materializes a
+     * coherent layout, so any later commit makes a torn one consistent again.
+     * It cannot recover that the split members previously SHARED a row — that
+     * information is gone — so this makes tearing visible and coherent, not
+     * undone.
+     *
+     * Idempotent by construction: `materializeGrid` emits only members whose
+     * position actually changed, so a settled container produces no writes and
+     * this can be called freely.
+     */
+    const rematerializeGrid = (group: CanvasGroup) => {
+        if (!isGridGroup(group)) return;
+        // NO assignments, deliberately. `materializeGrid` then recomputes every
+        // member's Y from the row model and leaves every X exactly as stored —
+        // which is the whole job here. Assigning each member its own cell would
+        // additionally re-snap x through `colAt`'s round-and-clamp under
+        // `gridItemsFor`'s growth-column count, dragging members left for a
+        // reason that has nothing to do with a member leaving a row.
+        commitGridMaterialization(group.id, []);
+    };
+
     const resyncGroupSize = (groupId: string) => {
         const group = canvasGroups.find((g) => g.id === groupId);
         if (!group || group.type !== "custom") return;
         const layout = props.cardLayout();
 
         if (isGridGroup(group)) {
+            // A member LEAVING lowers its row's baseline, so every row-mate
+            // rises and every row below moves up. Nothing else in the app would
+            // ever write those rows. Skipped for a container this gesture just
+            // committed — see `settledByGesture`.
+            if (!settledByGesture.has(groupId)) rematerializeGrid(group);
             // Cells are non-negative by construction, so a grid never expands
             // left; its content bounds are just its lattice.
             const cols = Math.max(
                 gridColsOf(group),
                 maxChildSpanCols(canvasTree(), group.id, layout)
             );
+            // Re-read AFTER rematerializing, or the container is sized from the
+            // pre-materialization set and is one gesture behind.
             const items = gridItemsOf(canvasTree(), group.id, layout, cols);
             const dims = resolveGridDims(
                 group,
-                rowCountOf(rowsOfItems(items, layout)),
+                gridContentHeight(rowsOfItems(items, layout)),
                 cols,
                 layout
             );

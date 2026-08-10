@@ -131,16 +131,6 @@ export const cellToPosition = (cell: GridCell, layout: CardLayout) => ({
     y: GRID_HEADER_HEIGHT + GRID_PADDING + cell.row * cellH(layout)
 });
 
-export const positionToCell = (
-    x: number,
-    y: number,
-    layout: CardLayout,
-    cols: number
-): GridCell => ({
-    row: Math.max(0, Math.round((y - GRID_HEADER_HEIGHT - GRID_PADDING) / cellH(layout))),
-    col: Math.min(cols - 1, Math.max(0, Math.round((x - GRID_PADDING) / cellW(layout))))
-});
-
 // Columns that fit in the group's current width (mirror of the
 // height-based row computation in the hint overlay).
 export const colsFromWidth = (width: number, layout: CardLayout): number =>
@@ -623,16 +613,24 @@ export const footprintPixelWidth = (
     return cols * cardWidth(layout) + (cols - 1) * GRID_CELL_GAP;
 };
 
-export const gridDimensions = (rowCount: number, cols: number, layout: CardLayout) => ({
+/**
+ * Container size from a CONTENT HEIGHT rather than a row count — §6.0a rule 2.
+ *
+ * `rowCount * cellH` was only ever right while every row was one card tall.
+ * `contentHeight` comes from `gridRows.gridContentHeight`, which ALREADY
+ * includes the header and both paddings — do not add them again here. That is
+ * the one arithmetic trap in this signature.
+ */
+export const gridDimensions = (
+    contentHeight: number,
+    cols: number,
+    layout: CardLayout
+) => ({
     width:
         2 * GRID_PADDING +
         cols * cardWidth(layout) +
         Math.max(0, cols - 1) * GRID_CELL_GAP,
-    height:
-        GRID_HEADER_HEIGHT +
-        2 * GRID_PADDING +
-        rowCount * cardHeight(layout) +
-        Math.max(0, rowCount - 1) * GRID_CELL_GAP
+    height: contentHeight
 });
 
 /**
@@ -700,10 +698,10 @@ export const resolveContainerDims = (
 /** `resolveContainerDims` for a grid container, whose content bounds are its lattice. */
 export const resolveGridDims = (
     group: CanvasGroup,
-    rows: number,
+    contentHeight: number,
     cols: number,
     layout: CardLayout
-) => resolveContainerDims(group, gridDimensions(rows, cols, layout));
+) => resolveContainerDims(group, gridDimensions(contentHeight, cols, layout));
 
 /**
  * Content bounds of a free-layout container: the union of its children's rects
@@ -743,39 +741,6 @@ export const contentBoundsOf = (
         maxLeftEdgeDelta: Math.max(0, minLeft - GRID_PADDING),
         expandLeft: Math.max(0, GRID_PADDING - minLeft)
     };
-};
-
-/**
- * Rows the grid spans once `placements` are applied to `items`.
- *
- * With one-row stamps the old `bottom()` helper collapses to `cell.row`, so the
- * footprint map is only still here to tell a placement for an EXISTING item
- * apart from one for a node entering from outside. Task 5 deletes this outright
- * when `gridRows.gridContentHeight` takes over container sizing.
- */
-export const rowCountAfter = (
-    placements: GridPlacement[],
-    items: GridItem[],
-    layout: CardLayout,
-    cols: number
-): number => {
-    const known = new Set(items.map((i) => i.id));
-    const moved = new Map(
-        placements.map((p) => [
-            p.id,
-            positionToCell(p.positionX, p.positionY, layout, cols)
-        ])
-    );
-    let maxRow = 0;
-    for (const item of items) {
-        maxRow = Math.max(maxRow, (moved.get(item.id) ?? item.cell).row);
-    }
-    for (const placement of placements) {
-        if (known.has(placement.id)) continue;
-        const cell = moved.get(placement.id);
-        if (cell) maxRow = Math.max(maxRow, cell.row);
-    }
-    return maxRow + 1;
 };
 
 export type GridSettingsInput = {
