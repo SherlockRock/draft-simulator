@@ -105,6 +105,11 @@ export const CanvasGroupMetadataSchema = z.object({
   draftMode: DraftModeSchema.optional(),
   layout: z.enum(["free", "grid"]).optional(),
   gridCols: z.number().int().min(1).optional(),
+  // The MINIMUM number of rows the grid presents, absent meaning one. It is a
+  // floor and not a count: content that needs more rows still gets them, and
+  // the container is sized to whichever is larger. Without it an empty grid
+  // container is header-plus-padding tall no matter how it was configured.
+  gridRows: z.number().int().min(1).optional(),
   rowLabels: z.array(z.string()).optional(),
   colLabels: z.array(z.string()).optional(),
   // The size the user last set by HAND-resizing this container; absent means
@@ -129,12 +134,19 @@ export const CanvasGroupMetadataSchema = z.object({
 // because the update is a shallow merge over a JSON-serialized payload and an
 // `undefined` simply drops out of the request. The backend strips the null
 // before saving, so stored metadata stays enum-or-absent.
+//
+// `draftMode` joined `gameType` as clearable when the settings dialog stopped
+// offering draft mode for custom groups: a custom group that already stored
+// `fearless` has to be able to stop restricting, and only an explicit null can
+// say so through a shallow merge.
 export const CanvasGroupMetadataUpdateSchema = CanvasGroupMetadataSchema.omit({
   gameType: true,
+  draftMode: true,
 })
   .partial()
   .extend({
     gameType: GameTypeSchema.nullable().optional(),
+    draftMode: DraftModeSchema.nullable().optional(),
   });
 
 // =============================================================================

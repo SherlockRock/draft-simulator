@@ -170,20 +170,32 @@ function deriveGameType(competitive) {
 }
 
 /**
+ * Keys the write shape may carry as `null` to mean "delete this key" (D3).
+ *
+ * `gameType` always was. `draftMode` joined it when the settings dialog stopped
+ * offering draft mode for custom groups: a custom group that already stored
+ * `fearless` has to be able to stop restricting, and through a shallow merge
+ * only an explicit null can say so.
+ */
+const CLEARABLE_GROUP_METADATA_KEYS = ["gameType", "draftMode"];
+
+/**
  * Merge client-supplied group metadata over what is stored, honouring the
- * clear protocol (design D3): `gameType: null` means "delete this key".
+ * clear protocol (design D3): a `null` means "delete this key".
  *
  * The update is a shallow merge over a JSON-serialized payload, so `undefined`
  * simply drops out of the request and cannot clear a stored value — hence the
  * explicit null. Deleting rather than storing JSON null keeps stored metadata
  * enum-or-absent, which is what the read schema expects.
  *
- * Shared by BOTH merge points on purpose. Inline at one site leaves the other
+ * Shared by ALL merge points on purpose. Inline at one site leaves the others
  * able to store a JSON null.
  */
 function mergeGroupMetadata(storedMetadata, incomingMetadata) {
   const merged = { ...(storedMetadata || {}), ...(incomingMetadata || {}) };
-  if (merged.gameType === null) delete merged.gameType;
+  for (const key of CLEARABLE_GROUP_METADATA_KEYS) {
+    if (merged[key] === null) delete merged[key];
+  }
   return merged;
 }
 
@@ -1858,7 +1870,8 @@ router.post("/:canvasId/group", protect, async (req, res) => {
   let t;
   try {
     const { canvasId } = req.params;
-    const { name, positionX, positionY, parentId, metadata } = req.body;
+    const { name, positionX, positionY, parentId, metadata, width, height } =
+      req.body;
 
     await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
 
@@ -1877,8 +1890,13 @@ router.post("/:canvasId/group", protect, async (req, res) => {
       type: "custom",
       positionX: positionX ?? 50,
       positionY: positionY ?? 50,
-      width: 400,
-      height: 200,
+      // A grid container is created at the size its configured rows and
+      // columns need, so it opens as the grid it was configured to be rather
+      // than at a flat default it only grows out of on the first drop. The
+      // 400x200 fallback is what every Group used before and what a series or
+      // a free-layout Group still gets.
+      width: Number.isFinite(width) && width > 0 ? width : 400,
+      height: Number.isFinite(height) && height > 0 ? height : 200,
       // `metadata` on CREATE (design §10, 5c). Without it every new Group was
       // born `free`, so the creation dialog's layout choice needed a follow-up
       // update — a second round trip that leaves the Group `free` if it fails.

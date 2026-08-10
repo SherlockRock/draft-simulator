@@ -331,6 +331,14 @@ export const localCreateGroup = (data: {
      * `free` while a server one is born `grid`, and the two diverge at sign-up.
      */
     metadata?: CanvasGroupMetadataUpdate;
+    /**
+     * The size to create it at. Absent leaves width/height unset, which is what
+     * every local Group used to get and what the renderer's DEFAULT_GROUP_*
+     * fallback covers; a grid container sends the size its rows and columns
+     * need so it opens as the grid it was configured to be.
+     */
+    width?: number;
+    height?: number;
 }) => {
     return mutateLocal((canvas) => {
         const existingNames = new Set(canvas.groups.map((g) => g.name));
@@ -362,6 +370,8 @@ export const localCreateGroup = (data: {
             // ADR-0006: absolute world at every depth, so a nested create
             // stores the position it was given, unrebased.
             parent_group_id: parentId,
+            ...(data.width !== undefined ? { width: data.width } : {}),
+            ...(data.height !== undefined ? { height: data.height } : {}),
             // Same clear protocol as the server's create: a `gameType: null`
             // means "no classification", never a stored null.
             metadata: mergeLocalGroupMetadata({}, data.metadata ?? {})
@@ -372,18 +382,28 @@ export const localCreateGroup = (data: {
 };
 
 /**
- * Local mirror of the backend's clear protocol (D3): an inbound
- * `gameType: null` deletes the key rather than storing a null, so local
- * metadata keeps the same enum-or-absent shape the read schema expects.
+ * Local mirror of the backend's clear protocol (D3): an inbound `null` deletes
+ * the key rather than storing a null, so local metadata keeps the same
+ * enum-or-absent shape the read schema expects.
+ *
+ * Two keys are clearable. `gameType` always was; `draftMode` joined it when the
+ * settings dialog stopped offering draft mode for custom groups — a custom
+ * group that already stored `fearless` has to be able to stop restricting, and
+ * through a shallow merge only an explicit null can say so.
+ *
+ * Written out per key rather than looped over a list: the value types differ,
+ * and a loop would need a cast to index into the merged object.
  */
 const mergeLocalGroupMetadata = (
     stored: CanvasGroupMetadata,
     incoming: CanvasGroupMetadataUpdate
 ): CanvasGroupMetadata => {
-    const { gameType, ...rest } = incoming;
+    const { gameType, draftMode, ...rest } = incoming;
     const merged: CanvasGroupMetadata = { ...stored, ...rest };
     if (gameType === null) delete merged.gameType;
     else if (gameType !== undefined) merged.gameType = gameType;
+    if (draftMode === null) delete merged.draftMode;
+    else if (draftMode !== undefined) merged.draftMode = draftMode;
     return merged;
 };
 

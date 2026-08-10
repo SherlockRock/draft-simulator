@@ -397,6 +397,34 @@ describe("clear protocol: null deletes the key (D3)", () => {
     expect(metadata).toMatchObject({ layout: "grid" });
   });
 
+  /**
+   * `draftMode` became clearable when the settings dialog stopped offering
+   * draft mode for custom groups. A custom group that already stored
+   * `fearless` restricts champions across its drafts — both here and in the
+   * mutation gate, which reads `metadata.seriesType || metadata.draftMode` —
+   * so it has to be able to stop.
+   */
+  it("clears a stored draftMode the same way", async () => {
+    const metadata = await putGroup(
+      "custom",
+      { draftMode: "fearless", layout: "grid" },
+      { metadata: { draftMode: null } },
+    );
+    expect(Object.prototype.hasOwnProperty.call(metadata, "draftMode")).toBe(
+      false,
+    );
+    expect(metadata).toMatchObject({ layout: "grid" });
+  });
+
+  it("leaves a stored draftMode alone when the update omits the key", async () => {
+    const metadata = await putGroup(
+      "custom",
+      { draftMode: "fearless", layout: "grid" },
+      { metadata: { gridCols: 4 } },
+    );
+    expect(metadata.draftMode).toBe("fearless");
+  });
+
   it("also clears through the draft-positions merge point", async () => {
     const group = {
       id: "g-1",

@@ -38,6 +38,7 @@ const {
     localCreateGroup,
     localConvertGroupToSeries,
     localDeleteGroup,
+    localUpdateGroup,
     localUpdateDraftPositions
 } = await import("./useLocalCanvasMutations");
 const { MAX_GROUP_DEPTH } = await import("@draft-sim/shared-types/canvas-tree-vector");
@@ -405,5 +406,42 @@ describe("localCreateGroup metadata and name", () => {
             localCreateGroup({ positionX: 0, positionY: 0, name: "Scrim block" }).group
                 .name
         ).toBe("Scrim block");
+    });
+});
+
+/**
+ * `draftMode` joined `gameType` as a clearable key when the settings dialog
+ * stopped offering draft mode for custom groups. A custom group that already
+ * stored `fearless` restricts champions across its drafts (draftRestrictions'
+ * SYMMETRIC branch), so it has to be able to stop.
+ */
+describe("localUpdateGroup clear protocol", () => {
+    it("deletes a stored draftMode on an explicit null", () => {
+        const { group } = localCreateGroup({
+            positionX: 0,
+            positionY: 0,
+            metadata: { layout: "grid", draftMode: "fearless" }
+        });
+
+        localUpdateGroup({ groupId: group.id, metadata: { draftMode: null } });
+
+        const stored = (getLocalCanvas()?.groups ?? []).find((g) => g.id === group.id);
+        expect(
+            Object.prototype.hasOwnProperty.call(stored?.metadata ?? {}, "draftMode")
+        ).toBe(false);
+        expect(stored?.metadata.layout).toBe("grid");
+    });
+
+    it("leaves a stored draftMode alone when the update omits the key", () => {
+        const { group } = localCreateGroup({
+            positionX: 0,
+            positionY: 0,
+            metadata: { draftMode: "fearless" }
+        });
+
+        localUpdateGroup({ groupId: group.id, metadata: { gridCols: 4 } });
+
+        const stored = (getLocalCanvas()?.groups ?? []).find((g) => g.id === group.id);
+        expect(stored?.metadata.draftMode).toBe("fearless");
     });
 });
