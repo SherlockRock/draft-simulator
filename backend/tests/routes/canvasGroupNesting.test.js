@@ -153,6 +153,69 @@ describe("POST /:canvasId/group with parentId", () => {
     }
   });
 
+  /**
+   * design §10 (5c): the creation dialog decides a Group's layout, so the
+   * create has to be able to store it. Before this the route dropped
+   * `metadata` on the floor and every new Group was born `free`.
+   */
+  it("stores the metadata the create was given, on both lock paths", async () => {
+    for (const parentId of [undefined, "parent"]) {
+      onCanvas([groupRow("parent")]);
+      const created = vi
+        .spyOn(CanvasGroup, "create")
+        .mockImplementation(async (values) => ({
+          ...values,
+          toJSON: () => values,
+        }));
+
+      const res = await create({
+        positionX: 0,
+        positionY: 0,
+        ...(parentId ? { parentId } : {}),
+        metadata: { layout: "grid", gridCols: 4, colLabels: ["A"] },
+      });
+
+      expect(res.status).toBe(201);
+      expect(created.mock.calls.at(-1)[0].metadata).toEqual({
+        layout: "grid",
+        gridCols: 4,
+        colLabels: ["A"],
+      });
+    }
+  });
+
+  it("deletes a null gameType on create rather than storing one (D3)", async () => {
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+    const created = vi
+      .spyOn(CanvasGroup, "create")
+      .mockImplementation(async (values) => ({
+        ...values,
+        toJSON: () => values,
+      }));
+
+    await create({
+      positionX: 0,
+      positionY: 0,
+      metadata: { layout: "grid", gameType: null },
+    });
+
+    expect(created.mock.calls.at(-1)[0].metadata).toEqual({ layout: "grid" });
+  });
+
+  it("writes no metadata attribute when the create carries none", async () => {
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+    const created = vi
+      .spyOn(CanvasGroup, "create")
+      .mockImplementation(async (values) => ({
+        ...values,
+        toJSON: () => values,
+      }));
+
+    await create({ positionX: 0, positionY: 0 });
+
+    expect(created.mock.calls.at(-1)[0]).not.toHaveProperty("metadata");
+  });
+
   it("400s on a parent that is not on this canvas", async () => {
     onCanvas([groupRow("parent")]);
     const created = vi.spyOn(CanvasGroup, "create");

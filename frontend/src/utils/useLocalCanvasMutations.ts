@@ -323,11 +323,19 @@ export const localCreateGroup = (data: {
     positionX: number;
     positionY: number;
     parentId?: string | null;
+    /** Absent falls back to the auto-numbered "New Group N". */
+    name?: string;
+    /**
+     * What the Group is born with — the local twin of the create route's
+     * `metadata` (design §10, 5c). Without it a locally created Group is born
+     * `free` while a server one is born `grid`, and the two diverge at sign-up.
+     */
+    metadata?: CanvasGroupMetadataUpdate;
 }) => {
     return mutateLocal((canvas) => {
         const existingNames = new Set(canvas.groups.map((g) => g.name));
-        let name = "New Group";
-        if (existingNames.has(name)) {
+        let name = data.name?.trim() || "New Group";
+        if (!data.name?.trim() && existingNames.has(name)) {
             let counter = 1;
             while (existingNames.has(`New Group ${counter}`)) {
                 counter++;
@@ -354,7 +362,9 @@ export const localCreateGroup = (data: {
             // ADR-0006: absolute world at every depth, so a nested create
             // stores the position it was given, unrebased.
             parent_group_id: parentId,
-            metadata: {}
+            // Same clear protocol as the server's create: a `gameType: null`
+            // means "no classification", never a stored null.
+            metadata: mergeLocalGroupMetadata({}, data.metadata ?? {})
         };
         canvas.groups.push(group);
         return { canvas, result: { success: true, group } };

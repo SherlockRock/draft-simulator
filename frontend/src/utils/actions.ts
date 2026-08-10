@@ -506,6 +506,13 @@ export const createCanvasGroup = async (data: {
      * rebased against the container origin.
      */
     parentId?: string | null;
+    /**
+     * What the Group is born with (design §10). Sent on the CREATE so a new
+     * Group is never briefly `free` before a follow-up update makes it a grid.
+     * Same write shape as `updateCanvasGroup`'s — the backend merges it through
+     * the same `mergeGroupMetadata`.
+     */
+    metadata?: CanvasGroupMetadataUpdate;
 }) => {
     const result = await apiPost(
         `/canvas/${data.canvasId}/group`,
@@ -513,7 +520,8 @@ export const createCanvasGroup = async (data: {
             name: data.name,
             positionX: data.positionX,
             positionY: data.positionY,
-            ...(data.parentId ? { parentId: data.parentId } : {})
+            ...(data.parentId ? { parentId: data.parentId } : {}),
+            ...(data.metadata ? { metadata: data.metadata } : {})
         },
         z.object({ success: z.boolean(), group: CanvasGroupSchema })
     );

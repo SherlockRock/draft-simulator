@@ -344,3 +344,66 @@ describe("local group nesting", () => {
         expect(stored?.positionX).toBe(5);
     });
 });
+
+/**
+ * The local twin of the create route's `metadata` (design §10, 5c). Without
+ * these, a Group created on a local canvas is born `free` while a server one is
+ * born `grid`, and the divergence only surfaces at sign-up.
+ */
+describe("localCreateGroup metadata and name", () => {
+    it("is born with the metadata the creation dialog decided", () => {
+        const { group } = localCreateGroup({
+            positionX: 0,
+            positionY: 0,
+            metadata: {
+                layout: "grid",
+                gridCols: 4,
+                colLabels: ["A"],
+                draftMode: "fearless"
+            }
+        });
+
+        expect(group.metadata.layout).toBe("grid");
+        expect(group.metadata.gridCols).toBe(4);
+        expect(group.metadata.colLabels).toEqual(["A"]);
+        expect(group.metadata.draftMode).toBe("fearless");
+        // And it survives the round trip through localStorage.
+        const stored = (getLocalCanvas()?.groups ?? []).find((g) => g.id === group.id);
+        expect(stored?.metadata.gridCols).toBe(4);
+    });
+
+    it("stores no metadata key when none is supplied", () => {
+        const { group } = localCreateGroup({ positionX: 0, positionY: 0 });
+        expect(group.metadata).toEqual({});
+    });
+
+    it("deletes a null gameType rather than storing one (D3)", () => {
+        const { group } = localCreateGroup({
+            positionX: 0,
+            positionY: 0,
+            metadata: { layout: "grid", gameType: null }
+        });
+        expect(Object.prototype.hasOwnProperty.call(group.metadata, "gameType")).toBe(
+            false
+        );
+    });
+
+    it("takes the supplied name, and auto-numbers only without one", () => {
+        expect(localCreateGroup({ positionX: 0, positionY: 0 }).group.name).toBe(
+            "New Group"
+        );
+        expect(localCreateGroup({ positionX: 0, positionY: 0 }).group.name).toBe(
+            "New Group 1"
+        );
+        expect(
+            localCreateGroup({ positionX: 0, positionY: 0, name: "Scrim block" }).group
+                .name
+        ).toBe("Scrim block");
+        // A duplicate explicit name is the user's call, not something to
+        // silently renumber behind their back.
+        expect(
+            localCreateGroup({ positionX: 0, positionY: 0, name: "Scrim block" }).group
+                .name
+        ).toBe("Scrim block");
+    });
+});

@@ -1858,7 +1858,7 @@ router.post("/:canvasId/group", protect, async (req, res) => {
   let t;
   try {
     const { canvasId } = req.params;
-    const { name, positionX, positionY, parentId } = req.body;
+    const { name, positionX, positionY, parentId, metadata } = req.body;
 
     await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
 
@@ -1879,6 +1879,14 @@ router.post("/:canvasId/group", protect, async (req, res) => {
       positionY: positionY ?? 50,
       width: 400,
       height: 200,
+      // `metadata` on CREATE (design §10, 5c). Without it every new Group was
+      // born `free`, so the creation dialog's layout choice needed a follow-up
+      // update — a second round trip that leaves the Group `free` if it fails.
+      // Through `mergeGroupMetadata` like every other write point, so the D3
+      // clear protocol holds here too rather than storing a JSON null.
+      ...(metadata && typeof metadata === "object"
+        ? { metadata: mergeGroupMetadata({}, metadata) }
+        : {}),
     };
 
     let group;
