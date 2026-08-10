@@ -15,12 +15,13 @@ import {
     firstEmptyRect,
     GRID_CELL_GAP,
     gridColsOf,
+    gridRowsOf,
     materializeGrid,
     resolveContainerDims,
     resolveGridDims,
     type GridItem
 } from "./gridLayout";
-import { gridContentHeight, memberY } from "./gridRows";
+import { gridContentHeightForRows, memberY } from "./gridRows";
 import {
     childCardsOf,
     gridItemsOf,
@@ -114,7 +115,12 @@ export const resolveCopyPlacement = (args: {
             x: cellToPosition(cell, layout).x,
             y: copyRow ? memberY(copyRow, copy.inset) : cellToPosition(cell, layout).y
         };
-        const dims = resolveGridDims(group, gridContentHeight(rows), cols, layout);
+        const dims = resolveGridDims(
+            group,
+            gridContentHeightForRows(rows, gridRowsOf(group), layout),
+            cols,
+            layout
+        );
         return {
             positionX: position.x,
             positionY: position.y,

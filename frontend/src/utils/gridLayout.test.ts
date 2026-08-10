@@ -19,6 +19,9 @@ import {
     buildGridMetadata,
     arrangedRowCount,
     resolveGridSave,
+    gridMetadataEquals,
+    DEFAULT_GRID_COLS,
+    DEFAULT_GRID_ROWS,
     toPositionUpdates,
     manualFloorOf,
     resolveContainerDims,
@@ -1332,6 +1335,7 @@ describe("mergeLabels", () => {
 describe("buildGridMetadata", () => {
     const settings = {
         gridCols: 2,
+        gridRows: 2,
         rowLabels: ["r1", "r2"],
         colLabels: ["c1", "c2"]
     };
@@ -1378,7 +1382,12 @@ describe("arrangedRowCount", () => {
 });
 
 describe("resolveGridSave", () => {
-    const settings = { gridCols: 3, rowLabels: ["r"], colLabels: ["c1", "c2", "c3"] };
+    const settings = {
+        gridCols: 3,
+        gridRows: 1,
+        rowLabels: ["r"],
+        colLabels: ["c1", "c2", "c3"]
+    };
 
     it("reflows and emits labeled grid metadata for a free group", () => {
         const { metadata, reflow } = resolveGridSave({ layout: "free" }, settings);
@@ -1406,6 +1415,76 @@ describe("resolveGridSave", () => {
         expect(reflow).toBe(false);
         expect(metadata.rowLabels).toEqual(["r"]);
         expect(metadata.colLabels).toEqual(["c1", "c2", "c3"]);
+    });
+
+    it("does NOT reflow a row-count change — rows are a height floor", () => {
+        // `arrangeGrid` never reads the row count, so reflowing on one would
+        // relocate every member for a change that only resizes the frame.
+        const { metadata, reflow } = resolveGridSave(
+            { layout: "grid", gridCols: 3, gridRows: 1 },
+            { ...settings, gridRows: 4 }
+        );
+        expect(reflow).toBe(false);
+        expect(metadata.gridRows).toBe(4);
+    });
+});
+
+/**
+ * Lets an ordinary settings save — a rename, a classification change — stay ONE
+ * request on a group whose grid nobody touched. Two partial metadata merges
+ * fired from one save can have their responses arrive out of order, and the
+ * loser replaces the row.
+ */
+describe("gridMetadataEquals", () => {
+    const stored = {
+        layout: "grid" as const,
+        gridCols: 3,
+        gridRows: 2,
+        rowLabels: ["r1"],
+        colLabels: ["c1"]
+    };
+    const asMetadata = (over: Partial<typeof stored> = {}) => ({
+        ...stored,
+        ...over,
+        layout: "grid" as const
+    });
+
+    it("is true when nothing changed", () => {
+        expect(gridMetadataEquals(stored, asMetadata())).toBe(true);
+    });
+
+    it("reads the same defaults gridColsOf and gridRowsOf do", () => {
+        // A group that never stored a count must not be reported as changing
+        // merely by having the default written down for the first time.
+        expect(
+            gridMetadataEquals(
+                { layout: "grid", rowLabels: [], colLabels: [] },
+                {
+                    layout: "grid",
+                    gridCols: DEFAULT_GRID_COLS,
+                    gridRows: DEFAULT_GRID_ROWS,
+                    rowLabels: [],
+                    colLabels: []
+                }
+            )
+        ).toBe(true);
+    });
+
+    it("is false for a layout, column, row or label change", () => {
+        expect(gridMetadataEquals({ ...stored, layout: "free" }, asMetadata())).toBe(
+            false
+        );
+        expect(gridMetadataEquals(stored, asMetadata({ gridCols: 4 }))).toBe(false);
+        expect(gridMetadataEquals(stored, asMetadata({ gridRows: 3 }))).toBe(false);
+        expect(gridMetadataEquals(stored, asMetadata({ rowLabels: ["x"] }))).toBe(false);
+        expect(gridMetadataEquals(stored, asMetadata({ colLabels: ["x"] }))).toBe(false);
+    });
+
+    it("is false when a label array gains or loses an entry", () => {
+        expect(gridMetadataEquals(stored, asMetadata({ colLabels: ["c1", ""] }))).toBe(
+            false
+        );
+        expect(gridMetadataEquals(stored, asMetadata({ colLabels: [] }))).toBe(false);
     });
 });
 

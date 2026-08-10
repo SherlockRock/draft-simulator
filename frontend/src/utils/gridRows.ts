@@ -386,6 +386,31 @@ export const gridContentHeight = (rows: RowMetrics[]): number => {
     return last.offset + last.height + GRID_PADDING;
 };
 
+/**
+ * A grid container's content height when it must present at least `minRows`
+ * rows — `metadata.gridRows`, the count the settings dialog offers.
+ *
+ * The stored count is a FLOOR, never a ceiling: content that needs more rows
+ * still gets them, so this is the taller of the two heights. Without it an
+ * empty grid is header-plus-padding tall however it was configured, and a
+ * container the user built as a 3x4 grid opens as a sliver.
+ *
+ * The trailing rows are measured with `rowMetricsAt`, the same extrapolation
+ * the drop targeting and the hint painter use, so a configured-but-empty row
+ * is exactly where a drop into it would put a card — rather than a second,
+ * subtly different notion of how tall an empty row is.
+ */
+export const gridContentHeightForRows = (
+    rows: RowMetrics[],
+    minRows: number,
+    layout: CardLayout
+): number => {
+    const occupied = gridContentHeight(rows);
+    if (minRows <= 0) return occupied;
+    const last = rowMetricsAt(rows, minRows - 1, layout);
+    return Math.max(occupied, last.offset + last.height + GRID_PADDING);
+};
+
 /** Bound on extrapolated hint rows, so a huge manual resize cannot paint thousands. */
 const MAX_GROWTH_ROWS = 64;
 

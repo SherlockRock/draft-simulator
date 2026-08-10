@@ -1,26 +1,39 @@
 import { describe, it, expect } from "vitest";
 import {
     NEW_GROUP_DRAFT_MODE,
+    newGroupDimensions,
     newGroupGridSettings,
     resolveNewGroupMetadata
 } from "./groupCreation";
-import { DEFAULT_GRID_COLS } from "./gridLayout";
+import {
+    DEFAULT_GRID_COLS,
+    DEFAULT_GRID_ROWS,
+    GRID_CELL_GAP,
+    GRID_HEADER_HEIGHT,
+    GRID_PADDING,
+    gridDimensions
+} from "./gridLayout";
+import { gridContentHeightForRows } from "./gridRows";
+import { cardHeight } from "./helpers";
+import type { CardLayout } from "./canvasCardLayout";
 
 describe("new-group creation defaults", () => {
-    it("opens a new group at fearless", () => {
+    it("opens a new series at fearless", () => {
         // Decision 3 (2026-08-10). The NEW-group branch only — an existing
         // series with no stored draftMode still reads `standard` via
         // Canvas.tsx's toDraftMode fallback, which this constant never touches.
         expect(NEW_GROUP_DRAFT_MODE).toBe("fearless");
     });
 
-    it("starts the grid form at DEFAULT_GRID_COLS with no labels", () => {
+    it("starts the grid form at DEFAULT_GRID_COLS/ROWS with no labels", () => {
         expect(newGroupGridSettings()).toEqual({
             gridCols: DEFAULT_GRID_COLS,
+            gridRows: DEFAULT_GRID_ROWS,
             rowLabels: [],
             colLabels: []
         });
         expect(DEFAULT_GRID_COLS).toBe(3);
+        expect(DEFAULT_GRID_ROWS).toBe(1);
     });
 
     it("returns a fresh object each call so the form cannot alias it", () => {
@@ -38,17 +51,47 @@ describe("resolveNewGroupMetadata", () => {
         grid: newGroupGridSettings()
     };
 
-    it("births a custom group as a grid at the dialog's columns (decision 13)", () => {
+    it("births a custom group as a grid at the dialog's rows and columns", () => {
         const metadata = resolveNewGroupMetadata({
             ...base,
             isSeries: false,
-            grid: { gridCols: 4, rowLabels: ["Week 1"], colLabels: ["A", "B"] }
+            grid: {
+                gridCols: 4,
+                gridRows: 3,
+                rowLabels: ["Week 1"],
+                colLabels: ["A", "B"]
+            }
         });
         expect(metadata.layout).toBe("grid");
         expect(metadata.gridCols).toBe(4);
+        expect(metadata.gridRows).toBe(3);
         expect(metadata.rowLabels).toEqual(["Week 1"]);
         // mergeLabels pads to the column count and trims the trailing empties.
         expect(metadata.colLabels).toEqual(["A", "B"]);
+    });
+
+    /**
+     * Draft mode WORKS on custom groups — `draftRestrictions` runs them
+     * symmetrically and the backend gate reads the same key — so a default
+     * leaking in would make every new group silently restrict champions across
+     * its drafts. That is a real defect the first cut of 5c shipped.
+     */
+    it("gives a CUSTOM group no draftMode at all", () => {
+        const metadata = resolveNewGroupMetadata({
+            ...base,
+            isSeries: false,
+            draftMode: "fearless"
+        });
+        expect(Object.prototype.hasOwnProperty.call(metadata, "draftMode")).toBe(false);
+    });
+
+    it("still gives a SERIES its draft mode", () => {
+        const metadata = resolveNewGroupMetadata({
+            ...base,
+            isSeries: true,
+            draftMode: "fearless"
+        });
+        expect(metadata.draftMode).toBe("fearless");
     });
 
     it("gives a SERIES no grid keys at all", () => {
@@ -62,16 +105,14 @@ describe("resolveNewGroupMetadata", () => {
         expect(metadata).not.toHaveProperty("colLabels");
     });
 
-    it("carries draft mode, disabled champions and classification either way", () => {
+    it("carries disabled champions and classification either way", () => {
         for (const isSeries of [true, false]) {
             const metadata = resolveNewGroupMetadata({
                 ...base,
                 isSeries,
-                draftMode: "ironman",
                 disabledChampions: ["Yasuo"],
                 gameType: "official"
             });
-            expect(metadata.draftMode).toBe("ironman");
             expect(metadata.disabledChampions).toEqual(["Yasuo"]);
             expect(metadata.gameType).toBe("official");
         }
@@ -99,5 +140,64 @@ describe("resolveNewGroupMetadata", () => {
         });
         disabledChampions.push("Zed");
         expect(metadata.disabledChampions).toEqual(["Yasuo"]);
+    });
+});
+
+/**
+ * A grid container is born at the size its configured grid needs. Before this,
+ * every new Group got the server's flat 400x200 and only reached its real size
+ * after the first drop resynced it.
+ */
+describe("newGroupDimensions", () => {
+    const layout: CardLayout = "vertical";
+
+    it("sizes a new grid to its configured rows and columns", () => {
+        const grid = { gridCols: 4, gridRows: 3, rowLabels: [], colLabels: [] };
+        const dims = newGroupDimensions({ isSeries: false, grid, layout });
+
+        const height = gridContentHeightForRows([], 3, layout);
+        expect(dims).toEqual({
+            width: gridDimensions(height, 4, layout).width,
+            height
+        });
+    });
+
+    it("grows with each extra column and each extra row", () => {
+        const at = (gridCols: number, gridRows: number) =>
+            newGroupDimensions({
+                isSeries: false,
+                grid: { gridCols, gridRows, rowLabels: [], colLabels: [] },
+                layout
+            });
+
+        const one = at(1, 1);
+        expect(at(2, 1)?.width).toBeGreaterThan(one?.width ?? 0);
+        expect(at(1, 2)?.height).toBeGreaterThan(one?.height ?? 0);
+        // One more row is exactly one card plus one gap taller — the same step
+        // the row model uses, not an invented one.
+        expect((at(1, 2)?.height ?? 0) - (one?.height ?? 0)).toBe(
+            cardHeight(layout) + GRID_CELL_GAP
+        );
+    });
+
+    it("fits a single 1x1 cell exactly: header, padding, one card, padding", () => {
+        const dims = newGroupDimensions({
+            isSeries: false,
+            grid: { gridCols: 1, gridRows: 1, rowLabels: [], colLabels: [] },
+            layout
+        });
+        expect(dims?.height).toBe(
+            GRID_HEADER_HEIGHT + 2 * GRID_PADDING + cardHeight(layout)
+        );
+    });
+
+    it("declines to size a SERIES — its interior is computed from its length", () => {
+        expect(
+            newGroupDimensions({
+                isSeries: true,
+                grid: newGroupGridSettings(),
+                layout
+            })
+        ).toBeNull();
     });
 });

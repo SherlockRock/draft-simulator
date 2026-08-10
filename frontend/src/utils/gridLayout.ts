@@ -123,6 +123,18 @@ export const isGridGroup = (group: CanvasGroup): boolean =>
 export const gridColsOf = (group: CanvasGroup): number =>
     group.metadata.gridCols ?? DEFAULT_GRID_COLS;
 
+/**
+ * The minimum number of rows a grid container presents.
+ *
+ * Absent means one — every grid that predates the setting keeps its old height,
+ * which was derived from content alone. It is a FLOOR: content needing more
+ * rows still gets them (see `gridContentHeightForRows`).
+ */
+export const DEFAULT_GRID_ROWS = 1;
+
+export const gridRowsOf = (group: CanvasGroup): number =>
+    group.metadata.gridRows ?? DEFAULT_GRID_ROWS;
+
 const cellW = (layout: CardLayout) => cardWidth(layout) + GRID_CELL_GAP;
 const cellH = (layout: CardLayout) => cardHeight(layout) + GRID_CELL_GAP;
 
@@ -769,6 +781,7 @@ export const contentBoundsOf = (
 
 export type GridSettingsInput = {
     gridCols: number;
+    gridRows: number;
     rowLabels: string[];
     colLabels: string[];
 };
@@ -776,6 +789,7 @@ export type GridSettingsInput = {
 export type GridMetadata = {
     layout: "grid";
     gridCols: number;
+    gridRows: number;
     rowLabels: string[];
     colLabels: string[];
 };
@@ -806,6 +820,7 @@ export const buildGridMetadata = (
 ): GridMetadata => ({
     layout: "grid",
     gridCols: settings.gridCols,
+    gridRows: settings.gridRows,
     colLabels: mergeLabels(
         existing.colLabels ?? [],
         settings.colLabels,
@@ -837,6 +852,36 @@ export const arrangedRowCount = (items: GridItem[], cols: number): number => {
     return Math.max(0, ...assignments.map((a) => a.cell.row)) + 1;
 };
 
+/**
+ * Whether a resolved `GridMetadata` is what the group already stores.
+ *
+ * Lets an ordinary settings save — a rename, a classification change — stay ONE
+ * request on a group whose grid nobody touched, instead of firing a second
+ * layout write that races the first. Reads the same defaults `gridColsOf` and
+ * `gridRowsOf` do, so a group that never stored a column count is not reported
+ * as changing merely by having one written down.
+ */
+export const gridMetadataEquals = (
+    existing: {
+        layout?: "free" | "grid";
+        gridCols?: number;
+        gridRows?: number;
+        rowLabels?: string[];
+        colLabels?: string[];
+    },
+    next: GridMetadata
+): boolean => {
+    const sameLabels = (a: string[] | undefined, b: string[]) =>
+        (a ?? []).length === b.length && (a ?? []).every((v, i) => v === b[i]);
+    return (
+        existing.layout === next.layout &&
+        (existing.gridCols ?? DEFAULT_GRID_COLS) === next.gridCols &&
+        (existing.gridRows ?? DEFAULT_GRID_ROWS) === next.gridRows &&
+        sameLabels(existing.rowLabels, next.rowLabels) &&
+        sameLabels(existing.colLabels, next.colLabels)
+    );
+};
+
 // Pure save decision: the metadata to persist (always including labels) and
 // whether the group must be reflowed. Reflow when creating a grid from a free
 // group, or when an existing grid's column count changed.
@@ -844,6 +889,7 @@ export const resolveGridSave = (
     existing: {
         layout?: "free" | "grid";
         gridCols?: number;
+        gridRows?: number;
         rowLabels?: string[];
         colLabels?: string[];
     },
@@ -851,6 +897,11 @@ export const resolveGridSave = (
 ): { metadata: GridMetadata; reflow: boolean } => {
     const wasGrid = existing.layout === "grid";
     const colsChanged = settings.gridCols !== (existing.gridCols ?? DEFAULT_GRID_COLS);
+    // A row-count change is deliberately NOT a reflow. Rows are a height floor,
+    // not an arrangement input — `arrangeGrid` never reads them — so reflowing
+    // on one would relocate every member for a change that only resizes the
+    // frame. The caller re-derives the dimensions on BOTH branches and compares,
+    // which covers a row change without a flag saying so.
     return {
         metadata: buildGridMetadata(existing, settings),
         reflow: !wasGrid || colsChanged

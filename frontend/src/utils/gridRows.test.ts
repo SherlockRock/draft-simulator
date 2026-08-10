@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     gridContentHeight,
+    gridContentHeightForRows,
     hintRowOffsets,
     memberY,
     rowAtY,
@@ -415,6 +416,54 @@ describe("gridContentHeight", () => {
         expect(gridContentHeight(rows)).toBe(
             GRID_HEADER_HEIGHT + 2 * GRID_PADDING + SERIES_H
         );
+    });
+});
+
+/**
+ * `metadata.gridRows` is a FLOOR, not a count. A container configured as 3 rows
+ * opens 3 rows tall while empty, and still grows past 3 when its content needs
+ * to.
+ */
+describe("gridContentHeightForRows", () => {
+    it("gives an EMPTY grid the height its configured rows need", () => {
+        const empty = gridContentHeight([]);
+        expect(gridContentHeightForRows([], 1, layout)).toBe(top + ch + GRID_PADDING);
+        expect(gridContentHeightForRows([], 3, layout)).toBe(
+            top + 2 * step + ch + GRID_PADDING
+        );
+        // ...which is taller than the header-and-padding sliver it would be
+        // without a configured count. That sliver is the bug.
+        expect(gridContentHeightForRows([], 3, layout)).toBeGreaterThan(empty);
+    });
+
+    it("is a floor: content taller than the configured rows still wins", () => {
+        const rows = rowsOf([cardAt("a", top), cardAt("c", top + 3 * step)], layout);
+        const content = gridContentHeight(rows);
+        expect(gridContentHeightForRows(rows, 2, layout)).toBe(content);
+        expect(gridContentHeightForRows(rows, 1, layout)).toBe(content);
+    });
+
+    it("extends past the content when the configured count is larger", () => {
+        const rows = rowsOf([cardAt("a", top)], layout);
+        expect(gridContentHeightForRows(rows, 3, layout)).toBe(
+            top + 2 * step + ch + GRID_PADDING
+        );
+    });
+
+    it("measures a trailing row exactly where rowMetricsAt puts it", () => {
+        // Not a second notion of how tall an empty row is: the configured
+        // height and the drop target for that row must agree, or a card
+        // dropped into the last row lands outside the frame.
+        const rows = rowsOf([seriesAt("s", top)], layout);
+        const third = rowMetricsAt(rows, 2, layout);
+        expect(gridContentHeightForRows(rows, 3, layout)).toBe(
+            third.offset + third.height + GRID_PADDING
+        );
+    });
+
+    it("falls back to the content height for a non-positive count", () => {
+        const rows = rowsOf([cardAt("a", top)], layout);
+        expect(gridContentHeightForRows(rows, 0, layout)).toBe(gridContentHeight(rows));
     });
 });
 
