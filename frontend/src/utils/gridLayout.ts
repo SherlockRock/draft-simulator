@@ -20,8 +20,15 @@ export const DEFAULT_GRID_COLS = 3;
 
 export type GridCell = { row: number; col: number };
 
-/** Lattice units a node covers. See `spanFor` in `canvasTree.ts`. */
-export type GridFootprint = { rows: number; cols: number };
+/**
+ * Lattice COLUMNS a node covers. See `spanFor` in `canvasTree.ts`.
+ *
+ * There is no row axis: §6.0a rule 1 made rows auto-size to their tallest
+ * member, so nothing ever spans two rows — the ROW GROWS instead. A node's
+ * height still matters, but to `gridRows.rowsOf` via `GridItem.height`, not
+ * here.
+ */
+export type GridFootprint = { cols: number };
 
 /**
  * A Card is always exactly one unit: a cell IS a card, so
@@ -29,7 +36,7 @@ export type GridFootprint = { rows: number; cols: number };
  * into a grid (step 5a) must use `footprintOf` instead — this constant is only
  * correct for Cards.
  */
-export const CARD_FOOTPRINT: GridFootprint = { rows: 1, cols: 1 };
+export const CARD_FOOTPRINT: GridFootprint = { cols: 1 };
 
 /**
  * One child of a grid Group, as the layout engine sees it: a rectangular stamp
@@ -142,41 +149,39 @@ export const effectiveGridCols = (
 const cellKey = (cell: GridCell) => `${cell.row}:${cell.col}`;
 
 const spanOf = (footprint: GridFootprint) => ({
-    rows: Math.max(1, footprint.rows),
     cols: Math.max(1, footprint.cols)
 });
 
-/** Every cell a footprint stamped with its top-left at `cell` covers. */
-export const rectCells = (cell: GridCell, footprint: GridFootprint): GridCell[] => {
-    const { rows, cols } = spanOf(footprint);
+/**
+ * Every cell a footprint stamped at `cell` covers — ONE row, `cols` wide.
+ *
+ * Replaces `rectCells`. §6.0a rule 1: nothing spans rows, because a row grows
+ * to fit its tallest member instead of a tall member claiming a second row.
+ */
+export const rowCells = (cell: GridCell, footprint: GridFootprint): GridCell[] => {
+    const { cols } = spanOf(footprint);
     const out: GridCell[] = [];
-    for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-            out.push({ row: cell.row + row, col: cell.col + col });
-        }
-    }
+    for (let col = 0; col < cols; col++) out.push({ row: cell.row, col: cell.col + col });
     return out;
 };
 
 /**
- * Occupancy is per COVERED cell, not per item — a `2×4` series blocks eight
- * cells, and a `1×1` dropped on any of them collides.
+ * Occupancy is per COVERED cell, not per item — a Bo3 blocks three cells, and a
+ * one-column node dropped on any of them collides.
  *
- * `bottomRow` (-1 when empty) is what bounds every outward search: the row band
- * below it is free by construction, so a free rect always exists.
+ * `maxRow` (-1 when empty) is what bounds every outward search: the row band
+ * below it is free by construction, so a free rect always exists. Rule 5 —
+ * deleting multi-row stamping does NOT mean deleting this.
  */
-type Occupancy = { cells: Set<string>; bottomRow: number };
+type Occupancy = { cells: Set<string>; maxRow: number };
 
-const emptyOccupancy = (): Occupancy => ({ cells: new Set<string>(), bottomRow: -1 });
+const emptyOccupancy = (): Occupancy => ({ cells: new Set<string>(), maxRow: -1 });
 
 const occupy = (occupancy: Occupancy, cell: GridCell, footprint: GridFootprint) => {
-    for (const covered of rectCells(cell, footprint)) {
+    for (const covered of rowCells(cell, footprint)) {
         occupancy.cells.add(cellKey(covered));
     }
-    occupancy.bottomRow = Math.max(
-        occupancy.bottomRow,
-        cell.row + spanOf(footprint).rows - 1
-    );
+    occupancy.maxRow = Math.max(occupancy.maxRow, cell.row);
 };
 
 const isFree = (
@@ -185,7 +190,7 @@ const isFree = (
     footprint: GridFootprint
 ): boolean => {
     if (cell.row < 0 || cell.col < 0) return false;
-    return rectCells(cell, footprint).every((c) => !occupancy.cells.has(cellKey(c)));
+    return rowCells(cell, footprint).every((c) => !occupancy.cells.has(cellKey(c)));
 };
 
 const occupancyOf = (items: GridItem[]): Occupancy => {
@@ -249,7 +254,7 @@ const nearestFreeRectIn = (
     const maxCol = lastStartCol(cols, footprint);
     // The row band below every occupied cell is free by construction, so a
     // candidate always exists at or above this limit.
-    const rowLimit = Math.max(occupancy.bottomRow + 1, from.row);
+    const rowLimit = Math.max(occupancy.maxRow + 1, from.row);
     let best: GridCell = { row: rowLimit, col: 0 };
     let bestScore = Infinity;
     for (let row = 0; row <= rowLimit; row++) {
@@ -292,8 +297,7 @@ const placementAt = (
     return { id: item.id, kind: item.kind, positionX: position.x, positionY: position.y };
 };
 
-const isUnit = (footprint: GridFootprint): boolean =>
-    spanOf(footprint).rows === 1 && spanOf(footprint).cols === 1;
+const isUnit = (footprint: GridFootprint): boolean => spanOf(footprint).cols === 1;
 
 /**
  * Where a drop lands, and what (if anything) it displaces.
@@ -334,9 +338,9 @@ export const resolveGridDrop = (args: {
         dragged.footprint
     );
 
-    const covered = new Set(rectCells(target, dragged.footprint).map(cellKey));
+    const covered = new Set(rowCells(target, dragged.footprint).map(cellKey));
     const collisions = others.filter((i) =>
-        rectCells(i.cell, i.footprint).some((c) => covered.has(cellKey(c)))
+        rowCells(i.cell, i.footprint).some((c) => covered.has(cellKey(c)))
     );
     if (collisions.length === 0) return [placementAt(dragged, target, layout)];
 
@@ -463,19 +467,20 @@ export const reflowAfterGrowth = (args: {
 };
 
 /**
- * Painted size of a footprint rectangle, in px — `n` cells with the gaps
- * INSIDE the span, the same arithmetic `spanFor` inverts.
+ * Painted WIDTH of a footprint, in px — `n` cells with the gaps INSIDE the
+ * span, the same arithmetic `spanFor` inverts.
  *
- * `cellToPosition` gives the rectangle's top-left; together they are what the
- * drop overlay draws, which is why this is `1×1` = one card and not
- * `gridDimensions` (that one adds the container's header and padding).
+ * There is deliberately no height half any more: a row's height comes from
+ * `gridRows.rowsOf` and depends on who ELSE is in the row, so a function
+ * returning `rows * cardHeight` could only ever hand the drop highlight a
+ * rectangle of the wrong size.
  */
-export const footprintPixelSize = (footprint: GridFootprint, layout: CardLayout) => {
-    const { rows, cols } = spanOf(footprint);
-    return {
-        width: cols * cardWidth(layout) + (cols - 1) * GRID_CELL_GAP,
-        height: rows * cardHeight(layout) + (rows - 1) * GRID_CELL_GAP
-    };
+export const footprintPixelWidth = (
+    footprint: GridFootprint,
+    layout: CardLayout
+): number => {
+    const { cols } = spanOf(footprint);
+    return cols * cardWidth(layout) + (cols - 1) * GRID_CELL_GAP;
 };
 
 export const gridDimensions = (rowCount: number, cols: number, layout: CardLayout) => ({
@@ -601,9 +606,12 @@ export const contentBoundsOf = (
 };
 
 /**
- * Rows the grid spans once `placements` are applied to `items` — counting the
- * BOTTOM row of each footprint, so a `2×4` series in row 0 makes the grid two
- * rows tall.
+ * Rows the grid spans once `placements` are applied to `items`.
+ *
+ * With one-row stamps the old `bottom()` helper collapses to `cell.row`, so the
+ * footprint map is only still here to tell a placement for an EXISTING item
+ * apart from one for a node entering from outside. Task 5 deletes this outright
+ * when `gridRows.gridContentHeight` takes over container sizing.
  */
 export const rowCountAfter = (
     placements: GridPlacement[],
@@ -611,7 +619,7 @@ export const rowCountAfter = (
     layout: CardLayout,
     cols: number
 ): number => {
-    const footprints = new Map(items.map((i) => [i.id, i.footprint]));
+    const known = new Set(items.map((i) => i.id));
     const moved = new Map(
         placements.map((p) => [
             p.id,
@@ -619,16 +627,11 @@ export const rowCountAfter = (
         ])
     );
     let maxRow = 0;
-    const bottom = (cell: GridCell, footprint: GridFootprint) =>
-        cell.row + spanOf(footprint).rows - 1;
     for (const item of items) {
-        maxRow = Math.max(
-            maxRow,
-            bottom(moved.get(item.id) ?? item.cell, item.footprint)
-        );
+        maxRow = Math.max(maxRow, (moved.get(item.id) ?? item.cell).row);
     }
     for (const placement of placements) {
-        if (footprints.has(placement.id)) continue;
+        if (known.has(placement.id)) continue;
         const cell = moved.get(placement.id);
         if (cell) maxRow = Math.max(maxRow, cell.row);
     }

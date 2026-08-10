@@ -155,17 +155,17 @@ describe("seriesGrowthReflow", () => {
         ).toBeNull();
     });
 
-    // The parked vertical half, pinned so §6.0a landing is a visible change
-    // here rather than a silent one.
-    it("still covers its second row, which is chrome (§6.0a, parked)", () => {
+    // §6.0a LANDED. A series used to stamp a second row of pure chrome, so a
+    // Card directly beneath one was displaced by a growth that never reached
+    // it. Rows auto-size now, the series claims only its own row, and the Card
+    // below is left alone. This assertion is the inverse of the one it
+    // replaces, deliberately — it was pinned to make the change visible.
+    it("no longer covers the row beneath it — that was chrome (§6.0a rule 1)", () => {
         const tree = treeWith({
             games: 3,
             cards: [{ id: "c", row: 1, col: 0 }]
         });
-        expect(
-            seriesGrowthReflow({ tree, seriesId: "s", layout: LAYOUT })
-                ?.placements.map((p) => p.id)
-        ).toEqual(["c"]);
+        expect(seriesGrowthReflow({ tree, seriesId: "s", layout: LAYOUT })).toBeNull();
     });
 
     // The whole point of the slice: at Bo3 the Card at col 3 is clear, and the

@@ -209,15 +209,13 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
     const hintCells = createMemo<GridCell[]>(() => {
         if (!isGrid()) return [];
         const layout = props.cardLayout();
-        // The BOTTOM row of each footprint: a 2-row child in row 0 makes the
-        // grid two rows tall, and hinting only its top row would offer a drop
-        // target the child already covers.
+        // §6.0a rule 1: nothing spans rows any more, so a child's bottom row
+        // IS its cell row. Task 6 replaces this whole memo with per-row bands
+        // from `gridRows.hintRowOffsets`, which is what makes a tall row's hint
+        // cell paint at the row's real height.
         let maxRow = 0;
         for (const item of props.gridItems) {
-            maxRow = Math.max(
-                maxRow,
-                item.cell.row + Math.max(1, item.footprint.rows) - 1
-            );
+            maxRow = Math.max(maxRow, item.cell.row);
         }
         const cellH = cardHeight(layout) + GRID_CELL_GAP;
         const availH =

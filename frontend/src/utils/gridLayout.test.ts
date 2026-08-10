@@ -8,7 +8,7 @@ import {
     positionToCell,
     firstEmptyRect,
     nearestFreeRect,
-    rectCells,
+    rowCells,
     resolveGridDrop,
     reflowAfterGrowth,
     arrangeGrid,
@@ -25,11 +25,12 @@ import {
     resolveContainerDims,
     resolveGridDims,
     contentBoundsOf,
-    footprintPixelSize,
+    footprintPixelWidth,
     MIN_GROUP_WIDTH,
     MIN_GROUP_HEIGHT,
     DEFAULT_GROUP_WIDTH,
     DEFAULT_GROUP_HEIGHT,
+    type GridCell,
     type GridFootprint,
     type GridItem
 } from "./gridLayout";
@@ -90,9 +91,10 @@ const cellOf = (
     cols: number
 ) => positionToCell(placement.positionX, placement.positionY, layout, cols);
 
-// A Bo3 series and a Bo5 series, as canvasTree.footprintOf derives them.
-const BO3: GridFootprint = { rows: 2, cols: 4 };
-const BO5: GridFootprint = { rows: 2, cols: 6 };
+// Multi-column footprints, standing in for a wide child such as a series.
+// COLUMNS ONLY since §6.0a rule 1: nothing spans rows, the row grows instead.
+const SPAN4: GridFootprint = { cols: 4 };
+const SPAN6: GridFootprint = { cols: 6 };
 
 describe("cell math", () => {
     it("round-trips cell -> position -> cell for every layout", () => {
@@ -120,16 +122,24 @@ describe("cell math", () => {
     });
 });
 
-describe("rectCells", () => {
-    it("covers every cell of a footprint, not just its top-left", () => {
-        expect(rectCells({ row: 1, col: 2 }, { rows: 2, cols: 3 })).toEqual([
-            { row: 1, col: 2 },
-            { row: 1, col: 3 },
-            { row: 1, col: 4 },
+describe("rowCells", () => {
+    it("covers one row and `cols` columns", () => {
+        expect(rowCells({ row: 2, col: 1 }, { cols: 3 })).toEqual([
+            { row: 2, col: 1 },
             { row: 2, col: 2 },
-            { row: 2, col: 3 },
-            { row: 2, col: 4 }
+            { row: 2, col: 3 }
         ]);
+    });
+
+    it("never covers a second row — the row grows instead", () => {
+        expect(rowCells({ row: 0, col: 0 }, { cols: 5 }).every((c) => c.row === 0)).toBe(
+            true
+        );
+    });
+
+    it("clamps a zero or negative span to one column", () => {
+        expect(rowCells({ row: 0, col: 0 }, { cols: 0 })).toEqual([{ row: 0, col: 0 }]);
+        expect(rowCells({ row: 0, col: 0 }, { cols: -3 })).toEqual([{ row: 0, col: 0 }]);
     });
 });
 
@@ -155,7 +165,7 @@ describe("firstEmptyRect", () => {
     it("skips every cell a wide footprint covers, not just its top-left", () => {
         // A Bo3 at (0,0) blocks cols 0-3 of rows 0-1, so a Card fits at (0,4)
         // and NOT at (0,1) — the bug a top-left-only occupancy set has.
-        const items = [itemInCell("s", 0, 0, "wide", BO3, "group")];
+        const items = [itemInCell("s", 0, 0, "wide", SPAN4, "group")];
         expect(firstEmptyRect(items, CARD_FOOTPRINT, 6)).toEqual({ row: 0, col: 4 });
     });
 
@@ -164,20 +174,20 @@ describe("firstEmptyRect", () => {
         // cannot start at (0,0), and in a 5-column grid the only other legal
         // start on row 0 is (0,1) — cols 1-4, clear of the card.
         const items = [itemInCell("a", 0, 0, "wide")];
-        expect(firstEmptyRect(items, BO3, 5)).toEqual({ row: 0, col: 1 });
+        expect(firstEmptyRect(items, SPAN4, 5)).toEqual({ row: 0, col: 1 });
     });
 
     it("drops to the next row when no start column on this one fits", () => {
         const items = [itemInCell("a", 0, 1, "wide")];
         // Legal starts in a 5-column grid are cols 0 and 1; both cover (0,1).
-        expect(firstEmptyRect(items, BO3, 5)).toEqual({ row: 1, col: 0 });
+        expect(firstEmptyRect(items, SPAN4, 5)).toEqual({ row: 1, col: 0 });
     });
 
     it("terminates on a footprint wider than the grid instead of scanning forever", () => {
         // copyPlacement calls this with the CONFIGURED column count, which can
         // be narrower than a child. Clamping to column 0 overhangs; not
         // clamping never finds a legal column at all.
-        expect(firstEmptyRect([], BO5, 3)).toEqual({ row: 0, col: 0 });
+        expect(firstEmptyRect([], SPAN6, 3)).toEqual({ row: 0, col: 0 });
     });
 });
 
@@ -294,11 +304,11 @@ describe("resolveGridDrop", () => {
         });
     });
 
-    it("refuses to swap a 1x1 with a 2x4: the dragged card takes the nearest free rect", () => {
-        // Decision 7: swap survives only for 1x1 <-> 1x1. Evicting a whole
-        // series because a Card landed on one of its eight cells is the
-        // failure mode this rule exists to prevent.
-        const series = itemInCell("bo3", 0, 0, "wide", BO3, "group");
+    it("refuses to swap a Card with a multi-column node: the Card takes the nearest free rect", () => {
+        // Decision 7: swap survives only for one-column Card <-> Card.
+        // Evicting a whole series because a Card landed on one of its cells is
+        // the failure mode this rule exists to prevent.
+        const series = itemInCell("bo3", 0, 0, "wide", SPAN4, "group");
         const target = cellToPosition({ row: 0, col: 1 }, "wide");
         const placements = resolveGridDrop({
             items: [series],
@@ -312,8 +322,10 @@ describe("resolveGridDrop", () => {
         expect(placements).toHaveLength(1);
         expect(placements[0].id).toBe("dragged");
         // The series is untouched, and the card takes the nearest free cell to
-        // (0,1) — two rows straight down, not three columns across.
-        expect(cellOf(placements[0], "wide", 6)).toEqual({ row: 2, col: 1 });
+        // (0,1) — ONE row straight down, not three columns across. It was two
+        // rows under the retired multi-row stamp; §6.0a rule 1 frees the row
+        // directly beneath a series, because the series no longer claims it.
+        expect(cellOf(placements[0], "wide", 6)).toEqual({ row: 1, col: 1 });
     });
 
     it("relocates a wide dragged node rather than displacing the card it lands on", () => {
@@ -321,7 +333,7 @@ describe("resolveGridDrop", () => {
         const target = cellToPosition({ row: 0, col: 0 }, "wide");
         const placements = resolveGridDrop({
             items: [card],
-            dragged: { id: "bo3", kind: "group", footprint: BO3 },
+            dragged: { id: "bo3", kind: "group", footprint: SPAN4 },
             draggedOrigin: null,
             dropX: target.x,
             dropY: target.y,
@@ -338,7 +350,7 @@ describe("resolveGridDrop", () => {
         const target = cellToPosition({ row: 0, col: 5 }, "wide");
         const placements = resolveGridDrop({
             items: [],
-            dragged: { id: "bo3", kind: "group", footprint: BO3 },
+            dragged: { id: "bo3", kind: "group", footprint: SPAN4 },
             draggedOrigin: null,
             dropX: target.x,
             dropY: target.y,
@@ -356,7 +368,7 @@ describe("resolveGridDrop with a rectangular dragged Group", () => {
         const target = cellToPosition({ row: 2, col: 0 }, "wide");
         const placements = resolveGridDrop({
             items: [itemInCell("card", 0, 0, "wide")],
-            dragged: { id: "bo3", kind: "group", footprint: BO3 },
+            dragged: { id: "bo3", kind: "group", footprint: SPAN4 },
             draggedOrigin: null,
             dropX: target.x,
             dropY: target.y,
@@ -375,7 +387,7 @@ describe("resolveGridDrop with a rectangular dragged Group", () => {
         const target = cellToPosition({ row: 1, col: 3 }, "wide");
         const placements = resolveGridDrop({
             items: [],
-            dragged: { id: "bo3", kind: "group", footprint: BO3 },
+            dragged: { id: "bo3", kind: "group", footprint: SPAN4 },
             draggedOrigin: null,
             dropX: target.x,
             dropY: target.y,
@@ -391,7 +403,7 @@ describe("resolveGridDrop with a rectangular dragged Group", () => {
         const target = cellToPosition({ row: 0, col: 0 }, "wide");
         const placements = resolveGridDrop({
             items: [card],
-            dragged: { id: "bo3", kind: "group", footprint: BO3 },
+            dragged: { id: "bo3", kind: "group", footprint: SPAN4 },
             draggedOrigin: null,
             dropX: target.x,
             dropY: target.y,
@@ -409,7 +421,7 @@ describe("resolveGridDrop with a rectangular dragged Group", () => {
         const target = cellToPosition({ row: 0, col: 2 }, "wide");
         const placements = resolveGridDrop({
             items: [],
-            dragged: { id: "bo5", kind: "group", footprint: BO5 },
+            dragged: { id: "bo5", kind: "group", footprint: SPAN6 },
             draggedOrigin: null,
             dropX: target.x,
             dropY: target.y,
@@ -420,11 +432,11 @@ describe("resolveGridDrop with a rectangular dragged Group", () => {
     });
 
     it("does not evict a series when a rectangle lands on one", () => {
-        const series = itemInCell("bo3", 0, 0, "wide", BO3, "group");
+        const series = itemInCell("bo3", 0, 0, "wide", SPAN4, "group");
         const target = cellToPosition({ row: 0, col: 0 }, "wide");
         const placements = resolveGridDrop({
             items: [series],
-            dragged: { id: "bo5", kind: "group", footprint: BO5 },
+            dragged: { id: "bo5", kind: "group", footprint: SPAN6 },
             draggedOrigin: null,
             dropX: target.x,
             dropY: target.y,
@@ -432,8 +444,9 @@ describe("resolveGridDrop with a rectangular dragged Group", () => {
             cols: 6
         });
         expect(placements.map((p) => p.id)).toEqual(["bo5"]);
-        // Below the series' two rows, which is the only free band.
-        expect(cellOf(placements[0], "wide", 6).row).toBe(2);
+        // Directly below the series, which is the only free band — the series
+        // occupies exactly one row (§6.0a rule 1), not two.
+        expect(cellOf(placements[0], "wide", 6).row).toBe(1);
     });
 });
 
@@ -551,7 +564,7 @@ describe("arrangeGrid", () => {
 
     it("packs rectangles without overlap, keeping the series atomic", () => {
         const items = [
-            itemInCell("bo3", 0, 0, "wide", BO3, "group"),
+            itemInCell("bo3", 0, 0, "wide", SPAN4, "group"),
             itemInCell("a", 0, 1, "wide"),
             itemInCell("b", 0, 2, "wide")
         ];
@@ -560,7 +573,7 @@ describe("arrangeGrid", () => {
         expect(cells.get("bo3")).toEqual({ row: 0, col: 0 });
         // Both cards are pushed clear of the series' 2x4 block.
         const covered = new Set(
-            rectCells({ row: 0, col: 0 }, BO3).map((c) => `${c.row}:${c.col}`)
+            rowCells({ row: 0, col: 0 }, SPAN4).map((c: GridCell) => `${c.row}:${c.col}`)
         );
         for (const id of ["a", "b"]) {
             const cell = cells.get(id);
@@ -578,7 +591,7 @@ describe("reflowAfterGrowth", () => {
         // The series already carries its Bo5 footprint; the card that was at
         // (0,4) is now inside it.
         const items = [
-            itemInCell("series", 0, 0, "wide", BO5, "group"),
+            itemInCell("series", 0, 0, "wide", SPAN6, "group"),
             itemInCell("card", 0, 4, "wide")
         ];
         const placements = reflowAfterGrowth({
@@ -591,16 +604,17 @@ describe("reflowAfterGrowth", () => {
         expect(placements.map((p) => p.id)).toEqual(["card"]);
         const cell = cellOf(placements[0], "wide", 6);
         const covered = new Set(
-            rectCells({ row: 0, col: 0 }, BO5).map((c) => `${c.row}:${c.col}`)
+            rowCells({ row: 0, col: 0 }, SPAN6).map((c: GridCell) => `${c.row}:${c.col}`)
         );
         expect(covered.has(`${cell.row}:${cell.col}`)).toBe(false);
-        // Nearest free rect from (0,4) is straight down, out of the series.
-        expect(cell).toEqual({ row: 2, col: 4 });
+        // Nearest free rect from (0,4) is straight down, out of the series —
+        // one row, not two, now that a series claims only its own row.
+        expect(cell).toEqual({ row: 1, col: 4 });
     });
 
     it("grows a resized nested Group right/down rather than relocating it", () => {
         const items = [
-            itemInCell("child", 1, 1, "wide", { rows: 2, cols: 2 }, "group"),
+            itemInCell("child", 1, 1, "wide", { cols: 2 }, "group"),
             itemInCell("a", 1, 2, "wide"),
             itemInCell("b", 3, 0, "wide")
         ];
@@ -662,28 +676,27 @@ describe("toPositionUpdates", () => {
     });
 });
 
-describe("footprintPixelSize", () => {
-    it("is exactly one card for a unit footprint, in every layout", () => {
+describe("footprintPixelWidth", () => {
+    it("is exactly one card wide for a unit footprint, in every layout", () => {
         for (const layout of LAYOUTS) {
-            expect(footprintPixelSize(CARD_FOOTPRINT, layout)).toEqual({
-                width: cardWidth(layout),
-                height: cardHeight(layout)
-            });
+            expect(footprintPixelWidth(CARD_FOOTPRINT, layout)).toBe(cardWidth(layout));
         }
     });
 
     it("puts the gaps INSIDE the span, inverting spanFor", () => {
-        const size = footprintPixelSize(BO3, "wide");
-        expect(size.width).toBe(4 * cardWidth("wide") + 3 * GRID_CELL_GAP);
-        expect(size.height).toBe(2 * cardHeight("wide") + 1 * GRID_CELL_GAP);
+        expect(footprintPixelWidth(SPAN4, "wide")).toBe(
+            4 * cardWidth("wide") + 3 * GRID_CELL_GAP
+        );
     });
 
     it("clamps a degenerate footprint to one cell", () => {
-        expect(footprintPixelSize({ rows: 0, cols: 0 }, "wide")).toEqual({
-            width: cardWidth("wide"),
-            height: cardHeight("wide")
-        });
+        expect(footprintPixelWidth({ cols: 0 }, "wide")).toBe(cardWidth("wide"));
     });
+
+    // There is deliberately no height half. A row's height is a property of
+    // its MEMBERSHIP (`gridRows.rowsOf`), not of any one footprint, so a
+    // `rows * cardHeight` answer could only ever be wrong for the drop
+    // highlight that consumes it.
 });
 
 describe("gridDimensions", () => {
@@ -712,9 +725,14 @@ describe("rowCountAfter", () => {
         expect(rowCountAfter(placements, [settled, moving], "wide", 3)).toBe(3);
     });
 
-    it("counts the bottom row of a footprint, not its top", () => {
-        const series = itemInCell("bo3", 1, 0, "wide", BO3, "group");
-        expect(rowCountAfter([], [series], "wide", 6)).toBe(3);
+    // §6.0a rule 1 retired the multi-row stamp, so a footprint's bottom row IS
+    // its top row and this collapses to "the deepest occupied row, plus one".
+    // Task 5 deletes the function outright when gridContentHeight takes over.
+    it("counts the deepest occupied row, which no footprint extends past", () => {
+        const series = itemInCell("bo3", 1, 0, "wide", SPAN4, "group");
+        expect(rowCountAfter([], [series], "wide", 6)).toBe(2);
+        const card = itemInCell("c", 1, 0, "wide");
+        expect(rowCountAfter([], [card], "wide", 6)).toBe(2);
     });
 });
 
@@ -769,7 +787,7 @@ describe("column growth", () => {
     it("effectiveGridCols widens to fit the widest child, with no extra growth column", () => {
         // A Bo5 is 6 columns wide. The +1 is owed to the CONFIGURED term only:
         // a six-wide child needs six columns, not seven.
-        expect(effectiveGridCols(gridGroup(3, null), "wide", BO5.cols)).toBe(6);
+        expect(effectiveGridCols(gridGroup(3, null), "wide", SPAN6.cols)).toBe(6);
     });
 
     it("effectiveGridCols keeps the growth column when no child dominates", () => {
@@ -1064,7 +1082,7 @@ describe("container sizing", () => {
                 effectiveGridCols(
                     container(metadata, grown.width, grown.height),
                     layout,
-                    BO5.cols
+                    SPAN6.cols
                 )
             ).toBe(6);
 

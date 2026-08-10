@@ -376,32 +376,24 @@ export const spanFor = (size: number, cell: number, gap: number): number => {
 };
 
 /**
- * The cell rectangle a node occupies inside a grid Group (design §6).
+ * The COLUMN span a node occupies inside a grid Group (design §6, §6.0a rule 1).
  *
- * One rule for all three kinds, no series special case. A Card is 1×1 because a
- * cell IS a card.
+ * One rule for all three kinds, no series special case. A Card is 1 because a
+ * cell IS a card. Since 5a-6 a Bo-N series is exactly N columns:
+ * `SERIES_PADDING_X` is 0 and `SERIES_CARD_GAP` equals `GRID_CELL_GAP`, so its
+ * games land on the grid's own column rhythm.
  *
- * Since 5a-6 a Bo-N series is exactly N columns: `SERIES_PADDING_X` is 0 and
- * `SERIES_CARD_GAP` equals `GRID_CELL_GAP`, so its games land on the grid's own
- * column rhythm. It is still **2 rows** — its height is
- * `SERIES_HEADER_HEIGHT + 2·SERIES_PADDING_Y + cardHeight` = `96 + cardHeight`,
- * and unlike the side padding those 96px cannot go to zero: 56 of them are a
- * header that has to exist. Making a series one row needs rows that auto-size to
- * their tallest child — design §6.0a, parked.
- *
- * So a Bo3 is 2×3 and a Bo5 is 2×5, in every card layout.
+ * There is no row axis. §6.0a made rows auto-size to their tallest member, so a
+ * series is one row tall however much chrome it carries — the row grows instead.
+ * Its HEIGHT still matters, but to `gridRows.rowsOf` via `gridItemsOf`, not here.
  */
 export const footprintOf = (
     tree: CanvasTree,
     node: TreeNode,
     layout: CardLayout
-): GridFootprint => {
-    const size = nodeSize(tree, node, layout);
-    return {
-        cols: spanFor(size.width, cardWidth(layout), GRID_CELL_GAP),
-        rows: spanFor(size.height, cardHeight(layout), GRID_CELL_GAP)
-    };
-};
+): GridFootprint => ({
+    cols: spanFor(nodeSize(tree, node, layout).width, cardWidth(layout), GRID_CELL_GAP)
+});
 
 /**
  * Widest child footprint, in columns — the "must fit" floor for a grid Group's

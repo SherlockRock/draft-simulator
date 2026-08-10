@@ -4,10 +4,11 @@ import type { CanvasGroup } from "../utils/schemas";
 import type { CardLayout } from "../utils/canvasCardLayout";
 import {
     cellToPosition,
-    footprintPixelSize,
+    footprintPixelWidth,
     type GridCell,
     type GridFootprint
 } from "../utils/gridLayout";
+import { cardHeight } from "../utils/helpers";
 
 /** A landing (or displaced) rectangle: a top-left cell plus how far it spans. */
 export type GridDropRect = { cell: GridCell; footprint: GridFootprint };
@@ -63,7 +64,13 @@ export const GridDropHighlight: Component<GridDropHighlightProps> = (props) => {
                 {(entry) => {
                     const layout = props.cardLayout();
                     const origin = cellToPosition(entry.rect.cell, layout);
-                    const size = footprintPixelSize(entry.rect.footprint, layout);
+                    const width = footprintPixelWidth(entry.rect.footprint, layout);
+                    // TODO(6.0a Task 6): the HEIGHT must come from the landing
+                    // row's metrics, not from one card — a row holding a series
+                    // is much taller, and this rectangle currently under-draws
+                    // it. Wrong but honest, and it compiles; Task 6 gives every
+                    // rect its own `rowMetrics`.
+                    const height = cardHeight(layout);
                     return (
                         <div
                             class="absolute rounded-lg border-2"
@@ -78,8 +85,8 @@ export const GridDropHighlight: Component<GridDropHighlightProps> = (props) => {
                             style={{
                                 left: `${props.group.positionX + origin.x}px`,
                                 top: `${props.group.positionY + origin.y}px`,
-                                width: `${size.width}px`,
-                                height: `${size.height}px`
+                                width: `${width}px`,
+                                height: `${height}px`
                             }}
                         >
                             <Show when={entry.kind === "swap-target"}>

@@ -422,10 +422,7 @@ describe("spanFor", () => {
 describe("footprints", () => {
     it("makes a Card exactly one cell", () => {
         const t = tree([group("g1")], [card("c1", { group_id: "g1" })]);
-        expect(footprintOf(t, childrenOf(t, "g1")[0], LAYOUT)).toEqual({
-            rows: 1,
-            cols: 1
-        });
+        expect(footprintOf(t, childrenOf(t, "g1")[0], LAYOUT)).toEqual({ cols: 1 });
     });
 
     it("sizes a series from its game count, not its stored size", () => {
@@ -475,12 +472,13 @@ describe("footprints", () => {
             )
         );
         const node = childrenOf(t, "root")[0];
-        const { cols, rows } = footprintOf(t, node, LAYOUT);
+        const { cols } = footprintOf(t, node, LAYOUT);
         const size = nodeSize(t, node, LAYOUT);
         const spanned = (n: number, cell: number) => n * cell + (n - 1) * GRID_CELL_GAP;
         expect(spanned(cols, cardWidth(LAYOUT))).toBeGreaterThanOrEqual(size.width);
         expect(spanned(cols - 1, cardWidth(LAYOUT))).toBeLessThan(size.width);
-        expect(spanned(rows, cardHeight(LAYOUT))).toBeGreaterThanOrEqual(size.height);
+        // No height half: §6.0a rule 1 removed the row axis, and a node's
+        // height is contained by its ROW growing rather than by its stamp.
     });
 
     it("sizes a nested custom group from its stored size, with the shared fallback", () => {
@@ -492,7 +490,7 @@ describe("footprints", () => {
         const [sized, unsized] = childrenOf(t, "root");
         expect(nodeSize(t, sized, LAYOUT)).toEqual({ width: 900, height: 700 });
         expect(nodeSize(t, unsized, LAYOUT)).toEqual({ width: 400, height: 200 });
-        expect(footprintOf(t, unsized, LAYOUT)).toEqual({ rows: 1, cols: 1 });
+        expect(footprintOf(t, unsized, LAYOUT)).toEqual({ cols: 1 });
     });
 
     it("reports the widest child span as the grid's must-fit floor", () => {
