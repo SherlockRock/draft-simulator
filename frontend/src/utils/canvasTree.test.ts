@@ -633,6 +633,106 @@ describe("gridItemsOf", () => {
     it("returns nothing for a group that is not in the tree", () => {
         expect(gridItemsOf(tree([group("root")]), "gone", LAYOUT, 3)).toEqual([]);
     });
+
+    it("carries each item's inset and painted height for the row model", () => {
+        const t = tree(
+            [group("root"), group("s1", { type: "series", parent: "root" })],
+            [
+                card("c1", { group_id: "root" }),
+                ...Array.from({ length: 3 }, (_, i) =>
+                    card(`g${i}`, { group_id: "s1", seriesIndex: i + 1 })
+                )
+            ]
+        );
+        const items = gridItemsOf(t, "root", LAYOUT, 6);
+        const series = items.find((i) => i.id === "s1");
+        const loose = items.find((i) => i.id === "c1");
+        expect(loose?.inset).toBe(GROUP_BORDER_WIDTH);
+        expect(loose?.height).toBe(cardHeight(LAYOUT));
+        expect(series?.inset).toBe(
+            GROUP_BORDER_WIDTH +
+                SERIES_HEADER_HEIGHT +
+                SERIES_PADDING_Y +
+                SERIES_GAME_CONTROLS_HEIGHT
+        );
+        expect(series?.height).toBe(getSeriesGroupDimensions(3, LAYOUT).height);
+    });
+
+    /**
+     * §6.0a's one genuinely NEW class of mid-gesture churn. A row index is a
+     * COLLECTIVE property now, so a node whose y is being rewritten every
+     * mousemove would form a bucket of its own — and if it hovers above the
+     * first real row, every OTHER member's row index shifts by one, while
+     * `rowsOfItems(others)` still indexes from 0. The two memberships disagree,
+     * `resolveGridDrop` finds no collision where there is one, and nothing
+     * swaps or relocates. The `canvasObjectMoved` relay reproduces it on every
+     * observing client, which is why `Canvas.tsx` tracks remote drags too.
+     */
+    describe("in-flight members", () => {
+        const settledGrid = () => {
+            const top = GRID_HEADER_HEIGHT + GRID_PADDING;
+            const step = cardHeight(LAYOUT) + GRID_CELL_GAP;
+            return tree(
+                [group("root")],
+                [
+                    card("a", { group_id: "root", x: GRID_PADDING, y: top }),
+                    card("b", { group_id: "root", x: GRID_PADDING, y: top + step }),
+                    card("drag", { group_id: "root", x: GRID_PADDING, y: top })
+                ]
+            );
+        };
+        const t0 = settledGrid();
+
+        it("does not let a node at an arbitrary mid-gesture y renumber anyone else", () => {
+            const t = settledGrid();
+            const before = gridItemsOf(t, "root", LAYOUT, 3, new Set(["drag"]));
+            // Mousemove has ALREADY overwritten the store — "the last committed
+            // position" is fiction here. Put it well above the first row.
+            const moved = tree(
+                [...t.groups],
+                [
+                    ...t.drafts.filter((d) => d.draft_id !== "drag"),
+                    card("drag", { group_id: "root", x: GRID_PADDING, y: -4000 })
+                ]
+            );
+            const after = gridItemsOf(moved, "root", LAYOUT, 3, new Set(["drag"]));
+            const rowsOfOthers = (items: ReturnType<typeof gridItemsOf>) =>
+                items
+                    .filter((i) => i.id !== "drag")
+                    .map((i) => ({ id: i.id, row: i.cell.row }));
+            expect(rowsOfOthers(after)).toEqual(rowsOfOthers(before));
+            expect(rowsOfOthers(after)).toEqual([
+                { id: "a", row: 0 },
+                { id: "b", row: 1 }
+            ]);
+        });
+
+        it("attaches the in-flight node to the row its CURRENT y targets", () => {
+            const top = GRID_HEADER_HEIGHT + GRID_PADDING;
+            const step = cardHeight(LAYOUT) + GRID_CELL_GAP;
+            const t = tree(
+                [...t0.groups],
+                [
+                    ...t0.drafts.filter((d) => d.draft_id !== "drag"),
+                    card("drag", { group_id: "root", x: GRID_PADDING, y: top + step })
+                ]
+            );
+            const items = gridItemsOf(t, "root", LAYOUT, 3, new Set(["drag"]));
+            expect(items.find((i) => i.id === "drag")?.cell.row).toBe(1);
+        });
+
+        it("renumbers everyone WITHOUT the exclusion — the bug this prevents", () => {
+            const moved = tree(
+                [...t0.groups],
+                [
+                    ...t0.drafts.filter((d) => d.draft_id !== "drag"),
+                    card("drag", { group_id: "root", x: GRID_PADDING, y: -4000 })
+                ]
+            );
+            const unguarded = gridItemsOf(moved, "root", LAYOUT, 3);
+            expect(unguarded.find((i) => i.id === "a")?.cell.row).not.toBe(0);
+        });
+    });
 });
 
 // The assertion this whole slice exists for: a series must measure a whole

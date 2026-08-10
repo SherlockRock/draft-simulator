@@ -30,11 +30,23 @@ import {
     MIN_GROUP_HEIGHT,
     DEFAULT_GROUP_WIDTH,
     DEFAULT_GROUP_HEIGHT,
+    materializeGrid,
+    rowsOfItems,
+    type GridAssignment,
     type GridCell,
     type GridFootprint,
     type GridItem
 } from "./gridLayout";
-import { cardWidth, cardHeight } from "./helpers";
+import { memberY, rowsOfIndexed } from "./gridRows";
+import {
+    GROUP_BORDER_WIDTH,
+    SERIES_GAME_CONTROLS_HEIGHT,
+    SERIES_HEADER_HEIGHT,
+    SERIES_PADDING_Y,
+    cardHeight,
+    cardWidth,
+    getSeriesGroupDimensions
+} from "./helpers";
 import type { CardLayout } from "./canvasCardLayout";
 import type { CanvasGroup } from "./schemas";
 
@@ -47,6 +59,46 @@ const LAYOUTS: CardLayout[] = [
     "draft-order"
 ];
 
+/**
+ * A fixture's CHROME: what `canvasTree.insetOf` and `nodeSize` would report.
+ * Everything defaults to a Card, so every pre-§6.0a fixture keeps the exact
+ * lattice positions it had — an all-equal-inset row materializes to the uniform
+ * lattice, which is the property entry condition 5 turns on.
+ */
+type Chrome = { inset: number; height: number };
+const CARD_INSET = GROUP_BORDER_WIDTH;
+const cardChrome = (layout: CardLayout): Chrome => ({
+    inset: CARD_INSET,
+    height: cardHeight(layout)
+});
+const SERIES_INSET =
+    GROUP_BORDER_WIDTH +
+    SERIES_HEADER_HEIGHT +
+    SERIES_PADDING_Y +
+    SERIES_GAME_CONTROLS_HEIGHT;
+const seriesChrome = (games: number, layout: CardLayout): Chrome => ({
+    inset: SERIES_INSET,
+    height: getSeriesGroupDimensions(games, layout).height
+});
+
+/**
+ * Container-relative position of `cell` for a member with `chrome`, derived
+ * through the SAME row model the engine uses — so a fixture can never encode a
+ * position the model would not have produced. For a lone member of a row this
+ * is exactly `cellToPosition`, which is why the all-Card fixtures below are
+ * unchanged.
+ */
+const positionOfCell = (cell: GridCell, chrome: Chrome, layout: CardLayout) => {
+    const rows = rowsOfIndexed(
+        [{ id: "x", index: cell.row, inset: chrome.inset, height: chrome.height }],
+        layout
+    );
+    return {
+        x: cellToPosition(cell, layout).x,
+        y: memberY(rows[0], chrome.inset)
+    };
+};
+
 // Minimal GridItem factory. `id` is the node's PLACEMENT identity — a Card's
 // draft_id, a Group's id — which is what canvasTree.gridItemsOf emits.
 function itemAt(
@@ -56,14 +108,17 @@ function itemAt(
     layout: CardLayout,
     cols: number,
     footprint: GridFootprint = CARD_FOOTPRINT,
-    kind: GridItem["kind"] = "card"
+    kind: GridItem["kind"] = "card",
+    chrome: Chrome = cardChrome(layout)
 ): GridItem {
     return {
         id,
         kind,
         footprint,
         position: { x, y },
-        cell: positionToCell(x, y, layout, cols)
+        cell: positionToCell(x, y, layout, cols),
+        inset: chrome.inset,
+        height: chrome.height
     };
 }
 
@@ -73,23 +128,89 @@ function itemInCell(
     col: number,
     layout: CardLayout,
     footprint: GridFootprint = CARD_FOOTPRINT,
-    kind: GridItem["kind"] = "card"
+    kind: GridItem["kind"] = "card",
+    chrome: Chrome = cardChrome(layout)
 ): GridItem {
-    const pos = cellToPosition({ row, col }, layout);
     return {
         id,
         kind,
         footprint,
-        position: { x: pos.x, y: pos.y },
-        cell: { row, col }
+        position: positionOfCell({ row, col }, chrome, layout),
+        cell: { row, col },
+        inset: chrome.inset,
+        height: chrome.height
     };
 }
 
-const cellOf = (
-    placement: { positionX: number; positionY: number },
-    layout: CardLayout,
-    cols: number
-) => positionToCell(placement.positionX, placement.positionY, layout, cols);
+/**
+ * A SET of items materialized together, so members sharing a row get the `y`
+ * rule 3 actually gives them. `itemInCell` derives each member's position in
+ * isolation, which is right for a uniform row and WRONG for a mixed one — two
+ * members built that way both land at the row's top, key to two different row
+ * identities, and silently split into two rows. Use this whenever a fixture
+ * puts different chrome in the same row.
+ */
+const itemsInCells = (
+    specs: {
+        id: string;
+        cell: GridCell;
+        footprint?: GridFootprint;
+        kind?: GridItem["kind"];
+        chrome?: Chrome;
+    }[],
+    layout: CardLayout
+): GridItem[] => {
+    const chromeOf = (spec: (typeof specs)[number]) => spec.chrome ?? cardChrome(layout);
+    const rows = rowsOfIndexed(
+        specs.map((spec) => ({
+            id: spec.id,
+            index: spec.cell.row,
+            inset: chromeOf(spec).inset,
+            height: chromeOf(spec).height
+        })),
+        layout
+    );
+    return specs.map((spec) => {
+        const chrome = chromeOf(spec);
+        const row = rows.find((r) => r.ids.includes(spec.id));
+        return {
+            id: spec.id,
+            kind: spec.kind ?? "card",
+            footprint: spec.footprint ?? CARD_FOOTPRINT,
+            position: {
+                x: cellToPosition(spec.cell, layout).x,
+                y: row ? memberY(row, chrome.inset) : 0
+            },
+            cell: spec.cell,
+            inset: chrome.inset,
+            height: chrome.height
+        };
+    });
+};
+
+/** Every item's own cell, as the engine's assignments report them. */
+const assignmentsOf = (items: GridItem[]): GridAssignment[] =>
+    items.map((i) => ({ id: i.id, kind: i.kind, cell: i.cell }));
+
+/** Targeting rows for a `resolveGridDrop` call: the membership minus `dragged`. */
+const targetingRows = (items: GridItem[], draggedId: string, layout: CardLayout) =>
+    rowsOfItems(
+        items.filter((i) => i.id !== draggedId),
+        layout
+    );
+
+/**
+ * `resolveGridDrop` with the TARGETING membership filled in — the contract
+ * every call site owes it, in one place. Including the dragged node in `rows`
+ * lets a hovering Bo3 raise its own target row's baseline, shifting the offset,
+ * changing which row the point falls in, frame after frame. The tests below
+ * would not catch that if each one built `rows` by hand.
+ */
+const drop = (args: Omit<Parameters<typeof resolveGridDrop>[0], "rows">) =>
+    resolveGridDrop({
+        ...args,
+        rows: targetingRows(args.items, args.dragged.id, args.layout)
+    });
 
 // Multi-column footprints, standing in for a wide child such as a series.
 // COLUMNS ONLY since §6.0a rule 1: nothing spans rows, the row grows instead.
@@ -226,6 +347,271 @@ describe("nearestFreeRect", () => {
     });
 });
 
+describe("materializeGrid", () => {
+    const layout: CardLayout = "wide";
+    const ch = cardHeight(layout);
+    const SERIES_H = getSeriesGroupDimensions(3, layout).height;
+    /** How much a Card drops when a series joins its row — rule 3, as a number. */
+    const BASELINE_DROP = SERIES_INSET - CARD_INSET;
+    /** How much taller a series row is than a Card row — rule 2, as a number. */
+    const ROW_GROWTH = SERIES_H - ch;
+
+    const gridCard = (id: string, cell: GridCell) =>
+        itemInCell(id, cell.row, cell.col, layout);
+    const gridSeries = (id: string, cell: GridCell, games: number) =>
+        itemInCell(
+            id,
+            cell.row,
+            cell.col,
+            layout,
+            { cols: games },
+            "group",
+            seriesChrome(games, layout)
+        );
+
+    it("returns nothing when no member moved", () => {
+        const items = [
+            gridCard("a", { row: 0, col: 0 }),
+            gridCard("b", { row: 0, col: 1 })
+        ];
+        expect(
+            materializeGrid({ items, assignments: assignmentsOf(items), layout })
+                .placements
+        ).toEqual([]);
+    });
+
+    it("moves ONLY the reassigned member in an all-Card grid", () => {
+        const items = [
+            gridCard("a", { row: 0, col: 0 }),
+            gridCard("b", { row: 0, col: 1 })
+        ];
+        const { placements } = materializeGrid({
+            items,
+            assignments: [
+                { id: "a", kind: "card", cell: { row: 0, col: 0 } },
+                { id: "b", kind: "card", cell: { row: 1, col: 0 } }
+            ],
+            layout
+        });
+        expect(placements.map((p) => p.id)).toEqual(["b"]);
+    });
+
+    // The cascade §6.0a's "three memberships" section describes.
+    it("drops every Card in a row to the baseline when a series joins it", () => {
+        const card = gridCard("c", { row: 0, col: 3 });
+        const series = gridSeries("s", { row: 0, col: 0 }, 3);
+        const { placements } = materializeGrid({
+            items: [card, series],
+            assignments: [
+                { id: "c", kind: "card", cell: { row: 0, col: 3 } },
+                { id: "s", kind: "group", cell: { row: 0, col: 0 } }
+            ],
+            layout
+        });
+        expect(BASELINE_DROP).toBeGreaterThan(0);
+        expect(placements.find((p) => p.id === "c")?.positionY).toBe(
+            card.position.y + BASELINE_DROP
+        );
+        // The series owns the baseline, so it sits flush at the row's top and
+        // does not move at all.
+        expect(placements.find((p) => p.id === "s")).toBeUndefined();
+    });
+
+    it("pushes the rows BELOW a grown row down by the height it gained", () => {
+        const below = gridCard("b", { row: 1, col: 0 });
+        const series = gridSeries("s", { row: 0, col: 0 }, 3);
+        const { placements } = materializeGrid({
+            items: [series, below],
+            assignments: [
+                { id: "s", kind: "group", cell: { row: 0, col: 0 } },
+                { id: "b", kind: "card", cell: { row: 1, col: 0 } }
+            ],
+            layout
+        });
+        expect(ROW_GROWTH).toBeGreaterThan(0);
+        expect(placements.find((p) => p.id === "b")?.positionY).toBe(
+            below.position.y + ROW_GROWTH
+        );
+    });
+
+    it("keeps x on the column lattice, untouched by the row work", () => {
+        const items = [gridCard("a", { row: 0, col: 0 })];
+        const { placements } = materializeGrid({
+            items,
+            assignments: [{ id: "a", kind: "card", cell: { row: 0, col: 2 } }],
+            layout
+        });
+        expect(placements[0].positionX).toBe(
+            GRID_PADDING + 2 * (cardWidth(layout) + GRID_CELL_GAP)
+        );
+    });
+
+    // A pure COLUMN move must not be swallowed by the "did anything change?"
+    // filter — the y is identical on both sides of it.
+    it("emits a placement for a pure column move", () => {
+        const items = [gridCard("a", { row: 0, col: 0 })];
+        const { placements } = materializeGrid({
+            items,
+            assignments: [{ id: "a", kind: "card", cell: { row: 0, col: 1 } }],
+            layout
+        });
+        expect(placements.map((p) => p.id)).toEqual(["a"]);
+        expect(placements[0].positionY).toBe(items[0].position.y);
+    });
+
+    it("leaves an UNASSIGNED member's x alone rather than re-rounding it", () => {
+        // A member nudged off the exact column lattice, and a different member
+        // reassigned. Recomputing x from `cell.col` under whichever `cols` the
+        // call site used would drag this one sideways for no reason.
+        const nudged = { ...gridCard("a", { row: 0, col: 1 }) };
+        nudged.position = { x: nudged.position.x + 7, y: nudged.position.y };
+        const series = gridSeries("s", { row: 0, col: 0 }, 1);
+        const { placements } = materializeGrid({
+            items: [nudged, series],
+            assignments: [{ id: "s", kind: "group", cell: { row: 0, col: 0 } }],
+            layout
+        });
+        expect(placements.find((p) => p.id === "a")?.positionX).toBe(nudged.position.x);
+    });
+
+    it("materializes a member assigned to a growth row past the end", () => {
+        const existing = gridCard("a", { row: 0, col: 0 });
+        const entering = gridCard("new", { row: 1, col: 0 });
+        const { placements } = materializeGrid({
+            items: [existing, entering],
+            assignments: [
+                { id: "a", kind: "card", cell: { row: 0, col: 0 } },
+                { id: "new", kind: "card", cell: { row: 1, col: 0 } }
+            ],
+            layout
+        });
+        // `entering` was already fixtured at row 1, so it does not move; what
+        // this pins is that a row past the end resolves at all.
+        expect(placements).toEqual([]);
+    });
+
+    it("keeps sparse assignments sparse — row 3 of a one-row grid stays row 3", () => {
+        const items = [
+            gridCard("a", { row: 0, col: 0 }),
+            gridCard("b", { row: 0, col: 1 })
+        ];
+        const { rows } = materializeGrid({
+            items,
+            assignments: [
+                { id: "a", kind: "card", cell: { row: 0, col: 0 } },
+                { id: "b", kind: "card", cell: { row: 3, col: 0 } }
+            ],
+            layout
+        });
+        expect(rows.map((r) => r.index)).toEqual([0, 3]);
+    });
+
+    // The contract that stops a caller silently mis-aligning an incoming
+    // nested container by defaulting it to a Card's geometry.
+    it("throws on an assignment with no item, rather than guessing its chrome", () => {
+        expect(() =>
+            materializeGrid({
+                items: [gridCard("a", { row: 0, col: 0 })],
+                assignments: [{ id: "ghost", kind: "card", cell: { row: 0, col: 1 } }],
+                layout
+            })
+        ).toThrow(/no item/);
+    });
+
+    it("returns the EXACT post-drop rows, not something to be re-inferred", () => {
+        const card = gridCard("c", { row: 0, col: 3 });
+        const series = gridSeries("s", { row: 0, col: 0 }, 3);
+        const { rows } = materializeGrid({
+            items: [card, series],
+            assignments: [
+                { id: "c", kind: "card", cell: { row: 0, col: 3 } },
+                { id: "s", kind: "group", cell: { row: 0, col: 0 } }
+            ],
+            layout
+        });
+        expect(rows).toHaveLength(1);
+        expect(rows[0].baseline).toBe(SERIES_INSET);
+        expect(rows[0].height).toBe(SERIES_H);
+    });
+
+    // Round-trip: what materializeGrid WRITES must read back through the
+    // inferential path as the same rows. This is the property that makes
+    // `rematerializeGrid` idempotent and pixel authority coherent.
+    it("round-trips through rowsOfItems: materialized pixels re-derive the same rows", () => {
+        const card = gridCard("c", { row: 0, col: 3 });
+        const series = gridSeries("s", { row: 0, col: 0 }, 3);
+        const below = gridCard("b", { row: 1, col: 0 });
+        const items = [card, series, below];
+        const assignments = assignmentsOf(items);
+        const { placements, rows } = materializeGrid({ items, assignments, layout });
+        const settled = items.map((i) => {
+            const moved = placements.find((p) => p.id === i.id);
+            return moved
+                ? { ...i, position: { x: moved.positionX, y: moved.positionY } }
+                : i;
+        });
+        expect(rowsOfItems(settled, layout)).toEqual(rows);
+        // ...and materializing again writes nothing.
+        expect(
+            materializeGrid({ items: settled, assignments, layout }).placements
+        ).toEqual([]);
+    });
+});
+
+describe("landing metrics vs targeting metrics (§6.0a, three memberships)", () => {
+    const layout: CardLayout = "wide";
+
+    it("targeting EXCLUDES the dragged node, so a hovering Bo3 cannot move its own target row", () => {
+        // Both genuinely in row 0, materialized together — a hovering Bo3 that
+        // is ALREADY counted has raised the row's baseline, which is the state
+        // the targeting membership must not be computed from.
+        const [resident, bo3] = itemsInCells(
+            [
+                { id: "r", cell: { row: 0, col: 0 } },
+                {
+                    id: "s",
+                    cell: { row: 0, col: 1 },
+                    kind: "group",
+                    footprint: { cols: 3 },
+                    chrome: seriesChrome(3, layout)
+                }
+            ],
+            layout
+        );
+        const targeting = rowsOfItems([resident], layout);
+        const withDragged = rowsOfItems([resident, bo3], layout);
+        expect(withDragged).toHaveLength(1);
+        expect(targeting[0].baseline).toBe(resident.inset);
+        expect(withDragged[0].baseline).toBe(bo3.inset);
+        // The row's OFFSET is what `rowAtY` compares against, and including the
+        // dragged node moves it — which is the oscillation this rule prevents.
+        expect(targeting[0].height).not.toBe(withDragged[0].height);
+    });
+
+    it("landing INCLUDES it, so the highlight is drawn where the node will actually be", () => {
+        const resident = itemInCell("r", 0, 3, layout);
+        const bo3 = itemInCell(
+            "s",
+            0,
+            0,
+            layout,
+            { cols: 3 },
+            "group",
+            seriesChrome(3, layout)
+        );
+        const { placements } = materializeGrid({
+            items: [resident, bo3],
+            assignments: [
+                { id: "r", kind: "card", cell: { row: 0, col: 3 } },
+                { id: "s", kind: "group", cell: { row: 0, col: 0 } }
+            ],
+            layout
+        });
+        // The resident Card moves even though it was not dragged.
+        expect(placements.map((p) => p.id)).toContain("r");
+    });
+});
+
 describe("resolveGridDrop", () => {
     const draggedCard = (id: string) => ({
         id,
@@ -236,7 +622,7 @@ describe("resolveGridDrop", () => {
     it("snaps into an empty cell: one placement, no swap", () => {
         const a = itemInCell("a", 0, 0, "wide");
         const target = cellToPosition({ row: 0, col: 1 }, "wide");
-        const placements = resolveGridDrop({
+        const placements = drop({
             items: [a, itemAt("dragged", target.x + 30, target.y - 10, "wide", 3)],
             dragged: draggedCard("dragged"),
             draggedOrigin: null,
@@ -246,12 +632,7 @@ describe("resolveGridDrop", () => {
             cols: 3
         });
         expect(placements).toEqual([
-            {
-                id: "dragged",
-                kind: "card",
-                positionX: target.x,
-                positionY: target.y
-            }
+            { id: "dragged", kind: "card", cell: { row: 0, col: 1 } }
         ]);
     });
 
@@ -260,7 +641,7 @@ describe("resolveGridDrop", () => {
         const target = cellToPosition({ row: 0, col: 0 }, "wide");
         const occupant = itemInCell("occ", 0, 0, "wide");
         const dragged = itemAt("dragged", target.x + 5, target.y + 5, "wide", 3);
-        const placements = resolveGridDrop({
+        const placements = drop({
             items: [occupant, dragged],
             dragged: draggedCard("dragged"),
             draggedOrigin: { x: origin.x, y: origin.y },
@@ -272,22 +653,19 @@ describe("resolveGridDrop", () => {
         expect(placements).toContainEqual({
             id: "dragged",
             kind: "card",
-            positionX: target.x,
-            positionY: target.y
+            cell: { row: 0, col: 0 }
         });
         expect(placements).toContainEqual({
             id: "occ",
             kind: "card",
-            positionX: origin.x,
-            positionY: origin.y
+            cell: { row: 1, col: 0 }
         });
     });
 
     it("swap without origin (card entering from outside): occupant moves to first empty cell", () => {
         const target = cellToPosition({ row: 0, col: 0 }, "wide");
-        const empty = cellToPosition({ row: 0, col: 1 }, "wide");
         const occupant = itemInCell("occ", 0, 0, "wide");
-        const placements = resolveGridDrop({
+        const placements = drop({
             items: [occupant],
             dragged: draggedCard("dragged"),
             draggedOrigin: null,
@@ -299,8 +677,7 @@ describe("resolveGridDrop", () => {
         expect(placements).toContainEqual({
             id: "occ",
             kind: "card",
-            positionX: empty.x,
-            positionY: empty.y
+            cell: { row: 0, col: 1 }
         });
     });
 
@@ -310,7 +687,7 @@ describe("resolveGridDrop", () => {
         // the failure mode this rule exists to prevent.
         const series = itemInCell("bo3", 0, 0, "wide", SPAN4, "group");
         const target = cellToPosition({ row: 0, col: 1 }, "wide");
-        const placements = resolveGridDrop({
+        const placements = drop({
             items: [series],
             dragged: draggedCard("dragged"),
             draggedOrigin: { x: 0, y: 0 },
@@ -325,13 +702,13 @@ describe("resolveGridDrop", () => {
         // (0,1) — ONE row straight down, not three columns across. It was two
         // rows under the retired multi-row stamp; §6.0a rule 1 frees the row
         // directly beneath a series, because the series no longer claims it.
-        expect(cellOf(placements[0], "wide", 6)).toEqual({ row: 1, col: 1 });
+        expect(placements[0].cell).toEqual({ row: 1, col: 1 });
     });
 
     it("relocates a wide dragged node rather than displacing the card it lands on", () => {
         const card = itemInCell("a", 0, 0, "wide");
         const target = cellToPosition({ row: 0, col: 0 }, "wide");
-        const placements = resolveGridDrop({
+        const placements = drop({
             items: [card],
             dragged: { id: "bo3", kind: "group", footprint: SPAN4 },
             draggedOrigin: null,
@@ -343,12 +720,12 @@ describe("resolveGridDrop", () => {
         expect(placements.map((p) => p.id)).toEqual(["bo3"]);
         // A Bo3 needs 4 free columns across 2 rows; (0,1) collides with nothing
         // but overhangs (cols 1-4 of 6 is fine), so it lands there.
-        expect(cellOf(placements[0], "wide", 6)).toEqual({ row: 0, col: 1 });
+        expect(placements[0].cell).toEqual({ row: 0, col: 1 });
     });
 
     it("clamps the target so a wide footprint cannot overhang the last column", () => {
         const target = cellToPosition({ row: 0, col: 5 }, "wide");
-        const placements = resolveGridDrop({
+        const placements = drop({
             items: [],
             dragged: { id: "bo3", kind: "group", footprint: SPAN4 },
             draggedOrigin: null,
@@ -357,7 +734,7 @@ describe("resolveGridDrop", () => {
             layout: "wide",
             cols: 6
         });
-        expect(cellOf(placements[0], "wide", 6)).toEqual({ row: 0, col: 2 });
+        expect(placements[0].cell).toEqual({ row: 0, col: 2 });
     });
 });
 
@@ -366,7 +743,7 @@ describe("resolveGridDrop", () => {
 describe("resolveGridDrop with a rectangular dragged Group", () => {
     it("places a Bo3 at the cell under the drop when the rectangle is free", () => {
         const target = cellToPosition({ row: 2, col: 0 }, "wide");
-        const placements = resolveGridDrop({
+        const placements = drop({
             items: [itemInCell("card", 0, 0, "wide")],
             dragged: { id: "bo3", kind: "group", footprint: SPAN4 },
             draggedOrigin: null,
@@ -376,7 +753,7 @@ describe("resolveGridDrop with a rectangular dragged Group", () => {
             cols: 4
         });
         expect(placements).toEqual([
-            { id: "bo3", kind: "group", positionX: target.x, positionY: target.y }
+            { id: "bo3", kind: "group", cell: { row: 2, col: 0 } }
         ]);
     });
 
@@ -385,7 +762,7 @@ describe("resolveGridDrop with a rectangular dragged Group", () => {
     // has `lastStartCol` 0 and lands in column 0 wherever it is released.
     it("clamps a full-width rectangle to column 0 however far right it is dropped", () => {
         const target = cellToPosition({ row: 1, col: 3 }, "wide");
-        const placements = resolveGridDrop({
+        const placements = drop({
             items: [],
             dragged: { id: "bo3", kind: "group", footprint: SPAN4 },
             draggedOrigin: null,
@@ -394,14 +771,14 @@ describe("resolveGridDrop with a rectangular dragged Group", () => {
             layout: "wide",
             cols: 4
         });
-        expect(cellOf(placements[0], "wide", 4)).toEqual({ row: 1, col: 0 });
+        expect(placements[0].cell).toEqual({ row: 1, col: 0 });
     });
 
     it("relocates the DRAGGED rectangle on a collision and leaves occupants alone", () => {
         // A Card at (0,1) sits inside the Bo3's 2x4 rectangle at (0,0).
         const card = itemInCell("card", 0, 1, "wide");
         const target = cellToPosition({ row: 0, col: 0 }, "wide");
-        const placements = resolveGridDrop({
+        const placements = drop({
             items: [card],
             dragged: { id: "bo3", kind: "group", footprint: SPAN4 },
             draggedOrigin: null,
@@ -412,14 +789,14 @@ describe("resolveGridDrop with a rectangular dragged Group", () => {
         });
         expect(placements).toHaveLength(1);
         expect(placements[0].id).toBe("bo3");
-        expect(cellOf(placements[0], "wide", 4).row).toBeGreaterThan(0);
+        expect(placements[0].cell.row).toBeGreaterThan(0);
     });
 
     it("overhangs from column 0 when the child is wider than the grid", () => {
         // A Bo5 is 6 columns; the grid offers 4. `lastStartCol` clamps to 0
         // rather than scanning forever for a column that fits (step-3 fix).
         const target = cellToPosition({ row: 0, col: 2 }, "wide");
-        const placements = resolveGridDrop({
+        const placements = drop({
             items: [],
             dragged: { id: "bo5", kind: "group", footprint: SPAN6 },
             draggedOrigin: null,
@@ -428,13 +805,13 @@ describe("resolveGridDrop with a rectangular dragged Group", () => {
             layout: "wide",
             cols: 4
         });
-        expect(cellOf(placements[0], "wide", 4)).toEqual({ row: 0, col: 0 });
+        expect(placements[0].cell).toEqual({ row: 0, col: 0 });
     });
 
     it("does not evict a series when a rectangle lands on one", () => {
         const series = itemInCell("bo3", 0, 0, "wide", SPAN4, "group");
         const target = cellToPosition({ row: 0, col: 0 }, "wide");
-        const placements = resolveGridDrop({
+        const placements = drop({
             items: [series],
             dragged: { id: "bo5", kind: "group", footprint: SPAN6 },
             draggedOrigin: null,
@@ -446,7 +823,7 @@ describe("resolveGridDrop with a rectangular dragged Group", () => {
         expect(placements.map((p) => p.id)).toEqual(["bo5"]);
         // Directly below the series, which is the only free band — the series
         // occupies exactly one row (§6.0a rule 1), not two.
-        expect(cellOf(placements[0], "wide", 6).row).toBe(1);
+        expect(placements[0].cell.row).toBe(1);
     });
 });
 
@@ -455,7 +832,7 @@ describe("kind-gated swap (decision 7, amended round 2)", () => {
         const occupant = itemInCell("occupant", 0, 1, "wide");
         const origin = cellToPosition({ row: 0, col: 0 }, "wide");
         const target = cellToPosition({ row: 0, col: 1 }, "wide");
-        const placements = resolveGridDrop({
+        const placements = drop({
             items: [occupant],
             dragged: { id: "dragged", kind: "card", footprint: CARD_FOOTPRINT },
             draggedOrigin: { x: origin.x, y: origin.y },
@@ -465,7 +842,7 @@ describe("kind-gated swap (decision 7, amended round 2)", () => {
             cols: 3
         });
         expect(placements).toHaveLength(2);
-        expect(cellOf(placements[1], "wide", 3)).toEqual({ row: 0, col: 0 });
+        expect(placements[1].cell).toEqual({ row: 0, col: 0 });
     });
 
     // A default 400x200 Group is 1x1 in four of the six layouts, so `isUnit`
@@ -475,7 +852,7 @@ describe("kind-gated swap (decision 7, amended round 2)", () => {
         const occupant = itemInCell("nested", 0, 1, "wide", CARD_FOOTPRINT, "group");
         const origin = cellToPosition({ row: 0, col: 0 }, "wide");
         const target = cellToPosition({ row: 0, col: 1 }, "wide");
-        const placements = resolveGridDrop({
+        const placements = drop({
             items: [occupant],
             dragged: { id: "dragged", kind: "card", footprint: CARD_FOOTPRINT },
             draggedOrigin: { x: origin.x, y: origin.y },
@@ -486,14 +863,14 @@ describe("kind-gated swap (decision 7, amended round 2)", () => {
         });
         expect(placements).toHaveLength(1);
         expect(placements[0].id).toBe("dragged");
-        expect(cellOf(placements[0], "wide", 3)).not.toEqual({ row: 0, col: 1 });
+        expect(placements[0].cell).not.toEqual({ row: 0, col: 1 });
     });
 
     it("never lets a 1x1 GROUP evict a Card either", () => {
         const occupant = itemInCell("card", 0, 1, "wide");
         const origin = cellToPosition({ row: 0, col: 0 }, "wide");
         const target = cellToPosition({ row: 0, col: 1 }, "wide");
-        const placements = resolveGridDrop({
+        const placements = drop({
             items: [occupant],
             dragged: { id: "dragged", kind: "group", footprint: CARD_FOOTPRINT },
             draggedOrigin: { x: origin.x, y: origin.y },
@@ -510,13 +887,11 @@ describe("kind-gated swap (decision 7, amended round 2)", () => {
 describe("arrangeGrid", () => {
     it("keeps already-tidy items in place", () => {
         const items = [itemInCell("a", 0, 0, "wide"), itemInCell("b", 0, 1, "wide")];
-        const placements = arrangeGrid(items, "wide", 3);
-        const p = cellToPosition({ row: 0, col: 0 }, "wide");
+        const placements = arrangeGrid(items, 3);
         expect(placements.find((u) => u.id === "a")).toEqual({
             id: "a",
             kind: "card",
-            positionX: p.x,
-            positionY: p.y
+            cell: { row: 0, col: 0 }
         });
     });
 
@@ -526,7 +901,7 @@ describe("arrangeGrid", () => {
             itemAt("a", p.x + 5, p.y + 5, "wide", 3),
             itemAt("b", p.x + 40, p.y + 40, "wide", 3)
         ];
-        const cells = arrangeGrid(items, "wide", 3).map((u) => cellOf(u, "wide", 3));
+        const cells = arrangeGrid(items, 3).map((u) => u.cell);
         expect(cells).toContainEqual({ row: 0, col: 0 });
         expect(cells).toContainEqual({ row: 0, col: 1 });
     });
@@ -537,11 +912,11 @@ describe("arrangeGrid", () => {
     // backend guard used to reject that as "positions must be a non-empty
     // array", so the conversion silently failed to persist behind an
     // optimistic store write.
-    it("returns no placements for an empty group, leaving the group to carry the work", () => {
-        const placements = arrangeGrid([], "wide", 3);
-        expect(placements).toEqual([]);
+    it("returns no assignments for an empty group, leaving the group to carry the work", () => {
+        const assignments = arrangeGrid([], 3);
+        expect(assignments).toEqual([]);
 
-        const rows = rowCountAfter(placements, [], "wide", 3);
+        const rows = rowCountAfter([], [], "wide", 3);
         expect(rows).toBe(1);
 
         const dims = gridDimensions(rows, 3, "wide");
@@ -554,8 +929,8 @@ describe("arrangeGrid", () => {
             itemAt(`d${i}`, 10 * i, 5 * i, "compact", 3)
         );
         const keys = new Set(
-            arrangeGrid(items, "compact", 3).map((u) => {
-                const c = cellOf(u, "compact", 3);
+            arrangeGrid(items, 3).map((u) => {
+                const c = u.cell;
                 return `${c.row}:${c.col}`;
             })
         );
@@ -568,8 +943,8 @@ describe("arrangeGrid", () => {
             itemInCell("a", 0, 1, "wide"),
             itemInCell("b", 0, 2, "wide")
         ];
-        const placements = arrangeGrid(items, "wide", 6);
-        const cells = new Map(placements.map((p) => [p.id, cellOf(p, "wide", 6)]));
+        const placements = arrangeGrid(items, 6);
+        const cells = new Map(placements.map((p) => [p.id, p.cell]));
         expect(cells.get("bo3")).toEqual({ row: 0, col: 0 });
         // Both cards are pushed clear of the series' 2x4 block.
         const covered = new Set(
@@ -597,12 +972,11 @@ describe("reflowAfterGrowth", () => {
         const placements = reflowAfterGrowth({
             items,
             grownId: "series",
-            layout: "wide",
             cols: 6
         });
         // The grown node does not move, so it produces no placement.
         expect(placements.map((p) => p.id)).toEqual(["card"]);
-        const cell = cellOf(placements[0], "wide", 6);
+        const cell = placements[0].cell;
         const covered = new Set(
             rowCells({ row: 0, col: 0 }, SPAN6).map((c: GridCell) => `${c.row}:${c.col}`)
         );
@@ -621,12 +995,11 @@ describe("reflowAfterGrowth", () => {
         const placements = reflowAfterGrowth({
             items,
             grownId: "child",
-            layout: "wide",
             cols: 4
         });
         // "b" is clear of the grown rect, so it is untouched; only "a" moves.
         expect(placements.map((p) => p.id)).toEqual(["a"]);
-        expect(cellOf(placements[0], "wide", 4)).toEqual({ row: 0, col: 2 });
+        expect(placements[0].cell).toEqual({ row: 0, col: 2 });
     });
 
     it("resolves the overlaps a card-layout change creates among untouched siblings", () => {
@@ -641,12 +1014,11 @@ describe("reflowAfterGrowth", () => {
         const placements = reflowAfterGrowth({
             items,
             grownId: "pinned",
-            layout: "compact",
             cols: 3
         });
         const cells = new Map(items.map((i) => [i.id, `${i.cell.row}:${i.cell.col}`]));
         for (const p of placements) {
-            const c = cellOf(p, "compact", 3);
+            const c = p.cell;
             cells.set(p.id, `${c.row}:${c.col}`);
         }
         expect(cells.get("pinned")).toBe("0:0");
@@ -658,7 +1030,6 @@ describe("reflowAfterGrowth", () => {
             reflowAfterGrowth({
                 items: [itemInCell("a", 0, 0, "wide")],
                 grownId: "ghost",
-                layout: "wide",
                 cols: 3
             })
         ).toEqual([]);
@@ -797,7 +1168,7 @@ describe("column growth", () => {
     it("resolveGridDrop lands in a growth column when cols allow it", () => {
         const a = itemInCell("a", 0, 2, "wide");
         const target = cellToPosition({ row: 0, col: 3 }, "wide");
-        const placements = resolveGridDrop({
+        const placements = drop({
             items: [a],
             dragged: { id: "dragged", kind: "card", footprint: CARD_FOOTPRINT },
             draggedOrigin: null,
@@ -807,12 +1178,7 @@ describe("column growth", () => {
             cols: 4
         });
         expect(placements).toEqual([
-            {
-                id: "dragged",
-                kind: "card",
-                positionX: target.x,
-                positionY: target.y
-            }
+            { id: "dragged", kind: "card", cell: { row: 0, col: 3 } }
         ]);
     });
 });
@@ -877,14 +1243,14 @@ describe("buildGridMetadata", () => {
 
 describe("arrangedRowCount", () => {
     it("returns 1 for an empty group", () => {
-        expect(arrangedRowCount([], "wide", 3)).toBe(1);
+        expect(arrangedRowCount([], 3)).toBe(1);
     });
 
     it("reflects spread-out ideal rows, not ceil(count / cols)", () => {
         // Items whose positions sit at rows 0 and 3. arrangeGrid preserves the
         // ideal row, so the grid spans 4 rows even though ceil(2/3) === 1.
         const items = [itemInCell("a", 0, 0, "wide"), itemInCell("b", 3, 1, "wide")];
-        expect(arrangedRowCount(items, "wide", 3)).toBe(4);
+        expect(arrangedRowCount(items, 3)).toBe(4);
     });
 
     it("counts collision overflow into later rows", () => {
@@ -893,7 +1259,7 @@ describe("arrangedRowCount", () => {
             itemAt(`d${i}`, p.x + i, p.y + i, "wide", 1)
         );
         // cols=1 forces the four near-(0,0) items into rows 0..3.
-        expect(arrangedRowCount(items, "wide", 1)).toBe(4);
+        expect(arrangedRowCount(items, 1)).toBe(4);
     });
 });
 

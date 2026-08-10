@@ -4,6 +4,7 @@ import {
     cardHeight,
     cardWidth,
     getSeriesGroupDimensions,
+    GROUP_BORDER_WIDTH,
     SERIES_CARD_GAP,
     SERIES_PADDING_X
 } from "./helpers";
@@ -14,11 +15,13 @@ import {
     firstEmptyRect,
     GRID_CELL_GAP,
     gridColsOf,
+    materializeGrid,
     resolveContainerDims,
     resolveGridDims,
     rowCountAfter,
     type GridItem
 } from "./gridLayout";
+import { memberY } from "./gridRows";
 import {
     childCardsOf,
     gridItemsOf,
@@ -81,16 +84,40 @@ export const resolveCopyPlacement = (args: {
         );
         const items = gridItemsOf(tree, group.id, layout, cols);
         const cell = firstEmptyRect(items, CARD_FOOTPRINT, cols);
-        const position = cellToPosition(cell, layout);
+        // A copy is a brand-new Card and is by definition NOT in `items`, so it
+        // has to be projected in before materializing — `materializeGrid`
+        // throws on an assignment with no item rather than guessing a Card's
+        // geometry. Its `position` here is a placeholder; the row model
+        // replaces it below.
         const copy: GridItem = {
             id: `${draft.draft_id}-copy`,
             kind: "card",
             footprint: CARD_FOOTPRINT,
-            position: { x: position.x, y: position.y },
-            cell
+            position: cellToPosition(cell, layout),
+            cell,
+            inset: GROUP_BORDER_WIDTH,
+            height: cardHeight(layout)
         };
-        const rows = rowCountAfter([], [...items, copy], layout, cols);
-        const dims = resolveGridDims(group, rows, cols, layout);
+        const projected = [...items, copy];
+        const { rows } = materializeGrid({
+            items: projected,
+            assignments: [{ id: copy.id, kind: "card", cell }],
+            layout
+        });
+        // Rule 3: the copy's y is its ROW's, not the uniform lattice's. Landing
+        // beside a Bo3 puts it at that row's baseline, level with the series'
+        // first game, rather than at the row's top edge.
+        const copyRow = rows.find((r) => r.ids.includes(copy.id));
+        const position = {
+            x: cellToPosition(cell, layout).x,
+            y: copyRow ? memberY(copyRow, copy.inset) : cellToPosition(cell, layout).y
+        };
+        const dims = resolveGridDims(
+            group,
+            rowCountAfter([], projected, layout, cols),
+            cols,
+            layout
+        );
         return {
             positionX: position.x,
             positionY: position.y,

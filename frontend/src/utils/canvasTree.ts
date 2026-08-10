@@ -15,11 +15,13 @@ import {
     GRID_CELL_GAP,
     GRID_HEADER_HEIGHT,
     GRID_PADDING,
+    colAt,
     isGridGroup,
-    positionToCell,
+    rowsOfItems,
     type GridFootprint,
     type GridItem
 } from "./gridLayout";
+import { rowAtY } from "./gridRows";
 import { sortedSeriesDrafts } from "./canvasWorldPosition";
 
 /**
@@ -419,16 +421,32 @@ export const maxChildSpanCols = (
  * for Groups and nothing for Cards: under ADR-0006 a Group already stores
  * absolute world coordinates at every depth, a Card stores its offset inside
  * its container. Returns nothing for a Group that is not in the tree.
+ *
+ * **The row index is a COLLECTIVE property and cannot be computed per item**
+ * (§6.0a). A member's `y` alone no longer says which row it is in — rule 3
+ * deliberately gives row-mates different `y` — so the rows are derived once,
+ * from the whole membership, and each item is then told which one it landed in.
+ * `col` stays a per-item division, because the x axis is untouched.
+ *
+ * `inFlightIds` are members whose stored position is being rewritten every
+ * mousemove. They are EXCLUDED from the row derivation and then attached to the
+ * row their current y targets. Without that, a dragged node sitting at an
+ * arbitrary y forms a row bucket of its own; if it hovers above the first real
+ * row, every OTHER member's `cell.row` shifts by one, while the targeting rows
+ * (`rowsOfItems(others)`) still index from 0. The two memberships then disagree,
+ * `resolveGridDrop` finds no collision where there is one, and no swap or
+ * relocation happens. `canvasObjectMoved` reproduces it on every observer.
  */
 export const gridItemsOf = (
     tree: CanvasTree,
     groupId: string,
     layout: CardLayout,
-    cols: number
+    cols: number,
+    inFlightIds: ReadonlySet<string> = new Set()
 ): GridItem[] => {
     const parent = groupById(tree, groupId);
     if (!parent) return [];
-    return childrenOf(tree, groupId).map((node) => {
+    const items = childrenOf(tree, groupId).map((node) => {
         const position =
             node.kind === "card"
                 ? { x: node.card.positionX, y: node.card.positionY }
@@ -441,7 +459,35 @@ export const gridItemsOf = (
             kind: node.kind,
             footprint: footprintOf(tree, node, layout),
             position,
-            cell: positionToCell(position.x, position.y, layout, cols)
+            // Replaced below from the row model — a placeholder, never read.
+            cell: { row: 0, col: colAt(position.x, layout, cols) },
+            inset: insetOf(tree, node, layout),
+            height: nodeSize(tree, node, layout).height
         };
     });
+
+    // Rows come from the SETTLED members only.
+    const rows = rowsOfItems(
+        items.filter((i) => !inFlightIds.has(i.id)),
+        layout
+    );
+    const rowIndexOf = new Map<string, number>();
+    for (const row of rows) {
+        // `row.index` — the ABSOLUTE lattice row. Using the array ordinal here
+        // collapses every empty row and silently puts `GridItem.cell.row` in a
+        // different coordinate system from `cellAt`/`rowAtY`, which return
+        // lattice rows. The two are then compared in `resolveGridDrop`'s
+        // collision set, `arrangeGrid`'s `ideal` and `reflowAfterGrowth`.
+        for (const id of row.ids) rowIndexOf.set(id, row.index);
+    }
+    return items.map((item) => ({
+        ...item,
+        cell: {
+            // An in-flight node has no settled row, so it is attached to the
+            // row its CURRENT y targets — against the settled membership, so it
+            // cannot perturb anyone else's index.
+            row: rowIndexOf.get(item.id) ?? rowAtY(rows, item.position.y, layout),
+            col: item.cell.col
+        }
+    }));
 };

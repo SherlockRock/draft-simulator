@@ -1,6 +1,14 @@
 import type { CanvasGroup } from "./schemas";
 import { cardWidth, cardHeight } from "./helpers";
 import type { CardLayout } from "./canvasCardLayout";
+import {
+    memberY,
+    rowAtY,
+    rowsOf,
+    rowsOfIndexed,
+    type RowMember,
+    type RowMetrics
+} from "./gridRows";
 
 /**
  * The frame border both container components paint. Declared in `helpers.ts`
@@ -52,6 +60,24 @@ export type GridItem = {
     kind: "card" | "group";
     footprint: GridFootprint;
     position: { x: number; y: number };
+    cell: GridCell;
+    /** Top edge to first draft Card — `canvasTree.insetOf`. Feeds rule 3. */
+    inset: number;
+    /** Painted height, from `canvasTree.nodeSize`. Feeds rule 2. */
+    height: number;
+};
+
+/**
+ * Where the engine decided an item goes, as a LATTICE CELL.
+ *
+ * This is the engine's currency now. It used to hand back pixels, which forced
+ * every caller to know how a cell becomes a coordinate — and a row's `y` is no
+ * longer a function of its index alone, so there was no honest answer to give.
+ * `materializeGrid` is the one place a cell becomes a pixel.
+ */
+export type GridAssignment = {
+    id: string;
+    kind: GridItem["kind"];
     cell: GridCell;
 };
 
@@ -288,13 +314,129 @@ export const nearestFreeRect = (
     cols: number
 ): GridCell => nearestFreeRectIn(occupancyOf(items), footprint, from, cols);
 
-const placementAt = (
+const assignmentAt = (
     item: { id: string; kind: GridItem["kind"] },
-    cell: GridCell,
-    layout: CardLayout
-): GridPlacement => {
-    const position = cellToPosition(cell, layout);
-    return { id: item.id, kind: item.kind, positionX: position.x, positionY: position.y };
+    cell: GridCell
+): GridAssignment => ({ id: item.id, kind: item.kind, cell });
+
+/** `items` as the row model sees them. */
+export const rowMembersOf = (items: GridItem[]): RowMember[] =>
+    items.map((i) => ({ id: i.id, y: i.position.y, inset: i.inset, height: i.height }));
+
+/** The rows `items` currently form. */
+export const rowsOfItems = (items: GridItem[], layout: CardLayout): RowMetrics[] =>
+    rowsOf(rowMembersOf(items), layout);
+
+/** Column of a container-relative x. The x axis is unchanged by §6.0a. */
+export const colAt = (x: number, layout: CardLayout, cols: number): number =>
+    Math.min(cols - 1, Math.max(0, Math.round((x - GRID_PADDING) / cellW(layout))));
+
+/**
+ * The cell a container-relative point targets, against `rows`.
+ *
+ * Replaces `positionToCell`. The row half can no longer be a division: rows
+ * have different heights, so the inverse needs the actual bands. `rows` must be
+ * the TARGETING membership — `others`, excluding the dragged node — or a
+ * hovering Bo3 raises the target row's baseline, shifting the row's offset,
+ * changing which row the point falls in, frame after frame.
+ */
+export const cellAt = (
+    rows: RowMetrics[],
+    x: number,
+    y: number,
+    layout: CardLayout,
+    cols: number
+): GridCell => ({
+    row: rowAtY(rows, y, layout),
+    col: colAt(x, layout, cols)
+});
+
+/**
+ * Turn cell assignments into container-relative pixels — the ONE place a cell
+ * becomes a coordinate.
+ *
+ * Takes the whole projected item set rather than just the moved nodes, because
+ * a row's geometry is a property of its MEMBERS: a series joining a row raises
+ * its baseline and every Card already in it drops by the difference, and a row
+ * growing taller pushes every row below it down. Returning only the moved node
+ * would leave the rest of the container drawn to the previous layout.
+ *
+ * Returns a placement only where the position actually changed, so a drop that
+ * moves one Card in an all-Card grid still writes exactly one row — and so
+ * `rematerializeGrid` can be called freely on a settled container.
+ *
+ * The rows come back alongside because they are the EXACT projection of the
+ * post-drop layout. A caller that instead re-derived them by running `rowsOf`
+ * over the materialized pixels would be running the inferential path over the
+ * exact one's output — the same answer when everything is right, and a second
+ * place to be wrong when it is not.
+ */
+export const materializeGrid = (args: {
+    items: GridItem[];
+    assignments: GridAssignment[];
+    layout: CardLayout;
+}): { placements: GridPlacement[]; rows: RowMetrics[] } => {
+    const { items, assignments, layout } = args;
+    const assigned = new Map(assignments.map((a) => [a.id, a]));
+    const byId = new Map(items.map((i) => [i.id, i]));
+
+    // Every assigned node must be in `items`. A node entering from outside is
+    // the caller's job to project in FIRST, with its real inset and height — an
+    // earlier draft defaulted it to a Card, which silently mis-aligned an
+    // incoming nested container and drew its highlight one card tall.
+    for (const a of assignments) {
+        if (!byId.has(a.id)) {
+            throw new Error(
+                `materializeGrid: assignment for "${a.id}" has no item; ` +
+                    `project entering nodes into \`items\` before calling`
+            );
+        }
+    }
+
+    const projected = items.map((item) => ({
+        item,
+        cell: assigned.get(item.id)?.cell ?? item.cell
+    }));
+
+    // Keyed by the ASSIGNED lattice row, so sparse indices stay sparse: a drop
+    // targeting row 3 of a one-row grid lands in row 3, with rows 1-2 empty.
+    const rows = rowsOfIndexed(
+        projected.map(({ item, cell }) => ({
+            id: item.id,
+            index: cell.row,
+            inset: item.inset,
+            height: item.height
+        })),
+        layout
+    );
+    const rowOf = new Map<string, RowMetrics>();
+    for (const row of rows) for (const id of row.ids) rowOf.set(id, row);
+
+    const placements: GridPlacement[] = [];
+    for (const { item, cell } of projected) {
+        const row = rowOf.get(item.id);
+        if (!row) continue;
+        // The ROW cascade is intended: a member moves because its row's
+        // baseline or a row above it changed. The COLUMN is not — an unassigned
+        // member keeps its stored x. Recomputing it from `item.cell.col` would
+        // push every member through `colAt`'s round-and-clamp under whichever
+        // `cols` the call site used, and those differ (`gridItemsFor` carries
+        // the +1 growth column, `resyncGroupSize` and `copyPlacement` do not),
+        // so an unrelated resync would drag members left.
+        const positionX = assigned.has(item.id)
+            ? GRID_PADDING + cell.col * cellW(layout)
+            : item.position.x;
+        const positionY = memberY(row, item.inset);
+        // BOTH axes, or a pure COLUMN move is silently dropped.
+        if (
+            Math.round(item.position.x) === Math.round(positionX) &&
+            Math.round(item.position.y) === Math.round(positionY)
+        ) {
+            continue;
+        }
+        placements.push({ id: item.id, kind: item.kind, positionX, positionY });
+    }
+    return { placements, rows };
 };
 
 const isUnit = (footprint: GridFootprint): boolean => spanOf(footprint).cols === 1;
@@ -323,17 +465,24 @@ const isUnit = (footprint: GridFootprint): boolean => spanOf(footprint).cols ===
  */
 export const resolveGridDrop = (args: {
     items: GridItem[];
+    /**
+     * TARGETING rows — `rowsOfItems(others)`, EXCLUDING the dragged node.
+     * Including it lets a hovering Bo3 raise the target row's baseline, which
+     * shifts the row's offset, which changes which row the point falls in,
+     * frame after frame.
+     */
+    rows: RowMetrics[];
     dragged: { id: string; kind: GridItem["kind"]; footprint: GridFootprint };
     draggedOrigin: { x: number; y: number } | null;
     dropX: number;
     dropY: number;
     layout: CardLayout;
     cols: number;
-}): GridPlacement[] => {
-    const { items, dragged, draggedOrigin, layout, cols } = args;
+}): GridAssignment[] => {
+    const { items, rows, dragged, draggedOrigin, layout, cols } = args;
     const others = items.filter((i) => i.id !== dragged.id);
     const target = clampToGrid(
-        positionToCell(args.dropX, args.dropY, layout, cols),
+        cellAt(rows, args.dropX, args.dropY, layout, cols),
         cols,
         dragged.footprint
     );
@@ -342,7 +491,7 @@ export const resolveGridDrop = (args: {
     const collisions = others.filter((i) =>
         rowCells(i.cell, i.footprint).some((c) => covered.has(cellKey(c)))
     );
-    if (collisions.length === 0) return [placementAt(dragged, target, layout)];
+    if (collisions.length === 0) return [assignmentAt(dragged, target)];
 
     const occupant = collisions[0];
     if (
@@ -353,7 +502,7 @@ export const resolveGridDrop = (args: {
         isUnit(occupant.footprint)
     ) {
         const occupantCell = draggedOrigin
-            ? positionToCell(draggedOrigin.x, draggedOrigin.y, layout, cols)
+            ? cellAt(rows, draggedOrigin.x, draggedOrigin.y, layout, cols)
             : // Entered from outside the grid: the occupant yields to the first
               // empty cell, treating the dragged node as settled in the target.
               firstEmptyRect(
@@ -371,17 +520,13 @@ export const resolveGridDrop = (args: {
                   occupant.footprint,
                   cols
               );
-        return [
-            placementAt(dragged, target, layout),
-            placementAt(occupant, occupantCell, layout)
-        ];
+        return [assignmentAt(dragged, target), assignmentAt(occupant, occupantCell)];
     }
 
     return [
-        placementAt(
+        assignmentAt(
             dragged,
-            nearestFreeRectIn(occupancyOf(others), dragged.footprint, target, cols),
-            layout
+            nearestFreeRectIn(occupancyOf(others), dragged.footprint, target, cols)
         )
     ];
 };
@@ -401,11 +546,7 @@ const readingOrder = (items: GridItem[]): GridItem[] =>
  * user left it as the lattice allows. Nearest-first — take the ideal cell when
  * the whole footprint is free there, else the next free rect in reading order.
  */
-export const arrangeGrid = (
-    items: GridItem[],
-    layout: CardLayout,
-    cols: number
-): GridPlacement[] => {
+export const arrangeGrid = (items: GridItem[], cols: number): GridAssignment[] => {
     const occupancy = emptyOccupancy();
     return readingOrder(items).map((item) => {
         const ideal = clampToGrid(item.cell, cols, item.footprint);
@@ -413,7 +554,7 @@ export const arrangeGrid = (
             ? ideal
             : firstFreeRectFrom(occupancy, ideal, item.footprint, cols);
         occupy(occupancy, cell, item.footprint);
-        return placementAt(item, cell, layout);
+        return assignmentAt(item, cell);
     });
 };
 
@@ -434,10 +575,9 @@ export const arrangeGrid = (
 export const reflowAfterGrowth = (args: {
     items: GridItem[];
     grownId: string;
-    layout: CardLayout;
     cols: number;
-}): GridPlacement[] => {
-    const { items, grownId, layout, cols } = args;
+}): GridAssignment[] => {
+    const { items, grownId, cols } = args;
     const grown = items.find((i) => i.id === grownId);
     if (!grown) return [];
 
@@ -462,7 +602,7 @@ export const reflowAfterGrowth = (args: {
     return displaced.map((item) => {
         const cell = nearestFreeRectIn(occupancy, item.footprint, item.cell, cols);
         occupy(occupancy, cell, item.footprint);
-        return placementAt(item, cell, layout);
+        return assignmentAt(item, cell);
     });
 };
 
@@ -689,15 +829,24 @@ export const buildGridMetadata = (
     )
 });
 
-// The row count a reflow will actually produce for `cols`. Runs the same
-// arrangeGrid → rowCountAfter the save uses, so the dialog's row-label inputs
-// match the arranged grid (arrangeGrid preserves position-derived ideal rows
-// and pushes collisions into later rows — ceil(count/cols) would under-count).
-export const arrangedRowCount = (
-    items: GridItem[],
-    layout: CardLayout,
-    cols: number
-): number => rowCountAfter(arrangeGrid(items, layout, cols), items, layout, cols);
+/**
+ * The row count a reflow will actually produce for `cols` — what the grid
+ * settings dialog offers row-label inputs for.
+ *
+ * Runs the same `arrangeGrid` the save uses, so the inputs match the arranged
+ * grid: `arrangeGrid` preserves position-derived ideal rows and pushes
+ * collisions into later rows, and `ceil(count / cols)` would under-count.
+ *
+ * **`maxRow + 1`, not the number of distinct occupied rows.** With any row gap
+ * those differ, and the distinct count offers fewer inputs than there are rows,
+ * after which `mergeLabels`' `count` argument silently trims the stored labels
+ * beyond it.
+ */
+export const arrangedRowCount = (items: GridItem[], cols: number): number => {
+    const assignments = arrangeGrid(items, cols);
+    if (assignments.length === 0) return 1;
+    return Math.max(0, ...assignments.map((a) => a.cell.row)) + 1;
+};
 
 // Pure save decision: the metadata to persist (always including labels) and
 // whether the group must be reflowed. Reflow when creating a grid from a free

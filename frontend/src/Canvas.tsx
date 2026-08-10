@@ -82,16 +82,15 @@ import {
     childGroupsOf,
     footprintOf,
     gridItemsOf,
+    insetOf,
     maxChildSpanCols,
     nodeSize,
     renderOrder,
-    type CanvasTree
+    type CanvasTree,
+    type TreeNode
 } from "./utils/canvasTree";
 import { findDropContainer } from "./utils/canvasHitTest";
-import {
-    splitGridPlacements,
-    type GridWrites
-} from "./utils/gridPersistence";
+import { splitGridPlacements, type GridWrites } from "./utils/gridPersistence";
 import {
     subtreeMoveWrites,
     subtreeRows,
@@ -153,23 +152,26 @@ import {
     gridColsOf,
     resolveGridDrop,
     arrangeGrid,
-    rowCountAfter,
-    positionToCell,
+    cellAt,
+    materializeGrid,
+    rowsOfItems,
     effectiveGridCols,
     resolveGridDims,
     resolveContainerDims,
     contentBoundsOf,
     DEFAULT_GROUP_WIDTH,
     DEFAULT_GROUP_HEIGHT,
+    GROUP_BORDER_WIDTH,
     resolveGridSave,
     arrangedRowCount,
     CARD_FOOTPRINT,
     type GridFootprint,
     type GridItem,
-    type GridPlacement,
     type GridSettingsInput,
+    type GridAssignment,
     type GridMetadata
 } from "./utils/gridLayout";
+import type { RowMetrics } from "./utils/gridRows";
 import { seriesGrowthReflow } from "./utils/seriesGrowthReflow";
 import { resolveCopyPlacement } from "./utils/copyPlacement";
 import { GridSettingsDialog } from "./components/GridSettingsDialog";
@@ -537,8 +539,97 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // not negotiable: footprints -> maxChildSpanCols -> effective cols -> cells
     // (canvasTree.ts, step-2 amendment 3). Deriving the span from the items
     // would be circular, since an item's cell is clamped by the column count.
+    /**
+     * Nodes whose stored position is being rewritten every mousemove, keyed by
+     * placement id, valued with the timestamp of the last relayed frame.
+     *
+     * §6.0a made this necessary and nothing before it did. A row INDEX is now a
+     * collective property (`gridItemsOf`), so a node sitting at an arbitrary
+     * mid-gesture y forms a row bucket of its own; if it hovers above the first
+     * real row, every OTHER member's `cell.row` shifts by one while the
+     * targeting rows still index from 0. The two memberships then disagree,
+     * `resolveGridDrop` finds no collision where there is one, and no swap or
+     * relocation happens.
+     *
+     * The LOCAL drag is covered by `dragState().activeBoxId` and
+     * `gState.activeGroupId`. A REMOTE drag was not covered by anything: an
+     * observer learns about it only through `canvasObjectMoved`/`groupMoved`,
+     * which write straight into the stores with no in-flight marker and no
+     * drag-end event. Worse, if that observer's `resyncGroupSize` fires for an
+     * unrelated reason, it would persist the mid-gesture layout.
+     *
+     * Entries are cleared by the commit broadcast that ends the drag
+     * (`draftPositionsUpdated` / `canvasGroupUpdated`) and expire on a timer, so
+     * a dropped connection cannot pin a node in-flight forever.
+     */
+    const [relayedDrags, setRelayedDrags] = createStore<Record<string, number>>({});
+    const RELAYED_DRAG_TTL_MS = 2000;
+    const markRelayedDrag = (id: string) => setRelayedDrags(id, Date.now());
+    const clearRelayedDrag = (id: string) => setRelayedDrags(id, undefined!);
+
+    const inFlightIds = createMemo<ReadonlySet<string>>(() => {
+        const ids = new Set<string>();
+        const localCard = dragState().activeBoxId;
+        if (localCard !== null) ids.add(localCard);
+        const localGroup = groupDragState().activeGroupId;
+        if (localGroup !== null) ids.add(localGroup);
+        const now = Date.now();
+        for (const [id, at] of Object.entries(relayedDrags)) {
+            if (at !== undefined && now - at < RELAYED_DRAG_TTL_MS) ids.add(id);
+        }
+        return ids;
+    });
+
+    /**
+     * Lattice rows a set of row metrics spans — the LAST row's absolute index
+     * plus one, so an empty middle row still counts. Read off the metrics
+     * rather than inverted out of pixels: `positionToCell`'s uniform inverse is
+     * wrong for a row that a series has made taller.
+     *
+     * TODO(6.0a Task 5): container height stops being a row COUNT entirely and
+     * becomes `gridRows.gridContentHeight(rows)`, at which point this goes.
+     */
+    const rowCountOf = (rows: RowMetrics[]): number =>
+        rows.length === 0 ? 1 : rows[rows.length - 1].index + 1;
+
+    /**
+     * The geometry `commitGridDrop` needs for a dragged node: its column span
+     * plus the two §6.0a terms. Extracted so no call site hand-rolls the
+     * chrome — a Card that reported a container's inset would be aligned on the
+     * wrong baseline, and one that reported a Card's height would size its row
+     * too short.
+     */
+    const draggedCardGeometry = (draftId: string, layout: CardLayout) => ({
+        id: draftId,
+        kind: "card" as const,
+        footprint: CARD_FOOTPRINT,
+        inset: GROUP_BORDER_WIDTH,
+        height: cardHeight(layout)
+    });
+
+    const draggedGroupGeometry = (
+        groupId: string,
+        group: CanvasGroup,
+        layout: CardLayout
+    ) => {
+        const node: TreeNode = { kind: "group", id: groupId, group };
+        return {
+            id: groupId,
+            kind: "group" as const,
+            footprint: footprintOf(canvasTree(), node, layout),
+            inset: insetOf(canvasTree(), node, layout),
+            height: nodeSize(canvasTree(), node, layout).height
+        };
+    };
+
     const gridItemsFor = (group: CanvasGroup): GridItem[] =>
-        gridItemsOf(canvasTree(), group.id, props.cardLayout(), gridColsFor(group));
+        gridItemsOf(
+            canvasTree(),
+            group.id,
+            props.cardLayout(),
+            gridColsFor(group),
+            inFlightIds()
+        );
 
     const groupForCard = (cd: CanvasDraft): CanvasGroup | undefined =>
         cd.group_id ? canvasGroups.find((g) => g.id === cd.group_id) : undefined;
@@ -879,9 +970,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         writes: GridWrites
     ): T & { groups?: GroupPositionUpdate[] } => ({
         ...payload,
-        ...(writes.groupStoreWrites.length > 0
-            ? { groups: writes.groupStoreWrites }
-            : {})
+        ...(writes.groupStoreWrites.length > 0 ? { groups: writes.groupStoreWrites } : {})
     });
 
     /**
@@ -901,7 +990,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
      */
     const commitGridDrop = (args: {
         group: CanvasGroup;
-        dragged: { id: string; kind: GridItem["kind"]; footprint: GridFootprint };
+        /**
+         * `inset` and `height` ride along with the footprint because the node
+         * may be entering from OUTSIDE the container, and §6.0a's row geometry
+         * needs both to project it into the landing membership. One object
+         * rather than two loose numbers: a positional `number, number` pair is
+         * the shape a later edit transposes.
+         */
+        dragged: {
+            id: string;
+            kind: GridItem["kind"];
+            footprint: GridFootprint;
+            inset: number;
+            height: number;
+        };
         relX: number;
         relY: number;
         origin: { x: number; y: number } | null;
@@ -927,9 +1029,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         //    plus the must-fit terms, and no growth column, or the container
         //    grows a column wider than it needs.
         const layoutCols = Math.max(gridColsFor(group), dragged.footprint.cols);
-        const targetCell = positionToCell(relX, relY, layout, layoutCols);
-        const placements = resolveGridDrop({
+        // TARGETING membership (§6.0a, three memberships): the dragged node is
+        // EXCLUDED. Including it lets a hovering Bo3 raise its own target row's
+        // baseline, shifting that row's offset, changing which row the point
+        // falls in — frame after frame.
+        const targetingRows = rowsOfItems(
+            items.filter((i) => i.id !== dragged.id),
+            layout
+        );
+        const targetCell = cellAt(targetingRows, relX, relY, layout, layoutCols);
+        const assignments = resolveGridDrop({
             items,
+            rows: targetingRows,
             dragged,
             draggedOrigin: origin,
             dropX: relX,
@@ -942,16 +1053,38 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         // relocate it to a lower column. Bumping the user's configured count
         // for a landing that never happened is the same class of mistake as
         // sizing the container from the layout count.
-        const landing = placements.find((p) => p.id === dragged.id);
-        const landingCell = landing
-            ? positionToCell(landing.positionX, landing.positionY, layout, layoutCols)
-            : targetCell;
+        const landing = assignments.find((a) => a.id === dragged.id);
+        const landingCell = landing ? landing.cell : targetCell;
         const configuredCols = Math.max(gridColsOf(group), landingCell.col + 1);
         const sizeCols = Math.max(
             configuredCols,
             maxChildSpanCols(canvasTree(), group.id, layout),
             dragged.footprint.cols
         );
+        // The dragged node may be entering from outside and not be among the
+        // group's items yet; its inset and height still have to count, and
+        // `materializeGrid` throws rather than guess them.
+        const projected: GridItem[] = items.some((i) => i.id === dragged.id)
+            ? items
+            : [
+                  ...items,
+                  {
+                      id: dragged.id,
+                      kind: dragged.kind,
+                      footprint: dragged.footprint,
+                      position: { x: relX, y: relY },
+                      cell: landingCell,
+                      inset: dragged.inset,
+                      height: dragged.height
+                  }
+              ];
+        // LANDING membership: everything that moves, including row-mates the
+        // user never touched and every row below a row that changed height.
+        const { placements, rows: landedRows } = materializeGrid({
+            items: projected,
+            assignments,
+            layout
+        });
         const writes = splitGridPlacements({
             tree: canvasTree(),
             parent: group,
@@ -969,22 +1102,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             const entry = writes.groups.find((g) => g.id === dragged.id);
             if (entry && joinsContainer) entry.parentId = group.id;
         }
-        // The dragged node may be entering from outside, in which case it is
-        // not among the group's items yet; its footprint still has to count.
-        const projected = items.some((i) => i.id === dragged.id)
-            ? items
-            : [
-                  ...items,
-                  {
-                      id: dragged.id,
-                      kind: dragged.kind,
-                      footprint: dragged.footprint,
-                      position: { x: relX, y: relY },
-                      cell: targetCell
-                  }
-              ];
-        const rows = rowCountAfter(placements, projected, layout, layoutCols);
-        const dims = resolveGridDims(group, rows, sizeCols, layout);
+        const dims = resolveGridDims(group, rowCountOf(landedRows), sizeCols, layout);
         const metadata =
             configuredCols !== gridColsOf(group)
                 ? { gridCols: configuredCols }
@@ -1032,20 +1150,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             maxChildSpanCols(canvasTree(), group.id, layout)
         );
         const items = gridItemsOf(canvasTree(), group.id, layout, cols);
-        const placements = arrangeGrid(items, layout, cols);
+        const assignments = arrangeGrid(items, cols);
         // `arrangeGrid` assigns cells to child GROUPS as well as Cards, and
         // `toPositionUpdates` used to drop that half on the floor — so a nested
         // Group kept its old position while Cards were written around the cells
-        // it had been assigned, and `rowCountAfter` sized the container from a
-        // layout that never happened. One menu click, a persisted write.
+        // it had been assigned, and the container was sized from a layout that
+        // never happened. One menu click, a persisted write.
+        const { placements, rows } = materializeGrid({ items, assignments, layout });
         const writes = splitGridPlacements({
             tree: canvasTree(),
             parent: group,
             placements
         });
         const updates = writes.positions;
-        const rows = rowCountAfter(placements, items, layout, cols);
-        const dims = resolveGridDims(group, rows, cols, layout);
+        const dims = resolveGridDims(group, rowCountOf(rows), cols, layout);
 
         for (const u of updates) {
             setCanvasDrafts((cd) => cd.draft_id === u.draft_id, {
@@ -1092,12 +1210,21 @@ const CanvasComponent = (props: CanvasComponentProps) => {
      * the group store wholesale, which recreates the `<For>` DOM and strands
      * `:hover`. `persistGroupDimensions` sets the same precedent.
      */
-    const commitReflowPlacements = (
-        parentId: string,
-        placements: GridPlacement[]
-    ) => {
+    const commitReflowPlacements = (parentId: string, assignments: GridAssignment[]) => {
         const parent = canvasGroups.find((g) => g.id === parentId);
-        if (!parent || placements.length === 0) return;
+        if (!parent || assignments.length === 0) return;
+
+        // Materialized HERE and only here, so there is exactly one point where
+        // a cell becomes a pixel on this path. The assignments name displaced
+        // siblings only; `materializeGrid` sees the whole membership, which is
+        // what lets a baseline change move row-mates nobody displaced.
+        const layout = props.cardLayout();
+        const { placements } = materializeGrid({
+            items: gridItemsFor(parent),
+            assignments,
+            layout
+        });
+        if (placements.length === 0) return;
 
         const writes = splitGridPlacements({
             tree: canvasTree(),
@@ -1145,9 +1272,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
         // The wider span raises effectiveGridCols' must-fit term, so the
         // container has to grow with it — even when nothing was displaced.
-        const parentId = canvasGroups.find(
-            (g) => g.id === seriesId
-        )?.parent_group_id;
+        const parentId = canvasGroups.find((g) => g.id === seriesId)?.parent_group_id;
         if (parentId) resyncGroupSize(parentId);
     };
 
@@ -1170,11 +1295,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const gridRowCount = (group: CanvasGroup, cols: number): number => {
         const layout = props.cardLayout();
-        return arrangedRowCount(
-            gridItemsOf(canvasTree(), group.id, layout, cols),
-            layout,
-            cols
-        );
+        return arrangedRowCount(gridItemsOf(canvasTree(), group.id, layout, cols), cols);
     };
 
     const saveGridSettings = (settings: GridSettingsInput) => {
@@ -1845,6 +1966,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             );
             if (!data) return;
             if (dragState().activeBoxId !== data.draftId) {
+                // A live mid-drag frame from another client. Mark it in-flight
+                // BEFORE the store write, so no row derivation this tick sees
+                // the arbitrary y as a settled row.
+                markRelayedDrag(data.draftId);
                 setCanvasDrafts((cd) => cd.Draft.id === data.draftId, {
                     positionX: data.positionX,
                     positionY: data.positionY
@@ -1859,6 +1984,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             );
             if (!data) return;
             for (const p of data.positions) {
+                // The commit that ends the drag: this node is settled again.
+                clearRelayedDrag(p.draft_id);
                 // `draft_id` names the CanvasDraft row (the Card's placement),
                 // not the Draft — the two hold the same value today but only
                 // one of them is what the server sent.
@@ -1870,6 +1997,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             }
             const group = data.group;
             if (group) {
+                // A container carried on a commit is settled by definition —
+                // this is the write that ENDS a drag, not one during it.
+                clearRelayedDrag(group.id);
                 setCanvasGroups((g) => g.id === group.id, group);
             }
         });
@@ -1957,6 +2087,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             if (!data) return;
             const gState = groupDragState();
             if (gState.activeGroupId !== data.groupId) {
+                // A live mid-drag frame from another client — see relayedDrags.
+                markRelayedDrag(data.groupId);
                 // LIVE events only (A3 revised). `subtree` is set by
                 // `relayGroupMove` and by nothing else: a commit broadcast is a
                 // complete set of absolute row-setters, one per written row, and
@@ -2000,6 +2132,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         socket.on("groupResized", (rawData: unknown) => {
             const data = validateSocketEvent("groupResized", rawData, GroupResizedSchema);
             if (!data) return;
+            // A resize broadcast is a commit, so whatever was in flight is not.
+            clearRelayedDrag(data.groupId);
             const group = canvasGroups.find((g) => g.id === data.groupId);
             const draftPositionDelta =
                 group?.type === "custom" && data.positionX !== undefined
@@ -3215,15 +3349,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             // the swap/relocation math runs on these numbers.
             commitGridDrop({
                 group: nextParent,
-                dragged: {
-                    id: groupId,
-                    kind: "group",
-                    footprint: footprintOf(
-                        canvasTree(),
-                        { kind: "group", id: groupId, group },
-                        props.cardLayout()
-                    )
-                },
+                dragged: draggedGroupGeometry(groupId, group, props.cardLayout()),
                 relX: group.positionX - nextParent.positionX,
                 relY: group.positionY - nextParent.positionY,
                 origin: parentageChanged
@@ -3590,7 +3716,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             const items = gridItemsOf(canvasTree(), group.id, layout, cols);
             const dims = resolveGridDims(
                 group,
-                rowCountAfter([], items, layout, cols),
+                rowCountOf(rowsOfItems(items, layout)),
                 cols,
                 layout
             );
@@ -4117,8 +4243,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     const relX = newX - previewParent.positionX;
                     const relY = newY - previewParent.positionY;
                     const joins = previewParent.id !== (dragged.parent_group_id ?? null);
-                    const placements = resolveGridDrop({
-                        items: gridItemsFor(previewParent),
+                    const items = gridItemsFor(previewParent);
+                    // TARGETING rows exclude the dragged node; LANDING rows,
+                    // below, include it. Dragging a nested container into a
+                    // grid is exactly the gesture whose point is that the row
+                    // grows to fit it, so a preview drawn from the targeting
+                    // membership would mispromise the thing being shipped.
+                    const previewRows = rowsOfItems(
+                        items.filter((i) => i.id !== gState.activeGroupId),
+                        layout
+                    );
+                    const assignments = resolveGridDrop({
+                        items,
+                        rows: previewRows,
                         dragged: { id: gState.activeGroupId, kind: "group", footprint },
                         draggedOrigin: joins
                             ? null
@@ -4131,20 +4268,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         layout,
                         cols
                     });
-                    const landing = placements.find((p) => p.id === gState.activeGroupId);
+                    const landing = assignments.find(
+                        (a) => a.id === gState.activeGroupId
+                    );
                     setGridDropCell(
                         landing
                             ? {
                                   groupId: previewParent.id,
-                                  landing: {
-                                      cell: positionToCell(
-                                          landing.positionX,
-                                          landing.positionY,
-                                          layout,
-                                          cols
-                                      ),
-                                      footprint
-                                  },
+                                  landing: { cell: landing.cell, footprint },
                                   // A Group never swaps (decision 7, amended):
                                   // both sides must be Cards.
                                   isSwap: false,
@@ -4234,10 +4365,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     // the drop have to agree about which columns exist, or the
                     // overlay offers one the resolver refuses (round 2, V4).
                     const cols = gridColsFor(gridHoverGroup);
-                    const targetCell = positionToCell(relX, relY, layout, cols);
+                    const items = gridItemsFor(gridHoverGroup);
                     const isIntraGroup = gridHoverGroup.id === state.dragGroupId;
-                    const placements = resolveGridDrop({
-                        items: gridItemsFor(gridHoverGroup),
+                    // TARGETING rows: the dragged Card is excluded, so hovering
+                    // it cannot move the row it is trying to land in.
+                    const previewRows = rowsOfItems(
+                        items.filter((i) => i.id !== draggedCard.draft_id),
+                        layout
+                    );
+                    const targetCell = cellAt(previewRows, relX, relY, layout, cols);
+                    const assignments = resolveGridDrop({
+                        items,
+                        rows: previewRows,
                         // The layout engine keys on draft_id (the Card's
                         // PLACEMENT identity); activeBoxId is a Draft.id. Same
                         // value today, different meanings — see step-1's
@@ -4255,40 +4394,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         layout,
                         cols
                     });
-                    const landing = placements[0];
-                    const displaced = placements.length > 1 ? placements[1] : null;
+                    const landing = assignments[0];
+                    const displaced = assignments.length > 1 ? assignments[1] : null;
                     const occupantFootprint = displaced
-                        ? (gridItemsFor(gridHoverGroup).find((i) => i.id === displaced.id)
-                              ?.footprint ?? CARD_FOOTPRINT)
+                        ? (items.find((i) => i.id === displaced.id)?.footprint ??
+                          CARD_FOOTPRINT)
                         : CARD_FOOTPRINT;
                     setGridDropCell({
                         groupId: gridHoverGroup.id,
                         landing: {
-                            // Read from the placement, not from targetCell: a
+                            // Read from the assignment, not from targetCell: a
                             // footprint that collides without being able to swap
                             // lands on the nearest free rect instead, and the
                             // overlay has to point at where it will actually go.
-                            cell: landing
-                                ? positionToCell(
-                                      landing.positionX,
-                                      landing.positionY,
-                                      layout,
-                                      cols
-                                  )
-                                : targetCell,
+                            cell: landing ? landing.cell : targetCell,
                             footprint: CARD_FOOTPRINT
                         },
                         isSwap: displaced !== null,
                         displaced: displaced
-                            ? {
-                                  cell: positionToCell(
-                                      displaced.positionX,
-                                      displaced.positionY,
-                                      layout,
-                                      cols
-                                  ),
-                                  footprint: occupantFootprint
-                              }
+                            ? { cell: displaced.cell, footprint: occupantFootprint }
                             : null
                     });
                 } else {
@@ -4413,11 +4537,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             // Grid destination: snap/swap and derive dimensions.
                             commitGridDrop({
                                 group: dropGroup,
-                                dragged: {
-                                    id: finalDraft.draft_id,
-                                    kind: "card",
-                                    footprint: CARD_FOOTPRINT
-                                },
+                                dragged: draggedCardGeometry(
+                                    finalDraft.draft_id,
+                                    props.cardLayout()
+                                ),
                                 relX: relativeX,
                                 relY: relativeY,
                                 origin: null,
@@ -4491,11 +4614,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             // relative to where the card started.
                             commitGridDrop({
                                 group: sameGroup,
-                                dragged: {
-                                    id: finalDraft.draft_id,
-                                    kind: "card",
-                                    footprint: CARD_FOOTPRINT
-                                },
+                                dragged: draggedCardGeometry(
+                                    finalDraft.draft_id,
+                                    props.cardLayout()
+                                ),
                                 relX: finalDraft.positionX,
                                 relY: finalDraft.positionY,
                                 origin: { x: state.dragOriginX, y: state.dragOriginY },

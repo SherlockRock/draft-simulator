@@ -2,7 +2,7 @@ import {
     effectiveGridCols,
     isGridGroup,
     reflowAfterGrowth,
-    type GridPlacement
+    type GridAssignment
 } from "./gridLayout";
 import {
     gridItemsOf,
@@ -37,7 +37,7 @@ export const seriesGrowthReflow = (args: {
     tree: CanvasTree;
     seriesId: string;
     layout: CardLayout;
-}): { parentId: string; placements: GridPlacement[] } | null => {
+}): { parentId: string; placements: GridAssignment[] } | null => {
     const { tree, seriesId, layout } = args;
 
     // `parentIdOf` returns undefined for a node that is not in the tree and
@@ -56,7 +56,6 @@ export const seriesGrowthReflow = (args: {
     const placements = reflowAfterGrowth({
         items: gridItemsOf(tree, parent.id, layout, cols),
         grownId: seriesId,
-        layout,
         cols
     });
 

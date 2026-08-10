@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { seriesGrowthReflow } from "./seriesGrowthReflow";
 import { cellToPosition } from "./gridLayout";
+import { memberY, rowsOfIndexed } from "./gridRows";
+import {
+    GROUP_BORDER_WIDTH,
+    SERIES_GAME_CONTROLS_HEIGHT,
+    SERIES_HEADER_HEIGHT,
+    SERIES_PADDING_Y,
+    cardHeight,
+    getSeriesGroupDimensions
+} from "./helpers";
 import type { CanvasTree } from "./canvasTree";
 import type { CanvasDraft, CanvasGroup } from "./schemas";
 import type { CardLayout } from "./canvasCardLayout";
@@ -80,14 +89,47 @@ const treeWith = (args: {
         orphanSeries = false
     } = args;
 
-    const seriesPos = cellToPosition({ row: seriesRow, col: seriesCol }, LAYOUT);
+    // §6.0a rule 3: row-mates have DIFFERENT stored y — each sits at the row's
+    // baseline minus its own inset. Materializing the fixture through the same
+    // row model the engine uses is not a nicety: `cellToPosition` for both
+    // would put the series and a Card in the SAME row at two different row
+    // KEYS, splitting them into two rows, and the collision this file is about
+    // would silently stop happening.
+    const CARD_INSET = GROUP_BORDER_WIDTH;
+    const SERIES_INSET =
+        GROUP_BORDER_WIDTH +
+        SERIES_HEADER_HEIGHT +
+        SERIES_PADDING_Y +
+        SERIES_GAME_CONTROLS_HEIGHT;
+    const rows = rowsOfIndexed(
+        [
+            {
+                id: "s",
+                index: seriesRow,
+                inset: SERIES_INSET,
+                height: getSeriesGroupDimensions(games, LAYOUT).height
+            },
+            ...cards.map((c) => ({
+                id: c.id,
+                index: c.row,
+                inset: CARD_INSET,
+                height: cardHeight(LAYOUT)
+            }))
+        ],
+        LAYOUT
+    );
+    const yOf = (id: string, inset: number): number => {
+        const row = rows.find((r) => r.ids.includes(id));
+        return row ? memberY(row, inset) : 0;
+    };
+
     const groups: CanvasGroup[] = [
         ...(orphanSeries ? [] : [group("p", { layout: parentLayout, cols })]),
         group("s", {
             type: "series",
             parent: orphanSeries ? null : "p",
-            x: seriesPos.x,
-            y: seriesPos.y
+            x: cellToPosition({ row: seriesRow, col: seriesCol }, LAYOUT).x,
+            y: yOf("s", SERIES_INSET)
         })
     ];
 
@@ -96,10 +138,13 @@ const treeWith = (args: {
         ...Array.from({ length: games }, (_, i) =>
             card(`g${i}`, { group_id: "s", seriesIndex: i })
         ),
-        ...cards.map((c) => {
-            const pos = cellToPosition({ row: c.row, col: c.col }, LAYOUT);
-            return card(c.id, { group_id: "p", x: pos.x, y: pos.y });
-        })
+        ...cards.map((c) =>
+            card(c.id, {
+                group_id: "p",
+                x: cellToPosition({ row: c.row, col: c.col }, LAYOUT).x,
+                y: yOf(c.id, CARD_INSET)
+            })
+        )
     ];
 
     return { groups, drafts };
