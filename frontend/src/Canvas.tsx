@@ -174,6 +174,11 @@ import {
     type GridCell,
     type GridMetadata
 } from "./utils/gridLayout";
+import {
+    NEW_GROUP_DRAFT_MODE,
+    newGroupGridSettings,
+    resolveNewGroupMetadata
+} from "./utils/groupCreation";
 import { gridContentHeight, rowMetricsAt, type RowMetrics } from "./utils/gridRows";
 import { seriesGrowthReflow } from "./utils/seriesGrowthReflow";
 import { resolveCopyPlacement } from "./utils/copyPlacement";
@@ -1614,43 +1619,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     }));
 
-    const createGroupMutation = useMutation(() => ({
-        mutationFn: createCanvasGroup,
-        onMutate: (variables) => {
-            const tempId = `temp-${Date.now()}`;
-            const tempGroup: CanvasGroup = {
-                id: tempId,
-                canvas_id: canvasId(),
-                name: "New Group",
-                type: "custom",
-                positionX: variables.positionX,
-                positionY: variables.positionY,
-                width: null,
-                height: null,
-                versus_draft_id: null,
-                // Without this the optimistic row flashes at TOP LEVEL, and
-                // under DFS that means the wrong paint stratum, until the
-                // server responds (plan A7).
-                parent_group_id: variables.parentId ?? null,
-                metadata: {}
-            };
-            setCanvasGroups([...canvasGroups, tempGroup]);
-            return { tempId };
-        },
-        onSuccess: (data, _variables, context) => {
-            if (context?.tempId) {
-                setCanvasGroups((g) => g.id === context.tempId, data.group);
-            }
-            toast.success("Group created");
-        },
-        onError: (error, _vars, context) => {
-            if (context?.tempId) {
-                setCanvasGroups(canvasGroups.filter((g) => g.id !== context.tempId));
-            }
-            toast.error(`Failed to create group: ${error.message}`);
-        }
-    }));
-
     const updateGroupMutation = useMutation(() => ({
         mutationFn: updateCanvasGroup,
         onSuccess: (data, variables) => {
@@ -3079,6 +3047,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         team2_id: string | null;
         length: number;
         gameType: GameType | null;
+        grid: GridSettingsInput | null;
     }) => {
         // A classification set while CREATING a group is otherwise dropped, so
         // all eight write paths below carry it. `null` clears (D3); on the
@@ -3087,6 +3056,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const pendingPosition = pendingGroupSettingsPosition();
         if (pendingPosition) {
             const groupName = data.name || "Custom Series";
+            // The whole of what a new Group is born as, resolved in one pure
+            // place (§10). The CUSTOM branch writes it on the create itself, so
+            // the Group is never briefly `free`; the SERIES branch leaves it to
+            // `convertGroupToSeries`, which owns a series' metadata.
+            const newMetadata = resolveNewGroupMetadata({
+                isSeries: data.convertToSeries,
+                disabledChampions: data.disabledChampions,
+                draftMode: data.draftMode,
+                gameType: data.gameType,
+                grid: data.grid ?? newGroupGridSettings()
+            });
             if (isLocalMode()) {
                 // The local mutations enforce parentage and the series-leaf
                 // invariant themselves — there is no server here to do it — and
@@ -3098,7 +3078,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     result = localCreateGroup({
                         positionX: pendingPosition.x,
                         positionY: pendingPosition.y,
-                        parentId: pendingPosition.parentId
+                        parentId: pendingPosition.parentId,
+                        name: groupName,
+                        // A series' metadata is written by the conversion
+                        // below, which owns it; a custom Group is born with
+                        // everything the dialog decided.
+                        ...(data.convertToSeries ? {} : { metadata: newMetadata })
                     });
                 } catch (error) {
                     toast.error(
@@ -3118,16 +3103,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         disabledChampions: data.disabledChampions,
                         gameType: data.gameType
                     });
-                } else {
-                    localUpdateGroup({
-                        groupId: result.group.id,
-                        name: groupName,
-                        metadata: {
-                            disabledChampions: data.disabledChampions,
-                            draftMode: data.draftMode,
-                            gameType: data.gameType
-                        }
-                    });
                 }
                 refreshFromLocal();
                 toast.success(data.convertToSeries ? "Series created" : "Group created");
@@ -3137,20 +3112,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     name: groupName,
                     positionX: pendingPosition.x,
                     positionY: pendingPosition.y,
-                    parentId: pendingPosition.parentId
+                    parentId: pendingPosition.parentId,
+                    // See the local branch: the create carries the metadata, so
+                    // a custom Group is never briefly `free` and a failed
+                    // follow-up can no longer leave one that way.
+                    ...(data.convertToSeries ? {} : { metadata: newMetadata })
                 })
                     .then((result) => {
-                        if (!data.convertToSeries) {
-                            return updateCanvasGroup({
-                                canvasId: canvasId(),
-                                groupId: result.group.id,
-                                metadata: {
-                                    disabledChampions: data.disabledChampions,
-                                    draftMode: data.draftMode,
-                                    gameType: data.gameType
-                                }
-                            });
-                        }
+                        if (!data.convertToSeries) return result;
                         return convertGroupToSeries({
                             canvasId: canvasId(),
                             groupId: result.group.id,
@@ -3325,26 +3294,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         return container.id;
     };
 
+    /**
+     * BOTH creation paths — the toolbar button and the canvas context menu —
+     * defer the create and open the merged settings dialog (§10, confirmed
+     * 2026-08-10; this REVERSED the design's earlier lean to keep the toolbar
+     * as a no-dialog fast path). One creation flow, so a new Group is never a
+     * surprise about what it turned out to be.
+     */
     const handleCreateGroup = () => {
         const pos = createGroupPosition();
         const parentId = resolveCreateParent(pos);
         if (parentId === undefined) return;
-        if (isLocalMode()) {
-            localCreateGroup({
-                positionX: pos.x,
-                positionY: pos.y,
-                parentId
-            });
-            refreshFromLocal();
-            toast.success("Group created");
-        } else {
-            createGroupMutation.mutate({
-                canvasId: canvasId(),
-                positionX: pos.x,
-                positionY: pos.y,
-                parentId
-            });
-        }
+        setPendingGroupSettingsPosition({ x: pos.x, y: pos.y, parentId });
     };
 
     /**
@@ -3485,13 +3446,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 groups: [entry]
             });
         }
-    };
-
-    const handleCreateGroupFromContextMenu = () => {
-        const pos = createGroupPosition();
-        const parentId = resolveCreateParent(pos);
-        if (parentId === undefined) return;
-        setPendingGroupSettingsPosition({ x: pos.x, y: pos.y, parentId });
     };
 
     const closeGroupSettingsDialog = () => {
@@ -5656,10 +5610,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     }
                     initialName={settingsGroup()?.name ?? "Custom Series"}
                     initialChampions={settingsGroup()?.metadata.disabledChampions ?? []}
-                    initialDraftMode={toDraftMode(
-                        settingsGroup()?.metadata.draftMode ??
-                            settingsGroup()?.metadata.seriesType
-                    )}
+                    // ⚠️ The new default is applied on the NEW-GROUP branch
+                    // only. `toDraftMode`'s `standard` fallback below is shared
+                    // with every existing Group, and a legacy series with no
+                    // stored `draftMode` must keep reading as `standard` —
+                    // moving the fallback would silently reinterpret stored
+                    // data on every canvas.
+                    initialDraftMode={
+                        pendingGroupSettingsPosition() !== null
+                            ? NEW_GROUP_DRAFT_MODE
+                            : toDraftMode(
+                                  settingsGroup()?.metadata.draftMode ??
+                                      settingsGroup()?.metadata.seriesType
+                              )
+                    }
                     isSeries={settingsGroup()?.type === "series"}
                     canEditSeriesSettings={
                         settingsGroup()?.type !== "series" ||
@@ -5750,7 +5714,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         setCreateGroupPosition(
                                             contextMenuWorldPosition()
                                         );
-                                        handleCreateGroupFromContextMenu();
+                                        handleCreateGroup();
                                     }
                                 }
                             ]}

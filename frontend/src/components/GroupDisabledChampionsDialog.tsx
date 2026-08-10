@@ -1,13 +1,16 @@
-import { createSignal, createEffect, Show, Component } from "solid-js";
+import { createSignal, createEffect, createMemo, Show, Component } from "solid-js";
 import { ChevronDown, ChevronUp } from "lucide-solid";
 import type { DraftMode, GameType, Team } from "@draft-sim/shared-types";
 import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./Dialog";
 import { ChampionToggleGrid } from "./ChampionToggleGrid";
 import { StyledSelect } from "./StyledSelect";
 import { TeamNameSelect } from "./TeamNameSelect";
+import { GridSettingsFields, createGridSettingsForm } from "./GridSettingsFields";
 import { resolveChampionId } from "../utils/constants";
 import { resolveTeamLink } from "../utils/teamLink";
 import { gameTypeHint } from "../utils/gameClassification";
+import { newGroupGridSettings } from "../utils/groupCreation";
+import type { GridSettingsInput } from "../utils/gridLayout";
 
 interface GroupSettingsDialogProps {
     isOpen: () => boolean;
@@ -52,6 +55,13 @@ interface GroupSettingsDialogProps {
         length: number;
         /** null clears a stored classification; see the clear protocol (D3). */
         gameType: GameType | null;
+        /**
+         * Columns and labels for a new CUSTOM Group, which is born `grid`
+         * (decision 13). `null` whenever the grid fields were not on screen —
+         * editing an existing Group, or creating a series, whose interior is
+         * computed rather than laid out by a container grid.
+         */
+        grid: GridSettingsInput | null;
     }) => void;
 }
 
@@ -99,6 +109,20 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
     const [length, setLength] = createSignal(3);
     const [gameType, setGameType] = createSignal<GameType | null>(null);
     const [disabledExpanded, setDisabledExpanded] = createSignal(false);
+    const gridForm = createGridSettingsForm();
+
+    /**
+     * Grid configuration is offered at CREATION only, and only once the user
+     * has said this is not a series — that is the one moment decision 13's
+     * `grid` default is observable. An existing Group edits its grid through
+     * the context menu's "Grid settings…", which stays the single place to
+     * change columns after the fact.
+     */
+    const showGrid = createMemo(() => (props.isNewGroup ?? false) && !seriesEnabled());
+
+    // A brand-new Group has no members, so a reflow produces exactly one row.
+    // Row labels beyond it become reachable once it holds something.
+    const gridRowInputCount = createMemo(() => Math.max(1, gridForm.rowLabels().length));
 
     createEffect(() => {
         if (props.isOpen()) {
@@ -115,6 +139,7 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
             setLength(clampSeriesLength(props.initialLength || 3));
             setGameType(props.initialGameType ?? (props.isNewGroup ? "scratch" : null));
             setDisabledExpanded(false);
+            gridForm.seed(newGroupGridSettings());
         }
     });
 
@@ -136,7 +161,8 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
             team1_id: blue.teamId,
             team2_id: red.teamId,
             length: clampSeriesLength(length()),
-            gameType: gameType()
+            gameType: gameType(),
+            grid: showGrid() ? gridForm.read(gridRowInputCount()) : null
         });
         props.onClose();
     };
@@ -158,7 +184,7 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
             body={
                 <div class="w-[min(100vw-2rem,32rem)] max-w-full">
                     <h2 class="mb-4 text-xl font-bold text-darius-text-primary">
-                        Group Settings
+                        {props.isNewGroup ? "New Group" : "Group Settings"}
                     </h2>
 
                     <div class="space-y-4">
@@ -312,6 +338,32 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                                         </div>
                                     </label>
                                 </div>
+                            </div>
+                        </Show>
+
+                        {/*
+                          The complement of the series box above. Turning
+                          Enable Series OFF is the only moment decision 13's
+                          `grid` default is observable, so the columns it
+                          implies are editable right there rather than behind a
+                          second trip through the context menu.
+                        */}
+                        <Show when={showGrid()}>
+                            <div class="space-y-3 rounded-md border border-darius-border bg-darius-card-hover/30 p-3">
+                                <div>
+                                    <div class="text-sm font-medium text-darius-text-primary">
+                                        Grid layout
+                                    </div>
+                                    <p class="mt-1 text-xs text-darius-text-secondary">
+                                        Drafts dropped into this group snap to a grid.
+                                        Change it later from the group menu.
+                                    </p>
+                                </div>
+                                <GridSettingsFields
+                                    form={gridForm}
+                                    rowInputCount={gridRowInputCount}
+                                    idPrefix="new-group-grid"
+                                />
                             </div>
                         </Show>
 
