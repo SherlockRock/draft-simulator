@@ -23,12 +23,19 @@ import {
     DEFAULT_GROUP_HEIGHT
 } from "../utils/gridLayout";
 import { hintRowOffsets, rowMetricsAt } from "../utils/gridRows";
+import { containerContentsLabel, isContainerEmpty } from "../utils/containerContents";
 import { cardWidth } from "../utils/helpers";
 import type { CardLayout } from "../utils/canvasCardLayout";
 
 type CustomGroupContainerProps = {
     group: CanvasGroup;
     drafts: CanvasDraft[];
+    /**
+     * Direct child GROUPS. `drafts` cannot stand in for them and neither can
+     * `gridItems`, which `Canvas.tsx` passes as `[]` for every free-layout
+     * container — exactly where a Group-only container is most visible.
+     */
+    childGroupCount: number;
     zoom: Accessor<number>;
     isPanning: boolean;
     onGroupMouseDown: (groupId: string, e: MouseEvent) => void;
@@ -197,7 +204,16 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
         window.addEventListener("mouseup", handleMouseUp);
     };
 
-    const draftCount = createMemo(() => props.drafts.length);
+    /**
+     * What this container holds, of BOTH kinds. The three empty-state surfaces
+     * below used to read `props.drafts.length` alone, so a container holding
+     * only nested Groups drew a dashed border, reported "0 drafts" and painted
+     * "Drag drafts here" straight through the Groups it was holding.
+     */
+    const contents = createMemo(() => ({
+        drafts: props.drafts.length,
+        groups: props.childGroupCount
+    }));
 
     const isGrid = () => isGridGroup(props.group);
 
@@ -275,7 +291,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 "border-red-500": isResizeClamped(),
                 "border-darius-purple-bright": props.isDragTarget,
                 "border-darius-border opacity-75": props.isExitingSource,
-                "border-dashed": draftCount() === 0
+                "border-dashed": isContainerEmpty(contents())
             }}
             style={{
                 // World coordinates — .canvas-world applies the viewport transform.
@@ -328,7 +344,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                         />
                     </Show>
                     <span class="flex-shrink-0 text-xs text-darius-text-secondary">
-                        {draftCount()} draft{draftCount() !== 1 ? "s" : ""}
+                        {containerContentsLabel(contents())}
                     </span>
                     {/* Only when tagged — an untagged custom group looks as before. */}
                     <GameTypeChip gameType={props.group.metadata.gameType} />
@@ -452,7 +468,7 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                 }}
             >
                 <Show
-                    when={draftCount() > 0}
+                    when={!isContainerEmpty(contents())}
                     fallback={
                         <div class="flex h-full items-center justify-center text-sm text-darius-text-secondary">
                             Drag drafts here

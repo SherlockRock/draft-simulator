@@ -5125,6 +5125,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     <CustomGroupContainer
                                         group={group}
                                         drafts={getDraftsForGroup(group.id)}
+                                        // Reads only `parent_group_id`, like
+                                        // `renderOrder` above — so a position
+                                        // write during a drag does not
+                                        // invalidate it for every container.
+                                        childGroupCount={
+                                            childGroupsOf(canvasTree(), group.id).length
+                                        }
                                         zoom={viewportZoom}
                                         isPanning={dragState().isPanning}
                                         onGroupMouseDown={onGroupMouseDown}
