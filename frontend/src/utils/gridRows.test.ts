@@ -285,6 +285,58 @@ describe("rowAtY", () => {
         expect(rowAtY(rows, -500, layout)).toBe(0);
     });
 
+    /**
+     * Table-driven over the FIRST OCCUPIED row, because the fixture that only
+     * ever put it at 0 is exactly what let the leading-rows blind spot ship:
+     * the candidate set was `afterLast` + occupied + one gap row each, and
+     * nothing in it could ever be below the first occupied index. A grid whose
+     * only members are two Bo3s in row 2 then had `{2, 3, 4, …}` as its whole
+     * reachable answer set, and a Card dragged to the top of the container was
+     * targeted at the series, collided, and relocated to row 1 — the user's
+     * "it only ever allows me to move it to the second row".
+     */
+    describe.each([0, 1, 2, 3])("with the first occupied row at %i", (first) => {
+        const rows = rowsOf([cardAt("a", top + first * step)], layout);
+
+        it("targets every leading empty row by its own top", () => {
+            for (let index = 0; index <= first; index++) {
+                expect(rowAtY(rows, top + index * step, layout)).toBe(index);
+                // …and anywhere in that row's upper half, not just its top.
+                expect(rowAtY(rows, top + index * step + 10, layout)).toBe(index);
+            }
+        });
+
+        it("targets row 0 from far above the container", () => {
+            expect(rowAtY(rows, -500, layout)).toBe(0);
+            expect(rowAtY(rows, top - 5, layout)).toBe(0);
+        });
+    });
+
+    /**
+     * The same blind spot in its interior form. `hintRowOffsets` paints a hint
+     * for EVERY row between two occupied ones — rows at {0, 4} owe hints for 1,
+     * 2 and 3 — so all three have to be reachable, or the overlay offers a
+     * target the resolver refuses.
+     */
+    it("targets every row of a multi-row interior gap", () => {
+        const rows = rowsOf([cardAt("a", top), cardAt("b", top + 4 * step)], layout);
+        for (const index of [1, 2, 3]) {
+            expect(rowAtY(rows, top + index * step, layout)).toBe(index);
+        }
+    });
+
+    /**
+     * A TALL leading row does not shift the rows above it: everything above the
+     * first occupied row is uniformly step-spaced from the container's top,
+     * whatever the first occupied row turns out to hold.
+     */
+    it("targets leading rows above a series row on the uniform lattice", () => {
+        const rows = rowsOf([seriesAt("s", top + 2 * step)], layout);
+        expect(rowAtY(rows, top, layout)).toBe(0);
+        expect(rowAtY(rows, top + step, layout)).toBe(1);
+        expect(rowAtY(rows, top + 2 * step, layout)).toBe(2);
+    });
+
     it("is defined for an empty container", () => {
         expect(rowAtY([], top + 5, layout)).toBe(0);
         expect(rowAtY([], top + step + 5, layout)).toBe(1);

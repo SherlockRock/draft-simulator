@@ -307,9 +307,11 @@ export const rowMetricsAt = (
 export const rowAtY = (rows: RowMetrics[], y: number, layout: CardLayout): number => {
     const step = cardHeight(layout) + GRID_CELL_GAP;
 
-    // Candidate rows: every occupied row, the interior gap rows that follow
-    // them, and the growth rows past the end. Extrapolation is uniform, so the
-    // nearest growth row is a division rather than a scan.
+    // Candidate rows: every occupied row, every EMPTY RUN — above the first
+    // occupied row, between two of them, and past the last. A run is uniformly
+    // step-spaced, which is the one thing this module guarantees about rows it
+    // never had to measure, so the nearest row of a run is a division rather
+    // than a scan.
     const last = rows[rows.length - 1];
     const afterLast = last
         ? last.index +
@@ -322,24 +324,48 @@ export const rowAtY = (rows: RowMetrics[], y: number, layout: CardLayout): numbe
 
     let best = afterLast;
     let bestDistance = Math.abs(y - rowMetricsAt(rows, afterLast, layout).offset);
-    for (const row of rows) {
-        // Strict `<` keeps the LOWER index on a tie, matching Math.round's
-        // behaviour at an exact midpoint in the uniform case.
-        const distance = Math.abs(y - row.offset);
+    // Strict `<` keeps the LOWER index on a tie, matching Math.round's
+    // behaviour at an exact midpoint in the uniform case.
+    const consider = (index: number, offset: number) => {
+        const distance = Math.abs(y - offset);
         if (distance < bestDistance) {
             bestDistance = distance;
-            best = row.index;
+            best = index;
         }
-        // An interior gap row between this row and the next.
-        const gapIndex = row.index + 1;
-        if (!rowByIndex(rows, gapIndex)) {
-            const gapDistance = Math.abs(y - (row.offset + row.height + GRID_CELL_GAP));
-            if (gapDistance < bestDistance) {
-                bestDistance = gapDistance;
-                best = gapIndex;
-            }
+    };
+    /**
+     * The nearest row of a BOUNDED empty run — `count` rows from lattice
+     * `startIndex`, whose top is `startOffset`.
+     *
+     * Rev 1 generated no candidate at all above the first occupied row, and
+     * exactly ONE below each of them. So a grid whose only members sat in row 2
+     * had `{2, 3, 4, …}` as its entire reachable answer set — rows 0 and 1 were
+     * unreachable from any pointer position, including a y far above the
+     * container — and rows at `{0, 4}` could reach 1 but never 2 or 3, which
+     * `hintRowOffsets` paints as drop targets. `rowMetricsAt` resolved all of
+     * them correctly the whole time; only the candidate generation was blind.
+     */
+    const considerRun = (startIndex: number, startOffset: number, count: number) => {
+        if (count <= 0) return;
+        const k = Math.min(count - 1, Math.max(0, Math.round((y - startOffset) / step)));
+        consider(startIndex + k, startOffset + k * step);
+    };
+
+    const first = rows[0];
+    if (first) considerRun(0, firstRowOffset(), first.index);
+    rows.forEach((row, position) => {
+        consider(row.index, row.offset);
+        // The interior gap between this row and the next occupied one. The run
+        // past the LAST row is `afterLast`, which is unbounded above.
+        const next = rows[position + 1];
+        if (next) {
+            considerRun(
+                row.index + 1,
+                row.offset + row.height + GRID_CELL_GAP,
+                next.index - row.index - 1
+            );
         }
-    }
+    });
     return Math.max(0, best);
 };
 
