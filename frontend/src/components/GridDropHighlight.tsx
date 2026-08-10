@@ -8,10 +8,23 @@ import {
     type GridCell,
     type GridFootprint
 } from "../utils/gridLayout";
-import { cardHeight } from "../utils/helpers";
+import type { RowMetrics } from "../utils/gridRows";
 
-/** A landing (or displaced) rectangle: a top-left cell plus how far it spans. */
-export type GridDropRect = { cell: GridCell; footprint: GridFootprint };
+/**
+ * A landing (or displaced) rectangle: a top-left cell, how far it spans, and
+ * the ROW BAND it lands in.
+ *
+ * `rowMetrics` must be the LANDING metrics — the row as it will be once the
+ * drop completes, computed from projected membership — not the targeting ones.
+ * Dragging a Bo3 into a grid is precisely the gesture whose point is that the
+ * row grows to fit it, so a highlight drawn one card tall at a Card's offset
+ * would mispromise exactly the thing §6.0a ships.
+ */
+export type GridDropRect = {
+    cell: GridCell;
+    footprint: GridFootprint;
+    rowMetrics: RowMetrics;
+};
 
 export type GridDropTarget = {
     groupId: string;
@@ -40,9 +53,10 @@ type HighlightKind = "landing" | "swap-target" | "swap-displaced";
  * The cost, accepted: it now also paints above the connection SVG. It is a
  * transient drag affordance, visible only while the pointer is down.
  *
- * Cells are converted to world space here — `group.position + cellToPosition`.
- * That is exactly equivalent to the group-local overlay it replaces, because
- * `cellToPosition` already includes the container's header and padding.
+ * Rects are converted to world space here — `group.position` plus the column
+ * lattice for x, plus the row band's own offset for y. That is exactly
+ * equivalent to the group-local overlay it replaces, because both already
+ * include the container's header and padding.
  */
 export const GridDropHighlight: Component<GridDropHighlightProps> = (props) => {
     const rects = (): { rect: GridDropRect; kind: HighlightKind }[] => {
@@ -63,14 +77,11 @@ export const GridDropHighlight: Component<GridDropHighlightProps> = (props) => {
             <For each={rects()}>
                 {(entry) => {
                     const layout = props.cardLayout();
-                    const origin = cellToPosition(entry.rect.cell, layout);
+                    // x from the column lattice, y and height from the row
+                    // BAND — the two axes have different inverses now.
+                    const left = cellToPosition(entry.rect.cell, layout).x;
                     const width = footprintPixelWidth(entry.rect.footprint, layout);
-                    // TODO(6.0a Task 6): the HEIGHT must come from the landing
-                    // row's metrics, not from one card — a row holding a series
-                    // is much taller, and this rectangle currently under-draws
-                    // it. Wrong but honest, and it compiles; Task 6 gives every
-                    // rect its own `rowMetrics`.
-                    const height = cardHeight(layout);
+                    const band = entry.rect.rowMetrics;
                     return (
                         <div
                             class="absolute rounded-lg border-2"
@@ -83,10 +94,10 @@ export const GridDropHighlight: Component<GridDropHighlightProps> = (props) => {
                                     entry.kind === "swap-displaced"
                             }}
                             style={{
-                                left: `${props.group.positionX + origin.x}px`,
-                                top: `${props.group.positionY + origin.y}px`,
+                                left: `${props.group.positionX + left}px`,
+                                top: `${props.group.positionY + band.offset}px`,
                                 width: `${width}px`,
-                                height: `${height}px`
+                                height: `${band.height}px`
                             }}
                         >
                             <Show when={entry.kind === "swap-target"}>

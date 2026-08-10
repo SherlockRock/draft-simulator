@@ -13,18 +13,17 @@ import { scaledStrokePx } from "../utils/viewport";
 import { CanvasDraft, CanvasGroup, AnchorType } from "../utils/schemas";
 import {
     GRID_HEADER_HEIGHT,
-    GRID_PADDING,
-    GRID_CELL_GAP,
-    GridCell,
     GridItem,
     isGridGroup,
     cellToPosition,
+    rowsOfItems,
     MIN_GROUP_WIDTH,
     MIN_GROUP_HEIGHT,
     DEFAULT_GROUP_WIDTH,
     DEFAULT_GROUP_HEIGHT
 } from "../utils/gridLayout";
-import { cardWidth, cardHeight } from "../utils/helpers";
+import { hintRowOffsets, rowMetricsAt } from "../utils/gridRows";
+import { cardWidth } from "../utils/helpers";
 import type { CardLayout } from "../utils/canvasCardLayout";
 
 type CustomGroupContainerProps = {
@@ -202,40 +201,53 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
 
     const isGrid = () => isGridGroup(props.group);
 
-    // Cells covering every row and column the group currently shows: the
-    // occupied rows plus a growth row (and the configured columns plus a
-    // growth column), extended to fill the group when the user has resized
-    // it larger — so empty rows/columns read as drop targets.
-    const hintCells = createMemo<GridCell[]>(() => {
+    /**
+     * Drop-hint rectangles: every row BAND the group currently shows, crossed
+     * with its columns.
+     *
+     * §6.0a rule 2 — a hint is `{ top, height }` from the row model, not
+     * `cellToPosition(row).y` and one card. A row holding a series is much
+     * taller than a card, and a uniform hint would both sit in the wrong place
+     * and promise the wrong size for the drop about to happen.
+     *
+     * `hintRowOffsets` supplies the occupied rows, every interior gap row, and
+     * the growth rows that fit `groupHeight()` — which tracks a LIVE resize,
+     * because `handleResizeGroup` writes height on every mousemove and the
+     * resolver reads the same store value, so the hints and the drop cannot
+     * disagree.
+     *
+     * Columns still come from the parent's `effectiveGridCols`, for the same
+     * store-width reason; the x axis is untouched by §6.0a.
+     */
+    const hintCells = createMemo<{ left: number; top: number; height: number }[]>(() => {
         if (!isGrid()) return [];
         const layout = props.cardLayout();
-        // §6.0a rule 1: nothing spans rows any more, so a child's bottom row
-        // IS its cell row. Task 6 replaces this whole memo with per-row bands
-        // from `gridRows.hintRowOffsets`, which is what makes a tall row's hint
-        // cell paint at the row's real height.
-        let maxRow = 0;
-        for (const item of props.gridItems) {
-            maxRow = Math.max(maxRow, item.cell.row);
-        }
-        const cellH = cardHeight(layout) + GRID_CELL_GAP;
-        const availH =
-            groupHeight() - GRID_HEADER_HEIGHT - 2 * GRID_PADDING + GRID_CELL_GAP;
-        const rowsFromHeight = Math.max(1, Math.floor(availH / cellH));
-        const totalRows = Math.max(maxRow + 2, rowsFromHeight);
-        // Columns come from the parent's effectiveGridCols, which reads the
-        // STORE width — and that tracks a live resize, because
-        // handleResizeGroup writes width on every mousemove. localWidth() would
-        // only differ if the store write were dropped, and then the resolver
-        // would be the one that is wrong.
-        const totalCols = props.gridCols;
-        const cells: GridCell[] = [];
-        for (let row = 0; row < totalRows; row++) {
-            for (let col = 0; col < totalCols; col++) {
-                cells.push({ row, col });
+        const bands = hintRowOffsets(
+            rowsOfItems([...props.gridItems], layout),
+            groupHeight(),
+            layout
+        );
+        const out: { left: number; top: number; height: number }[] = [];
+        for (const band of bands) {
+            for (let col = 0; col < props.gridCols; col++) {
+                out.push({
+                    left: cellToPosition({ row: 0, col }, layout).x,
+                    top: band.offset,
+                    height: band.height
+                });
             }
         }
-        return cells;
+        return out;
     });
+
+    /**
+     * The row bands this container's labels and hints share. Recomputed from
+     * the items rather than passed in, so the labels cannot drift from the
+     * hints drawn beside them.
+     */
+    const rowBands = createMemo(() =>
+        isGrid() ? rowsOfItems([...props.gridItems], props.cardLayout()) : []
+    );
 
     // Resize-clamped wins over drag-target, matching the order the two ring-2
     // classList entries used to resolve in.
@@ -352,20 +364,17 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
             <Show when={isGrid() && (props.isDragTarget || props.isDragSource)}>
                 <div class="pointer-events-none absolute inset-0">
                     <For each={hintCells()}>
-                        {(cell) => {
-                            const pos = cellToPosition(cell, props.cardLayout());
-                            return (
-                                <div
-                                    class="absolute rounded-lg border-2 border-dashed border-darius-border/40"
-                                    style={{
-                                        left: `${pos.x}px`,
-                                        top: `${pos.y}px`,
-                                        width: `${cardWidth(props.cardLayout())}px`,
-                                        height: `${cardHeight(props.cardLayout())}px`
-                                    }}
-                                />
-                            );
-                        }}
+                        {(hint) => (
+                            <div
+                                class="absolute rounded-lg border-2 border-dashed border-darius-border/40"
+                                style={{
+                                    left: `${hint.left}px`,
+                                    top: `${hint.top}px`,
+                                    width: `${cardWidth(props.cardLayout())}px`,
+                                    height: `${hint.height}px`
+                                }}
+                            />
+                        )}
                     </For>
                 </div>
             </Show>
@@ -394,13 +403,22 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
                                 class="pointer-events-none absolute -ml-2 max-w-32 -translate-x-full truncate text-right text-xs font-semibold text-darius-text-secondary"
                                 style={{
                                     left: "0px",
-                                    top: `${
-                                        cellToPosition(
-                                            { row: i(), col: 0 },
+                                    // Centred on the row's BAND, and looked up
+                                    // by LATTICE INDEX — `rowMetricsAt` resolves
+                                    // an occupied row, an interior gap row and a
+                                    // row past the end alike. Indexing
+                                    // `rowBands()` positionally would point at
+                                    // the wrong row the moment a row is empty,
+                                    // and a label for a row that has since
+                                    // emptied would vanish or stack at 0.
+                                    top: `${(() => {
+                                        const band = rowMetricsAt(
+                                            rowBands(),
+                                            i(),
                                             props.cardLayout()
-                                        ).y +
-                                        cardHeight(props.cardLayout()) / 2
-                                    }px`
+                                        );
+                                        return band.offset + band.height / 2;
+                                    })()}px`
                                 }}
                             >
                                 {label}

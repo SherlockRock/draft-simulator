@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     gridContentHeight,
+    hintRowOffsets,
     memberY,
     rowAtY,
     rowMetricsAt,
@@ -362,5 +363,73 @@ describe("gridContentHeight", () => {
         expect(gridContentHeight(rows)).toBe(
             GRID_HEADER_HEIGHT + 2 * GRID_PADDING + SERIES_H
         );
+    });
+});
+
+describe("hintRowOffsets", () => {
+    const emptyContainer = GRID_HEADER_HEIGHT + 2 * GRID_PADDING;
+
+    it("gives one offset per occupied row plus a growth row", () => {
+        const rows = rowsOf([seriesAt("s", top)], layout);
+        const offsets = hintRowOffsets(rows, emptyContainer, layout);
+        expect(offsets).toHaveLength(2);
+        expect(offsets[0]).toEqual({ offset: top, height: SERIES_H });
+        expect(offsets[1]).toEqual({
+            offset: top + SERIES_H + GRID_CELL_GAP,
+            height: ch
+        });
+    });
+
+    it("fills a user-resized container with extra growth rows", () => {
+        const rows = rowsOf([cardAt("a", top)], layout);
+        const tall = top + 4 * step;
+        expect(hintRowOffsets(rows, tall, layout).length).toBeGreaterThan(2);
+    });
+
+    // `rows.length` is the count of OCCUPIED rows, not the next free lattice
+    // index — with rows at {0, 2} it starts at 2, which is occupied, so the
+    // hint list would repeat row 2 and never offer row 3.
+    it("extrapolates from the last LATTICE index, not the occupied-row count", () => {
+        const rows = rowsOf([cardAt("a", top), cardAt("c", top + 2 * step)], layout);
+        const offsets = hintRowOffsets(rows, emptyContainer, layout);
+        expect(new Set(offsets.map((o) => o.offset)).size).toBe(offsets.length);
+        expect(offsets.some((o) => o.offset === top + 3 * step)).toBe(true);
+    });
+
+    it("includes the INTERIOR gap row, which is a legal drop target", () => {
+        const rows = rowsOf([cardAt("a", top), cardAt("c", top + 2 * step)], layout);
+        const offsets = hintRowOffsets(rows, emptyContainer, layout);
+        expect(offsets.some((o) => o.offset === top + step)).toBe(true);
+    });
+
+    it("offers EVERY interior gap row, not just the first", () => {
+        // Rows at {0, 2, 5} owe hints for gap rows 1, 3 and 4.
+        const rows = rowsOf(
+            [cardAt("a", top), cardAt("b", top + 2 * step), cardAt("c", top + 5 * step)],
+            layout
+        );
+        expect(rows.map((r) => r.index)).toEqual([0, 2, 5]);
+        const offsets = hintRowOffsets(rows, emptyContainer, layout);
+        for (const gap of [1, 3, 4]) {
+            expect(offsets.some((o) => o.offset === top + gap * step)).toBe(true);
+        }
+        expect(new Set(offsets.map((o) => o.offset)).size).toBe(offsets.length);
+    });
+
+    it("gives an empty container exactly one hint row", () => {
+        expect(hintRowOffsets([], emptyContainer, layout)).toEqual([
+            { offset: top, height: ch }
+        ]);
+    });
+
+    it("paints a tall row at its FULL height, so the user can see it is tall", () => {
+        const rows = rowsOf([seriesAt("s", top)], layout);
+        expect(hintRowOffsets(rows, emptyContainer, layout)[0].height).toBe(SERIES_H);
+        expect(SERIES_H).toBeGreaterThan(ch);
+    });
+
+    it("cannot paint thousands of rows for a huge manual resize", () => {
+        const rows = rowsOf([cardAt("a", top)], layout);
+        expect(hintRowOffsets(rows, 10_000_000, layout).length).toBeLessThan(80);
     });
 });

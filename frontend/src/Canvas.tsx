@@ -169,9 +169,10 @@ import {
     type GridItem,
     type GridSettingsInput,
     type GridAssignment,
+    type GridCell,
     type GridMetadata
 } from "./utils/gridLayout";
-import { gridContentHeight } from "./utils/gridRows";
+import { gridContentHeight, rowMetricsAt, type RowMetrics } from "./utils/gridRows";
 import { seriesGrowthReflow } from "./utils/seriesGrowthReflow";
 import { resolveCopyPlacement } from "./utils/copyPlacement";
 import { GridSettingsDialog } from "./components/GridSettingsDialog";
@@ -616,6 +617,49 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         inset: GROUP_BORDER_WIDTH,
         height: cardHeight(layout)
     });
+
+    /**
+     * The item set a materialization must see: the container's current members,
+     * plus the dragged node when it is joining from OUTSIDE, carrying its real
+     * inset and height.
+     *
+     * `materializeGrid` throws on an assignment with no item rather than
+     * guessing an entering node's chrome, so every one of the three call sites
+     * — the commit and both drop previews — owes it this. Extracted once
+     * because writing it three times is how one of them ends up defaulting an
+     * incoming nested container to a Card's geometry.
+     */
+    const projectIntoGrid = (
+        items: GridItem[],
+        dragged: {
+            id: string;
+            kind: GridItem["kind"];
+            footprint: GridFootprint;
+            inset: number;
+            height: number;
+        },
+        cell: GridCell,
+        position: { x: number; y: number }
+    ): GridItem[] =>
+        items.some((i) => i.id === dragged.id)
+            ? items
+            : [...items, { ...dragged, position, cell }];
+
+    /**
+     * The row band a node will occupy once the drop completes — the LANDING
+     * metrics the highlight is drawn from, never the targeting ones.
+     *
+     * Falls back to `rowMetricsAt` for a node the materializer did not place,
+     * which is the growth-row case: total by construction, so the highlight
+     * always has a rectangle to draw.
+     */
+    const landingBandOf = (
+        rows: RowMetrics[],
+        id: string,
+        cell: GridCell,
+        layout: CardLayout
+    ): RowMetrics =>
+        rows.find((row) => row.ids.includes(id)) ?? rowMetricsAt(rows, cell.row, layout);
 
     const draggedGroupGeometry = (
         groupId: string,
@@ -1076,23 +1120,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             maxChildSpanCols(canvasTree(), group.id, layout),
             dragged.footprint.cols
         );
-        // The dragged node may be entering from outside and not be among the
-        // group's items yet; its inset and height still have to count, and
-        // `materializeGrid` throws rather than guess them.
-        const projected: GridItem[] = items.some((i) => i.id === dragged.id)
-            ? items
-            : [
-                  ...items,
-                  {
-                      id: dragged.id,
-                      kind: dragged.kind,
-                      footprint: dragged.footprint,
-                      position: { x: relX, y: relY },
-                      cell: landingCell,
-                      inset: dragged.inset,
-                      height: dragged.height
-                  }
-              ];
+        const projected = projectIntoGrid(items, dragged, landingCell, {
+            x: relX,
+            y: relY
+        });
         // LANDING membership: everything that moves, including row-mates the
         // user never touched and every row below a row that changed height.
         const { placements, rows: landedRows } = materializeGrid({
@@ -4298,11 +4329,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     : undefined;
                 if (dragged && previewParent && isGridGroup(previewParent)) {
                     const layout = props.cardLayout();
-                    const footprint = footprintOf(
-                        canvasTree(),
-                        { kind: "group", id: gState.activeGroupId, group: dragged },
+                    const draggedGeometry = draggedGroupGeometry(
+                        gState.activeGroupId,
+                        dragged,
                         layout
                     );
+                    const footprint = draggedGeometry.footprint;
                     const cols = Math.max(gridColsFor(previewParent), footprint.cols);
                     const relX = newX - previewParent.positionX;
                     const relY = newY - previewParent.positionY;
@@ -4320,7 +4352,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     const assignments = resolveGridDrop({
                         items,
                         rows: previewRows,
-                        dragged: { id: gState.activeGroupId, kind: "group", footprint },
+                        dragged: draggedGeometry,
                         draggedOrigin: joins
                             ? null
                             : {
@@ -4335,11 +4367,36 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     const landing = assignments.find(
                         (a) => a.id === gState.activeGroupId
                     );
+                    // LANDING membership: the dragged Group is projected IN,
+                    // with its real inset and height, so the highlight is drawn
+                    // at the height the row will actually grow to. This is the
+                    // gesture whose whole point is that growth.
+                    const { rows: landedRows } = landing
+                        ? materializeGrid({
+                              items: projectIntoGrid(
+                                  items,
+                                  draggedGeometry,
+                                  landing.cell,
+                                  { x: relX, y: relY }
+                              ),
+                              assignments,
+                              layout
+                          })
+                        : { rows: [] };
                     setGridDropCell(
                         landing
                             ? {
                                   groupId: previewParent.id,
-                                  landing: { cell: landing.cell, footprint },
+                                  landing: {
+                                      cell: landing.cell,
+                                      footprint,
+                                      rowMetrics: landingBandOf(
+                                          landedRows,
+                                          gState.activeGroupId,
+                                          landing.cell,
+                                          layout
+                                      )
+                                  },
                                   // A Group never swaps (decision 7, amended):
                                   // both sides must be Cards.
                                   isSwap: false,
@@ -4431,6 +4488,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     const cols = gridColsFor(gridHoverGroup);
                     const items = gridItemsFor(gridHoverGroup);
                     const isIntraGroup = gridHoverGroup.id === state.dragGroupId;
+                    const draggedGeometry = draggedCardGeometry(
+                        draggedCard.draft_id,
+                        layout
+                    );
                     // TARGETING rows: the dragged Card is excluded, so hovering
                     // it cannot move the row it is trying to land in.
                     const previewRows = rowsOfItems(
@@ -4445,11 +4506,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         // PLACEMENT identity); activeBoxId is a Draft.id. Same
                         // value today, different meanings — see step-1's
                         // identity split.
-                        dragged: {
-                            id: draggedCard.draft_id,
-                            kind: "card",
-                            footprint: CARD_FOOTPRINT
-                        },
+                        dragged: draggedGeometry,
                         draggedOrigin: isIntraGroup
                             ? { x: state.dragOriginX, y: state.dragOriginY }
                             : null,
@@ -4464,19 +4521,47 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         ? (items.find((i) => i.id === displaced.id)?.footprint ??
                           CARD_FOOTPRINT)
                         : CARD_FOOTPRINT;
+                    // Read from the assignment, not from targetCell: a
+                    // footprint that collides without being able to swap lands
+                    // on the nearest free rect instead, and the overlay has to
+                    // point at where it will actually go.
+                    const landingCell = landing ? landing.cell : targetCell;
+                    // LANDING membership — the dragged Card projected IN, so
+                    // both rects are drawn against the post-drop rows. A Card
+                    // joining a row a series already owns sits at that row's
+                    // baseline, not at its top edge.
+                    const { rows: landedRows } = materializeGrid({
+                        items: projectIntoGrid(items, draggedGeometry, landingCell, {
+                            x: relX,
+                            y: relY
+                        }),
+                        assignments,
+                        layout
+                    });
                     setGridDropCell({
                         groupId: gridHoverGroup.id,
                         landing: {
-                            // Read from the assignment, not from targetCell: a
-                            // footprint that collides without being able to swap
-                            // lands on the nearest free rect instead, and the
-                            // overlay has to point at where it will actually go.
-                            cell: landing ? landing.cell : targetCell,
-                            footprint: CARD_FOOTPRINT
+                            cell: landingCell,
+                            footprint: CARD_FOOTPRINT,
+                            rowMetrics: landingBandOf(
+                                landedRows,
+                                draggedCard.draft_id,
+                                landingCell,
+                                layout
+                            )
                         },
                         isSwap: displaced !== null,
                         displaced: displaced
-                            ? { cell: displaced.cell, footprint: occupantFootprint }
+                            ? {
+                                  cell: displaced.cell,
+                                  footprint: occupantFootprint,
+                                  rowMetrics: landingBandOf(
+                                      landedRows,
+                                      displaced.id,
+                                      displaced.cell,
+                                      layout
+                                  )
+                              }
                             : null
                     });
                 } else {

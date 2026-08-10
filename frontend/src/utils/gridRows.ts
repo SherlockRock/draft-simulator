@@ -359,3 +359,55 @@ export const gridContentHeight = (rows: RowMetrics[]): number => {
     // still occupy the container they are part of.
     return last.offset + last.height + GRID_PADDING;
 };
+
+/** Bound on extrapolated hint rows, so a huge manual resize cannot paint thousands. */
+const MAX_GROWTH_ROWS = 64;
+
+/**
+ * Row bands to paint as drop hints: every occupied row, every INTERIOR gap row
+ * between two occupied ones, one growth row past the end, and however many
+ * further growth rows fit a container the user has resized taller.
+ *
+ * `containerHeight` is the container's RENDERED height, which tracks a live
+ * resize — `handleResizeGroup` writes it on every mousemove and the resolver
+ * reads the same store value, so the hints and the drop cannot disagree.
+ *
+ * A hint for a TALL row is the row's full band, not one card: the point is that
+ * the user can see the row is tall before dropping into it.
+ */
+export const hintRowOffsets = (
+    rows: RowMetrics[],
+    containerHeight: number,
+    layout: CardLayout
+): { offset: number; height: number }[] => {
+    const out: { offset: number; height: number }[] = [];
+    rows.forEach((row, position) => {
+        out.push({ offset: row.offset, height: row.height });
+        // EVERY interior gap row between this row and the next occupied one is
+        // a legal drop target — `rowAtY` can return any of them — so each is
+        // offered a hint. Rows at {0, 2, 5} owe hints for 1, 3 AND 4.
+        const next = rows[position + 1];
+        if (!next) return;
+        for (let index = row.index + 1; index < next.index; index++) {
+            const gap = rowMetricsAt(rows, index, layout);
+            out.push({ offset: gap.offset, height: gap.height });
+        }
+    });
+
+    const limit = containerHeight - GRID_PADDING;
+    const last = rows[rows.length - 1];
+    // The next FREE lattice index. `rows.length` is the count of OCCUPIED rows,
+    // which with rows at {0, 2} is 2 — an occupied index, so the hint list
+    // would repeat row 2 and never offer row 3.
+    const firstGrowth = last ? last.index + 1 : 0;
+    let index = firstGrowth;
+    do {
+        const growth = rowMetricsAt(rows, index, layout);
+        out.push({ offset: growth.offset, height: growth.height });
+        index++;
+    } while (
+        rowMetricsAt(rows, index, layout).offset + cardHeight(layout) <= limit &&
+        index < firstGrowth + MAX_GROWTH_ROWS
+    );
+    return out;
+};
