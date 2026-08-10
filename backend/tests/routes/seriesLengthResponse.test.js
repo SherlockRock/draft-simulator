@@ -43,7 +43,16 @@ function buildCanvasApp() {
 const SERIES_PADDING_X = 0;
 const SERIES_PADDING_Y = 20;
 const SERIES_HEADER_HEIGHT = 56;
+const GROUP_BORDER_WIDTH = 2;
+const SERIES_GAME_CONTROLS_HEIGHT = 94.5;
 const SERIES_GAME_STEP = 380;
+
+// The composite the route seeds a first game Card at (§6.0a Task 0).
+const SERIES_FIRST_CARD_Y =
+  GROUP_BORDER_WIDTH +
+  SERIES_HEADER_HEIGHT +
+  SERIES_PADDING_Y +
+  SERIES_GAME_CONTROLS_HEIGHT;
 
 // A stored game Card, in the shape the response builder reads it back in.
 const cardRow = (index) => ({
@@ -52,7 +61,7 @@ const cardRow = (index) => ({
   draft_id: `d-${index}`,
   group_id: "g-1",
   positionX: SERIES_PADDING_X + index * SERIES_GAME_STEP,
-  positionY: SERIES_HEADER_HEIGHT + SERIES_PADDING_Y,
+  positionY: SERIES_FIRST_CARD_Y,
   is_locked: false,
   source_type: "versus",
   Draft: {

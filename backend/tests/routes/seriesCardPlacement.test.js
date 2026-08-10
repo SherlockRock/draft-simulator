@@ -22,7 +22,18 @@ const Team = require("../../models/Team");
 const SERIES_PADDING_X = 0;
 const SERIES_PADDING_Y = 20;
 const SERIES_HEADER_HEIGHT = 56;
+const GROUP_BORDER_WIDTH = 2;
+const SERIES_GAME_CONTROLS_HEIGHT = 94.5;
 const SERIES_GAME_STEP = 380;
+
+// The composite the route seeds a first game Card at (§6.0a Task 0). The
+// controls block sits above each game's Card and was missing from every one of
+// these mirrors until then.
+const SERIES_FIRST_CARD_Y =
+  GROUP_BORDER_WIDTH +
+  SERIES_HEADER_HEIGHT +
+  SERIES_PADDING_Y +
+  SERIES_GAME_CONTROLS_HEIGHT;
 
 function loadRouter() {
   const routePath = require.resolve("../../routes/canvas");
@@ -134,7 +145,7 @@ describe("series game Cards are placed relative to their group", () => {
       expect(CanvasDraft.create).toHaveBeenCalledWith(
         expect.objectContaining({
           positionX: SERIES_PADDING_X,
-          positionY: SERIES_HEADER_HEIGHT + SERIES_PADDING_Y,
+          positionY: SERIES_FIRST_CARD_Y,
           group_id: "g-1",
         }),
         expect.anything(),
@@ -152,7 +163,7 @@ describe("series game Cards are placed relative to their group", () => {
         SERIES_PADDING_X + 2 * SERIES_GAME_STEP,
       ]);
       for (const values of placed) {
-        expect(values.positionY).toBe(SERIES_HEADER_HEIGHT + SERIES_PADDING_Y);
+        expect(values.positionY).toBe(SERIES_FIRST_CARD_Y);
       }
     });
 
@@ -219,7 +230,7 @@ describe("series game Cards are placed relative to their group", () => {
         SERIES_PADDING_X + SERIES_GAME_STEP,
       ]);
       for (const values of placed) {
-        expect(values.positionY).toBe(SERIES_HEADER_HEIGHT + SERIES_PADDING_Y);
+        expect(values.positionY).toBe(SERIES_FIRST_CARD_Y);
         expect(values.group_id).toBe("g-new");
       }
     });

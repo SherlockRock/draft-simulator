@@ -101,6 +101,27 @@ export const getGroupAnchorWorldPosition = (
     }
 };
 
+/**
+ * The structural frame border both container components paint (`border-2` on
+ * the root of `CustomGroupContainer` and `SeriesGroupContainer`).
+ *
+ * It is a LAYOUT border, not a ring: a Tailwind ring is a world-space
+ * box-shadow and vanishes below one device pixel at `MIN_ZOOM = 0.1`
+ * (`viewport.ts`), which is exactly why these frames are not rings. Proposed
+ * and rejected twice — do not "fix" the inset table by changing it.
+ *
+ * It matters to `canvasTree.insetOf` because it displaces a container's
+ * content: a child Card is positioned inside its parent's padding box, so it
+ * picks up the PARENT's border, while a child Group renders at world level and
+ * its own content picks up its OWN. Both are one border width, which is why the
+ * term cancels in every difference `gridRows.ts` takes.
+ *
+ * Declared here rather than in `gridLayout.ts` — which re-exports it — because
+ * `gridLayout` already imports `cardWidth`/`cardHeight` from this module and
+ * the reverse import would be a cycle.
+ */
+export const GROUP_BORDER_WIDTH = 2;
+
 // Series group layout constants (must match SeriesGroupContainer.tsx)
 export const SERIES_HEADER_HEIGHT = 56;
 // Horizontal padding is ZERO so a Bo-N series measures exactly N grid columns:
@@ -111,8 +132,35 @@ export const SERIES_PADDING_Y = 20;
 export const SERIES_CARD_GAP = 24;
 
 /**
+ * The per-game team-control block that sits ABOVE each series game's draft
+ * Card — the two side panels plus the swap button, plus the `gap-2` beneath
+ * them (`SeriesGroupContainer`'s `flex flex-col gap-2` game column).
+ *
+ * MEASURED against a rendered container, not derived from the markup: the
+ * block's height is intrinsic (button padding, text metrics, `border p-2`).
+ * Browser-measured 2026-08-09 at zoom 1 on a three-game series, in all six
+ * card layouts: the block itself is 86.5 and the column's `gap-2` adds 8. Every
+ * layout agreed, and `2*GROUP_BORDER_WIDTH + SERIES_HEADER_HEIGHT +
+ * 2*SERIES_PADDING_Y + this + cardHeight` reproduced the painted frame height
+ * exactly in each. If the series interior changes, RE-MEASURE — the two
+ * consumers below are continuous inputs to the §6.0a row model and are no
+ * longer forgiving.
+ *
+ * It arrived in e442845 (2026-06-29) and neither consumer was updated, which
+ * `spanFor`'s ceil hid for six weeks: `spanFor(96+ch, ch, 24)` and
+ * `spanFor(192+ch, ch, 24)` are both 2 in all six card layouts, so no column
+ * span ever changed.
+ */
+export const SERIES_GAME_CONTROLS_HEIGHT = 94.5;
+
+/**
  * Computes the pixel dimensions of a series group container
  * based on the number of drafts and the current layout toggle.
+ *
+ * The height is the frame's BORDER BOX, matching what a custom Group's stored
+ * `width`/`height` mean: the series root declares no explicit height, so its
+ * `border-2` adds on both edges. Retiring that 4px here is the vertical half of
+ * §6's long-standing discrepancy; the horizontal half stays open against 5a-6.
  */
 export const getSeriesGroupDimensions = (
     draftCount: number,
@@ -125,13 +173,24 @@ export const getSeriesGroupDimensions = (
             2 * SERIES_PADDING_X +
             draftCount * cw +
             Math.max(0, draftCount - 1) * SERIES_CARD_GAP,
-        height: SERIES_HEADER_HEIGHT + 2 * SERIES_PADDING_Y + ch
+        height:
+            2 * GROUP_BORDER_WIDTH +
+            SERIES_HEADER_HEIGHT +
+            2 * SERIES_PADDING_Y +
+            SERIES_GAME_CONTROLS_HEIGHT +
+            ch
     };
 };
 
 /**
  * Computes the world-coordinate top-left corner of a draft card
  * inside a series group, based on its sorted index in the group.
+ *
+ * The `y` composite here is MIRRORED on three runtimes — this helper, the
+ * backend's `nextSeriesCardOrigin` and its two literal seeds, and
+ * `useLocalCanvasMutations`. They must move together or a Card jumps the moment
+ * it leaves a series, because the stored value is what the promote-on-delete
+ * and drag-out-of-series paths read back.
  */
 export const getSeriesDraftWorldPosition = (
     group: CanvasGroup,
@@ -140,11 +199,13 @@ export const getSeriesDraftWorldPosition = (
 ): { x: number; y: number } => {
     const cw = cardWidth(cardLayout);
     return {
-        x:
-            group.positionX +
-            SERIES_PADDING_X +
-            draftIndex * (cw + SERIES_CARD_GAP),
-        y: group.positionY + SERIES_HEADER_HEIGHT + SERIES_PADDING_Y
+        x: group.positionX + SERIES_PADDING_X + draftIndex * (cw + SERIES_CARD_GAP),
+        y:
+            group.positionY +
+            GROUP_BORDER_WIDTH +
+            SERIES_HEADER_HEIGHT +
+            SERIES_PADDING_Y +
+            SERIES_GAME_CONTROLS_HEIGHT
     };
 };
 

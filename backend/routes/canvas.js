@@ -54,7 +54,22 @@ const VALID_DRAFT_MODES = new Set(["standard", "fearless", "ironman"]);
 const SERIES_PADDING_X = 0;
 const SERIES_PADDING_Y = 20;
 const SERIES_HEADER_HEIGHT = 56;
+// GROUP_BORDER_WIDTH and SERIES_GAME_CONTROLS_HEIGHT mirror helpers.ts too.
+// The controls block is the per-game team panels that sit ABOVE each game's
+// Card; it arrived in e442845 and was missing from the seed until §6.0a Task 0,
+// which put the seed ~96.5px above where the Card actually paints.
+const GROUP_BORDER_WIDTH = 2;
+const SERIES_GAME_CONTROLS_HEIGHT = 94.5;
 const SERIES_GAME_STEP = 380;
+
+// The container-relative y of a series' first game Card. Mirrors the composite
+// in getSeriesDraftWorldPosition — change one, change all four mirrors (here,
+// helpers.ts, useLocalCanvasMutations, and the two test files' private copies).
+const SERIES_FIRST_CARD_Y =
+  GROUP_BORDER_WIDTH +
+  SERIES_HEADER_HEIGHT +
+  SERIES_PADDING_Y +
+  SERIES_GAME_CONTROLS_HEIGHT;
 
 // Where the next game Card goes, given the last one already placed (if any).
 // Both coordinates stay container-relative in either branch.
@@ -63,9 +78,7 @@ function nextSeriesCardOrigin(lastCanvasDraft) {
     x: lastCanvasDraft
       ? lastCanvasDraft.positionX + SERIES_GAME_STEP
       : SERIES_PADDING_X,
-    y: lastCanvasDraft
-      ? lastCanvasDraft.positionY
-      : SERIES_HEADER_HEIGHT + SERIES_PADDING_Y,
+    y: lastCanvasDraft ? lastCanvasDraft.positionY : SERIES_FIRST_CARD_Y,
   };
 }
 
@@ -1535,7 +1548,7 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
           // Container-relative, like every other Card: the group already
           // carries the world position these used to add a second time.
           positionX: SERIES_PADDING_X + i * SERIES_GAME_STEP,
-          positionY: SERIES_HEADER_HEIGHT + SERIES_PADDING_Y,
+          positionY: SERIES_FIRST_CARD_Y,
           is_locked: true,
           group_id: group.id,
           source_type: "versus",

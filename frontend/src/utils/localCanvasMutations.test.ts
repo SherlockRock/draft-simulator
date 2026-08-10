@@ -41,8 +41,20 @@ const {
     localUpdateDraftPositions
 } = await import("./useLocalCanvasMutations");
 const { MAX_GROUP_DEPTH } = await import("@draft-sim/shared-types/canvas-tree-vector");
-const { SERIES_HEADER_HEIGHT, SERIES_PADDING_X, SERIES_PADDING_Y } =
-    await import("./helpers");
+const {
+    GROUP_BORDER_WIDTH,
+    SERIES_GAME_CONTROLS_HEIGHT,
+    SERIES_HEADER_HEIGHT,
+    SERIES_PADDING_X,
+    SERIES_PADDING_Y
+} = await import("./helpers");
+
+/** The seed composite, mirrored from `getSeriesDraftWorldPosition`. */
+const SERIES_FIRST_CARD_Y =
+    GROUP_BORDER_WIDTH +
+    SERIES_HEADER_HEIGHT +
+    SERIES_PADDING_Y +
+    SERIES_GAME_CONTROLS_HEIGHT;
 
 beforeEach(() => {
     localStorage.clear();
@@ -132,7 +144,7 @@ describe("local series Card placement", () => {
 
         const card = (getLocalCanvas()?.drafts ?? [])[0];
         expect(card.positionX).toBe(SERIES_PADDING_X);
-        expect(card.positionY).toBe(SERIES_HEADER_HEIGHT + SERIES_PADDING_Y);
+        expect(card.positionY).toBe(SERIES_FIRST_CARD_Y);
     });
 
     it("keeps later games on the same relative convention as the first", () => {
@@ -157,7 +169,7 @@ describe("local series Card placement", () => {
             SERIES_PADDING_X + 760
         ]);
         for (const card of cards) {
-            expect(card.positionY).toBe(SERIES_HEADER_HEIGHT + SERIES_PADDING_Y);
+            expect(card.positionY).toBe(SERIES_FIRST_CARD_Y);
         }
     });
 

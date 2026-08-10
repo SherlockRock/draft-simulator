@@ -431,31 +431,26 @@ describe("footprints", () => {
     });
 
     // 5a-6 retired the 2x4 / 2x6 contract: with SERIES_PADDING_X at 0 a Bo-N
-    // series is exactly N columns. The second row is chrome and stays until
-    // design §6.0a.
-    it.each(ALL_LAYOUTS)("makes a Bo3 2x3 and a Bo5 2x5 in %s", (layout) => {
-        const games = (n: number) =>
-            Array.from({ length: n }, (_, i) =>
-                card(`c${i}`, { group_id: "s1", seriesIndex: i + 1 })
-            );
+    // series is exactly N columns.
+    //
+    // COLUMNS ONLY, deliberately. §6.0a Task 0 grew a series' height by the
+    // per-game control block, which moves its ROW span in some layouts — and
+    // §6.0a rule 1 then deletes the row axis outright, because rows auto-size.
+    // What must not move, and is asserted here for every layout and every
+    // odd Bo-N, is the column span: that is what feeds `maxChildSpanCols` and
+    // `effectiveGridCols`, and a change there would silently relay out every
+    // grid holding a series.
+    it.each(ALL_LAYOUTS)("makes a Bo-N series exactly N columns in %s", (layout) => {
         const seriesNode = (t: CanvasTree) => childrenOf(t, "root")[0];
-
-        const bo3 = tree(
-            [group("root"), group("s1", { type: "series", parent: "root" })],
-            games(3)
-        );
-        const bo5 = tree(
-            [group("root"), group("s1", { type: "series", parent: "root" })],
-            games(5)
-        );
-        expect(footprintOf(bo3, seriesNode(bo3), layout)).toEqual({
-            rows: 2,
-            cols: 3
-        });
-        expect(footprintOf(bo5, seriesNode(bo5), layout)).toEqual({
-            rows: 2,
-            cols: 5
-        });
+        for (const n of [1, 3, 5, 7]) {
+            const t = tree(
+                [group("root"), group("s1", { type: "series", parent: "root" })],
+                Array.from({ length: n }, (_, i) =>
+                    card(`c${i}`, { group_id: "s1", seriesIndex: i + 1 })
+                )
+            );
+            expect(footprintOf(t, seriesNode(t), layout).cols).toBe(n);
+        }
     });
 
     it("stamps a footprint that actually contains the node it describes", () => {
@@ -559,11 +554,8 @@ describe("gridItemsOf", () => {
 describe("a series is exactly N grid columns wide", () => {
     it.each(ALL_LAYOUTS)("holds for %s at Bo1, Bo3 and Bo5", (layout) => {
         for (const games of [1, 3, 5]) {
-            const columnSpan =
-                games * cardWidth(layout) + (games - 1) * GRID_CELL_GAP;
-            expect(getSeriesGroupDimensions(games, layout).width).toBe(
-                columnSpan
-            );
+            const columnSpan = games * cardWidth(layout) + (games - 1) * GRID_CELL_GAP;
+            expect(getSeriesGroupDimensions(games, layout).width).toBe(columnSpan);
         }
     });
 });

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { getDraftWorldPosition, sortedSeriesDrafts } from "./canvasWorldPosition";
 import {
+    GROUP_BORDER_WIDTH,
     SERIES_CARD_GAP,
+    SERIES_GAME_CONTROLS_HEIGHT,
     SERIES_HEADER_HEIGHT,
     SERIES_PADDING_X,
     SERIES_PADDING_Y,
@@ -75,12 +77,16 @@ describe("getDraftWorldPosition", () => {
 
         const pos = getDraftWorldPosition(games[1], g, games, LAYOUT);
 
-        expect(pos.y).toBe(g.positionY + SERIES_HEADER_HEIGHT + SERIES_PADDING_Y);
+        expect(pos.y).toBe(
+            g.positionY +
+                GROUP_BORDER_WIDTH +
+                SERIES_HEADER_HEIGHT +
+                SERIES_PADDING_Y +
+                SERIES_GAME_CONTROLS_HEIGHT
+        );
         expect(pos.y).not.toBe(g.positionY);
         expect(pos.x).toBe(
-            g.positionX +
-                SERIES_PADDING_X +
-                (cardWidth(LAYOUT) + SERIES_CARD_GAP)
+            g.positionX + SERIES_PADDING_X + (cardWidth(LAYOUT) + SERIES_CARD_GAP)
         );
     });
 

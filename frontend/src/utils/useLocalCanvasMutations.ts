@@ -12,6 +12,8 @@ import { getManualSeriesGameDefaults } from "./manualSeriesDefaults";
 import { childGroupsOf } from "./canvasTree";
 import { parentageRejection } from "./groupParentage";
 import {
+    GROUP_BORDER_WIDTH,
+    SERIES_GAME_CONTROLS_HEIGHT,
     SERIES_HEADER_HEIGHT,
     SERIES_PADDING_X,
     SERIES_PADDING_Y
@@ -476,7 +478,10 @@ export const localConvertGroupToSeries = (data: {
         const startX = lastDraft ? lastDraft.positionX + 380 : SERIES_PADDING_X;
         const startY = lastDraft
             ? lastDraft.positionY
-            : SERIES_HEADER_HEIGHT + SERIES_PADDING_Y;
+            : GROUP_BORDER_WIDTH +
+              SERIES_HEADER_HEIGHT +
+              SERIES_PADDING_Y +
+              SERIES_GAME_CONTROLS_HEIGHT;
 
         for (let i = groupDrafts.length; i < data.length; i += 1) {
             const draftId = crypto.randomUUID();

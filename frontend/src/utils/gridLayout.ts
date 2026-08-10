@@ -2,6 +2,15 @@ import type { CanvasGroup } from "./schemas";
 import { cardWidth, cardHeight } from "./helpers";
 import type { CardLayout } from "./canvasCardLayout";
 
+/**
+ * The frame border both container components paint. Declared in `helpers.ts`
+ * and re-exported here so grid code can take it from the module it belongs to,
+ * matching how `DEFAULT_GROUP_WIDTH` is declared here and re-exported by
+ * `canvasTree.ts`. Declaring it there is what keeps `helpers` ⇄ `gridLayout`
+ * acyclic.
+ */
+export { GROUP_BORDER_WIDTH } from "./helpers";
+
 export const GRID_CELL_GAP = 24;
 export const GRID_PADDING = 16;
 // Single source of truth; CustomGroupContainer re-exports this as
