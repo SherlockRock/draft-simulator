@@ -1,8 +1,8 @@
-import { Index, Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
-import { Minus, Plus } from "lucide-solid";
+import { Show, createEffect, createMemo, untrack } from "solid-js";
 import { CanvasGroup } from "../utils/schemas";
 import { gridColsOf, isGridGroup, type GridSettingsInput } from "../utils/gridLayout";
 import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./Dialog";
+import { GridSettingsFields, createGridSettingsForm } from "./GridSettingsFields";
 
 type GridSettingsDialogProps = {
     group: () => CanvasGroup | null;
@@ -12,18 +12,8 @@ type GridSettingsDialogProps = {
     rowCount: (group: CanvasGroup, cols: number) => number;
 };
 
-const LABEL_INPUT_CLASS =
-    "w-full appearance-none rounded border border-darius-border bg-darius-card px-3 py-2 text-sm leading-tight text-darius-text-primary shadow focus:outline-none focus:ring-2 focus:ring-darius-purple-bright";
-
-const STEPPER_BUTTON_CLASS =
-    "flex h-8 w-8 items-center justify-center rounded border border-darius-border bg-darius-card text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-darius-text-primary disabled:cursor-not-allowed disabled:opacity-40";
-
 export const GridSettingsDialog = (props: GridSettingsDialogProps) => {
-    const [cols, setCols] = createSignal(3);
-    // Seeded from the FULL stored arrays so labels beyond the visible
-    // rows/columns are never dropped on save.
-    const [rowLabels, setRowLabels] = createSignal<string[]>([]);
-    const [colLabels, setColLabels] = createSignal<string[]>([]);
+    const form = createGridSettingsForm();
 
     // Snapshot form state when the dialog opens. Only `props.isOpen()` is
     // tracked; the group/metadata reads are untracked so a socket reconcile
@@ -34,9 +24,11 @@ export const GridSettingsDialog = (props: GridSettingsDialogProps) => {
         untrack(() => {
             const group = props.group();
             if (!group) return;
-            setCols(gridColsOf(group));
-            setColLabels([...(group.metadata.colLabels ?? [])]);
-            setRowLabels([...(group.metadata.rowLabels ?? [])]);
+            form.seed({
+                gridCols: gridColsOf(group),
+                colLabels: group.metadata.colLabels,
+                rowLabels: group.metadata.rowLabels
+            });
         });
     });
 
@@ -50,43 +42,10 @@ export const GridSettingsDialog = (props: GridSettingsDialogProps) => {
     const rowInputCount = createMemo(() => {
         const group = props.group();
         if (!group) return 0;
-        return Math.max(props.rowCount(group, cols()), rowLabels().length, 1);
+        return Math.max(props.rowCount(group, form.cols()), form.rowLabels().length, 1);
     });
 
-    const handleColsInput = (value: string) => {
-        const parsed = Number(value);
-        if (Number.isInteger(parsed) && parsed >= 1) setCols(parsed);
-    };
-
-    const stepCols = (delta: number) => setCols((c) => Math.max(1, c + delta));
-
-    const setColLabel = (i: number, value: string) => {
-        const next = [...colLabels()];
-        next[i] = value;
-        setColLabels(next);
-    };
-
-    const setRowLabel = (i: number, value: string) => {
-        const next = [...rowLabels()];
-        next[i] = value;
-        setRowLabels(next);
-    };
-
-    const save = () => {
-        // Read signals into locals so the Array.from callbacks below don't read
-        // reactive state (keeps solid/reactivity happy; `save` is event-only).
-        const colCount = cols();
-        const rows = rowLabels();
-        const columns = colLabels();
-        const rowLen = rowInputCount();
-        props.onSave({
-            gridCols: colCount,
-            rowLabels: Array.from({ length: rowLen }, (_, i) => (rows[i] ?? "").trim()),
-            colLabels: Array.from({ length: colCount }, (_, i) =>
-                (columns[i] ?? "").trim()
-            )
-        });
-    };
+    const save = () => props.onSave(form.read(rowInputCount()));
 
     return (
         <Dialog
@@ -103,90 +62,11 @@ export const GridSettingsDialog = (props: GridSettingsDialogProps) => {
                             Grid settings
                         </h2>
 
-                        <div class="space-y-4">
-                            <div class="flex items-center justify-between gap-3">
-                                <label
-                                    class="text-sm font-medium text-darius-text-secondary"
-                                    for="grid-settings-cols"
-                                >
-                                    Columns
-                                </label>
-                                <div class="flex items-center gap-1.5">
-                                    <button
-                                        type="button"
-                                        class={STEPPER_BUTTON_CLASS}
-                                        onClick={() => stepCols(-1)}
-                                        disabled={cols() <= 1}
-                                        aria-label="Decrease columns"
-                                    >
-                                        <Minus size={14} />
-                                    </button>
-                                    <input
-                                        id="grid-settings-cols"
-                                        type="number"
-                                        min="1"
-                                        value={cols()}
-                                        onInput={(e) =>
-                                            handleColsInput(e.currentTarget.value)
-                                        }
-                                        onBlur={(e) =>
-                                            (e.currentTarget.value = String(cols()))
-                                        }
-                                        class="w-14 appearance-none rounded border border-darius-border bg-darius-card px-2 py-1.5 text-center text-sm leading-tight text-darius-text-primary shadow [appearance:textfield] focus:outline-none focus:ring-2 focus:ring-darius-purple-bright [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                    />
-                                    <button
-                                        type="button"
-                                        class={STEPPER_BUTTON_CLASS}
-                                        onClick={() => stepCols(1)}
-                                        aria-label="Increase columns"
-                                    >
-                                        <Plus size={14} />
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div>
-                                <span class="mb-2 block text-sm font-medium text-darius-text-secondary">
-                                    Column labels
-                                </span>
-                                <div class="custom-scrollbar max-h-40 space-y-2 overflow-y-auto pr-1">
-                                    <Index each={Array.from({ length: cols() })}>
-                                        {(_, i) => (
-                                            <input
-                                                type="text"
-                                                placeholder={`Column ${i + 1}`}
-                                                value={colLabels()[i] ?? ""}
-                                                onInput={(e) =>
-                                                    setColLabel(i, e.currentTarget.value)
-                                                }
-                                                class={LABEL_INPUT_CLASS}
-                                            />
-                                        )}
-                                    </Index>
-                                </div>
-                            </div>
-
-                            <div>
-                                <span class="mb-2 block text-sm font-medium text-darius-text-secondary">
-                                    Row labels
-                                </span>
-                                <div class="custom-scrollbar max-h-40 space-y-2 overflow-y-auto pr-1">
-                                    <Index each={Array.from({ length: rowInputCount() })}>
-                                        {(_, i) => (
-                                            <input
-                                                type="text"
-                                                placeholder={`Row ${i + 1}`}
-                                                value={rowLabels()[i] ?? ""}
-                                                onInput={(e) =>
-                                                    setRowLabel(i, e.currentTarget.value)
-                                                }
-                                                class={LABEL_INPUT_CLASS}
-                                            />
-                                        )}
-                                    </Index>
-                                </div>
-                            </div>
-                        </div>
+                        <GridSettingsFields
+                            form={form}
+                            rowInputCount={rowInputCount}
+                            idPrefix="grid-settings"
+                        />
 
                         <div class="mt-6 flex items-center justify-end gap-2 border-t border-darius-border pt-4">
                             <button
