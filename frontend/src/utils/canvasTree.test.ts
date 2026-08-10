@@ -12,6 +12,7 @@ import {
     descendantGroupsOf,
     footprintOf,
     gridItemsOf,
+    insetOf,
     isDescendant,
     maxChildSpanCols,
     nodeSize,
@@ -20,15 +21,24 @@ import {
     spanFor,
     subtreeHeight,
     wouldCreateCycle,
-    type CanvasTree
+    type CanvasTree,
+    type TreeNode
 } from "./canvasTree";
 import {
     GRID_CELL_GAP,
     GRID_HEADER_HEIGHT,
     GRID_PADDING,
+    GROUP_BORDER_WIDTH,
     cellToPosition
 } from "./gridLayout";
-import { cardHeight, cardWidth, getSeriesGroupDimensions } from "./helpers";
+import {
+    SERIES_GAME_CONTROLS_HEIGHT,
+    SERIES_HEADER_HEIGHT,
+    SERIES_PADDING_Y,
+    cardHeight,
+    cardWidth,
+    getSeriesGroupDimensions
+} from "./helpers";
 import type { CanvasDraft, CanvasGroup } from "./schemas";
 import type { CardLayout } from "./canvasCardLayout";
 
@@ -74,6 +84,7 @@ const group = (
         y?: number;
         width?: number;
         height?: number;
+        metadata?: CanvasGroup["metadata"];
     } = {}
 ): CanvasGroup => ({
     id,
@@ -85,7 +96,7 @@ const group = (
     width: opts.width,
     height: opts.height,
     parent_group_id: opts.parent ?? null,
-    metadata: {}
+    metadata: opts.metadata ?? {}
 });
 
 const tree = (groups: CanvasGroup[], drafts: CanvasDraft[] = []): CanvasTree => ({
@@ -497,6 +508,83 @@ describe("footprints", () => {
         expect(maxChildSpanCols(t, "root", LAYOUT)).toBe(3);
         expect(maxChildSpanCols(t, "s1", LAYOUT)).toBe(1);
         expect(maxChildSpanCols(t, "nope", LAYOUT)).toBe(0);
+    });
+});
+
+describe("insetOf", () => {
+    const layout: CardLayout = "vertical";
+    const seriesNode = (g: CanvasGroup): TreeNode => ({
+        kind: "group",
+        id: g.id,
+        group: g
+    });
+
+    it("is the frame border for a Card — it sits inside its parent's border", () => {
+        const t = tree([], [card("c1")]);
+        const node: TreeNode = { kind: "card", id: "c1", card: t.drafts[0] };
+        expect(insetOf(t, node, layout)).toBe(GROUP_BORDER_WIDTH);
+    });
+
+    it("is border + header + padding + the per-game controls for a series", () => {
+        const series = group("s1", { type: "series" });
+        const t = tree([series]);
+        // Task 0's term. Without it this is short by ~95px and rule 3 puts the
+        // series' games BELOW the Card it is meant to align with.
+        expect(insetOf(t, seriesNode(series), layout)).toBe(
+            GROUP_BORDER_WIDTH +
+                SERIES_HEADER_HEIGHT +
+                SERIES_PADDING_Y +
+                SERIES_GAME_CONTROLS_HEIGHT
+        );
+    });
+
+    it("is border + header + padding for a grid container", () => {
+        const grid = group("g1", { metadata: { layout: "grid" } });
+        const t = tree([grid]);
+        expect(insetOf(t, seriesNode(grid), layout)).toBe(
+            GROUP_BORDER_WIDTH + GRID_HEADER_HEIGHT + GRID_PADDING
+        );
+    });
+
+    it("claims only the header for a free container — its content is wherever the user left it", () => {
+        const free = group("f1", { metadata: { layout: "free" } });
+        const t = tree([free]);
+        expect(insetOf(t, seriesNode(free), layout)).toBe(
+            GROUP_BORDER_WIDTH + GRID_HEADER_HEIGHT
+        );
+    });
+
+    // Entry condition 8. The BORDER term is uniform across every node kind, so
+    // it cancels everywhere rules 2 and 3 use an inset — they use differences
+    // only. This test is what stops a future border change breaking that
+    // silently: if someone gives one kind a different border, it fails here.
+    //
+    // The series' controls term is NOT uniform and does NOT cancel, which is
+    // why the design's flat `76` is wrong and Task 0 exists. The expectation
+    // below is computed, never a literal.
+    it("carries the border term uniformly, so inset DIFFERENCES are chrome-only", () => {
+        const series = group("s1", { type: "series" });
+        const grid = group("g1", { metadata: { layout: "grid" } });
+        const free = group("f1", { metadata: { layout: "free" } });
+        const t = tree([series, grid, free], [card("c1")]);
+        const cardInset = insetOf(
+            t,
+            { kind: "card", id: "c1", card: t.drafts[0] },
+            layout
+        );
+
+        expect(insetOf(t, seriesNode(series), layout) - cardInset).toBe(
+            SERIES_HEADER_HEIGHT + SERIES_PADDING_Y + SERIES_GAME_CONTROLS_HEIGHT
+        );
+        expect(insetOf(t, seriesNode(grid), layout) - cardInset).toBe(64);
+        expect(insetOf(t, seriesNode(free), layout) - cardInset).toBe(48);
+    });
+
+    it("is the same for every card layout — no inset depends on one today", () => {
+        const series = group("s1", { type: "series" });
+        const t = tree([series]);
+        const insets = ALL_LAYOUTS.map((l) => insetOf(t, seriesNode(series), l));
+        expect(new Set(insets).size).toBe(1);
     });
 });
 

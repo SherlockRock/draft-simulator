@@ -1,10 +1,21 @@
 import type { CanvasDraft, CanvasGroup } from "./schemas";
 import type { CardLayout } from "./canvasCardLayout";
-import { cardHeight, cardWidth, getSeriesGroupDimensions } from "./helpers";
+import {
+    GROUP_BORDER_WIDTH,
+    SERIES_GAME_CONTROLS_HEIGHT,
+    SERIES_HEADER_HEIGHT,
+    SERIES_PADDING_Y,
+    cardHeight,
+    cardWidth,
+    getSeriesGroupDimensions
+} from "./helpers";
 import {
     DEFAULT_GROUP_HEIGHT,
     DEFAULT_GROUP_WIDTH,
     GRID_CELL_GAP,
+    GRID_HEADER_HEIGHT,
+    GRID_PADDING,
+    isGridGroup,
     positionToCell,
     type GridFootprint,
     type GridItem
@@ -304,6 +315,50 @@ export const nodeSize = (
         width: node.group.width ?? DEFAULT_GROUP_WIDTH,
         height: node.group.height ?? DEFAULT_GROUP_HEIGHT
     };
+};
+
+/**
+ * A node's CONTENT INSET: its own top edge to where its first draft Card
+ * begins, in the container-relative frame `gridItemsOf` reports positions in
+ * (design §6.0a rule 3).
+ *
+ * This is what baseline alignment aligns on. A row's baseline is the largest
+ * inset among its members, and each member sits at
+ * `rowOffset + (baseline - its own inset)` — so a series' first game lands
+ * level with a loose Card beside it instead of ~171px below it.
+ *
+ * Every value carries `GROUP_BORDER_WIDTH` once, for two different reasons
+ * that happen to have the same size: a Card is positioned inside its parent
+ * container's padding box, and a Group's own content sits inside its own
+ * border. Uniform, therefore cancelling — see the test. The series' controls
+ * term is NOT uniform and does not cancel, which is why §6.0a's flat inset
+ * table was wrong and why Task 0 had to land first.
+ *
+ * A free container claims only its header: its content starts wherever the
+ * user left it, so there is nothing else that can honestly be claimed.
+ */
+export const insetOf = (
+    _tree: CanvasTree,
+    node: TreeNode,
+    _layout: CardLayout
+): number => {
+    // `_tree` and `_layout` are unused today and are in the signature
+    // deliberately: it mirrors `nodeSize` and `footprintOf`, every call site
+    // already has the triple, and a card-layout-dependent inset is one CSS
+    // change away. A test pins that no inset varies by layout right now.
+    if (node.kind === "card") return GROUP_BORDER_WIDTH;
+    if (node.group.type === "series") {
+        return (
+            GROUP_BORDER_WIDTH +
+            SERIES_HEADER_HEIGHT +
+            SERIES_PADDING_Y +
+            SERIES_GAME_CONTROLS_HEIGHT
+        );
+    }
+    if (isGridGroup(node.group)) {
+        return GROUP_BORDER_WIDTH + GRID_HEADER_HEIGHT + GRID_PADDING;
+    }
+    return GROUP_BORDER_WIDTH + GRID_HEADER_HEIGHT;
 };
 
 /**
