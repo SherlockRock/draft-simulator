@@ -206,6 +206,24 @@ export const configuredColsAfterDrop = (
 ): number => Math.max(gridColsOf(group), landing.col + spanOf(footprint).cols);
 
 /**
+ * The row count to PERSIST after a drop — the same rule, on the other axis.
+ *
+ * Columns have grown on drop since §6; rows never did, and the asymmetry was
+ * visible: a Card dropped into the growth row of a one-row grid was accepted
+ * and the container grew to hold it, but `gridRows` stayed 1 — so moving that
+ * Card away collapsed the container back to one row and the row the user had
+ * added did not survive. Under `gridContentHeightForRows` the stored count is
+ * the container's height FLOOR, so a drop that does not raise it buys a row
+ * only for as long as something occupies it.
+ *
+ * **No footprint term**, unlike the column rule. §6.0a rule 1: nothing spans
+ * rows — a tall member makes its ROW grow instead — so a landing occupies
+ * exactly one row and `row + 1` is total for a Card and a Bo5 alike.
+ */
+export const configuredRowsAfterDrop = (group: CanvasGroup, landing: GridCell): number =>
+    Math.max(gridRowsOf(group), landing.row + 1);
+
+/**
  * Every cell a footprint stamped at `cell` covers — ONE row, `cols` wide.
  *
  * Replaces `rectCells`. §6.0a rule 1: nothing spans rows, because a row grows

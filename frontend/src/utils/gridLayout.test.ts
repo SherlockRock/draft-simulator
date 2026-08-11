@@ -15,6 +15,7 @@ import {
     colsFromWidth,
     effectiveGridCols,
     configuredColsAfterDrop,
+    configuredRowsAfterDrop,
     mergeLabels,
     buildGridMetadata,
     arrangedRowCount,
@@ -1234,6 +1235,60 @@ describe("column growth", () => {
                     )
                 ).toBe(Math.max(3, col + 1));
             }
+        });
+    });
+
+    /**
+     * The row half of the same rule, missing until 2026-08-11. Columns have
+     * persisted their growth since §6: drop past the configured count and
+     * `gridCols` rises to cover it. Rows never did — so a Card dropped into the
+     * growth row of a one-row grid was accepted and the container grew to hold
+     * it, but `gridRows` stayed 1, and moving that Card away collapsed the
+     * container back to one row. The row the user added did not survive.
+     */
+    describe("configuredRowsAfterDrop", () => {
+        const rowGroup = (gridRows: number): CanvasGroup => ({
+            ...gridGroup(3, null),
+            metadata: { layout: "grid", gridCols: 3, gridRows }
+        });
+
+        it("is the configured count when the landing already fits", () => {
+            expect(configuredRowsAfterDrop(rowGroup(3), { row: 0, col: 0 })).toBe(3);
+            expect(configuredRowsAfterDrop(rowGroup(3), { row: 2, col: 1 })).toBe(3);
+        });
+
+        it("rises to cover a landing in the growth row — the reported defect", () => {
+            expect(configuredRowsAfterDrop(rowGroup(1), { row: 1, col: 0 })).toBe(2);
+        });
+
+        it("covers a landing several rows past the end", () => {
+            for (const row of [0, 1, 2, 5]) {
+                expect(configuredRowsAfterDrop(rowGroup(2), { row, col: 0 })).toBe(
+                    Math.max(2, row + 1)
+                );
+            }
+        });
+
+        /**
+         * No footprint term, unlike the column rule. §6.0a rule 1: nothing spans
+         * rows — a tall member makes its ROW grow instead — so a landing always
+         * occupies exactly one row and `row + 1` is total.
+         */
+        it("counts one row for a member of any height", () => {
+            expect(configuredRowsAfterDrop(rowGroup(1), { row: 1, col: 0 })).toBe(
+                configuredRowsAfterDrop(rowGroup(1), { row: 1, col: 2 })
+            );
+        });
+
+        it("reads the DEFAULT row count for a grid that never stored one", () => {
+            const legacy: CanvasGroup = {
+                ...gridGroup(3, null),
+                metadata: { layout: "grid", gridCols: 3 }
+            };
+            expect(configuredRowsAfterDrop(legacy, { row: 0, col: 0 })).toBe(
+                DEFAULT_GRID_ROWS
+            );
+            expect(configuredRowsAfterDrop(legacy, { row: 3, col: 0 })).toBe(4);
         });
 
         /**

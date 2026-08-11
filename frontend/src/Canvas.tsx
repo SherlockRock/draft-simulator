@@ -155,6 +155,7 @@ import {
     gridRowsOf,
     gridMetadataEquals,
     configuredColsAfterDrop,
+    configuredRowsAfterDrop,
     resolveGridDrop,
     arrangeGrid,
     cellAt,
@@ -1133,6 +1134,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             landingCell,
             dragged.footprint
         );
+        // The row axis, by the same rule and from the same landing. Without it
+        // a drop into the growth row was accepted and the container grew, but
+        // the count stayed put — so the row lasted only as long as something
+        // occupied it, and moving that member away collapsed the container.
+        const configuredRows = configuredRowsAfterDrop(group, landingCell);
         const sizeCols = Math.max(
             configuredCols,
             maxChildSpanCols(canvasTree(), group.id, layout),
@@ -1166,16 +1172,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             const entry = writes.groups.find((g) => g.id === dragged.id);
             if (entry && joinsContainer) entry.parentId = group.id;
         }
+        // `configuredRows`, not the STORED count — this is the write that
+        // raises it, so reading the group would size the container to the floor
+        // it is leaving behind.
         const dims = resolveGridDims(
             group,
-            gridContentHeightForRows(landedRows, gridRowsOf(group), layout),
+            gridContentHeightForRows(landedRows, configuredRows, layout),
             sizeCols,
             layout
         );
-        const metadata =
-            configuredCols !== gridColsOf(group)
-                ? { gridCols: configuredCols }
-                : undefined;
+        const gridChanges = {
+            ...(configuredCols !== gridColsOf(group) ? { gridCols: configuredCols } : {}),
+            ...(configuredRows !== gridRowsOf(group) ? { gridRows: configuredRows } : {})
+        };
+        const metadata = Object.keys(gridChanges).length > 0 ? gridChanges : undefined;
 
         for (const u of updates) {
             setCanvasDrafts((cd) => cd.draft_id === u.draft_id, {
