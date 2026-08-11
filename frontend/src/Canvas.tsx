@@ -91,7 +91,7 @@ import {
     type TreeNode
 } from "./utils/canvasTree";
 import { findDropContainer } from "./utils/canvasHitTest";
-import { resizeChainOf } from "./utils/containerResizeChain";
+import { groupDragResyncTargets, resizeChainOf } from "./utils/containerResizeChain";
 import { splitGridPlacements, type GridWrites } from "./utils/gridPersistence";
 import {
     subtreeMoveWrites,
@@ -3434,6 +3434,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             positionY: group.positionY,
             ...(parentageChanged ? { parentId: resolution.nextParentId } : {})
         };
+        // Every container whose contents this drag changed — the one it left
+        // and the one it landed in, including the SAME container on a plain
+        // reposition. The Card path has always refitted all of these; the Group
+        // path refitted only a newly-gained parent, so a series moved further
+        // up inside its free parent never shrank it.
+        const resyncTargets = groupDragResyncTargets({
+            previousParentId: currentParentId,
+            nextParentId: resolution.nextParentId ?? null,
+            rejected: Boolean(resolution.rejection)
+        });
 
         // A GRID container lays its children out; it does not accept them
         // wherever they were released. Route the drop — including a same-parent
@@ -3461,6 +3471,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                       },
                 joinsContainer: parentageChanged
             });
+            // `commitGridDrop` sizes the destination itself from the layout it
+            // just materialized, so only the container the Group LEFT is still
+            // owed a refit — which it never got before.
+            for (const id of resyncTargets) {
+                if (id !== nextParent.id) resyncGroupSize(id);
+            }
             return;
         }
 
@@ -3469,13 +3485,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 parent_group_id: resolution.nextParentId ?? null
             });
         }
-        // §9.1a's locked rule: grow the container only when the drop CHANGES
-        // parentage INTO it. Never to chase a child that is leaving, and never
-        // mid-drag — that ratchet is what made drag-out unusable as an un-nest
-        // path in the first place (A5).
-        if (parentageChanged && resolution.nextParentId) {
-            resyncGroupSize(resolution.nextParentId);
-        }
+        // AFTER the parentage write above, so a container losing this Group is
+        // measured over a membership that no longer includes it. §9.1a's locked
+        // rule survives: it forbids growing MID-DRAG to chase a leaving child,
+        // and every call here runs once the drag has committed.
+        for (const id of resyncTargets) resyncGroupSize(id);
 
         if (isLocalMode()) {
             // Local has nothing to fan the delta out for it and the live drag

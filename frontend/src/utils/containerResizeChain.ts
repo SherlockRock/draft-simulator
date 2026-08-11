@@ -24,3 +24,40 @@ export const resizeChainOf = (tree: CanvasTree, groupId: string): string[] => {
     if (!groupById(tree, groupId)) return [];
     return [groupId, ...ancestorsOf(tree, groupId).map((g) => g.id)];
 };
+
+/**
+ * The containers a GROUP drag has to re-fit: the one it left and the one it
+ * landed in, deduped, source first.
+ *
+ * `commitGroupDrag` used to resync `nextParentId` and only when parentage
+ * CHANGED into it, which left two holes the Card path never had. A same-parent
+ * reposition changes no parentage, so a series moved further up inside its free
+ * parent never shrank it — the reported defect. And a Group dragged out to top
+ * level has a null `nextParentId`, so the parent it abandoned was never
+ * refitted either.
+ *
+ * §9.1a's locked rule ("never grow to chase a child that is leaving") survives
+ * intact, because it is a rule about WHEN, not about which container: every
+ * call here runs after the drag has committed, by which point a departed child
+ * is no longer a member and cannot be chased. Mid-drag growth — the ratchet
+ * that made drag-out unusable — is still nobody's job.
+ *
+ * Source first so a container losing a member settles before the one gaining
+ * it is measured, which matters when one is nested inside the other and their
+ * resize chains overlap.
+ */
+export const groupDragResyncTargets = (input: {
+    previousParentId: string | null;
+    nextParentId: string | null;
+    rejected: boolean;
+}): string[] => {
+    // A rejected drop commits the position only, so parentage is unchanged and
+    // `nextParentId` names a container the Group never joined. Refitting it
+    // would size a container for a member it does not have.
+    const next = input.rejected ? input.previousParentId : input.nextParentId;
+    const targets: string[] = [];
+    for (const id of [input.previousParentId, next]) {
+        if (id && !targets.includes(id)) targets.push(id);
+    }
+    return targets;
+};
