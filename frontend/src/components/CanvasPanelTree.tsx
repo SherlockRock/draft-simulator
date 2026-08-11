@@ -246,24 +246,14 @@ const GroupedCardRow: Component<{
         return ids.filter((id) => id !== "");
     });
 
-    const currentDraftChampionIds = createMemo(() => {
-        if (!isActiveDraftRow()) {
-            return [];
-        }
-
-        const picks = props.canvasDraft.Draft.picks ?? [];
-        const ids = panel.showRestrictionBans() ? picks : picks.slice(10, 20);
-
-        return ids.filter((id) => id !== "");
-    });
-
-    const displayChampionIds = createMemo(() =>
-        isActiveDraftRow() ? currentDraftChampionIds() : rowChampionIds()
-    );
+    // Only SIBLING rows get a strip. The row for the draft you are viewing used
+    // to show that draft's own picks, on no mode condition at all — so it fired
+    // in every group, standard included, restating the board already filling the
+    // screen beside it. A strip earns its space by naming what a row takes AWAY
+    // from you, which is what `rowChampionIds` reads and why it is empty outside
+    // fearless and ironman.
     const hasChampionStrip = createMemo(
-        () =>
-            (isCurrentRestrictionSource() || isActiveDraftRow()) &&
-            displayChampionIds().length > 0
+        () => isCurrentRestrictionSource() && rowChampionIds().length > 0
     );
 
     return (
@@ -317,7 +307,7 @@ const GroupedCardRow: Component<{
                     contentClass="pb-2 pt-1"
                 >
                     <div class="px-2">
-                        <ChampionStrip championIds={displayChampionIds()} />
+                        <ChampionStrip championIds={rowChampionIds()} />
                     </div>
                 </RestrictionTreeRow>
             </Show>
