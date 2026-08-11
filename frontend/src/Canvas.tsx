@@ -193,7 +193,7 @@ import {
     type RowMetrics
 } from "./utils/gridRows";
 import { seriesGrowthReflow } from "./utils/seriesGrowthReflow";
-import { resolveCopyPlacement } from "./utils/copyPlacement";
+import { resolveCopyPlacement, type CopyPlacement } from "./utils/copyPlacement";
 import { GroupTeamNamesDialog } from "./components/GroupTeamNamesDialog";
 import {
     DraftPositionsUpdatedSchema,
@@ -1486,26 +1486,44 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
+    /**
+     * `metadata` rides along in the SAME request rather than firing a second
+     * one — two partial metadata merges can have their responses arrive out of
+     * order and the loser replaces the row, which is the race
+     * `resolveLayoutChange` exists to avoid on the settings path.
+     */
     const persistGroupDimensions = (
         group: CanvasGroup,
-        dims: { width: number; height: number }
+        dims: { width: number; height: number },
+        // Narrower than `CanvasGroupMetadataUpdate` on purpose: that permits the
+        // D3 clear protocol's `null`, which the STORED metadata shape does not
+        // accept, so a general type here could not be merged into the store
+        // without an assertion.
+        metadata?: CopyPlacement["groupMetadata"]
     ) => {
-        setCanvasGroups((g) => g.id === group.id, {
-            width: dims.width,
-            height: dims.height
-        });
+        setCanvasGroups(
+            (g) => g.id === group.id,
+            (g) => ({
+                ...g,
+                width: dims.width,
+                height: dims.height,
+                ...(metadata ? { metadata: { ...g.metadata, ...metadata } } : {})
+            })
+        );
         if (isLocalMode()) {
             localUpdateGroup({
                 groupId: group.id,
                 width: dims.width,
-                height: dims.height
+                height: dims.height,
+                ...(metadata ? { metadata } : {})
             });
         } else {
             updateGroupMutation.mutate({
                 canvasId: canvasId(),
                 groupId: group.id,
                 width: dims.width,
-                height: dims.height
+                height: dims.height,
+                ...(metadata ? { metadata } : {})
             });
         }
     };
@@ -4240,8 +4258,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             layout: props.cardLayout()
         });
 
-        if (placement.groupDims && sourceGroup) {
-            persistGroupDimensions(sourceGroup, placement.groupDims);
+        // Either half can be present alone: a copy can push the grid onto a new
+        // row without changing the container's size, when a manual floor
+        // already made it tall enough to hold it.
+        if (sourceGroup && (placement.groupDims || placement.groupMetadata)) {
+            persistGroupDimensions(
+                sourceGroup,
+                placement.groupDims ?? {
+                    width: sourceGroup.width ?? DEFAULT_GROUP_WIDTH,
+                    height: sourceGroup.height ?? DEFAULT_GROUP_HEIGHT
+                },
+                placement.groupMetadata
+            );
         }
 
         if (isLocalMode()) {

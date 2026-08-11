@@ -51,6 +51,7 @@ function groupWith(args: {
     height?: number | null;
     layout?: "free" | "grid";
     gridCols?: number;
+    gridRows?: number;
     manualWidth?: number;
     manualHeight?: number;
 }): CanvasGroup {
@@ -66,6 +67,7 @@ function groupWith(args: {
         metadata: {
             layout: args.layout,
             gridCols: args.gridCols,
+            gridRows: args.gridRows,
             manualWidth: args.manualWidth,
             manualHeight: args.manualHeight
         }
@@ -112,6 +114,62 @@ describe("resolveCopyPlacement", () => {
                 layout
             )
         );
+    });
+
+    /**
+     * The paste half of the drop defect fixed the same day. `firstEmptyRect`
+     * can legitimately place a copy on a row past the configured count — the
+     * test above is exactly that case — and the container is sized to include
+     * it. Without persisting the count, that row is a height the container
+     * holds only while the copy occupies it: move the copy out and the
+     * container collapses, taking the row with it.
+     */
+    it("persists the row count a copy pushed the grid onto", () => {
+        const group = groupWith({
+            id: "g1",
+            type: "custom",
+            layout: "grid",
+            gridCols: 2,
+            gridRows: 1
+        });
+        const first = cellToPosition({ row: 0, col: 0 }, layout);
+        const second = cellToPosition({ row: 0, col: 1 }, layout);
+        const drafts = [
+            draftAt("a", first.x, first.y, group.id),
+            draftAt("b", second.x, second.y, group.id)
+        ];
+
+        const placement = resolveCopyPlacement({
+            draft: drafts[0],
+            group,
+            tree: { groups: [group], drafts },
+            layout
+        });
+
+        expect(placement.positionY).toBe(cellToPosition({ row: 1, col: 0 }, layout).y);
+        expect(placement.groupMetadata).toEqual({ gridRows: 2 });
+    });
+
+    it("sends no metadata when the copy fits the rows already configured", () => {
+        // A one-request paste is the common case; a copy landing inside the
+        // configured grid must not fire a metadata write that changes nothing.
+        const group = groupWith({
+            id: "g1",
+            type: "custom",
+            layout: "grid",
+            gridCols: 2,
+            gridRows: 4
+        });
+        const drafts = [draftAt("a", 0, 0, group.id)];
+
+        const placement = resolveCopyPlacement({
+            draft: drafts[0],
+            group,
+            tree: { groups: [group], drafts },
+            layout
+        });
+
+        expect(placement.groupMetadata).toBeUndefined();
     });
 
     it("keeps free-layout copies in the same group directly below the source", () => {

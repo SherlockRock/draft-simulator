@@ -11,6 +11,7 @@ import {
 import {
     CARD_FOOTPRINT,
     cellToPosition,
+    configuredRowsAfterDrop,
     contentBoundsOf,
     firstEmptyRect,
     GRID_CELL_GAP,
@@ -37,6 +38,18 @@ export type CopyPlacement = {
         width: number;
         height: number;
     };
+    /**
+     * Grid metadata the paste has to persist alongside the position — present
+     * only when it CHANGES, so an ordinary copy into a container that already
+     * has room stays a single request.
+     *
+     * Rows only. A copy has no drop point, so no growth COLUMN is owed and
+     * `cols` below is deliberately not `effectiveGridCols` — but
+     * `firstEmptyRect` genuinely does place a copy on a row past the configured
+     * count, and the container is sized to include it. Leaving the count behind
+     * makes that row last only as long as the copy sits in it.
+     */
+    groupMetadata?: { gridRows: number };
 };
 
 /**
@@ -115,9 +128,12 @@ export const resolveCopyPlacement = (args: {
             x: cellToPosition(cell, layout).x,
             y: copyRow ? memberY(copyRow, copy.inset) : cellToPosition(cell, layout).y
         };
+        // The count being APPLIED, so the container is sized to the row the
+        // copy just landed on rather than to the floor it is leaving behind.
+        const configuredRows = configuredRowsAfterDrop(group, cell);
         const dims = resolveGridDims(
             group,
-            gridContentHeightForRows(rows, gridRowsOf(group), layout),
+            gridContentHeightForRows(rows, configuredRows, layout),
             cols,
             layout
         );
@@ -125,7 +141,10 @@ export const resolveCopyPlacement = (args: {
             positionX: position.x,
             positionY: position.y,
             group_id: group.id,
-            ...(resizesGroup(group, dims) ? { groupDims: dims } : {})
+            ...(resizesGroup(group, dims) ? { groupDims: dims } : {}),
+            ...(configuredRows !== gridRowsOf(group)
+                ? { groupMetadata: { gridRows: configuredRows } }
+                : {})
         };
     }
 

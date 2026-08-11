@@ -57,6 +57,7 @@ import type { RestrictionGroup } from "../components/ChampionPanel";
 import { getDraftWorldPosition } from "../utils/canvasWorldPosition";
 import { childCardsOf } from "../utils/canvasTree";
 import { resolveCopyPlacement } from "../utils/copyPlacement";
+import { DEFAULT_GROUP_WIDTH, DEFAULT_GROUP_HEIGHT } from "../utils/gridLayout";
 
 const ChampionStrip: Component<{
     championIds: string[];
@@ -531,19 +532,30 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
             layout: cardLayout()
         });
 
-        if (placement.groupDims && sourceGroup) {
+        // Either half can be present alone: a copy can push the grid onto a new
+        // row without changing the container's size, when a manual floor
+        // already made it tall enough to hold it. The metadata rides in the
+        // same request, never a second one.
+        if (sourceGroup && (placement.groupDims || placement.groupMetadata)) {
+            const dims = placement.groupDims ?? {
+                width: sourceGroup.width ?? DEFAULT_GROUP_WIDTH,
+                height: sourceGroup.height ?? DEFAULT_GROUP_HEIGHT
+            };
+            const metadata = placement.groupMetadata;
             if (isLocalMode()) {
                 localUpdateGroup({
                     groupId: sourceGroup.id,
-                    width: placement.groupDims.width,
-                    height: placement.groupDims.height
+                    width: dims.width,
+                    height: dims.height,
+                    ...(metadata ? { metadata } : {})
                 });
             } else {
                 updateGroupMutation.mutate({
                     canvasId: canvasId(),
                     groupId: sourceGroup.id,
-                    width: placement.groupDims.width,
-                    height: placement.groupDims.height
+                    width: dims.width,
+                    height: dims.height,
+                    ...(metadata ? { metadata } : {})
                 });
             }
         }
