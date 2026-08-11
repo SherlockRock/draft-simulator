@@ -38,6 +38,7 @@ const {
     localCreateConnection,
     localCreateGroup,
     localConvertGroupToSeries,
+    localDeleteDraft,
     localDeleteGroup,
     localUpdateGroup,
     localUpdateDraftPositions
@@ -344,6 +345,43 @@ describe("local group nesting", () => {
         const stored = (getLocalCanvas()?.groups ?? []).find((g) => g.id === child.id);
         expect(stored?.parent_group_id).toBe(parent.id);
         expect(stored?.positionX).toBe(5);
+    });
+});
+
+describe("localDeleteDraft, against the server's route", () => {
+    const card = (name: string) =>
+        localNewDraft({ name, picks: Array(20).fill(""), positionX: 0, positionY: 0 });
+
+    it("trims a multi-endpoint connection instead of deleting it", () => {
+        const source = card("source");
+        const doomed = card("doomed");
+        const survivor = card("survivor");
+        localCreateConnection({
+            sourceDraftIds: [{ draftId: source.draft_id }],
+            targetDraftIds: [{ draftId: doomed.draft_id }, { draftId: survivor.draft_id }]
+        });
+
+        localDeleteDraft(doomed.draft_id);
+
+        const connections = getLocalCanvas()?.connections ?? [];
+        expect(connections).toHaveLength(1);
+        expect(connections[0].target_draft_ids).toHaveLength(1);
+        expect(connections[0].target_draft_ids[0]).toMatchObject({
+            draft_id: survivor.draft_id
+        });
+    });
+
+    it("still destroys a connection whose side the delete empties", () => {
+        const source = card("source");
+        const doomed = card("doomed");
+        localCreateConnection({
+            sourceDraftIds: [{ draftId: source.draft_id }],
+            targetDraftIds: [{ draftId: doomed.draft_id }]
+        });
+
+        localDeleteDraft(doomed.draft_id);
+
+        expect(getLocalCanvas()?.connections ?? []).toHaveLength(0);
     });
 });
 

@@ -148,16 +148,12 @@ export const localUpdateDraftPosition = (data: {
 export const localDeleteDraft = (draftId: string) => {
     return mutateLocal((canvas) => {
         canvas.drafts = canvas.drafts.filter((d) => d.Draft.id !== draftId);
-        // Also remove connections referencing this draft
-        canvas.connections = canvas.connections.filter((c) => {
-            const srcRefs = c.source_draft_ids.some(
-                (e) => "draft_id" in e && e.draft_id === draftId
-            );
-            const tgtRefs = c.target_draft_ids.some(
-                (e) => "draft_id" in e && e.draft_id === draftId
-            );
-            return !srcRefs && !tgtRefs;
-        });
+        // Also remove connections referencing this draft — trimmed, not dropped
+        // wholesale, exactly as canvas.js:1249 does it.
+        canvas.connections = pruneConnectionEndpoints(
+            canvas.connections,
+            (e) => "draft_id" in e && e.draft_id === draftId
+        );
         return { canvas, result: { success: true } };
     });
 };
