@@ -168,6 +168,10 @@ import {
     DEFAULT_GROUP_HEIGHT,
     GROUP_BORDER_WIDTH,
     resolveGridSave,
+    resolveResizeGridSettings,
+    gridDimensions,
+    MIN_GROUP_WIDTH,
+    MIN_GROUP_HEIGHT,
     arrangedRowCount,
     CARD_FOOTPRINT,
     type GridFootprint,
@@ -1231,12 +1235,26 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         // The metadata being APPLIED, not the stored row count — this is the
         // path a row-count change takes, so reading the group would size it to
         // the count it is leaving behind.
-        const dims = resolveGridDims(
-            group,
+        //
+        // Derived WITHOUT the manual floor, and recorded AS the new floor, for
+        // the reason `gridDimsFor` gives: the counts and the floor are two
+        // views of one thing, so a stale floor must not veto a column change
+        // the user just made. `gridContentHeightForRows` and `cols` have both
+        // already taken the max over what the members need.
+        const raw = gridDimensions(
             gridContentHeightForRows(rows, metadata.gridRows, layout),
             cols,
             layout
         );
+        const dims = {
+            width: Math.max(MIN_GROUP_WIDTH, raw.width),
+            height: Math.max(MIN_GROUP_HEIGHT, raw.height)
+        };
+        const sizedMetadata = {
+            ...metadata,
+            manualWidth: dims.width,
+            manualHeight: dims.height
+        };
 
         for (const u of updates) {
             setCanvasDrafts((cd) => cd.draft_id === u.draft_id, {
@@ -1248,7 +1266,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setCanvasGroups((g) => g.id === group.id, {
             width: dims.width,
             height: dims.height,
-            metadata: { ...group.metadata, ...metadata }
+            metadata: { ...group.metadata, ...sizedMetadata }
         });
 
         const payload = {
@@ -1258,7 +1276,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 id: group.id,
                 width: dims.width,
                 height: dims.height,
-                metadata
+                metadata: sizedMetadata
             }
         };
         if (isLocalMode()) {
@@ -1391,9 +1409,32 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     /**
+     * The row bands a grid container currently presents — its own configured
+     * columns raised by any child too wide for them, exactly as the sizing
+     * paths read it.
+     */
+    const gridRowsFor = (group: CanvasGroup): RowMetrics[] => {
+        const layout = props.cardLayout();
+        const cols = Math.max(
+            gridColsOf(group),
+            maxChildSpanCols(canvasTree(), group.id, layout)
+        );
+        return rowsOfItems(gridItemsOf(canvasTree(), group.id, layout, cols), layout);
+    };
+
+    /**
      * The size a grid container should be for `metadata`, without re-arranging
      * anything — the row count is a height floor, not an arrangement input, so
      * changing it resizes the frame and moves nothing.
+     *
+     * **Deliberately NOT `resolveGridDims`** (2026-08-11). That takes
+     * `max(manualFloor, derived)`, so once `handleResizeEnd` had written a
+     * floor, every later count change in the dialog was vetoed by it and the
+     * dialog silently did nothing. The counts and the manual floor are two
+     * views of one thing now — a resize writes the counts, and a count change
+     * writes the floor, which is what `handleSaveGroupSettings` does with this
+     * result. Content still fits without the floor's help: both terms below
+     * already take the max over what the members need.
      */
     const gridDimsFor = (group: CanvasGroup, metadata: GridMetadata) => {
         const layout = props.cardLayout();
@@ -1402,8 +1443,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             maxChildSpanCols(canvasTree(), group.id, layout)
         );
         const items = gridItemsOf(canvasTree(), group.id, layout, cols);
-        return resolveGridDims(
-            group,
+        const dims = gridDimensions(
             gridContentHeightForRows(
                 rowsOfItems(items, layout),
                 metadata.gridRows,
@@ -1412,6 +1452,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             cols,
             layout
         );
+        return {
+            width: Math.max(MIN_GROUP_WIDTH, dims.width),
+            height: Math.max(MIN_GROUP_HEIGHT, dims.height)
+        };
     };
 
     const handleSetGroupTeamNames = (metadata: {
@@ -3229,6 +3273,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             disabledChampions: data.disabledChampions,
             gameType: data.gameType,
             draftMode: staysSeries ? data.draftMode : null,
+            // The counts and the manual floor are two views of one thing: a
+            // resize writes the counts, and a count change re-writes the floor.
+            // Without this half, a container that had ever been resized could
+            // never be made SMALLER from the dialog — the stale floor won.
+            ...(layoutDims
+                ? { manualWidth: layoutDims.width, manualHeight: layoutDims.height }
+                : {}),
             ...(layoutChange && !layoutChange.reflow ? layoutChange.metadata : {})
         };
 
@@ -3667,7 +3718,26 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         // derives `width`/`height` as max(floor, content), so if any of them
         // also wrote the floor, an auto-grow would be indistinguishable from a
         // deliberate resize and the ratchet would come straight back.
-        const metadata = { manualWidth: width, manualHeight: height };
+        //
+        // On a GRID it also writes the counts that size describes (2026-08-11).
+        // The floor alone left `gridCols`/`gridRows` free to disagree with the
+        // width the user dragged, and since every derivation computes width from
+        // `gridCols` while never reading the current width, the next one
+        // reconciled it — a row-count edit moved the frame sideways. The counts
+        // are floored, so the size they imply never exceeds the dragged size and
+        // the floor above still wins.
+        const metadata = {
+            manualWidth: width,
+            manualHeight: height,
+            ...(group && isGridGroup(group)
+                ? resolveResizeGridSettings({
+                      width,
+                      height,
+                      rows: gridRowsFor(group),
+                      layout: props.cardLayout()
+                  })
+                : {})
+        };
         setCanvasGroups(
             (g) => g.id === groupId,
             (g) => ({

@@ -415,6 +415,36 @@ export const gridContentHeightForRows = (
 const MAX_GROWTH_ROWS = 64;
 
 /**
+ * How many rows a container of `containerHeight` presents — the inverse of
+ * `gridContentHeightForRows`, and the row half of the resize → counts rule.
+ *
+ * This cannot be the division `colsFromWidth` is. Columns are a uniform
+ * lattice; rows are bands whose height comes from their tallest member (rule
+ * 2), so a container holding a Bo3 has one row that measuring in card-heights
+ * would call two. It walks `rowMetricsAt` instead — the same extrapolation the
+ * drop targeting and `hintRowOffsets` use — against `hintRowOffsets`' own
+ * `containerHeight - GRID_PADDING` limit, so the count a resize yields is
+ * exactly the number of rows the hints were painting at that height.
+ *
+ * Floored at one: a grid always presents a row, and `DEFAULT_GRID_ROWS` is 1.
+ * Bounded by `MAX_GROWTH_ROWS` for the same reason `hintRowOffsets` is.
+ */
+export const rowsFromHeight = (
+    rows: RowMetrics[],
+    containerHeight: number,
+    layout: CardLayout
+): number => {
+    const limit = containerHeight - GRID_PADDING;
+    let count = 0;
+    while (count < MAX_GROWTH_ROWS) {
+        const metrics = rowMetricsAt(rows, count, layout);
+        if (metrics.offset + metrics.height > limit) break;
+        count++;
+    }
+    return Math.max(1, count);
+};
+
+/**
  * Row bands to paint as drop hints: every occupied row, every INTERIOR gap row
  * between two occupied ones, one growth row past the end, and however many
  * further growth rows fit a container the user has resized taller.

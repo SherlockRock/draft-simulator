@@ -6,6 +6,7 @@ import {
     memberY,
     rowAtY,
     rowMetricsAt,
+    rowsFromHeight,
     rowsOf,
     type RowMember
 } from "./gridRows";
@@ -532,5 +533,65 @@ describe("hintRowOffsets", () => {
     it("cannot paint thousands of rows for a huge manual resize", () => {
         const rows = rowsOf([cardAt("a", top)], layout);
         expect(hintRowOffsets(rows, 10_000_000, layout).length).toBeLessThan(80);
+    });
+});
+
+/**
+ * The inverse of `gridContentHeightForRows`, and the row half of the resize →
+ * counts rule: a manual resize decides the grid's configuration rather than
+ * leaving a floor that silently disagrees with it.
+ *
+ * Rows are variable-height bands, so this cannot be a division the way
+ * `colsFromWidth` is. It walks `rowMetricsAt` — the same extrapolation the drop
+ * targeting and `hintRowOffsets` use — so the rows a resize yields are exactly
+ * the rows the hints were painting at that height.
+ */
+describe("rowsFromHeight", () => {
+    it("is the inverse of gridContentHeightForRows on an empty grid", () => {
+        for (const count of [1, 2, 3, 7]) {
+            const height = gridContentHeightForRows([], count, layout);
+            expect(rowsFromHeight([], height, layout)).toBe(count);
+        }
+    });
+
+    it("never reports zero rows — a grid always presents one", () => {
+        expect(rowsFromHeight([], 0, layout)).toBe(1);
+        expect(rowsFromHeight([], -500, layout)).toBe(1);
+    });
+
+    it("does not count a row the container is one pixel too short for", () => {
+        const height = gridContentHeightForRows([], 3, layout);
+        expect(rowsFromHeight([], height - 1, layout)).toBe(2);
+    });
+
+    it("counts a TALL row as the one row it is, not as the cards it spans", () => {
+        // A Bo3 occupies one row whose band is SERIES_GROWTH taller than a card
+        // row. Measuring in card-height steps would call that band two rows and
+        // hand the container a row count its own model contradicts.
+        const rows = rowsOf([seriesAt("s", top - SERIES_INSET + CARD_INSET)], layout);
+        const height = gridContentHeightForRows(rows, 1, layout);
+        expect(rowsFromHeight(rows, height, layout)).toBe(1);
+        expect(height).toBeGreaterThan(gridContentHeightForRows([], 1, layout));
+    });
+
+    it("counts the growth row past a tall row once the height allows it", () => {
+        const rows = rowsOf([seriesAt("s", top - SERIES_INSET + CARD_INSET)], layout);
+        const two = gridContentHeightForRows(rows, 2, layout);
+        expect(rowsFromHeight(rows, two, layout)).toBe(2);
+        expect(rowsFromHeight(rows, two - 1, layout)).toBe(1);
+    });
+
+    it("agrees with the rows hintRowOffsets paints at the same height", () => {
+        // The two must not disagree: the hints are the promise a drop makes,
+        // and the count is what the container stores as its floor.
+        const rows = rowsOf([cardAt("a", top)], layout);
+        const height = gridContentHeightForRows(rows, 4, layout);
+        expect(rowsFromHeight(rows, height, layout)).toBe(
+            hintRowOffsets(rows, height, layout).length
+        );
+    });
+
+    it("is bounded, so a huge manual resize cannot return thousands", () => {
+        expect(rowsFromHeight([], 10_000_000, layout)).toBeLessThan(80);
     });
 });

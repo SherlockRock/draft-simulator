@@ -4,6 +4,7 @@ import type { CardLayout } from "./canvasCardLayout";
 import {
     memberY,
     rowAtY,
+    rowsFromHeight,
     rowsOf,
     rowsOfIndexed,
     type RowMember,
@@ -881,6 +882,37 @@ export const gridMetadataEquals = (
         sameLabels(existing.colLabels, next.colLabels)
     );
 };
+
+/**
+ * The grid configuration a manual resize implies — decision "resize sets the
+ * counts" (2026-08-11).
+ *
+ * Before this, `handleResizeEnd` wrote only the `manualWidth`/`manualHeight`
+ * floor and left `gridCols`/`gridRows` alone, so the size the user dragged and
+ * the size the counts imply were free to disagree. Every sizing path derives
+ * width as `max(floor, cols * cardWidth + gaps)` without ever reading the
+ * container's CURRENT width, so any later re-derivation reconciled that
+ * disagreement — a row-count edit was simply the one that surfaced it, by
+ * moving the frame's width.
+ *
+ * The two were already contradicting each other in the other direction:
+ * `effectiveGridCols` includes `colsFromWidth`, so a resize widened the
+ * reachable drop columns while the next re-derivation discarded them.
+ *
+ * The counts this returns always describe a grid no LARGER than the size
+ * dragged to (both terms floor), which is what guarantees the manual floor
+ * still wins in `resolveContainerDims` and the container cannot snap after the
+ * mouse comes up.
+ */
+export const resolveResizeGridSettings = (input: {
+    width: number;
+    height: number;
+    rows: RowMetrics[];
+    layout: CardLayout;
+}): { gridCols: number; gridRows: number } => ({
+    gridCols: colsFromWidth(input.width, input.layout),
+    gridRows: rowsFromHeight(input.rows, input.height, input.layout)
+});
 
 // Pure save decision: the metadata to persist (always including labels) and
 // whether the group must be reflowed. Reflow when creating a grid from a free

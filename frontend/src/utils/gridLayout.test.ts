@@ -19,6 +19,7 @@ import {
     buildGridMetadata,
     arrangedRowCount,
     resolveGridSave,
+    resolveResizeGridSettings,
     gridMetadataEquals,
     DEFAULT_GRID_COLS,
     DEFAULT_GRID_ROWS,
@@ -41,7 +42,13 @@ import {
     type GridFootprint,
     type GridItem
 } from "./gridLayout";
-import { gridContentHeight, memberY, rowAtY, rowsOfIndexed } from "./gridRows";
+import {
+    gridContentHeight,
+    gridContentHeightForRows,
+    memberY,
+    rowAtY,
+    rowsOfIndexed
+} from "./gridRows";
 import {
     GROUP_BORDER_WIDTH,
     SERIES_GAME_CONTROLS_HEIGHT,
@@ -1729,5 +1736,129 @@ describe("container sizing", () => {
                     .maxLeftEdgeDelta
             ).toBe(0);
         });
+    });
+});
+
+/**
+ * Resize → counts (2026-08-11). A manual resize used to write only the
+ * `manualWidth`/`manualHeight` floor, leaving `gridCols` untouched — so the
+ * width the user dragged and the width the column count implies were free to
+ * disagree, and ANY later re-derivation reconciled them. A row-count edit was
+ * the one that surfaced it: it moved the frame's WIDTH.
+ *
+ * The two were already contradicting each other elsewhere: `effectiveGridCols`
+ * has always included `colsFromWidth`, so a container resized wider exposed
+ * extra drop columns that the next re-derivation silently discarded.
+ */
+describe("resolveResizeGridSettings", () => {
+    const layout: CardLayout = "vertical";
+
+    const widthFor = (cols: number) => gridDimensions(0, cols, layout).width;
+
+    it("reads the column count off the width the user dragged to", () => {
+        for (const cols of [1, 2, 3, 5]) {
+            expect(
+                resolveResizeGridSettings({
+                    width: widthFor(cols),
+                    height: gridContentHeightForRows([], 1, layout),
+                    rows: [],
+                    layout
+                }).gridCols
+            ).toBe(cols);
+        }
+    });
+
+    it("reads the row count off the height the user dragged to", () => {
+        for (const rows of [1, 2, 4]) {
+            expect(
+                resolveResizeGridSettings({
+                    width: widthFor(3),
+                    height: gridContentHeightForRows([], rows, layout),
+                    rows: [],
+                    layout
+                }).gridRows
+            ).toBe(rows);
+        }
+    });
+
+    /** The size a 1x1 grid needs — the smallest a grid container can honestly be. */
+    const oneByOne = {
+        width: widthFor(1),
+        height: gridContentHeightForRows([], 1, layout)
+    };
+
+    /**
+     * The property the whole fix rests on: the size these counts imply never
+     * EXCEEDS the size the user dragged to, so `resolveContainerDims`' floor
+     * (which is that same dragged size) always wins and the frame cannot snap
+     * afterwards. Without it, resizing would set counts that immediately
+     * resized the container away from where it was dropped.
+     *
+     * Swept from the 1x1 size up, because below it the one-row/one-column floor
+     * has to win — see the test after this one.
+     */
+    it("never yields counts whose own size exceeds the dragged size", () => {
+        for (let width = oneByOne.width; width < 2200; width += 37) {
+            for (let height = oneByOne.height; height < 1800; height += 53) {
+                const settings = resolveResizeGridSettings({
+                    width,
+                    height,
+                    rows: [],
+                    layout
+                });
+                const derived = gridDimensions(
+                    gridContentHeightForRows([], settings.gridRows, layout),
+                    settings.gridCols,
+                    layout
+                );
+                // Equality is fine and common; only exceeding is a snap.
+                expect(derived.width).toBeLessThanOrEqual(width);
+                expect(derived.height).toBeLessThanOrEqual(height);
+            }
+        }
+    });
+
+    it("floors both counts at one, however small the container is dragged", () => {
+        const settings = resolveResizeGridSettings({
+            width: 0,
+            height: 0,
+            rows: [],
+            layout
+        });
+        expect(settings).toEqual({ gridCols: 1, gridRows: 1 });
+    });
+
+    /**
+     * The ONE case where a grid container still snaps after a resize, and it
+     * predates this change: `MIN_GROUP_WIDTH`/`MIN_GROUP_HEIGHT` let the resize
+     * handles go smaller than a single cell, and a grid cannot be narrower than
+     * one column. Recorded rather than fixed — the clamp is shared with free
+     * containers, which have no such floor.
+     */
+    it("documents the sub-one-cell floor the resize clamp still permits", () => {
+        expect(MIN_GROUP_WIDTH).toBeLessThan(oneByOne.width);
+        expect(MIN_GROUP_HEIGHT).toBeLessThan(oneByOne.height);
+        const settings = resolveResizeGridSettings({
+            width: MIN_GROUP_WIDTH,
+            height: MIN_GROUP_HEIGHT,
+            rows: [],
+            layout
+        });
+        expect(settings).toEqual({ gridCols: 1, gridRows: 1 });
+        expect(widthFor(settings.gridCols)).toBeGreaterThan(MIN_GROUP_WIDTH);
+    });
+
+    it("measures rows over the container's REAL bands, not a card lattice", () => {
+        // A container holding a Bo3 has one tall row. Counting in card-height
+        // steps would report two rows for a height that presents one.
+        const tall = rowsOfIndexed(
+            [{ id: "s", index: 0, inset: 172, height: 520 }],
+            layout
+        );
+        const height = gridContentHeightForRows(tall, 1, layout);
+        expect(
+            resolveResizeGridSettings({ width: widthFor(3), height, rows: tall, layout })
+                .gridRows
+        ).toBe(1);
     });
 });
