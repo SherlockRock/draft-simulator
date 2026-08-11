@@ -275,7 +275,6 @@ export const subtreeHeight = (tree: CanvasTree, groupId: string): number => {
  * Every Group in the store comes out exactly once.
  */
 export const renderOrder = (tree: CanvasTree): CanvasGroup[] => {
-    const known = new Set(tree.groups.map((g) => g.id));
     const out: CanvasGroup[] = [];
     const visited = new Set<string>();
 
@@ -286,14 +285,46 @@ export const renderOrder = (tree: CanvasTree): CanvasGroup[] => {
         for (const child of childGroupsOf(tree, group.id)) walk(child);
     };
 
-    for (const group of tree.groups) {
-        const parentId = group.parent_group_id ?? null;
-        if (parentId === null || !known.has(parentId)) walk(group);
-    }
-    // Anything still unvisited is in a cycle: no root reaches it.
-    for (const group of tree.groups) walk(group);
+    for (const root of rootGroupsOf(tree)) walk(root);
 
     return out;
+};
+
+/**
+ * The Groups a top-down walk must START from — what `childGroupsOf(tree, null)`
+ * is NOT.
+ *
+ * Any consumer that renders the tree from the top needs this rather than the
+ * top-level query, because two of the three kinds of root are invisible to it:
+ *
+ *  - **Top-level Groups**, `parent_group_id == null`.
+ *  - **Orphans**, whose parent names a row that is not in the tree. Filtering on
+ *    `parent_group_id == null` makes a whole subtree vanish for a full round
+ *    trip every time the optimistic delete runs.
+ *  - **Cycle members**, which no root reaches. The server rejects cycles, but a
+ *    local canvas has no server, and a node that silently disappears is worse
+ *    than one drawn in an odd place.
+ *
+ * Roots and orphans come first in fetch order, then whatever a walk from those
+ * never reached. Callers that RECURSE must still carry their own visited set:
+ * this makes a cycle reachable, it does not make it finite.
+ */
+export const rootGroupsOf = (tree: CanvasTree): CanvasGroup[] => {
+    const known = new Set(tree.groups.map((g) => g.id));
+    const roots = tree.groups.filter((g) => {
+        const parentId = g.parent_group_id ?? null;
+        return parentId === null || !known.has(parentId);
+    });
+
+    const reached = new Set<string>();
+    const walk = (group: CanvasGroup) => {
+        if (reached.has(group.id)) return;
+        reached.add(group.id);
+        for (const child of childGroupsOf(tree, group.id)) walk(child);
+    };
+    for (const root of roots) walk(root);
+
+    return [...roots, ...tree.groups.filter((g) => !reached.has(g.id))];
 };
 
 /**

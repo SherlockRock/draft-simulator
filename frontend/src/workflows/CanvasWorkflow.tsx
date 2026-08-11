@@ -4,9 +4,7 @@ import {
     createEffect,
     createSignal,
     createMemo,
-    Show,
-    For,
-    type JSX
+    Show
 } from "solid-js";
 import { useParams, useNavigate, RouteSectionProps } from "@solidjs/router";
 import { useQueryClient, useMutation, useQuery } from "@tanstack/solid-query";
@@ -36,6 +34,13 @@ import { FlowBackLink } from "../components/FlowBackLink";
 import toast from "solid-toast";
 import { CanvasGroup, CanvasDraft, Viewport } from "../utils/schemas";
 import { CanvasAccessDenied, AccessErrorType } from "../components/CanvasAccessDenied";
+import { CanvasPanelTree } from "../components/CanvasPanelTree";
+import {
+    NO_COLLAPSE_CHOICES,
+    isCollapsedAtDepth,
+    toggledCollapse,
+    type CollapseChoices
+} from "../utils/panelCollapse";
 import { DraftContextMenu } from "../components/DraftContextMenu";
 import { GroupContextMenu } from "../components/GroupContextMenu";
 import {
@@ -47,7 +52,6 @@ import {
 import { CanvasContext, type ShareAnchor } from "../contexts/CanvasContext";
 import { CanvasSocketProvider } from "../providers/CanvasSocketProvider";
 import type { CardLayout } from "../utils/canvasCardLayout";
-import { resolveChampion } from "../utils/constants";
 import { getRestrictedChampionsByGame } from "../utils/seriesRestrictions";
 import {
     getGroupRestrictedChampionsByDraft,
@@ -55,91 +59,8 @@ import {
 } from "../utils/groupRestrictions";
 import type { RestrictionGroup } from "../components/ChampionPanel";
 import { getDraftWorldPosition } from "../utils/canvasWorldPosition";
-import { childCardsOf } from "../utils/canvasTree";
 import { resolveCopyPlacement } from "../utils/copyPlacement";
 import { DEFAULT_GROUP_WIDTH, DEFAULT_GROUP_HEIGHT } from "../utils/gridLayout";
-
-const ChampionStrip: Component<{
-    championIds: string[];
-    tint?: "default" | "disabled";
-}> = (props) => {
-    const visibleChampionIds = createMemo(() =>
-        props.championIds.filter((id) => id !== "")
-    );
-
-    return (
-        <Show when={visibleChampionIds().length > 0}>
-            <div class="flex flex-wrap gap-1">
-                <For each={visibleChampionIds()}>
-                    {(championId) => {
-                        const champion = resolveChampion(championId);
-                        if (!champion) {
-                            return null;
-                        }
-                        return (
-                            <img
-                                src={champion.img}
-                                alt={champion.name}
-                                title={champion.name}
-                                class={`h-7 w-7 rounded object-cover ${
-                                    props.tint === "disabled"
-                                        ? "border border-red-700/60 opacity-75"
-                                        : "border border-darius-border"
-                                }`}
-                            />
-                        );
-                    }}
-                </For>
-            </div>
-        </Show>
-    );
-};
-
-const TREE_CONNECTOR_WIDTH_CLASS = "w-6";
-const TREE_CONNECTOR_STROKE_CLASS = "bg-darius-purple-bright/35";
-const TREE_CONNECTOR_THICKNESS_CLASS = "w-0.5";
-const TREE_CONNECTOR_BRANCH_THICKNESS_CLASS = "h-0.5";
-const TREE_CONNECTOR_BRANCH_OFFSET_CLASS = "left-[2px]";
-const TREE_CONNECTOR_END_CAP_CLASS = "h-[calc(50%+1px)]";
-
-const RestrictionTreeRow: Component<{
-    continueAbove?: boolean;
-    continueBelow?: boolean;
-    branch?: boolean;
-    contentClass?: string;
-    children: JSX.Element;
-}> = (props) => {
-    return (
-        <div class="flex items-stretch">
-            <div class={`relative ml-[11px] shrink-0 ${TREE_CONNECTOR_WIDTH_CLASS}`}>
-                <Show when={props.continueAbove}>
-                    <div
-                        class={`absolute left-0 ${TREE_CONNECTOR_THICKNESS_CLASS} ${TREE_CONNECTOR_STROKE_CLASS} ${
-                            props.continueBelow
-                                ? "bottom-0 top-0"
-                                : `top-0 ${TREE_CONNECTOR_END_CAP_CLASS}`
-                        }`}
-                    />
-                </Show>
-                <Show when={props.continueBelow}>
-                    <div
-                        class={`absolute bottom-0 left-0 ${TREE_CONNECTOR_THICKNESS_CLASS} ${TREE_CONNECTOR_STROKE_CLASS} ${
-                            props.continueAbove ? "hidden" : "h-1/2"
-                        }`}
-                    />
-                </Show>
-                <Show when={props.branch}>
-                    <div
-                        class={`absolute right-0 top-[calc(50%-1px)] ${TREE_CONNECTOR_BRANCH_OFFSET_CLASS} ${TREE_CONNECTOR_BRANCH_THICKNESS_CLASS} ${TREE_CONNECTOR_STROKE_CLASS}`}
-                    />
-                </Show>
-            </div>
-            <div class={`min-w-0 flex-1 ${props.contentClass ?? ""}`}>
-                {props.children}
-            </div>
-        </div>
-    );
-};
 
 const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     const params = useParams();
@@ -222,6 +143,20 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
             }
         }
     );
+
+    /**
+     * Panel collapse — per-user, EPHEMERAL view state (decision 8 as amended),
+     * so it is never persisted and never broadcast. It lives here rather than
+     * in the panel because `CanvasWorkflow` wraps both `/:id` and
+     * `/:id/draft/:draftId`, so a collapse survives opening a draft and coming
+     * back. The rule itself is in `panelCollapse.ts`, where it has tests.
+     */
+    const [collapseChoices, setCollapseChoices] =
+        createSignal<CollapseChoices>(NO_COLLAPSE_CHOICES);
+    const isGroupCollapsed = (group: CanvasGroup, depth: number) =>
+        isCollapsedAtDepth(collapseChoices(), group.id, depth);
+    const toggleGroupCollapsed = (group: CanvasGroup, depth: number) =>
+        setCollapseChoices(toggledCollapse(collapseChoices(), group.id, depth));
 
     const [createDraftCallback, setCreateDraftCallback] = createSignal<
         (() => void) | null
@@ -718,9 +653,6 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                             () =>
                                                 (canvas()?.drafts ?? []) as CanvasDraft[]
                                         );
-                                        const ungroupedDrafts = createMemo(() =>
-                                            drafts().filter((d) => !d.group_id)
-                                        );
                                         const activeCanvasDraft = createMemo(() =>
                                             drafts().find(
                                                 (canvasDraft) =>
@@ -834,12 +766,6 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                             }
                                             return null;
                                         });
-                                        const getDraftsForGroup = (groupId: string) =>
-                                            childCardsOf(
-                                                { groups: groups(), drafts: drafts() },
-                                                groupId
-                                            );
-
                                         return (
                                             <div class="flex min-h-0 flex-1 flex-col p-3">
                                                 {/* Inset container */}
@@ -853,413 +779,52 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
 
                                                     {/* Scrollable content */}
                                                     <div class="custom-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
-                                                        {/* Grouped drafts */}
-                                                        <For each={groups()}>
-                                                            {(group) => (
-                                                                <div
-                                                                    class={`flex flex-shrink-0 flex-col rounded ${
-                                                                        isDraftView() &&
-                                                                        group.id ===
-                                                                            activeGroup()
-                                                                                ?.id
-                                                                            ? "border border-darius-purple-bright/35 bg-darius-purple/10 p-1.5"
-                                                                            : ""
-                                                                    }`}
-                                                                >
-                                                                    <div
-                                                                        class={`flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors ${
-                                                                            isDraftView() &&
-                                                                            group.id ===
-                                                                                activeGroup()
-                                                                                    ?.id
-                                                                                ? "bg-darius-purple/20 text-darius-text-primary hover:bg-darius-purple/25"
-                                                                                : "bg-darius-card-hover/50 text-darius-text-secondary hover:bg-darius-card-hover hover:text-darius-text-primary"
-                                                                        }`}
-                                                                        onClick={() => {
-                                                                            const callback =
-                                                                                navigateToDraftCallback();
-                                                                            if (
-                                                                                callback
-                                                                            ) {
-                                                                                callback(
-                                                                                    group.positionX,
-                                                                                    group.positionY
-                                                                                );
-                                                                            }
-                                                                        }}
-                                                                        onContextMenu={(
-                                                                            e
-                                                                        ) =>
-                                                                            handleSidebarGroupContextMenu(
-                                                                                group,
-                                                                                e
-                                                                            )
-                                                                        }
-                                                                    >
-                                                                        <span class="flex h-4 w-4 items-center justify-center">
-                                                                            <span
-                                                                                class={`block h-1.5 w-1.5 rounded-full ${
-                                                                                    group.type ===
-                                                                                    "series"
-                                                                                        ? "bg-darius-crimson"
-                                                                                        : "bg-darius-purple-bright"
-                                                                                }`}
-                                                                            />
-                                                                        </span>
-                                                                        <span class="truncate text-darius-text-primary">
-                                                                            {group.name}
-                                                                        </span>
-                                                                        <Show
-                                                                            when={
-                                                                                group.id ===
-                                                                                    activeGroup()
-                                                                                        ?.id &&
-                                                                                activeRestrictionLabel()
-                                                                            }
-                                                                        >
-                                                                            <span class="ml-auto rounded bg-darius-purple/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-darius-purple-bright">
-                                                                                {activeRestrictionLabel()}
-                                                                            </span>
-                                                                        </Show>
-                                                                    </div>
-                                                                    <div>
-                                                                        <For
-                                                                            each={getDraftsForGroup(
-                                                                                group.id
-                                                                            )}
-                                                                        >
-                                                                            {(
-                                                                                canvasDraft,
-                                                                                index
-                                                                            ) => {
-                                                                                const getNavPosition =
-                                                                                    () =>
-                                                                                        getDraftWorldPosition(
-                                                                                            canvasDraft,
-                                                                                            group,
-                                                                                            getDraftsForGroup(
-                                                                                                group.id
-                                                                                            ),
-                                                                                            cardLayout()
-                                                                                        );
-
-                                                                                const isLast =
-                                                                                    () =>
-                                                                                        index() ===
-                                                                                        getDraftsForGroup(
-                                                                                            group.id
-                                                                                        )
-                                                                                            .length -
-                                                                                            1;
-                                                                                const showDisabledRow =
-                                                                                    () =>
-                                                                                        isDraftView() &&
-                                                                                        group.id ===
-                                                                                            activeGroup()
-                                                                                                ?.id &&
-                                                                                        activeDisabledChampions()
-                                                                                            .length >
-                                                                                            0;
-                                                                                const isCurrentRestrictionSource =
-                                                                                    () =>
-                                                                                        isDraftView() &&
-                                                                                        group.id ===
-                                                                                            activeGroup()
-                                                                                                ?.id &&
-                                                                                        canvasDraft
-                                                                                            .Draft
-                                                                                            .id !==
-                                                                                            activeCanvasDraft()
-                                                                                                ?.Draft
-                                                                                                .id;
-                                                                                const isActiveDraftRow =
-                                                                                    () =>
-                                                                                        isDraftView() &&
-                                                                                        canvasDraft
-                                                                                            .Draft
-                                                                                            .id ===
-                                                                                            activeCanvasDraft()
-                                                                                                ?.Draft
-                                                                                                .id;
-                                                                                const restrictionSource =
-                                                                                    createMemo(
-                                                                                        () =>
-                                                                                            activeRestrictionGroups().find(
-                                                                                                (
-                                                                                                    restrictionGroup
-                                                                                                ) =>
-                                                                                                    restrictionGroup.label ===
-                                                                                                    (group.type ===
-                                                                                                    "series"
-                                                                                                        ? `Game ${(canvasDraft.Draft.seriesIndex ?? 0) + 1}`
-                                                                                                        : canvasDraft
-                                                                                                              .Draft
-                                                                                                              .name)
-                                                                                            )
-                                                                                    );
-                                                                                const rowChampionIds =
-                                                                                    createMemo(
-                                                                                        () => {
-                                                                                            const source =
-                                                                                                restrictionSource();
-                                                                                            if (
-                                                                                                !source
-                                                                                            ) {
-                                                                                                return [];
-                                                                                            }
-
-                                                                                            const ids =
-                                                                                                showRestrictionBans()
-                                                                                                    ? [
-                                                                                                          ...source.blueBans,
-                                                                                                          ...source.redBans,
-                                                                                                          ...source.bluePicks,
-                                                                                                          ...source.redPicks
-                                                                                                      ]
-                                                                                                    : [
-                                                                                                          ...source.bluePicks,
-                                                                                                          ...source.redPicks
-                                                                                                      ];
-
-                                                                                            return ids.filter(
-                                                                                                (
-                                                                                                    id
-                                                                                                ) =>
-                                                                                                    id !==
-                                                                                                    ""
-                                                                                            );
-                                                                                        }
-                                                                                    );
-                                                                                const currentDraftChampionIds =
-                                                                                    createMemo(
-                                                                                        () => {
-                                                                                            if (
-                                                                                                !isActiveDraftRow()
-                                                                                            ) {
-                                                                                                return [];
-                                                                                            }
-
-                                                                                            const picks =
-                                                                                                canvasDraft
-                                                                                                    .Draft
-                                                                                                    .picks ??
-                                                                                                [];
-                                                                                            const ids =
-                                                                                                showRestrictionBans()
-                                                                                                    ? picks
-                                                                                                    : picks.slice(
-                                                                                                          10,
-                                                                                                          20
-                                                                                                      );
-
-                                                                                            return ids.filter(
-                                                                                                (
-                                                                                                    id
-                                                                                                ) =>
-                                                                                                    id !==
-                                                                                                    ""
-                                                                                            );
-                                                                                        }
-                                                                                    );
-                                                                                const displayChampionIds =
-                                                                                    createMemo(
-                                                                                        () =>
-                                                                                            isActiveDraftRow()
-                                                                                                ? currentDraftChampionIds()
-                                                                                                : rowChampionIds()
-                                                                                    );
-                                                                                const hasChampionStrip =
-                                                                                    createMemo(
-                                                                                        () =>
-                                                                                            (isCurrentRestrictionSource() ||
-                                                                                                isActiveDraftRow()) &&
-                                                                                            displayChampionIds()
-                                                                                                .length >
-                                                                                                0
-                                                                                    );
-
-                                                                                return (
-                                                                                    <>
-                                                                                        <RestrictionTreeRow
-                                                                                            continueAbove
-                                                                                            continueBelow={
-                                                                                                hasChampionStrip() ||
-                                                                                                !isLast() ||
-                                                                                                showDisabledRow()
-                                                                                            }
-                                                                                            branch
-                                                                                            contentClass={
-                                                                                                index() ===
-                                                                                                0
-                                                                                                    ? "pt-2"
-                                                                                                    : "pt-2"
-                                                                                            }
-                                                                                        >
-                                                                                            <div
-                                                                                                class={`cursor-pointer truncate rounded px-2 py-1.5 text-sm transition-colors ${
-                                                                                                    isDraftView() &&
-                                                                                                    canvasDraft
-                                                                                                        .Draft
-                                                                                                        .id ===
-                                                                                                        params.draftId
-                                                                                                        ? "bg-darius-purple/30 text-darius-text-primary hover:bg-darius-purple/35"
-                                                                                                        : "bg-darius-card-hover/50 text-darius-text-primary hover:bg-darius-card-hover"
-                                                                                                }`}
-                                                                                                onClick={() => {
-                                                                                                    if (
-                                                                                                        isDraftView()
-                                                                                                    ) {
-                                                                                                        navigate(
-                                                                                                            `/canvas/${canvasId()}/draft/${canvasDraft.Draft.id}`
-                                                                                                        );
-                                                                                                    } else {
-                                                                                                        const callback =
-                                                                                                            navigateToDraftCallback();
-                                                                                                        if (
-                                                                                                            callback
-                                                                                                        ) {
-                                                                                                            const pos =
-                                                                                                                getNavPosition();
-                                                                                                            callback(
-                                                                                                                pos.x,
-                                                                                                                pos.y
-                                                                                                            );
-                                                                                                        }
-                                                                                                    }
-                                                                                                }}
-                                                                                                onContextMenu={(
-                                                                                                    e
-                                                                                                ) => {
-                                                                                                    if (
-                                                                                                        hasEditPermissions()
-                                                                                                    ) {
-                                                                                                        handleSidebarDraftContextMenu(
-                                                                                                            canvasDraft,
-                                                                                                            e
-                                                                                                        );
-                                                                                                    }
-                                                                                                }}
-                                                                                            >
-                                                                                                {
-                                                                                                    canvasDraft
-                                                                                                        .Draft
-                                                                                                        .name
-                                                                                                }
-                                                                                            </div>
-                                                                                        </RestrictionTreeRow>
-                                                                                        <Show
-                                                                                            when={hasChampionStrip()}
-                                                                                        >
-                                                                                            <RestrictionTreeRow
-                                                                                                continueAbove
-                                                                                                continueBelow={
-                                                                                                    !isLast() ||
-                                                                                                    showDisabledRow()
-                                                                                                }
-                                                                                                contentClass="pb-2 pt-1"
-                                                                                            >
-                                                                                                <div class="px-2">
-                                                                                                    <ChampionStrip
-                                                                                                        championIds={displayChampionIds()}
-                                                                                                    />
-                                                                                                </div>
-                                                                                            </RestrictionTreeRow>
-                                                                                        </Show>
-                                                                                    </>
-                                                                                );
-                                                                            }}
-                                                                        </For>
-                                                                        <Show
-                                                                            when={
-                                                                                isDraftView() &&
-                                                                                group.id ===
-                                                                                    activeGroup()
-                                                                                        ?.id &&
-                                                                                activeDisabledChampions()
-                                                                                    .length >
-                                                                                    0
-                                                                            }
-                                                                        >
-                                                                            <>
-                                                                                <RestrictionTreeRow
-                                                                                    continueAbove
-                                                                                    continueBelow
-                                                                                >
-                                                                                    <div class="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wider text-darius-crimson">
-                                                                                        Disabled
-                                                                                    </div>
-                                                                                </RestrictionTreeRow>
-                                                                                <RestrictionTreeRow
-                                                                                    continueAbove
-                                                                                    branch
-                                                                                    contentClass="pb-2 pt-1"
-                                                                                >
-                                                                                    <div class="px-2">
-                                                                                        <ChampionStrip
-                                                                                            championIds={activeDisabledChampions()}
-                                                                                            tint="disabled"
-                                                                                        />
-                                                                                    </div>
-                                                                                </RestrictionTreeRow>
-                                                                            </>
-                                                                        </Show>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                        </For>
-
-                                                        {/* Ungrouped drafts */}
-                                                        <For each={ungroupedDrafts()}>
-                                                            {(canvasDraft) => (
-                                                                <div
-                                                                    class={`flex-shrink-0 cursor-pointer truncate rounded px-2 py-1.5 text-sm transition-colors ${
-                                                                        isDraftView() &&
-                                                                        canvasDraft.Draft
-                                                                            .id ===
-                                                                            params.draftId
-                                                                            ? "bg-darius-purple/30 text-darius-text-primary hover:bg-darius-purple/35"
-                                                                            : "bg-darius-card-hover/50 text-darius-text-primary hover:bg-darius-card-hover"
-                                                                    }`}
-                                                                    onClick={() => {
-                                                                        if (
-                                                                            isDraftView()
-                                                                        ) {
-                                                                            navigate(
-                                                                                `/canvas/${canvasId()}/draft/${canvasDraft.Draft.id}`
-                                                                            );
-                                                                        } else {
-                                                                            const callback =
-                                                                                navigateToDraftCallback();
-                                                                            if (
-                                                                                callback
-                                                                            ) {
-                                                                                callback(
-                                                                                    canvasDraft.positionX,
-                                                                                    canvasDraft.positionY
-                                                                                );
-                                                                            }
-                                                                        }
-                                                                    }}
-                                                                    onContextMenu={(
-                                                                        e
-                                                                    ) => {
-                                                                        if (
-                                                                            hasEditPermissions()
-                                                                        ) {
-                                                                            handleSidebarDraftContextMenu(
-                                                                                canvasDraft,
-                                                                                e
-                                                                            );
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    {
-                                                                        canvasDraft.Draft
-                                                                            .name
-                                                                    }
-                                                                </div>
-                                                            )}
-                                                        </For>
+                                                        <CanvasPanelTree
+                                                            tree={() => ({
+                                                                groups: groups(),
+                                                                drafts: drafts()
+                                                            })}
+                                                            isCollapsed={isGroupCollapsed}
+                                                            onToggleCollapsed={
+                                                                toggleGroupCollapsed
+                                                            }
+                                                            isDraftView={isDraftView}
+                                                            activeGroup={activeGroup}
+                                                            activeDraftId={() =>
+                                                                params.draftId
+                                                            }
+                                                            activeRestrictionLabel={
+                                                                activeRestrictionLabel
+                                                            }
+                                                            activeDisabledChampions={
+                                                                activeDisabledChampions
+                                                            }
+                                                            activeRestrictionGroups={
+                                                                activeRestrictionGroups
+                                                            }
+                                                            showRestrictionBans={
+                                                                showRestrictionBans
+                                                            }
+                                                            cardLayout={cardLayout}
+                                                            canEdit={hasEditPermissions}
+                                                            onOpenDraft={(draftId) =>
+                                                                navigate(
+                                                                    `/canvas/${canvasId()}/draft/${draftId}`
+                                                                )
+                                                            }
+                                                            onPanTo={(x, y) =>
+                                                                navigateToDraftCallback()?.(
+                                                                    x,
+                                                                    y
+                                                                )
+                                                            }
+                                                            onGroupContextMenu={
+                                                                handleSidebarGroupContextMenu
+                                                            }
+                                                            onCardContextMenu={
+                                                                handleSidebarDraftContextMenu
+                                                            }
+                                                        />
                                                     </div>
                                                 </div>
                                             </div>
