@@ -58,13 +58,21 @@ export const newGroupGridSettings = (): GridSettingsInput => ({
  * `gameType: null` (the user picked Untagged) omits the key rather than
  * sending a null: the D3 clear protocol exists to delete a STORED value, and a
  * create has nothing stored yet.
+ *
+ * A NULL `grid` is the dialog's "Grid layout off", and it produces a FREE
+ * group. That null used to be defaulted back to `newGroupGridSettings()` at the
+ * call site, so every custom group was born `layout: "grid"` however the toggle
+ * was set — the toggle did nothing. `layout: "free"` is written explicitly
+ * rather than omitted, matching `resolveLayoutChange`'s clear on the edit path;
+ * omitting it would rely on `isGridGroup`'s absent-means-free reading, which is
+ * a legacy default rather than a statement of intent.
  */
 export const resolveNewGroupMetadata = (input: {
     isSeries: boolean;
     disabledChampions: string[];
     draftMode: DraftMode;
     gameType: GameType | null;
-    grid: GridSettingsInput;
+    grid: GridSettingsInput | null;
 }): CanvasGroupMetadataUpdate => ({
     disabledChampions: [...input.disabledChampions],
     ...(input.isSeries ? { draftMode: input.draftMode } : {}),
@@ -72,7 +80,11 @@ export const resolveNewGroupMetadata = (input: {
     // `buildGridMetadata` over an empty `existing`, rather than a literal, so
     // the label trimming and column padding are the same code the grid
     // settings save already runs and is tested for.
-    ...(input.isSeries ? {} : buildGridMetadata({}, input.grid))
+    ...(input.isSeries
+        ? {}
+        : input.grid
+          ? buildGridMetadata({}, input.grid)
+          : { layout: "free" })
 });
 
 /**
@@ -86,14 +98,16 @@ export const resolveNewGroupMetadata = (input: {
  * and after its first drop are produced by one rule, not two.
  *
  * A series or a free-layout Group gets `null`: the caller falls back to the
- * server's own defaults, which is what those two have always used.
+ * server's own defaults, which is what those two have always used. Free layout
+ * is a null `grid` — the same signal `resolveNewGroupMetadata` reads — so the
+ * two cannot disagree about what was created.
  */
 export const newGroupDimensions = (input: {
     isSeries: boolean;
-    grid: GridSettingsInput;
+    grid: GridSettingsInput | null;
     layout: CardLayout;
 }): { width: number; height: number } | null => {
-    if (input.isSeries) return null;
+    if (input.isSeries || !input.grid) return null;
     // No members yet, so the occupied-row list is empty and the height is
     // entirely the configured floor.
     const height = gridContentHeightForRows([], input.grid.gridRows, input.layout);

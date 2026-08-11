@@ -131,6 +131,30 @@ describe("resolveNewGroupMetadata", () => {
         expect(Object.prototype.hasOwnProperty.call(metadata, "gameType")).toBe(false);
     });
 
+    /**
+     * The dialog reports "Grid layout off" as a NULL grid
+     * (`GroupDisabledChampionsDialog`'s `save`), and a free group is what the
+     * user asked for. Before this, the create path defaulted that null back to
+     * `newGroupGridSettings()` and every new custom group was stamped
+     * `layout: "grid"` — the toggle did nothing at all.
+     */
+    it("births a custom group as FREE when the dialog turned grid off", () => {
+        const metadata = resolveNewGroupMetadata({
+            ...base,
+            isSeries: false,
+            grid: null
+        });
+        expect(metadata.layout).toBe("free");
+        for (const key of ["gridCols", "gridRows", "rowLabels", "colLabels"]) {
+            expect(Object.prototype.hasOwnProperty.call(metadata, key)).toBe(false);
+        }
+    });
+
+    it("gives a SERIES no layout key even when grid is off", () => {
+        const metadata = resolveNewGroupMetadata({ ...base, isSeries: true, grid: null });
+        expect(metadata).not.toHaveProperty("layout");
+    });
+
     it("does not alias the caller's disabledChampions array", () => {
         const disabledChampions = ["Yasuo"];
         const metadata = resolveNewGroupMetadata({
@@ -199,5 +223,9 @@ describe("newGroupDimensions", () => {
                 layout
             })
         ).toBeNull();
+    });
+
+    it("declines to size a FREE group — the server's defaults describe it", () => {
+        expect(newGroupDimensions({ isSeries: false, grid: null, layout })).toBeNull();
     });
 });

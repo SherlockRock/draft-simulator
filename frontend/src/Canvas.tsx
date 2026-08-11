@@ -180,7 +180,6 @@ import {
 import {
     NEW_GROUP_DRAFT_MODE,
     newGroupDimensions,
-    newGroupGridSettings,
     resolveNewGroupMetadata
 } from "./utils/groupCreation";
 import {
@@ -3090,20 +3089,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 disabledChampions: data.disabledChampions,
                 draftMode: data.draftMode,
                 gameType: data.gameType,
-                grid: data.grid ?? newGroupGridSettings()
+                // NOT defaulted: `null` is the dialog's "Grid layout off", and
+                // defaulting it here made the toggle inert — every new custom
+                // group was born a grid.
+                grid: data.grid
             });
             // A grid container is born at the size its configured rows and
             // columns need, rather than at a flat 400x200 it only grows out of
             // on the first drop. `null` for a series and for free layout, whose
             // sizes the server's defaults already describe.
-            const newDims =
-                data.grid && !data.convertToSeries
-                    ? newGroupDimensions({
-                          isSeries: false,
-                          grid: data.grid,
-                          layout: props.cardLayout()
-                      })
-                    : null;
+            const newDims = newGroupDimensions({
+                isSeries: data.convertToSeries,
+                grid: data.grid,
+                layout: props.cardLayout()
+            });
             if (isLocalMode()) {
                 // The local mutations enforce parentage and the series-leaf
                 // invariant themselves — there is no server here to do it — and
