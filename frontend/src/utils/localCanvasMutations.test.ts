@@ -35,6 +35,7 @@ const { getLocalCanvas, saveLocalCanvas, createEmptyLocalCanvas } =
 const {
     localNewDraft,
     localCopyDraft,
+    localCreateConnection,
     localCreateGroup,
     localConvertGroupToSeries,
     localDeleteGroup,
@@ -343,6 +344,104 @@ describe("local group nesting", () => {
         const stored = (getLocalCanvas()?.groups ?? []).find((g) => g.id === child.id);
         expect(stored?.parent_group_id).toBe(parent.id);
         expect(stored?.positionX).toBe(5);
+    });
+});
+
+/**
+ * Deleting a container is where the local runtime has drifted furthest from
+ * `canvas.js`'s route: it wrote no position for the Cards it ungrouped, and it
+ * cleaned up only the connections anchored to the Group itself. Both are
+ * server/local divergences with local on the wrong side.
+ */
+describe("localDeleteGroup, against the server's route", () => {
+    const groupAt = (positionX: number, positionY: number) =>
+        localCreateGroup({ positionX, positionY }).group;
+
+    const cardIn = (groupId: string | null, positionX: number, positionY: number) =>
+        localNewDraft({
+            name: "Card",
+            picks: Array(20).fill(""),
+            positionX,
+            positionY,
+            group_id: groupId
+        });
+
+    it("rebases a kept Card to world coordinates when it is ungrouped", () => {
+        const group = groupAt(100, 200);
+        const card = cardIn(group.id, 30, 40);
+
+        localDeleteGroup(group.id, true);
+
+        const stored = (getLocalCanvas()?.drafts ?? []).find(
+            (d) => d.draft_id === card.draft_id
+        );
+        expect(stored?.group_id ?? null).toBe(null);
+        // canvas.js:2038 — group.position + card.position, not the bare
+        // container-relative pair, which would land the Card near the origin.
+        expect(stored?.positionX).toBe(130);
+        expect(stored?.positionY).toBe(240);
+    });
+
+    it("leaves a Card outside the deleted container untouched", () => {
+        const group = groupAt(100, 200);
+        const outside = cardIn(null, 7, 9);
+
+        localDeleteGroup(group.id, true);
+
+        const stored = (getLocalCanvas()?.drafts ?? []).find(
+            (d) => d.draft_id === outside.draft_id
+        );
+        expect(stored?.positionX).toBe(7);
+        expect(stored?.positionY).toBe(9);
+    });
+
+    it("drops a connection whose endpoint was a Card deleted with the container", () => {
+        const group = groupAt(100, 200);
+        const inside = cardIn(group.id, 10, 10);
+        const outside = cardIn(null, 500, 500);
+        localCreateConnection({
+            sourceDraftIds: [{ draftId: outside.draft_id }],
+            targetDraftIds: [{ draftId: inside.draft_id }]
+        });
+
+        localDeleteGroup(group.id, false);
+
+        expect(getLocalCanvas()?.connections ?? []).toHaveLength(0);
+    });
+
+    it("trims a multi-endpoint connection instead of deleting it", () => {
+        const group = groupAt(100, 200);
+        const inside = cardIn(group.id, 10, 10);
+        const survivor = cardIn(null, 500, 500);
+        const source = cardIn(null, 0, 0);
+        localCreateConnection({
+            sourceDraftIds: [{ draftId: source.draft_id }],
+            targetDraftIds: [{ draftId: inside.draft_id }, { draftId: survivor.draft_id }]
+        });
+
+        localDeleteGroup(group.id, false);
+
+        // The server trims the endpoint and keeps the connection
+        // (canvas.js:1249) — only an empty SIDE destroys it.
+        const connections = getLocalCanvas()?.connections ?? [];
+        expect(connections).toHaveLength(1);
+        expect(connections[0].target_draft_ids).toHaveLength(1);
+        expect(connections[0].target_draft_ids[0]).toMatchObject({
+            draft_id: survivor.draft_id
+        });
+    });
+
+    it("still drops endpoints anchored to the Group itself", () => {
+        const group = groupAt(100, 200);
+        const outside = cardIn(null, 500, 500);
+        localCreateConnection({
+            sourceDraftIds: [{ draftId: outside.draft_id }],
+            targetDraftIds: [{ groupId: group.id }]
+        });
+
+        localDeleteGroup(group.id, true);
+
+        expect(getLocalCanvas()?.connections ?? []).toHaveLength(0);
     });
 });
 
