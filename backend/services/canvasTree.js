@@ -24,6 +24,19 @@
  * `group_id`. `drafts` is optional — most server-side callers only have Groups.
  */
 
+/**
+ * Soft nesting cap (recursive-groups decision 6). Measured in ANCESTORS, so 4
+ * permits five levels of containment. Checked against the deepest leaf of the
+ * moved subtree, not the moved Group alone — dropping a two-level subtree under
+ * a depth-3 parent puts its leaves at depth 5.
+ *
+ * Duplicated from `MAX_GROUP_DEPTH` in `@draft-sim/shared-types/canvas-tree-vector`,
+ * which this file cannot require (ESM). `canvasGroupNesting.test.js` imports the
+ * shared constant and derives its fixtures from it, so drift fails a test. It
+ * lives here rather than in each route so the backend has ONE copy.
+ */
+const MAX_GROUP_DEPTH = 4;
+
 const groupById = (tree, id) => tree.groups.find((g) => g.id === id);
 
 const cardById = (tree, id) =>
@@ -166,6 +179,7 @@ function subtreeHeight(tree, groupId) {
 }
 
 module.exports = {
+  MAX_GROUP_DEPTH,
   parentIdOf,
   childGroupsOf,
   ancestorsOf,
