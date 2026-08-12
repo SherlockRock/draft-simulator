@@ -47,8 +47,19 @@ export const MAX_GROUP_DEPTH = 4;
 
 export type CanvasTreeVectorNode = {
   id: string;
-  kind: "group" | "card";
-  /** `parent_group_id` for a Group, `group_id` for a Card. `null` = top level. */
+  /**
+   * `annotation` is a LEAF, exactly like `card`: it contains nothing, so every
+   * quantity this vector pins — depth, descendant groups, descendancy, the
+   * cycle guard, render order — treats it identically. It is here so the
+   * topology contract is complete, NOT because it is where the risk is: the
+   * layout and persistence work that annotations actually endanger is
+   * frontend-only and has no cross-runtime vector (design §3).
+   */
+  kind: "group" | "card" | "annotation";
+  /**
+   * `parent_group_id` for a Group, `group_id` for a Card or an annotation.
+   * `null` = top level.
+   */
   parentId: string | null;
 };
 
@@ -82,6 +93,8 @@ export const CANVAS_TREE_VECTOR: CanvasTreeVectorCase[] = [
       { id: "c-1", kind: "card", parentId: "g-a1" },
       { id: "c-2", kind: "card", parentId: null },
       { id: "c-3", kind: "card", parentId: "g-root" },
+      { id: "a-1", kind: "annotation", parentId: "g-a1" },
+      { id: "a-2", kind: "annotation", parentId: null },
     ],
     depth: {
       "g-root": 0,
@@ -92,6 +105,8 @@ export const CANVAS_TREE_VECTOR: CanvasTreeVectorCase[] = [
       "c-1": 3,
       "c-2": 0,
       "c-3": 1,
+      "a-1": 3,
+      "a-2": 0,
     },
     descendantGroups: {
       "g-root": ["g-a", "g-a1", "g-b"],
@@ -108,6 +123,9 @@ export const CANVAS_TREE_VECTOR: CanvasTreeVectorCase[] = [
       { ancestor: "g-solo", node: "g-a", expected: false },
       { ancestor: "g-root", node: "g-root", expected: false },
       { ancestor: "g-root", node: "c-2", expected: false },
+      { ancestor: "g-a1", node: "a-1", expected: true },
+      { ancestor: "g-root", node: "a-1", expected: true },
+      { ancestor: "g-root", node: "a-2", expected: false },
     ],
     cycleGuard: [
       { node: "g-root", target: "g-a1", expected: true },
@@ -126,12 +144,14 @@ export const CANVAS_TREE_VECTOR: CanvasTreeVectorCase[] = [
       { id: "g-grandchild", kind: "group", parentId: "g-child" },
       { id: "g-top", kind: "group", parentId: null },
       { id: "c-x", kind: "card", parentId: "g-deleted" },
+      { id: "a-x", kind: "annotation", parentId: "g-deleted" },
     ],
     depth: {
       "g-child": 0,
       "g-grandchild": 1,
       "g-top": 0,
       "c-x": 0,
+      "a-x": 0,
     },
     descendantGroups: {
       "g-child": ["g-grandchild"],
@@ -142,6 +162,7 @@ export const CANVAS_TREE_VECTOR: CanvasTreeVectorCase[] = [
       { ancestor: "g-child", node: "g-grandchild", expected: true },
       { ancestor: "g-deleted", node: "g-child", expected: false },
       { ancestor: "g-deleted", node: "c-x", expected: false },
+      { ancestor: "g-deleted", node: "a-x", expected: false },
     ],
     cycleGuard: [
       { node: "g-child", target: "g-grandchild", expected: true },
