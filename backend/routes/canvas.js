@@ -26,6 +26,10 @@ const {
   subtreeHeight,
   wouldCreateCycle,
 } = require("../services/canvasTree");
+const {
+  findGroupNotOnCanvas,
+  touchCanvasTimestamp,
+} = require("../services/canvasWriteGuards");
 const presenceEjection = require("../services/presenceEjection");
 const {
   respondCanvasMutationError,
@@ -361,18 +365,6 @@ async function syncManualSeriesLength({
   }
 }
 
-// Helper function to touch canvas updatedAt timestamp
-async function touchCanvasTimestamp(canvasId) {
-  const now = new Date();
-
-  // Fetch the canvas instance and save it to trigger updatedAt
-  const canvas = await Canvas.findByPk(canvasId);
-  if (canvas) {
-    canvas.changed("updatedAt", true);
-    await canvas.save({ silent: false });
-  }
-}
-
 // Get all canvases for the current user
 router.get("/", async (req, res) => {
   try {
@@ -698,44 +690,6 @@ function resolveParentage({ lockedById, pending }) {
     }
   }
   return { nextTree, rejection: null };
-}
-
-/**
- * A Card's `group_id` is a container reference, and until step 4 nothing
- * validated it on any path: a crafted id could park a Card in another canvas's
- * Group — or a deleted one — where it renders on neither canvas.
- *
- * One helper rather than a check per route, because the three write paths
- * (`PUT /draft-positions`, `PUT /draft/:draftId`, `POST /draft/:draftId/copy`)
- * drifting apart is the failure mode this whole area keeps reproducing.
- *
- * Returns the first id that is not on the canvas, or null. Non-strings (an
- * explicit `null` to ungroup, an absent key) are ignored, and an empty set
- * costs no query. Pass `known` when the caller already holds the canvas's
- * Groups — the batch endpoint locks them all and must not re-read.
- */
-async function findGroupNotOnCanvas({
-  canvasId,
-  groupIds,
-  transaction,
-  known,
-}) {
-  const wanted = [
-    ...new Set(groupIds.filter((groupId) => typeof groupId === "string")),
-  ];
-  if (wanted.length === 0) return null;
-  const onCanvas =
-    known ??
-    new Set(
-      (
-        await CanvasGroup.findAll({
-          where: { canvas_id: canvasId, id: wanted },
-          attributes: ["id"],
-          transaction,
-        })
-      ).map((row) => row.id),
-    );
-  return wanted.find((groupId) => !onCanvas.has(groupId)) ?? null;
 }
 
 /**

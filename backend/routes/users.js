@@ -29,6 +29,7 @@ const {
   generateUniqueCanvasGroupName,
 } = require("../helpers");
 const { planCanvasGroupImport } = require("../services/canvasGroupImport");
+const { touchCanvasTimestamp } = require("../services/canvasWriteGuards");
 
 const VALID_CHAMPION_IDS = new Set(
   championData.champions.map((champion) => champion.id),
@@ -269,14 +270,6 @@ async function clearCanvasContents(canvasId, transaction) {
     where: { canvas_id: canvasId },
     transaction,
   });
-}
-
-async function touchCanvasTimestamp(canvasId, transaction) {
-  const canvas = await Canvas.findByPk(canvasId, { transaction });
-  if (!canvas) return null;
-  canvas.changed("updatedAt", true);
-  await canvas.save({ transaction, silent: false });
-  return canvas;
 }
 
 async function findOwnedVersusSeriesByName(userId, name, transaction) {
