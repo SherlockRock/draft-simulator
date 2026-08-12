@@ -2118,6 +2118,30 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
         })),
       };
     }
+    // Which socket event this update gets depends only on `updates`, decided
+    // before the transaction ever ran — so the branch is knowable here, ahead
+    // of the response. Only the `canvasUpdate` branch needs a snapshot; the
+    // dimension guard below is on BOTH width and height being numbers, so the
+    // hot resize-drag path (`groupResized`) never pays for one.
+    //
+    // The dimension guard is on BOTH being numbers: the route accepts one
+    // dimension or an explicit `null`, while `GroupResizedSchema` requires both
+    // numeric — so `{positionX, width: null}` would emit an event every client
+    // silently drops.
+    const isDimensionOnlyResize =
+      updates.metadata === undefined &&
+      typeof updates.width === "number" &&
+      typeof updates.height === "number";
+
+    // Read the broadcast snapshot BEFORE sending the response: a DB failure
+    // here must produce a clean 500, not throw ERR_HTTP_HEADERS_SENT out of
+    // an already-sent response (Express 4 does not catch that, and the
+    // process has no unhandledRejection handler — it would crash the
+    // backend).
+    const snapshot = isDimensionOnlyResize
+      ? null
+      : await buildCanvasSnapshot(canvasId);
+
     res.status(200).json({ success: true, group: responseGroup });
 
     // Emit appropriate socket event.
@@ -2140,16 +2164,7 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
     //  - Otherwise a resize emits `groupResized`, whose handler rebases child
     //    CARDS by the left-edge delta and correctly leaves child Groups alone
     //    (they are absolute at every depth, ADR-0006).
-    //
-    // The dimension guard is on BOTH being numbers: the route accepts one
-    // dimension or an explicit `null`, while `GroupResizedSchema` requires both
-    // numeric — so `{positionX, width: null}` would emit an event every client
-    // silently drops.
-    if (
-      updates.metadata === undefined &&
-      typeof updates.width === "number" &&
-      typeof updates.height === "number"
-    ) {
+    if (isDimensionOnlyResize) {
       socketService.emitToRoom(canvasId, "groupResized", {
         groupId,
         width: group.width,
@@ -2160,11 +2175,7 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
       });
     } else {
       // Name / metadata / partial-dimension changes: full canvas update.
-      socketService.emitToRoom(
-        canvasId,
-        "canvasUpdate",
-        await buildCanvasSnapshot(canvasId),
-      );
+      socketService.emitToRoom(canvasId, "canvasUpdate", snapshot);
     }
   } catch (error) {
     if (t && !t.finished) await t.rollback();
