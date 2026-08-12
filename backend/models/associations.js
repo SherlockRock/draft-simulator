@@ -2,7 +2,7 @@ const UserToken = require("./UserToken");
 const User = require("./User");
 const Draft = require("./Draft");
 const DraftShare = require("./DraftShare");
-const { Canvas, UserCanvas, CanvasDraft, CanvasShare, CanvasGroup } = require("./Canvas");
+const { Canvas, UserCanvas, CanvasDraft, CanvasShare, CanvasGroup, CanvasAnnotation } = require("./Canvas");
 const VersusDraft = require("./VersusDraft");
 const VersusParticipant = require("./VersusParticipant");
 const NavigatorSession = require("./NavigatorSession");
@@ -79,6 +79,28 @@ const setupAssociations = () => {
 
   CanvasGroup.hasMany(CanvasDraft, { foreignKey: "group_id", onDelete: "SET NULL" });
   CanvasDraft.belongsTo(CanvasGroup, { foreignKey: "group_id", onDelete: "SET NULL" });
+
+  // Annotation containment. Both onDelete values are declared EXPLICITLY:
+  // Sequelize's default is NO ACTION, and `CanvasDraft` already needed the same
+  // declaration for the same reason (design §2). Without the SET NULL, deleting
+  // a Group that holds a note is a 500 and the Group becomes undeletable.
+  Canvas.hasMany(CanvasAnnotation, {
+    foreignKey: "canvas_id",
+    onDelete: "CASCADE",
+  });
+  CanvasAnnotation.belongsTo(Canvas, {
+    foreignKey: "canvas_id",
+    onDelete: "CASCADE",
+  });
+
+  CanvasGroup.hasMany(CanvasAnnotation, {
+    foreignKey: "group_id",
+    onDelete: "SET NULL",
+  });
+  CanvasAnnotation.belongsTo(CanvasGroup, {
+    foreignKey: "group_id",
+    onDelete: "SET NULL",
+  });
 
   // Self-referential nesting: null parent = top-level. No DB-level cascade —
   // recursive deletion is handled in app logic (promote-up).

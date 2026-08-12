@@ -181,6 +181,72 @@ const CanvasGroup = sequelize.define("CanvasGroup", {
   },
 });
 
+const CanvasAnnotation = sequelize.define("CanvasAnnotation", {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  canvas_id: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: { model: Canvas, key: "id" },
+  },
+  // Container membership. Nullable = loose on the canvas. The FK's onDelete is
+  // declared EXPLICITLY in associations.js: Sequelize's default is NO ACTION,
+  // which would make deleting a Group that holds a note a 500.
+  group_id: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: { model: "CanvasGroups", key: "id" },
+  },
+  // Container-relative when group_id is set, absolute world otherwise —
+  // exactly like a Card (ADR-0006).
+  positionX: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 50 },
+  positionY: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 50 },
+  // STORED, never derived by the layout engine (design D5). Snapped only at
+  // render inside a grid (D5a), so the stored value survives a round trip
+  // through a grid Group untouched.
+  width: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 380 },
+  height: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 120 },
+  // The hand-set floor auto-fit may never go below (design D7), null until the
+  // user drags a resize handle. Separate columns because `width`/`height` are
+  // the RENDERED size and auto-fit writes `height` — conflating the two makes
+  // the floor ratchet and a grown note can never shrink again.
+  manualWidth: { type: DataTypes.FLOAT, allowNull: true, defaultValue: null },
+  manualHeight: { type: DataTypes.FLOAT, allowNull: true, defaultValue: null },
+  // The `id` this row had in the export it was imported from, null for a row
+  // created on this canvas. Import dedupes on (canvas_id, source_id) — it can
+  // NOT dedupe on `id`, which is a global PK: reusing an export's id across two
+  // destination canvases is a unique violation (design D15, Task 9).
+  source_id: { type: DataTypes.UUID, allowNull: true, defaultValue: null },
+  text: { type: DataTypes.TEXT, allowNull: false, defaultValue: "" },
+  championIds: {
+    type: DataTypes.JSONB,
+    allowNull: false,
+    defaultValue: [],
+    comment: "Canonical champion ids, in strip order. Append/remove only (D3).",
+  },
+  color: {
+    type: DataTypes.ENUM(
+      "none",
+      "slate",
+      "purple",
+      "teal",
+      "amber",
+      "crimson",
+      "emerald",
+    ),
+    allowNull: false,
+    defaultValue: "slate",
+  },
+  fontSize: {
+    type: DataTypes.ENUM("sm", "md", "lg", "xl"),
+    allowNull: false,
+    defaultValue: "md",
+  },
+});
+
 module.exports = {
   Canvas,
   UserCanvas,
@@ -188,4 +254,5 @@ module.exports = {
   CanvasShare,
   CanvasConnection,
   CanvasGroup,
+  CanvasAnnotation,
 };
