@@ -4,18 +4,9 @@ const router = express.Router();
 // const { DraftSchema } = require("@draft-sim/shared-types");
 // Usage: const result = DraftSchema.safeParse(req.body);
 const Draft = require("../models/Draft");
-const {
-  CANVAS_DRAFT_ATTRIBUTES,
-  DRAFT_ATTRIBUTES,
-} = require("./canvasProjections");
+const { buildCanvasSnapshot } = require("./canvasProjections");
 const VersusDraft = require("../models/VersusDraft");
-const {
-  CanvasDraft,
-  Canvas,
-  UserCanvas,
-  CanvasConnection,
-  CanvasGroup,
-} = require("../models/Canvas.js");
+const { CanvasDraft, Canvas, UserCanvas } = require("../models/Canvas.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
 const {
@@ -175,31 +166,11 @@ router.post("/", protect, async (req, res) => {
       canvas.updatedAt = new Date();
       await canvas.save();
 
-      const canvasDrafts = await CanvasDraft.findAll({
-        where: { canvas_id: canvas_id },
-        attributes: CANVAS_DRAFT_ATTRIBUTES,
-        include: [
-          {
-            model: Draft,
-            attributes: DRAFT_ATTRIBUTES,
-          },
-        ],
-        raw: true,
-        nest: true,
-      });
-      const connections = await CanvasConnection.findAll({
-        where: { canvas_id: canvas_id },
-        raw: true,
-      });
-      const groups = await CanvasGroup.findAll({
-        where: { canvas_id: canvas_id },
-      });
-      socketService.emitToRoom(canvas_id, "canvasUpdate", {
-        canvas: canvas.toJSON(),
-        drafts: canvasDrafts,
-        connections: connections,
-        groups: groups.map((g) => g.toJSON()),
-      });
+      socketService.emitToRoom(
+        canvas_id,
+        "canvasUpdate",
+        await buildCanvasSnapshot(canvas_id),
+      );
     }
 
     res.json(draft);
@@ -345,31 +316,11 @@ router.put("/:id", protect, async (req, res) => {
           return;
         }
 
-        const canvasDrafts = await CanvasDraft.findAll({
-          where: { canvas_id },
-          attributes: CANVAS_DRAFT_ATTRIBUTES,
-          include: [
-            {
-              model: Draft,
-              attributes: DRAFT_ATTRIBUTES,
-            },
-          ],
-          raw: true,
-          nest: true,
-        });
-        const connections = await CanvasConnection.findAll({
-          where: { canvas_id },
-          raw: true,
-        });
-        const groups = await CanvasGroup.findAll({
-          where: { canvas_id },
-        });
-        socketService.emitToRoom(canvas_id, "canvasUpdate", {
-          canvas: canvas.toJSON(),
-          drafts: canvasDrafts,
-          connections: connections,
-          groups: groups.map((g) => g.toJSON()),
-        });
+        socketService.emitToRoom(
+          canvas_id,
+          "canvasUpdate",
+          await buildCanvasSnapshot(canvas_id),
+        );
       }
     }
   } catch (err) {

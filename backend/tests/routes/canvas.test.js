@@ -13,6 +13,7 @@ const {
   CanvasDraft,
   CanvasConnection,
   CanvasGroup,
+  CanvasAnnotation,
 } = require("../../models/Canvas.js");
 const Draft = require("../../models/Draft.js");
 
@@ -69,6 +70,7 @@ beforeEach(() => {
   });
   vi.spyOn(socketService, "emitToRoom").mockImplementation(() => {});
   vi.spyOn(CanvasDraft, "findOne").mockResolvedValue(null);
+  vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
   vi.spyOn(UserCanvas, "destroy").mockResolvedValue(0);
   vi.spyOn(presenceEjection, "ejectUserFromCanvas").mockImplementation(
     () => {},

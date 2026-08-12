@@ -17,6 +17,7 @@ const {
   CanvasDraft,
   CanvasConnection,
   CanvasGroup,
+  CanvasAnnotation,
 } = require("../../models/Canvas.js");
 const Draft = require("../../models/Draft.js");
 const VersusDraft = require("../../models/VersusDraft.js");
@@ -98,6 +99,7 @@ beforeEach(() => {
   vi.spyOn(Canvas, "findByPk").mockResolvedValue(mockCanvasRow());
   vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasConnection, "destroy").mockResolvedValue(0);
+  vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
   // The delete route promotes direct child Groups before the destroy
   // (design §8.2.0): `parent_group_id` has no `onDelete`, so a container

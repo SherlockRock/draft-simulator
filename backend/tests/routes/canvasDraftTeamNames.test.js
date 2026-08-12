@@ -6,7 +6,7 @@ import request from "supertest";
 const require = createRequire(import.meta.url);
 const auth = require("../../middleware/auth");
 const socketService = require("../../middleware/socketService");
-const { Canvas, CanvasDraft, CanvasGroup, CanvasConnection } =
+const { Canvas, CanvasDraft, CanvasGroup, CanvasConnection, CanvasAnnotation } =
   require("../../models/Canvas");
 const Draft = require("../../models/Draft.js");
 // The route destructures assertCanvasAccess at module load, so the spy must be
@@ -54,6 +54,7 @@ beforeEach(() => {
     toJSON: () => ({ id: CANVAS_ID }),
   });
   vi.spyOn(canvasMutations, "assertCanvasAccess").mockResolvedValue(undefined);
+  vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
   vi.spyOn(Draft, "update").mockResolvedValue([1]);
   vi.spyOn(socketService, "emitToRoom").mockImplementation(() => {});
 });

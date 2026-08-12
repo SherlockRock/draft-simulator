@@ -11,10 +11,7 @@ const {
   CanvasConnection,
 } = require("../models/Canvas");
 const Draft = require("../models/Draft");
-const {
-  CANVAS_DRAFT_ATTRIBUTES,
-  DRAFT_ATTRIBUTES,
-} = require("./canvasProjections");
+const { buildCanvasSnapshot } = require("./canvasProjections");
 const VersusDraft = require("../models/VersusDraft");
 const VersusParticipant = require("../models/VersusParticipant");
 const UserToken = require("../models/UserToken");
@@ -288,37 +285,9 @@ function getImportedSeriesName(series) {
 }
 
 async function broadcastCanvasUpdate(canvasId) {
-  const canvas = await Canvas.findByPk(canvasId);
-  if (!canvas) return;
-
-  const canvasDrafts = await CanvasDraft.findAll({
-    where: { canvas_id: canvasId },
-    attributes: CANVAS_DRAFT_ATTRIBUTES,
-    include: [
-      {
-        model: Draft,
-        attributes: DRAFT_ATTRIBUTES,
-      },
-    ],
-    raw: true,
-    nest: true,
-  });
-
-  const connections = await CanvasConnection.findAll({
-    where: { canvas_id: canvasId },
-    raw: true,
-  });
-
-  const groups = await CanvasGroup.findAll({
-    where: { canvas_id: canvasId },
-  });
-
-  socketService.emitToRoom(canvasId, "canvasUpdate", {
-    canvas: canvas.toJSON(),
-    drafts: canvasDrafts,
-    connections,
-    groups: groups.map((group) => group.toJSON()),
-  });
+  const payload = await buildCanvasSnapshot(canvasId);
+  if (!payload.canvas) return;
+  socketService.emitToRoom(canvasId, "canvasUpdate", payload);
 }
 
 router.get("/", async (req, res) => {

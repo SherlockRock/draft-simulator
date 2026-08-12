@@ -12,6 +12,7 @@ const {
   CanvasDraft,
   CanvasConnection,
   CanvasGroup,
+  CanvasAnnotation,
 } = require("../../models/Canvas.js");
 const Draft = require("../../models/Draft.js");
 const VersusDraft = require("../../models/VersusDraft.js");
@@ -72,6 +73,7 @@ beforeEach(() => {
   vi.spyOn(CanvasGroup, "count").mockResolvedValue(0);
   vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
+  vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasDraft, "create").mockImplementation(async (values) => ({
     ...values,
     toJSON: () => values,
