@@ -1053,6 +1053,13 @@ router.post("/:canvasId/draft/:draftId/copy", protect, async (req, res) => {
 
     await touchCanvasTimestamp(canvasId);
 
+    // Read the broadcast snapshot BEFORE sending the response: a DB failure
+    // here must produce a clean 500, not throw ERR_HTTP_HEADERS_SENT out of
+    // an already-sent response (Express 4 does not catch that, and the
+    // process has no unhandledRejection handler — it would crash the
+    // backend).
+    const snapshot = await buildCanvasSnapshot(canvasId);
+
     res.status(201).json({
       success: true,
       canvasDraft: {
@@ -1061,11 +1068,7 @@ router.post("/:canvasId/draft/:draftId/copy", protect, async (req, res) => {
       },
     });
 
-    socketService.emitToRoom(
-      canvasId,
-      "canvasUpdate",
-      await buildCanvasSnapshot(canvasId),
-    );
+    socketService.emitToRoom(canvasId, "canvasUpdate", snapshot);
   } catch (error) {
     if (
       respondCanvasMutationError(res, error, {
@@ -1163,14 +1166,12 @@ router.delete("/:canvasId/draft/:draftId", protect, async (req, res) => {
 
     await touchCanvasTimestamp(canvasId);
 
+    const snapshot = await buildCanvasSnapshot(canvasId);
+
     res
       .status(200)
       .json({ success: true, message: "Draft removed from canvas" });
-    socketService.emitToRoom(
-      canvasId,
-      "canvasUpdate",
-      await buildCanvasSnapshot(canvasId),
-    );
+    socketService.emitToRoom(canvasId, "canvasUpdate", snapshot);
   } catch (error) {
     if (
       respondCanvasMutationError(res, error, {
@@ -1303,6 +1304,8 @@ router.post("/:canvasId/import/draft", protect, async (req, res) => {
 
     await touchCanvasTimestamp(canvasId);
 
+    const snapshot = await buildCanvasSnapshot(canvasId);
+
     res.status(201).json({
       success: true,
       canvasDraft: {
@@ -1311,11 +1314,7 @@ router.post("/:canvasId/import/draft", protect, async (req, res) => {
       },
     });
 
-    socketService.emitToRoom(
-      canvasId,
-      "canvasUpdate",
-      await buildCanvasSnapshot(canvasId),
-    );
+    socketService.emitToRoom(canvasId, "canvasUpdate", snapshot);
   } catch (error) {
     if (
       respondCanvasMutationError(res, error, {
@@ -1412,6 +1411,8 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
     await t.commit();
     await touchCanvasTimestamp(canvasId);
 
+    const snapshot = await buildCanvasSnapshot(canvasId);
+
     res.status(201).json({
       success: true,
       group: {
@@ -1420,11 +1421,7 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
       },
     });
 
-    socketService.emitToRoom(
-      canvasId,
-      "canvasUpdate",
-      await buildCanvasSnapshot(canvasId),
-    );
+    socketService.emitToRoom(canvasId, "canvasUpdate", snapshot);
   } catch (error) {
     if (t && !t.finished) await t.rollback();
     if (
@@ -1637,6 +1634,8 @@ router.post(
       await t.commit();
       await touchCanvasTimestamp(canvasId);
 
+      const snapshot = await buildCanvasSnapshot(canvasId);
+
       res.status(201).json({
         success: true,
         group: {
@@ -1648,11 +1647,7 @@ router.post(
         },
       });
 
-      socketService.emitToRoom(
-        canvasId,
-        "canvasUpdate",
-        await buildCanvasSnapshot(canvasId),
-      );
+      socketService.emitToRoom(canvasId, "canvasUpdate", snapshot);
     } catch (error) {
       if (t && !t.finished) await t.rollback();
       if (
@@ -1752,16 +1747,14 @@ router.post("/:canvasId/group", protect, async (req, res) => {
 
     await touchCanvasTimestamp(canvasId);
 
+    const snapshot = await buildCanvasSnapshot(canvasId);
+
     res.status(201).json({
       success: true,
       group: group.toJSON(),
     });
 
-    socketService.emitToRoom(
-      canvasId,
-      "canvasUpdate",
-      await buildCanvasSnapshot(canvasId),
-    );
+    socketService.emitToRoom(canvasId, "canvasUpdate", snapshot);
   } catch (error) {
     if (t && !t.finished) await t.rollback();
     if (
@@ -1942,13 +1935,11 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
     await t.commit();
     await touchCanvasTimestamp(canvasId);
 
+    const snapshot = await buildCanvasSnapshot(canvasId);
+
     res.status(200).json({ success: true, message: "Group deleted" });
 
-    socketService.emitToRoom(
-      canvasId,
-      "canvasUpdate",
-      await buildCanvasSnapshot(canvasId),
-    );
+    socketService.emitToRoom(canvasId, "canvasUpdate", snapshot);
   } catch (error) {
     if (t && !t.finished) await t.rollback();
     if (
@@ -2321,6 +2312,7 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
     }
     await canvas.save();
 
+    const snapshot = await buildCanvasSnapshot(canvasId);
     const canvasJSON = canvas.toJSON();
 
     res.status(200).json({
@@ -2329,11 +2321,7 @@ router.patch("/:canvasId/name", protect, async (req, res) => {
       canvas: canvasJSON,
     });
 
-    socketService.emitToRoom(
-      canvasId,
-      "canvasUpdate",
-      await buildCanvasSnapshot(canvasId),
-    );
+    socketService.emitToRoom(canvasId, "canvasUpdate", snapshot);
   } catch (error) {
     if (
       respondCanvasMutationError(res, error, {
@@ -2376,17 +2364,15 @@ router.patch("/:canvasId/card-layout", protect, async (req, res) => {
     canvas.cardLayout = cardLayout;
     await canvas.save();
 
+    const snapshot = await buildCanvasSnapshot(canvasId);
+
     res.status(200).json({
       success: true,
       message: "Canvas card layout updated",
       canvas: canvas.toJSON(),
     });
 
-    socketService.emitToRoom(
-      canvasId,
-      "canvasUpdate",
-      await buildCanvasSnapshot(canvasId),
-    );
+    socketService.emitToRoom(canvasId, "canvasUpdate", snapshot);
   } catch (error) {
     if (
       respondCanvasMutationError(res, error, {

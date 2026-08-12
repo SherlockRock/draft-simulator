@@ -294,10 +294,13 @@ router.put("/:id", protect, async (req, res) => {
     }
 
     await draft.save();
-    res.json(draft);
-    socketService.emitToRoom(draft.id, "draftUpdate", draft.toJSON());
 
-    // Broadcast to canvas room so other canvas users see the edit
+    // Resolve the canvas-room broadcast (if any) BEFORE sending the response:
+    // a DB failure in buildCanvasSnapshot must produce a clean 500, not throw
+    // ERR_HTTP_HEADERS_SENT out of an already-sent response (Express 4 does
+    // not catch that, and the process has no unhandledRejection handler — it
+    // would crash the backend).
+    let canvasBroadcast = null;
     if (canvas_id) {
       const canvas = await Canvas.findByPk(canvas_id);
       if (canvas) {
@@ -308,20 +311,26 @@ router.put("/:id", protect, async (req, res) => {
           !willChangeDescription &&
           !willChangeIcon;
 
-        if (isRenameOnlyCanvasUpdate) {
-          socketService.emitToRoom(canvas_id, "draftNameUpdated", {
-            draftId: draft.id,
-            name: draft.name,
-          });
-          return;
-        }
-
-        socketService.emitToRoom(
-          canvas_id,
-          "canvasUpdate",
-          await buildCanvasSnapshot(canvas_id),
-        );
+        canvasBroadcast = isRenameOnlyCanvasUpdate
+          ? {
+              event: "draftNameUpdated",
+              payload: { draftId: draft.id, name: draft.name },
+            }
+          : {
+              event: "canvasUpdate",
+              payload: await buildCanvasSnapshot(canvas_id),
+            };
       }
+    }
+
+    res.json(draft);
+    socketService.emitToRoom(draft.id, "draftUpdate", draft.toJSON());
+    if (canvasBroadcast) {
+      socketService.emitToRoom(
+        canvas_id,
+        canvasBroadcast.event,
+        canvasBroadcast.payload,
+      );
     }
   } catch (err) {
     console.error(err);
