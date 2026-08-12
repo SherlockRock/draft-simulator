@@ -48,6 +48,27 @@ const BODY = {
   ],
 };
 
+// Since the annotations lock order, Cards are LOCKED by `CanvasDraft.findAll`
+// (`ORDER BY draft_id ASC ... FOR UPDATE`) and written through the locked
+// instance, not through a static `CanvasDraft.update` with a where clause. The
+// static call took its row locks in caller-supplied array order with no dedupe,
+// which is the deadlock this endpoint's lock order exists to remove — so these
+// mocks moved with it.
+const cardRow = (draftId, opts = {}) => ({
+  id: opts.id ?? `row-${draftId}`,
+  draft_id: draftId,
+  positionX: opts.x ?? 0,
+  positionY: opts.y ?? 0,
+  group_id: opts.group ?? null,
+  update: vi.fn().mockResolvedValue(undefined),
+});
+
+const mockCanvasDrafts = (draftIds) => {
+  const rows = draftIds.map((draftId) => cardRow(draftId));
+  vi.spyOn(CanvasDraft, "findAll").mockResolvedValue(rows);
+  return new Map(rows.map((row) => [row.draft_id, row]));
+};
+
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(auth, "protect").mockImplementation((req, _res, next) => {
@@ -90,14 +111,16 @@ describe("PUT /:canvasId/draft-positions", () => {
   it("accepts empty positions when the group carries the work", async () => {
     vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
     mockTransaction();
-    const update = vi.spyOn(CanvasDraft, "update").mockResolvedValue([1]);
+    const findAll = vi.spyOn(CanvasDraft, "findAll");
     const groupRow = {
       id: "g1",
       metadata: { layout: "free" },
       update: vi.fn().mockResolvedValue(undefined),
       toJSON: () => ({ id: "g1", metadata: { layout: "grid" } }),
     };
-    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(groupRow);
+    // The standalone group is LOCKED up front now, not resolved by an unlocked
+    // findOne after the writes.
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([groupRow]);
 
     const res = await request(buildApp())
       .put("/api/canvas/c1/draft-positions")
@@ -112,7 +135,8 @@ describe("PUT /:canvasId/draft-positions", () => {
       });
 
     expect(res.status).toBe(200);
-    expect(update).not.toHaveBeenCalled();
+    // Zero Cards means zero Card locks, not a Card query returning nothing.
+    expect(findAll).not.toHaveBeenCalled();
     expect(groupRow.update).toHaveBeenCalled();
     expect(socketService.emitToRoom).toHaveBeenCalledWith(
       "c1",
@@ -163,20 +187,22 @@ describe("PUT /:canvasId/draft-positions", () => {
   it("updates every draft in one transaction and emits draftPositionsUpdated", async () => {
     vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
     const t = mockTransaction();
-    const update = vi.spyOn(CanvasDraft, "update").mockResolvedValue([1]);
+    const cards = mockCanvasDrafts(["d1", "d2"]);
 
     const res = await request(buildApp())
       .put("/api/canvas/c1/draft-positions")
       .send(BODY);
 
     expect(res.status).toBe(200);
-    expect(update).toHaveBeenCalledTimes(2);
-    expect(update).toHaveBeenCalledWith(
+    // One locking read for both Cards, then one write per locked instance.
+    expect(CanvasDraft.findAll).toHaveBeenCalledTimes(1);
+    expect(cards.get("d1").update).toHaveBeenCalledWith(
       { positionX: 16, positionY: 64 },
-      expect.objectContaining({
-        where: { canvas_id: "c1", draft_id: "d1" },
-        transaction: t,
-      })
+      expect.objectContaining({ transaction: t })
+    );
+    expect(cards.get("d2").update).toHaveBeenCalledWith(
+      { positionX: 740, positionY: 64 },
+      expect.objectContaining({ transaction: t })
     );
     expect(t.commit).toHaveBeenCalled();
     expect(socketService.emitToRoom).toHaveBeenCalledWith(
@@ -192,7 +218,7 @@ describe("PUT /:canvasId/draft-positions", () => {
     vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
     mockTransaction();
     vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([{ id: "g1" }]);
-    const update = vi.spyOn(CanvasDraft, "update").mockResolvedValue([1]);
+    const cards = mockCanvasDrafts(["d1"]);
 
     await request(buildApp())
       .put("/api/canvas/c1/draft-positions")
@@ -202,16 +228,18 @@ describe("PUT /:canvasId/draft-positions", () => {
         ],
       });
 
-    expect(update).toHaveBeenCalledWith(
+    expect(cards.get("d1").update).toHaveBeenCalledWith(
       { positionX: 16, positionY: 64, group_id: "g1" },
-      expect.objectContaining({ where: { canvas_id: "c1", draft_id: "d1" } })
+      expect.anything()
     );
   });
 
   it("rolls back and 404s when a draft is not on the canvas", async () => {
     vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
     const t = mockTransaction();
-    vi.spyOn(CanvasDraft, "update").mockResolvedValue([0]);
+    // Absent from the locking read, so it is rejected BEFORE any write rather
+    // than by a write that turns out to have affected zero rows.
+    vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
 
     const res = await request(buildApp())
       .put("/api/canvas/c1/draft-positions")
@@ -225,14 +253,14 @@ describe("PUT /:canvasId/draft-positions", () => {
   it("merges group metadata and broadcasts the updated group", async () => {
     vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
     mockTransaction();
-    vi.spyOn(CanvasDraft, "update").mockResolvedValue([1]);
+    mockCanvasDrafts(["d1", "d2"]);
     const groupRow = {
       id: "g1",
       metadata: { layout: "free", disabledChampions: ["Ahri"] },
       update: vi.fn().mockResolvedValue(undefined),
       toJSON: () => ({ id: "g1", metadata: { layout: "grid" } }),
     };
-    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(groupRow);
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([groupRow]);
 
     const res = await request(buildApp())
       .put("/api/canvas/c1/draft-positions")
@@ -333,14 +361,14 @@ describe("PUT /:canvasId/draft-positions — groups[]", () => {
   it("accepts a groups-only commit", async () => {
     mockTransaction();
     const rows = mockCanvasGroups([groupRow("g1", { x: 100, y: 100 })]);
-    const update = vi.spyOn(CanvasDraft, "update").mockResolvedValue([1]);
+    const cardFindAll = vi.spyOn(CanvasDraft, "findAll");
 
     const res = await putGroups({
       groups: [{ id: "g1", positionX: 300, positionY: 250 }],
     });
 
     expect(res.status).toBe(200);
-    expect(update).not.toHaveBeenCalled();
+    expect(cardFindAll).not.toHaveBeenCalled();
     expect(rows.get("g1").update).toHaveBeenCalledWith(
       { positionX: 300, positionY: 250 },
       expect.anything()
@@ -374,11 +402,13 @@ describe("PUT /:canvasId/draft-positions — groups[]", () => {
   });
 
   // Card-only commits are the hot path (every grid drag) and must not start
-  // taking a canvas-wide Group lock.
+  // taking a canvas-wide Group lock. Still true under the introduced lock
+  // order: a batch that references no container queries no Groups at all, and
+  // one that references containers locks only those.
   it("takes no group lock when only cards move", async () => {
     mockTransaction();
     const findAll = vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
-    vi.spyOn(CanvasDraft, "update").mockResolvedValue([1]);
+    mockCanvasDrafts(["d1", "d2"]);
 
     await putGroups(BODY);
 
@@ -516,7 +546,7 @@ describe("PUT /:canvasId/draft-positions — groups[]", () => {
   it("emits every groupMoved before draftPositionsUpdated", async () => {
     mockTransaction();
     mockCanvasGroups([groupRow("g1", { x: 0, y: 0 })]);
-    vi.spyOn(CanvasDraft, "update").mockResolvedValue([1]);
+    mockCanvasDrafts(["d1", "d2"]);
 
     await putGroups({
       ...BODY,
@@ -731,7 +761,7 @@ describe("PUT /:canvasId/draft-positions — groups[]", () => {
     it("rejects a card dropped into a group that is not on this canvas", async () => {
       const t = mockTransaction();
       vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
-      const update = vi.spyOn(CanvasDraft, "update").mockResolvedValue([1]);
+      const cards = mockCanvasDrafts(["d1"]);
 
       const res = await putGroups({
         positions: [
@@ -740,14 +770,14 @@ describe("PUT /:canvasId/draft-positions — groups[]", () => {
       });
 
       expect(res.status).toBe(404);
-      expect(update).not.toHaveBeenCalled();
+      expect(cards.get("d1").update).not.toHaveBeenCalled();
       expect(t.rollback).toHaveBeenCalled();
     });
 
     it("allows an explicit null group_id without a container lookup", async () => {
       mockTransaction();
       const findAll = vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
-      vi.spyOn(CanvasDraft, "update").mockResolvedValue([1]);
+      mockCanvasDrafts(["d1"]);
 
       const res = await putGroups({
         positions: [

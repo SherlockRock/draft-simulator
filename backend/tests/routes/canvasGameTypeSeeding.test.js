@@ -434,8 +434,14 @@ describe("clear protocol: null deletes the key (D3)", () => {
       update: vi.fn().mockResolvedValue(),
       toJSON: () => ({ id: "g-1" }),
     };
-    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(group);
-    vi.spyOn(CanvasDraft, "update").mockResolvedValue([1]);
+    // Both rows are LOCKED up front now (annotations design §3): the standalone
+    // group through the Group lock, the Card through `CanvasDraft.findAll ...
+    // FOR UPDATE`, and neither through the unlocked findOne/static-update pair
+    // this test used to stand on.
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([group]);
+    vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([
+      { id: "cd-1", draft_id: "d-1", update: vi.fn().mockResolvedValue() },
+    ]);
     await request(buildCanvasApp())
       .put("/api/canvas/c-1/draft-positions")
       .send({

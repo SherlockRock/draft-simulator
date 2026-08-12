@@ -375,8 +375,16 @@ export const DraftPositionUpdateSchema = z.object({
   group_id: z.string().nullable().optional(),
 });
 
+/**
+ * `.default([])` rather than `.catch([])`: an older server that omits the key
+ * genuinely means "no annotations moved" for THIS event, which is the same
+ * thing an empty array means. It is not the `.catch()` key-presence trap —
+ * nothing here shallow-spreads the parsed event over stored annotation state,
+ * so a defaulted `[]` cannot erase notes that did not move.
+ */
 export const DraftPositionsUpdatedSchema = z.object({
   positions: z.array(DraftPositionUpdateSchema),
+  annotations: z.array(AnnotationPositionUpdateSchema).default([]),
   group: CanvasGroupSchema.nullable(),
 });
 

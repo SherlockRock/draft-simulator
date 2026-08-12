@@ -663,23 +663,69 @@ function resolveParentage({ lockedById, pending }) {
  * `{ updatedGroup, groupMoves }` on success. It owns its own transaction so the
  * caller can retry the whole thing on a deadlock.
  */
-async function commitDraftPositions({ canvasId, positions, groups, group }) {
+async function commitDraftPositions({
+  canvasId,
+  positions,
+  annotations,
+  groups,
+  group,
+}) {
   let t;
   try {
     t = await Canvas.sequelize.transaction();
 
-    // ---- Locks and validation come before any write (design §8.1) ----
+    // ---- THE LOCK ORDER (annotations design §3) ----
     //
-    // The lock covers EVERY Group on the canvas, not just the resolved affected
-    // set. The design asks for "the affected set, sorted by id" — but that set
-    // is data-dependent on the very rows being locked (a descendant is only a
-    // descendant according to parent pointers we have not locked yet), so
+    // There was no order here to extend; this introduces one. Before it,
+    // GROUP_LOCK_ORDER applied only when `groups.length > 0`, Card writes took
+    // implicit row locks in caller-supplied array order with no dedupe, and a
+    // Card-only batch validated `group_id` through an UNLOCKED query. Two
+    // batches moving Cards [A,B] and [B,A] could already deadlock, and
+    // COMMIT_RETRIES only masked it.
+    //
+    // The rule, in full:
+    //   1. one fixed TYPE order — Group, then Card, then annotation;
+    //   2. ids deduped and sorted ASCENDING within each type;
+    //   3. every referenced row validated before the first write;
+    //   4. Groups locked canvas-wide whenever ancestry can change.
+    //
+    // Deadlock-freedom: every transaction walks the same total order, so the
+    // wait-for graph cannot contain a cycle. A canvas-wide Group lock ordered
+    // by id is a SUPERSET of a subset lock ordered by id acquired in the same
+    // direction, so the two queue instead of crossing. `(canvas_id, draft_id)`
+    // is unique (`unique_draft_canvas`) and `id` is a PK, so each sort is a
+    // total order with no ties to resolve differently between transactions.
+    const sortedUnique = (values) =>
+      [...new Set(values.filter((v) => typeof v === "string"))].sort();
+
+    // --- Type 1: Groups ---
+    //
+    // Canvas-wide when a Group is moving: ancestry can change, and the affected
+    // set is data-dependent on the very rows not yet locked (a descendant is
+    // only a descendant according to parent pointers we have not locked), so
     // resolving it from an unlocked read leaves a window where a concurrent
     // reparent moves a Group into the subtree and the fan-out silently skips
-    // it. Canvas-wide is a superset in one stable order, and it only runs when
-    // Groups are actually moving — a Card-only commit (every grid drag, by far
-    // the hot path) takes no Group lock at all and keeps today's query plan.
+    // it. Otherwise only the Groups the batch REFERENCES, which closes the
+    // TOCTOU where a referenced Group could be deleted or reparented between
+    // validation and write — and keeps the hot path (a grid drag referencing no
+    // container at all) taking no Group lock whatsoever.
     let lockedById = null;
+    // `group.id` is IN this set. It is the batch's standalone
+    // dimensions/metadata row, and the original code resolved it with an
+    // UNLOCKED findOne *after* the Card writes, then called .update() on it — a
+    // Group row lock taken after the Card locks, and a referenced row validated
+    // after writing. Both are the rules this block exists to establish, so
+    // omitting it would leave the hole open in the one path that carries a
+    // Group id without moving a Group.
+    const standaloneGroupId =
+      group && typeof group === "object" && typeof group.id === "string"
+        ? group.id
+        : null;
+    const referencedGroupIds = sortedUnique([
+      ...positions.map((p) => p.group_id),
+      ...annotations.map((a) => a.group_id),
+      standaloneGroupId,
+    ]);
     if (groups.length > 0) {
       const rows = await CanvasGroup.findAll({
         where: { canvas_id: canvasId },
@@ -698,22 +744,88 @@ async function commitDraftPositions({ canvasId, positions, groups, group }) {
           };
         }
       }
+    } else if (referencedGroupIds.length > 0) {
+      const rows = await CanvasGroup.findAll({
+        where: { canvas_id: canvasId, id: referencedGroupIds },
+        order: GROUP_LOCK_ORDER,
+        lock: true,
+        transaction: t,
+      });
+      lockedById = new Map(rows.map((row) => [row.id, row]));
     }
 
-    // Cards may only be dropped into a container on THIS canvas. The locked map
-    // already holds every Group here, so a groups[] commit needs no second read.
-    const foreignCardGroup = await findGroupNotOnCanvas({
+    // Validated HERE, before any write, rather than at the point of use below.
+    if (standaloneGroupId && !lockedById?.has(standaloneGroupId)) {
+      await t.rollback();
+      return { status: 404, error: "Group not found" };
+    }
+
+    // Items may only be dropped into a container on THIS canvas. The locked map
+    // already holds the Groups this batch touches, so the guard re-reads
+    // nothing — that is what `known` is for. Containment, NOT authorization:
+    // the Canvas Mutation Gate above already answered whether this actor may
+    // write, and neither substitutes for the other.
+    const foreignGroup = await findGroupNotOnCanvas({
       canvasId,
-      groupIds: positions.map((p) => p.group_id),
+      groupIds: referencedGroupIds,
       transaction: t,
       known: lockedById ? new Set(lockedById.keys()) : undefined,
     });
-    if (foreignCardGroup) {
+    if (foreignGroup) {
       await t.rollback();
       return {
         status: 404,
-        error: `Group ${foreignCardGroup} not found on canvas`,
+        error: `Group ${foreignGroup} not found on canvas`,
       };
+    }
+
+    // --- Type 2: Cards ---
+    const draftIds = sortedUnique(positions.map((p) => p.draft_id));
+    const lockedCardByDraftId = new Map();
+    if (draftIds.length > 0) {
+      const rows = await CanvasDraft.findAll({
+        where: { canvas_id: canvasId, draft_id: draftIds },
+        order: [["draft_id", "ASC"]],
+        lock: true,
+        transaction: t,
+      });
+      for (const row of rows) lockedCardByDraftId.set(row.draft_id, row);
+      for (const draftId of draftIds) {
+        if (!lockedCardByDraftId.has(draftId)) {
+          await t.rollback();
+          return {
+            status: 404,
+            error: `Draft ${draftId} not found on canvas`,
+          };
+        }
+      }
+    }
+
+    // --- Type 3: annotations ---
+    //
+    // A leaf: it contains nothing, so it is cycle-free and needs none of the
+    // parentage machinery Groups do. Its `group_id` went through the SAME
+    // containment guard as a Card's above, against the SAME locked rows — the
+    // unlocked-query pattern must not reappear for a new item type.
+    const annotationIds = sortedUnique(annotations.map((a) => a.id));
+    const lockedAnnotationById = new Map();
+    if (annotationIds.length > 0) {
+      const rows = await CanvasAnnotation.findAll({
+        where: { canvas_id: canvasId, id: annotationIds },
+        order: [["id", "ASC"]],
+        lock: true,
+        transaction: t,
+      });
+      for (const row of rows) lockedAnnotationById.set(row.id, row);
+      for (const annotationId of annotationIds) {
+        if (!lockedAnnotationById.has(annotationId)) {
+          await t.rollback();
+          return {
+            status: 404,
+            error: `Annotation ${annotationId} not found on canvas`,
+          };
+        }
+      }
     }
 
     const groupWrites = new Map();
@@ -767,41 +879,38 @@ async function commitDraftPositions({ canvasId, positions, groups, group }) {
       }
     }
 
-    for (const p of positions) {
-      const updates = { positionX: p.positionX, positionY: p.positionY };
-      if (p.group_id !== undefined) updates.group_id = p.group_id;
-      const [updated] = await CanvasDraft.update(updates, {
-        where: { canvas_id: canvasId, draft_id: p.draft_id },
-        transaction: t,
-      });
-      if (updated === 0) {
-        await t.rollback();
-        return {
-          status: 404,
-          error: `Draft ${p.draft_id} not found on canvas`,
-        };
-      }
-    }
-
+    // ---- The writes run in the SAME order as the locks ----
+    //
+    // Groups, then Cards, then annotations, every one of them against an
+    // instance this transaction already holds FOR UPDATE. Reordering the writes
+    // is safe precisely because every lock is already taken and every row's
+    // presence was validated above, which is also what makes the old
+    // `updated === 0` 404 branch dead rather than merely unreachable.
     for (const [groupId, updates] of groupWrites) {
       await lockedById.get(groupId).update(updates, { transaction: t });
     }
 
+    for (const p of positions) {
+      const updates = { positionX: p.positionX, positionY: p.positionY };
+      if (p.group_id !== undefined) updates.group_id = p.group_id;
+      await lockedCardByDraftId
+        .get(p.draft_id)
+        .update(updates, { transaction: t });
+    }
+
+    for (const a of annotations) {
+      const updates = { positionX: a.positionX, positionY: a.positionY };
+      if (a.group_id !== undefined) updates.group_id = a.group_id;
+      await lockedAnnotationById.get(a.id).update(updates, { transaction: t });
+    }
+
     let updatedGroup = null;
-    if (group && typeof group === "object" && typeof group.id === "string") {
-      // Reuse the locked instance when there is one: re-reading a row this
-      // transaction may have just moved would be a second source of truth for
-      // the same fields.
-      const groupRow =
-        lockedById?.get(group.id) ??
-        (await CanvasGroup.findOne({
-          where: { id: group.id, canvas_id: canvasId },
-          transaction: t,
-        }));
-      if (!groupRow) {
-        await t.rollback();
-        return { status: 404, error: "Group not found" };
-      }
+    if (standaloneGroupId) {
+      // ALWAYS the locked instance — the `?? await CanvasGroup.findOne(...)`
+      // fallback is gone. It re-read a row this transaction may have just
+      // moved (a second source of truth for the same fields), took its lock
+      // out of order, and validated a referenced row after writing.
+      const groupRow = lockedById.get(standaloneGroupId);
       const groupUpdates = {};
       if (typeof group.width === "number") groupUpdates.width = group.width;
       if (typeof group.height === "number") groupUpdates.height = group.height;
@@ -908,6 +1017,46 @@ router.put("/:canvasId/draft-positions", protect, async (req, res) => {
         .json({ error: "groups must not contain the same id twice" });
     }
 
+    // Duplicate ids are what make lock order CALLER-dependent: two batches
+    // sending [A,B] and [B,A] can deadlock, and COMMIT_RETRIES only masks it.
+    // Groups have been rejected for this since 5a; Cards never were.
+    if (new Set(positions.map((p) => p.draft_id)).size !== positions.length) {
+      return res
+        .status(400)
+        .json({ error: "positions must not contain the same draft twice" });
+    }
+
+    const rawAnnotations = req.body.annotations;
+    if (rawAnnotations !== undefined && !Array.isArray(rawAnnotations)) {
+      return res.status(400).json({
+        error: "annotations must be an array of {id, positionX, positionY}",
+      });
+    }
+    const annotations = rawAnnotations ?? [];
+
+    // `group_id` is tri-state on key PRESENCE, matching positions[]: absent
+    // leaves membership alone, null ungroups, a string moves it.
+    const validAnnotations = annotations.every(
+      (a) =>
+        a &&
+        typeof a.id === "string" &&
+        typeof a.positionX === "number" &&
+        typeof a.positionY === "number" &&
+        (a.group_id === undefined ||
+          a.group_id === null ||
+          typeof a.group_id === "string"),
+    );
+    if (!validAnnotations) {
+      return res.status(400).json({
+        error: "annotations must be an array of {id, positionX, positionY}",
+      });
+    }
+    if (new Set(annotations.map((a) => a.id)).size !== annotations.length) {
+      return res
+        .status(400)
+        .json({ error: "annotations must not contain the same id twice" });
+    }
+
     // Emptiness is validated separately from shape: an empty group has no
     // cards to place, so "Arrange as grid" legitimately sends positions: []
     // with only the group's layout/dimensions. Requiring a non-empty
@@ -919,10 +1068,18 @@ router.put("/:canvasId/draft-positions", protect, async (req, res) => {
       (typeof group.width === "number" ||
         typeof group.height === "number" ||
         (group.metadata && typeof group.metadata === "object"));
-    if (positions.length === 0 && groups.length === 0 && !groupCarriesWork) {
+    // An annotations-only batch is the D13 champion-pool Group's every reflow:
+    // a custom grid Group holding no Cards at all, where every move in the
+    // commit is a note's.
+    if (
+      positions.length === 0 &&
+      groups.length === 0 &&
+      annotations.length === 0 &&
+      !groupCarriesWork
+    ) {
       return res.status(400).json({
         error:
-          "Nothing to update: provide positions, groups, or a group with width/height/metadata",
+          "Nothing to update: provide positions, annotations, groups, or a group with width/height/metadata",
       });
     }
 
@@ -932,6 +1089,7 @@ router.put("/:canvasId/draft-positions", protect, async (req, res) => {
         result = await commitDraftPositions({
           canvasId,
           positions,
+          annotations,
           groups,
           group,
         });
@@ -962,10 +1120,14 @@ router.put("/:canvasId/draft-positions", protect, async (req, res) => {
     }
 
     // Suppressed on a groups-only commit: schema-valid and a client no-op, but
-    // it would broadcast `positions: []` for a change that moved no Cards.
-    if (positions.length > 0 || result.updatedGroup) {
+    // it would broadcast `positions: []` for a change that moved no Cards. An
+    // annotations-only commit is NOT that case — it is a real change, and the
+    // suppression condition has to grow with the payload or the D13 Group's
+    // every reflow goes unbroadcast.
+    if (positions.length > 0 || annotations.length > 0 || result.updatedGroup) {
       socketService.emitToRoom(canvasId, "draftPositionsUpdated", {
         positions,
+        annotations,
         group: result.updatedGroup ? result.updatedGroup.toJSON() : null,
       });
     }
