@@ -1,4 +1,11 @@
-import { CanvasDraft, Connection, CanvasGroup, Viewport, AnchorType } from "./schemas";
+import {
+    CanvasDraft,
+    Connection,
+    ConnectionEndpoint,
+    CanvasGroup,
+    Viewport,
+    AnchorType
+} from "./schemas";
 import { getLocalCanvas, saveLocalCanvas, LocalCanvas } from "./localCanvasStore";
 import type { CardLayout } from "./canvasCardLayout";
 import type {
@@ -29,6 +36,31 @@ const toAnchorType = (
     }
     return defaultValue;
 };
+
+/**
+ * Drop endpoints whose target has just been deleted, mirroring the server's own
+ * cleanup in the draft-delete (`canvas.js:1249`) and group-delete
+ * (`canvas.js:2110`) routes: a connection dies only when a WHOLE side empties,
+ * otherwise it is trimmed and kept. Dropping the connection whenever any single
+ * endpoint matched — what this file used to do — silently deleted the
+ * multi-endpoint connections `localUpdateConnection` can build.
+ */
+const pruneConnectionEndpoints = (
+    connections: Connection[],
+    isRemoved: (endpoint: ConnectionEndpoint) => boolean
+): Connection[] =>
+    connections.flatMap((connection) => {
+        const sources = connection.source_draft_ids.filter((e) => !isRemoved(e));
+        const targets = connection.target_draft_ids.filter((e) => !isRemoved(e));
+        if (sources.length === 0 || targets.length === 0) return [];
+        if (
+            sources.length === connection.source_draft_ids.length &&
+            targets.length === connection.target_draft_ids.length
+        ) {
+            return [connection];
+        }
+        return [{ ...connection, source_draft_ids: sources, target_draft_ids: targets }];
+    });
 
 // Helper: read, apply, save, return
 const mutateLocal = <T>(
@@ -116,16 +148,12 @@ export const localUpdateDraftPosition = (data: {
 export const localDeleteDraft = (draftId: string) => {
     return mutateLocal((canvas) => {
         canvas.drafts = canvas.drafts.filter((d) => d.Draft.id !== draftId);
-        // Also remove connections referencing this draft
-        canvas.connections = canvas.connections.filter((c) => {
-            const srcRefs = c.source_draft_ids.some(
-                (e) => "draft_id" in e && e.draft_id === draftId
-            );
-            const tgtRefs = c.target_draft_ids.some(
-                (e) => "draft_id" in e && e.draft_id === draftId
-            );
-            return !srcRefs && !tgtRefs;
-        });
+        // Also remove connections referencing this draft — trimmed, not dropped
+        // wholesale, exactly as canvas.js:1249 does it.
+        canvas.connections = pruneConnectionEndpoints(
+            canvas.connections,
+            (e) => "draft_id" in e && e.draft_id === draftId
+        );
         return { canvas, result: { success: true } };
     });
 };
@@ -538,33 +566,47 @@ export const localConvertGroupToSeries = (data: {
 
 export const localDeleteGroup = (groupId: string, keepDrafts?: boolean) => {
     return mutateLocal((canvas) => {
+        const deleted = canvas.groups.find((g) => g.id === groupId);
+        const removedDraftIds = new Set<string>();
+
         if (!keepDrafts) {
+            for (const d of canvas.drafts) {
+                if (d.group_id === groupId) removedDraftIds.add(d.draft_id);
+            }
             canvas.drafts = canvas.drafts.filter((d) => d.group_id !== groupId);
         } else {
+            // A grouped Card's stored position is relative to its container
+            // (ADR-0006), so the same numbers read as world once group_id is
+            // null — without this rebase every kept Card jumps to near the
+            // canvas origin. Same formula the server uses at canvas.js:2038.
+            const originX = deleted?.positionX ?? 0;
+            const originY = deleted?.positionY ?? 0;
             canvas.drafts = canvas.drafts.map((d) =>
-                d.group_id === groupId ? { ...d, group_id: null } : d
+                d.group_id === groupId
+                    ? {
+                          ...d,
+                          positionX: originX + d.positionX,
+                          positionY: originY + d.positionY,
+                          group_id: null
+                      }
+                    : d
             );
         }
         // Promote direct child Groups before the row goes (design §8.2.0): the
         // server does the same UPDATE, and without it a local delete strands a
         // subtree pointing at a row that no longer exists. Coordinates are
         // absolute at every depth (ADR-0006), so a promotion writes no position.
-        const deleted = canvas.groups.find((g) => g.id === groupId);
         const promoteTo = deleted?.parent_group_id ?? null;
         for (const child of canvas.groups) {
             if (child.parent_group_id === groupId) child.parent_group_id = promoteTo;
         }
         canvas.groups = canvas.groups.filter((g) => g.id !== groupId);
-        // Remove connections referencing this group
-        canvas.connections = canvas.connections.filter((c) => {
-            const srcRefs = c.source_draft_ids.some(
-                (e) => "group_id" in e && e.group_id === groupId
-            );
-            const tgtRefs = c.target_draft_ids.some(
-                (e) => "group_id" in e && e.group_id === groupId
-            );
-            return !srcRefs && !tgtRefs;
-        });
+        // Endpoints anchored to the Group always go; endpoints anchored to the
+        // Cards it took with it go on the !keepDrafts path, which used to leave
+        // them stranded on drafts that no longer exist.
+        canvas.connections = pruneConnectionEndpoints(canvas.connections, (e) =>
+            "group_id" in e ? e.group_id === groupId : removedDraftIds.has(e.draft_id)
+        );
         return { canvas, result: { success: true } };
     });
 };

@@ -361,6 +361,11 @@ export const ExportedCanvasDraftSchema = z.object({
   picks: z.array(z.string()),
   positionX: z.number(),
   positionY: z.number(),
+  // Which container the Card sat in, as the EXPORT's own group id. Without it
+  // an export carried no Card membership at all, so a restore flattened every
+  // container even before Group nesting existed. Optional because exports
+  // written before this field exist in the wild.
+  group_id: z.string().nullable().optional(),
 });
 
 export const ExportedCanvasGroupSchema = z.object({
@@ -369,6 +374,12 @@ export const ExportedCanvasGroupSchema = z.object({
   type: z.enum(["series", "custom"]),
   positionX: z.number(),
   positionY: z.number(),
+  // Absolute world coordinates at every depth (ADR-0006), so nesting needs no
+  // coordinate remap on import — only the parent id does.
+  parent_group_id: z.string().nullable().optional(),
+  width: z.number().nullable().optional(),
+  height: z.number().nullable().optional(),
+  metadata: CanvasGroupMetadataSchema.optional(),
 });
 
 export const ExportedCanvasSchema = z.object({

@@ -28,6 +28,7 @@ const {
   generateUniqueCanvasDraftName,
   generateUniqueCanvasGroupName,
 } = require("../helpers");
+const { planCanvasGroupImport } = require("../services/canvasGroupImport");
 
 const VALID_CHAMPION_IDS = new Set(
   championData.champions.map((champion) => champion.id),
@@ -431,6 +432,10 @@ router.get("/me/export", protect, async (req, res) => {
         picks: cd.Draft.picks,
         positionX: cd.positionX,
         positionY: cd.positionY,
+        // Card membership. A Card's stored position is relative to whatever
+        // this names (ADR-0006), so the two travel together or neither means
+        // anything on the way back in.
+        group_id: cd.group_id ?? null,
       })),
       groups: uc.Canvas.CanvasGroups.map((g) => ({
         id: g.id,
@@ -438,6 +443,13 @@ router.get("/me/export", protect, async (req, res) => {
         type: g.type,
         positionX: g.positionX,
         positionY: g.positionY,
+        // Nesting, size and layout. Group coordinates are absolute at every
+        // depth (ADR-0006), so `parent_group_id` is the whole of the tree —
+        // there is nothing to rebase.
+        parent_group_id: g.parent_group_id ?? null,
+        width: g.width ?? null,
+        height: g.height ?? null,
+        metadata: g.metadata ?? {},
       })),
     }));
 
@@ -555,12 +567,6 @@ router.post("/me/import", protect, async (req, res) => {
     const warnings = [];
 
     for (const importedCanvas of selectedCanvases) {
-      if ((importedCanvas.groups?.length || 0) > 0) {
-        warnings.push(
-          `Canvas "${importedCanvas.name}" contains groups in the export. Group structure is not restored by this import yet.`,
-        );
-      }
-
       let destinationCanvas = targetCanvas;
 
       if (canvasImportMode === "new_canvases") {
@@ -611,12 +617,117 @@ router.post("/me/import", protect, async (req, res) => {
         }
       }
 
+      // Containers before Cards: a Card's `group_id` needs the row to exist.
+      // The tree is rebuilt in TWO PASSES rather than by creating parents
+      // first — nothing here needs an ordering guarantee, and the second pass
+      // is one update per nested Group against an id map that is complete by
+      // then. `planCanvasGroupImport` decides what is rebuilt and why.
+      const groupPlan = planCanvasGroupImport(importedCanvas);
+      warnings.push(...groupPlan.warnings);
+
+      const groupIdMap = new Map();
+      // Groups the import OWNS: created here, or matched and overwritten. A
+      // `skip`-matched Group is reused as a placement target but never written
+      // to, so the second pass must not reparent it either.
+      const writableGroupIds = new Set();
+
+      for (const plannedGroup of groupPlan.groups) {
+        // Containers dedupe by name exactly as Cards do. Without it a repeat
+        // import into the same canvas litters it with empty duplicates: every
+        // Card dedupes onto the row it already had, so the fresh containers
+        // would have nothing to hold. Series rows are excluded from the match
+        // so a custom Group can never adopt a container that backs a series.
+        const existingGroup =
+          dedupeStrategy === "rename"
+            ? null
+            : await CanvasGroup.findOne({
+                where: {
+                  canvas_id: destinationCanvas.id,
+                  name: plannedGroup.name,
+                  type: "custom",
+                },
+                transaction,
+              });
+
+        if (existingGroup && dedupeStrategy === "skip") {
+          groupIdMap.set(plannedGroup.sourceId, existingGroup.id);
+          continue;
+        }
+
+        if (existingGroup) {
+          await existingGroup.update(
+            {
+              positionX: plannedGroup.positionX,
+              positionY: plannedGroup.positionY,
+              ...(plannedGroup.width != null && { width: plannedGroup.width }),
+              ...(plannedGroup.height != null && { height: plannedGroup.height }),
+              // Merged, not replaced: an export written before groups carried
+              // metadata has `{}` here, and replacing would wipe a layout the
+              // destination Group already had.
+              metadata: { ...existingGroup.metadata, ...plannedGroup.metadata },
+            },
+            { transaction },
+          );
+          groupIdMap.set(plannedGroup.sourceId, existingGroup.id);
+          writableGroupIds.add(existingGroup.id);
+          continue;
+        }
+
+        const createdGroup = await CanvasGroup.create(
+          {
+            canvas_id: destinationCanvas.id,
+            name: await generateUniqueCanvasGroupName(
+              plannedGroup.name,
+              destinationCanvas.id,
+              transaction,
+            ),
+            type: "custom",
+            positionX: plannedGroup.positionX,
+            positionY: plannedGroup.positionY,
+            ...(plannedGroup.width != null && { width: plannedGroup.width }),
+            ...(plannedGroup.height != null && { height: plannedGroup.height }),
+            metadata: plannedGroup.metadata,
+          },
+          { transaction },
+        );
+        groupIdMap.set(plannedGroup.sourceId, createdGroup.id);
+        writableGroupIds.add(createdGroup.id);
+      }
+
+      for (const plannedGroup of groupPlan.groups) {
+        if (plannedGroup.parentSourceId === null) continue;
+        const groupId = groupIdMap.get(plannedGroup.sourceId);
+        if (!writableGroupIds.has(groupId)) continue;
+        await CanvasGroup.update(
+          {
+            parent_group_id: groupIdMap.get(plannedGroup.parentSourceId) ?? null,
+          },
+          { where: { id: groupId }, transaction },
+        );
+      }
+
+      const cardPlacements = new Map(
+        groupPlan.cards.map((card) => [card.sourceId, card]),
+      );
+
       for (const importedDraft of importedCanvas.drafts) {
         const existingCanvasDraft = await findCanvasDraftByName(
           destinationCanvas.id,
           importedDraft.name,
           transaction,
         );
+
+        // Position and membership travel together: a Card inside a rebuilt
+        // container keeps its container-relative pair, one whose container was
+        // not rebuilt arrives already rebased to world.
+        const placement = cardPlacements.get(importedDraft.id) ?? {
+          groupSourceId: null,
+          positionX: importedDraft.positionX,
+          positionY: importedDraft.positionY,
+        };
+        const placementGroupId = placement.groupSourceId
+          ? (groupIdMap.get(placement.groupSourceId) ?? null)
+          : null;
 
         if (!existingCanvasDraft) {
           const newDraft = await Draft.create(
@@ -642,8 +753,9 @@ router.post("/me/import", protect, async (req, res) => {
             {
               canvas_id: destinationCanvas.id,
               draft_id: newDraft.id,
-              positionX: importedDraft.positionX,
-              positionY: importedDraft.positionY,
+              positionX: placement.positionX,
+              positionY: placement.positionY,
+              group_id: placementGroupId,
               team1Name: importedDraft.team1Name ?? null,
               team2Name: importedDraft.team2Name ?? null,
               source_type: "canvas",
@@ -681,8 +793,9 @@ router.post("/me/import", protect, async (req, res) => {
             {
               canvas_id: destinationCanvas.id,
               draft_id: renamedDraft.id,
-              positionX: importedDraft.positionX,
-              positionY: importedDraft.positionY,
+              positionX: placement.positionX,
+              positionY: placement.positionY,
+              group_id: placementGroupId,
               team1Name: importedDraft.team1Name ?? null,
               team2Name: importedDraft.team2Name ?? null,
               source_type: "canvas",
@@ -703,8 +816,9 @@ router.post("/me/import", protect, async (req, res) => {
 
         await existingCanvasDraft.update(
           {
-            positionX: importedDraft.positionX,
-            positionY: importedDraft.positionY,
+            positionX: placement.positionX,
+            positionY: placement.positionY,
+            group_id: placementGroupId,
           },
           { transaction },
         );

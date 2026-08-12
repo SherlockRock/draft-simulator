@@ -18,6 +18,7 @@ import {
     nodeSize,
     parentIdOf,
     renderOrder,
+    rootGroupsOf,
     spanFor,
     subtreeHeight,
     wouldCreateCycle,
@@ -174,6 +175,56 @@ describe("child queries", () => {
         const t = tree([group("g1")]);
         expect(parentIdOf(t, "g1")).toBeNull();
         expect(parentIdOf(t, "nope")).toBeUndefined();
+    });
+});
+
+/**
+ * The panel renders the tree by RECURSING from these, so anything missing here
+ * is a Group that silently disappears from the sidebar — which is what
+ * `childGroupsOf(tree, null)` would have done to an orphan.
+ */
+describe("rootGroupsOf", () => {
+    it("returns the top-level groups and nothing below them", () => {
+        const t = tree([
+            group("root"),
+            group("a", { parent: "root" }),
+            group("solo")
+        ]);
+        expect(rootGroupsOf(t).map((g) => g.id)).toEqual(["root", "solo"]);
+    });
+
+    it("treats an orphan as a root, but not its children", () => {
+        const t = tree([
+            group("kept"),
+            group("orphan", { parent: "gone" }),
+            group("orphan-child", { parent: "orphan" })
+        ]);
+        expect(rootGroupsOf(t).map((g) => g.id)).toEqual(["kept", "orphan"]);
+    });
+
+    it("surfaces a cycle no root reaches, so it cannot vanish", () => {
+        const t = tree([
+            group("z"),
+            group("x", { parent: "y" }),
+            group("y", { parent: "x" })
+        ]);
+        expect(rootGroupsOf(t).map((g) => g.id)).toEqual(["z", "x", "y"]);
+    });
+
+    it("does not surface a cycle a root already reaches", () => {
+        // `x` is reachable from `root`, so it is not a second entry point —
+        // only the walk's own visited set stops it there.
+        const t = tree([
+            group("root"),
+            group("x", { parent: "root" }),
+            group("y", { parent: "x" }),
+            group("z", { parent: "y" })
+        ]);
+        expect(rootGroupsOf(t).map((g) => g.id)).toEqual(["root"]);
+    });
+
+    it("returns nothing for an empty tree", () => {
+        expect(rootGroupsOf(tree([]))).toEqual([]);
     });
 });
 

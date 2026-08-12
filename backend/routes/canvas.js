@@ -20,6 +20,7 @@ const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
 const { assertCanvasAccess } = require("../services/canvasMutations");
 const {
+  MAX_GROUP_DEPTH,
   depthOf,
   descendantGroupsOf,
   subtreeHeight,
@@ -607,16 +608,6 @@ router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
     res.status(500).json({ error: "Failed to update canvas draft" });
   }
 });
-
-// Soft nesting cap (recursive-groups decision 6). Measured in ANCESTORS, so 4
-// permits five levels of containment. Checked against the deepest leaf of the
-// moved subtree, not the moved Group alone — dropping a two-level subtree under
-// a depth-3 parent puts its leaves at depth 5.
-//
-// Duplicated from `MAX_GROUP_DEPTH` in `@draft-sim/shared-types/canvas-tree-vector`,
-// which this file cannot require (ESM). `canvasGroupNesting.test.js` imports the
-// shared constant and derives its fixtures from it, so drift fails a test.
-const MAX_GROUP_DEPTH = 4;
 
 // Canonical acquisition order for CanvasGroup row locks (design §8.1). Postgres
 // puts LockRows above Sort, so `ORDER BY id FOR UPDATE` locks in id order and
