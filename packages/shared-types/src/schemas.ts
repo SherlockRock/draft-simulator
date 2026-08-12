@@ -262,6 +262,112 @@ export const CanvasGroupSchema = z.object({
   updatedAt: z.string().optional(),
 });
 
+// =============================================================================
+// Canvas Annotation Schemas
+// =============================================================================
+
+/**
+ * `none` is a real palette entry, not the absence of one: it means transparent
+ * and borderless, which is how a bare champion icon renders without note
+ * chrome (design D6). Folding the frame into the colour avoids a separate
+ * `showFrame` flag and the "the note transforms when you delete the last word"
+ * surprise that inferring the frame from content would cause.
+ */
+export const AnnotationColorSchema = z.enum([
+  "none",
+  "slate",
+  "purple",
+  "teal",
+  "amber",
+  "crimson",
+  "emerald",
+]);
+
+/**
+ * Four presets, because this is the difference between annotating and
+ * LABELLING (design D6): a region header like "PLAYOFFS PREP" must stay legible
+ * at low zoom, and without this the only way to make one is to make the box
+ * huge, which fights the grid. The px values live frontend-side in
+ * `utils/annotationStyle.ts` — this enum is the wire contract only.
+ */
+export const AnnotationFontSizeSchema = z.enum(["sm", "md", "lg", "xl"]);
+
+/**
+ * A first-class canvas item (design D1): its own id, world coordinates, a
+ * nullable `group_id`, its own selection and drag path — never parented to a
+ * Card.
+ *
+ * `positionX`/`positionY` are container-relative when `group_id` is set and
+ * absolute world otherwise, exactly like a Card (ADR-0006).
+ *
+ * `width`/`height` are STORED and user-resizable (design D5). The layout engine
+ * reads them and never derives them; only a user action (typing, changing
+ * `fontSize`, dragging a handle) may measure rendered content and commit a new
+ * stored height. Inside a grid Group the size is snapped at RENDER, never at
+ * commit (D5a), so drag-in then drag-out is a lossless round trip.
+ *
+ * An annotation is a LEAF: it contains nothing, so it is cycle-free and
+ * behaves exactly like a Card for every topology question.
+ */
+export const CanvasAnnotationSchema = z.object({
+  id: z.string(),
+  canvas_id: z.string(),
+  group_id: z.string().nullable().optional(),
+  positionX: z.number(),
+  positionY: z.number(),
+  width: z.number(),
+  height: z.number(),
+  /**
+   * The size the user last set BY HAND, null where they never have.
+   *
+   * ⚠️ `width`/`height` cannot answer this and the first draft of this plan
+   * wrongly assumed they could. Auto-fit WRITES `height`, so using it as its own
+   * floor makes the floor ratchet: grow a note to 400px and 400 becomes the
+   * floor, so deleting text can never shrink it — exactly the failure D7 exists
+   * to prevent. Same conflation `manualFloorOf` (gridLayout.ts) exists to avoid
+   * for Groups, which is why D7 says "reusing the manualWidth/manualHeight floor
+   * semantics Groups already have".
+   *
+   * Written ONLY by the resize-handle commit. Never by auto-fit.
+   */
+  manualWidth: z.number().nullable().optional(),
+  manualHeight: z.number().nullable().optional(),
+  text: z.string(),
+  championIds: z.array(z.string()),
+  color: AnnotationColorSchema,
+  fontSize: AnnotationFontSizeSchema,
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+/**
+ * The annotation sibling of `DraftPositionUpdateSchema` for the `annotations[]`
+ * array on `PUT /:canvasId/draft-positions`.
+ *
+ * A grid reflow produces Card and annotation moves TOGETHER; splitting them
+ * across two endpoints would make one drag two non-atomic transactions
+ * (design §3). `group_id` is tri-state on key PRESENCE, matching the Card
+ * array: absent leaves membership alone, `null` ungroups, a string moves it.
+ */
+export const AnnotationPositionUpdateSchema = z.object({
+  id: z.string(),
+  positionX: z.number(),
+  positionY: z.number(),
+  group_id: z.string().nullable().optional(),
+});
+
+/**
+ * The live-drag relay's wire shape — the twin of `CanvasObjectMovedSchema`
+ * (design D14). Without it a note teleports on commit while Cards glide, and
+ * under D2's obligation a drag path that does not broadcast is a special-cased
+ * drag path.
+ */
+export const AnnotationMovedSchema = z.object({
+  annotationId: z.string(),
+  positionX: z.number(),
+  positionY: z.number(),
+});
+
 export const DraftPositionUpdateSchema = z.object({
   draft_id: z.string(),
   positionX: z.number(),
@@ -382,6 +488,35 @@ export const ExportedCanvasGroupSchema = z.object({
   metadata: CanvasGroupMetadataSchema.optional(),
 });
 
+export const ExportedCanvasAnnotationSchema = z.object({
+  // Carried so import can dedupe on it (design D15). Cards and Groups dedupe
+  // by NAME; an annotation has none, so re-importing the same file would
+  // duplicate every note. Matching on the export's own id makes that
+  // idempotent, which is the case that matters.
+  //
+  // ⚠️ MATCHED on, never REUSED as the destination primary key. `id` is a
+  // global UUID PK: importing one export into canvas A and then canvas B would
+  // find no row in B, then try to create A's primary key again and fail with a
+  // unique violation. Import stores this in `source_id` and always generates a
+  // fresh `id` (see Task 3 and Task 9).
+  id: z.string(),
+  positionX: z.number(),
+  positionY: z.number(),
+  width: z.number(),
+  height: z.number(),
+  // The hand-set floor travels too, or a round trip silently re-enables
+  // auto-shrink on a note the user deliberately sized tall.
+  manualWidth: z.number().nullable().optional(),
+  manualHeight: z.number().nullable().optional(),
+  text: z.string(),
+  championIds: z.array(z.string()).default([]),
+  color: AnnotationColorSchema.default("slate"),
+  fontSize: AnnotationFontSizeSchema.default("md"),
+  // Container membership, as the EXPORT's own group id. A member's stored
+  // position is relative to whatever this names, so the two travel together.
+  group_id: z.string().nullable().optional(),
+});
+
 export const ExportedCanvasSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -390,6 +525,7 @@ export const ExportedCanvasSchema = z.object({
   createdAt: z.string().optional(),
   drafts: z.array(ExportedCanvasDraftSchema).default([]),
   groups: z.array(ExportedCanvasGroupSchema).default([]),
+  annotations: z.array(ExportedCanvasAnnotationSchema).default([]),
 });
 
 export const ExportedVersusSeriesDraftSchema = z.object({
@@ -625,6 +761,7 @@ export const CanvasResponseSchema = z.object({
   drafts: z.array(CanvasDraftSchema),
   connections: z.array(ConnectionSchema),
   groups: z.array(CanvasGroupSchema),
+  annotations: z.array(CanvasAnnotationSchema).default([]),
   lastViewport: ViewportSchema,
   userPermissions: z.enum(["view", "edit", "admin"]),
 });
@@ -949,6 +1086,16 @@ export type CanvasGroupMetadataUpdate = z.infer<
 export type DraftMode = z.infer<typeof DraftModeSchema>;
 export type GameType = z.infer<typeof GameTypeSchema>;
 export type CanvasGroup = z.infer<typeof CanvasGroupSchema>;
+export type AnnotationColor = z.infer<typeof AnnotationColorSchema>;
+export type AnnotationFontSize = z.infer<typeof AnnotationFontSizeSchema>;
+export type CanvasAnnotation = z.infer<typeof CanvasAnnotationSchema>;
+export type AnnotationPositionUpdate = z.infer<
+  typeof AnnotationPositionUpdateSchema
+>;
+export type AnnotationMoved = z.infer<typeof AnnotationMovedSchema>;
+export type ExportedCanvasAnnotation = z.infer<
+  typeof ExportedCanvasAnnotationSchema
+>;
 export type DraftPositionUpdate = z.infer<typeof DraftPositionUpdateSchema>;
 export type DraftPositionsUpdated = z.infer<
   typeof DraftPositionsUpdatedSchema
