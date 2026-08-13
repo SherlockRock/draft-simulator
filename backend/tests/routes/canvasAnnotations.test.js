@@ -48,6 +48,11 @@ const annotationRow = (overrides = {}) => ({
   positionY: 20,
   width: 380,
   height: 120,
+  // Null by default: no hand-set floor. The copy route must carry whatever
+  // value is here through unchanged — see the manualWidth/manualHeight tests
+  // in the copy describe block below.
+  manualWidth: null,
+  manualHeight: null,
   text: "why we lost this one",
   championIds: [],
   color: "slate",
@@ -163,6 +168,20 @@ describe("PATCH /:canvasId/annotations/:annotationId", () => {
     expect(res.status).toBe(404);
   });
 
+  // Containment, not authorization (design §3): the Gate said yes, and the
+  // group_id still belongs to somebody else's canvas. findGroupNotOnCanvas
+  // runs before the row lookup, so a foreign group_id must stop the request
+  // before CanvasAnnotation.findOne is ever called.
+  it("404s a group_id that is not on this canvas", async () => {
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+    const findOne = vi.spyOn(CanvasAnnotation, "findOne");
+    const res = await request(buildApp())
+      .patch("/api/canvas/c1/annotations/a1")
+      .send({ text: "x", group_id: "gForeign" });
+    expect(res.status).toBe(404);
+    expect(findOne).not.toHaveBeenCalled();
+  });
+
   it("writes only the fields the request carries", async () => {
     const row = annotationRow();
     vi.spyOn(CanvasAnnotation, "findOne").mockResolvedValue(row);
@@ -220,7 +239,12 @@ describe("POST /:canvasId/annotations/:annotationId/copy", () => {
 
   it("copies every content field and takes the caller's placement", async () => {
     vi.spyOn(CanvasAnnotation, "findOne").mockResolvedValue(
-      annotationRow({ championIds: ["Ahri", "Orianna"], color: "purple" }),
+      annotationRow({
+        championIds: ["Ahri", "Orianna"],
+        color: "purple",
+        manualWidth: 320,
+        manualHeight: 96,
+      }),
     );
     const create = vi
       .spyOn(CanvasAnnotation, "create")
@@ -240,8 +264,48 @@ describe("POST /:canvasId/annotations/:annotationId/copy", () => {
         championIds: ["Ahri", "Orianna"],
         color: "purple",
         text: "why we lost this one",
+        // The hand-set floor is part of the note's identity (router comment):
+        // a duplicate that dropped it would silently start auto-shrinking
+        // where the original never did.
+        manualWidth: 320,
+        manualHeight: 96,
       }),
     );
     expectCanvasUpdateBroadcast();
+  });
+
+  // Negative case for the same guarantee: a source that never had a hand-set
+  // floor must produce a copy that also has none — not coerced to 0 or left
+  // undefined, which would silently turn "no floor" into "a floor of zero".
+  it("keeps manualWidth/manualHeight null when the source never set a floor", async () => {
+    vi.spyOn(CanvasAnnotation, "findOne").mockResolvedValue(annotationRow());
+    const create = vi
+      .spyOn(CanvasAnnotation, "create")
+      .mockResolvedValue(annotationRow({ id: "a2" }));
+
+    const res = await request(buildApp())
+      .post("/api/canvas/c1/annotations/a1/copy")
+      .send({ positionX: 0, positionY: 0 });
+
+    expect(res.status).toBe(201);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ manualWidth: null, manualHeight: null }),
+    );
+  });
+
+  // Containment, not authorization (design §3): the Gate said yes, and the
+  // group_id still belongs to somebody else's canvas. findGroupNotOnCanvas
+  // runs before the source lookup, so a foreign group_id must stop the
+  // request before CanvasAnnotation.findOne/create are ever called.
+  it("404s a group_id that is not on this canvas", async () => {
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+    const findOne = vi.spyOn(CanvasAnnotation, "findOne");
+    const create = vi.spyOn(CanvasAnnotation, "create");
+    const res = await request(buildApp())
+      .post("/api/canvas/c1/annotations/a1/copy")
+      .send({ positionX: 0, positionY: 0, group_id: "gForeign" });
+    expect(res.status).toBe(404);
+    expect(findOne).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
   });
 });
