@@ -384,6 +384,7 @@ router.get("/me/export", protect, async (req, res) => {
           include: [
             { model: CanvasDraft, include: [{ model: Draft }] },
             { model: CanvasGroup },
+            { model: CanvasAnnotation },
           ],
         },
       ],
@@ -419,6 +420,23 @@ router.get("/me/export", protect, async (req, res) => {
         width: g.width ?? null,
         height: g.height ?? null,
         metadata: g.metadata ?? {},
+      })),
+      annotations: uc.Canvas.CanvasAnnotations.map((annotation) => ({
+        // The exported id is provenance for D15 dedupe. Import matches it via
+        // source_id and never reuses it as the destination primary key.
+        id: annotation.id,
+        positionX: annotation.positionX,
+        positionY: annotation.positionY,
+        width: annotation.width,
+        height: annotation.height,
+        text: annotation.text,
+        championIds: annotation.championIds ?? [],
+        color: annotation.color,
+        fontSize: annotation.fontSize,
+        manualWidth: annotation.manualWidth ?? null,
+        manualHeight: annotation.manualHeight ?? null,
+        // Membership travels with the container-relative position.
+        group_id: annotation.group_id ?? null,
       })),
     }));
 
@@ -529,6 +547,9 @@ router.post("/me/import", protect, async (req, res) => {
       draftsCreated: 0,
       draftsUpdated: 0,
       draftsSkipped: 0,
+      annotationsCreated: 0,
+      annotationsUpdated: 0,
+      annotationsSkipped: 0,
       seriesCreated: 0,
       seriesUpdated: 0,
       seriesSkipped: 0,
@@ -793,6 +814,67 @@ router.post("/me/import", protect, async (req, res) => {
         );
 
         summary.draftsUpdated += 1;
+      }
+
+      // Groups already exist, so annotation membership can be remapped from
+      // the export's Group ids to Groups on the destination canvas.
+      for (const importedAnnotation of importedCanvas.annotations ?? []) {
+        const placementGroupId = importedAnnotation.group_id
+          ? (groupIdMap.get(importedAnnotation.group_id) ?? null)
+          : null;
+
+        // D15 matches the export id in source_id, scoped to this canvas. The
+        // destination id remains model-generated, allowing the same export to
+        // be imported into multiple canvases without a global-PK collision.
+        const existing =
+          dedupeStrategy === "rename"
+            ? null
+            : await CanvasAnnotation.findOne({
+                where: {
+                  canvas_id: destinationCanvas.id,
+                  source_id: importedAnnotation.id,
+                },
+                transaction,
+              });
+
+        if (existing && dedupeStrategy === "skip") {
+          summary.annotationsSkipped += 1;
+          continue;
+        }
+
+        const fields = {
+          positionX: importedAnnotation.positionX,
+          positionY: importedAnnotation.positionY,
+          width: importedAnnotation.width,
+          height: importedAnnotation.height,
+          text: importedAnnotation.text,
+          championIds: importedAnnotation.championIds ?? [],
+          color: importedAnnotation.color,
+          fontSize: importedAnnotation.fontSize,
+          manualWidth: importedAnnotation.manualWidth ?? null,
+          manualHeight: importedAnnotation.manualHeight ?? null,
+          group_id: placementGroupId,
+        };
+
+        if (existing) {
+          await existing.update(fields, { transaction });
+          summary.annotationsUpdated += 1;
+          continue;
+        }
+
+        await CanvasAnnotation.create(
+          {
+            canvas_id: destinationCanvas.id,
+            // Rename intentionally creates an independent note; otherwise the
+            // export id is stored only as provenance, never as this row's id.
+            ...(dedupeStrategy === "rename"
+              ? {}
+              : { source_id: importedAnnotation.id }),
+            ...fields,
+          },
+          { transaction },
+        );
+        summary.annotationsCreated += 1;
       }
 
       destinationCanvas.changed("updatedAt", true);
