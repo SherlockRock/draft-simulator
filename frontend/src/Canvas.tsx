@@ -223,6 +223,7 @@ import {
     autoFitHeight,
     defaultAnnotationSize
 } from "./utils/annotationSize";
+import { annotationKeyboardShortcut } from "./utils/annotationKeyboardShortcut";
 
 const debounce = <T extends unknown[]>(func: (...args: T) => void, limit: number) => {
     let inDebounce: boolean;
@@ -4750,28 +4751,29 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     return;
                 }
             }
-            if (
-                e.key === "Enter" &&
-                !isConnectionMode() &&
-                selectedAnnotationId() &&
-                editingAnnotationId() === null &&
-                !isFocusedInteractiveTarget(e.target)
-            ) {
+            const annotationShortcut = annotationKeyboardShortcut({
+                key: e.key,
+                isConnectionMode: isConnectionMode(),
+                selectedAnnotationId: selectedAnnotationId(),
+                editingAnnotationId: editingAnnotationId(),
+                isInteractiveTarget: isFocusedInteractiveTarget(e.target),
+                isModalOpen:
+                    document.querySelector('[data-modal-overlay="true"]') !== null
+            });
+            if (annotationShortcut === "start-editing") {
                 e.preventDefault();
                 setEditingAnnotationId(selectedAnnotationId());
                 return;
             }
-            if (e.key === "Escape" && !isConnectionMode()) {
-                if (editingAnnotationId() !== null) {
-                    setEditingAnnotationId(null);
-                    e.preventDefault();
-                    return;
-                }
-                if (selectedAnnotationId() !== null) {
-                    setSelectedAnnotationId(null);
-                    e.preventDefault();
-                    return;
-                }
+            if (annotationShortcut === "stop-editing") {
+                setEditingAnnotationId(null);
+                e.preventDefault();
+                return;
+            }
+            if (annotationShortcut === "clear-selection") {
+                setSelectedAnnotationId(null);
+                e.preventDefault();
+                return;
             }
             if (e.key === "Escape" && isConnectionMode()) {
                 e.preventDefault();

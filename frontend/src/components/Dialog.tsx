@@ -68,6 +68,7 @@ export const Dialog = (props: {
     return (
         <Show when={props.isOpen()}>
             <div
+                data-modal-overlay="true"
                 class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
                 onPointerDown={(e: PointerEvent) => {
                     pointerDownOnBackdrop = e.target === e.currentTarget;
