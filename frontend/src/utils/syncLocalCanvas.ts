@@ -6,11 +6,19 @@ import {
     updateCanvasGroup,
     updateCanvasDraft,
     createConnection,
+    createAnnotation,
+    updateAnnotation,
     updateCanvasViewport,
     updateCanvasDraftPositions
 } from "./actions";
 import { CanvasGroup, ConnectionEndpoint } from "./schemas";
-import type { CanvasGroupMetadata, GroupPositionUpdate } from "@draft-sim/shared-types";
+import type {
+    AnnotationColor,
+    AnnotationFontSize,
+    CanvasAnnotation,
+    CanvasGroupMetadata,
+    GroupPositionUpdate
+} from "@draft-sim/shared-types";
 
 /**
  * Drops `gameType` from local group metadata on its way to the server.
@@ -59,6 +67,40 @@ export const nestedGroupSyncEntries = (
             parentId: idMap.get(group.parent_group_id ?? "") ?? null
         }));
 
+export const annotationSyncEntries = (
+    annotations: readonly CanvasAnnotation[],
+    groupIdMap: ReadonlyMap<string, string>
+): {
+    sourceId: string;
+    positionX: number;
+    positionY: number;
+    width: number;
+    height: number;
+    text: string;
+    championIds: string[];
+    color: AnnotationColor;
+    fontSize: AnnotationFontSize;
+    manualWidth: number | null;
+    manualHeight: number | null;
+    group_id: string | null;
+}[] =>
+    annotations.map((annotation) => ({
+        sourceId: annotation.id,
+        positionX: annotation.positionX,
+        positionY: annotation.positionY,
+        width: annotation.width,
+        height: annotation.height,
+        text: annotation.text,
+        championIds: [...annotation.championIds],
+        color: annotation.color,
+        fontSize: annotation.fontSize,
+        manualWidth: annotation.manualWidth ?? null,
+        manualHeight: annotation.manualHeight ?? null,
+        group_id: annotation.group_id
+            ? (groupIdMap.get(annotation.group_id) ?? null)
+            : null
+    }));
+
 export const syncLocalCanvasToServer = async (): Promise<string | null> => {
     // Skip sync if canvas is empty (no drafts, no groups, not renamed)
     if (isLocalCanvasEmpty()) return null;
@@ -78,6 +120,7 @@ export const syncLocalCanvasToServer = async (): Promise<string | null> => {
     // ID remapping: tempId -> serverId
     const draftIdMap = new Map<string, string>();
     const groupIdMap = new Map<string, string>();
+    const annotationIdMap = new Map<string, string>();
 
     // Step 2: Save viewport
     await updateCanvasViewport({ canvasId, viewport: local.viewport });
@@ -154,6 +197,41 @@ export const syncLocalCanvasToServer = async (): Promise<string | null> => {
                 ...(serverGroupId && { group_id: serverGroupId }),
                 ...(team1Name && { team1Name }),
                 ...(team2Name && { team2Name })
+            });
+        }
+    }
+
+    // Step 3c: Create annotations after their Groups and before Connections.
+    // The annotation id map must be complete before connection endpoint
+    // remapping learns about annotation endpoints.
+    for (const entry of annotationSyncEntries(local.annotations, groupIdMap)) {
+        const created = await createAnnotation({
+            canvasId,
+            positionX: entry.positionX,
+            positionY: entry.positionY,
+            width: entry.width,
+            height: entry.height,
+            group_id: entry.group_id
+        });
+        annotationIdMap.set(entry.sourceId, created.annotation.id);
+
+        const hasContent =
+            entry.text !== "" ||
+            entry.championIds.length > 0 ||
+            entry.color !== "slate" ||
+            entry.fontSize !== "md" ||
+            entry.manualWidth !== null ||
+            entry.manualHeight !== null;
+        if (hasContent) {
+            await updateAnnotation({
+                canvasId,
+                annotationId: created.annotation.id,
+                text: entry.text,
+                championIds: entry.championIds,
+                color: entry.color,
+                fontSize: entry.fontSize,
+                manualWidth: entry.manualWidth,
+                manualHeight: entry.manualHeight
             });
         }
     }

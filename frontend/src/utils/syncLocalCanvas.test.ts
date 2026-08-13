@@ -1,6 +1,137 @@
-import { describe, expect, it } from "vitest";
-import { nestedGroupSyncEntries, stripUnsyncableGroupMetadata } from "./syncLocalCanvas";
-import type { CanvasGroup } from "./schemas";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("./actions", () => ({
+    createCanvas: vi.fn(),
+    postNewDraft: vi.fn(),
+    createCanvasGroup: vi.fn(),
+    updateCanvasGroup: vi.fn(),
+    updateCanvasDraft: vi.fn(),
+    createAnnotation: vi.fn(),
+    updateAnnotation: vi.fn(),
+    createConnection: vi.fn(),
+    updateCanvasViewport: vi.fn(),
+    updateCanvasDraftPositions: vi.fn()
+}));
+import {
+    annotationSyncEntries,
+    nestedGroupSyncEntries,
+    stripUnsyncableGroupMetadata,
+    syncLocalCanvasToServer
+} from "./syncLocalCanvas";
+import type { CanvasAnnotation, CanvasDraft, CanvasGroup } from "./schemas";
+import {
+    createAnnotation,
+    createCanvas,
+    createCanvasGroup,
+    createConnection,
+    postNewDraft,
+    updateAnnotation,
+    updateCanvasViewport
+} from "./actions";
+import { createEmptyLocalCanvas, saveLocalCanvas } from "./localCanvasStore";
+
+class MemoryStorage {
+    private store = new Map<string, string>();
+    getItem(key: string): string | null {
+        return this.store.get(key) ?? null;
+    }
+    setItem(key: string, value: string): void {
+        this.store.set(key, value);
+    }
+    removeItem(key: string): void {
+        this.store.delete(key);
+    }
+    clear(): void {
+        this.store.clear();
+    }
+}
+
+Object.defineProperty(globalThis, "localStorage", {
+    value: new MemoryStorage(),
+    writable: true
+});
+
+const localAnnotation = (
+    id: string,
+    over: Partial<CanvasAnnotation> = {}
+): CanvasAnnotation => ({
+    id,
+    canvas_id: "local",
+    group_id: null,
+    positionX: 10,
+    positionY: 20,
+    width: 380,
+    height: 120,
+    text: "",
+    championIds: [],
+    color: "slate",
+    fontSize: "md",
+    ...over
+});
+
+const localDraft = (id: string): CanvasDraft => ({
+    draft_id: id,
+    positionX: 0,
+    positionY: 0,
+    group_id: null,
+    source_type: "canvas",
+    Draft: {
+        id,
+        name: id,
+        picks: Array(20).fill(""),
+        type: "canvas"
+    }
+});
+
+describe("annotationSyncEntries", () => {
+    it("remaps group ids and passes content through", () => {
+        expect(
+            annotationSyncEntries(
+                [
+                    localAnnotation("local-a", {
+                        group_id: "local-g",
+                        text: "S tier",
+                        championIds: ["Ahri"]
+                    })
+                ],
+                new Map([["local-g", "server-g"]])
+            )
+        ).toEqual([
+            expect.objectContaining({
+                sourceId: "local-a",
+                group_id: "server-g",
+                text: "S tier",
+                championIds: ["Ahri"]
+            })
+        ]);
+    });
+
+    it("sends null for a group that is not in the map", () => {
+        const entries = annotationSyncEntries(
+            [localAnnotation("local-a", { group_id: "ghost" })],
+            new Map()
+        );
+
+        expect(entries[0].group_id).toBe(null);
+    });
+
+    it("carries manual size floors without coercing null to zero", () => {
+        const entries = annotationSyncEntries(
+            [
+                localAnnotation("sized", { manualWidth: 440, manualHeight: 260 }),
+                localAnnotation("unset", { manualWidth: null, manualHeight: null })
+            ],
+            new Map()
+        );
+
+        expect(entries[0]).toEqual(
+            expect.objectContaining({ manualWidth: 440, manualHeight: 260 })
+        );
+        expect(entries[1]).toEqual(
+            expect.objectContaining({ manualWidth: null, manualHeight: null })
+        );
+    });
+});
 
 /**
  * syncLocalCanvasToServer has no test harness (it drives seven network actions
@@ -102,5 +233,96 @@ describe("nestedGroupSyncEntries", () => {
         expect(nestedGroupSyncEntries(groups, new Map([["child", "s-child"]]))).toEqual([
             { id: "s-child", positionX: 0, positionY: 0, parentId: null }
         ]);
+    });
+});
+
+describe("syncLocalCanvasToServer", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        localStorage.clear();
+        vi.mocked(createCanvas).mockResolvedValue({
+            success: true,
+            canvas: { id: "server-canvas", name: "My Canvas", drafts: [] }
+        });
+        vi.mocked(updateCanvasViewport).mockResolvedValue({ success: true });
+        vi.mocked(createCanvasGroup).mockResolvedValue({
+            success: true,
+            group: localGroup("server-group")
+        });
+        vi.mocked(postNewDraft).mockResolvedValue({
+            id: "server-draft",
+            name: "draft",
+            picks: Array<string>(20).fill(""),
+            type: "canvas",
+            public: false,
+            owner_id: null,
+            firstPick: "blue",
+            blueSideTeam: 1
+        });
+        vi.mocked(createAnnotation).mockResolvedValue({
+            success: true,
+            annotation: localAnnotation("server-annotation")
+        });
+        vi.mocked(updateAnnotation).mockResolvedValue({
+            success: true,
+            annotation: localAnnotation("server-annotation")
+        });
+        vi.mocked(createConnection).mockResolvedValue({
+            success: true,
+            connection: {
+                id: "server-connection",
+                canvas_id: "server-canvas",
+                source_draft_ids: [],
+                target_draft_ids: [],
+                vertices: [],
+                style: "solid"
+            }
+        });
+    });
+
+    it("syncs an annotation-only canvas instead of treating it as empty", async () => {
+        const canvas = createEmptyLocalCanvas("My Canvas");
+        canvas.annotations = [localAnnotation("a1", { text: "keep me" })];
+        saveLocalCanvas(canvas);
+
+        const canvasId = await syncLocalCanvasToServer();
+
+        expect(canvasId).toBe("server-canvas");
+        expect(createAnnotation).toHaveBeenCalledWith(
+            expect.objectContaining({ canvasId: "server-canvas" })
+        );
+        expect(updateAnnotation).toHaveBeenCalledWith(
+            expect.objectContaining({
+                canvasId: "server-canvas",
+                annotationId: "server-annotation",
+                text: "keep me"
+            })
+        );
+    });
+
+    it("creates annotations after Cards and before Connections", async () => {
+        const canvas = createEmptyLocalCanvas("My Canvas");
+        canvas.drafts = [localDraft("d1")];
+        canvas.annotations = [localAnnotation("a1")];
+        canvas.connections = [
+            {
+                id: "c1",
+                canvas_id: "local",
+                source_draft_ids: [{ draft_id: "d1", anchor_type: "right" }],
+                target_draft_ids: [{ draft_id: "d1", anchor_type: "left" }],
+                vertices: [],
+                style: "solid"
+            }
+        ];
+        saveLocalCanvas(canvas);
+
+        await syncLocalCanvasToServer();
+
+        expect(vi.mocked(postNewDraft).mock.invocationCallOrder[0]).toBeLessThan(
+            vi.mocked(createAnnotation).mock.invocationCallOrder[0]
+        );
+        expect(vi.mocked(createAnnotation).mock.invocationCallOrder[0]).toBeLessThan(
+            vi.mocked(createConnection).mock.invocationCallOrder[0]
+        );
     });
 });
