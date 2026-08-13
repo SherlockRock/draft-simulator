@@ -19,9 +19,10 @@
  *    `wouldCreateCycle` is. Every walk here carries a visited set, so a cycle
  *    already in the data can never hang a request.
  *
- * A `tree` is `{ groups, drafts }` of plain rows (Sequelize instances work as
- * they are): Groups carry `id` / `parent_group_id`, Cards `draft_id` /
- * `group_id`. `drafts` is optional — most server-side callers only have Groups.
+ * A `tree` is `{ groups, drafts, annotations }` of plain rows (Sequelize
+ * instances work as they are): Groups carry `id` / `parent_group_id`, Cards
+ * `draft_id` / `group_id`, and annotations `id` / `group_id`. Both leaf buckets
+ * are optional — most server-side callers only have Groups.
  */
 
 /**

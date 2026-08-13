@@ -200,6 +200,85 @@ describe("annotations in the tree", () => {
         expect(items.map((item) => item.kind)).toEqual(["annotation"]);
         expect(items[0].position).toEqual({ x: 16, y: 24 });
     });
+
+    // D13: the standing acceptance fixture for the champion-pool use case.
+    // There are deliberately no Cards here: every generic tree/layout route
+    // must remain total when annotations are the grid's only occupants.
+    it("lays out the three-row, annotation-only champion pool", () => {
+        const pool = group("g-pool", {
+            x: 1000,
+            y: 500,
+            metadata: {
+                layout: "grid",
+                gridCols: 1,
+                rowLabels: ["S", "A", "Situational"]
+            }
+        });
+        const cells = [
+            cellToPosition({ row: 0, col: 0 }, LAYOUT),
+            cellToPosition({ row: 1, col: 0 }, LAYOUT),
+            cellToPosition({ row: 2, col: 0 }, LAYOUT)
+        ];
+        const t = tree(
+            [pool],
+            [],
+            [
+                annotation("a-s", {
+                    group_id: pool.id,
+                    positionX: cells[0].x,
+                    positionY: cells[0].y
+                }),
+                annotation("a-a", {
+                    group_id: pool.id,
+                    positionX: cells[1].x,
+                    positionY: cells[1].y
+                }),
+                annotation("a-situational", {
+                    group_id: pool.id,
+                    positionX: cells[2].x,
+                    positionY: cells[2].y
+                })
+            ]
+        );
+
+        expect(childrenOf(t, pool.id).map((node) => [node.id, node.kind])).toEqual([
+            ["a-s", "annotation"],
+            ["a-a", "annotation"],
+            ["a-situational", "annotation"]
+        ]);
+        expect(
+            gridItemsOf(t, pool.id, LAYOUT, 1).map((item) => ({
+                id: item.id,
+                kind: item.kind,
+                position: item.position,
+                cell: item.cell,
+                cols: item.footprint.cols
+            }))
+        ).toEqual([
+            {
+                id: "a-s",
+                kind: "annotation",
+                position: cells[0],
+                cell: { row: 0, col: 0 },
+                cols: 1
+            },
+            {
+                id: "a-a",
+                kind: "annotation",
+                position: cells[1],
+                cell: { row: 1, col: 0 },
+                cols: 1
+            },
+            {
+                id: "a-situational",
+                kind: "annotation",
+                position: cells[2],
+                cell: { row: 2, col: 0 },
+                cols: 1
+            }
+        ]);
+        expect(maxChildSpanCols(t, pool.id, LAYOUT)).toBe(1);
+    });
 });
 
 describe("child queries", () => {
