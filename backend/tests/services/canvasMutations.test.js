@@ -384,6 +384,46 @@ describe("ephemeral relays — authorize → broadcast only", () => {
     ).rejects.toThrow(NotAuthorizedError);
   });
 
+  it("relayAnnotationMove refuses a view-only actor without broadcasting", async () => {
+    mockPermissions({ "c-1": "view" });
+    const { gate, to, emit, exceptEmit } = buildGate();
+
+    await expect(
+      gate.relayAnnotationMove({
+        actor: ACTOR,
+        canvasId: "c-1",
+        annotationId: "a-1",
+        positionX: 1,
+        positionY: 2,
+      }),
+    ).rejects.toThrow(NotAuthorizedError);
+
+    expect(to).not.toHaveBeenCalled();
+    expect(emit).not.toHaveBeenCalled();
+    expect(exceptEmit).not.toHaveBeenCalled();
+  });
+
+  it("relayAnnotationMove broadcasts to the whole canvas room, sender included", async () => {
+    mockPermissions({ "c-1": "edit" });
+    const { gate, to, emit, except } = buildGate();
+
+    await gate.relayAnnotationMove({
+      actor: ACTOR,
+      canvasId: "c-1",
+      annotationId: "a-1",
+      positionX: 10,
+      positionY: 20,
+    });
+
+    expect(to).toHaveBeenCalledWith("c-1");
+    expect(emit).toHaveBeenCalledWith(
+      "annotationMoved",
+      { annotationId: "a-1", positionX: 10, positionY: 20 },
+      "c-1",
+    );
+    expect(except).not.toHaveBeenCalled();
+  });
+
   it("relayVertexMove broadcasts vertexMoved to the canvas room", async () => {
     mockPermissions({ "c-1": "edit" });
     const { gate, to, emit } = buildGate();

@@ -26,6 +26,7 @@ function buildFakeGate() {
   return {
     applyDraftPicks: vi.fn().mockResolvedValue(undefined),
     relayObjectMove: vi.fn().mockResolvedValue(undefined),
+    relayAnnotationMove: vi.fn().mockResolvedValue(undefined),
     relayVertexMove: vi.fn().mockResolvedValue(undefined),
     relayGroupMove: vi.fn().mockResolvedValue(undefined),
     relayGroupResize: vi.fn().mockResolvedValue(undefined),
@@ -48,9 +49,10 @@ afterEach(() => {
 });
 
 describe("setupCanvasHandlers", () => {
-  it("registers the five canvas mutation events", () => {
+  it("registers the six canvas mutation events", () => {
     const { handlers } = installHandlers();
     expect([...handlers.keys()].sort()).toEqual([
+      "annotationMove",
       "canvasObjectMove",
       "groupMove",
       "groupResize",
@@ -110,6 +112,43 @@ describe("setupCanvasHandlers", () => {
 
     expect(socket.emit).toHaveBeenCalledWith("canvasMutationError", {
       event: "groupMove",
+      code: "NOT_AUTHORIZED",
+      message: "Not authorized",
+    });
+  });
+
+  it("annotationMove maps the payload onto the gate call", async () => {
+    const { handlers, gate } = installHandlers();
+
+    await handlers.get("annotationMove")({
+      canvasId: "c-1",
+      annotationId: "a-1",
+      positionX: 5,
+      positionY: 6,
+    });
+
+    expect(gate.relayAnnotationMove).toHaveBeenCalledWith({
+      actor: { userId: "user-1", socketId: "sock-1" },
+      canvasId: "c-1",
+      annotationId: "a-1",
+      positionX: 5,
+      positionY: 6,
+    });
+  });
+
+  it("maps an annotationMove gate rejection to canvasMutationError", async () => {
+    const { socket, handlers, gate } = installHandlers();
+    gate.relayAnnotationMove.mockRejectedValue(new NotAuthorizedError());
+
+    await handlers.get("annotationMove")({
+      canvasId: "c-1",
+      annotationId: "a-1",
+      positionX: 5,
+      positionY: 6,
+    });
+
+    expect(socket.emit).toHaveBeenCalledWith("canvasMutationError", {
+      event: "annotationMove",
       code: "NOT_AUTHORIZED",
       message: "Not authorized",
     });

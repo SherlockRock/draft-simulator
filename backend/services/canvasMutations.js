@@ -248,6 +248,25 @@ function createCanvasMutationGate({ io }) {
     );
   }
 
+  async function relayAnnotationMove({
+    actor,
+    canvasId,
+    annotationId,
+    positionX,
+    positionY,
+  }) {
+    await assertCanvasAccess({
+      userId: actor.userId,
+      canvasId,
+      level: "edit",
+    });
+    io.to(canvasId).emit(
+      "annotationMoved",
+      { annotationId, positionX, positionY },
+      canvasId,
+    );
+  }
+
   async function relayVertexMove({ actor, canvasId, connectionId, vertexId, x, y }) {
     await assertCanvasAccess({ userId: actor.userId, canvasId });
     io.to(canvasId).emit("vertexMoved", { connectionId, vertexId, x, y });
@@ -284,6 +303,7 @@ function createCanvasMutationGate({ io }) {
     assertCanvasAccess,
     applyDraftPicks,
     relayObjectMove,
+    relayAnnotationMove,
     relayVertexMove,
     relayGroupMove,
     relayGroupResize,
