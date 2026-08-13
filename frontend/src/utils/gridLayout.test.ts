@@ -1071,6 +1071,20 @@ describe("toPositionUpdates", () => {
             ])
         ).toEqual([{ draft_id: "card", positionX: 1, positionY: 2 }]);
     });
+
+    // `toPositionUpdates` filters to Cards. That was TOTAL while only Cards
+    // could be in a grid and silently lossy the moment a Group could be — the
+    // exact bug gridPersistence.ts was created to fix. An annotation is the
+    // third kind walking into the same filter.
+    it("drops annotation placements, deliberately and visibly", () => {
+        expect(
+            toPositionUpdates([
+                { id: "d1", kind: "card", positionX: 0, positionY: 0 },
+                { id: "a1", kind: "annotation", positionX: 10, positionY: 10 },
+                { id: "g1", kind: "group", positionX: 20, positionY: 20 }
+            ])
+        ).toEqual([{ draft_id: "d1", positionX: 0, positionY: 0 }]);
+    });
 });
 
 describe("footprintPixelWidth", () => {

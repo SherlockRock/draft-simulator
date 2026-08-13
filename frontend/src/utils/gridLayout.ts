@@ -105,9 +105,16 @@ export type PositionUpdate = {
 /**
  * Card placements as the `positions[]` wire shape.
  *
- * **Group placements are dropped**, deliberately: they belong in the `groups[]`
- * array step 4 adds, rebased to absolute world first. Nothing can put a Group
- * inside a grid before step 5a, so today this is total.
+ * **Group AND annotation placements are dropped**, deliberately: each has its
+ * own array on the wire, and `gridPersistence.splitGridPlacements` is the only
+ * thing that should be routing placements to arrays at all. This helper survives
+ * for the Card-only callers that predate it.
+ *
+ * ⚠️ Before `splitGridPlacements` existed, this filter simply LOST every Group
+ * placement — total while nothing could put a Group in a grid, and silently
+ * lossy the moment one could. An annotation is the third kind to walk into it.
+ * If you are reaching for this function from a path that can see a non-Card,
+ * you want `splitGridPlacements`.
  */
 export const toPositionUpdates = (placements: GridPlacement[]): PositionUpdate[] =>
     placements
