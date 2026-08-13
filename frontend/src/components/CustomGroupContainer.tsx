@@ -36,6 +36,8 @@ type CustomGroupContainerProps = {
      * container — exactly where a Group-only container is most visible.
      */
     childGroupCount: number;
+    /** Direct child notes, counted independently of Cards and nested Groups. */
+    childAnnotationCount: number;
     zoom: Accessor<number>;
     isPanning: boolean;
     onGroupMouseDown: (groupId: string, e: MouseEvent) => void;
@@ -205,14 +207,15 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
     };
 
     /**
-     * What this container holds, of BOTH kinds. The three empty-state surfaces
+     * What this container holds, of all three kinds. The three empty-state surfaces
      * below used to read `props.drafts.length` alone, so a container holding
-     * only nested Groups drew a dashed border, reported "0 drafts" and painted
-     * "Drag drafts here" straight through the Groups it was holding.
+     * only nested Groups or notes drew a dashed border, reported "0 drafts" and
+     * replaced the children with "Drag drafts here".
      */
     const contents = createMemo(() => ({
         drafts: props.drafts.length,
-        groups: props.childGroupCount
+        groups: props.childGroupCount,
+        annotations: props.childAnnotationCount
     }));
 
     const isGrid = () => isGridGroup(props.group);

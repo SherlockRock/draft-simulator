@@ -5763,6 +5763,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         childGroupCount={
                                             childGroupsOf(canvasTree(), group.id).length
                                         }
+                                        childAnnotationCount={
+                                            childAnnotationsOf(canvasTree(), group.id)
+                                                .length
+                                        }
                                         zoom={viewportZoom}
                                         isPanning={dragState().isPanning}
                                         onGroupMouseDown={onGroupMouseDown}
@@ -6175,9 +6179,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             />
                         )}
                     </For>
-                    {/* D8: above Cards and Group containers, below the grid
-                        drop highlight and connection SVG. Layering is DOM
-                        order among equal z-30 siblings, not a new z-index. */}
+                    {/* Above Cards and Group containers, below the z-40 grid
+                        highlight, and above the connection SVG by DOM order.
+                        This known D8 deviation was accepted by the maintainer
+                        on 2026-08-13 while notes cannot own connections. Task
+                        32 must revisit it: raising lines reverses the measured
+                        Card order; lowering notes can make them unrecoverable. */}
                     <For each={childAnnotationsOf(canvasTree(), null)}>
                         {(annotation) => (
                             <CanvasAnnotationItem
