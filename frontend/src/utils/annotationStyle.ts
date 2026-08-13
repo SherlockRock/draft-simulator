@@ -38,3 +38,13 @@ export const ANNOTATION_COLOR_OPTIONS: {
     { value: "crimson", label: "Crimson", swatchClass: "bg-red-600" },
     { value: "emerald", label: "Emerald", swatchClass: "bg-emerald-600" }
 ];
+
+export const ANNOTATION_FONT_OPTIONS: {
+    value: AnnotationFontSize;
+    label: string;
+}[] = [
+    { value: "sm", label: "Small" },
+    { value: "md", label: "Medium" },
+    { value: "lg", label: "Large" },
+    { value: "xl", label: "Huge" }
+];
