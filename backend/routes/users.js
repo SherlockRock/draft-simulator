@@ -9,6 +9,7 @@ const {
   CanvasDraft,
   CanvasGroup,
   CanvasConnection,
+  CanvasAnnotation,
 } = require("../models/Canvas");
 const Draft = require("../models/Draft");
 const { buildCanvasSnapshot } = require("./canvasProjections");
@@ -263,6 +264,12 @@ async function clearCanvasContents(canvasId, transaction) {
       transaction,
     });
   }
+  // Annotations are Group children too. Remove them before their containers so
+  // the replace operation is children-first regardless of FK fallback policy.
+  await CanvasAnnotation.destroy({
+    where: { canvas_id: canvasId },
+    transaction,
+  });
   await CanvasGroup.destroy({
     where: { canvas_id: canvasId },
     transaction,
@@ -1367,6 +1374,9 @@ router.delete("/me", protect, async (req, res) => {
 
       // Delete all connections on this canvas
       await CanvasConnection.destroy({ where: { canvas_id: canvasId } });
+
+      // Explicitly remove annotation children before the canvas itself.
+      await CanvasAnnotation.destroy({ where: { canvas_id: canvasId } });
 
       // Delete the canvas (cascades to CanvasDraft, CanvasGroup, etc.)
       await Canvas.destroy({ where: { id: canvasId } });

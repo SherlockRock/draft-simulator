@@ -1941,10 +1941,16 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
     await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
     t = await Canvas.sequelize.transaction();
 
-    const group = await CanvasGroup.findOne({
-      where: { id: groupId, canvas_id: canvasId },
+    // This delete can change Group ancestry, so lock the canvas's Groups as one
+    // sorted set. The target is resolved from this locked snapshot rather than
+    // by the former unlocked findOne.
+    const lockedGroups = await CanvasGroup.findAll({
+      where: { canvas_id: canvasId },
+      order: GROUP_LOCK_ORDER,
+      lock: true,
       transaction: t,
     });
+    const group = lockedGroups.find((row) => row.id === groupId);
 
     if (!group) {
       await t.rollback();
@@ -1954,9 +1960,20 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
     // Get draft IDs in the group
     const groupDrafts = await CanvasDraft.findAll({
       where: { group_id: groupId, canvas_id: canvasId },
+      order: [["draft_id", "ASC"]],
+      lock: true,
       transaction: t,
     });
     const draftIdsToRemove = new Set(groupDrafts.map((d) => d.draft_id));
+
+    // Annotations are leaf contents. Lock them after Cards, in ascending id
+    // order, before the first write.
+    const groupAnnotations = await CanvasAnnotation.findAll({
+      where: { group_id: groupId, canvas_id: canvasId },
+      order: [["id", "ASC"]],
+      lock: true,
+      transaction: t,
+    });
 
     // The group is going away either way, so its backing series would describe
     // nothing. Load it now while the link still exists. Only manual series are
@@ -1967,6 +1984,23 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
           transaction: t,
         })
       : null;
+
+    // Read every connection before writes begin. The same snapshot is used to
+    // trim both Card endpoints and the deleted Group endpoint.
+    const allConnections = await CanvasConnection.findAll({
+      where: { canvas_id: canvasId },
+      transaction: t,
+    });
+
+    // keepDrafts also needs the series membership validated before writes.
+    const seriesDrafts =
+      keepDrafts && backingSeries
+        ? await Draft.findAll({
+            where: { versus_draft_id: backingSeries.id },
+            attributes: ["id"],
+            transaction: t,
+          })
+        : [];
 
     if (keepDrafts) {
       // Convert positions to absolute and ungroup
@@ -1981,16 +2015,22 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
         );
       }
 
+      for (const annotation of groupAnnotations) {
+        await annotation.update(
+          {
+            positionX: group.positionX + annotation.positionX,
+            positionY: group.positionY + annotation.positionY,
+            group_id: null,
+          },
+          { transaction: t },
+        );
+      }
+
       // These cards stay on the canvas, so their Drafts must stop pointing at
       // the series before we destroy it — versus_draft_id cascades, and would
       // delete the very drafts keepDrafts exists to preserve. Mirrors how the
       // series-creation path releases drafts it does not convert.
       if (backingSeries) {
-        const seriesDrafts = await Draft.findAll({
-          where: { versus_draft_id: backingSeries.id },
-          attributes: ["id"],
-          transaction: t,
-        });
         const seriesDraftIds = seriesDrafts.map((d) => d.id);
 
         if (seriesDraftIds.length > 0) {
@@ -2005,32 +2045,6 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
         }
       }
     } else {
-      // Clean up connections involving these drafts
-      const allConnections = await CanvasConnection.findAll({
-        where: { canvas_id: canvasId },
-        transaction: t,
-      });
-
-      for (const conn of allConnections) {
-        const filteredSources = (conn.source_draft_ids || []).filter(
-          (src) => !draftIdsToRemove.has(src.draft_id),
-        );
-        const filteredTargets = (conn.target_draft_ids || []).filter(
-          (tgt) => !draftIdsToRemove.has(tgt.draft_id),
-        );
-
-        if (filteredSources.length === 0 || filteredTargets.length === 0) {
-          await conn.destroy({ transaction: t });
-        } else if (
-          filteredSources.length !== conn.source_draft_ids.length ||
-          filteredTargets.length !== conn.target_draft_ids.length
-        ) {
-          conn.source_draft_ids = filteredSources;
-          conn.target_draft_ids = filteredTargets;
-          await conn.save({ transaction: t });
-        }
-      }
-
       // Delete all CanvasDrafts in the group
       await CanvasDraft.destroy({
         where: { group_id: groupId, canvas_id: canvasId },
@@ -2040,20 +2054,26 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
       // Cards a series does not own (drafts left loose inside the group) have
       // no other owner, so destroying the join rows alone would strand them.
       await destroyUnreferencedDrafts([...draftIdsToRemove], t);
+
+      // Annotation children must be gone before the Group FK target.
+      await CanvasAnnotation.destroy({
+        where: { group_id: groupId, canvas_id: canvasId },
+        transaction: t,
+      });
     }
 
-    // Clean up any connection endpoints that reference this group
-    const allConnsForGroup = await CanvasConnection.findAll({
-      where: { canvas_id: canvasId },
-      transaction: t,
-    });
-
-    for (const conn of allConnsForGroup) {
+    // Clean up endpoints from one pre-write snapshot. On remove-with-contents,
+    // Card endpoints and the Group endpoint are trimmed together.
+    for (const conn of allConnections) {
       const filteredSources = (conn.source_draft_ids || []).filter(
-        (src) => !(src.type === "group" && src.group_id === groupId),
+        (src) =>
+          !(!keepDrafts && draftIdsToRemove.has(src.draft_id)) &&
+          !(src.type === "group" && src.group_id === groupId),
       );
       const filteredTargets = (conn.target_draft_ids || []).filter(
-        (tgt) => !(tgt.type === "group" && tgt.group_id === groupId),
+        (tgt) =>
+          !(!keepDrafts && draftIdsToRemove.has(tgt.draft_id)) &&
+          !(tgt.type === "group" && tgt.group_id === groupId),
       );
 
       if (filteredSources.length === 0 || filteredTargets.length === 0) {
@@ -2377,6 +2397,10 @@ router.delete("/:canvasId", protect, async (req, res) => {
       transaction: t,
     });
     await CanvasDraft.destroy({
+      where: { canvas_id: canvasId },
+      transaction: t,
+    });
+    await CanvasAnnotation.destroy({
       where: { canvas_id: canvasId },
       transaction: t,
     });

@@ -100,6 +100,7 @@ beforeEach(() => {
   vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasConnection, "destroy").mockResolvedValue(0);
   vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
+  vi.spyOn(CanvasAnnotation, "destroy").mockResolvedValue(0);
   vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
   // The delete route promotes direct child Groups before the destroy
   // (design §8.2.0): `parent_group_id` has no `onDelete`, so a container
@@ -120,7 +121,7 @@ describe("DELETE /:canvasId/group/:groupId series cleanup", () => {
     mockTransaction();
     const group = mockGroup({ seriesId: "vd-1" });
     const series = mockSeries();
-    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(group);
+    CanvasGroup.findAll.mockResolvedValue([group]);
     VersusDraft.findOne.mockResolvedValue(series);
     CanvasDraft.findAll.mockResolvedValueOnce([mockCanvasDraft("d-1")]);
 
@@ -132,9 +133,7 @@ describe("DELETE /:canvasId/group/:groupId series cleanup", () => {
 
   it("never destroys a live series", async () => {
     mockTransaction();
-    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(
-      mockGroup({ seriesId: "vd-live" }),
-    );
+    CanvasGroup.findAll.mockResolvedValue([mockGroup({ seriesId: "vd-live" })]);
     // origin: "manual" is part of the lookup, so a live series never matches.
     VersusDraft.findOne.mockResolvedValue(null);
     CanvasDraft.findAll.mockResolvedValueOnce([mockCanvasDraft("d-1")]);
@@ -154,7 +153,7 @@ describe("DELETE /:canvasId/group/:groupId series cleanup", () => {
     mockTransaction();
     const group = mockGroup({ seriesId: "vd-1" });
     const series = mockSeries();
-    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(group);
+    CanvasGroup.findAll.mockResolvedValue([group]);
     VersusDraft.findOne.mockResolvedValue(series);
     CanvasDraft.findAll.mockResolvedValueOnce([mockCanvasDraft("d-1")]);
     Draft.findAll.mockResolvedValueOnce([{ id: "d-1" }, { id: "d-2" }]);
@@ -180,7 +179,7 @@ describe("DELETE /:canvasId/group/:groupId series cleanup", () => {
 
   it("destroys drafts the group leaves unreferenced when keepDrafts is absent", async () => {
     mockTransaction();
-    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(mockGroup());
+    CanvasGroup.findAll.mockResolvedValue([mockGroup()]);
     CanvasDraft.findAll
       .mockResolvedValueOnce([mockCanvasDraft("d-1"), mockCanvasDraft("d-2")])
       // No cards remain pointing at either draft.
@@ -193,6 +192,84 @@ describe("DELETE /:canvasId/group/:groupId series cleanup", () => {
       expect.objectContaining({
         where: { id: ["d-1", "d-2"], versus_draft_id: null },
       }),
+    );
+  });
+});
+
+describe("annotations in group deletion", () => {
+  it("locks Groups, Cards, then annotations in ascending order before writes", async () => {
+    mockTransaction();
+    const group = mockGroup();
+    const card = mockCanvasDraft("d-1");
+    const annotation = {
+      id: "a-1",
+      positionX: 30,
+      positionY: 40,
+      update: vi.fn().mockResolvedValue(),
+    };
+    CanvasGroup.findAll.mockResolvedValue([group]);
+    CanvasDraft.findAll.mockResolvedValueOnce([card]);
+    CanvasAnnotation.findAll.mockResolvedValueOnce([annotation]);
+
+    const res = await request(buildApp()).delete(
+      "/api/canvas/c-1/group/g-1?keepDrafts=true",
+    );
+
+    expect(res.status).toBe(200);
+    expect(CanvasGroup.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ order: [["id", "ASC"]], lock: true }),
+    );
+    expect(CanvasDraft.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ order: [["draft_id", "ASC"]], lock: true }),
+    );
+    expect(CanvasAnnotation.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ order: [["id", "ASC"]], lock: true }),
+    );
+    expect(CanvasGroup.findAll.mock.invocationCallOrder[0]).toBeLessThan(
+      CanvasDraft.findAll.mock.invocationCallOrder[0],
+    );
+    expect(CanvasDraft.findAll.mock.invocationCallOrder[0]).toBeLessThan(
+      CanvasAnnotation.findAll.mock.invocationCallOrder[0],
+    );
+    expect(CanvasAnnotation.findAll.mock.invocationCallOrder[0]).toBeLessThan(
+      card.update.mock.invocationCallOrder[0],
+    );
+    expect(annotation.update).toHaveBeenCalledWith(
+      { positionX: 130, positionY: 240, group_id: null },
+      expect.objectContaining({ transaction: expect.anything() }),
+    );
+  });
+
+  it("deletes all annotations from a zero-Card D13 grid Group", async () => {
+    mockTransaction();
+    const group = {
+      ...mockGroup(),
+      type: "custom",
+      metadata: {
+        layout: "grid",
+        rowLabels: ["S", "A", "Situational"],
+      },
+    };
+    CanvasGroup.findAll.mockResolvedValue([group]);
+    CanvasDraft.findAll.mockResolvedValueOnce([]);
+    CanvasAnnotation.findAll.mockResolvedValueOnce([
+      { id: "a-1" },
+      { id: "a-2" },
+      { id: "a-3" },
+    ]);
+
+    const res = await request(buildApp()).delete(
+      "/api/canvas/c-1/group/g-1?keepDrafts=false",
+    );
+
+    expect(res.status).toBe(200);
+    expect(CanvasAnnotation.destroy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { group_id: "g-1", canvas_id: "c-1" },
+      }),
+    );
+    expect(CanvasAnnotation.destroy.mock.invocationCallOrder[0]).toBeLessThan(
+      group.destroy.mock.invocationCallOrder[0],
     );
   });
 });
@@ -230,6 +307,22 @@ describe("DELETE /:canvasId series cleanup", () => {
 
     expect(res.status).toBe(200);
     expect(VersusDraft.destroy).not.toHaveBeenCalled();
+  });
+
+  it("destroys annotations before Canvas.destroy", async () => {
+    mockTransaction();
+    vi.spyOn(Canvas, "destroy").mockResolvedValue(1);
+    CanvasGroup.findAll.mockResolvedValue([]);
+
+    const res = await request(buildApp()).delete("/api/canvas/c-1");
+
+    expect(res.status).toBe(200);
+    expect(CanvasAnnotation.destroy).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { canvas_id: "c-1" } }),
+    );
+    expect(CanvasAnnotation.destroy.mock.invocationCallOrder[0]).toBeLessThan(
+      Canvas.destroy.mock.invocationCallOrder[0],
+    );
   });
 });
 

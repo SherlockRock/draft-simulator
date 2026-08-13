@@ -86,6 +86,7 @@ beforeEach(() => {
   vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
+  vi.spyOn(CanvasAnnotation, "destroy").mockResolvedValue(0);
   vi.spyOn(Team, "findAll").mockResolvedValue([]);
 });
 
@@ -287,8 +288,9 @@ describe("DELETE /:canvasId/group/:groupId promotes child Groups", () => {
 
   it("re-parents direct children to the deleted group's own parent", async () => {
     const target = groupRow("mid", { parent: "top" });
-    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(target);
-    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+    // The route resolves its target from the locked canvas-wide Groups
+    // snapshot (Task 6/A3 lock order), not an unlocked findOne.
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([target]);
     const update = vi.spyOn(CanvasGroup, "update").mockResolvedValue([1]);
 
     const res = await del("mid");
@@ -307,8 +309,7 @@ describe("DELETE /:canvasId/group/:groupId promotes child Groups", () => {
   });
 
   it("promotes to top level when the deleted group was top level", async () => {
-    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(groupRow("top"));
-    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([groupRow("top")]);
     const update = vi.spyOn(CanvasGroup, "update").mockResolvedValue([0]);
 
     await del("top");
