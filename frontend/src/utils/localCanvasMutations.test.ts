@@ -128,6 +128,25 @@ describe("local Card wire identity", () => {
 
         expect(getLocalCanvas()?.drafts[0].draft_id).toBe("legacy-1");
     });
+
+    it("defaults annotations when a legacy stored canvas omits the key", () => {
+        localStorage.setItem(
+            "draft-sim:local-canvas",
+            JSON.stringify({
+                name: "Legacy Canvas",
+                description: "",
+                icon: "",
+                cardLayout: "vertical",
+                drafts: [],
+                connections: [],
+                groups: [],
+                viewport: { x: 0, y: 0, zoom: 1 },
+                createdAt: "2026-08-01T00:00:00.000Z"
+            })
+        );
+
+        expect(getLocalCanvas()?.annotations).toEqual([]);
+    });
 });
 
 describe("local annotations", () => {
@@ -260,6 +279,61 @@ describe("local annotations", () => {
         expect(stored?.annotations.map((annotation) => annotation.positionY)).toEqual([
             96, 216, 336
         ]);
+    });
+
+    it("applies all three batch annotation membership states by key presence", () => {
+        const originalGroup = localCreateGroup({ positionX: 100, positionY: 200 }).group;
+        const targetGroup = localCreateGroup({ positionX: 500, positionY: 200 }).group;
+        const annotations = [0, 1, 2].map((index) =>
+            localCreateAnnotation({
+                positionX: index * 10,
+                positionY: index * 20,
+                width: 380,
+                height: 120,
+                group_id: originalGroup.id
+            }).annotation
+        );
+        const leaveMembershipAlone = {
+            id: annotations[0].id,
+            positionX: 10,
+            positionY: 20
+        };
+        const ungroup = {
+            id: annotations[1].id,
+            positionX: 30,
+            positionY: 40,
+            group_id: null
+        };
+        const moveToAnotherGroup = {
+            id: annotations[2].id,
+            positionX: 50,
+            positionY: 60,
+            group_id: targetGroup.id
+        };
+
+        expect(
+            Object.prototype.hasOwnProperty.call(leaveMembershipAlone, "group_id")
+        ).toBe(false);
+        expect(Object.prototype.hasOwnProperty.call(ungroup, "group_id")).toBe(true);
+        expect(
+            Object.prototype.hasOwnProperty.call(moveToAnotherGroup, "group_id")
+        ).toBe(true);
+
+        localUpdateDraftPositions({
+            positions: [],
+            annotations: [leaveMembershipAlone, ungroup, moveToAnotherGroup]
+        });
+
+        const stored = getLocalCanvas()?.annotations ?? [];
+        expect(stored.find((entry) => entry.id === annotations[0].id)?.group_id).toBe(
+            originalGroup.id
+        );
+        expect(
+            stored.find((entry) => entry.id === annotations[1].id)?.group_id
+        ).toBeNull();
+        expect(stored.find((entry) => entry.id === annotations[2].id)?.group_id).toBe(
+            targetGroup.id
+        );
     });
 });
 
