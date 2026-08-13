@@ -1,3 +1,6 @@
+import type { JSX } from "solid-js";
+import type { VersusDraft, VersusParticipant } from "./schemas";
+
 // =============================================================================
 // UI-only types (not from API, no Zod schema needed)
 // These types are used purely for frontend UI state and have no API representation
@@ -23,8 +26,6 @@ export type CanvasDraft = {
     };
 };
 
-import type { VersusDraft, VersusParticipant } from "./schemas";
-
 export type AnchorPoint = {
     type: "top" | "bottom" | "left" | "right";
 };
@@ -39,6 +40,17 @@ export type ContextMenuAction = {
     action: () => void;
     destructive?: boolean;
 };
+
+/**
+ * A row that renders its own content instead of a label button. `close` is the
+ * same closer the text rows get, handed in so a swatch click dismisses the menu
+ * exactly like an action row does rather than re-plumbing it in every caller.
+ */
+export type ContextMenuCustomRow = {
+    render: (close: () => void) => JSX.Element;
+};
+
+export type ContextMenuEntry = ContextMenuAction | ContextMenuCustomRow;
 
 export type ContextMenuPosition = {
     x: number; // Screen coordinates

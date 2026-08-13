@@ -91,6 +91,7 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
 
     return (
         <div
+            data-annotation-id={props.annotation.id}
             // `canvas-annotation` is REQUIRED: `dispatchContextMenu` in
             // Canvas.tsx matches on it to route the right-click to the
             // annotation menu.
@@ -234,3 +235,5 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
         </div>
     );
 };
+
+export default CanvasAnnotation;

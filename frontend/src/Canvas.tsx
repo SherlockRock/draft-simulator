@@ -12,7 +12,7 @@ import {
     Accessor,
     JSX
 } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
+import { createStore, produce, reconcile } from "solid-js/store";
 import { resolveChampionId } from "./utils/constants";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query";
 import {
@@ -35,7 +35,11 @@ import {
     updateCanvasDraft,
     updateCanvasDraftPositions,
     convertGroupToSeries,
-    fetchTeams
+    fetchTeams,
+    createAnnotation,
+    updateAnnotation,
+    deleteAnnotation,
+    copyAnnotation
 } from "./utils/actions";
 import { useNavigate, useParams } from "@solidjs/router";
 import { toast } from "solid-toast";
@@ -51,7 +55,9 @@ import {
     VertexMovedSchema,
     GroupMovedSchema,
     GroupResizedSchema,
-    CanvasDraftUpdateSchema
+    CanvasDraftUpdateSchema,
+    AnnotationMovedSchema,
+    CanvasAnnotation
 } from "./utils/schemas";
 import { validateSocketEvent } from "./utils/socketValidation";
 import { CanvasCard } from "./components/CanvasCard";
@@ -80,6 +86,7 @@ import { cardHeight, cardWidth } from "./utils/helpers";
 import { getDraftWorldPosition as draftWorldPosition } from "./utils/canvasWorldPosition";
 import {
     childCardsOf,
+    childAnnotationsOf,
     childGroupsOf,
     footprintOf,
     gridItemsOf,
@@ -119,7 +126,11 @@ import {
     localDeleteGroup,
     localUpdateDraftGroup,
     localUpdateDraftPositions,
-    localUpdateDraftMetadata
+    localUpdateDraftMetadata,
+    localCreateAnnotation,
+    localUpdateAnnotation,
+    localDeleteAnnotation,
+    localCopyAnnotation
 } from "./utils/useLocalCanvasMutations";
 import { getLocalCanvas, saveLocalCanvas } from "./utils/localCanvasStore";
 import { handleLogin } from "./utils/actions";
@@ -130,6 +141,8 @@ import { GroupSettingsDialog } from "./components/GroupDisabledChampionsDialog";
 import { ContextMenu } from "./components/ContextMenu";
 import { DraftContextMenu } from "./components/DraftContextMenu";
 import { GroupContextMenu } from "./components/GroupContextMenu";
+import { AnnotationContextMenu } from "./components/AnnotationContextMenu";
+import CanvasAnnotationItem from "./components/CanvasAnnotation";
 import { GridDropHighlight, type GridDropTarget } from "./components/GridDropHighlight";
 import { useCanvasContext, type ShareAnchor } from "./contexts/CanvasContext";
 import { useCanvasSocket } from "./providers/CanvasSocketProvider";
@@ -174,6 +187,7 @@ import {
     MIN_GROUP_WIDTH,
     MIN_GROUP_HEIGHT,
     arrangedRowCount,
+    GRID_CELL_GAP,
     CARD_FOOTPRINT,
     type GridFootprint,
     type GridItem,
@@ -203,6 +217,11 @@ import {
     type GroupPositionUpdate
 } from "@draft-sim/shared-types";
 import { type CardLayout } from "./utils/canvasCardLayout";
+import {
+    annotationFloor,
+    autoFitHeight,
+    defaultAnnotationSize
+} from "./utils/annotationSize";
 
 const debounce = <T extends unknown[]>(func: (...args: T) => void, limit: number) => {
     let inDebounce: boolean;
@@ -287,12 +306,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             setCanvasDrafts(local.drafts);
             setConnections(local.connections);
             setCanvasGroups(local.groups);
+            setAnnotations(local.annotations);
         }
     };
 
     const [canvasDrafts, setCanvasDrafts] = createStore<CanvasDraft[]>([]);
     const [connections, setConnections] = createStore<Connection[]>([]);
     const [canvasGroups, setCanvasGroups] = createStore<CanvasGroup[]>([]);
+    const [annotations, setAnnotations] = createStore<CanvasAnnotation[]>([]);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = createSignal(false);
     const [draftToDelete, setDraftToDelete] = createSignal<CanvasDraft | null>(null);
     const [loadedCanvasId, setLoadedCanvasId] = createSignal<string | null>(null);
@@ -337,6 +358,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         viewportStartX: 0,
         viewportStartY: 0
     });
+    const [annotationDragState, setAnnotationDragState] = createSignal<{
+        activeAnnotationId: string | null;
+        offsetX: number;
+        offsetY: number;
+        dragGroupId: string | null;
+        originX: number;
+        originY: number;
+    }>({
+        activeAnnotationId: null,
+        offsetX: 0,
+        offsetY: 0,
+        dragGroupId: null,
+        originX: 0,
+        originY: 0
+    });
+    const draggedAnnotationId = () => annotationDragState().activeAnnotationId;
     const [vertexDragState, setVertexDragState] = createSignal<{
         connectionId: string | null;
         vertexId: string | null;
@@ -425,6 +462,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     });
     const [draftContextMenu, setDraftContextMenu] = createSignal<{
         draft: CanvasDraft;
+        position: { x: number; y: number };
+    } | null>(null);
+    // Selection is annotation-local and deliberately NOT a general selection
+    // model: D2 puts multi-select in Grid Layout slice 2, and building an
+    // annotation-flavoured one here would guarantee two selection models meet
+    // badly later. One id, cleared on background mousedown.
+    const [selectedAnnotationId, setSelectedAnnotationId] = createSignal<string | null>(
+        null
+    );
+    const [editingAnnotationId, setEditingAnnotationId] = createSignal<string | null>(
+        null
+    );
+    const [annotationContextMenu, setAnnotationContextMenu] = createSignal<{
+        annotation: CanvasAnnotation;
         position: { x: number; y: number };
     } | null>(null);
 
@@ -538,7 +589,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const canvasTree = (): CanvasTree => ({
         groups: canvasGroups,
         drafts: canvasDrafts,
-        annotations: []
+        annotations
     });
 
     const getDraftsForGroup = (groupId: string) => childCardsOf(canvasTree(), groupId);
@@ -607,7 +658,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [relayedDrags, setRelayedDrags] = createStore<Record<string, number>>({});
     const RELAYED_DRAG_TTL_MS = 2000;
     const markRelayedDrag = (id: string) => setRelayedDrags(id, Date.now());
-    const clearRelayedDrag = (id: string) => setRelayedDrags(id, undefined!);
+    const clearRelayedDrag = (id: string) =>
+        setRelayedDrags(
+            produce((drags) => {
+                delete drags[id];
+            })
+        );
 
     const inFlightIds = createMemo<ReadonlySet<string>>(() => {
         const ids = new Set<string>();
@@ -615,6 +671,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         if (localCard !== null) ids.add(localCard);
         const localGroup = groupDragState().activeGroupId;
         if (localGroup !== null) ids.add(localGroup);
+        const localAnnotation = draggedAnnotationId();
+        if (localAnnotation !== null) ids.add(localAnnotation);
         const now = Date.now();
         for (const [id, at] of Object.entries(relayedDrags)) {
             if (at !== undefined && now - at < RELAYED_DRAG_TTL_MS) ids.add(id);
@@ -1564,6 +1622,46 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     }));
 
+    const updateAnnotationMutation = useMutation(() => ({
+        mutationFn: updateAnnotation,
+        onError: (error: Error) => toast.error(`Failed to update note: ${error.message}`)
+    }));
+
+    const createAnnotationMutation = useMutation(() => ({
+        mutationFn: createAnnotation,
+        onSuccess: (data) => {
+            setAnnotations([...annotations, data.annotation]);
+            // Symmetric with the local branch: select and open the new note.
+            setSelectedAnnotationId(data.annotation.id);
+            setEditingAnnotationId(data.annotation.id);
+        },
+        onError: (error: Error) => toast.error(`Failed to create note: ${error.message}`)
+    }));
+
+    const deleteAnnotationMutation = useMutation(() => ({
+        mutationFn: deleteAnnotation,
+        onMutate: (variables) => {
+            const removed = annotations.find((a) => a.id === variables.annotationId);
+            setAnnotations(annotations.filter((a) => a.id !== variables.annotationId));
+            return { removed };
+        },
+        onError: (error: Error, _variables, context) => {
+            // An annotation is the only AUTHORED PROSE on the canvas — a Card's
+            // content is picks, which are re-enterable; a paragraph is not, and
+            // there is no undo, no panel row and no search hit to notice it went
+            // missing (D11). A failed delete must put it back.
+            if (context?.removed) setAnnotations([...annotations, context.removed]);
+            toast.error(`Failed to delete note: ${error.message}`);
+        }
+    }));
+
+    const copyAnnotationMutation = useMutation(() => ({
+        mutationFn: copyAnnotation,
+        onSuccess: (data) => setAnnotations([...annotations, data.annotation]),
+        onError: (error: Error) =>
+            toast.error(`Failed to duplicate note: ${error.message}`)
+    }));
+
     const updateViewportMutation = useMutation(() => ({
         mutationFn: updateCanvasViewport,
         onError: (error: Error) => {
@@ -1830,6 +1928,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const debouncedEmitMove = debounce(emitMove, 25);
 
+    // Mirrors the Card relay. A drag path that does not broadcast is a
+    // special-cased drag path, which D2 forbids.
+    const emitAnnotationMove = (
+        annotationId: string,
+        positionX: number,
+        positionY: number
+    ) => {
+        if (isLocalMode()) return;
+        const socket = socketAccessor();
+        if (!socket) return;
+        socket.emit("annotationMove", {
+            canvasId: canvasId(),
+            annotationId,
+            positionX,
+            positionY
+        });
+    };
+    const debouncedEmitAnnotationMove = debounce(emitAnnotationMove, 25);
+
     const emitVertexMove = (
         connectionId: string,
         vertexId: string,
@@ -1893,6 +2010,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setCanvasDrafts(data.drafts ?? []);
         setConnections(data.connections ?? []);
         setCanvasGroups(data.groups ?? []);
+        setAnnotations(data.annotations ?? []);
 
         // Reset viewport for the new canvas
         props.setViewport(data.lastViewport ?? { x: 0, y: 0, zoom: 1 });
@@ -1903,6 +2021,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setGroupConnectionSource(null);
         setSourceAnchor(null);
         setSelectedVertexForConnection(null);
+        setSelectedAnnotationId(null);
+        setEditingAnnotationId(null);
+        setAnnotationContextMenu(null);
         setContextMenuPosition(null);
         setIsDeleteDialogOpen(false);
         setDraftToDelete(null);
@@ -2021,6 +2142,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 drafts: CanvasDraft[];
                 connections: Connection[];
                 groups?: CanvasGroup[];
+                annotations?: CanvasAnnotation[];
             }) => {
                 // Reconcile (merge in place) instead of replacing the arrays
                 // wholesale. A wholesale replace hands `<For>` brand-new object
@@ -2035,6 +2157,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 setCanvasDrafts(reconcile(data.drafts, { key: "draft_id" }));
                 setConnections(data.connections);
                 setCanvasGroups(reconcile(data.groups ?? [], { key: "id" }));
+                // Reconcile, never a wholesale replace — a wholesale replace
+                // hands `<For>` new object references for every note, which
+                // destroys and recreates the DOM under the cursor and strands
+                // :hover until the next real mousemove.
+                setAnnotations(reconcile(data.annotations ?? [], { key: "id" }));
                 canvasContext.mutateCanvas((prev: CanvasResposnse | undefined) => {
                     if (!prev) return prev;
                     return {
@@ -2045,7 +2172,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         cardLayout: data.canvas.cardLayout ?? prev.cardLayout,
                         drafts: data.drafts,
                         connections: data.connections,
-                        groups: data.groups ?? prev.groups
+                        groups: data.groups ?? prev.groups,
+                        annotations: data.annotations ?? prev.annotations
                     };
                 });
             }
@@ -2104,6 +2232,23 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 });
             }
         });
+        socket.on("annotationMoved", (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "annotationMoved",
+                rawData,
+                AnnotationMovedSchema
+            );
+            if (!data) return;
+            if (draggedAnnotationId() !== data.annotationId) {
+                // Mark in-flight BEFORE the store write, so no row derivation
+                // this tick sees the arbitrary mid-gesture y as a settled row.
+                markRelayedDrag(data.annotationId);
+                setAnnotations((a) => a.id === data.annotationId, {
+                    positionX: data.positionX,
+                    positionY: data.positionY
+                });
+            }
+        });
         socket.on("draftPositionsUpdated", (rawData: unknown) => {
             const data = validateSocketEvent(
                 "draftPositionsUpdated",
@@ -2121,6 +2266,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     positionX: p.positionX,
                     positionY: p.positionY,
                     ...(p.group_id !== undefined ? { group_id: p.group_id } : {})
+                });
+            }
+            for (const entry of data.annotations) {
+                // The commit that ends the drag: this node is settled again.
+                clearRelayedDrag(entry.id);
+                setAnnotations((a) => a.id === entry.id, {
+                    positionX: entry.positionX,
+                    positionY: entry.positionY,
+                    ...(Object.prototype.hasOwnProperty.call(entry, "group_id")
+                        ? { group_id: entry.group_id ?? null }
+                        : {})
                 });
             }
             const group = data.group;
@@ -2293,6 +2449,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             socket.off("draftNameUpdated");
             socket.off("draftUpdate");
             socket.off("canvasObjectMoved");
+            socket.off("annotationMoved");
             socket.off("draftPositionsUpdated");
             socket.off("connectionCreated");
             socket.off("connectionUpdated");
@@ -2847,6 +3004,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         };
     };
 
+    /**
+     * An annotation's own centre. `getCardCenterPoint` is hardcoded to
+     * cardWidth/cardHeight and is wrong for a 56x40 bare-icon note by up to
+     * 350x216px — enough to resolve a container the note is not in.
+     */
+    const annotationCenterPoint = (
+        worldX: number,
+        worldY: number,
+        annotation: CanvasAnnotation
+    ) => ({
+        x: worldX + annotation.width / 2,
+        y: worldY + annotation.height / 2
+    });
+
     const isInteractiveCardTarget = (target: EventTarget | null) => {
         return (
             target instanceof HTMLElement &&
@@ -2897,16 +3068,49 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
+    const onAnnotationMouseDown = (e: MouseEvent, annotation: CanvasAnnotation) => {
+        if (e.button !== 0) return;
+        canvasContext.closeSharePopper();
+        if (isConnectionMode() || !canEdit()) return;
+        if (isInteractiveCardTarget(e.target)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setSelectedAnnotationId(annotation.id);
+        const worldCoords = screenToWorld(e.clientX, e.clientY);
+        const group = annotation.group_id
+            ? canvasGroups.find((entry) => entry.id === annotation.group_id)
+            : undefined;
+        const worldX = group
+            ? group.positionX + annotation.positionX
+            : annotation.positionX;
+        const worldY = group
+            ? group.positionY + annotation.positionY
+            : annotation.positionY;
+        setAnnotationDragState({
+            activeAnnotationId: annotation.id,
+            offsetX: worldCoords.x - worldX,
+            offsetY: worldCoords.y - worldY,
+            dragGroupId: group?.id ?? null,
+            originX: annotation.positionX,
+            originY: annotation.positionY
+        });
+    };
+
     const onBackgroundMouseDown = (e: MouseEvent) => {
         if (e.button !== 0) return;
         canvasContext.closeSharePopper();
+        setSelectedAnnotationId(null);
+        setEditingAnnotationId(null);
 
         if (isConnectionMode()) {
             clearConnectionSelection();
         }
 
-        const target = e.target as HTMLElement;
-        if (target === canvasContainerRef || canvasContainerRef?.contains(target)) {
+        const target = e.target instanceof HTMLElement ? e.target : null;
+        if (
+            target &&
+            (target === canvasContainerRef || canvasContainerRef?.contains(target))
+        ) {
             const vp = props.viewport();
             setDragState({
                 activeBoxId: null,
@@ -4077,6 +4281,125 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         for (const id of resizeChainOf(canvasTree(), groupId)) resyncOneGroupSize(id);
     };
 
+    const persistAnnotationPlacement = (
+        annotationId: string,
+        placement: { positionX: number; positionY: number; group_id?: string | null }
+    ) => {
+        setAnnotations((a) => a.id === annotationId, {
+            positionX: placement.positionX,
+            positionY: placement.positionY,
+            ...(placement.group_id !== undefined ? { group_id: placement.group_id } : {})
+        });
+        if (isLocalMode()) {
+            localUpdateAnnotation({ annotationId, ...placement });
+        } else {
+            updateAnnotationMutation.mutate({
+                canvasId: canvasId(),
+                annotationId,
+                ...placement
+            });
+        }
+    };
+
+    /** Live resize: paint only. No persistence and no floor write. */
+    const handleAnnotationResize = (
+        annotationId: string,
+        width: number,
+        height: number
+    ) => {
+        setAnnotations((a) => a.id === annotationId, { width, height });
+    };
+
+    /** Resize commit writes both the rendered size and the manual floor (D7). */
+    const handleAnnotationResizeEnd = (
+        annotationId: string,
+        width: number,
+        height: number
+    ) => {
+        const fields = { width, height, manualWidth: width, manualHeight: height };
+        setAnnotations((a) => a.id === annotationId, fields);
+        if (isLocalMode()) localUpdateAnnotation({ annotationId, ...fields });
+        else {
+            updateAnnotationMutation.mutate({
+                canvasId: canvasId(),
+                annotationId,
+                ...fields
+            });
+        }
+        const annotation = annotations.find((a) => a.id === annotationId);
+        if (annotation?.group_id) resyncGroupSize(annotation.group_id);
+    };
+
+    /**
+     * Commit prose and its bidirectional auto-fit in one write. The floor is
+     * manualHeight, never the rendered height, so typed growth can shrink.
+     */
+    const handleAnnotationTextCommit = (
+        annotationId: string,
+        text: string,
+        measured: number
+    ) => {
+        const annotation = annotations.find((a) => a.id === annotationId);
+        if (!annotation) return;
+        const height = autoFitHeight({
+            measured,
+            floor: annotationFloor(annotation).height
+        });
+        if (text === annotation.text && height === annotation.height) return;
+        setAnnotations((a) => a.id === annotationId, { text, height });
+        if (isLocalMode()) localUpdateAnnotation({ annotationId, text, height });
+        else {
+            updateAnnotationMutation.mutate({
+                canvasId: canvasId(),
+                annotationId,
+                text,
+                height
+            });
+        }
+        if (annotation.group_id) resyncGroupSize(annotation.group_id);
+    };
+
+    const handleAnnotationDuplicate = (annotation: CanvasAnnotation) => {
+        const group = annotation.group_id
+            ? canvasGroups.find((g) => g.id === annotation.group_id)
+            : undefined;
+        // Slice 1 free-Group / loose offset. Grid-aware footprint placement is
+        // introduced as one whole branch in slice 2.
+        const placement = {
+            positionX: annotation.positionX,
+            positionY: annotation.positionY + annotation.height + GRID_CELL_GAP,
+            group_id: group?.id ?? null
+        };
+        if (isLocalMode()) {
+            localCopyAnnotation(annotation.id, placement);
+            refreshFromLocal();
+        } else {
+            copyAnnotationMutation.mutate({
+                canvasId: canvasId(),
+                annotationId: annotation.id,
+                ...placement
+            });
+        }
+    };
+
+    const updateAnnotationAppearance = (
+        annotationId: string,
+        fields: {
+            color?: CanvasAnnotation["color"];
+            fontSize?: CanvasAnnotation["fontSize"];
+        }
+    ) => {
+        setAnnotations((a) => a.id === annotationId, fields);
+        if (isLocalMode()) localUpdateAnnotation({ annotationId, ...fields });
+        else {
+            updateAnnotationMutation.mutate({
+                canvasId: canvasId(),
+                annotationId,
+                ...fields
+            });
+        }
+    };
+
     // Right/middle-drag pan + mouse-up context menu dispatch. A right or
     // middle press anywhere on the canvas world starts a pan candidate;
     // movement past the threshold commits the pan, and a right release under
@@ -4112,7 +4435,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // keeps its current behavior.
     const isCanvasWorldTarget = (target: EventTarget | null) =>
         target instanceof Element &&
-        target.closest(".canvas-background, .group-container, .canvas-card") !== null;
+        target.closest(
+            ".canvas-background, .group-container, .canvas-card, .canvas-annotation"
+        ) !== null;
 
     const onAuxMouseDown = (e: MouseEvent) => {
         if (e.button !== 1 && e.button !== 2) return;
@@ -4183,6 +4508,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             return;
         }
 
+        const annotationEl = el?.closest(".canvas-annotation");
+        if (annotationEl) {
+            if (!canEdit()) return;
+            const annotation = annotations.find(
+                (entry) => entry.id === annotationEl.getAttribute("data-annotation-id")
+            );
+            if (annotation) {
+                closeAllContextMenus();
+                setSelectedAnnotationId(annotation.id);
+                setAnnotationContextMenu({ annotation, position: { x, y } });
+            }
+            return;
+        }
+
         const groupEl = el?.closest(".group-container");
         if (groupEl) {
             if (!canEdit()) return;
@@ -4229,6 +4568,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const closeAllContextMenus = () => {
         setContextMenuPosition(null);
         setDraftContextMenu(null);
+        setAnnotationContextMenu(null);
         setGroupContextMenu(null);
         setConnectionContextMenu(null);
     };
@@ -4388,6 +4728,29 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
                     e.preventDefault();
                     goToSearchMatch(-1);
+                    return;
+                }
+            }
+            if (
+                e.key === "Enter" &&
+                !isConnectionMode() &&
+                selectedAnnotationId() &&
+                editingAnnotationId() === null &&
+                !isFocusedInteractiveTarget(e.target)
+            ) {
+                e.preventDefault();
+                setEditingAnnotationId(selectedAnnotationId());
+                return;
+            }
+            if (e.key === "Escape" && !isConnectionMode()) {
+                if (editingAnnotationId() !== null) {
+                    setEditingAnnotationId(null);
+                    e.preventDefault();
+                    return;
+                }
+                if (selectedAnnotationId() !== null) {
+                    setSelectedAnnotationId(null);
+                    e.preventDefault();
                     return;
                 }
             }
@@ -4607,6 +4970,48 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 return;
             }
 
+            const annotationState = annotationDragState();
+            if (annotationState.activeAnnotationId) {
+                const annotation = annotations.find(
+                    (entry) => entry.id === annotationState.activeAnnotationId
+                );
+                if (!annotation) return;
+                const worldCoords = screenToWorld(e.clientX, e.clientY);
+                const newWorldX = worldCoords.x - annotationState.offsetX;
+                const newWorldY = worldCoords.y - annotationState.offsetY;
+                const sourceGroup = annotationState.dragGroupId
+                    ? canvasGroups.find((g) => g.id === annotationState.dragGroupId)
+                    : undefined;
+                const positionX = sourceGroup
+                    ? newWorldX - sourceGroup.positionX
+                    : newWorldX;
+                const positionY = sourceGroup
+                    ? newWorldY - sourceGroup.positionY
+                    : newWorldY;
+                setAnnotations((entry) => entry.id === annotation.id, {
+                    positionX,
+                    positionY
+                });
+                debouncedEmitAnnotationMove(annotation.id, positionX, positionY);
+
+                const hoverPoint = annotationCenterPoint(
+                    newWorldX,
+                    newWorldY,
+                    annotation
+                );
+                const hoverGroup = findGroupAtPosition(hoverPoint.x, hoverPoint.y);
+                const currentGroupId = annotationState.dragGroupId ?? annotation.group_id;
+                if (hoverGroup && hoverGroup.id !== currentGroupId) {
+                    setDragOverGroupId(hoverGroup.id);
+                    setExitingGroupId(currentGroupId ?? null);
+                } else {
+                    setDragOverGroupId(null);
+                    setExitingGroupId(!hoverGroup ? (currentGroupId ?? null) : null);
+                }
+                setGridDropCell(null);
+                return;
+            }
+
             const state = dragState();
 
             if (state.isPanning) {
@@ -4786,6 +5191,63 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         candidate.startY
                     );
                 }
+                return;
+            }
+
+            const annotationState = annotationDragState();
+            if (annotationState.activeAnnotationId) {
+                const annotation = annotations.find(
+                    (entry) => entry.id === annotationState.activeAnnotationId
+                );
+                if (annotation) {
+                    const sourceGroup = annotationState.dragGroupId
+                        ? canvasGroups.find((g) => g.id === annotationState.dragGroupId)
+                        : undefined;
+                    const worldX = sourceGroup
+                        ? sourceGroup.positionX + annotation.positionX
+                        : annotation.positionX;
+                    const worldY = sourceGroup
+                        ? sourceGroup.positionY + annotation.positionY
+                        : annotation.positionY;
+                    const dropPoint = annotationCenterPoint(worldX, worldY, annotation);
+                    const dropGroup = findGroupAtPosition(dropPoint.x, dropPoint.y);
+                    if (dropGroup) {
+                        // Slice 1: free Groups and the loose canvas.
+                        // `commitGridDrop` learns the annotation kind in slice 2.
+                        // A grid destination is therefore an accepted interim
+                        // plain positioned member; Task 25 lands the whole
+                        // collision/swap/reflow branch together.
+                        persistAnnotationPlacement(annotation.id, {
+                            positionX: worldX - dropGroup.positionX,
+                            positionY: worldY - dropGroup.positionY,
+                            group_id: dropGroup.id
+                        });
+                        resyncGroupSize(dropGroup.id);
+                    } else {
+                        persistAnnotationPlacement(annotation.id, {
+                            positionX: worldX,
+                            positionY: worldY,
+                            group_id: null
+                        });
+                    }
+                    if (
+                        annotationState.dragGroupId &&
+                        annotationState.dragGroupId !== dropGroup?.id
+                    ) {
+                        resyncGroupSize(annotationState.dragGroupId);
+                    }
+                }
+                setAnnotationDragState({
+                    activeAnnotationId: null,
+                    offsetX: 0,
+                    offsetY: 0,
+                    dragGroupId: null,
+                    originX: 0,
+                    originY: 0
+                });
+                setDragOverGroupId(null);
+                setExitingGroupId(null);
+                setGridDropCell(null);
                 return;
             }
 
@@ -5418,6 +5880,44 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 />
                                             )}
                                         </For>
+                                        <For
+                                            each={childAnnotationsOf(
+                                                canvasTree(),
+                                                group.id
+                                            )}
+                                        >
+                                            {(annotation) => (
+                                                <CanvasAnnotationItem
+                                                    annotation={annotation}
+                                                    isGrouped={true}
+                                                    zoom={viewportZoom}
+                                                    canEdit={canEdit}
+                                                    isConnectionMode={isConnectionMode()}
+                                                    snappedSize={() => null}
+                                                    isSelected={() =>
+                                                        selectedAnnotationId() ===
+                                                        annotation.id
+                                                    }
+                                                    editingAnnotationId={
+                                                        editingAnnotationId
+                                                    }
+                                                    onEditingComplete={() =>
+                                                        setEditingAnnotationId(null)
+                                                    }
+                                                    onStartEditing={
+                                                        setEditingAnnotationId
+                                                    }
+                                                    onMouseDown={onAnnotationMouseDown}
+                                                    onCommitText={
+                                                        handleAnnotationTextCommit
+                                                    }
+                                                    onResize={handleAnnotationResize}
+                                                    onResizeEnd={
+                                                        handleAnnotationResizeEnd
+                                                    }
+                                                />
+                                            )}
+                                        </For>
                                     </CustomGroupContainer>
                                 }
                             >
@@ -5675,6 +6175,31 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             />
                         )}
                     </For>
+                    {/* D8: above Cards and Group containers, below the grid
+                        drop highlight and connection SVG. Layering is DOM
+                        order among equal z-30 siblings, not a new z-index. */}
+                    <For each={childAnnotationsOf(canvasTree(), null)}>
+                        {(annotation) => (
+                            <CanvasAnnotationItem
+                                annotation={annotation}
+                                isGrouped={false}
+                                zoom={viewportZoom}
+                                canEdit={canEdit}
+                                isConnectionMode={isConnectionMode()}
+                                snappedSize={() => null}
+                                isSelected={() =>
+                                    selectedAnnotationId() === annotation.id
+                                }
+                                editingAnnotationId={editingAnnotationId}
+                                onEditingComplete={() => setEditingAnnotationId(null)}
+                                onStartEditing={setEditingAnnotationId}
+                                onMouseDown={onAnnotationMouseDown}
+                                onCommitText={handleAnnotationTextCommit}
+                                onResize={handleAnnotationResize}
+                                onResizeEnd={handleAnnotationResizeEnd}
+                            />
+                        )}
+                    </For>
                 </div>
                 <Show when={searchOpen()}>
                     <CanvasSearchBar
@@ -5925,6 +6450,44 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         );
                                         handleCreateGroup();
                                     }
+                                },
+                                {
+                                    label: "Create Note",
+                                    action: () => {
+                                        const worldPos = contextMenuWorldPosition();
+                                        const group = findGroupAtPosition(
+                                            worldPos.x,
+                                            worldPos.y
+                                        );
+                                        const size = defaultAnnotationSize(
+                                            props.cardLayout()
+                                        );
+                                        const placement = {
+                                            positionX: group
+                                                ? worldPos.x - group.positionX
+                                                : worldPos.x,
+                                            positionY: group
+                                                ? worldPos.y - group.positionY
+                                                : worldPos.y,
+                                            width: size.width,
+                                            height: size.height,
+                                            group_id: group?.id ?? null
+                                        };
+                                        if (isLocalMode()) {
+                                            const created =
+                                                localCreateAnnotation(placement);
+                                            refreshFromLocal();
+                                            setSelectedAnnotationId(
+                                                created.annotation.id
+                                            );
+                                            setEditingAnnotationId(created.annotation.id);
+                                        } else {
+                                            createAnnotationMutation.mutate({
+                                                canvasId: canvasId(),
+                                                ...placement
+                                            });
+                                        }
+                                    }
                                 }
                             ]}
                             onClose={closeContextMenu}
@@ -5963,6 +6526,51 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     : () => handleDraftDelete(menu().draft)
                             }
                             onClose={closeDraftContextMenu}
+                        />
+                    )}
+                </Show>
+                {/* Annotation Context Menu */}
+                <Show when={annotationContextMenu()}>
+                    {(menu) => (
+                        <AnnotationContextMenu
+                            position={menu().position}
+                            annotation={menu().annotation}
+                            onEditText={() => {
+                                setEditingAnnotationId(menu().annotation.id);
+                                setAnnotationContextMenu(null);
+                            }}
+                            onSetColor={(color) =>
+                                updateAnnotationAppearance(menu().annotation.id, {
+                                    color
+                                })
+                            }
+                            onSetFontSize={(fontSize) => {
+                                updateAnnotationAppearance(menu().annotation.id, {
+                                    fontSize
+                                });
+                                setEditingAnnotationId(menu().annotation.id);
+                            }}
+                            onDuplicate={() =>
+                                handleAnnotationDuplicate(menu().annotation)
+                            }
+                            onDelete={() => {
+                                const annotation = menu().annotation;
+                                if (isLocalMode()) {
+                                    localDeleteAnnotation(annotation.id);
+                                    refreshFromLocal();
+                                } else {
+                                    deleteAnnotationMutation.mutate({
+                                        canvasId: canvasId(),
+                                        annotationId: annotation.id
+                                    });
+                                }
+                                setSelectedAnnotationId(null);
+                                setEditingAnnotationId(null);
+                                if (annotation.group_id) {
+                                    resyncGroupSize(annotation.group_id);
+                                }
+                            }}
+                            onClose={() => setAnnotationContextMenu(null)}
                         />
                     )}
                 </Show>

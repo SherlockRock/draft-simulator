@@ -1,9 +1,9 @@
 import { For, Show, onCleanup, onMount } from "solid-js";
-import { ContextMenuAction, ContextMenuPosition } from "../utils/types";
+import { ContextMenuEntry, ContextMenuPosition } from "../utils/types";
 
 type ContextMenuProps = {
     position: ContextMenuPosition;
-    actions: ContextMenuAction[];
+    actions: ContextMenuEntry[];
     // Optional truncated title row (e.g. draft/group name).
     header?: string;
     // Extra classes on the menu root (surface tag like "draft-context-menu").
@@ -62,23 +62,31 @@ export const ContextMenu = (props: ContextMenuProps) => {
                 </div>
             </Show>
             <For each={props.actions}>
-                {(action) => (
-                    <button
-                        class="w-full px-4 py-2 text-left text-sm transition-colors"
-                        classList={{
-                            "text-darius-text-primary hover:bg-darius-border":
-                                !action.destructive,
-                            "text-darius-crimson hover:bg-darius-crimson/15":
-                                action.destructive
-                        }}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            action.action();
-                            props.onClose();
-                        }}
+                {(entry) => (
+                    <Show
+                        when={"render" in entry}
+                        fallback={
+                            <button
+                                class="w-full px-4 py-2 text-left text-sm transition-colors"
+                                classList={{
+                                    "text-darius-text-primary hover:bg-darius-border":
+                                        !("render" in entry) && !entry.destructive,
+                                    "text-darius-crimson hover:bg-darius-crimson/15":
+                                        !("render" in entry) && entry.destructive
+                                }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if ("render" in entry) return;
+                                    entry.action();
+                                    props.onClose();
+                                }}
+                            >
+                                {"render" in entry ? "" : entry.label}
+                            </button>
+                        }
                     >
-                        {action.label}
-                    </button>
+                        {"render" in entry ? entry.render(props.onClose) : null}
+                    </Show>
                 )}
             </For>
         </div>
