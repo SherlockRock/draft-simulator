@@ -3,6 +3,10 @@ import type { CanvasAnnotation as CanvasAnnotationRow } from "../utils/schemas";
 import { annotationSurfaceClass, ANNOTATION_FONT_PX } from "../utils/annotationStyle";
 import { MIN_ANNOTATION_HEIGHT, MIN_ANNOTATION_WIDTH } from "../utils/annotationSize";
 import { scaledStrokePx, screenConstantPx } from "../utils/viewport";
+import { CUSTOM_GROUP_HEADER_HEIGHT } from "./CustomGroupContainer";
+
+export const annotationRenderTop = (positionY: number, isGrouped: boolean): number =>
+    isGrouped ? positionY - CUSTOM_GROUP_HEADER_HEIGHT : positionY;
 
 type CanvasAnnotationProps = {
     annotation: CanvasAnnotationRow;
@@ -116,7 +120,10 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
             }}
             style={{
                 left: `${props.annotation.positionX}px`,
-                top: `${props.annotation.positionY}px`,
+                top: `${annotationRenderTop(
+                    props.annotation.positionY,
+                    props.isGrouped
+                )}px`,
                 width: `${renderWidth()}px`,
                 height: `${renderHeight()}px`,
                 // `scaledStrokePx`, NOT `screenConstantPx`. viewport.ts:55-84
