@@ -3234,5 +3234,9 @@ router.delete(
   },
 );
 
+// Annotation routes live in their own file (canvas.js is 3300 lines) but mount
+// under the same prefix, so the URLs are `/api/canvas/:canvasId/annotations`.
+router.use(require("./canvasAnnotations"));
+
 module.exports = router;
 module.exports.resolveTeamLinkUpdate = resolveTeamLinkUpdate;

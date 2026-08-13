@@ -1,0 +1,247 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createRequire } from "node:module";
+import express from "express";
+import request from "supertest";
+
+const require = createRequire(import.meta.url);
+const auth = require("../../middleware/auth");
+const socketService = require("../../middleware/socketService");
+const {
+  Canvas,
+  UserCanvas,
+  CanvasDraft,
+  CanvasConnection,
+  CanvasGroup,
+  CanvasAnnotation,
+} = require("../../models/Canvas");
+
+function buildApp() {
+  const routePath = require.resolve("../../routes/canvas");
+  // canvas.js mounts the annotation router with a static `require("./canvasAnnotations")`
+  // at its own top level. Deleting only canvas.js's cache entry re-executes canvas.js
+  // (so its own `const { protect } = require(...)` picks up this test's spy), but
+  // node still serves the cached canvasAnnotations.js module — whose `protect` was
+  // captured once, on the first buildApp() call, and never updates. Every test after
+  // the first would run the REAL auth middleware and 401 instead of hitting the mock.
+  const annotationsRoutePath = require.resolve("../../routes/canvasAnnotations");
+  delete require.cache[routePath];
+  delete require.cache[annotationsRoutePath];
+  const app = express();
+  app.use(express.json());
+  app.use("/api/canvas", require("../../routes/canvas"));
+  return app;
+}
+
+function expectCanvasUpdateBroadcast() {
+  expect(socketService.emitToRoom).toHaveBeenCalledWith(
+    "c1",
+    "canvasUpdate",
+    expect.objectContaining({ annotations: [] }),
+  );
+}
+
+const annotationRow = (overrides = {}) => ({
+  id: "a1",
+  canvas_id: "c1",
+  group_id: null,
+  positionX: 10,
+  positionY: 20,
+  width: 380,
+  height: 120,
+  text: "why we lost this one",
+  championIds: [],
+  color: "slate",
+  fontSize: "md",
+  update: vi.fn().mockResolvedValue(undefined),
+  destroy: vi.fn().mockResolvedValue(undefined),
+  toJSON() {
+    const { update, destroy, toJSON, ...rest } = this;
+    return rest;
+  },
+  ...overrides,
+});
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+  vi.spyOn(auth, "protect").mockImplementation((req, _res, next) => {
+    req.user = { id: "u1" };
+    next();
+  });
+  vi.spyOn(socketService, "emitToRoom").mockImplementation(() => {});
+  vi.spyOn(Canvas, "findByPk").mockResolvedValue({
+    changed: vi.fn(),
+    save: vi.fn().mockResolvedValue(undefined),
+    toJSON: () => ({ id: "c1" }),
+  });
+  vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
+  vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
+  vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+  vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
+});
+
+describe("annotation routes — the Canvas Mutation Gate", () => {
+  for (const [name, send] of [
+    ["create", (app) => request(app).post("/api/canvas/c1/annotations").send({})],
+    [
+      "update",
+      (app) => request(app).patch("/api/canvas/c1/annotations/a1").send({ text: "x" }),
+    ],
+    ["delete", (app) => request(app).delete("/api/canvas/c1/annotations/a1")],
+    ["duplicate", (app) => request(app).post("/api/canvas/c1/annotations/a1/copy").send({})],
+  ]) {
+    it(`403s ${name} for a view-only user and writes nothing`, async () => {
+      vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "view" });
+      const create = vi.spyOn(CanvasAnnotation, "create");
+      const res = await send(buildApp());
+      expect(res.status).toBe(403);
+      expect(create).not.toHaveBeenCalled();
+    });
+  }
+});
+
+describe("POST /:canvasId/annotations", () => {
+  beforeEach(() => {
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
+  });
+
+  it("creates a loose annotation and broadcasts the snapshot", async () => {
+    vi.spyOn(CanvasAnnotation, "create").mockResolvedValue(annotationRow());
+    const res = await request(buildApp())
+      .post("/api/canvas/c1/annotations")
+      .send({ positionX: 10, positionY: 20 });
+
+    expect(res.status).toBe(201);
+    expect(res.body.annotation.id).toBe("a1");
+    const broadcast = socketService.emitToRoom.mock.calls.find(
+      ([, event]) => event === "canvasUpdate",
+    );
+    expect(broadcast?.[2]).toHaveProperty("annotations");
+  });
+
+  // Containment, not authorization (design §3): the Gate said yes, and the
+  // group_id still belongs to somebody else's canvas.
+  it("404s a group_id that is not on this canvas", async () => {
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+    const create = vi.spyOn(CanvasAnnotation, "create");
+    const res = await request(buildApp())
+      .post("/api/canvas/c1/annotations")
+      .send({ positionX: 0, positionY: 0, group_id: "gForeign" });
+
+    expect(res.status).toBe(404);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unknown colour with 400", async () => {
+    const res = await request(buildApp())
+      .post("/api/canvas/c1/annotations")
+      .send({ positionX: 0, positionY: 0, color: "chartreuse" });
+    expect(res.status).toBe(400);
+  });
+
+  // `none` is a palette entry (D6), not a missing value.
+  it("accepts colour `none`", async () => {
+    vi.spyOn(CanvasAnnotation, "create").mockResolvedValue(
+      annotationRow({ color: "none" }),
+    );
+    const res = await request(buildApp())
+      .post("/api/canvas/c1/annotations")
+      .send({ positionX: 0, positionY: 0, color: "none" });
+    expect(res.status).toBe(201);
+  });
+});
+
+describe("PATCH /:canvasId/annotations/:annotationId", () => {
+  beforeEach(() => {
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
+  });
+
+  it("404s an annotation on another canvas", async () => {
+    vi.spyOn(CanvasAnnotation, "findOne").mockResolvedValue(null);
+    const res = await request(buildApp())
+      .patch("/api/canvas/c1/annotations/aX")
+      .send({ text: "hello" });
+    expect(res.status).toBe(404);
+  });
+
+  it("writes only the fields the request carries", async () => {
+    const row = annotationRow();
+    vi.spyOn(CanvasAnnotation, "findOne").mockResolvedValue(row);
+    await request(buildApp())
+      .patch("/api/canvas/c1/annotations/a1")
+      .send({ text: "their jungler always flexes here" });
+
+    expect(row.update).toHaveBeenCalledWith({
+      text: "their jungler always flexes here",
+    });
+    expectCanvasUpdateBroadcast();
+  });
+
+  // An empty text is a legal state (D3) — a bare champion strip. A truthiness
+  // guard here would make clearing a note impossible.
+  it("accepts an empty text", async () => {
+    const row = annotationRow();
+    vi.spyOn(CanvasAnnotation, "findOne").mockResolvedValue(row);
+    const res = await request(buildApp())
+      .patch("/api/canvas/c1/annotations/a1")
+      .send({ text: "" });
+    expect(res.status).toBe(200);
+    expect(row.update).toHaveBeenCalledWith({ text: "" });
+  });
+
+  it("400s when the body carries no writable field", async () => {
+    vi.spyOn(CanvasAnnotation, "findOne").mockResolvedValue(annotationRow());
+    const res = await request(buildApp())
+      .patch("/api/canvas/c1/annotations/a1")
+      .send({ nonsense: 1 });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("DELETE /:canvasId/annotations/:annotationId", () => {
+  beforeEach(() => {
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
+  });
+
+  // Immediate and unconfirmed, matching Card delete (D11).
+  it("destroys the row and broadcasts", async () => {
+    const row = annotationRow();
+    vi.spyOn(CanvasAnnotation, "findOne").mockResolvedValue(row);
+    const res = await request(buildApp()).delete("/api/canvas/c1/annotations/a1");
+    expect(res.status).toBe(200);
+    expect(row.destroy).toHaveBeenCalled();
+    expectCanvasUpdateBroadcast();
+  });
+});
+
+describe("POST /:canvasId/annotations/:annotationId/copy", () => {
+  beforeEach(() => {
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
+  });
+
+  it("copies every content field and takes the caller's placement", async () => {
+    vi.spyOn(CanvasAnnotation, "findOne").mockResolvedValue(
+      annotationRow({ championIds: ["Ahri", "Orianna"], color: "purple" }),
+    );
+    const create = vi
+      .spyOn(CanvasAnnotation, "create")
+      .mockResolvedValue(annotationRow({ id: "a2" }));
+
+    const res = await request(buildApp())
+      .post("/api/canvas/c1/annotations/a1/copy")
+      .send({ positionX: 500, positionY: 300, group_id: null });
+
+    expect(res.status).toBe(201);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        canvas_id: "c1",
+        positionX: 500,
+        positionY: 300,
+        group_id: null,
+        championIds: ["Ahri", "Orianna"],
+        color: "purple",
+        text: "why we lost this one",
+      }),
+    );
+    expectCanvasUpdateBroadcast();
+  });
+});
