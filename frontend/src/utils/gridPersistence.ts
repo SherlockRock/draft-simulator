@@ -1,4 +1,7 @@
-import type { GroupPositionUpdate } from "@draft-sim/shared-types";
+import type {
+    AnnotationPositionUpdate,
+    GroupPositionUpdate
+} from "@draft-sim/shared-types";
 import type { CanvasGroup } from "./schemas";
 import type { GridPlacement, PositionUpdate } from "./gridLayout";
 import { subtreeMoveWrites, type GroupPositionWrite } from "./groupSubtreeMove";
@@ -9,9 +12,10 @@ import type { CanvasTree } from "./canvasTree";
  *
  * `gridLayout.ts` is container-relative and kind-agnostic by contract, and it
  * stays that way: a `GridPlacement` says where a child sits inside its parent,
- * for a Card and a Group alike. But the two persist completely differently —
- * a Card's position IS container-relative and rides in `positions[]`, while a
- * Group's is absolute world at every depth (ADR-0006) and rides in `groups[]`.
+ * for Cards, Groups, and annotations alike. The leaves persist their
+ * container-relative positions in `positions[]` and `annotations[]`, while a
+ * Group persists absolute world coordinates at every depth (ADR-0006) in
+ * `groups[]`.
  * Pushing the parent's world origin down into the engine to resolve that would
  * break the engine's whole contract, so the knowledge lives here instead, above
  * it, serving every caller (`commitGridDrop`, `arrangeGroupAsGrid`, and
@@ -26,6 +30,8 @@ import type { CanvasTree } from "./canvasTree";
 export type GridWrites = {
     /** Card placements, container-relative, for `positions[]`. */
     positions: PositionUpdate[];
+    /** Annotation placements, container-relative, for `annotations[]`. */
+    annotations: AnnotationPositionUpdate[];
     /** Group placements, rebased to absolute world, for `groups[]`. */
     groups: GroupPositionUpdate[];
     /**
@@ -44,38 +50,54 @@ export const splitGridPlacements = (args: {
 }): GridWrites => {
     const { tree, parent, placements } = args;
     const positions: PositionUpdate[] = [];
+    const annotations: AnnotationPositionUpdate[] = [];
     const groups: GroupPositionUpdate[] = [];
     const groupStoreWrites: GroupPositionWrite[] = [];
 
     for (const placement of placements) {
-        if (placement.kind === "card") {
-            positions.push({
-                draft_id: placement.id,
-                positionX: placement.positionX,
-                positionY: placement.positionY
-            });
-            continue;
-        }
-        const positionX = parent.positionX + placement.positionX;
-        const positionY = parent.positionY + placement.positionY;
-        groups.push({ id: placement.id, positionX, positionY });
+        switch (placement.kind) {
+            case "card":
+                positions.push({
+                    draft_id: placement.id,
+                    positionX: placement.positionX,
+                    positionY: placement.positionY
+                });
+                break;
+            case "annotation":
+                annotations.push({
+                    id: placement.id,
+                    positionX: placement.positionX,
+                    positionY: placement.positionY
+                });
+                break;
+            case "group": {
+                const positionX = parent.positionX + placement.positionX;
+                const positionY = parent.positionY + placement.positionY;
+                groups.push({ id: placement.id, positionX, positionY });
 
-        const stored = tree.groups.find((g) => g.id === placement.id);
-        if (stored) {
-            groupStoreWrites.push(
-                ...subtreeMoveWrites(
-                    tree,
-                    placement.id,
-                    positionX - stored.positionX,
-                    positionY - stored.positionY
-                )
-            );
-        } else {
-            // Entering the grid from outside and not in the store yet: there is
-            // no subtree to carry, so the row itself is the whole write.
-            groupStoreWrites.push({ id: placement.id, positionX, positionY });
+                const stored = tree.groups.find((g) => g.id === placement.id);
+                if (stored) {
+                    groupStoreWrites.push(
+                        ...subtreeMoveWrites(
+                            tree,
+                            placement.id,
+                            positionX - stored.positionX,
+                            positionY - stored.positionY
+                        )
+                    );
+                } else {
+                    // Entering the grid from outside and not in the store yet: there is
+                    // no subtree to carry, so the row itself is the whole write.
+                    groupStoreWrites.push({ id: placement.id, positionX, positionY });
+                }
+                break;
+            }
+            default: {
+                const exhaustive: never = placement.kind;
+                throw new Error(`Unhandled grid placement kind: ${exhaustive}`);
+            }
         }
     }
 
-    return { positions, groups, groupStoreWrites };
+    return { positions, annotations, groups, groupStoreWrites };
 };

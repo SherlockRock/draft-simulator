@@ -1271,6 +1271,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
         const payload = {
             positions: updates,
+            ...(writes.annotations.length > 0 ? { annotations: writes.annotations } : {}),
             ...(writes.groups.length > 0 ? { groups: writes.groups } : {}),
             group: { id: group.id, width: dims.width, height: dims.height, metadata }
         };
@@ -1344,6 +1345,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
         const payload = {
             positions: updates,
+            ...(writes.annotations.length > 0 ? { annotations: writes.annotations } : {}),
             ...(writes.groups.length > 0 ? { groups: writes.groups } : {}),
             group: {
                 id: group.id,
@@ -1409,12 +1411,23 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
         if (isLocalMode()) {
             localUpdateDraftPositions(
-                withLocalSubtree({ positions: writes.positions }, writes)
+                withLocalSubtree(
+                    {
+                        positions: writes.positions,
+                        ...(writes.annotations.length > 0
+                            ? { annotations: writes.annotations }
+                            : {})
+                    },
+                    writes
+                )
             );
         } else {
             updateDraftPositionsMutation.mutate({
                 canvasId: canvasId(),
                 positions: writes.positions,
+                ...(writes.annotations.length > 0
+                    ? { annotations: writes.annotations }
+                    : {}),
                 ...(writes.groups.length > 0 ? { groups: writes.groups } : {})
             });
         }

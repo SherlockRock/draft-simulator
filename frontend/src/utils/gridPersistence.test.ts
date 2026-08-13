@@ -38,6 +38,13 @@ const nested = (id: string, x: number, y: number): GridPlacement => ({
     positionY: y
 });
 
+const annotation = (id: string, x: number, y: number): GridPlacement => ({
+    id,
+    kind: "annotation",
+    positionX: x,
+    positionY: y
+});
+
 describe("splitGridPlacements", () => {
     it("keeps Card placements container-relative and verbatim", () => {
         const parent = group("P", { x: 1000, y: 500 });
@@ -114,6 +121,63 @@ describe("splitGridPlacements", () => {
         });
         expect(positions.map((p) => p.draft_id)).toEqual(["c1", "c2"]);
         expect(groups).toEqual([{ id: "C", positionX: 410, positionY: 74 }]);
+    });
+});
+
+describe("annotation persistence buckets", () => {
+    it("routes a mixed Card, Group, and annotation reflow by kind", () => {
+        const parent = group("P", { x: 1000, y: 500 });
+        const child = group("G", { parent: "P", x: 1200, y: 700 });
+
+        const writes = splitGridPlacements({
+            tree: treeOf([parent, child]),
+            parent,
+            placements: [
+                card("C", 16, 24),
+                nested("G", 220, 24),
+                annotation("A", 420, 24)
+            ]
+        });
+
+        expect(writes.positions).toEqual([
+            { draft_id: "C", positionX: 16, positionY: 24 }
+        ]);
+        expect(writes.groups).toEqual([{ id: "G", positionX: 1220, positionY: 524 }]);
+        expect(writes.annotations).toEqual([{ id: "A", positionX: 420, positionY: 24 }]);
+    });
+
+    it("persists the D13 zero-Card champion pool entirely as annotations", () => {
+        const parent: CanvasGroup = {
+            ...group("champion-pool", { x: 1000, y: 500 }),
+            metadata: {
+                layout: "grid",
+                rowLabels: ["S", "A", "Situational"]
+            }
+        };
+
+        const writes = splitGridPlacements({
+            tree: treeOf([parent]),
+            parent,
+            placements: [
+                annotation("note-s", 16, 24),
+                annotation("note-a", 16, 168),
+                annotation("note-situational", 16, 312)
+            ]
+        });
+
+        expect(parent.type).toBe("custom");
+        expect(parent.metadata).toEqual({
+            layout: "grid",
+            rowLabels: ["S", "A", "Situational"]
+        });
+        expect(writes.positions).toEqual([]);
+        expect(writes.groups).toEqual([]);
+        expect(writes.annotations).toEqual([
+            { id: "note-s", positionX: 16, positionY: 24 },
+            { id: "note-a", positionX: 16, positionY: 168 },
+            { id: "note-situational", positionX: 16, positionY: 312 }
+        ]);
+        expect(writes.groupStoreWrites).toEqual([]);
     });
 });
 
