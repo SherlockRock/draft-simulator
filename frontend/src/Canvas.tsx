@@ -107,6 +107,7 @@ import {
 } from "./utils/groupSubtreeMove";
 import { parentageRejection } from "./utils/groupParentage";
 import { resolveGroupDrop, type GroupDropResolution } from "./utils/groupDropResolver";
+import { freeGroupLeftRebaseWrites } from "./utils/freeGroupLeftRebase";
 import {
     localNewDraft,
     localEditDraft,
@@ -4224,9 +4225,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             const newWidth = resolved.width;
             const newHeight = resolved.height;
             const newPositionX = group.positionX - expandLeft;
-            const groupedDrafts =
+            const rebaseWrites =
                 expandLeft > 0
-                    ? canvasDrafts.filter((draft) => draft.group_id === group.id)
+                    ? freeGroupLeftRebaseWrites(canvasTree(), group.id, expandLeft)
                     : [];
 
             setCanvasGroups((g) => g.id === group.id, {
@@ -4234,14 +4235,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 width: newWidth,
                 height: newHeight
             });
-            if (groupedDrafts.length > 0) {
-                setCanvasDrafts(
-                    (draft) => draft.group_id === group.id,
-                    (draft) => ({
-                        ...draft,
-                        positionX: draft.positionX + expandLeft
-                    })
-                );
+            for (const write of rebaseWrites) {
+                if (write.kind === "card") {
+                    setCanvasDrafts((draft) => draft.Draft.id === write.draftId, {
+                        positionX: write.positionX
+                    });
+                } else {
+                    setAnnotations((annotation) => annotation.id === write.annotationId, {
+                        positionX: write.positionX
+                    });
+                }
             }
             if (isLocalMode()) {
                 localUpdateGroup({
@@ -4250,12 +4253,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     width: newWidth,
                     height: newHeight
                 });
-                for (const draft of groupedDrafts) {
-                    localUpdateDraftPosition({
-                        draftId: draft.Draft.id,
-                        positionX: draft.positionX + expandLeft,
-                        positionY: draft.positionY
-                    });
+                for (const write of rebaseWrites) {
+                    if (write.kind === "card") {
+                        localUpdateDraftPosition({
+                            draftId: write.draftId,
+                            positionX: write.positionX,
+                            positionY: write.positionY
+                        });
+                    } else {
+                        localUpdateAnnotation({
+                            annotationId: write.annotationId,
+                            positionX: write.positionX,
+                            positionY: write.positionY
+                        });
+                    }
                 }
             } else {
                 updateGroupMutation.mutate({
@@ -4265,13 +4276,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     width: newWidth,
                     height: newHeight
                 });
-                for (const draft of groupedDrafts) {
-                    updatePositionMutation.mutate({
-                        canvasId: canvasId(),
-                        draftId: draft.Draft.id,
-                        positionX: draft.positionX + expandLeft,
-                        positionY: draft.positionY
-                    });
+                for (const write of rebaseWrites) {
+                    if (write.kind === "card") {
+                        updatePositionMutation.mutate({
+                            canvasId: canvasId(),
+                            draftId: write.draftId,
+                            positionX: write.positionX,
+                            positionY: write.positionY
+                        });
+                    } else {
+                        updateAnnotationMutation.mutate({
+                            canvasId: canvasId(),
+                            annotationId: write.annotationId,
+                            positionX: write.positionX,
+                            positionY: write.positionY
+                        });
+                    }
                 }
             }
         }
