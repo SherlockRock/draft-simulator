@@ -125,6 +125,18 @@ describe("splitGridPlacements", () => {
 });
 
 describe("annotation persistence buckets", () => {
+    it("always returns an empty annotations array when no annotations are placed", () => {
+        const parent = group("P", { x: 1000, y: 500 });
+
+        const writes = splitGridPlacements({
+            tree: treeOf([parent]),
+            parent,
+            placements: [card("C", 16, 24)]
+        });
+
+        expect(writes.annotations).toEqual([]);
+    });
+
     it("routes a mixed Card, Group, and annotation reflow by kind", () => {
         const parent = group("P", { x: 1000, y: 500 });
         const child = group("G", { parent: "P", x: 1200, y: 700 });
