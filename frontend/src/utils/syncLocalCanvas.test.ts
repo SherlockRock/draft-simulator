@@ -282,22 +282,28 @@ describe("syncLocalCanvasToServer", () => {
 
     it("syncs an annotation-only canvas instead of treating it as empty", async () => {
         const canvas = createEmptyLocalCanvas("My Canvas");
-        canvas.annotations = [localAnnotation("a1", { text: "keep me" })];
+        canvas.annotations = [
+            localAnnotation("a1", {
+                text: "keep me",
+                manualWidth: 440,
+                manualHeight: 260
+            })
+        ];
         saveLocalCanvas(canvas);
 
         const canvasId = await syncLocalCanvasToServer();
 
         expect(canvasId).toBe("server-canvas");
+        expect(createAnnotation).toHaveBeenCalledTimes(1);
         expect(createAnnotation).toHaveBeenCalledWith(
-            expect.objectContaining({ canvasId: "server-canvas" })
-        );
-        expect(updateAnnotation).toHaveBeenCalledWith(
             expect.objectContaining({
                 canvasId: "server-canvas",
-                annotationId: "server-annotation",
-                text: "keep me"
+                text: "keep me",
+                manualWidth: 440,
+                manualHeight: 260
             })
         );
+        expect(updateAnnotation).not.toHaveBeenCalled();
     });
 
     it("creates annotations after Cards and before Connections", async () => {

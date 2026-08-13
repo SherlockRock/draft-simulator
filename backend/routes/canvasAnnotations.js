@@ -90,6 +90,8 @@ router.post("/:canvasId/annotations", protect, async (req, res) => {
       positionY: updates.positionY ?? 50,
       width: updates.width ?? DEFAULT_WIDTH,
       height: updates.height ?? DEFAULT_HEIGHT,
+      manualWidth: updates.manualWidth ?? null,
+      manualHeight: updates.manualHeight ?? null,
       text: updates.text ?? "",
       championIds: updates.championIds ?? [],
       color: updates.color ?? "slate",

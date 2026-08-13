@@ -7,7 +7,6 @@ import {
     updateCanvasDraft,
     createConnection,
     createAnnotation,
-    updateAnnotation,
     updateCanvasViewport,
     updateCanvasDraftPositions
 } from "./actions";
@@ -211,29 +210,15 @@ export const syncLocalCanvasToServer = async (): Promise<string | null> => {
             positionY: entry.positionY,
             width: entry.width,
             height: entry.height,
+            manualWidth: entry.manualWidth,
+            manualHeight: entry.manualHeight,
+            text: entry.text,
+            championIds: entry.championIds,
+            color: entry.color,
+            fontSize: entry.fontSize,
             group_id: entry.group_id
         });
         annotationIdMap.set(entry.sourceId, created.annotation.id);
-
-        const hasContent =
-            entry.text !== "" ||
-            entry.championIds.length > 0 ||
-            entry.color !== "slate" ||
-            entry.fontSize !== "md" ||
-            entry.manualWidth !== null ||
-            entry.manualHeight !== null;
-        if (hasContent) {
-            await updateAnnotation({
-                canvasId,
-                annotationId: created.annotation.id,
-                text: entry.text,
-                championIds: entry.championIds,
-                color: entry.color,
-                fontSize: entry.fontSize,
-                manualWidth: entry.manualWidth,
-                manualHeight: entry.manualHeight
-            });
-        }
     }
 
     // Step 4: Create connections with remapped IDs

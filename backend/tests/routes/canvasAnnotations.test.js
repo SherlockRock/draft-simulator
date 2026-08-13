@@ -123,6 +123,36 @@ describe("POST /:canvasId/annotations", () => {
     expect(broadcast?.[2]).toHaveProperty("annotations");
   });
 
+  it("persists the hand-set size floor on create", async () => {
+    const create = vi
+      .spyOn(CanvasAnnotation, "create")
+      .mockResolvedValue(annotationRow({ manualWidth: 440, manualHeight: 260 }));
+
+    const res = await request(buildApp())
+      .post("/api/canvas/c1/annotations")
+      .send({ manualWidth: 440, manualHeight: 260 });
+
+    expect(res.status).toBe(201);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ manualWidth: 440, manualHeight: 260 }),
+    );
+  });
+
+  it("defaults an omitted hand-set size floor to null, not zero", async () => {
+    const create = vi
+      .spyOn(CanvasAnnotation, "create")
+      .mockResolvedValue(annotationRow());
+
+    const res = await request(buildApp())
+      .post("/api/canvas/c1/annotations")
+      .send({});
+
+    expect(res.status).toBe(201);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ manualWidth: null, manualHeight: null }),
+    );
+  });
+
   // Containment, not authorization (design §3): the Gate said yes, and the
   // group_id still belongs to somebody else's canvas.
   it("404s a group_id that is not on this canvas", async () => {

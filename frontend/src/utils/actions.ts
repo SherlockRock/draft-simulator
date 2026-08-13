@@ -601,6 +601,12 @@ export const createAnnotation = async (data: {
     positionY: number;
     width: number;
     height: number;
+    manualWidth?: number | null;
+    manualHeight?: number | null;
+    text?: string;
+    championIds?: string[];
+    color?: AnnotationColor;
+    fontSize?: AnnotationFontSize;
     group_id?: string | null;
 }) => {
     const result = await apiPost(
@@ -610,6 +616,12 @@ export const createAnnotation = async (data: {
             positionY: data.positionY,
             width: data.width,
             height: data.height,
+            manualWidth: data.manualWidth,
+            manualHeight: data.manualHeight,
+            text: data.text,
+            championIds: data.championIds,
+            color: data.color,
+            fontSize: data.fontSize,
             ...(data.group_id !== undefined ? { group_id: data.group_id } : {})
         },
         z.object({ success: z.boolean(), annotation: CanvasAnnotationSchema })
