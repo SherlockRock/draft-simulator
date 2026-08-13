@@ -657,10 +657,7 @@ export const deleteAnnotation = async (data: {
     canvasId: string;
     annotationId: string;
 }) =>
-    apiDelete(
-        `/canvas/${data.canvasId}/annotations/${data.annotationId}`,
-        SuccessSchema
-    );
+    apiDelete(`/canvas/${data.canvasId}/annotations/${data.annotationId}`, SuccessSchema);
 
 export const copyAnnotation = async (data: {
     canvasId: string;

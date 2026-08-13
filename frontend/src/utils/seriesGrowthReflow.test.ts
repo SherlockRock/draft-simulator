@@ -153,23 +153,17 @@ const treeWith = (args: {
 describe("seriesGrowthReflow", () => {
     it("returns null when the series has no parent", () => {
         const tree = treeWith({ games: 5, orphanSeries: true });
-        expect(
-            seriesGrowthReflow({ tree, seriesId: "s", layout: LAYOUT })
-        ).toBeNull();
+        expect(seriesGrowthReflow({ tree, seriesId: "s", layout: LAYOUT })).toBeNull();
     });
 
     it("returns null when the parent is a free-layout container", () => {
         const tree = treeWith({ parentLayout: "free", games: 5 });
-        expect(
-            seriesGrowthReflow({ tree, seriesId: "s", layout: LAYOUT })
-        ).toBeNull();
+        expect(seriesGrowthReflow({ tree, seriesId: "s", layout: LAYOUT })).toBeNull();
     });
 
     it("returns null when the series is not in the tree", () => {
         const tree = treeWith({ games: 3 });
-        expect(
-            seriesGrowthReflow({ tree, seriesId: "gone", layout: LAYOUT })
-        ).toBeNull();
+        expect(seriesGrowthReflow({ tree, seriesId: "gone", layout: LAYOUT })).toBeNull();
     });
 
     it("displaces a Card the grown series now covers, and leaves the series put", () => {
@@ -195,9 +189,7 @@ describe("seriesGrowthReflow", () => {
             games: 3,
             cards: [{ id: "c", row: 2, col: 0 }]
         });
-        expect(
-            seriesGrowthReflow({ tree, seriesId: "s", layout: LAYOUT })
-        ).toBeNull();
+        expect(seriesGrowthReflow({ tree, seriesId: "s", layout: LAYOUT })).toBeNull();
     });
 
     // §6.0a LANDED. A series used to stamp a second row of pure chrome, so a

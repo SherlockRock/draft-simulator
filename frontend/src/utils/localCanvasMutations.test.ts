@@ -249,14 +249,15 @@ describe("local annotations", () => {
                 rowLabels: ["S", "A", "Situational"]
             }
         }).group;
-        const annotations = [0, 1, 2].map((index) =>
-            localCreateAnnotation({
-                positionX: 0,
-                positionY: 0,
-                width: 380,
-                height: 120,
-                group_id: group.id
-            }).annotation
+        const annotations = [0, 1, 2].map(
+            (_index) =>
+                localCreateAnnotation({
+                    positionX: 0,
+                    positionY: 0,
+                    width: 380,
+                    height: 120,
+                    group_id: group.id
+                }).annotation
         );
 
         localUpdateDraftPositions({
@@ -271,11 +272,7 @@ describe("local annotations", () => {
 
         const stored = getLocalCanvas();
         expect(stored?.drafts).toEqual([]);
-        expect(stored?.groups[0].metadata.rowLabels).toEqual([
-            "S",
-            "A",
-            "Situational"
-        ]);
+        expect(stored?.groups[0].metadata.rowLabels).toEqual(["S", "A", "Situational"]);
         expect(stored?.annotations.map((annotation) => annotation.positionY)).toEqual([
             96, 216, 336
         ]);
@@ -284,14 +281,15 @@ describe("local annotations", () => {
     it("applies all three batch annotation membership states by key presence", () => {
         const originalGroup = localCreateGroup({ positionX: 100, positionY: 200 }).group;
         const targetGroup = localCreateGroup({ positionX: 500, positionY: 200 }).group;
-        const annotations = [0, 1, 2].map((index) =>
-            localCreateAnnotation({
-                positionX: index * 10,
-                positionY: index * 20,
-                width: 380,
-                height: 120,
-                group_id: originalGroup.id
-            }).annotation
+        const annotations = [0, 1, 2].map(
+            (index) =>
+                localCreateAnnotation({
+                    positionX: index * 10,
+                    positionY: index * 20,
+                    width: 380,
+                    height: 120,
+                    group_id: originalGroup.id
+                }).annotation
         );
         const leaveMembershipAlone = {
             id: annotations[0].id,
@@ -315,9 +313,9 @@ describe("local annotations", () => {
             Object.prototype.hasOwnProperty.call(leaveMembershipAlone, "group_id")
         ).toBe(false);
         expect(Object.prototype.hasOwnProperty.call(ungroup, "group_id")).toBe(true);
-        expect(
-            Object.prototype.hasOwnProperty.call(moveToAnotherGroup, "group_id")
-        ).toBe(true);
+        expect(Object.prototype.hasOwnProperty.call(moveToAnotherGroup, "group_id")).toBe(
+            true
+        );
 
         localUpdateDraftPositions({
             positions: [],

@@ -148,10 +148,7 @@ describe("annotations in the tree", () => {
         const t = tree(
             [group("g1"), group("g-child", { parent: "g1" })],
             [card("d1", { group_id: "g1" })],
-            [
-                annotation("a1", { group_id: "g1" }),
-                annotation("a2", { group_id: null })
-            ]
+            [annotation("a1", { group_id: "g1" }), annotation("a2", { group_id: null })]
         );
         expect(childAnnotationsOf(t, "g1").map((a) => a.id)).toEqual(["a1"]);
         expect(childAnnotationsOf(t, null).map((a) => a.id)).toEqual(["a2"]);
@@ -350,11 +347,7 @@ describe("child queries", () => {
  */
 describe("rootGroupsOf", () => {
     it("returns the top-level groups and nothing below them", () => {
-        const t = tree([
-            group("root"),
-            group("a", { parent: "root" }),
-            group("solo")
-        ]);
+        const t = tree([group("root"), group("a", { parent: "root" }), group("solo")]);
         expect(rootGroupsOf(t).map((g) => g.id)).toEqual(["root", "solo"]);
     });
 

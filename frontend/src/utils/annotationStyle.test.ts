@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AnnotationColorSchema, AnnotationFontSizeSchema } from "./schemas";
-import {
-    ANNOTATION_COLOR_OPTIONS,
-    ANNOTATION_FONT_OPTIONS
-} from "./annotationStyle";
+import { ANNOTATION_COLOR_OPTIONS, ANNOTATION_FONT_OPTIONS } from "./annotationStyle";
 
 describe("annotation style options", () => {
     it("offers every annotation colour exactly once", () => {

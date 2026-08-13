@@ -88,10 +88,8 @@ export type { GridFootprint, GridItem };
  */
 export { DEFAULT_GROUP_WIDTH, DEFAULT_GROUP_HEIGHT };
 
-export const groupById = (
-    tree: CanvasTree,
-    id: string
-): CanvasGroup | undefined => tree.groups.find((g) => g.id === id);
+export const groupById = (tree: CanvasTree, id: string): CanvasGroup | undefined =>
+    tree.groups.find((g) => g.id === id);
 
 const cardById = (tree: CanvasTree, id: string): CanvasDraft | undefined =>
     tree.drafts.find((d) => d.draft_id === id);

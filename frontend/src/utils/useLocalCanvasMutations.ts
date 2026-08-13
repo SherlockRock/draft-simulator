@@ -595,8 +595,7 @@ export const localConvertGroupToSeries = (data: {
                     annotations: canvas.annotations
                 },
                 data.groupId
-            )
-                .length > 0
+            ).length > 0
         ) {
             throw new Error("Can't convert a group that contains groups");
         }
