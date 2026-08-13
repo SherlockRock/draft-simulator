@@ -1,9 +1,14 @@
 import { CanvasGroup } from "../utils/schemas";
+import {
+    containerContentsLabel,
+    type ContainerContents
+} from "../utils/containerContents";
 import { EscapeKeyHint, ReturnKeyHint } from "./Dialog";
 
 type DeleteGroupDialogProps = {
     group: CanvasGroup;
-    draftCount: number;
+    /** Direct child Cards, Groups and notes affected by the deletion choice. */
+    contents: ContainerContents;
     onKeepDrafts: () => void;
     onDeleteAll: () => void;
     onCancel: () => void;
@@ -19,9 +24,8 @@ export const DeleteGroupDialog = (props: DeleteGroupDialogProps) => {
                 This will remove "{props.group.name}" from this canvas.
             </p>
             <p class="mb-6 text-sm text-darius-text-secondary">
-                It contains {props.draftCount} draft
-                {props.draftCount !== 1 ? "s" : ""}. You can keep those drafts on the
-                canvas or remove them with the group.
+                It contains {containerContentsLabel(props.contents)}. You can keep those
+                on the canvas or remove them with the group.
             </p>
             <div class="flex justify-end gap-3">
                 <button
@@ -42,7 +46,7 @@ export const DeleteGroupDialog = (props: DeleteGroupDialogProps) => {
                     onClick={props.onDeleteAll}
                     class="rounded-md bg-darius-crimson px-4 py-2 text-darius-text-primary transition-[filter] hover:brightness-110"
                 >
-                    Remove Group and Drafts
+                    Remove Group and Contents
                 </button>
             </div>
         </div>

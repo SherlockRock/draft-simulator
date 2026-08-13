@@ -36,6 +36,12 @@ describe("containerContentsLabel", () => {
         );
     });
 
+    it("singularises Cards and notes", () => {
+        expect(containerContentsLabel({ drafts: 1, groups: 0, annotations: 1 })).toBe(
+            "1 draft · 1 note"
+        );
+    });
+
     it("names Cards, Groups and notes when all three are present", () => {
         expect(containerContentsLabel({ drafts: 2, groups: 1, annotations: 3 })).toBe(
             "2 drafts · 1 group · 3 notes"

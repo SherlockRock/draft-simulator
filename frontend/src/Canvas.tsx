@@ -6331,7 +6331,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 >
                                     <DeleteGroupDialog
                                         group={group()}
-                                        draftCount={getDraftsForGroup(group().id).length}
+                                        contents={{
+                                            drafts: getDraftsForGroup(group().id).length,
+                                            groups: childGroupsOf(
+                                                canvasTree(),
+                                                group().id
+                                            ).length,
+                                            annotations: childAnnotationsOf(
+                                                canvasTree(),
+                                                group().id
+                                            ).length
+                                        }}
                                         onKeepDrafts={() =>
                                             handleDeleteGroupWithChoice(true)
                                         }
