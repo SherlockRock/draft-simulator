@@ -1,5 +1,6 @@
 import {
     CanvasDraft,
+    CanvasAnnotation,
     Connection,
     ConnectionEndpoint,
     CanvasGroup,
@@ -11,6 +12,9 @@ import type { CardLayout } from "./canvasCardLayout";
 import type {
     CanvasGroupMetadata,
     CanvasGroupMetadataUpdate,
+    AnnotationColor,
+    AnnotationFontSize,
+    AnnotationPositionUpdate,
     DraftPositionUpdate,
     GameType,
     GroupPositionUpdate
@@ -192,6 +196,100 @@ export const localCopyDraft = (
         };
         canvas.drafts.push(newDraft);
         return { canvas, result: { success: true, canvasDraft: newDraft } };
+    });
+};
+
+export const localCreateAnnotation = (data: {
+    positionX: number;
+    positionY: number;
+    width: number;
+    height: number;
+    group_id: string | null;
+}) => {
+    return mutateLocal((canvas) => {
+        const annotation: CanvasAnnotation = {
+            id: crypto.randomUUID(),
+            canvas_id: "local",
+            group_id: data.group_id,
+            positionX: data.positionX,
+            positionY: data.positionY,
+            width: data.width,
+            height: data.height,
+            text: "",
+            championIds: [],
+            color: "slate",
+            fontSize: "md"
+        };
+        canvas.annotations.push(annotation);
+        return { canvas, result: { success: true, annotation } };
+    });
+};
+
+export const localUpdateAnnotation = (data: {
+    annotationId: string;
+    positionX?: number;
+    positionY?: number;
+    width?: number;
+    height?: number;
+    manualWidth?: number | null;
+    manualHeight?: number | null;
+    text?: string;
+    championIds?: string[];
+    color?: AnnotationColor;
+    fontSize?: AnnotationFontSize;
+    group_id?: string | null;
+}) => {
+    return mutateLocal((canvas) => {
+        const annotation = canvas.annotations.find(
+            (entry) => entry.id === data.annotationId
+        );
+        if (annotation) {
+            if (data.positionX !== undefined) annotation.positionX = data.positionX;
+            if (data.positionY !== undefined) annotation.positionY = data.positionY;
+            if (data.width !== undefined) annotation.width = data.width;
+            if (data.height !== undefined) annotation.height = data.height;
+            if (data.manualWidth !== undefined) annotation.manualWidth = data.manualWidth;
+            if (data.manualHeight !== undefined) {
+                annotation.manualHeight = data.manualHeight;
+            }
+            if (data.text !== undefined) annotation.text = data.text;
+            if (data.championIds !== undefined) {
+                annotation.championIds = [...data.championIds];
+            }
+            if (data.color !== undefined) annotation.color = data.color;
+            if (data.fontSize !== undefined) annotation.fontSize = data.fontSize;
+            if (data.group_id !== undefined) annotation.group_id = data.group_id;
+        }
+        return { canvas, result: { success: true } };
+    });
+};
+
+export const localDeleteAnnotation = (annotationId: string) => {
+    return mutateLocal((canvas) => {
+        canvas.annotations = canvas.annotations.filter(
+            (entry) => entry.id !== annotationId
+        );
+        return { canvas, result: { success: true } };
+    });
+};
+
+export const localCopyAnnotation = (
+    annotationId: string,
+    placement: { positionX: number; positionY: number; group_id: string | null }
+) => {
+    return mutateLocal((canvas) => {
+        const source = canvas.annotations.find((entry) => entry.id === annotationId);
+        if (!source) throw new Error("Annotation not found");
+        const copy: CanvasAnnotation = {
+            ...source,
+            id: crypto.randomUUID(),
+            championIds: [...source.championIds],
+            positionX: placement.positionX,
+            positionY: placement.positionY,
+            group_id: placement.group_id
+        };
+        canvas.annotations.push(copy);
+        return { canvas, result: { success: true, annotation: copy } };
     });
 };
 
@@ -382,7 +480,11 @@ export const localCreateGroup = (data: {
         const parentId = data.parentId ?? null;
         if (parentId !== null) {
             const rejection = parentageRejection(
-                { groups: canvas.groups, drafts: canvas.drafts, annotations: [] },
+                {
+                    groups: canvas.groups,
+                    drafts: canvas.drafts,
+                    annotations: canvas.annotations
+                },
                 id,
                 parentId
             );
@@ -487,7 +589,11 @@ export const localConvertGroupToSeries = (data: {
         // a local canvas has no server.
         if (
             childGroupsOf(
-                { groups: canvas.groups, drafts: canvas.drafts, annotations: [] },
+                {
+                    groups: canvas.groups,
+                    drafts: canvas.drafts,
+                    annotations: canvas.annotations
+                },
                 data.groupId
             )
                 .length > 0
@@ -577,6 +683,9 @@ export const localDeleteGroup = (groupId: string, keepDrafts?: boolean) => {
                 if (d.group_id === groupId) removedDraftIds.add(d.draft_id);
             }
             canvas.drafts = canvas.drafts.filter((d) => d.group_id !== groupId);
+            canvas.annotations = canvas.annotations.filter(
+                (annotation) => annotation.group_id !== groupId
+            );
         } else {
             // A grouped Card's stored position is relative to its container
             // (ADR-0006), so the same numbers read as world once group_id is
@@ -594,6 +703,12 @@ export const localDeleteGroup = (groupId: string, keepDrafts?: boolean) => {
                       }
                     : d
             );
+            for (const annotation of canvas.annotations) {
+                if (annotation.group_id !== groupId) continue;
+                annotation.positionX += originX;
+                annotation.positionY += originY;
+                annotation.group_id = null;
+            }
         }
         // Promote direct child Groups before the row goes (design §8.2.0): the
         // server does the same UPDATE, and without it a local delete strands a
@@ -633,6 +748,7 @@ export const localUpdateDraftGroup = (data: {
 
 export const localUpdateDraftPositions = (data: {
     positions: DraftPositionUpdate[];
+    annotations?: AnnotationPositionUpdate[];
     /**
      * Group rows to move and/or reparent, absolute world (ADR-0006).
      *
@@ -654,7 +770,11 @@ export const localUpdateDraftPositions = (data: {
         for (const entry of data.groups ?? []) {
             if (!Object.prototype.hasOwnProperty.call(entry, "parentId")) continue;
             const rejection = parentageRejection(
-                { groups: canvas.groups, drafts: canvas.drafts, annotations: [] },
+                {
+                    groups: canvas.groups,
+                    drafts: canvas.drafts,
+                    annotations: canvas.annotations
+                },
                 entry.id,
                 entry.parentId ?? null
             );
@@ -681,6 +801,13 @@ export const localUpdateDraftPositions = (data: {
                 draft.positionY = p.positionY;
                 if (p.group_id !== undefined) draft.group_id = p.group_id;
             }
+        }
+        for (const entry of data.annotations ?? []) {
+            const annotation = canvas.annotations.find((item) => item.id === entry.id);
+            if (!annotation) continue;
+            annotation.positionX = entry.positionX;
+            annotation.positionY = entry.positionY;
+            if (entry.group_id !== undefined) annotation.group_id = entry.group_id;
         }
         if (data.group) {
             const group = canvas.groups.find((g) => g.id === data.group?.id);

@@ -1,4 +1,10 @@
-import { CanvasDraft, Connection, CanvasGroup, Viewport } from "./schemas";
+import {
+    CanvasAnnotation,
+    CanvasDraft,
+    Connection,
+    CanvasGroup,
+    Viewport
+} from "./schemas";
 import { DEFAULT_CARD_LAYOUT } from "./canvasCardLayout";
 import type { CardLayout } from "./canvasCardLayout";
 
@@ -12,6 +18,7 @@ export type LocalCanvas = {
     drafts: CanvasDraft[];
     connections: Connection[];
     groups: CanvasGroup[];
+    annotations: CanvasAnnotation[];
     viewport: Viewport;
     createdAt: string;
 };
@@ -34,6 +41,7 @@ export const getLocalCanvas = (): LocalCanvas | null => {
             ),
             connections: parsed.connections ?? [],
             groups: parsed.groups ?? [],
+            annotations: parsed.annotations ?? [],
             viewport: parsed.viewport ?? { x: 0, y: 0, zoom: 1 },
             createdAt: parsed.createdAt ?? new Date().toISOString()
         };
@@ -64,6 +72,7 @@ export const createEmptyLocalCanvas = (
         drafts: [],
         connections: [],
         groups: [],
+        annotations: [],
         viewport: { x: 0, y: 0, zoom: 1 },
         createdAt: new Date().toISOString()
     };
@@ -76,7 +85,12 @@ export const hasLocalCanvas = (): boolean => {
 export const isLocalCanvasEmpty = (): boolean => {
     const canvas = getLocalCanvas();
     if (!canvas) return true;
-    const hasContent = canvas.drafts.length > 0 || canvas.groups.length > 0;
+    // Data-loss gate: sync returns null when this says empty, after which the
+    // caller clears localStorage. An annotation-only canvas is real content.
+    const hasContent =
+        canvas.drafts.length > 0 ||
+        canvas.groups.length > 0 ||
+        canvas.annotations.length > 0;
     const wasRenamed = canvas.name !== "My Canvas";
     return !hasContent && !wasRenamed;
 };

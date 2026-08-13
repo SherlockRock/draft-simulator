@@ -31,13 +31,17 @@ import {
     UpdateCanvasNameResponseSchema,
     ShareCanvasVerifySchema,
     CardLayoutSchema,
-    TeamSchema
+    TeamSchema,
+    CanvasAnnotationSchema
 } from "./schemas";
 import type {
     CanvasGroupMetadata,
     CanvasGroupMetadataUpdate,
     DraftPositionUpdate,
     GroupPositionUpdate,
+    AnnotationPositionUpdate,
+    AnnotationColor,
+    AnnotationFontSize,
     GameType,
     RosterInput
 } from "@draft-sim/shared-types";
@@ -254,6 +258,7 @@ export const updateCanvasDraft = async (data: {
 export const updateCanvasDraftPositions = async (data: {
     canvasId: string;
     positions: DraftPositionUpdate[];
+    annotations?: AnnotationPositionUpdate[];
     /**
      * Group rows to move and/or reparent, absolute world (ADR-0006). The server
      * fans a container's delta out over its descendants, so a subtree move
@@ -273,6 +278,7 @@ export const updateCanvasDraftPositions = async (data: {
         `/canvas/${data.canvasId}/draft-positions`,
         {
             positions: data.positions,
+            ...(data.annotations ? { annotations: data.annotations } : {}),
             ...(data.groups ? { groups: data.groups } : {}),
             group: data.group
         },
@@ -584,6 +590,82 @@ export const deleteCanvasGroup = async (data: {
         SuccessSchema
     );
 };
+
+// =============================================================================
+// Annotations
+// =============================================================================
+
+export const createAnnotation = async (data: {
+    canvasId: string;
+    positionX: number;
+    positionY: number;
+    width: number;
+    height: number;
+    group_id?: string | null;
+}) => {
+    const result = await apiPost(
+        `/canvas/${data.canvasId}/annotations`,
+        {
+            positionX: data.positionX,
+            positionY: data.positionY,
+            width: data.width,
+            height: data.height,
+            ...(data.group_id !== undefined ? { group_id: data.group_id } : {})
+        },
+        z.object({ success: z.boolean(), annotation: CanvasAnnotationSchema })
+    );
+    track("annotation_created");
+    return result;
+};
+
+export const updateAnnotation = async (data: {
+    canvasId: string;
+    annotationId: string;
+    positionX?: number;
+    positionY?: number;
+    width?: number;
+    height?: number;
+    manualWidth?: number | null;
+    manualHeight?: number | null;
+    text?: string;
+    championIds?: string[];
+    color?: AnnotationColor;
+    fontSize?: AnnotationFontSize;
+    group_id?: string | null;
+}) => {
+    const { canvasId, annotationId, ...fields } = data;
+    return apiPatch(
+        `/canvas/${canvasId}/annotations/${annotationId}`,
+        fields,
+        z.object({ success: z.boolean(), annotation: CanvasAnnotationSchema })
+    );
+};
+
+export const deleteAnnotation = async (data: {
+    canvasId: string;
+    annotationId: string;
+}) =>
+    apiDelete(
+        `/canvas/${data.canvasId}/annotations/${data.annotationId}`,
+        SuccessSchema
+    );
+
+export const copyAnnotation = async (data: {
+    canvasId: string;
+    annotationId: string;
+    positionX: number;
+    positionY: number;
+    group_id: string | null;
+}) =>
+    apiPost(
+        `/canvas/${data.canvasId}/annotations/${data.annotationId}/copy`,
+        {
+            positionX: data.positionX,
+            positionY: data.positionY,
+            group_id: data.group_id
+        },
+        z.object({ success: z.boolean(), annotation: CanvasAnnotationSchema })
+    );
 
 // =============================================================================
 // Versus Operations

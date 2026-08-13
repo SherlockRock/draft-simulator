@@ -30,7 +30,7 @@ Object.defineProperty(globalThis, "localStorage", {
     writable: true
 });
 
-const { getLocalCanvas, saveLocalCanvas, createEmptyLocalCanvas } =
+const { getLocalCanvas, saveLocalCanvas, createEmptyLocalCanvas, isLocalCanvasEmpty } =
     await import("./localCanvasStore");
 const {
     localNewDraft,
@@ -41,7 +41,11 @@ const {
     localDeleteDraft,
     localDeleteGroup,
     localUpdateGroup,
-    localUpdateDraftPositions
+    localUpdateDraftPositions,
+    localCreateAnnotation,
+    localUpdateAnnotation,
+    localDeleteAnnotation,
+    localCopyAnnotation
 } = await import("./useLocalCanvasMutations");
 const { MAX_GROUP_DEPTH } = await import("@draft-sim/shared-types/canvas-tree-vector");
 const {
@@ -123,6 +127,155 @@ describe("local Card wire identity", () => {
         localStorage.setItem("draft-sim:local-canvas", JSON.stringify(legacy));
 
         expect(getLocalCanvas()?.drafts[0].draft_id).toBe("legacy-1");
+    });
+});
+
+describe("local annotations", () => {
+    it("creates one with the defaults the server would apply", () => {
+        const result = localCreateAnnotation({
+            positionX: 10,
+            positionY: 20,
+            width: 380,
+            height: 120,
+            group_id: null
+        });
+
+        expect(result.annotation.text).toBe("");
+        expect(result.annotation.championIds).toEqual([]);
+        expect(result.annotation.color).toBe("slate");
+        expect(getLocalCanvas()?.annotations).toHaveLength(1);
+    });
+
+    it("updates only carried fields, including nullable manual size floors", () => {
+        const created = localCreateAnnotation({
+            positionX: 10,
+            positionY: 20,
+            width: 380,
+            height: 120,
+            group_id: null
+        }).annotation;
+
+        localUpdateAnnotation({
+            annotationId: created.id,
+            text: "old",
+            color: "teal",
+            manualWidth: 440,
+            manualHeight: 240
+        });
+        localUpdateAnnotation({
+            annotationId: created.id,
+            text: "",
+            manualWidth: null,
+            manualHeight: null
+        });
+
+        const stored = getLocalCanvas()?.annotations[0];
+        expect(stored?.text).toBe("");
+        expect(stored?.color).toBe("teal");
+        expect(stored?.manualWidth).toBeNull();
+        expect(stored?.manualHeight).toBeNull();
+    });
+
+    it("deletes one", () => {
+        const created = localCreateAnnotation({
+            positionX: 10,
+            positionY: 20,
+            width: 380,
+            height: 120,
+            group_id: null
+        }).annotation;
+
+        localDeleteAnnotation(created.id);
+
+        expect(getLocalCanvas()?.annotations).toEqual([]);
+    });
+
+    it("copies content and manual floors at the caller's placement", () => {
+        const source = localCreateAnnotation({
+            positionX: 10,
+            positionY: 20,
+            width: 380,
+            height: 120,
+            group_id: null
+        }).annotation;
+        localUpdateAnnotation({
+            annotationId: source.id,
+            text: "S tier",
+            championIds: ["Ahri"],
+            manualWidth: null,
+            manualHeight: 240
+        });
+
+        localCopyAnnotation(source.id, {
+            positionX: 500,
+            positionY: 300,
+            group_id: null
+        });
+
+        const copy = getLocalCanvas()?.annotations[1];
+        expect(copy?.text).toBe("S tier");
+        expect(copy?.championIds).toEqual(["Ahri"]);
+        expect(copy?.id).not.toBe(source.id);
+        expect(copy?.positionX).toBe(500);
+        expect(copy?.manualWidth).toBeNull();
+        expect(copy?.manualHeight).toBe(240);
+    });
+
+    it("reflows the D13 zero-Card champion-pool Group in one batch", () => {
+        const group = localCreateGroup({
+            positionX: 100,
+            positionY: 200,
+            metadata: {
+                layout: "grid",
+                rowLabels: ["S", "A", "Situational"]
+            }
+        }).group;
+        const annotations = [0, 1, 2].map((index) =>
+            localCreateAnnotation({
+                positionX: 0,
+                positionY: 0,
+                width: 380,
+                height: 120,
+                group_id: group.id
+            }).annotation
+        );
+
+        localUpdateDraftPositions({
+            positions: [],
+            annotations: annotations.map((annotation, index) => ({
+                id: annotation.id,
+                positionX: 64,
+                positionY: 96 + index * 120,
+                group_id: group.id
+            }))
+        });
+
+        const stored = getLocalCanvas();
+        expect(stored?.drafts).toEqual([]);
+        expect(stored?.groups[0].metadata.rowLabels).toEqual([
+            "S",
+            "A",
+            "Situational"
+        ]);
+        expect(stored?.annotations.map((annotation) => annotation.positionY)).toEqual([
+            96, 216, 336
+        ]);
+    });
+});
+
+describe("isLocalCanvasEmpty", () => {
+    it("an annotation-only canvas is not empty", () => {
+        localCreateAnnotation({
+            positionX: 10,
+            positionY: 20,
+            width: 380,
+            height: 120,
+            group_id: null
+        });
+
+        expect(getLocalCanvas()?.drafts).toEqual([]);
+        expect(getLocalCanvas()?.groups).toEqual([]);
+        expect(isLocalCanvasEmpty()).toBe(false);
     });
 });
 
@@ -418,6 +571,43 @@ describe("localDeleteGroup, against the server's route", () => {
         // container-relative pair, which would land the Card near the origin.
         expect(stored?.positionX).toBe(130);
         expect(stored?.positionY).toBe(240);
+    });
+
+    it("rebases a kept annotation to world coordinates when it is ungrouped", () => {
+        const group = groupAt(100, 200);
+        const annotation = localCreateAnnotation({
+            positionX: 30,
+            positionY: 40,
+            width: 380,
+            height: 120,
+            group_id: group.id
+        }).annotation;
+
+        localDeleteGroup(group.id, true);
+
+        const stored = getLocalCanvas()?.annotations.find(
+            (entry) => entry.id === annotation.id
+        );
+        expect(stored).toMatchObject({
+            group_id: null,
+            positionX: 130,
+            positionY: 240
+        });
+    });
+
+    it("destroys annotations with a zero-Card Group", () => {
+        const group = groupAt(100, 200);
+        localCreateAnnotation({
+            positionX: 30,
+            positionY: 40,
+            width: 380,
+            height: 120,
+            group_id: group.id
+        });
+
+        localDeleteGroup(group.id, false);
+
+        expect(getLocalCanvas()?.annotations).toEqual([]);
     });
 
     it("leaves a Card outside the deleted container untouched", () => {
