@@ -382,7 +382,7 @@ export const localCreateGroup = (data: {
         const parentId = data.parentId ?? null;
         if (parentId !== null) {
             const rejection = parentageRejection(
-                { groups: canvas.groups, drafts: canvas.drafts },
+                { groups: canvas.groups, drafts: canvas.drafts, annotations: [] },
                 id,
                 parentId
             );
@@ -486,7 +486,10 @@ export const localConvertGroupToSeries = (data: {
         // parentage writes (plan A13) — the server refuses this conversion, and
         // a local canvas has no server.
         if (
-            childGroupsOf({ groups: canvas.groups, drafts: canvas.drafts }, data.groupId)
+            childGroupsOf(
+                { groups: canvas.groups, drafts: canvas.drafts, annotations: [] },
+                data.groupId
+            )
                 .length > 0
         ) {
             throw new Error("Can't convert a group that contains groups");
@@ -651,7 +654,7 @@ export const localUpdateDraftPositions = (data: {
         for (const entry of data.groups ?? []) {
             if (!Object.prototype.hasOwnProperty.call(entry, "parentId")) continue;
             const rejection = parentageRejection(
-                { groups: canvas.groups, drafts: canvas.drafts },
+                { groups: canvas.groups, drafts: canvas.drafts, annotations: [] },
                 entry.id,
                 entry.parentId ?? null
             );

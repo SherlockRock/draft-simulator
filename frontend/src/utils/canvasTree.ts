@@ -1,4 +1,4 @@
-import type { CanvasDraft, CanvasGroup } from "./schemas";
+import type { CanvasAnnotation, CanvasDraft, CanvasGroup } from "./schemas";
 import type { CardLayout } from "./canvasCardLayout";
 import {
     GROUP_BORDER_WIDTH,
@@ -27,10 +27,11 @@ import { sortedSeriesDrafts } from "./canvasWorldPosition";
 /**
  * The canonical child / tree layer for the canvas.
  *
- * A Canvas holds two kinds of node with two different parent pointers — Groups
- * point at `parent_group_id`, Cards at `group_id` — and nothing else in the app
- * should have to know that. Every child query, ancestry walk and render order
- * lives here (recursive-groups design §7, decision 2).
+ * A Canvas holds three kinds of node with two different parent pointers — Groups
+ * point at `parent_group_id`, while Cards and annotations point at `group_id` —
+ * and nothing else in the app should have to know that. Every child query,
+ * ancestry walk and render order lives here (recursive-groups design §7,
+ * decision 2).
  *
  * Three properties are load-bearing and each has a test:
  *
@@ -43,9 +44,9 @@ import { sortedSeriesDrafts } from "./canvasWorldPosition";
  *    every walk here carries a visited set and terminates.
  *
  * Coordinates follow ADR-0006: a Group's positionX/Y are ABSOLUTE world at every
- * depth, a Card's are relative to its immediate container. That is why
- * `gridItemsOf` subtracts the parent's position for a child Group and not for a
- * child Card.
+ * depth, while Card and annotation coordinates are relative to their immediate
+ * container. That is why `gridItemsOf` subtracts the parent's position only for
+ * a child Group.
  *
  * **This is not the only implementation and cannot be** (design §7, rev 4). The
  * backend's validation (step 4) and the local-canvas mutation path each need
@@ -57,16 +58,19 @@ import { sortedSeriesDrafts } from "./canvasWorldPosition";
 export type CanvasTree = {
     groups: readonly CanvasGroup[];
     drafts: readonly CanvasDraft[];
+    /** Required so construction sites cannot silently omit this node kind. */
+    annotations: readonly CanvasAnnotation[];
 };
 
 /**
- * A node's id is its PLACEMENT identity: a Group's `id`, and for a Card its
- * `draft_id` — the id the store reconciles on. `Draft.id` holds the same value
- * today but means the Draft, not its placement on this canvas.
+ * A node's id is its PLACEMENT identity: a Group or annotation's `id`, and for
+ * a Card its `draft_id` — the id the store reconciles on. `Draft.id` holds the
+ * same value today but means the Draft, not its placement on this canvas.
  */
 export type TreeNode =
     | { kind: "group"; id: string; group: CanvasGroup }
-    | { kind: "card"; id: string; card: CanvasDraft };
+    | { kind: "card"; id: string; card: CanvasDraft }
+    | { kind: "annotation"; id: string; annotation: CanvasAnnotation };
 
 /**
  * Both shapes are declared in `gridLayout.ts` — the layout engine owns the item
@@ -92,6 +96,9 @@ export const groupById = (
 const cardById = (tree: CanvasTree, id: string): CanvasDraft | undefined =>
     tree.drafts.find((d) => d.draft_id === id);
 
+const annotationById = (tree: CanvasTree, id: string): CanvasAnnotation | undefined =>
+    tree.annotations.find((annotation) => annotation.id === id);
+
 const groupNode = (group: CanvasGroup): TreeNode => ({
     kind: "group",
     id: group.id,
@@ -102,6 +109,12 @@ const cardNode = (card: CanvasDraft): TreeNode => ({
     kind: "card",
     id: card.draft_id,
     card
+});
+
+const annotationNode = (annotation: CanvasAnnotation): TreeNode => ({
+    kind: "annotation",
+    id: annotation.id,
+    annotation
 });
 
 /**
@@ -120,6 +133,8 @@ export const parentIdOf = (
     if (group) return group.parent_group_id ?? null;
     const card = cardById(tree, nodeId);
     if (card) return card.group_id ?? null;
+    const annotation = annotationById(tree, nodeId);
+    if (annotation) return annotation.group_id ?? null;
     return undefined;
 };
 
@@ -141,14 +156,22 @@ export const childCardsOf = (tree: CanvasTree, groupId: string | null): CanvasDr
     return group?.type === "series" ? sortedSeriesDrafts(cards) : cards;
 };
 
-/** Groups first, then Cards; each in the order the two queries above define. */
+/** Direct annotation members of `groupId` (`null` = loose on the canvas). */
+export const childAnnotationsOf = (
+    tree: CanvasTree,
+    groupId: string | null
+): CanvasAnnotation[] =>
+    tree.annotations.filter((annotation) => (annotation.group_id ?? null) === groupId);
+
+/** Groups, then Cards, then annotations; each in its own query's order. */
 export const childrenOf = (tree: CanvasTree, parentId: string | null): TreeNode[] => [
     ...childGroupsOf(tree, parentId).map(groupNode),
-    ...childCardsOf(tree, parentId).map(cardNode)
+    ...childCardsOf(tree, parentId).map(cardNode),
+    ...childAnnotationsOf(tree, parentId).map(annotationNode)
 ];
 
 /**
- * Containers enclosing `nodeId`, nearest first. Works for a Card id too.
+ * Containers enclosing `nodeId`, nearest first. Works for leaf ids too.
  *
  * Stops at a dangling parent (the orphan case) and at a repeat (the cycle
  * case), so the result is always finite and never contains a duplicate.
@@ -341,6 +364,9 @@ export const nodeSize = (
     if (node.kind === "card") {
         return { width: cardWidth(layout), height: cardHeight(layout) };
     }
+    if (node.kind === "annotation") {
+        return { width: node.annotation.width, height: node.annotation.height };
+    }
     if (node.group.type === "series") {
         return getSeriesGroupDimensions(childCardsOf(tree, node.group.id).length, layout);
     }
@@ -379,7 +405,9 @@ export const insetOf = (
     // deliberately: it mirrors `nodeSize` and `footprintOf`, every call site
     // already has the triple, and a card-layout-dependent inset is one CSS
     // change away. A test pins that no inset varies by layout right now.
-    if (node.kind === "card") return GROUP_BORDER_WIDTH;
+    if (node.kind === "card" || node.kind === "annotation") {
+        return GROUP_BORDER_WIDTH;
+    }
     if (node.group.type === "series") {
         return (
             GROUP_BORDER_WIDTH +
@@ -448,10 +476,10 @@ export const maxChildSpanCols = (
 /**
  * Children of a grid Group as footprint stamps for the layout engine.
  *
- * `position` is CONTAINER-relative for both kinds, which costs a subtraction
- * for Groups and nothing for Cards: under ADR-0006 a Group already stores
- * absolute world coordinates at every depth, a Card stores its offset inside
- * its container. Returns nothing for a Group that is not in the tree.
+ * `position` is CONTAINER-relative for every kind, which costs a subtraction
+ * for Groups and nothing for Cards or annotations: under ADR-0006 a Group
+ * stores absolute world coordinates at every depth, while leaves store their
+ * offset inside the container. Returns nothing for a Group not in the tree.
  *
  * **The row index is a COLLECTIVE property and cannot be computed per item**
  * (§6.0a). A member's `y` alone no longer says which row it is in — rule 3
@@ -479,12 +507,14 @@ export const gridItemsOf = (
     if (!parent) return [];
     const items = childrenOf(tree, groupId).map((node) => {
         const position =
-            node.kind === "card"
-                ? { x: node.card.positionX, y: node.card.positionY }
-                : {
+            node.kind === "group"
+                ? {
                       x: node.group.positionX - parent.positionX,
                       y: node.group.positionY - parent.positionY
-                  };
+                  }
+                : node.kind === "card"
+                  ? { x: node.card.positionX, y: node.card.positionY }
+                  : { x: node.annotation.positionX, y: node.annotation.positionY };
         return {
             id: node.id,
             kind: node.kind,

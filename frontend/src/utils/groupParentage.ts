@@ -58,6 +58,7 @@ export const parentageRejection = (
     const exists = tree.groups.some((g) => g.id === nodeId);
     const next: CanvasTree = {
         drafts: tree.drafts,
+        annotations: tree.annotations,
         groups: exists
             ? tree.groups.map((g) =>
                   g.id === nodeId ? { ...g, parent_group_id: parentId } : g

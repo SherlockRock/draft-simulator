@@ -58,7 +58,7 @@ export const CARD_FOOTPRINT: GridFootprint = { cols: 1 };
  */
 export type GridItem = {
     id: string;
-    kind: "card" | "group";
+    kind: "card" | "group" | "annotation";
     footprint: GridFootprint;
     position: { x: number; y: number };
     cell: GridCell;

@@ -17,8 +17,8 @@ const {
 
 // The vector's node shape is runtime-neutral on purpose; each implementation
 // adapts it to its own rows. Here that means `parent_group_id` for Groups and
-// `group_id` for Cards — the two different parent pointers decision 2 leaves in
-// place, which is exactly what the shared vector exists to keep honest.
+// `group_id` for leaf nodes — the two different parent pointers decision 2
+// leaves in place, which is exactly what the shared vector exists to keep honest.
 const fromVector = (nodes) => ({
   groups: nodes
     .filter((n) => n.kind === "group")
@@ -26,13 +26,18 @@ const fromVector = (nodes) => ({
   drafts: nodes
     .filter((n) => n.kind === "card")
     .map((n) => ({ draft_id: n.id, group_id: n.parentId })),
+  annotations: nodes
+    .filter((n) => n.kind === "annotation")
+    .map((n) => ({ id: n.id, group_id: n.parentId })),
 });
 
 describe.each(CANVAS_TREE_VECTOR)("shared vector: $name", (vector) => {
   const t = fromVector(vector.nodes);
 
   it(vector.note, () => {
-    expect(t.groups.length + t.drafts.length).toBe(vector.nodes.length);
+    expect(t.groups.length + t.drafts.length + t.annotations.length).toBe(
+      vector.nodes.length,
+    );
   });
 
   it("agrees on depth", () => {

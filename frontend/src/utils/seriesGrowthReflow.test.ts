@@ -147,7 +147,7 @@ const treeWith = (args: {
         )
     ];
 
-    return { groups, drafts };
+    return { groups, drafts, annotations: [] };
 };
 
 describe("seriesGrowthReflow", () => {

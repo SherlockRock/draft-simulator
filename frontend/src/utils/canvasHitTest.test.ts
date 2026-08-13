@@ -27,7 +27,11 @@ const group = (
     metadata: {}
 });
 
-const treeOf = (groups: CanvasGroup[]): CanvasTree => ({ groups, drafts: [] });
+const treeOf = (groups: CanvasGroup[]): CanvasTree => ({
+    groups,
+    drafts: [],
+    annotations: []
+});
 
 describe("isPointInGroup", () => {
     it("uses the stored rect, edges inclusive", () => {

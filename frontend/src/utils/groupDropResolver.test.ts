@@ -28,7 +28,11 @@ const group = (
     metadata: {}
 });
 
-const treeOf = (groups: CanvasGroup[]): CanvasTree => ({ groups, drafts: [] });
+const treeOf = (groups: CanvasGroup[]): CanvasTree => ({
+    groups,
+    drafts: [],
+    annotations: []
+});
 
 describe("resolveGroupDrop", () => {
     it("nests into the container under the dragged Group's top-left corner", () => {

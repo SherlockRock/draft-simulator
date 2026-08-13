@@ -17,7 +17,11 @@ const group = (
     metadata: {}
 });
 
-const treeOf = (groups: CanvasGroup[]): CanvasTree => ({ groups, drafts: [] });
+const treeOf = (groups: CanvasGroup[]): CanvasTree => ({
+    groups,
+    drafts: [],
+    annotations: []
+});
 
 describe("subtreeMoveWrites", () => {
     it("moves the group alone when it has no children", () => {

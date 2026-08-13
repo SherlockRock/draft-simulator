@@ -14,7 +14,11 @@ const grp = (id: string, parent: string | null): CanvasGroup => ({
     metadata: {}
 });
 
-const treeOf = (groups: CanvasGroup[]): CanvasTree => ({ groups, drafts: [] });
+const treeOf = (groups: CanvasGroup[]): CanvasTree => ({
+    groups,
+    drafts: [],
+    annotations: []
+});
 
 describe("resizeChainOf", () => {
     it("is just the group itself at top level", () => {

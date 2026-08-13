@@ -42,6 +42,9 @@ const groupById = (tree, id) => tree.groups.find((g) => g.id === id);
 const cardById = (tree, id) =>
   (tree.drafts ?? []).find((d) => d.draft_id === id);
 
+const annotationById = (tree, id) =>
+  (tree.annotations ?? []).find((annotation) => annotation.id === id);
+
 /**
  * The container a node sits in: `null` at top level, `undefined` when the node
  * is not in the tree at all. A dangling `parent_group_id` comes back as the
@@ -52,6 +55,8 @@ function parentIdOf(tree, nodeId) {
   if (group) return group.parent_group_id ?? null;
   const card = cardById(tree, nodeId);
   if (card) return card.group_id ?? null;
+  const annotation = annotationById(tree, nodeId);
+  if (annotation) return annotation.group_id ?? null;
   return undefined;
 }
 

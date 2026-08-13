@@ -94,7 +94,7 @@ describe("resolveCopyPlacement", () => {
         const placement = resolveCopyPlacement({
             draft: drafts[0],
             group,
-            tree: { groups: [group], drafts },
+            tree: { groups: [group], drafts, annotations: [] },
             layout
         });
 
@@ -142,7 +142,7 @@ describe("resolveCopyPlacement", () => {
         const placement = resolveCopyPlacement({
             draft: drafts[0],
             group,
-            tree: { groups: [group], drafts },
+            tree: { groups: [group], drafts, annotations: [] },
             layout
         });
 
@@ -165,7 +165,7 @@ describe("resolveCopyPlacement", () => {
         const placement = resolveCopyPlacement({
             draft: drafts[0],
             group,
-            tree: { groups: [group], drafts },
+            tree: { groups: [group], drafts, annotations: [] },
             layout
         });
 
@@ -191,7 +191,7 @@ describe("resolveCopyPlacement", () => {
             resolveCopyPlacement({
                 draft,
                 group,
-                tree: { groups: [group], drafts: [draft] },
+                tree: { groups: [group], drafts: [draft], annotations: [] },
                 layout
             })
         ).toEqual({
@@ -215,7 +215,7 @@ describe("resolveCopyPlacement", () => {
         const placement = resolveCopyPlacement({
             draft,
             group,
-            tree: { groups: [group], drafts: [draft] },
+            tree: { groups: [group], drafts: [draft], annotations: [] },
             layout
         });
 
@@ -262,7 +262,11 @@ describe("resolveCopyPlacement", () => {
         const placement = resolveCopyPlacement({
             draft,
             group,
-            tree: { groups: [group, wideChild], drafts: [draft] },
+            tree: {
+                groups: [group, wideChild],
+                drafts: [draft],
+                annotations: []
+            },
             layout
         });
 
@@ -287,7 +291,7 @@ describe("resolveCopyPlacement", () => {
         const placement = resolveCopyPlacement({
             draft,
             group,
-            tree: { groups: [group], drafts: [draft] },
+            tree: { groups: [group], drafts: [draft], annotations: [] },
             layout
         });
 
@@ -314,7 +318,7 @@ describe("resolveCopyPlacement", () => {
             resolveCopyPlacement({
                 draft,
                 group,
-                tree: { groups: [group], drafts: groupDrafts },
+                tree: { groups: [group], drafts: groupDrafts, annotations: [] },
                 layout
             })
         ).toEqual({
@@ -331,7 +335,7 @@ describe("resolveCopyPlacement", () => {
             resolveCopyPlacement({
                 draft,
                 group: undefined,
-                tree: { groups: [], drafts: [draft] },
+                tree: { groups: [], drafts: [draft], annotations: [] },
                 layout
             })
         ).toEqual({

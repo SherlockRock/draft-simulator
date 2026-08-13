@@ -18,7 +18,11 @@ const group = (
     metadata: {}
 });
 
-const treeOf = (groups: CanvasGroup[]): CanvasTree => ({ groups, drafts: [] });
+const treeOf = (groups: CanvasGroup[]): CanvasTree => ({
+    groups,
+    drafts: [],
+    annotations: []
+});
 
 const card = (id: string, x: number, y: number): GridPlacement => ({
     id,

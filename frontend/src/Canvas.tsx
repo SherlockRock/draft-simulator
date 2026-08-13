@@ -535,7 +535,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     // The two stores as one tree. Read inside the tracking scope of whoever
     // calls it, so the child queries below stay reactive.
-    const canvasTree = (): CanvasTree => ({ groups: canvasGroups, drafts: canvasDrafts });
+    const canvasTree = (): CanvasTree => ({
+        groups: canvasGroups,
+        drafts: canvasDrafts,
+        annotations: []
+    });
 
     const getDraftsForGroup = (groupId: string) => childCardsOf(canvasTree(), groupId);
 

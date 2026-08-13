@@ -5,6 +5,7 @@ import {
 } from "@draft-sim/shared-types/canvas-tree-vector";
 import {
     ancestorsOf,
+    childAnnotationsOf,
     childCardsOf,
     childGroupsOf,
     childrenOf,
@@ -40,7 +41,7 @@ import {
     cardWidth,
     getSeriesGroupDimensions
 } from "./helpers";
-import type { CanvasDraft, CanvasGroup } from "./schemas";
+import type { CanvasAnnotation, CanvasDraft, CanvasGroup } from "./schemas";
 import type { CardLayout } from "./canvasCardLayout";
 
 const LAYOUT: CardLayout = "wide";
@@ -76,6 +77,24 @@ const card = (
     }
 });
 
+const annotation = (
+    id: string,
+    over: Partial<CanvasAnnotation> = {}
+): CanvasAnnotation => ({
+    id,
+    canvas_id: "canvas-1",
+    group_id: null,
+    positionX: 0,
+    positionY: 0,
+    width: 380,
+    height: 120,
+    text: "",
+    championIds: [],
+    color: "slate",
+    fontSize: "md",
+    ...over
+});
+
 const group = (
     id: string,
     opts: {
@@ -100,9 +119,14 @@ const group = (
     metadata: opts.metadata ?? {}
 });
 
-const tree = (groups: CanvasGroup[], drafts: CanvasDraft[] = []): CanvasTree => ({
+const tree = (
+    groups: CanvasGroup[],
+    drafts: CanvasDraft[] = [],
+    annotations: CanvasAnnotation[] = []
+): CanvasTree => ({
     groups,
-    drafts
+    drafts,
+    annotations
 });
 
 /** The vector is runtime-agnostic data; give it this runtime's shapes. */
@@ -113,8 +137,70 @@ const fromVector = (nodes: CanvasTreeVectorNode[]): CanvasTree =>
             .map((n) => group(n.id, { parent: n.parentId })),
         nodes
             .filter((n) => n.kind === "card")
-            .map((n) => card(n.id, { group_id: n.parentId }))
+            .map((n) => card(n.id, { group_id: n.parentId })),
+        nodes
+            .filter((n) => n.kind === "annotation")
+            .map((n) => annotation(n.id, { group_id: n.parentId }))
     );
+
+describe("annotations in the tree", () => {
+    it("returns direct members and emits them after Groups and Cards", () => {
+        const t = tree(
+            [group("g1"), group("g-child", { parent: "g1" })],
+            [card("d1", { group_id: "g1" })],
+            [
+                annotation("a1", { group_id: "g1" }),
+                annotation("a2", { group_id: null })
+            ]
+        );
+        expect(childAnnotationsOf(t, "g1").map((a) => a.id)).toEqual(["a1"]);
+        expect(childAnnotationsOf(t, null).map((a) => a.id)).toEqual(["a2"]);
+        expect(childrenOf(t, "g1").map((n) => n.kind)).toEqual([
+            "group",
+            "card",
+            "annotation"
+        ]);
+    });
+
+    it("supports annotation ancestry and stored-size layout", () => {
+        const note = annotation("a1", {
+            group_id: "g1",
+            width: 512,
+            height: 90
+        });
+        const t = tree([group("g1")], [], [note]);
+        const node: TreeNode = { kind: "annotation", id: note.id, annotation: note };
+        expect(parentIdOf(t, note.id)).toBe("g1");
+        expect(nodeSize(t, node, "wide")).toEqual({ width: 512, height: 90 });
+        expect(insetOf(t, node, "wide")).toBe(GROUP_BORDER_WIDTH);
+    });
+
+    it("derives annotation footprints and includes them in the widest span", () => {
+        const note = annotation("a1", { group_id: "g1", width: 700 });
+        const t = tree([group("g1")], [], [note]);
+        const node: TreeNode = { kind: "annotation", id: note.id, annotation: note };
+        expect(footprintOf(t, node, "compact").cols).toBe(2);
+        expect(footprintOf(t, node, "wide").cols).toBe(1);
+        expect(maxChildSpanCols(t, "g1", "compact")).toBe(2);
+    });
+
+    it("reports annotation grid items with container-relative positions", () => {
+        const t = tree(
+            [group("g1", { x: 1000, y: 500, metadata: { layout: "grid" } })],
+            [],
+            [
+                annotation("a1", {
+                    group_id: "g1",
+                    positionX: 16,
+                    positionY: 24
+                })
+            ]
+        );
+        const items = gridItemsOf(t, "g1", "wide", 3);
+        expect(items.map((item) => item.kind)).toEqual(["annotation"]);
+        expect(items[0].position).toEqual({ x: 16, y: 24 });
+    });
+});
 
 describe("child queries", () => {
     it("splits a container's children by their two different parent pointers", () => {
@@ -410,7 +496,9 @@ describe.each(CANVAS_TREE_VECTOR)("shared vector: $name", (vector) => {
     const t = fromVector(vector.nodes);
 
     it(vector.note, () => {
-        expect(t.groups.length + t.drafts.length).toBe(vector.nodes.length);
+        expect(t.groups.length + t.drafts.length + t.annotations.length).toBe(
+            vector.nodes.length
+        );
     });
 
     it("agrees on depth", () => {

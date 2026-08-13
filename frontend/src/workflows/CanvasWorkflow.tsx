@@ -108,6 +108,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                     icon: local.icon ?? null,
                     cardLayout: local.cardLayout ?? "vertical",
                     drafts: local.drafts,
+                    annotations: [],
                     connections: local.connections,
                     groups: local.groups,
                     lastViewport: local.viewport,
@@ -457,13 +458,14 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         const drafts = isLocalMode()
             ? (localCanvas?.drafts ?? [])
             : (canvas()?.drafts ?? []);
+        const annotations = isLocalMode() ? [] : (canvas()?.annotations ?? []);
         const sourceGroup = draft.group_id
             ? groups.find((group) => group.id === draft.group_id)
             : undefined;
         const placement = resolveCopyPlacement({
             draft,
             group: sourceGroup,
-            tree: { groups, drafts },
+            tree: { groups, drafts, annotations },
             layout: cardLayout()
         });
 
@@ -653,6 +655,9 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                             () =>
                                                 (canvas()?.drafts ?? []) as CanvasDraft[]
                                         );
+                                        const annotations = createMemo(
+                                            () => canvas()?.annotations ?? []
+                                        );
                                         const activeCanvasDraft = createMemo(() =>
                                             drafts().find(
                                                 (canvasDraft) =>
@@ -782,7 +787,8 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
                                                         <CanvasPanelTree
                                                             tree={() => ({
                                                                 groups: groups(),
-                                                                drafts: drafts()
+                                                                drafts: drafts(),
+                                                                annotations: annotations()
                                                             })}
                                                             isCollapsed={isGroupCollapsed}
                                                             onToggleCollapsed={

@@ -18,7 +18,11 @@ const group = (
     metadata: {}
 });
 
-const treeOf = (groups: CanvasGroup[]): CanvasTree => ({ groups, drafts: [] });
+const treeOf = (groups: CanvasGroup[]): CanvasTree => ({
+    groups,
+    drafts: [],
+    annotations: []
+});
 
 /** `d0` at top level down to `d{depth}`. */
 const chain = (depth: number) =>
