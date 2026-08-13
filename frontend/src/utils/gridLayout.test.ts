@@ -29,6 +29,7 @@ import {
     resolveContainerDims,
     resolveGridDims,
     contentBoundsOf,
+    annotationContentRectsOf,
     footprintPixelWidth,
     MIN_GROUP_WIDTH,
     MIN_GROUP_HEIGHT,
@@ -1771,6 +1772,28 @@ describe("container sizing", () => {
             });
         });
 
+        it("a note past the frame widens the bounds like any other rect", () => {
+            // The memo feeds annotation rects in with their STORED size; this is
+            // the property that makes a container refuse to shrink past a note.
+            expect(
+                contentBoundsOf([
+                    { x: 0, y: 0, width: 380, height: 600 },
+                    { x: 400, y: 0, width: 380, height: 120 }
+                ]).width
+            ).toBe(796);
+        });
+
+        // D13: the champion-pool Group's contents are annotations and nothing else.
+        it("derives real bounds from annotation rects alone", () => {
+            const bounds = contentBoundsOf([
+                { x: 0, y: 0, width: 380, height: 120 },
+                { x: 0, y: 140, width: 380, height: 120 },
+                { x: 0, y: 280, width: 380, height: 120 }
+            ]);
+            expect(bounds.width).toBe(396);
+            expect(bounds.height).toBe(416);
+        });
+
         it("reports how far the left edge must move OUT for a child past it", () => {
             const bounds = contentBoundsOf([{ x: -34, y: 0, width: 10, height: 10 }]);
             expect(bounds.expandLeft).toBe(GRID_PADDING + 34);
@@ -1790,6 +1813,38 @@ describe("container sizing", () => {
                 contentBoundsOf([{ x: -400, y: 0, width: 10, height: 10 }])
                     .maxLeftEdgeDelta
             ).toBe(0);
+        });
+
+        describe("annotationContentRectsOf", () => {
+            it("collects each grouped annotation using its stored rect", () => {
+                const rects = annotationContentRectsOf([
+                    {
+                        group_id: "pool",
+                        positionX: 400,
+                        positionY: 140,
+                        width: 380,
+                        height: 120
+                    }
+                ]);
+
+                expect(rects.get("pool")).toEqual([
+                    { x: 400, y: 140, width: 380, height: 120 }
+                ]);
+            });
+
+            it("does not assign loose annotations to container contents", () => {
+                expect(
+                    annotationContentRectsOf([
+                        {
+                            group_id: null,
+                            positionX: 400,
+                            positionY: 140,
+                            width: 380,
+                            height: 120
+                        }
+                    ]).size
+                ).toBe(0);
+            });
         });
     });
 });

@@ -764,8 +764,8 @@ export const resolveGridDims = (
  * cross the leftmost child.
  *
  * `rects` are CONTAINER-relative. Cards are all this sees in 5a-0; child Group
- * rects join them in 5a-1 (design §6.2 / plan A10), which is why it takes rects
- * rather than `CanvasDraft`s.
+ * rects join them in 5a-1 and annotations later (design §6.2 / plan A10), which
+ * is why it takes rects rather than canvas row types.
  */
 export const contentBoundsOf = (
     rects: { x: number; y: number; width: number; height: number }[]
@@ -796,6 +796,40 @@ export const contentBoundsOf = (
         maxLeftEdgeDelta: Math.max(0, minLeft - GRID_PADDING),
         expandLeft: Math.max(0, GRID_PADDING - minLeft)
     };
+};
+
+export type AnnotationContentRect = {
+    group_id?: string | null;
+    positionX: number;
+    positionY: number;
+    width: number;
+    height: number;
+};
+
+/**
+ * Container-relative annotation rects, grouped for free-layout content bounds.
+ * Loose annotations have no container and therefore contribute to no bounds.
+ */
+export const annotationContentRectsOf = (
+    annotations: readonly AnnotationContentRect[]
+): Map<string, { x: number; y: number; width: number; height: number }[]> => {
+    const rects = new Map<
+        string,
+        { x: number; y: number; width: number; height: number }[]
+    >();
+    for (const annotation of annotations) {
+        if (!annotation.group_id) continue;
+        const rect = {
+            x: annotation.positionX,
+            y: annotation.positionY,
+            width: annotation.width,
+            height: annotation.height
+        };
+        const list = rects.get(annotation.group_id);
+        if (list) list.push(rect);
+        else rects.set(annotation.group_id, [rect]);
+    }
+    return rects;
 };
 
 export type GridSettingsInput = {

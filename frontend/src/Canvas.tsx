@@ -178,6 +178,7 @@ import {
     resolveGridDims,
     resolveContainerDims,
     contentBoundsOf,
+    annotationContentRectsOf,
     DEFAULT_GROUP_WIDTH,
     DEFAULT_GROUP_HEIGHT,
     GROUP_BORDER_WIDTH,
@@ -4017,7 +4018,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
      *
      * The obvious shape — a `createMemo` per Group inside the `<For>` — does not
      * help: each one reads the whole `canvasDrafts` array, so every Group's memo
-     * invalidates on every Card write. This is O(cards + groups) per
+     * invalidates on every Card write. This is O(cards + annotations + groups) per
      * invalidation instead of O(groups × cards) per render.
      *
      * Unlike the paint-order memo, this one reads POSITIONS and therefore does
@@ -4028,10 +4029,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const layout = props.cardLayout();
         const cw = cardWidth(layout);
         const ch = cardHeight(layout);
-        const rects = new Map<
-            string,
-            { x: number; y: number; width: number; height: number }[]
-        >();
+        // Annotations are container CONTENTS and must resist the resize the
+        // same way Cards do. Without this a note in a free Group could be
+        // shrunk out of view with nothing pushing back — and on a
+        // champion-pool Group (zero Cards, all notes) the container's content
+        // floor would be zero, so the frame could collapse over every note in
+        // it (design §3, D13).
+        //
+        // STORED width/height, per D5: the layout engine never derives them.
+        const rects = annotationContentRectsOf(annotations);
         const add = (
             groupId: string,
             rect: { x: number; y: number; width: number; height: number }
