@@ -53,7 +53,7 @@ export const autoFitHeight = (args: { measured: number; floor: number }): number
  * Rows keep auto-sizing to their tallest member uniformly; annotations are not
  * excluded from the max. A special case for one member kind was proposed and
  * withdrawn, and the concern it addressed is handled by arithmetic instead: a
- * Card is 432–960px tall, so in any mixed row the Cards dominate.
+ * Card is 384–960px tall, so in any mixed row the Cards dominate.
  */
 export const snappedAnnotationSize = (args: {
     storedWidth: number;
