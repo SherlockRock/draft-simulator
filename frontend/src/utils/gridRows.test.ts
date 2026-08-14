@@ -58,14 +58,16 @@ const cardAt = (id: string, y: number): RowMember => ({
     y,
     inset: CARD_INSET,
     height: ch,
-    sizesRow: true
+    sizesRow: true,
+    rowSpan: 1
 });
 const seriesAt = (id: string, y: number): RowMember => ({
     id,
     y,
     inset: SERIES_INSET,
     height: SERIES_H,
-    sizesRow: true
+    sizesRow: true,
+    rowSpan: 1
 });
 
 describe("rowsOf", () => {
@@ -114,7 +116,7 @@ describe("rowsOf", () => {
 
     it("sizes an occupied row from its members", () => {
         const rows = rowsOf(
-            [{ id: "tiny", y: top, inset: 2, height: 10, sizesRow: true }],
+            [{ id: "tiny", y: top, inset: 2, height: 10, sizesRow: true, rowSpan: 1 }],
             layout
         );
         expect(rows[0].height).toBe(10);
@@ -130,7 +132,8 @@ describe("rowsOf", () => {
             y: top,
             inset: CARD_INSET,
             height: 120,
-            sizesRow: true
+            sizesRow: true,
+            rowSpan: 1
         };
         expect(rowsOf([cardAt("card", top), annotation], layout)[0].height).toBe(ch);
     });
@@ -141,13 +144,21 @@ describe("rowsOf", () => {
             y: top,
             inset: CARD_INSET,
             height: 120,
-            sizesRow: true
+            sizesRow: true,
+            rowSpan: 1
         };
         expect(rowsOf([annotation], layout)[0].height).toBe(120);
     });
 
     it("sizes a row containing only a short nested Group to that Group", () => {
-        const group = { id: "group", y: top, inset: 66, height: 100, sizesRow: true };
+        const group = {
+            id: "group",
+            y: top,
+            inset: 66,
+            height: 100,
+            sizesRow: true,
+            rowSpan: 1
+        };
         expect(rowsOf([group], layout)[0].height).toBe(100);
     });
 
@@ -160,7 +171,8 @@ describe("rowsOf", () => {
                     index,
                     inset: CARD_INSET,
                     height: 120,
-                    sizesRow: true
+                    sizesRow: true,
+                    rowSpan: 1
                 })),
                 cardLayout
             );
@@ -173,8 +185,15 @@ describe("rowsOf", () => {
 
     it("round-trips member-derived rows from indexed materialization through pixels", () => {
         const indexed = [
-            { id: "note-a", index: 0, inset: CARD_INSET, height: 120, sizesRow: true },
-            { id: "note-b", index: 1, inset: 66, height: 100, sizesRow: true }
+            {
+                id: "note-a",
+                index: 0,
+                inset: CARD_INSET,
+                height: 120,
+                sizesRow: true,
+                rowSpan: 1
+            },
+            { id: "note-b", index: 1, inset: 66, height: 100, sizesRow: true, rowSpan: 1 }
         ];
         const materialized = rowsOfIndexed(indexed, layout);
         const members = indexed.map((member) => {
@@ -187,7 +206,8 @@ describe("rowsOf", () => {
                 y: memberY(row, member.inset),
                 inset: member.inset,
                 height: member.height,
-                sizesRow: true
+                sizesRow: true,
+                rowSpan: 1
             };
         });
 
@@ -199,13 +219,21 @@ describe("rowsOf", () => {
         const legacyStep = cardHeight(cardLayout) + GRID_CELL_GAP;
         const legacy = rowsOf(
             [
-                { id: "note-a", y: top, inset: CARD_INSET, height: 120, sizesRow: true },
+                {
+                    id: "note-a",
+                    y: top,
+                    inset: CARD_INSET,
+                    height: 120,
+                    sizesRow: true,
+                    rowSpan: 1
+                },
                 {
                     id: "note-b",
                     y: top + legacyStep,
                     inset: CARD_INSET,
                     height: 120,
-                    sizesRow: true
+                    sizesRow: true,
+                    rowSpan: 1
                 }
             ],
             cardLayout
@@ -220,7 +248,8 @@ describe("rowsOf", () => {
                 index: row.index,
                 inset: CARD_INSET,
                 height: 120,
-                sizesRow: true
+                sizesRow: true,
+                rowSpan: 1
             })),
             cardLayout
         );
@@ -279,13 +308,21 @@ describe("rowsOf", () => {
             const t = GRID_HEADER_HEIGHT + GRID_PADDING;
             const rows = rowsOf(
                 [
-                    { id: "card", y: t, inset: CARD_INSET, height: h, sizesRow: true },
+                    {
+                        id: "card",
+                        y: t,
+                        inset: CARD_INSET,
+                        height: h,
+                        sizesRow: true,
+                        rowSpan: 1
+                    },
                     {
                         id: "series",
                         y: t + h + GRID_CELL_GAP,
                         inset: SERIES_INSET,
                         height: seriesH,
-                        sizesRow: true
+                        sizesRow: true,
+                        rowSpan: 1
                     }
                 ],
                 l
@@ -726,8 +763,8 @@ describe("rowsFromHeight", () => {
  */
 const UNEVEN_ROWS = rowsOfIndexed(
     [
-        { id: "tall", index: 0, inset: 0, height: 200, sizesRow: true },
-        { id: "short", index: 1, inset: 0, height: 50, sizesRow: true }
+        { id: "tall", index: 0, inset: 0, height: 200, sizesRow: true, rowSpan: 1 },
+        { id: "short", index: 1, inset: 0, height: 50, sizesRow: true, rowSpan: 1 }
     ],
     layout
 );
@@ -737,7 +774,7 @@ const TWO_ROWS = 200 + GRID_CELL_GAP + 50;
 describe("row sizing excludes members that span", () => {
     it("falls back when every member of a row spans past it", () => {
         const rows = rowsOf(
-            [{ id: "note", y: top, inset: 0, height: 900, sizesRow: false }],
+            [{ id: "note", y: top, inset: 0, height: 900, sizesRow: false, rowSpan: 1 }],
             layout
         );
         expect(rows[0].height).toBe(SPANNED_ROW_HEIGHT);
@@ -751,7 +788,14 @@ describe("row sizing excludes members that span", () => {
         const rows = rowsOf(
             [
                 cardAt("card", top),
-                { id: "note", y: top, inset: CARD_INSET, height: 5000, sizesRow: false }
+                {
+                    id: "note",
+                    y: top,
+                    inset: CARD_INSET,
+                    height: 5000,
+                    sizesRow: false,
+                    rowSpan: 1
+                }
             ],
             layout
         );
@@ -770,8 +814,22 @@ describe("row sizing excludes members that span", () => {
         // the first draft of this test failed to catch its own mutation.
         const rows = rowsOfIndexed(
             [
-                { id: "card", index: 0, inset: CARD_INSET, height: ch, sizesRow: true },
-                { id: "note", index: 0, inset: 900, height: 20, sizesRow: false }
+                {
+                    id: "card",
+                    index: 0,
+                    inset: CARD_INSET,
+                    height: ch,
+                    sizesRow: true,
+                    rowSpan: 1
+                },
+                {
+                    id: "note",
+                    index: 0,
+                    inset: 900,
+                    height: 20,
+                    sizesRow: false,
+                    rowSpan: 1
+                }
             ],
             layout
         );
@@ -871,5 +929,169 @@ describe("snapHeightToRows", () => {
         expect(snapped).toBe(TWO_ROWS);
         expect(snapHeightToRows(snapped, 0, UNEVEN_ROWS, layout)).toBe(snapped);
         expect(rowSpanFor(snapped, 0, UNEVEN_ROWS, layout)).toBe(2);
+    });
+});
+
+/**
+ * Spanned-into rows are OCCUPIED (maintainer ruling 2026-08-14), measuring
+ * SPANNED_ROW_HEIGHT rather than being read as empty and taking the cardHeight
+ * lattice. Measured before the ruling: a 300px note painted 1004 in `wide`.
+ */
+describe("a row a footprint spans into", () => {
+    const spanning = (id: string, index: number, rowSpan: number, height = 300) => ({
+        id,
+        index,
+        inset: 0,
+        height,
+        sizesRow: false,
+        rowSpan
+    });
+
+    it("exists in the model, even though no member starts in it", () => {
+        const rows = rowsOfIndexed([spanning("note", 0, 2)], layout);
+        expect(rows.map((r) => r.index)).toEqual([0, 1]);
+    });
+
+    it("measures SPANNED_ROW_HEIGHT, not the cardHeight lattice", () => {
+        const rows = rowsOfIndexed([spanning("note", 0, 2)], layout);
+        expect(rows[1].height).toBe(SPANNED_ROW_HEIGHT);
+        expect(rows[1].height).not.toBe(ch);
+    });
+
+    // `ids` still means "starts here". A spanning member listed in every row it
+    // covers would be positioned against its LAST row by materializeGrid's
+    // rowOf map, which walks rows in order and would overwrite.
+    it("lists no member of its own", () => {
+        const rows = rowsOfIndexed([spanning("note", 0, 2)], layout);
+        expect(rows[0].ids).toEqual(["note"]);
+        expect(rows[1].ids).toEqual([]);
+    });
+
+    it("paints the height the ruling described", () => {
+        const rows = rowsOfIndexed([spanning("note", 0, 2)], layout);
+        expect(footprintPixelHeight(rows, 0, 2, layout)).toBe(
+            SPANNED_ROW_HEIGHT * 2 + GRID_CELL_GAP
+        );
+    });
+
+    // Task 24's lattice pitch is untouched: only rows something REACHES are
+    // occupied. A gap nothing covers is still a card-pitch empty row.
+    it("leaves a truly empty row on the cardHeight lattice", () => {
+        const rows = rowsOfIndexed(
+            [spanning("note", 0, 2), { ...spanning("other", 4, 1), sizesRow: true }],
+            layout
+        );
+        expect(rows.map((r) => r.index)).toEqual([0, 1, 4]);
+        // Rows 2 and 3 are absent — genuinely empty — and row 4 sits a full two
+        // card-pitch steps below row 1's bottom.
+        expect(rows[2].offset).toBe(
+            rows[1].offset + rows[1].height + GRID_CELL_GAP + 2 * step
+        );
+    });
+
+    it("lets a sizing member that STARTS there win over the fallback", () => {
+        const rows = rowsOfIndexed(
+            [
+                spanning("note", 0, 2),
+                {
+                    id: "card",
+                    index: 1,
+                    inset: CARD_INSET,
+                    height: ch,
+                    sizesRow: true,
+                    rowSpan: 1
+                }
+            ],
+            layout
+        );
+        expect(rows[1].height).toBe(ch);
+    });
+
+    /**
+     * THE ROUND TRIP, and the reason `rowsOf`'s inference had to learn about
+     * spans. The pixels between two START rows now hold spanned rows at one
+     * pitch and empty rows at another; charging the spanned ones first is what
+     * keeps the remainder a whole number of lattice steps. Without it the
+     * indices compress and a layout this module wrote does not read back as
+     * itself — silently renumbering rowLabels.
+     */
+    it("reads back at the same indices it was written at", () => {
+        const indexed = [
+            spanning("note-a", 0, 2),
+            { ...spanning("note-b", 2, 1, 120), sizesRow: true }
+        ];
+        const materialized = rowsOfIndexed(indexed, layout);
+        expect(materialized.map((r) => r.index)).toEqual([0, 1, 2]);
+
+        const members = indexed.map((member) => {
+            const row = materialized.find((r) => r.ids.includes(member.id));
+            if (!row) throw new Error(`no row for ${member.id}`);
+            return {
+                id: member.id,
+                y: memberY(row, member.inset),
+                inset: member.inset,
+                height: member.height,
+                sizesRow: member.sizesRow,
+                rowSpan: member.rowSpan
+            };
+        });
+        expect(rowsOf(members, layout)).toEqual(materialized);
+    });
+
+    /**
+     * ⚠️ THE DISCRIMINATING SPAN, and it has to be this deep.
+     *
+     * Dropping `spannedExtent` from the inference is invisible at a 2-row span:
+     * the error is one spanned pitch (144px), and `empty` divides it by a full
+     * lattice step (624 in `vertical`) and rounds to 0, so the index still comes
+     * out right. The error only becomes a PHANTOM EMPTY ROW once it passes half
+     * a step, which needs `(span - 1) * 144 >= 312` — a four-row span.
+     *
+     * Found by mutation testing: the two round-trip tests above BOTH survived
+     * that mutation. Without this case the spanned-extent term would have been
+     * deletable with a green suite.
+     */
+    it("round-trips a deep span, where a missing extent term becomes a phantom row", () => {
+        const indexed = [
+            spanning("note-a", 0, 4),
+            { ...spanning("note-b", 4, 1, 120), sizesRow: true }
+        ];
+        const materialized = rowsOfIndexed(indexed, layout);
+        expect(materialized.map((r) => r.index)).toEqual([0, 1, 2, 3, 4]);
+
+        const members = indexed.map((member) => {
+            const row = materialized.find((r) => r.ids.includes(member.id));
+            if (!row) throw new Error(`no row for ${member.id}`);
+            return {
+                id: member.id,
+                y: memberY(row, member.inset),
+                inset: member.inset,
+                height: member.height,
+                sizesRow: member.sizesRow,
+                rowSpan: member.rowSpan
+            };
+        });
+        expect(rowsOf(members, layout).map((r) => r.index)).toEqual([0, 1, 2, 3, 4]);
+    });
+
+    it("still round-trips when an empty row follows the spanned one", () => {
+        const indexed = [
+            spanning("note-a", 0, 2),
+            { ...spanning("note-b", 4, 1, 120), sizesRow: true }
+        ];
+        const materialized = rowsOfIndexed(indexed, layout);
+        const members = indexed.map((member) => {
+            const row = materialized.find((r) => r.ids.includes(member.id));
+            if (!row) throw new Error(`no row for ${member.id}`);
+            return {
+                id: member.id,
+                y: memberY(row, member.inset),
+                inset: member.inset,
+                height: member.height,
+                sizesRow: member.sizesRow,
+                rowSpan: member.rowSpan
+            };
+        });
+        expect(rowsOf(members, layout).map((r) => r.index)).toEqual([0, 1, 4]);
     });
 });

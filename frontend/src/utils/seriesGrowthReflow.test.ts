@@ -108,14 +108,16 @@ const treeWith = (args: {
                 index: seriesRow,
                 inset: SERIES_INSET,
                 height: getSeriesGroupDimensions(games, LAYOUT).height,
-                sizesRow: true
+                sizesRow: true,
+                rowSpan: 1
             },
             ...cards.map((c) => ({
                 id: c.id,
                 index: c.row,
                 inset: CARD_INSET,
                 height: cardHeight(LAYOUT),
-                sizesRow: true
+                sizesRow: true,
+                rowSpan: 1
             }))
         ],
         LAYOUT

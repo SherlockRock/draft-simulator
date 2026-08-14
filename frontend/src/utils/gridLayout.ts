@@ -435,7 +435,8 @@ export const rowMembersOf = (items: GridItem[]): RowMember[] =>
         y: i.position.y,
         inset: i.inset,
         height: i.height,
-        sizesRow: sizesRow(i.kind)
+        sizesRow: sizesRow(i.kind),
+        rowSpan: spanOf(i.footprint).rows
     }));
 
 /** The rows `items` currently form. */
@@ -521,7 +522,8 @@ export const materializeGrid = (args: {
             index: cell.row,
             inset: item.inset,
             height: item.height,
-            sizesRow: sizesRow(item.kind)
+            sizesRow: sizesRow(item.kind),
+            rowSpan: spanOf(item.footprint).rows
         })),
         layout
     );

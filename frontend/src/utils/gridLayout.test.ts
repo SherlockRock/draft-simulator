@@ -109,7 +109,8 @@ const positionOfCell = (cell: GridCell, chrome: Chrome, layout: CardLayout) => {
                 index: cell.row,
                 inset: chrome.inset,
                 height: chrome.height,
-                sizesRow: true
+                sizesRow: true,
+                rowSpan: 1
             }
         ],
         layout
@@ -146,7 +147,8 @@ function itemAt(
                             index: 0,
                             inset: chrome.inset,
                             height: chrome.height,
-                            sizesRow: true
+                            sizesRow: true,
+                            rowSpan: 1
                         }
                     ],
                     layout
@@ -206,7 +208,8 @@ const itemsInCells = (
             index: spec.cell.row,
             inset: chromeOf(spec).inset,
             height: chromeOf(spec).height,
-            sizesRow: true
+            sizesRow: true,
+            rowSpan: 1
         })),
         layout
     );
@@ -2185,7 +2188,7 @@ describe("resolveResizeGridSettings", () => {
         // A container holding a Bo3 has one tall row. Counting in card-height
         // steps would report two rows for a height that presents one.
         const tall = rowsOfIndexed(
-            [{ id: "s", index: 0, inset: 172, height: 520, sizesRow: true }],
+            [{ id: "s", index: 0, inset: 172, height: 520, sizesRow: true, rowSpan: 1 }],
             layout
         );
         const height = gridContentHeightForRows(tall, 1, layout);

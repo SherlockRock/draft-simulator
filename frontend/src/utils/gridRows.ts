@@ -41,7 +41,20 @@ import type { CardLayout } from "./canvasCardLayout";
  * Kind-agnostic on purpose. This module knows nothing about the tree, and a
  * boolean keeps it that way where a `kind` would not.
  */
-type RowSizing = { sizesRow: boolean };
+type RowSizing = {
+    sizesRow: boolean;
+    /**
+     * How many rows this member COVERS from the one it starts in. 1 for
+     * everything that cannot span, which is every kind but an annotation.
+     *
+     * A covered row is OCCUPIED (maintainer ruling 2026-08-14): it exists in
+     * the model and measures `SPANNED_ROW_HEIGHT`, rather than being read as
+     * empty and taking the `cardHeight` lattice pitch. Without that a note
+     * grown one pixel past 120 jumped to a full card height — measured at 1004
+     * in `wide` — because the row it grew into had no member of its own.
+     */
+    rowSpan: number;
+};
 
 /** One member of a grid, as the row model sees it. `y` is container-relative. */
 export type RowMember = RowSizing & {
@@ -201,18 +214,28 @@ export const rowsOf = (members: RowMember[], layout: CardLayout): RowMetrics[] =
     const indexed: IndexedRowMember[] = [];
     let previousTop: number | null = null;
     let previousHeight = 0;
+    let previousSpan = 1;
     for (const key of keys) {
         const bucket = byKey.get(key) ?? [];
         const currentTop = rowTopOf(key, baselineOf(bucket));
         if (previousTop !== null) {
-            const adjacent = previousHeight + GRID_CELL_GAP;
+            // The pixels between two START rows now hold two different kinds of
+            // row at two different pitches: rows the previous bucket SPANS INTO
+            // (`SPANNED_ROW_HEIGHT` each) and rows that are genuinely EMPTY
+            // (`cardHeight` each). Charging the spanned ones first is what keeps
+            // the remainder a whole number of empty lattice rows — without it
+            // the surplus divides by the wrong pitch and the indices compress,
+            // so a layout this module wrote does not read back as itself.
+            const spannedExtent =
+                (previousSpan - 1) * (SPANNED_ROW_HEIGHT + GRID_CELL_GAP);
+            const adjacent = previousHeight + spannedExtent + GRID_CELL_GAP;
             // Rounded, because stored pixels may carry ADR-0006's drift. On
             // tops the only residual IS that drift.
             const empty = Math.max(
                 0,
                 Math.round((currentTop - previousTop - adjacent) / step)
             );
-            index += 1 + empty;
+            index += previousSpan + empty;
         }
         for (const member of bucket) {
             indexed.push({
@@ -220,11 +243,19 @@ export const rowsOf = (members: RowMember[], layout: CardLayout): RowMetrics[] =
                 index,
                 inset: member.inset,
                 height: member.height,
-                sizesRow: member.sizesRow
+                sizesRow: member.sizesRow,
+                rowSpan: member.rowSpan
             });
         }
         previousTop = currentTop;
         previousHeight = heightOf(bucket);
+        // The DEEPEST reach out of this row decides where the next one can
+        // start, exactly as the tallest member decides the row's own height.
+        previousSpan = bucket.reduce(
+            (deepest, member) =>
+                Math.max(deepest, Math.max(1, Math.round(member.rowSpan))),
+            1
+        );
     }
     return rowsOfIndexed(indexed, layout);
 };
@@ -244,12 +275,22 @@ export const rowsOfIndexed = (
     layout: CardLayout
 ): RowMetrics[] => {
     if (members.length === 0) return [];
+    // `byIndex` is members that START in a row — it decides the row's baseline,
+    // its height and its `ids`, all of which are about where members SIT.
+    // `covered` additionally holds every row a footprint reaches into, which
+    // decides only whether the row EXISTS. Keeping them separate is what stops
+    // a spanning member being positioned against its last row instead of its
+    // first, and leaves every `ids` consumer untouched.
     const byIndex = new Map<number, IndexedRowMember[]>();
+    const covered = new Set<number>();
     for (const member of members) {
         const index = Math.max(0, Math.round(member.index));
         const bucket = byIndex.get(index);
         if (bucket) bucket.push(member);
         else byIndex.set(index, [member]);
+        for (let i = 0; i < Math.max(1, Math.round(member.rowSpan)); i++) {
+            covered.add(index + i);
+        }
     }
 
     const rowPitch = cardHeight(layout);
@@ -257,7 +298,12 @@ export const rowsOfIndexed = (
     const rows: RowMetrics[] = [];
     let previous: RowMetrics | null = null;
 
-    for (const index of [...byIndex.keys()].sort((a, b) => a - b)) {
+    const occupiedIndices = [...new Set([...byIndex.keys(), ...covered])].sort(
+        (a, b) => a - b
+    );
+    for (const index of occupiedIndices) {
+        // A row that is only COVERED has an empty bucket, so `heightOf` returns
+        // SPANNED_ROW_HEIGHT and `baselineOf` returns 0 — exactly the ruling.
         const bucket = byIndex.get(index) ?? [];
         const row: RowMetrics = {
             index,
