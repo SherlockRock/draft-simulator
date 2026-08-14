@@ -371,9 +371,40 @@ const assignmentAt = (
     cell: GridCell
 ): GridAssignment => ({ id: item.id, kind: item.kind, cell });
 
+/**
+ * ⚠️ THE SWITCH FOR ROW SPANNING, and it is deliberately still OFF.
+ *
+ * Flipping this to `false` is the one edit that stops an annotation's height
+ * sizing its row and lets it span instead. Everything downstream of that —
+ * `gridRows.heightOf`'s exclusion, its `SPANNED_ROW_HEIGHT` fallback,
+ * `rowSpanFor`, `footprintPixelHeight`, `snapHeightToRows` — is built and
+ * tested, but nothing yet CONSUMES a span, so turning it on now would only
+ * make a tall note render at 120px and overflow its row.
+ *
+ * Typed `boolean` rather than left to inference so the `||` below stays a real
+ * runtime branch instead of narrowing to a constant.
+ */
+export const ANNOTATIONS_SIZE_ROWS: boolean = true;
+
+/**
+ * Whether an item's own geometry shapes the row it starts in — `gridRows`'
+ * `sizesRow`, decided here because this is the layer that knows about kinds.
+ *
+ * Cards, series and nested Groups always size their row: none of them can span,
+ * so none of them can be circular.
+ */
+export const sizesRow = (kind: GridItem["kind"]): boolean =>
+    kind !== "annotation" || ANNOTATIONS_SIZE_ROWS;
+
 /** `items` as the row model sees them. */
 export const rowMembersOf = (items: GridItem[]): RowMember[] =>
-    items.map((i) => ({ id: i.id, y: i.position.y, inset: i.inset, height: i.height }));
+    items.map((i) => ({
+        id: i.id,
+        y: i.position.y,
+        inset: i.inset,
+        height: i.height,
+        sizesRow: sizesRow(i.kind)
+    }));
 
 /** The rows `items` currently form. */
 export const rowsOfItems = (items: GridItem[], layout: CardLayout): RowMetrics[] =>
@@ -457,7 +488,8 @@ export const materializeGrid = (args: {
             id: item.id,
             index: cell.row,
             inset: item.inset,
-            height: item.height
+            height: item.height,
+            sizesRow: sizesRow(item.kind)
         })),
         layout
     );

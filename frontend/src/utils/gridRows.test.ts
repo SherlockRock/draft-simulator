@@ -9,8 +9,13 @@ import {
     rowsFromHeight,
     rowsOf,
     rowsOfIndexed,
+    rowSpanFor,
+    footprintPixelHeight,
+    snapHeightToRows,
+    SPANNED_ROW_HEIGHT,
     type RowMember
 } from "./gridRows";
+import { defaultAnnotationSize } from "./annotationSize";
 import {
     GRID_CELL_GAP,
     GRID_HEADER_HEIGHT,
@@ -52,13 +57,15 @@ const cardAt = (id: string, y: number): RowMember => ({
     id,
     y,
     inset: CARD_INSET,
-    height: ch
+    height: ch,
+    sizesRow: true
 });
 const seriesAt = (id: string, y: number): RowMember => ({
     id,
     y,
     inset: SERIES_INSET,
-    height: SERIES_H
+    height: SERIES_H,
+    sizesRow: true
 });
 
 describe("rowsOf", () => {
@@ -106,7 +113,10 @@ describe("rowsOf", () => {
     });
 
     it("sizes an occupied row from its members", () => {
-        const rows = rowsOf([{ id: "tiny", y: top, inset: 2, height: 10 }], layout);
+        const rows = rowsOf(
+            [{ id: "tiny", y: top, inset: 2, height: 10, sizesRow: true }],
+            layout
+        );
         expect(rows[0].height).toBe(10);
     });
 
@@ -115,17 +125,29 @@ describe("rowsOf", () => {
     });
 
     it("lets a Card dominate a mixed Card and annotation row", () => {
-        const annotation = { id: "note", y: top, inset: CARD_INSET, height: 120 };
+        const annotation = {
+            id: "note",
+            y: top,
+            inset: CARD_INSET,
+            height: 120,
+            sizesRow: true
+        };
         expect(rowsOf([cardAt("card", top), annotation], layout)[0].height).toBe(ch);
     });
 
     it("sizes an annotation-only row to the annotation's height", () => {
-        const annotation = { id: "note", y: top, inset: CARD_INSET, height: 120 };
+        const annotation = {
+            id: "note",
+            y: top,
+            inset: CARD_INSET,
+            height: 120,
+            sizesRow: true
+        };
         expect(rowsOf([annotation], layout)[0].height).toBe(120);
     });
 
     it("sizes a row containing only a short nested Group to that Group", () => {
-        const group = { id: "group", y: top, inset: 66, height: 100 };
+        const group = { id: "group", y: top, inset: 66, height: 100, sizesRow: true };
         expect(rowsOf([group], layout)[0].height).toBe(100);
     });
 
@@ -137,7 +159,8 @@ describe("rowsOf", () => {
                     id: `note-${index}`,
                     index,
                     inset: CARD_INSET,
-                    height: 120
+                    height: 120,
+                    sizesRow: true
                 })),
                 cardLayout
             );
@@ -150,8 +173,8 @@ describe("rowsOf", () => {
 
     it("round-trips member-derived rows from indexed materialization through pixels", () => {
         const indexed = [
-            { id: "note-a", index: 0, inset: CARD_INSET, height: 120 },
-            { id: "note-b", index: 1, inset: 66, height: 100 }
+            { id: "note-a", index: 0, inset: CARD_INSET, height: 120, sizesRow: true },
+            { id: "note-b", index: 1, inset: 66, height: 100, sizesRow: true }
         ];
         const materialized = rowsOfIndexed(indexed, layout);
         const members = indexed.map((member) => {
@@ -163,7 +186,8 @@ describe("rowsOf", () => {
                 id: member.id,
                 y: memberY(row, member.inset),
                 inset: member.inset,
-                height: member.height
+                height: member.height,
+                sizesRow: true
             };
         });
 
@@ -175,12 +199,13 @@ describe("rowsOf", () => {
         const legacyStep = cardHeight(cardLayout) + GRID_CELL_GAP;
         const legacy = rowsOf(
             [
-                { id: "note-a", y: top, inset: CARD_INSET, height: 120 },
+                { id: "note-a", y: top, inset: CARD_INSET, height: 120, sizesRow: true },
                 {
                     id: "note-b",
                     y: top + legacyStep,
                     inset: CARD_INSET,
-                    height: 120
+                    height: 120,
+                    sizesRow: true
                 }
             ],
             cardLayout
@@ -194,7 +219,8 @@ describe("rowsOf", () => {
                 id: row.ids[0] ?? "missing",
                 index: row.index,
                 inset: CARD_INSET,
-                height: 120
+                height: 120,
+                sizesRow: true
             })),
             cardLayout
         );
@@ -253,12 +279,13 @@ describe("rowsOf", () => {
             const t = GRID_HEADER_HEIGHT + GRID_PADDING;
             const rows = rowsOf(
                 [
-                    { id: "card", y: t, inset: CARD_INSET, height: h },
+                    { id: "card", y: t, inset: CARD_INSET, height: h, sizesRow: true },
                     {
                         id: "series",
                         y: t + h + GRID_CELL_GAP,
                         inset: SERIES_INSET,
-                        height: seriesH
+                        height: seriesH,
+                        sizesRow: true
                     }
                 ],
                 l
@@ -686,5 +713,163 @@ describe("rowsFromHeight", () => {
 
     it("is bounded, so a huge manual resize cannot return thousands", () => {
         expect(rowsFromHeight([], 10_000_000, layout)).toBeLessThan(80);
+    });
+});
+
+/**
+ * A two-row model with DELIBERATELY UNEQUAL row heights (200 then 50).
+ *
+ * Every span assertion below depends on the two differing: with equal rows a
+ * `rows × cardHeight` implementation and a member-derived one agree, which is
+ * exactly the coincidence that would let §6.0a's rejected shape pass as
+ * correct. Row 2 onwards is empty, so it extrapolates at `cardHeight`.
+ */
+const UNEVEN_ROWS = rowsOfIndexed(
+    [
+        { id: "tall", index: 0, inset: 0, height: 200, sizesRow: true },
+        { id: "short", index: 1, inset: 0, height: 50, sizesRow: true }
+    ],
+    layout
+);
+const ONE_ROW = 200;
+const TWO_ROWS = 200 + GRID_CELL_GAP + 50;
+
+describe("row sizing excludes members that span", () => {
+    it("falls back when every member of a row spans past it", () => {
+        const rows = rowsOf(
+            [{ id: "note", y: top, inset: 0, height: 900, sizesRow: false }],
+            layout
+        );
+        expect(rows[0].height).toBe(SPANNED_ROW_HEIGHT);
+    });
+
+    // THE LOAD-BEARING ONE. The fallback alone would pass even if the member
+    // were still measured, because a lone member's height IS the row height.
+    // Here the non-sizing member is far TALLER than the Card, so only genuine
+    // exclusion keeps the row at cardHeight.
+    it("lets a Card size a row a much taller spanning note shares", () => {
+        const rows = rowsOf(
+            [
+                cardAt("card", top),
+                { id: "note", y: top, inset: CARD_INSET, height: 5000, sizesRow: false }
+            ],
+            layout
+        );
+        expect(rows[0].height).toBe(ch);
+    });
+
+    it("keeps a spanning member out of the baseline as well as the height", () => {
+        // A deep inset would raise `baselineOf`, and `heightOf` is
+        // `baselineOf + below` — so measuring the baseline over all members
+        // would let an excluded one inflate the row through the back door.
+        //
+        // ⚠️ `rowsOfIndexed`, NOT `rowsOf`. `rowsOf` buckets on
+        // `round(y + inset)`, so a fixture that varies the inset to test the
+        // baseline puts the two members in DIFFERENT ROWS and the assertion
+        // passes without ever exercising the composition. That is exactly how
+        // the first draft of this test failed to catch its own mutation.
+        const rows = rowsOfIndexed(
+            [
+                { id: "card", index: 0, inset: CARD_INSET, height: ch, sizesRow: true },
+                { id: "note", index: 0, inset: 900, height: 20, sizesRow: false }
+            ],
+            layout
+        );
+        expect(rows[0].ids).toEqual(["card", "note"]);
+        expect(rows[0].baseline).toBe(CARD_INSET);
+        expect(rows[0].height).toBe(ch);
+    });
+
+    it("is the default note height, which it cannot import without a cycle", () => {
+        const layouts: CardLayout[] = ["vertical", "horizontal", "wide", "compact"];
+        for (const cardLayout of layouts) {
+            expect(SPANNED_ROW_HEIGHT).toBe(defaultAnnotationSize(cardLayout).height);
+        }
+    });
+
+    it("is not the Card floor Task 24 removed", () => {
+        expect(SPANNED_ROW_HEIGHT).toBeLessThan(cardHeight("horizontal"));
+    });
+});
+
+describe("rowSpanFor", () => {
+    it("is one row for a height the starting row already covers", () => {
+        expect(rowSpanFor(ONE_ROW, 0, UNEVEN_ROWS, layout)).toBe(1);
+        expect(rowSpanFor(1, 0, UNEVEN_ROWS, layout)).toBe(1);
+    });
+
+    it("takes the next row the moment the height exceeds the first", () => {
+        expect(rowSpanFor(ONE_ROW + 1, 0, UNEVEN_ROWS, layout)).toBe(2);
+        expect(rowSpanFor(TWO_ROWS, 0, UNEVEN_ROWS, layout)).toBe(2);
+        expect(rowSpanFor(TWO_ROWS + 1, 0, UNEVEN_ROWS, layout)).toBe(3);
+    });
+
+    // The reason this walks instead of dividing. Starting in the SHORT row, the
+    // same height needs a different span than it does from the tall one — a
+    // division by any single row height cannot produce both answers.
+    it("depends on which rows are being covered, not just how many", () => {
+        expect(rowSpanFor(220, 0, UNEVEN_ROWS, layout)).toBe(2);
+        expect(rowSpanFor(220, 1, UNEVEN_ROWS, layout)).toBe(2);
+        expect(rowSpanFor(51, 1, UNEVEN_ROWS, layout)).toBe(2);
+        expect(rowSpanFor(51, 0, UNEVEN_ROWS, layout)).toBe(1);
+    });
+
+    it("terminates on an absurd height rather than hanging", () => {
+        expect(rowSpanFor(1e9, 0, UNEVEN_ROWS, layout)).toBeLessThanOrEqual(64);
+    });
+});
+
+describe("footprintPixelHeight", () => {
+    it("is the row's own height at span one", () => {
+        expect(footprintPixelHeight(UNEVEN_ROWS, 0, 1, layout)).toBe(ONE_ROW);
+        expect(footprintPixelHeight(UNEVEN_ROWS, 1, 1, layout)).toBe(50);
+    });
+
+    // §6.0a rejected `rows × cardHeight`. This is the assertion that says the
+    // replacement is member-derived: two rows here are 250 + gap, and no
+    // multiple of cardHeight is.
+    it("sums the ACTUAL heights of the rows it covers, plus their gaps", () => {
+        expect(footprintPixelHeight(UNEVEN_ROWS, 0, 2, layout)).toBe(TWO_ROWS);
+        expect(footprintPixelHeight(UNEVEN_ROWS, 0, 2, layout)).not.toBe(
+            2 * ch + GRID_CELL_GAP
+        );
+    });
+
+    it("extrapolates past the last occupied row at the empty-row pitch", () => {
+        expect(footprintPixelHeight(UNEVEN_ROWS, 0, 3, layout)).toBe(
+            TWO_ROWS + GRID_CELL_GAP + ch
+        );
+    });
+
+    it("never reports less than the row it starts in", () => {
+        expect(footprintPixelHeight(UNEVEN_ROWS, 0, 0, layout)).toBe(ONE_ROW);
+    });
+});
+
+describe("snapHeightToRows", () => {
+    // The row twin of snapWidthToCells' jitter case: the handle is seeded from
+    // the painted box, which sits exactly on ONE_ROW, so a ceil rule would buy
+    // a whole extra row for one pixel of downward drift.
+    it("holds the row against a nudge past the boundary", () => {
+        expect(snapHeightToRows(ONE_ROW + 1, 0, UNEVEN_ROWS, layout)).toBe(ONE_ROW);
+        expect(snapHeightToRows(ONE_ROW + 20, 0, UNEVEN_ROWS, layout)).toBe(ONE_ROW);
+    });
+
+    it("takes the next row once the drag passes the midpoint", () => {
+        const midpoint = (ONE_ROW + TWO_ROWS) / 2;
+        expect(snapHeightToRows(midpoint - 1, 0, UNEVEN_ROWS, layout)).toBe(ONE_ROW);
+        expect(snapHeightToRows(midpoint + 1, 0, UNEVEN_ROWS, layout)).toBe(TWO_ROWS);
+    });
+
+    it("never returns less than one row, however far the drag shrinks", () => {
+        expect(snapHeightToRows(0, 0, UNEVEN_ROWS, layout)).toBe(ONE_ROW);
+        expect(snapHeightToRows(-500, 0, UNEVEN_ROWS, layout)).toBe(ONE_ROW);
+    });
+
+    it("is a fixpoint, and agrees with the span rowSpanFor derives", () => {
+        const snapped = snapHeightToRows(TWO_ROWS - 5, 0, UNEVEN_ROWS, layout);
+        expect(snapped).toBe(TWO_ROWS);
+        expect(snapHeightToRows(snapped, 0, UNEVEN_ROWS, layout)).toBe(snapped);
+        expect(rowSpanFor(snapped, 0, UNEVEN_ROWS, layout)).toBe(2);
     });
 });

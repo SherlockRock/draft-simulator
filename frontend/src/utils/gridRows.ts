@@ -28,8 +28,23 @@ import type { CardLayout } from "./canvasCardLayout";
  * sees a vertical stack of things that have an inset and a height.
  */
 
+/**
+ * Whether a member's own geometry SHAPES the row it starts in, or merely sits
+ * in it.
+ *
+ * A member that may span rows cannot also size them: its height would set the
+ * row height, which would then decide its span, which decides its height. The
+ * fixpoint is broken by taking such members out of the measurement entirely —
+ * rows are sized by "the other things within the row", and a row with no sizing
+ * member falls back to `SPANNED_ROW_HEIGHT`.
+ *
+ * Kind-agnostic on purpose. This module knows nothing about the tree, and a
+ * boolean keeps it that way where a `kind` would not.
+ */
+type RowSizing = { sizesRow: boolean };
+
 /** One member of a grid, as the row model sees it. `y` is container-relative. */
-export type RowMember = {
+export type RowMember = RowSizing & {
     id: string;
     y: number;
     inset: number;
@@ -37,12 +52,26 @@ export type RowMember = {
 };
 
 /** A member whose lattice row is already known, rather than inferred from `y`. */
-export type IndexedRowMember = {
+export type IndexedRowMember = RowSizing & {
     id: string;
     index: number;
     inset: number;
     height: number;
 };
+
+/**
+ * A row sized by nothing — every member starting in it spans past it.
+ *
+ * Deliberately equal to `annotationSize.defaultAnnotationSize().height` and
+ * deliberately NOT imported from there: `annotationSize` imports `canvasTree`,
+ * which imports this module, so the import would close a cycle. The equality is
+ * pinned by a test instead.
+ *
+ * NOT `cardHeight`. Task 24 removed the Card-height row floor precisely because
+ * it made a note-only row 6.4x too tall, and this must not reintroduce it by
+ * another name.
+ */
+export const SPANNED_ROW_HEIGHT = 120;
 
 /**
  * A row band. `offset` is container-relative; `ids` is in the order the members
@@ -66,21 +95,34 @@ export type RowMetrics = {
 /** Container-relative y of the first row's top edge. */
 const firstRowOffset = () => GRID_HEADER_HEIGHT + GRID_PADDING;
 
-/** The only two properties of a member the row geometry depends on. */
-type Chrome = { inset: number; height: number };
+/** The only properties of a member the row geometry depends on. */
+type Chrome = RowSizing & { inset: number; height: number };
 
-/** Rule 3: the row aligns on its deepest-inset member. */
+/**
+ * Rule 3: the row aligns on its deepest-inset member.
+ *
+ * Measured over the SIZING members only, for the same reason `heightOf` is —
+ * a member excluded from the height must be excluded from the baseline too, or
+ * it still shapes the row through `heightOf`'s `baselineOf(bucket) + below`.
+ */
 const baselineOf = (bucket: Chrome[]): number => {
     let baseline = 0;
-    for (const member of bucket) baseline = Math.max(baseline, member.inset);
+    for (const member of bucket) {
+        if (member.sizesRow) baseline = Math.max(baseline, member.inset);
+    }
     return baseline;
 };
 
 /**
- * Rule 2: an occupied row is exactly its baseline plus the furthest any member
- * reaches below its own inset. An all-Card row is still exactly `cardHeight`:
- * its baseline is the Card inset and its below-baseline extent is
+ * Rule 2: an occupied row is exactly its baseline plus the furthest any SIZING
+ * member reaches below its own inset. An all-Card row is still exactly
+ * `cardHeight`: its baseline is the Card inset and its below-baseline extent is
  * `cardHeight - inset`, so no explicit floor is needed.
+ *
+ * A row whose every member spans past it has nothing to measure and takes
+ * `SPANNED_ROW_HEIGHT`. That is the maintainer's ruling of 2026-08-14 —
+ * "covered rows keep their own height" — and it is what stops a spanning
+ * member's height feeding back into the rows that decide its span.
  *
  * Shared by `rowsOf`'s gap inference and `rowsOfIndexed`'s materialization on
  * purpose: if the two ever computed height differently, reading back a layout
@@ -88,7 +130,13 @@ const baselineOf = (bucket: Chrome[]): number => {
  */
 const heightOf = (bucket: Chrome[]): number => {
     let below = 0;
-    for (const member of bucket) below = Math.max(below, member.height - member.inset);
+    let sized = false;
+    for (const member of bucket) {
+        if (!member.sizesRow) continue;
+        sized = true;
+        below = Math.max(below, member.height - member.inset);
+    }
+    if (!sized) return SPANNED_ROW_HEIGHT;
     return baselineOf(bucket) + below;
 };
 
@@ -171,7 +219,8 @@ export const rowsOf = (members: RowMember[], layout: CardLayout): RowMetrics[] =
                 id: member.id,
                 index,
                 inset: member.inset,
-                height: member.height
+                height: member.height,
+                sizesRow: member.sizesRow
             });
         }
         previousTop = currentTop;
@@ -444,6 +493,93 @@ export const rowsFromHeight = (
         count++;
     }
     return Math.max(1, count);
+};
+
+/**
+ * How many rows a member of `height` starting at `startIndex` needs.
+ *
+ * The row axis's answer to `canvasTree.spanFor`, and CEIL-flavoured for the
+ * same reason: this is the OCCUPANCY question, "how many rows does this cover",
+ * where covering nine tenths of a row still means occupying it. The gesture
+ * question — "which row count did the user mean" — is `snapHeightToRows`.
+ *
+ * It cannot be a division the way `spanFor` is. Rows are bands of differing
+ * heights (rule 2), so the span depends on WHICH rows are being covered, which
+ * is why `startIndex` is a parameter and why this walks rather than divides.
+ *
+ * Bounded by `MAX_GROWTH_ROWS`, and terminating without it for any positive row
+ * height: `rowMetricsAt` extrapolates empty rows at `cardHeight`, so the
+ * accumulator strictly increases once it passes the last occupied row.
+ */
+export const rowSpanFor = (
+    height: number,
+    startIndex: number,
+    rows: RowMetrics[],
+    layout: CardLayout
+): number => {
+    if (!Number.isFinite(height)) return 1;
+    let covered = rowMetricsAt(rows, startIndex, layout).height;
+    let span = 1;
+    while (covered < height && span < MAX_GROWTH_ROWS) {
+        covered += GRID_CELL_GAP + rowMetricsAt(rows, startIndex + span, layout).height;
+        span++;
+    }
+    return span;
+};
+
+/**
+ * The pixel height of a `span`-row footprint starting at `startIndex`.
+ *
+ * ⚠️ This is the function `§6.0a` rule 1 said could not be written, and the
+ * reason its objection does not bind: the rejected shape was `rows × cardHeight`,
+ * which is wrong because "a row's height is a property of its MEMBERSHIP". This
+ * asks the row model for each covered row's ACTUAL height instead, so the drop
+ * highlight draws the true rectangle. `cardHeight` appears nowhere.
+ *
+ * The width sibling is `gridLayout.footprintPixelWidth`, which CAN multiply,
+ * because columns really are a uniform lattice.
+ */
+export const footprintPixelHeight = (
+    rows: RowMetrics[],
+    startIndex: number,
+    span: number,
+    layout: CardLayout
+): number => {
+    const count = Math.max(1, Math.round(span));
+    let total = 0;
+    for (let i = 0; i < count; i++) {
+        total += rowMetricsAt(rows, startIndex + i, layout).height;
+    }
+    return total + (count - 1) * GRID_CELL_GAP;
+};
+
+/**
+ * The nearest whole-row height to a hand-dragged one — the row axis's twin of
+ * `annotationSize.snapWidthToCells`, and NEAREST for the same reason that one
+ * is. The resize handle is seeded from the painted box, which already sits on a
+ * row boundary, so a ceil rule would buy a whole extra row for one pixel of
+ * downward jitter.
+ *
+ * Floored at one row: a member always occupies the row it starts in.
+ */
+export const snapHeightToRows = (
+    draggedHeight: number,
+    startIndex: number,
+    rows: RowMetrics[],
+    layout: CardLayout
+): number => {
+    let span = 1;
+    let candidate = footprintPixelHeight(rows, startIndex, 1, layout);
+    if (!Number.isFinite(draggedHeight)) return candidate;
+    while (candidate < draggedHeight && span < MAX_GROWTH_ROWS) {
+        const next = footprintPixelHeight(rows, startIndex, span + 1, layout);
+        if (next >= draggedHeight) {
+            return draggedHeight - candidate <= next - draggedHeight ? candidate : next;
+        }
+        span++;
+        candidate = next;
+    }
+    return candidate;
 };
 
 /**

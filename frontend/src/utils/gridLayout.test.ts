@@ -103,7 +103,15 @@ const seriesChrome = (games: number, layout: CardLayout): Chrome => ({
  */
 const positionOfCell = (cell: GridCell, chrome: Chrome, layout: CardLayout) => {
     const rows = rowsOfIndexed(
-        [{ id: "x", index: cell.row, inset: chrome.inset, height: chrome.height }],
+        [
+            {
+                id: "x",
+                index: cell.row,
+                inset: chrome.inset,
+                height: chrome.height,
+                sizesRow: true
+            }
+        ],
         layout
     );
     return {
@@ -132,7 +140,15 @@ function itemAt(
         cell: {
             row: rowAtY(
                 rowsOfIndexed(
-                    [{ id, index: 0, inset: chrome.inset, height: chrome.height }],
+                    [
+                        {
+                            id,
+                            index: 0,
+                            inset: chrome.inset,
+                            height: chrome.height,
+                            sizesRow: true
+                        }
+                    ],
                     layout
                 ),
                 y,
@@ -189,7 +205,8 @@ const itemsInCells = (
             id: spec.id,
             index: spec.cell.row,
             inset: chromeOf(spec).inset,
-            height: chromeOf(spec).height
+            height: chromeOf(spec).height,
+            sizesRow: true
         })),
         layout
     );
@@ -206,7 +223,8 @@ const itemsInCells = (
             },
             cell: spec.cell,
             inset: chrome.inset,
-            height: chrome.height
+            height: chrome.height,
+            sizesRow: true
         };
     });
 };
@@ -2127,7 +2145,7 @@ describe("resolveResizeGridSettings", () => {
         // A container holding a Bo3 has one tall row. Counting in card-height
         // steps would report two rows for a height that presents one.
         const tall = rowsOfIndexed(
-            [{ id: "s", index: 0, inset: 172, height: 520 }],
+            [{ id: "s", index: 0, inset: 172, height: 520, sizesRow: true }],
             layout
         );
         const height = gridContentHeightForRows(tall, 1, layout);
