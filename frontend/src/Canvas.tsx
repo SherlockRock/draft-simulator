@@ -221,7 +221,8 @@ import { type CardLayout } from "./utils/canvasCardLayout";
 import {
     annotationFloor,
     autoFitHeight,
-    defaultAnnotationSize
+    defaultAnnotationSize,
+    snappedAnnotationSize
 } from "./utils/annotationSize";
 import { annotationKeyboardShortcut } from "./utils/annotationKeyboardShortcut";
 
@@ -696,6 +697,60 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         inset: GROUP_BORDER_WIDTH,
         height: cardHeight(layout)
     });
+
+    /**
+     * The geometry `commitGridDrop` needs for a dragged annotation.
+     *
+     * Extracted for the same reason as `draggedCardGeometry`: a node that
+     * reported a Card's height would size its row wrong, and one that reported
+     * a container's inset would be aligned on the wrong baseline. `nodeSize`
+     * reads the STORED size (D5) — never the snapped render size, which is an
+     * output of the row this call is helping to compute.
+     */
+    const draggedAnnotationGeometry = (
+        annotation: CanvasAnnotation,
+        layout: CardLayout
+    ): {
+        id: string;
+        kind: "annotation";
+        footprint: GridFootprint;
+        inset: number;
+        height: number;
+    } => {
+        const node: TreeNode = {
+            kind: "annotation",
+            id: annotation.id,
+            annotation
+        };
+        return {
+            id: annotation.id,
+            kind: "annotation",
+            footprint: footprintOf(canvasTree(), node, layout),
+            inset: insetOf(canvasTree(), node, layout),
+            height: nodeSize(canvasTree(), node, layout).height
+        };
+    };
+
+    /**
+     * The render size for a grouped annotation inside a grid (D5a).
+     *
+     * Returns null outside a grid — the note then paints at its stored size,
+     * which is the whole point of snapping at render rather than at commit.
+     */
+    const snappedAnnotationSizeFor = (
+        group: CanvasGroup,
+        annotation: CanvasAnnotation
+    ): { width: number; height: number } | null => {
+        const layout = props.cardLayout();
+        const rows = rowsOfItems(gridItemsFor(group), layout);
+        const row = rows.find((r) => r.ids.includes(annotation.id));
+        if (!row) return null;
+        return snappedAnnotationSize({
+            storedWidth: annotation.width,
+            rowHeight: row.height,
+            layout
+        });
+    };
 
     /**
      * The item set a materialization must see: the container's current members,
@@ -1229,6 +1284,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             const entry = updates.find((u) => u.draft_id === dragged.id);
             if (entry) entry.group_id = group.id;
         }
+        if (joinsContainer && dragged.kind === "annotation") {
+            const entry = writes.annotations.find((a) => a.id === dragged.id);
+            if (entry) entry.group_id = group.id;
+        }
         if (dragged.kind === "group") {
             // Rebasing the placement says where it sits; it does not say that
             // it is a MEMBER. `parentId` is the only thing that does, and key
@@ -1256,6 +1315,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 positionX: u.positionX,
                 positionY: u.positionY,
                 ...(u.group_id !== undefined ? { group_id: u.group_id } : {})
+            });
+        }
+        for (const entry of writes.annotations) {
+            setAnnotations((a) => a.id === entry.id, {
+                positionX: entry.positionX,
+                positionY: entry.positionY,
+                ...(Object.prototype.hasOwnProperty.call(entry, "group_id")
+                    ? { group_id: entry.group_id }
+                    : {})
             });
         }
         applyGroupPositionWrites(writes.groupStoreWrites);
@@ -1337,6 +1405,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 positionY: u.positionY
             });
         }
+        for (const entry of writes.annotations) {
+            setAnnotations((a) => a.id === entry.id, {
+                positionX: entry.positionX,
+                positionY: entry.positionY,
+                ...(Object.prototype.hasOwnProperty.call(entry, "group_id")
+                    ? { group_id: entry.group_id }
+                    : {})
+            });
+        }
         applyGroupPositionWrites(writes.groupStoreWrites);
         setCanvasGroups((g) => g.id === group.id, {
             width: dims.width,
@@ -1373,7 +1450,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
      *
      * The local branch goes through `withLocalSubtree` for the same reason the
      * other two seams do. It deliberately does NOT call `refreshFromLocal`: the
-     * optimistic writes above already cover the UI, and that helper replaces
+     * optimistic Card, annotation, and Group writes above already cover the UI,
+     * and that helper replaces
      * the group store wholesale, which recreates the `<For>` DOM and strands
      * `:hover`. `persistGroupDimensions` sets the same precedent.
      */
@@ -1406,6 +1484,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             setCanvasDrafts((cd) => cd.draft_id === u.draft_id, {
                 positionX: u.positionX,
                 positionY: u.positionY
+            });
+        }
+        for (const entry of writes.annotations) {
+            setAnnotations((a) => a.id === entry.id, {
+                positionX: entry.positionX,
+                positionY: entry.positionY,
+                ...(Object.prototype.hasOwnProperty.call(entry, "group_id")
+                    ? { group_id: entry.group_id }
+                    : {})
             });
         }
         applyGroupPositionWrites(writes.groupStoreWrites);
@@ -5081,7 +5168,87 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     setDragOverGroupId(null);
                     setExitingGroupId(!hoverGroup ? (currentGroupId ?? null) : null);
                 }
-                setGridDropCell(null);
+                const gridHoverGroup =
+                    hoverGroup &&
+                    isGridGroup(hoverGroup) &&
+                    (hoverGroup.id !== currentGroupId ||
+                        hoverGroup.id === annotationState.dragGroupId)
+                        ? hoverGroup
+                        : null;
+                if (gridHoverGroup) {
+                    const layout = props.cardLayout();
+                    const relX = newWorldX - gridHoverGroup.positionX;
+                    const relY = newWorldY - gridHoverGroup.positionY;
+                    const draggedGeometry = draggedAnnotationGeometry(annotation, layout);
+                    const footprint = draggedGeometry.footprint;
+                    const cols = Math.max(gridColsFor(gridHoverGroup), footprint.cols);
+                    const items = gridItemsFor(gridHoverGroup);
+                    const isIntraGroup =
+                        gridHoverGroup.id === annotationState.dragGroupId;
+                    const previewRows = rowsOfItems(
+                        items.filter((i) => i.id !== annotation.id),
+                        layout
+                    );
+                    const targetCell = cellAt(previewRows, relX, relY, layout, cols);
+                    const assignments = resolveGridDrop({
+                        items,
+                        rows: previewRows,
+                        dragged: draggedGeometry,
+                        draggedOrigin: isIntraGroup
+                            ? {
+                                  x: annotationState.originX,
+                                  y: annotationState.originY
+                              }
+                            : null,
+                        dropX: relX,
+                        dropY: relY,
+                        layout,
+                        cols
+                    });
+                    const landing = assignments[0];
+                    const displaced = assignments.length > 1 ? assignments[1] : null;
+                    const occupantFootprint = displaced
+                        ? (items.find((i) => i.id === displaced.id)?.footprint ??
+                          CARD_FOOTPRINT)
+                        : CARD_FOOTPRINT;
+                    const landingCell = landing ? landing.cell : targetCell;
+                    const { rows: landedRows } = materializeGrid({
+                        items: projectIntoGrid(items, draggedGeometry, landingCell, {
+                            x: relX,
+                            y: relY
+                        }),
+                        assignments,
+                        layout
+                    });
+                    setGridDropCell({
+                        groupId: gridHoverGroup.id,
+                        landing: {
+                            cell: landingCell,
+                            footprint,
+                            rowMetrics: landingBandOf(
+                                landedRows,
+                                annotation.id,
+                                landingCell,
+                                layout
+                            )
+                        },
+                        isSwap: displaced !== null,
+                        displaced: displaced
+                            ? {
+                                  cell: displaced.cell,
+                                  footprint: occupantFootprint,
+                                  rowMetrics: landingBandOf(
+                                      landedRows,
+                                      displaced.id,
+                                      displaced.cell,
+                                      layout
+                                  )
+                              }
+                            : null
+                    });
+                } else {
+                    setGridDropCell(null);
+                }
                 return;
             }
 
@@ -5284,30 +5451,68 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         : annotation.positionY;
                     const dropPoint = annotationCenterPoint(worldX, worldY, annotation);
                     const dropGroup = findGroupAtPosition(dropPoint.x, dropPoint.y);
-                    if (dropGroup) {
-                        // Slice 1: free Groups and the loose canvas.
-                        // `commitGridDrop` learns the annotation kind in slice 2.
-                        // A grid destination is therefore an accepted interim
-                        // plain positioned member; Task 25 lands the whole
-                        // collision/swap/reflow branch together.
-                        persistAnnotationPlacement(annotation.id, {
-                            positionX: worldX - dropGroup.positionX,
-                            positionY: worldY - dropGroup.positionY,
-                            group_id: dropGroup.id
-                        });
-                        resyncGroupSize(dropGroup.id);
-                    } else {
+                    const sourceGroupId = annotationState.dragGroupId;
+                    if (dropGroup && dropGroup.id !== annotation.group_id) {
+                        const relativeX = worldX - dropGroup.positionX;
+                        const relativeY = worldY - dropGroup.positionY;
+                        if (isGridGroup(dropGroup)) {
+                            commitGridDrop({
+                                group: dropGroup,
+                                dragged: draggedAnnotationGeometry(
+                                    annotation,
+                                    props.cardLayout()
+                                ),
+                                relX: relativeX,
+                                relY: relativeY,
+                                origin: null,
+                                joinsContainer: true
+                            });
+                        } else {
+                            persistAnnotationPlacement(annotation.id, {
+                                positionX: relativeX,
+                                positionY: relativeY,
+                                group_id: dropGroup.id
+                            });
+                            resyncGroupSize(dropGroup.id);
+                        }
+                        if (sourceGroupId) resyncGroupSize(sourceGroupId);
+                    } else if (!dropGroup && annotation.group_id) {
                         persistAnnotationPlacement(annotation.id, {
                             positionX: worldX,
                             positionY: worldY,
                             group_id: null
                         });
-                    }
-                    if (
-                        annotationState.dragGroupId &&
-                        annotationState.dragGroupId !== dropGroup?.id
-                    ) {
-                        resyncGroupSize(annotationState.dragGroupId);
+                        if (sourceGroupId) resyncGroupSize(sourceGroupId);
+                    } else {
+                        const sameGroup = annotationState.dragGroupId
+                            ? canvasGroups.find(
+                                  (g) => g.id === annotationState.dragGroupId
+                              )
+                            : null;
+                        if (sameGroup && isGridGroup(sameGroup)) {
+                            commitGridDrop({
+                                group: sameGroup,
+                                dragged: draggedAnnotationGeometry(
+                                    annotation,
+                                    props.cardLayout()
+                                ),
+                                relX: annotation.positionX,
+                                relY: annotation.positionY,
+                                origin: {
+                                    x: annotationState.originX,
+                                    y: annotationState.originY
+                                },
+                                joinsContainer: false
+                            });
+                        } else {
+                            persistAnnotationPlacement(annotation.id, {
+                                positionX: annotation.positionX,
+                                positionY: annotation.positionY
+                            });
+                            if (annotationState.dragGroupId && dropGroup) {
+                                resyncGroupSize(dropGroup.id);
+                            }
+                        }
                     }
                 }
                 setAnnotationDragState({
@@ -5970,7 +6175,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                     zoom={viewportZoom}
                                                     canEdit={canEdit}
                                                     isConnectionMode={isConnectionMode()}
-                                                    snappedSize={() => null}
+                                                    snappedSize={() =>
+                                                        isGridGroup(group)
+                                                            ? snappedAnnotationSizeFor(
+                                                                  group,
+                                                                  annotation
+                                                              )
+                                                            : null
+                                                    }
                                                     isSelected={() =>
                                                         selectedAnnotationId() ===
                                                         annotation.id
