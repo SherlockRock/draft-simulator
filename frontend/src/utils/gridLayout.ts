@@ -555,7 +555,28 @@ export const materializeGrid = (args: {
     return { placements, rows };
 };
 
-const isUnit = (footprint: GridFootprint): boolean => spanOf(footprint).cols === 1;
+/**
+ * The swap's geometric precondition: the two nodes cover CONGRUENT rectangles,
+ * so exchanging their top-left cells cannot overlap anything.
+ *
+ * Was `isUnit(a) && isUnit(b)` — both exactly one cell wide, on the single-row
+ * lattice where that meant both exactly one cell. With a row axis that test
+ * would let a 1×2 note swap with a 1×1 Card and leave the note's second row
+ * sitting on top of whatever was below.
+ *
+ * ⚠️ THIS IS A LIVE BEHAVIOUR CHANGE, not just a spanning one. Two notes with
+ * the same non-unit footprint — a pool of 2-column notes, reachable today —
+ * could not be reordered before and can now. That is D6a's own rationale
+ * applied consistently: "every drag would fling the note to the nearest free
+ * cell instead of swapping" was the complaint, and it was as true of two wide
+ * notes as of two narrow ones. Unequal footprints still relocate the dragged
+ * node and leave occupants alone.
+ */
+const sameFootprint = (a: GridFootprint, b: GridFootprint): boolean => {
+    const left = spanOf(a);
+    const right = spanOf(b);
+    return left.cols === right.cols && left.rows === right.rows;
+};
 
 /**
  * Kinds that may be EVICTED by a swap (design D6a).
@@ -573,19 +594,20 @@ const isLeafKind = (kind: GridItem["kind"]): boolean =>
  * Where a drop lands, and what (if anything) it displaces.
  *
  * Target = the top-left cell under the drop. Footprint fits free → place it.
- * Collision → **swap only when both nodes are `1×1` LEAVES** — a Card or an
- * annotation (D6a); anything else relocates the DRAGGED node to the nearest
- * free rect and leaves the occupants alone (decision 7). A `1×1` dragged onto
- * a `2×4` series must not evict the series.
+ * Collision → **swap only when both nodes are LEAVES with CONGRUENT
+ * footprints** — a Card or an annotation (D6a); anything else relocates the
+ * DRAGGED node to the nearest free rect and leaves the occupants alone
+ * (decision 7). A `1×1` dragged onto a `2×4` series must not evict the series,
+ * and a 2-row note dragged onto a 1-row Card must not either.
  *
- * ⚠️ The `kind` half of that test is not redundant with `isUnit` (decision 7,
- * amended round 2). `isUnit` tests the FOOTPRINT, and a default 400×200 nested
- * Group is `1×1` in four of the six card layouts and `2×1` in the other two —
- * so without the `kind` gate the swap was reachable for containers *and* its
- * availability depended on `cardLayout`, which is canvas-level and broadcast.
- * One user flipping a display toggle would have changed what everyone's drop
- * gesture did to containers. A Card dropped onto a nested Group now relocates
- * the **Card**; the Group is never evicted.
+ * ⚠️ The `kind` half of that test is not redundant with the footprint half
+ * (decision 7, amended round 2). `sameFootprint` tests GEOMETRY, and a default
+ * 400×200 nested Group is `1×1` in four of the six card layouts and `2×1` in
+ * the other two — so without the `kind` gate the swap was reachable for
+ * containers *and* its availability depended on `cardLayout`, which is
+ * canvas-level and broadcast. One user flipping a display toggle would have
+ * changed what everyone's drop gesture did to containers. A Card dropped onto a
+ * nested Group relocates the **Card**; the Group is never evicted.
  *
  * The dragged node's footprint comes in separately from `items` because a node
  * entering from outside the group is not in `items` at all, and one that is has
@@ -626,8 +648,7 @@ export const resolveGridDrop = (args: {
         collisions.length === 1 &&
         isLeafKind(dragged.kind) &&
         isLeafKind(occupant.kind) &&
-        isUnit(dragged.footprint) &&
-        isUnit(occupant.footprint)
+        sameFootprint(dragged.footprint, occupant.footprint)
     ) {
         const occupantCell = draggedOrigin
             ? cellAt(rows, draggedOrigin.x, draggedOrigin.y, layout, cols)

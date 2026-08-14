@@ -853,9 +853,12 @@ describe("resolveGridDrop", () => {
         ]);
     });
 
-    // The kind half is not redundant with isUnit: a 2-column annotation is a
-    // leaf but not a unit, and the swap is a unit-footprint operation.
-    it("does not swap a 2-column annotation", () => {
+    // The kind half is not redundant with the footprint half: a 2-column
+    // annotation is a leaf, and the swap needs CONGRUENT footprints. This
+    // fixture drops a 2×1 onto a 1×1, so it stays a no-swap under the congruence
+    // rule that replaced the old "both exactly one cell" test — but two 2×1
+    // notes now DO swap, which the next test pins.
+    it("does not swap a 2-column annotation onto a 1-column one", () => {
         const items = itemsInCells(
             [
                 {
@@ -2295,5 +2298,165 @@ describe("multi-row footprints", () => {
                 { row: 1, col: 0 }
             ]);
         });
+    });
+});
+
+/**
+ * Step 4 of row spanning: what a drop does when the two nodes are not the same
+ * shape, and what a footprint growing DOWN displaces.
+ */
+describe("swapping and eviction across the row axis", () => {
+    const layout: CardLayout = "vertical";
+    const TALL: GridFootprint = { cols: 1, rows: 2 };
+
+    const dropOnto = (
+        items: GridItem[],
+        dragged: { id: string; kind: GridItem["kind"]; footprint: GridFootprint },
+        cell: GridCell,
+        cols: number
+    ) => {
+        const origin = items.find((i) => i.id === dragged.id)?.position ?? null;
+        const point = cellToPosition(cell, layout);
+        return resolveGridDrop({
+            items,
+            rows: rowsOfItems(
+                items.filter((i) => i.id !== dragged.id),
+                layout
+            ),
+            dragged,
+            draggedOrigin: origin,
+            dropX: point.x,
+            dropY: point.y,
+            layout,
+            cols
+        });
+    };
+
+    it("refuses to swap a two-row note with a one-row Card", () => {
+        const items = itemsInCells(
+            [
+                {
+                    id: "note",
+                    cell: { row: 0, col: 0 },
+                    footprint: TALL,
+                    kind: "annotation"
+                },
+                { id: "card", cell: { row: 2, col: 0 }, kind: "card" }
+            ],
+            layout
+        );
+        const result = dropOnto(
+            items,
+            { id: "note", kind: "annotation", footprint: TALL },
+            { row: 2, col: 0 },
+            1
+        );
+        // A swap would put the Card at row 0 and the note's second row on top of
+        // it. Relocation instead: only the dragged node moves.
+        expect(result.map((a) => a.id)).toEqual(["note"]);
+        expect(result[0].cell).not.toEqual({ row: 2, col: 0 });
+    });
+
+    it("swaps two notes that are the same shape, however tall", () => {
+        const items = itemsInCells(
+            [
+                {
+                    id: "a",
+                    cell: { row: 0, col: 0 },
+                    footprint: TALL,
+                    kind: "annotation"
+                },
+                { id: "b", cell: { row: 2, col: 0 }, footprint: TALL, kind: "annotation" }
+            ],
+            layout
+        );
+        const result = dropOnto(
+            items,
+            { id: "a", kind: "annotation", footprint: TALL },
+            { row: 2, col: 0 },
+            1
+        );
+        expect(result).toHaveLength(2);
+        expect(result.find((r) => r.id === "a")?.cell).toEqual({ row: 2, col: 0 });
+        expect(result.find((r) => r.id === "b")?.cell).toEqual({ row: 0, col: 0 });
+    });
+
+    // The live behaviour change called out on `sameFootprint`: reachable today,
+    // with no spanning involved at all.
+    it("swaps two 2-column notes, which the old unit rule refused", () => {
+        const wide: GridFootprint = { cols: 2, rows: 1 };
+        const items = itemsInCells(
+            [
+                {
+                    id: "a",
+                    cell: { row: 0, col: 0 },
+                    footprint: wide,
+                    kind: "annotation"
+                },
+                { id: "b", cell: { row: 1, col: 0 }, footprint: wide, kind: "annotation" }
+            ],
+            layout
+        );
+        const result = dropOnto(
+            items,
+            { id: "a", kind: "annotation", footprint: wide },
+            { row: 1, col: 0 },
+            2
+        );
+        expect(result).toHaveLength(2);
+        expect(result.find((r) => r.id === "b")?.cell).toEqual({ row: 0, col: 0 });
+    });
+
+    it("still refuses to evict a container, whatever the shapes", () => {
+        const items = itemsInCells(
+            [
+                { id: "g", cell: { row: 0, col: 0 }, kind: "group" },
+                { id: "note", cell: { row: 1, col: 0 }, kind: "annotation" }
+            ],
+            layout
+        );
+        const result = dropOnto(
+            items,
+            { id: "note", kind: "annotation", footprint: CARD_FOOTPRINT },
+            { row: 0, col: 0 },
+            1
+        );
+        expect(result.map((a) => a.id)).toEqual(["note"]);
+    });
+
+    it("evicts the occupant of a row a footprint grows DOWN into", () => {
+        // `reflowAfterGrowth` is footprint-generic, so the row axis needs no
+        // special case — but nothing proved it until this ran.
+        const items = itemsInCells(
+            [
+                {
+                    id: "note",
+                    cell: { row: 0, col: 0 },
+                    footprint: TALL,
+                    kind: "annotation"
+                },
+                { id: "card", cell: { row: 1, col: 0 }, kind: "card" }
+            ],
+            layout
+        );
+        const moved = reflowAfterGrowth({ items, grownId: "note", cols: 1 });
+        expect(moved.map((a) => a.id)).toEqual(["card"]);
+        expect(moved[0].cell).toEqual({ row: 2, col: 0 });
+    });
+
+    it("leaves a sibling alone when the growth misses it", () => {
+        const items = itemsInCells(
+            [
+                {
+                    id: "note",
+                    cell: { row: 0, col: 0 },
+                    footprint: TALL,
+                    kind: "annotation"
+                },
+                { id: "card", cell: { row: 0, col: 1 }, kind: "card" }
+            ],
+            layout
+        );
+        expect(reflowAfterGrowth({ items, grownId: "note", cols: 2 })).toEqual([]);
     });
 });
