@@ -2,8 +2,10 @@ import { Show, createEffect, createMemo, createSignal } from "solid-js";
 import type { CanvasAnnotation as CanvasAnnotationRow } from "../utils/schemas";
 import { annotationSurfaceClass, ANNOTATION_FONT_PX } from "../utils/annotationStyle";
 import { MIN_ANNOTATION_HEIGHT, MIN_ANNOTATION_WIDTH } from "../utils/annotationSize";
-import { scaledStrokePx, screenConstantPx } from "../utils/viewport";
+import { scaledStrokePx } from "../utils/viewport";
+import { resizeHandleWorldPx } from "../utils/resizeHandle";
 import { CUSTOM_GROUP_HEADER_HEIGHT } from "./CustomGroupContainer";
+import { ResizeGrip } from "./ResizeGrip";
 
 export const annotationRenderTop = (positionY: number, isGrouped: boolean): number =>
     isGrouped ? positionY - CUSTOM_GROUP_HEADER_HEIGHT : positionY;
@@ -203,12 +205,18 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
             {/* Champion strip lands in slice 3. */}
 
             <Show when={props.canEdit() && !props.isConnectionMode && props.isSelected()}>
-                <div
-                    class="absolute bottom-0 right-0 cursor-nwse-resize"
-                    style={{
-                        width: `${screenConstantPx(12, props.zoom())}px`,
-                        height: `${screenConstantPx(12, props.zoom())}px`
-                    }}
+                <ResizeGrip
+                    corner="se"
+                    // Screen-constant and capped, via the shared rule the
+                    // Group's grip uses. The old `screenConstantPx(12, …)` was
+                    // constant on screen but only 12px of it, and — uncapped —
+                    // resolved to 120 WORLD px at MIN_ZOOM, which is more than
+                    // a minimum 56x40 note is, so the handle covered the note
+                    // and swallowed its drag.
+                    size={resizeHandleWorldPx(
+                        props.zoom(),
+                        Math.min(renderWidth(), renderHeight())
+                    )}
                     onMouseDown={(e) => {
                         e.stopPropagation();
                         const startX = e.clientX;

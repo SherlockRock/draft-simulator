@@ -10,6 +10,8 @@ import {
 import { Trash2, Settings } from "lucide-solid";
 import { GameTypeChip } from "./GameTypeChip";
 import { scaledStrokePx } from "../utils/viewport";
+import { resizeHandleWorldPx } from "../utils/resizeHandle";
+import { ResizeGrip } from "./ResizeGrip";
 import { CanvasDraft, CanvasGroup, AnchorType } from "../utils/schemas";
 import {
     GRID_HEADER_HEIGHT,
@@ -497,40 +499,30 @@ export const CustomGroupContainer = (props: CustomGroupContainerProps) => {
 
             {/* Resize handle — in grid mode, resizing taller exposes empty rows */}
             <Show when={props.canEdit()}>
-                <div
-                    class="absolute bottom-0 left-0 h-4 w-4 cursor-sw-resize"
+                {/*
+                  Both grips are screen-constant now, via the same rule the
+                  annotation's uses. They were a fixed `h-4 w-4`, which is 16
+                  WORLD px and therefore 1.6 screen px at MIN_ZOOM — not a
+                  pointer target at all. A container is far larger than its
+                  shortest side's cap, so in practice this is purely the zoom
+                  rule.
+                */}
+                <ResizeGrip
+                    corner="sw"
+                    size={resizeHandleWorldPx(
+                        props.zoom(),
+                        Math.min(groupWidth(), groupHeight())
+                    )}
                     onMouseDown={(e) => handleResizeMouseDown(e, "left")}
-                >
-                    <svg
-                        class="absolute bottom-1 left-1 h-3 w-3 text-darius-text-secondary"
-                        fill="currentColor"
-                        viewBox="0 0 10 10"
-                    >
-                        <path
-                            d="M1 1L9 9M1 5L5 9M1 9L1 9"
-                            stroke="currentColor"
-                            stroke-width="1.5"
-                            fill="none"
-                        />
-                    </svg>
-                </div>
-                <div
-                    class="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize"
+                />
+                <ResizeGrip
+                    corner="se"
+                    size={resizeHandleWorldPx(
+                        props.zoom(),
+                        Math.min(groupWidth(), groupHeight())
+                    )}
                     onMouseDown={(e) => handleResizeMouseDown(e, "right")}
-                >
-                    <svg
-                        class="absolute bottom-1 right-1 h-3 w-3 text-darius-text-secondary"
-                        fill="currentColor"
-                        viewBox="0 0 10 10"
-                    >
-                        <path
-                            d="M9 1L1 9M9 5L5 9M9 9L9 9"
-                            stroke="currentColor"
-                            stroke-width="1.5"
-                            fill="none"
-                        />
-                    </svg>
-                </div>
+                />
             </Show>
         </div>
     );
