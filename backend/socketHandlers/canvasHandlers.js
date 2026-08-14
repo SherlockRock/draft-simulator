@@ -59,6 +59,7 @@ function setupCanvasHandlers(socket, gate, wrapSocketHandler) {
       actor,
       canvasId: data.canvasId,
       annotationId: data.annotationId,
+      positionX: data.positionX,
       width: data.width,
       height: data.height,
     }),

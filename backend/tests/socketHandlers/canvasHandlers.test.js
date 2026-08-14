@@ -162,6 +162,7 @@ describe("setupCanvasHandlers", () => {
     await handlers.get("annotationResize")({
       canvasId: "c-1",
       annotationId: "a-1",
+      positionX: 16,
       width: 700,
       height: 384,
     });
@@ -170,6 +171,7 @@ describe("setupCanvasHandlers", () => {
       actor: { userId: "user-1", socketId: "sock-1" },
       canvasId: "c-1",
       annotationId: "a-1",
+      positionX: 16,
       width: 700,
       height: 384,
     });
@@ -182,6 +184,7 @@ describe("setupCanvasHandlers", () => {
     await handlers.get("annotationResize")({
       canvasId: "c-1",
       annotationId: "a-1",
+      positionX: 16,
       width: 700,
       height: 384,
     });

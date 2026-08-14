@@ -3,7 +3,7 @@ import type { CanvasAnnotation as CanvasAnnotationRow } from "../utils/schemas";
 import { annotationSurfaceClass, ANNOTATION_FONT_PX } from "../utils/annotationStyle";
 import { MIN_ANNOTATION_HEIGHT, MIN_ANNOTATION_WIDTH } from "../utils/annotationSize";
 import { scaledStrokePx } from "../utils/viewport";
-import { resizeHandleWorldPx } from "../utils/resizeHandle";
+import { resizeFromLeft, resizeHandleWorldPx } from "../utils/resizeHandle";
 import { CUSTOM_GROUP_HEADER_HEIGHT } from "./CustomGroupContainer";
 import { ResizeGrip } from "./ResizeGrip";
 
@@ -28,8 +28,28 @@ type CanvasAnnotationProps = {
     onStartEditing: (annotationId: string) => void;
     onMouseDown: (e: MouseEvent, annotation: CanvasAnnotationRow) => void;
     onCommitText: (annotationId: string, text: string, measuredHeight: number) => void;
-    onResize: (annotationId: string, width: number, height: number) => void;
-    onResizeEnd: (annotationId: string, width: number, height: number) => void;
+    /**
+     * `isLeftEdge` says which corner is being dragged, and it is passed rather
+     * than inferred on purpose. The receiver cannot recover it from the
+     * numbers: comparing the incoming `positionX` against the stored one calls
+     * a RIGHT-edge drag a left-edge one whenever the note's x has moved since
+     * mousedown, and calls a left-edge drag a right-edge one at the exact
+     * moment the user drags back to where they started.
+     */
+    onResize: (
+        annotationId: string,
+        positionX: number,
+        width: number,
+        height: number,
+        isLeftEdge: boolean
+    ) => void;
+    onResizeEnd: (
+        annotationId: string,
+        positionX: number,
+        width: number,
+        height: number,
+        isLeftEdge: boolean
+    ) => void;
 };
 
 /**
@@ -82,6 +102,82 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
     const renderHeight = () => props.snappedSize()?.height ?? props.annotation.height;
 
     const fontPx = createMemo(() => ANNOTATION_FONT_PX[props.annotation.fontSize]);
+
+    /**
+     * Both bottom corners, which differ in exactly one thing: which horizontal
+     * edge stays put. `se` pins the left edge and grows right; `sw` pins the
+     * RIGHT edge and moves `positionX` as the width changes. Height is
+     * identical for both — they are both BOTTOM corners.
+     */
+    const handleResizeMouseDown = (e: MouseEvent, corner: "sw" | "se") => {
+        e.stopPropagation();
+        const isLeftEdge = corner === "sw";
+        const startX = e.clientX;
+        const startY = e.clientY;
+        // Seeded from the PAINTED box, not the stored size — and via the same
+        // accessors that paint it, so the gesture's origin cannot drift from
+        // the corner the handle is sitting on.
+        //
+        // Inside a grid those differ, and seeding from the stored size left the
+        // handle detached from the number it controls: a 56px-stored note
+        // painting 700px needed ~700px of travel before the first cell
+        // appeared, and a 120px-stored note painting 384px beside a Card did
+        // nothing for ~264px. The vertical dead zone's SIZE depended on what
+        // else shared the row, which is what made the two axes feel unrelated.
+        //
+        // Captured once, deliberately. Re-reading them per mousemove would feed
+        // each frame's snapped result back in as the next frame's origin.
+        //
+        // `positionX` is the exception that needs no render accessor: the note
+        // paints at `left: positionX` verbatim, so stored and painted x are the
+        // same number. Only the SIZE is ever snapped away from storage.
+        const startPositionX = props.annotation.positionX;
+        const startWidth = renderWidth();
+        const startHeight = renderHeight();
+
+        const onMove = (move: MouseEvent) => {
+            const deltaX = (move.clientX - startX) / props.zoom();
+            const deltaY = (move.clientY - startY) / props.zoom();
+            // Clamped to the RESIZE MINIMUM, not to the manual floor — this
+            // gesture is what SETS the floor, so reading it here would ratchet
+            // the note's size up and make it un-shrinkable by hand.
+            const horizontal = isLeftEdge
+                ? resizeFromLeft({
+                      startPositionX,
+                      startWidth,
+                      deltaX,
+                      minWidth: MIN_ANNOTATION_WIDTH
+                  })
+                : {
+                      // The LIVE x, not the captured one. This corner does not
+                      // move the note, so it must not write a stale origin over
+                      // an x that something else has since changed.
+                      positionX: props.annotation.positionX,
+                      width: Math.max(MIN_ANNOTATION_WIDTH, startWidth + deltaX)
+                  };
+            const height = Math.max(MIN_ANNOTATION_HEIGHT, startHeight + deltaY);
+            props.onResize(
+                props.annotation.id,
+                horizontal.positionX,
+                horizontal.width,
+                height,
+                isLeftEdge
+            );
+        };
+        const onUp = () => {
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+            props.onResizeEnd(
+                props.annotation.id,
+                props.annotation.positionX,
+                props.annotation.width,
+                props.annotation.height,
+                isLeftEdge
+            );
+        };
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+    };
 
     const commitText = () => {
         // ⚠️ Snapshot BEFORE clearing the focus flag. Solid flushes the resync
@@ -206,6 +302,14 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
 
             <Show when={props.canEdit() && !props.isConnectionMode && props.isSelected()}>
                 <ResizeGrip
+                    corner="sw"
+                    size={resizeHandleWorldPx(
+                        props.zoom(),
+                        Math.min(renderWidth(), renderHeight())
+                    )}
+                    onMouseDown={(e) => handleResizeMouseDown(e, "sw")}
+                />
+                <ResizeGrip
                     corner="se"
                     // Screen-constant and capped, via the shared rule the
                     // Group's grip uses. The old `screenConstantPx(12, …)` was
@@ -217,57 +321,7 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                         props.zoom(),
                         Math.min(renderWidth(), renderHeight())
                     )}
-                    onMouseDown={(e) => {
-                        e.stopPropagation();
-                        const startX = e.clientX;
-                        const startY = e.clientY;
-                        // Seeded from the PAINTED box, not the stored size —
-                        // and via the same two accessors that paint it, so the
-                        // gesture's origin cannot drift from the corner the
-                        // handle is sitting on.
-                        //
-                        // Inside a grid those differ, and seeding from the
-                        // stored size left the handle detached from the number
-                        // it controls: a 56px-stored note painting 700px
-                        // needed ~700px of travel before the first cell
-                        // appeared, and a 120px-stored note painting 384px
-                        // beside a Card did nothing for ~264px. The vertical
-                        // dead zone's SIZE depended on what else shared the
-                        // row, which is what made the two axes feel unrelated.
-                        //
-                        // Captured once, deliberately. Re-reading them per
-                        // mousemove would feed each frame's snapped result
-                        // back in as the next frame's origin.
-                        const startWidth = renderWidth();
-                        const startHeight = renderHeight();
-
-                        const onMove = (move: MouseEvent) => {
-                            // Clamped to the RESIZE MINIMUM, not to the manual
-                            // floor — this gesture is what SETS the floor, so
-                            // reading it here would ratchet the note's size up
-                            // and make it un-shrinkable by hand.
-                            const width = Math.max(
-                                MIN_ANNOTATION_WIDTH,
-                                startWidth + (move.clientX - startX) / props.zoom()
-                            );
-                            const height = Math.max(
-                                MIN_ANNOTATION_HEIGHT,
-                                startHeight + (move.clientY - startY) / props.zoom()
-                            );
-                            props.onResize(props.annotation.id, width, height);
-                        };
-                        const onUp = () => {
-                            window.removeEventListener("mousemove", onMove);
-                            window.removeEventListener("mouseup", onUp);
-                            props.onResizeEnd(
-                                props.annotation.id,
-                                props.annotation.width,
-                                props.annotation.height
-                            );
-                        };
-                        window.addEventListener("mousemove", onMove);
-                        window.addEventListener("mouseup", onUp);
-                    }}
+                    onMouseDown={(e) => handleResizeMouseDown(e, "se")}
                 />
             </Show>
         </div>

@@ -383,6 +383,7 @@ export const AnnotationMovedSchema = z.object({
  */
 export const AnnotationResizedSchema = z.object({
   annotationId: z.string(),
+  positionX: z.number(),
   width: z.number(),
   height: z.number(),
 });

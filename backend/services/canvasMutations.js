@@ -282,7 +282,14 @@ function createCanvasMutationGate({ io }) {
    * Paint-only. The D7 floor (`manualWidth`/`manualHeight`) is written once by
    * the REST commit, which broadcasts its own `canvasUpdate` snapshot.
    */
-  async function relayAnnotationResize({ actor, canvasId, annotationId, width, height }) {
+  async function relayAnnotationResize({
+    actor,
+    canvasId,
+    annotationId,
+    positionX,
+    width,
+    height,
+  }) {
     await assertCanvasAccess({
       userId: actor.userId,
       canvasId,
@@ -290,7 +297,7 @@ function createCanvasMutationGate({ io }) {
     });
     io.to(canvasId)
       .except(actor.socketId)
-      .emit("annotationResized", { annotationId, width, height });
+      .emit("annotationResized", { annotationId, positionX, width, height });
   }
 
   async function relayVertexMove({ actor, canvasId, connectionId, vertexId, x, y }) {

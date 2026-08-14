@@ -1,6 +1,34 @@
 import { screenConstantPx } from "./viewport";
 
 /**
+ * A bottom-LEFT resize: the note's right edge is anchored, so width and
+ * `positionX` move together and in opposite directions.
+ *
+ * **The invariant is that `positionX + width` never changes**, and it has to
+ * hold through the min-width clamp too — that is the case a naive
+ * implementation gets wrong, by clamping the width and leaving `positionX`
+ * free, which walks the anchored edge leftward one frame at a time.
+ *
+ * Mirrors `CustomGroupContainer`'s `edge === "left"` branch, which is the same
+ * `startPositionX + (startWidth - width)` shape. Extracted rather than copied
+ * because component internals are invisible to the suite here — no jsdom, by
+ * maintainer ruling — so this is the only layer where the arithmetic can be
+ * proven at all.
+ */
+export const resizeFromLeft = (args: {
+    startPositionX: number;
+    startWidth: number;
+    deltaX: number;
+    minWidth: number;
+}): { positionX: number; width: number } => {
+    const width = Math.max(args.minWidth, args.startWidth - args.deltaX);
+    return {
+        positionX: args.startPositionX + (args.startWidth - width),
+        width
+    };
+};
+
+/**
  * A comfortable pointer target for a corner resize grip, in css px.
  *
  * A hit target is a property of the HAND, not of the canvas — the pointer does

@@ -1,10 +1,84 @@
 import { describe, expect, it } from "vitest";
-import { RESIZE_HANDLE_SCREEN_PX, resizeHandleWorldPx } from "./resizeHandle";
+import {
+    RESIZE_HANDLE_SCREEN_PX,
+    resizeFromLeft,
+    resizeHandleWorldPx
+} from "./resizeHandle";
 import { MIN_ANNOTATION_HEIGHT, MIN_ANNOTATION_WIDTH } from "./annotationSize";
 import { MIN_ZOOM } from "./viewport";
 
 /** A roomy element, so the cap never binds and only the zoom rule is on show. */
 const ROOMY = 10000;
+
+describe("resizeFromLeft", () => {
+    it("moves the left edge while keeping the right edge invariant", () => {
+        const startPositionX = 120;
+        const startWidth = 380;
+        const resized = resizeFromLeft({
+            startPositionX,
+            startWidth,
+            deltaX: 75,
+            minWidth: MIN_ANNOTATION_WIDTH
+        });
+
+        expect(resized).toEqual({ positionX: 195, width: 305 });
+        expect(resized.positionX + resized.width).toBe(startPositionX + startWidth);
+    });
+
+    it("keeps the right edge invariant when the minimum-width clamp binds", () => {
+        const startPositionX = 120;
+        const startWidth = 380;
+        const resized = resizeFromLeft({
+            startPositionX,
+            startWidth,
+            deltaX: 1000,
+            minWidth: MIN_ANNOTATION_WIDTH
+        });
+
+        expect(resized.width).toBe(MIN_ANNOTATION_WIDTH);
+        expect(resized.positionX + resized.width).toBe(startPositionX + startWidth);
+    });
+
+    /**
+     * The invariant swept over the whole drag, in BOTH directions, rather than
+     * at two hand-picked deltas.
+     *
+     * The clamp is the interesting half: past it the width stops moving, so an
+     * implementation that keeps advancing `positionX` walks the supposedly
+     * anchored edge leftward one frame at a time. A fixture that only drags a
+     * little never reaches that, which is why this sweeps past the clamp on
+     * both sides.
+     */
+    it("holds the right edge across the entire drag range", () => {
+        const startPositionX = 120;
+        const startWidth = 380;
+        const rightEdge = startPositionX + startWidth;
+        for (let deltaX = -600; deltaX <= 600; deltaX += 20) {
+            const resized = resizeFromLeft({
+                startPositionX,
+                startWidth,
+                deltaX,
+                minWidth: MIN_ANNOTATION_WIDTH
+            });
+            expect(resized.positionX + resized.width).toBe(rightEdge);
+            expect(resized.width).toBeGreaterThanOrEqual(MIN_ANNOTATION_WIDTH);
+        }
+    });
+
+    // Dragging the left edge RIGHTWARD past the clamp must not invert the note
+    // — the width floors and the left edge stops, rather than the box turning
+    // inside out and reappearing on the far side of its anchor.
+    it("never inverts the box", () => {
+        const resized = resizeFromLeft({
+            startPositionX: 0,
+            startWidth: 100,
+            deltaX: 5000,
+            minWidth: MIN_ANNOTATION_WIDTH
+        });
+        expect(resized.width).toBe(MIN_ANNOTATION_WIDTH);
+        expect(resized.positionX).toBeLessThan(100);
+    });
+});
 
 describe("resizeHandleWorldPx", () => {
     it("is the authored target at zoom 1", () => {

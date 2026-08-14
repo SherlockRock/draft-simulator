@@ -95,6 +95,7 @@ import {
     maxChildSpanCols,
     nodeSize,
     renderOrder,
+    spanFor,
     type CanvasTree,
     type TreeNode
 } from "./utils/canvasTree";
@@ -191,6 +192,9 @@ import {
     MIN_GROUP_HEIGHT,
     arrangedRowCount,
     CARD_FOOTPRINT,
+    cellToPosition,
+    footprintPixelWidth,
+    GRID_CELL_GAP,
     type GridFootprint,
     type GridItem,
     type GridSettingsInput,
@@ -2078,6 +2082,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // `draggedAnnotationId()`. See `relayAnnotationResize`.
     const emitAnnotationResize = (
         annotationId: string,
+        positionX: number,
         width: number,
         height: number
     ) => {
@@ -2087,6 +2092,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         socket.emit("annotationResize", {
             canvasId: canvasId(),
             annotationId,
+            positionX,
             width,
             height
         });
@@ -2403,13 +2409,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             );
             if (!data) return;
             // No `markRelayedDrag` and no `clearRelayedDrag`, unlike the two
-            // relays either side of this one. A resize does not move the note,
-            // so there is no arbitrary mid-gesture position for a row
-            // derivation to mistake for a settled one — and marking it
-            // in-flight would drop it from the settled rows and change the
-            // size it paints at on THIS client only. Nor is a live frame a
-            // commit, which is what `groupResized` clears on.
+            // relays either side of this one.
+            //
+            // ⚠️ The original reason was "a resize does not move the note", and
+            // the bottom-LEFT grip made that false — it anchors the right edge,
+            // so `positionX` travels with the width. The conclusion survives on
+            // a NARROWER reason: it moves the note on the X AXIS ONLY, and the
+            // row model buckets on `y + inset`, so no mid-gesture x can be
+            // mistaken for a settled row. Marking it in-flight would still drop
+            // it from the settled rows and change the size it paints at on THIS
+            // client only. Nor is a live frame a commit, which is what
+            // `groupResized` clears on.
+            //
+            // KNOWN AND ACCEPTED: an observer who is themselves dragging this
+            // note now gets its x written under them by a resize frame. It
+            // needed two users on one note and no edit lock — the same class of
+            // conflict concurrent moves already have, and the edit lock is its
+            // own slice.
             setAnnotations((a) => a.id === data.annotationId, {
+                positionX: data.positionX,
                 width: data.width,
                 height: data.height
             });
@@ -4517,6 +4535,36 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     /**
+     * Snap a left-edge resize to the grid while preserving its right boundary.
+     * The width joins the result because clamping the left column at zero must
+     * also stop growth; otherwise the supposedly anchored right edge would move.
+     */
+    const resizeLeftFor = (
+        annotationId: string,
+        positionX: number,
+        width: number
+    ): { positionX: number; width: number } => {
+        const annotation = annotations.find((a) => a.id === annotationId);
+        if (!annotation?.group_id) return { positionX, width };
+        const group = canvasGroups.find((g) => g.id === annotation.group_id);
+        if (!group || !isGridGroup(group)) return { positionX, width };
+        const item = gridItemsFor(group).find(
+            (candidate) => candidate.id === annotationId
+        );
+        if (!item) return { positionX, width };
+
+        const layout = props.cardLayout();
+        const rightBoundaryCol = item.cell.col + item.footprint.cols;
+        const requestedCols = spanFor(width, cardWidth(layout), GRID_CELL_GAP);
+        const clampedCols = Math.min(requestedCols, rightBoundaryCol);
+        const leftCol = Math.max(0, rightBoundaryCol - clampedCols);
+        return {
+            positionX: cellToPosition({ row: item.cell.row, col: leftCol }, layout).x,
+            width: footprintPixelWidth({ cols: clampedCols, rows: 1 }, layout)
+        };
+    };
+
+    /**
      * The height a resize gesture is allowed to leave a note at: whole rows
      * inside a grid, untouched outside one.
      *
@@ -4544,25 +4592,50 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     /** Live resize: paint only. No persistence and no floor write. */
     const handleAnnotationResize = (
         annotationId: string,
+        positionX: number,
         width: number,
-        height: number
+        height: number,
+        isLeftEdge: boolean
     ) => {
         const snappedWidth = resizeWidthFor(annotationId, width);
         const snappedHeight = resizeHeightFor(annotationId, height);
+        // ⚠️ `isLeftEdge` is PASSED, never inferred from the numbers. An earlier
+        // draft derived it as `positionX !== annotation.positionX`, which is
+        // wrong in both directions: a RIGHT-edge drag reads as a left-edge one
+        // the moment anything else moves the note mid-gesture, and a left-edge
+        // drag reads as a right-edge one exactly when the user drags back to
+        // where they started.
+        const horizontal = isLeftEdge
+            ? resizeLeftFor(annotationId, positionX, snappedWidth)
+            : { positionX, width: snappedWidth };
         setAnnotations((a) => a.id === annotationId, {
-            width: snappedWidth,
+            positionX: horizontal.positionX,
+            width: horizontal.width,
             height: snappedHeight
         });
-        debouncedEmitAnnotationResize(annotationId, snappedWidth, snappedHeight);
+        debouncedEmitAnnotationResize(
+            annotationId,
+            horizontal.positionX,
+            horizontal.width,
+            snappedHeight
+        );
     };
 
     /** Resize commit writes both the rendered size and the manual floor (D7). */
     const handleAnnotationResizeEnd = (
         annotationId: string,
+        positionX: number,
         width: number,
-        height: number
+        height: number,
+        isLeftEdge: boolean
     ) => {
-        const fields = { width, height, manualWidth: width, manualHeight: height };
+        // The D7 floor is the SIZE only. `positionX` is committed as a plain
+        // position, and only when this corner actually moved it — a right-edge
+        // resize must not write an x at all, or it persists a value it never
+        // owned.
+        const fields = isLeftEdge
+            ? { positionX, width, height, manualWidth: width, manualHeight: height }
+            : { width, height, manualWidth: width, manualHeight: height };
         setAnnotations((a) => a.id === annotationId, fields);
         if (isLocalMode()) localUpdateAnnotation({ annotationId, ...fields });
         else {

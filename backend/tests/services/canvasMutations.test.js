@@ -433,6 +433,7 @@ describe("ephemeral relays — authorize → broadcast only", () => {
         actor: ACTOR,
         canvasId: "c-1",
         annotationId: "a-1",
+        positionX: 16,
         width: 700,
         height: 384,
       }),
@@ -458,6 +459,7 @@ describe("ephemeral relays — authorize → broadcast only", () => {
       actor: ACTOR,
       canvasId: "c-1",
       annotationId: "a-1",
+      positionX: 16,
       width: 700,
       height: 384,
     });
@@ -466,6 +468,7 @@ describe("ephemeral relays — authorize → broadcast only", () => {
     expect(except).toHaveBeenCalledWith("sock-1");
     expect(exceptEmit).toHaveBeenCalledWith("annotationResized", {
       annotationId: "a-1",
+      positionX: 16,
       width: 700,
       height: 384,
     });
