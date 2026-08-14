@@ -6,7 +6,8 @@ import {
     defaultAnnotationSize,
     MIN_ANNOTATION_HEIGHT,
     MIN_ANNOTATION_WIDTH,
-    snappedAnnotationSize
+    snappedAnnotationSize,
+    snapWidthToCells
 } from "./annotationSize";
 import { GRID_CELL_GAP } from "./gridLayout";
 import { cardWidth } from "./helpers";
@@ -77,6 +78,56 @@ describe("autoFitHeight", () => {
 describe("MIN_ANNOTATION_WIDTH", () => {
     it("is small enough for a bare champion icon", () => {
         expect(MIN_ANNOTATION_WIDTH).toBeLessThanOrEqual(64);
+    });
+});
+
+describe("snapWidthToCells", () => {
+    // THE LOAD-BEARING CASE. The handle is seeded from the painted box, which
+    // already sits exactly on a cell boundary, so this is what a corner drag's
+    // incidental horizontal jitter does. Under `spanFor`'s ceil it would be a
+    // whole extra column; under nearest it is nothing.
+    it("holds the column against a nudge past the boundary", () => {
+        for (const layout of LAYOUTS) {
+            const oneCell = cardWidth(layout);
+            expect(snapWidthToCells(oneCell + 1, layout)).toBe(oneCell);
+            expect(snapWidthToCells(oneCell + 30, layout)).toBe(oneCell);
+        }
+    });
+
+    it("takes the next column once the drag passes the midpoint", () => {
+        const layout = "wide";
+        const oneCell = cardWidth(layout);
+        const twoCells = oneCell * 2 + GRID_CELL_GAP;
+        const midpoint = (oneCell + twoCells) / 2;
+
+        expect(snapWidthToCells(midpoint - 1, layout)).toBe(oneCell);
+        expect(snapWidthToCells(midpoint + 1, layout)).toBe(twoCells);
+    });
+
+    it("never returns less than one column, however far the drag shrinks", () => {
+        for (const layout of LAYOUTS) {
+            expect(snapWidthToCells(0, layout)).toBe(cardWidth(layout));
+            expect(snapWidthToCells(MIN_ANNOTATION_WIDTH, layout)).toBe(
+                cardWidth(layout)
+            );
+        }
+    });
+
+    // Two properties in one: re-snapping is a fixpoint, AND the result is a
+    // width `spanFor` agrees needs exactly that many columns. If those two
+    // disagreed the stored width and the painted span would drift apart on
+    // every successive resize.
+    it("is a fixpoint, and agrees with the span the render path derives", () => {
+        const layout = "wide";
+        const oneCell = cardWidth(layout);
+        const threeCells = oneCell * 3 + GRID_CELL_GAP * 2;
+        const snapped = snapWidthToCells(threeCells - 40, layout);
+
+        expect(snapped).toBe(threeCells);
+        expect(snapWidthToCells(snapped, layout)).toBe(snapped);
+        expect(
+            snappedAnnotationSize({ storedWidth: snapped, rowHeight: 120, layout }).width
+        ).toBe(snapped);
     });
 });
 

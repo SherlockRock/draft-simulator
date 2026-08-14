@@ -224,6 +224,7 @@ import {
     annotationFloor,
     autoFitHeight,
     defaultAnnotationSize,
+    snapWidthToCells,
     type AnnotationRenderSize
 } from "./utils/annotationSize";
 import { annotationKeyboardShortcut } from "./utils/annotationKeyboardShortcut";
@@ -4491,14 +4492,34 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
     };
 
+    /**
+     * The width a resize gesture is allowed to leave a note at.
+     *
+     * Whole columns inside a grid, untouched outside one — the same membership
+     * test that decides whether the note paints snapped at all, so the handle
+     * and the render agree about which world the note is in.
+     *
+     * WIDTH ONLY, for now. Height's lattice is the row model, and a note has no
+     * legal intermediate heights to snap to until row spanning lands; today it
+     * simply grows its row, which already tracks the drag continuously.
+     */
+    const resizeWidthFor = (annotationId: string, width: number): number => {
+        const annotation = annotations.find((a) => a.id === annotationId);
+        if (!annotation?.group_id) return width;
+        const group = canvasGroups.find((g) => g.id === annotation.group_id);
+        if (!group || !isGridGroup(group)) return width;
+        return snapWidthToCells(width, props.cardLayout());
+    };
+
     /** Live resize: paint only. No persistence and no floor write. */
     const handleAnnotationResize = (
         annotationId: string,
         width: number,
         height: number
     ) => {
-        setAnnotations((a) => a.id === annotationId, { width, height });
-        debouncedEmitAnnotationResize(annotationId, width, height);
+        const snappedWidth = resizeWidthFor(annotationId, width);
+        setAnnotations((a) => a.id === annotationId, { width: snappedWidth, height });
+        debouncedEmitAnnotationResize(annotationId, snappedWidth, height);
     };
 
     /** Resize commit writes both the rendered size and the manual floor (D7). */

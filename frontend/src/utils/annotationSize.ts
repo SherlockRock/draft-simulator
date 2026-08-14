@@ -68,6 +68,42 @@ export const snappedAnnotationSize = (args: {
     height: args.rowHeight
 });
 
+/**
+ * The nearest whole-column width to a hand-dragged one — the resize handle's
+ * half of "the only valid sizes for a note inside a grid are full columns".
+ *
+ * ⚠️ NEAREST, not `spanFor`'s `ceil`, and the difference is the whole point.
+ * `spanFor` answers "how many columns does this width NEED", where rounding up
+ * is the only safe answer — a 730px note genuinely overflows one 700px cell.
+ * This answers "which column count did the user MEAN", and ceil there is
+ * unusable: the handle is seeded from the painted box, which already sits
+ * exactly on a boundary, so `ceil` would turn one pixel of rightward jitter
+ * into a whole extra column. On a corner handle every vertical drag carries
+ * that jitter.
+ *
+ * Feeding this result back through `spanFor` is a fixpoint: an exact n-column
+ * width needs exactly n columns.
+ *
+ * The one-column floor is deliberately NOT re-imposed here — `footprintPixelWidth`
+ * runs the count through `spanOf`, whose own `Math.max(1, cols)` is the floor.
+ * A local guard duplicating it was written, found to be unkillable by any
+ * mutation (it changed no output), and removed rather than kept as code no test
+ * can justify. The floor is reachable and load-bearing: every drag inside the
+ * first cell's midpoint rounds to zero columns.
+ *
+ * Grid callers only. A loose note has no cells to snap to and keeps the width
+ * the gesture gave it.
+ */
+export const snapWidthToCells = (draggedWidth: number, layout: CardLayout): number => {
+    const cell = cardWidth(layout);
+    const pitch = cell + GRID_CELL_GAP;
+    if (!Number.isFinite(draggedWidth) || pitch <= 0) return cell;
+    return footprintPixelWidth(
+        { cols: Math.round((draggedWidth + GRID_CELL_GAP) / pitch) },
+        layout
+    );
+};
+
 export type AnnotationRenderSize = { width: number; height: number };
 
 /**

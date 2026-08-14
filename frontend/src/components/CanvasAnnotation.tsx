@@ -70,6 +70,12 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
     // Snapped inside a grid, stored outside it (design D5a). Snapping happens
     // at RENDER and never at commit, so drag-into-grid then drag-back-out is a
     // lossless round trip rather than a silent resize.
+    //
+    // ⚠️ One exception, and it is deliberate: the resize handle SEEDS from
+    // these, so a hand-resize inside a grid commits a snapped-derived size and
+    // that note's round trip is no longer lossless. Only an explicit resize
+    // does this — a note the user never resized still round-trips exactly.
+    // See the resize handle below for why the alternative was worse.
     const renderWidth = () => props.snappedSize()?.width ?? props.annotation.width;
     const renderHeight = () => props.snappedSize()?.height ?? props.annotation.height;
 
@@ -207,8 +213,25 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                         e.stopPropagation();
                         const startX = e.clientX;
                         const startY = e.clientY;
-                        const startWidth = props.annotation.width;
-                        const startHeight = props.annotation.height;
+                        // Seeded from the PAINTED box, not the stored size —
+                        // and via the same two accessors that paint it, so the
+                        // gesture's origin cannot drift from the corner the
+                        // handle is sitting on.
+                        //
+                        // Inside a grid those differ, and seeding from the
+                        // stored size left the handle detached from the number
+                        // it controls: a 56px-stored note painting 700px
+                        // needed ~700px of travel before the first cell
+                        // appeared, and a 120px-stored note painting 384px
+                        // beside a Card did nothing for ~264px. The vertical
+                        // dead zone's SIZE depended on what else shared the
+                        // row, which is what made the two axes feel unrelated.
+                        //
+                        // Captured once, deliberately. Re-reading them per
+                        // mousemove would feed each frame's snapped result
+                        // back in as the next frame's origin.
+                        const startWidth = renderWidth();
+                        const startHeight = renderHeight();
 
                         const onMove = (move: MouseEvent) => {
                             // Clamped to the RESIZE MINIMUM, not to the manual
