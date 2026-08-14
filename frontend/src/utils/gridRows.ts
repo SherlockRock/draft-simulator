@@ -138,8 +138,8 @@ export const rowsOf = (members: RowMember[], layout: CardLayout): RowMetrics[] =
         else byKey.set(key, [member]);
     }
 
-    const minHeight = cardHeight(layout);
-    const step = minHeight + GRID_CELL_GAP;
+    const rowPitch = cardHeight(layout);
+    const step = rowPitch + GRID_CELL_GAP;
     const keys = [...byKey.keys()].sort((a, b) => a - b);
 
     // Everything above the FIRST occupied row is empty and therefore uniformly
@@ -203,8 +203,8 @@ export const rowsOfIndexed = (
         else byIndex.set(index, [member]);
     }
 
-    const minHeight = cardHeight(layout);
-    const step = minHeight + GRID_CELL_GAP;
+    const rowPitch = cardHeight(layout);
+    const step = rowPitch + GRID_CELL_GAP;
     const rows: RowMetrics[] = [];
     let previous: RowMetrics | null = null;
 

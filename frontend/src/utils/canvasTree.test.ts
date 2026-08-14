@@ -212,12 +212,13 @@ describe("annotations in the tree", () => {
             }
         });
         const first = cellToPosition({ row: 0, col: 0 }, LAYOUT);
+        const noteHeight = annotation("height-fixture").height;
         // D13 is a newly materialized annotation pool, so consecutive occupied
         // rows stack by the note height. Old Card-pitch pixels are covered by
         // gridRows' explicit legacy-layout hazard test.
         const cells = [0, 1, 2].map((row) => ({
             x: first.x,
-            y: first.y + row * (120 + GRID_CELL_GAP)
+            y: first.y + row * (noteHeight + GRID_CELL_GAP)
         }));
         const t = tree(
             [pool],

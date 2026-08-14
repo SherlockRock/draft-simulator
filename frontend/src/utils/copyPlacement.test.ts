@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CardLayout } from "./canvasCardLayout";
-import type { CanvasDraft, CanvasGroup } from "./schemas";
+import type { CanvasAnnotation, CanvasDraft, CanvasGroup } from "./schemas";
 import { resolveCopyPlacement, type CopySubject } from "./copyPlacement";
 import {
     cardHeight,
@@ -84,6 +84,27 @@ function cardSubject(draft: CanvasDraft, cardLayout: CardLayout = layout): CopyS
         width: cardWidth(cardLayout),
         height: cardHeight(cardLayout),
         inset: GROUP_BORDER_WIDTH
+    };
+}
+
+function annotationAt(
+    id: string,
+    positionX: number,
+    positionY: number,
+    groupId: string
+): CanvasAnnotation {
+    return {
+        id,
+        canvas_id: "canvas-1",
+        group_id: groupId,
+        positionX,
+        positionY,
+        width: 380,
+        height: 120,
+        text: "",
+        championIds: [],
+        color: "slate",
+        fontSize: "md"
     };
 }
 
@@ -236,6 +257,54 @@ describe("resolveCopyPlacement", () => {
         expect(placement.groupDims).toEqual({
             width: 450,
             height: 40 + cardHeight(layout) + GRID_CELL_GAP + cardHeight(layout) + 16
+        });
+    });
+
+    it("includes an existing annotation in free-Group bounds for a Card copy", () => {
+        const group = groupWith({ id: "g1", type: "custom", layout: "free" });
+        const draft = draftAt("card", 40, 40, group.id);
+        const annotation = annotationAt("note", 1000, 1500, group.id);
+
+        const placement = resolveCopyPlacement({
+            subject: cardSubject(draft),
+            group,
+            tree: { groups: [group], drafts: [draft], annotations: [annotation] },
+            layout
+        });
+
+        expect(placement.groupDims).toEqual({
+            width: annotation.positionX + annotation.width + GRID_PADDING,
+            height: annotation.positionY + annotation.height + GRID_PADDING
+        });
+    });
+
+    it("sizes an annotation-only free Group when duplicating its note", () => {
+        const group = groupWith({ id: "g1", type: "custom", layout: "free" });
+        const annotation = annotationAt("note", 900, 700, group.id);
+
+        const placement = resolveCopyPlacement({
+            subject: {
+                id: annotation.id,
+                kind: "annotation",
+                positionX: annotation.positionX,
+                positionY: annotation.positionY,
+                width: annotation.width,
+                height: annotation.height,
+                inset: GROUP_BORDER_WIDTH
+            },
+            group,
+            tree: { groups: [group], drafts: [], annotations: [annotation] },
+            layout
+        });
+
+        expect(placement.groupDims).toEqual({
+            width: annotation.positionX + annotation.width + GRID_PADDING,
+            height:
+                annotation.positionY +
+                annotation.height +
+                GRID_CELL_GAP +
+                annotation.height +
+                GRID_PADDING
         });
     });
 

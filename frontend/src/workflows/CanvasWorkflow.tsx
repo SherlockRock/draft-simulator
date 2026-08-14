@@ -459,7 +459,9 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
         const drafts = isLocalMode()
             ? (localCanvas?.drafts ?? [])
             : (canvas()?.drafts ?? []);
-        const annotations = isLocalMode() ? [] : (canvas()?.annotations ?? []);
+        const annotations = isLocalMode()
+            ? (localCanvas?.annotations ?? [])
+            : (canvas()?.annotations ?? []);
         const sourceGroup = draft.group_id
             ? groups.find((group) => group.id === draft.group_id)
             : undefined;
