@@ -498,6 +498,32 @@ describe("local group nesting", () => {
         ).toThrow("Can't convert a group that contains groups");
     });
 
+    it("refuses converting a container that holds notes without changing it", () => {
+        const parent = create();
+        localCreateAnnotation({
+            positionX: 10,
+            positionY: 20,
+            width: 380,
+            height: 120,
+            group_id: parent.id
+        });
+
+        expect(() =>
+            localConvertGroupToSeries({
+                groupId: parent.id,
+                name: "Bo3",
+                blueTeamName: "A",
+                redTeamName: "B",
+                length: 3,
+                draftMode: "standard",
+                disabledChampions: []
+            })
+        ).toThrow("Can't convert a group that contains notes");
+        expect(
+            getLocalCanvas()?.groups.find((group) => group.id === parent.id)?.type
+        ).toBe("custom");
+    });
+
     it("promotes direct children when their container is deleted", () => {
         const top = create();
         const mid = create(top.id);

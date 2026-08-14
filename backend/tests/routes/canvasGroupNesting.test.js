@@ -86,6 +86,7 @@ beforeEach(() => {
   vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
+  vi.spyOn(CanvasAnnotation, "count").mockResolvedValue(0);
   vi.spyOn(CanvasAnnotation, "destroy").mockResolvedValue(0);
   vi.spyOn(Team, "findAll").mockResolvedValue([]);
 });
@@ -343,5 +344,27 @@ describe("POST /:canvasId/group/:groupId/convert-to-series", () => {
     );
     expect(created).not.toHaveBeenCalled();
     expect(transaction.rollback).toHaveBeenCalled();
+  });
+
+  it("refuses a container that holds notes without converting it", async () => {
+    const group = groupRow("holder");
+    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(group);
+    vi.spyOn(CanvasGroup, "count").mockResolvedValue(0);
+    const count = CanvasAnnotation.count.mockResolvedValue(2);
+    const created = vi.spyOn(VersusDraft, "create");
+
+    const res = await convert("holder");
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Can't convert a group that contains notes");
+    expect(count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { group_id: "holder", canvas_id: "c1" },
+      }),
+    );
+    expect(group.update).not.toHaveBeenCalled();
+    expect(created).not.toHaveBeenCalled();
+    expect(transaction.rollback).toHaveBeenCalled();
+    expect(transaction.commit).not.toHaveBeenCalled();
   });
 });

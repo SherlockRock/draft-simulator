@@ -1649,6 +1649,17 @@ router.post(
           .json({ error: "Can't convert a group that contains groups" });
       }
 
+      const childAnnotationCount = await CanvasAnnotation.count({
+        where: { group_id: groupId, canvas_id: canvasId },
+        transaction: t,
+      });
+      if (childAnnotationCount > 0) {
+        await t.rollback();
+        return res
+          .status(400)
+          .json({ error: "Can't convert a group that contains notes" });
+      }
+
       // Team links picked in the Group Settings dialog arrive with the very
       // request that creates the series, so they must persist here — the group
       // is not yet a series and cannot be linked by the PUT-group path.

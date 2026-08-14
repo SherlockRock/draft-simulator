@@ -83,6 +83,7 @@ beforeEach(() => {
   }));
   vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
+  vi.spyOn(CanvasAnnotation, "count").mockResolvedValue(0);
   vi.spyOn(Draft, "create").mockImplementation(async (values) => ({
     ...values,
     id: "d-1",

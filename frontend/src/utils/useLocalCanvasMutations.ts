@@ -20,7 +20,7 @@ import type {
     GroupPositionUpdate
 } from "@draft-sim/shared-types";
 import { getManualSeriesGameDefaults } from "./manualSeriesDefaults";
-import { childGroupsOf } from "./canvasTree";
+import { childAnnotationsOf, childGroupsOf } from "./canvasTree";
 import { parentageRejection } from "./groupParentage";
 import {
     GROUP_BORDER_WIDTH,
@@ -598,6 +598,18 @@ export const localConvertGroupToSeries = (data: {
             ).length > 0
         ) {
             throw new Error("Can't convert a group that contains groups");
+        }
+        if (
+            childAnnotationsOf(
+                {
+                    groups: canvas.groups,
+                    drafts: canvas.drafts,
+                    annotations: canvas.annotations
+                },
+                data.groupId
+            ).length > 0
+        ) {
+            throw new Error("Can't convert a group that contains notes");
         }
 
         const isInitialConversion = group.type === "custom";
