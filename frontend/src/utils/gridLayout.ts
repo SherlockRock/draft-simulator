@@ -30,22 +30,37 @@ export const DEFAULT_GRID_COLS = 3;
 export type GridCell = { row: number; col: number };
 
 /**
- * Lattice COLUMNS a node covers. See `spanFor` in `canvasTree.ts`.
+ * Lattice cells a node covers, on both axes. `cols` via `canvasTree.spanFor`,
+ * `rows` via `gridRows.rowSpanFor`.
  *
- * There is no row axis: §6.0a rule 1 made rows auto-size to their tallest
- * member, so nothing ever spans two rows — the ROW GROWS instead. A node's
- * height still matters, but to `gridRows.rowsOf` via `GridItem.height`, not
- * here.
+ * ⚠️ THE ROW AXIS WAS REMOVED ONCE AND IS BACK DELIBERATELY. §6.0a rule 1 took
+ * it out on the argument that "a row's height is a property of its MEMBERSHIP,
+ * so any `rows × cardHeight` answer could only ever hand the drop highlight a
+ * rectangle of the wrong size". That argument was right about the FORMULA and
+ * is not overturned: nothing multiplies rows by a height. `footprintPixelHeight`
+ * asks the row model for each covered row's real height instead, and spanning
+ * members are excluded from sizing those rows so the two cannot feed back into
+ * each other. Maintainer ruling 2026-08-14; see
+ * `docs/designs/canvas-annotation-row-spanning-design.md`.
+ *
+ * `rows` is REQUIRED rather than defaulted, exactly as §6.0a required its
+ * absence: every construction site should have to state that it is 1, which is
+ * what makes "this change is a no-op for Cards" a written claim instead of an
+ * assumption.
+ *
+ * Only annotations ever exceed 1 row. A series is one row tall however much
+ * chrome it carries — the row grows for it, which is still rule 1's behaviour
+ * for everything that cannot span.
  */
-export type GridFootprint = { cols: number };
+export type GridFootprint = { cols: number; rows: number };
 
 /**
  * A Card is always exactly one unit: a cell IS a card, so
- * `spanFor(cardWidth, cardWidth, gap)` is 1 in every layout. Dragging a *Group*
- * into a grid (step 5a) must use `footprintOf` instead — this constant is only
- * correct for Cards.
+ * `spanFor(cardWidth, cardWidth, gap)` is 1 in every layout, and a Card cannot
+ * span rows. Dragging a *Group* into a grid (step 5a) must use `footprintOf`
+ * instead — this constant is only correct for Cards.
  */
-export const CARD_FOOTPRINT: GridFootprint = { cols: 1 };
+export const CARD_FOOTPRINT: GridFootprint = { cols: 1, rows: 1 };
 
 /**
  * One child of a grid Group, as the layout engine sees it: a rectangular stamp
@@ -185,7 +200,8 @@ export const effectiveGridCols = (
 const cellKey = (cell: GridCell) => `${cell.row}:${cell.col}`;
 
 const spanOf = (footprint: GridFootprint) => ({
-    cols: Math.max(1, footprint.cols)
+    cols: Math.max(1, footprint.cols),
+    rows: Math.max(1, footprint.rows)
 });
 
 /**
@@ -223,23 +239,33 @@ export const configuredColsAfterDrop = (
  * the container's height FLOOR, so a drop that does not raise it buys a row
  * only for as long as something occupies it.
  *
- * **No footprint term**, unlike the column rule. §6.0a rule 1: nothing spans
- * rows — a tall member makes its ROW grow instead — so a landing occupies
- * exactly one row and `row + 1` is total for a Card and a Bo5 alike.
+ * NOW CARRIES A FOOTPRINT TERM, symmetric with the column rule. It deliberately
+ * did not, on §6.0a rule 1's "a landing occupies exactly one row and `row + 1`
+ * is total for a Card and a Bo5 alike" — still true of a Card and a Bo5, and no
+ * longer true of a note that spans. Without the term a two-row note dropped in
+ * the last row persists a count one short of what it occupies, and the row it
+ * sits in survives only while it does.
  */
-export const configuredRowsAfterDrop = (group: CanvasGroup, landing: GridCell): number =>
-    Math.max(gridRowsOf(group), landing.row + 1);
+export const configuredRowsAfterDrop = (
+    group: CanvasGroup,
+    landing: GridCell,
+    footprint: GridFootprint
+): number => Math.max(gridRowsOf(group), landing.row + spanOf(footprint).rows);
 
 /**
- * Every cell a footprint stamped at `cell` covers — ONE row, `cols` wide.
+ * Every cell a footprint stamped at `cell` covers — `rows` tall, `cols` wide.
  *
- * Replaces `rectCells`. §6.0a rule 1: nothing spans rows, because a row grows
- * to fit its tallest member instead of a tall member claiming a second row.
+ * Was `rowCells`, which stamped a single row under §6.0a rule 1. Identical for
+ * any `rows: 1` footprint, which is every Card, series and nested Group.
  */
-export const rowCells = (cell: GridCell, footprint: GridFootprint): GridCell[] => {
-    const { cols } = spanOf(footprint);
+export const rectCells = (cell: GridCell, footprint: GridFootprint): GridCell[] => {
+    const { cols, rows } = spanOf(footprint);
     const out: GridCell[] = [];
-    for (let col = 0; col < cols; col++) out.push({ row: cell.row, col: cell.col + col });
+    for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+            out.push({ row: cell.row + row, col: cell.col + col });
+        }
+    }
     return out;
 };
 
@@ -248,18 +274,24 @@ export const rowCells = (cell: GridCell, footprint: GridFootprint): GridCell[] =
  * one-column node dropped on any of them collides.
  *
  * `maxRow` (-1 when empty) is what bounds every outward search: the row band
- * below it is free by construction, so a free rect always exists. Rule 5 —
- * deleting multi-row stamping does NOT mean deleting this.
+ * below it is free by construction, so a free rect always exists. Rule 5 kept
+ * this when multi-row stamping was deleted, and it survives multi-row stamping
+ * coming back — but only because `occupy` now records a footprint's LAST row.
+ * The guarantee is "no occupied cell at any row > maxRow", which a first-row
+ * reading would break for a spanning item.
  */
 type Occupancy = { cells: Set<string>; maxRow: number };
 
 const emptyOccupancy = (): Occupancy => ({ cells: new Set<string>(), maxRow: -1 });
 
 const occupy = (occupancy: Occupancy, cell: GridCell, footprint: GridFootprint) => {
-    for (const covered of rowCells(cell, footprint)) {
+    for (const covered of rectCells(cell, footprint)) {
         occupancy.cells.add(cellKey(covered));
     }
-    occupancy.maxRow = Math.max(occupancy.maxRow, cell.row);
+    // The footprint's LAST row, not its first. `maxRow` is what guarantees the
+    // band below it is free, and a two-row item whose top is the lowest start
+    // would otherwise leave its own bottom row inside the "free" band.
+    occupancy.maxRow = Math.max(occupancy.maxRow, cell.row + spanOf(footprint).rows - 1);
 };
 
 const isFree = (
@@ -268,7 +300,7 @@ const isFree = (
     footprint: GridFootprint
 ): boolean => {
     if (cell.row < 0 || cell.col < 0) return false;
-    return rowCells(cell, footprint).every((c) => !occupancy.cells.has(cellKey(c)));
+    return rectCells(cell, footprint).every((c) => !occupancy.cells.has(cellKey(c)));
 };
 
 const occupancyOf = (items: GridItem[]): Occupancy => {
@@ -583,9 +615,9 @@ export const resolveGridDrop = (args: {
         dragged.footprint
     );
 
-    const covered = new Set(rowCells(target, dragged.footprint).map(cellKey));
+    const covered = new Set(rectCells(target, dragged.footprint).map(cellKey));
     const collisions = others.filter((i) =>
-        rowCells(i.cell, i.footprint).some((c) => covered.has(cellKey(c)))
+        rectCells(i.cell, i.footprint).some((c) => covered.has(cellKey(c)))
     );
     if (collisions.length === 0) return [assignmentAt(dragged, target)];
 

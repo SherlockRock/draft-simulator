@@ -1275,7 +1275,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         // a drop into the growth row was accepted and the container grew, but
         // the count stayed put — so the row lasted only as long as something
         // occupied it, and moving that member away collapsed the container.
-        const configuredRows = configuredRowsAfterDrop(group, landingCell);
+        const configuredRows = configuredRowsAfterDrop(
+            group,
+            landingCell,
+            dragged.footprint
+        );
         const sizeCols = Math.max(
             configuredCols,
             maxChildSpanCols(canvasTree(), group.id, layout),

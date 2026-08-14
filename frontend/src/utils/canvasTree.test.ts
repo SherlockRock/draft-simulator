@@ -637,7 +637,10 @@ describe("spanFor", () => {
 describe("footprints", () => {
     it("makes a Card exactly one cell", () => {
         const t = tree([group("g1")], [card("c1", { group_id: "g1" })]);
-        expect(footprintOf(t, childrenOf(t, "g1")[0], LAYOUT)).toEqual({ cols: 1 });
+        expect(footprintOf(t, childrenOf(t, "g1")[0], LAYOUT)).toEqual({
+            cols: 1,
+            rows: 1
+        });
     });
 
     it("sizes a series from its game count, not its stored size", () => {
@@ -705,7 +708,7 @@ describe("footprints", () => {
         const [sized, unsized] = childrenOf(t, "root");
         expect(nodeSize(t, sized, LAYOUT)).toEqual({ width: 900, height: 700 });
         expect(nodeSize(t, unsized, LAYOUT)).toEqual({ width: 400, height: 200 });
-        expect(footprintOf(t, unsized, LAYOUT)).toEqual({ cols: 1 });
+        expect(footprintOf(t, unsized, LAYOUT)).toEqual({ cols: 1, rows: 1 });
     });
 
     it("reports the widest child span as the grid's must-fit floor", () => {

@@ -7,7 +7,7 @@ import {
     cellToPosition,
     firstEmptyRect,
     nearestFreeRect,
-    rowCells,
+    rectCells,
     resolveGridDrop,
     reflowAfterGrowth,
     arrangeGrid,
@@ -255,8 +255,8 @@ const drop = (args: Omit<Parameters<typeof resolveGridDrop>[0], "rows">) =>
 
 // Multi-column footprints, standing in for a wide child such as a series.
 // COLUMNS ONLY since §6.0a rule 1: nothing spans rows, the row grows instead.
-const SPAN4: GridFootprint = { cols: 4 };
-const SPAN6: GridFootprint = { cols: 6 };
+const SPAN4: GridFootprint = { cols: 4, rows: 1 };
+const SPAN6: GridFootprint = { cols: 6, rows: 1 };
 
 // `positionToCell` is gone: the row half can no longer be a division, because
 // rows have different heights. `cellAt` needs the actual bands. On an EMPTY
@@ -290,9 +290,9 @@ describe("cell math", () => {
     });
 });
 
-describe("rowCells", () => {
+describe("rectCells", () => {
     it("covers one row and `cols` columns", () => {
-        expect(rowCells({ row: 2, col: 1 }, { cols: 3 })).toEqual([
+        expect(rectCells({ row: 2, col: 1 }, { cols: 3, rows: 1 })).toEqual([
             { row: 2, col: 1 },
             { row: 2, col: 2 },
             { row: 2, col: 3 }
@@ -300,14 +300,18 @@ describe("rowCells", () => {
     });
 
     it("never covers a second row — the row grows instead", () => {
-        expect(rowCells({ row: 0, col: 0 }, { cols: 5 }).every((c) => c.row === 0)).toBe(
-            true
-        );
+        expect(
+            rectCells({ row: 0, col: 0 }, { cols: 5, rows: 1 }).every((c) => c.row === 0)
+        ).toBe(true);
     });
 
     it("clamps a zero or negative span to one column", () => {
-        expect(rowCells({ row: 0, col: 0 }, { cols: 0 })).toEqual([{ row: 0, col: 0 }]);
-        expect(rowCells({ row: 0, col: 0 }, { cols: -3 })).toEqual([{ row: 0, col: 0 }]);
+        expect(rectCells({ row: 0, col: 0 }, { cols: 0, rows: 1 })).toEqual([
+            { row: 0, col: 0 }
+        ]);
+        expect(rectCells({ row: 0, col: 0 }, { cols: -3, rows: 1 })).toEqual([
+            { row: 0, col: 0 }
+        ]);
     });
 });
 
@@ -411,7 +415,7 @@ describe("materializeGrid", () => {
             cell.row,
             cell.col,
             layout,
-            { cols: games },
+            { cols: games, rows: 1 },
             "group",
             seriesChrome(games, layout)
         );
@@ -619,7 +623,7 @@ describe("landing metrics vs targeting metrics (§6.0a, three memberships)", () 
                     id: "s",
                     cell: { row: 0, col: 1 },
                     kind: "group",
-                    footprint: { cols: 3 },
+                    footprint: { cols: 3, rows: 1 },
                     chrome: seriesChrome(3, layout)
                 }
             ],
@@ -642,7 +646,7 @@ describe("landing metrics vs targeting metrics (§6.0a, three memberships)", () 
             0,
             0,
             layout,
-            { cols: 3 },
+            { cols: 3, rows: 1 },
             "group",
             seriesChrome(3, layout)
         );
@@ -857,7 +861,7 @@ describe("resolveGridDrop", () => {
                 {
                     id: "a-wide",
                     cell: { row: 0, col: 0 },
-                    footprint: { cols: 2 },
+                    footprint: { cols: 2, rows: 1 },
                     kind: "annotation"
                 },
                 { id: "a1", cell: { row: 0, col: 2 }, kind: "annotation" }
@@ -867,7 +871,11 @@ describe("resolveGridDrop", () => {
         const target = cellToPosition({ row: 0, col: 2 }, "wide");
         const result = drop({
             items,
-            dragged: { id: "a-wide", kind: "annotation", footprint: { cols: 2 } },
+            dragged: {
+                id: "a-wide",
+                kind: "annotation",
+                footprint: { cols: 2, rows: 1 }
+            },
             draggedOrigin: items[0].position,
             dropX: target.x + 5,
             dropY: target.y + 5,
@@ -1143,7 +1151,7 @@ describe("arrangeGrid", () => {
         expect(cells.get("bo3")).toEqual({ row: 0, col: 0 });
         // Both cards are pushed clear of the series' 2x4 block.
         const covered = new Set(
-            rowCells({ row: 0, col: 0 }, SPAN4).map((c: GridCell) => `${c.row}:${c.col}`)
+            rectCells({ row: 0, col: 0 }, SPAN4).map((c: GridCell) => `${c.row}:${c.col}`)
         );
         for (const id of ["a", "b"]) {
             const cell = cells.get(id);
@@ -1173,7 +1181,7 @@ describe("reflowAfterGrowth", () => {
         expect(placements.map((p) => p.id)).toEqual(["card"]);
         const cell = placements[0].cell;
         const covered = new Set(
-            rowCells({ row: 0, col: 0 }, SPAN6).map((c: GridCell) => `${c.row}:${c.col}`)
+            rectCells({ row: 0, col: 0 }, SPAN6).map((c: GridCell) => `${c.row}:${c.col}`)
         );
         expect(covered.has(`${cell.row}:${cell.col}`)).toBe(false);
         // Nearest free rect from (0,4) is straight down, out of the series —
@@ -1183,7 +1191,7 @@ describe("reflowAfterGrowth", () => {
 
     it("grows a resized nested Group right/down rather than relocating it", () => {
         const items = [
-            itemInCell("child", 1, 1, "wide", { cols: 2 }, "group"),
+            itemInCell("child", 1, 1, "wide", { cols: 2, rows: 1 }, "group"),
             itemInCell("a", 1, 2, "wide"),
             itemInCell("b", 3, 0, "wide")
         ];
@@ -1270,7 +1278,7 @@ describe("footprintPixelWidth", () => {
     });
 
     it("clamps a degenerate footprint to one cell", () => {
-        expect(footprintPixelWidth({ cols: 0 }, "wide")).toBe(cardWidth("wide"));
+        expect(footprintPixelWidth({ cols: 0, rows: 1 }, "wide")).toBe(cardWidth("wide"));
     });
 
     // There is deliberately no height half. A row's height is a property of
@@ -1307,7 +1315,7 @@ describe("gridDimensions", () => {
             0,
             0,
             "wide",
-            { cols: 3 },
+            { cols: 3, rows: 1 },
             "group",
             seriesChrome(3, "wide")
         );
@@ -1399,9 +1407,7 @@ describe("column growth", () => {
                 configuredColsAfterDrop(
                     gridGroup(3, null),
                     { row: 0, col: 1 },
-                    {
-                        cols: 3
-                    }
+                    { cols: 3, rows: 1 }
                 )
             ).toBe(4);
             expect(
@@ -1437,31 +1443,60 @@ describe("column growth", () => {
         });
 
         it("is the configured count when the landing already fits", () => {
-            expect(configuredRowsAfterDrop(rowGroup(3), { row: 0, col: 0 })).toBe(3);
-            expect(configuredRowsAfterDrop(rowGroup(3), { row: 2, col: 1 })).toBe(3);
+            expect(
+                configuredRowsAfterDrop(rowGroup(3), { row: 0, col: 0 }, CARD_FOOTPRINT)
+            ).toBe(3);
+            expect(
+                configuredRowsAfterDrop(rowGroup(3), { row: 2, col: 1 }, CARD_FOOTPRINT)
+            ).toBe(3);
         });
 
         it("rises to cover a landing in the growth row — the reported defect", () => {
-            expect(configuredRowsAfterDrop(rowGroup(1), { row: 1, col: 0 })).toBe(2);
+            expect(
+                configuredRowsAfterDrop(rowGroup(1), { row: 1, col: 0 }, CARD_FOOTPRINT)
+            ).toBe(2);
         });
 
         it("covers a landing several rows past the end", () => {
             for (const row of [0, 1, 2, 5]) {
-                expect(configuredRowsAfterDrop(rowGroup(2), { row, col: 0 })).toBe(
-                    Math.max(2, row + 1)
-                );
+                expect(
+                    configuredRowsAfterDrop(rowGroup(2), { row, col: 0 }, CARD_FOOTPRINT)
+                ).toBe(Math.max(2, row + 1));
             }
         });
 
         /**
-         * No footprint term, unlike the column rule. §6.0a rule 1: nothing spans
-         * rows — a tall member makes its ROW grow instead — so a landing always
-         * occupies exactly one row and `row + 1` is total.
+         * ⚠️ THIS TEST PINNED THE OPPOSITE RULE until 2026-08-14. It asserted
+         * "no footprint term, §6.0a rule 1: nothing spans rows", by checking
+         * two landings agreed regardless of the member. That contract is gone
+         * with row spanning, and the assertion it used could not have caught
+         * the change anyway — it varied only `col`, so both sides moved
+         * together whatever the rule was.
+         *
+         * Rewritten to pin the term itself: a one-row member is unchanged, and
+         * a two-row member must persist the row it actually reaches.
          */
-        it("counts one row for a member of any height", () => {
-            expect(configuredRowsAfterDrop(rowGroup(1), { row: 1, col: 0 })).toBe(
-                configuredRowsAfterDrop(rowGroup(1), { row: 1, col: 2 })
-            );
+        it("counts a one-row member as reaching exactly its landing row", () => {
+            expect(
+                configuredRowsAfterDrop(rowGroup(1), { row: 1, col: 0 }, CARD_FOOTPRINT)
+            ).toBe(2);
+        });
+
+        it("counts a spanning member down to its LAST row", () => {
+            expect(
+                configuredRowsAfterDrop(
+                    rowGroup(1),
+                    { row: 1, col: 0 },
+                    { cols: 1, rows: 2 }
+                )
+            ).toBe(3);
+            expect(
+                configuredRowsAfterDrop(
+                    rowGroup(1),
+                    { row: 0, col: 0 },
+                    { cols: 1, rows: 4 }
+                )
+            ).toBe(4);
         });
 
         it("reads the DEFAULT row count for a grid that never stored one", () => {
@@ -1469,10 +1504,12 @@ describe("column growth", () => {
                 ...gridGroup(3, null),
                 metadata: { layout: "grid", gridCols: 3 }
             };
-            expect(configuredRowsAfterDrop(legacy, { row: 0, col: 0 })).toBe(
-                DEFAULT_GRID_ROWS
-            );
-            expect(configuredRowsAfterDrop(legacy, { row: 3, col: 0 })).toBe(4);
+            expect(
+                configuredRowsAfterDrop(legacy, { row: 0, col: 0 }, CARD_FOOTPRINT)
+            ).toBe(DEFAULT_GRID_ROWS);
+            expect(
+                configuredRowsAfterDrop(legacy, { row: 3, col: 0 }, CARD_FOOTPRINT)
+            ).toBe(4);
         });
 
         /**
@@ -1488,7 +1525,7 @@ describe("column growth", () => {
             for (const layout of LAYOUTS) {
                 for (const span of [1, 2, 3, 4, 6]) {
                     for (const col of [0, 1, 2, 3]) {
-                        const footprint: GridFootprint = { cols: span };
+                        const footprint: GridFootprint = { cols: span, rows: 1 };
                         const cols = configuredColsAfterDrop(
                             gridGroup(3, null),
                             { row: 0, col },
@@ -1514,7 +1551,7 @@ describe("column growth", () => {
          */
         it("never exceeds the layout count the drop resolved against", () => {
             for (const span of [1, 3, 4]) {
-                const footprint: GridFootprint = { cols: span };
+                const footprint: GridFootprint = { cols: span, rows: 1 };
                 const layoutCols = Math.max(4, span);
                 const lastStart = Math.max(0, layoutCols - span);
                 expect(
@@ -2153,5 +2190,110 @@ describe("resolveResizeGridSettings", () => {
             resolveResizeGridSettings({ width: widthFor(3), height, rows: tall, layout })
                 .gridRows
         ).toBe(1);
+    });
+});
+
+/**
+ * Row spanning — the axis §6.0a rule 1 removed and the 2026-08-14 ruling
+ * restored. Only annotations ever exceed one row, so every assertion here is
+ * about a footprint no Card, series or nested Group can have; the proof that
+ * they are unaffected is that every test above this block is untouched.
+ */
+describe("multi-row footprints", () => {
+    const layout: CardLayout = "vertical";
+    const TALL: GridFootprint = { cols: 1, rows: 2 };
+    const WIDE_TALL: GridFootprint = { cols: 2, rows: 2 };
+
+    describe("rectCells", () => {
+        it("is identical to single-row stamping at rows: 1", () => {
+            expect(rectCells({ row: 2, col: 1 }, { cols: 3, rows: 1 })).toEqual([
+                { row: 2, col: 1 },
+                { row: 2, col: 2 },
+                { row: 2, col: 3 }
+            ]);
+        });
+
+        it("stamps every cell of the rectangle, row-major", () => {
+            expect(rectCells({ row: 1, col: 0 }, WIDE_TALL)).toEqual([
+                { row: 1, col: 0 },
+                { row: 1, col: 1 },
+                { row: 2, col: 0 },
+                { row: 2, col: 1 }
+            ]);
+        });
+
+        it("floors a degenerate footprint at one cell", () => {
+            expect(rectCells({ row: 0, col: 0 }, { cols: 0, rows: 0 })).toEqual([
+                { row: 0, col: 0 }
+            ]);
+        });
+    });
+
+    describe("occupancy", () => {
+        // A one-row item dropped on the spanning item's LOWER half must collide.
+        // Under the old single-row stamping that cell was free, which is the
+        // defect this whole axis exists to prevent.
+        it("blocks a cell covered only by a spanning item's lower half", () => {
+            const items = [itemInCell("note", 0, 0, layout, TALL, "annotation")];
+            expect(firstEmptyRect(items, CARD_FOOTPRINT, 1)).toEqual({ row: 2, col: 0 });
+        });
+
+        it("leaves the neighbouring column of a covered row free", () => {
+            const items = [itemInCell("note", 0, 0, layout, TALL, "annotation")];
+            expect(firstEmptyRect(items, CARD_FOOTPRINT, 2)).toEqual({ row: 0, col: 1 });
+        });
+
+        // maxRow has to record the footprint's LAST row. Reading its first would
+        // put the "free by construction" band across the item's own bottom half,
+        // and every outward search is bounded by that promise.
+        it("keeps the free band below a spanning item's BOTTOM row", () => {
+            const items = [itemInCell("note", 3, 0, layout, TALL, "annotation")];
+            const landing = nearestFreeRect(items, CARD_FOOTPRINT, { row: 4, col: 0 }, 1);
+            expect(landing).not.toEqual({ row: 4, col: 0 });
+            expect(landing).toEqual({ row: 5, col: 0 });
+        });
+
+        it("finds no room for a two-row footprint in a one-row hole", () => {
+            const items = [
+                itemInCell("a", 0, 0, layout, CARD_FOOTPRINT, "card"),
+                itemInCell("b", 2, 0, layout, CARD_FOOTPRINT, "card")
+            ];
+            // Row 1 is free but a two-row stamp from it would hit row 2.
+            expect(firstEmptyRect(items, TALL, 1)).toEqual({ row: 3, col: 0 });
+        });
+
+        it("takes a two-row hole when one exists", () => {
+            const items = [
+                itemInCell("a", 0, 0, layout, CARD_FOOTPRINT, "card"),
+                itemInCell("b", 3, 0, layout, CARD_FOOTPRINT, "card")
+            ];
+            expect(firstEmptyRect(items, TALL, 1)).toEqual({ row: 1, col: 0 });
+        });
+    });
+
+    describe("arrangeGrid", () => {
+        it("does not let a reflow overlap a spanning item", () => {
+            const items = [
+                itemInCell("note", 0, 0, layout, TALL, "annotation"),
+                itemInCell("card", 1, 0, layout, CARD_FOOTPRINT, "card")
+            ];
+            const assigned = arrangeGrid(items, 1);
+            const note = assigned.find((a) => a.id === "note");
+            const card = assigned.find((a) => a.id === "card");
+            expect(note?.cell).toEqual({ row: 0, col: 0 });
+            // Row 1 is inside the note, so the Card is pushed clear of it.
+            expect(card?.cell).toEqual({ row: 2, col: 0 });
+        });
+
+        it("is unchanged when nothing spans", () => {
+            const items = [
+                itemInCell("a", 0, 0, layout, CARD_FOOTPRINT, "card"),
+                itemInCell("b", 1, 0, layout, CARD_FOOTPRINT, "card")
+            ];
+            expect(arrangeGrid(items, 1).map((a) => a.cell)).toEqual([
+                { row: 0, col: 0 },
+                { row: 1, col: 0 }
+            ]);
+        });
     });
 });

@@ -442,16 +442,29 @@ export const spanFor = (size: number, cell: number, gap: number): number => {
  * `SERIES_PADDING_X` is 0 and `SERIES_CARD_GAP` equals `GRID_CELL_GAP`, so its
  * games land on the grid's own column rhythm.
  *
- * There is no row axis. §6.0a made rows auto-size to their tallest member, so a
- * series is one row tall however much chrome it carries — the row grows instead.
- * Its HEIGHT still matters, but to `gridRows.rowsOf` via `gridItemsOf`, not here.
+ * A series is one row tall however much chrome it carries — the row grows
+ * instead. Its HEIGHT still matters, but to `gridRows.rowsOf` via `gridItemsOf`,
+ * not here.
+ *
+ * ⚠️ `rows` IS STILL HARDCODED TO 1, INCLUDING FOR ANNOTATIONS. The row axis
+ * exists on `GridFootprint` again but nothing derives it yet — that is wiring
+ * step 5, and it cannot be done here as a one-liner, because a row span needs
+ * the row model and the row model is built from these very items.
+ *
+ * The two-pass shape that resolves it, recorded so the next agent does not
+ * rediscover the apparent circularity and conclude the design is unsound:
+ * annotations never size a row (`gridLayout.sizesRow`), so the row heights are
+ * fully determined WITHOUT any annotation's span. Build items at `rows: 1`,
+ * derive the rows from the sizing members, then resolve each annotation's span
+ * against those final heights with `gridRows.rowSpanFor`. No fixpoint.
  */
 export const footprintOf = (
     tree: CanvasTree,
     node: TreeNode,
     layout: CardLayout
 ): GridFootprint => ({
-    cols: spanFor(nodeSize(tree, node, layout).width, cardWidth(layout), GRID_CELL_GAP)
+    cols: spanFor(nodeSize(tree, node, layout).width, cardWidth(layout), GRID_CELL_GAP),
+    rows: 1
 });
 
 /**

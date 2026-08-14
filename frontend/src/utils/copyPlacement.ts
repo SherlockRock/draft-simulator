@@ -91,7 +91,10 @@ export const resolveCopyPlacement = (args: {
 }): CopyPlacement => {
     const { subject, group, tree, layout } = args;
     const footprint: GridFootprint = {
-        cols: spanFor(subject.width, cardWidth(layout), GRID_CELL_GAP)
+        cols: spanFor(subject.width, cardWidth(layout), GRID_CELL_GAP),
+        // A copy lands one row tall. Row span needs the destination's row model,
+        // which this resolves only further down — wiring step 5.
+        rows: 1
     };
 
     if (group?.type === "custom" && group.metadata.layout === "grid") {
@@ -145,7 +148,7 @@ export const resolveCopyPlacement = (args: {
         };
         // The count being APPLIED, so the container is sized to the row the
         // copy just landed on rather than to the floor it is leaving behind.
-        const configuredRows = configuredRowsAfterDrop(group, cell);
+        const configuredRows = configuredRowsAfterDrop(group, cell, footprint);
         const dims = resolveGridDims(
             group,
             gridContentHeightForRows(rows, configuredRows, layout),

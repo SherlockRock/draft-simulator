@@ -62,7 +62,10 @@ export const snappedAnnotationSize = (args: {
     layout: CardLayout;
 }): { width: number; height: number } => ({
     width: footprintPixelWidth(
-        { cols: spanFor(args.storedWidth, cardWidth(args.layout), GRID_CELL_GAP) },
+        {
+            cols: spanFor(args.storedWidth, cardWidth(args.layout), GRID_CELL_GAP),
+            rows: 1
+        },
         args.layout
     ),
     height: args.rowHeight
@@ -99,7 +102,7 @@ export const snapWidthToCells = (draggedWidth: number, layout: CardLayout): numb
     const pitch = cell + GRID_CELL_GAP;
     if (!Number.isFinite(draggedWidth) || pitch <= 0) return cell;
     return footprintPixelWidth(
-        { cols: Math.round((draggedWidth + GRID_CELL_GAP) / pitch) },
+        { cols: Math.round((draggedWidth + GRID_CELL_GAP) / pitch), rows: 1 },
         layout
     );
 };
