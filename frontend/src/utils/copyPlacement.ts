@@ -1,15 +1,12 @@
 import type { CardLayout } from "./canvasCardLayout";
-import type { CanvasDraft, CanvasGroup } from "./schemas";
+import type { CanvasGroup } from "./schemas";
 import {
-    cardHeight,
     cardWidth,
     getSeriesGroupDimensions,
-    GROUP_BORDER_WIDTH,
     SERIES_CARD_GAP,
     SERIES_PADDING_X
 } from "./helpers";
 import {
-    CARD_FOOTPRINT,
     cellToPosition,
     configuredRowsAfterDrop,
     contentBoundsOf,
@@ -20,13 +17,17 @@ import {
     materializeGrid,
     resolveContainerDims,
     resolveGridDims,
+    type GridFootprint,
     type GridItem
 } from "./gridLayout";
 import { gridContentHeightForRows, memberY } from "./gridRows";
 import {
     childCardsOf,
+    childrenOf,
     gridItemsOf,
     maxChildSpanCols,
+    nodeSize,
+    spanFor,
     type CanvasTree
 } from "./canvasTree";
 
@@ -63,6 +64,17 @@ const resizesGroup = (
     dims: { width: number; height: number }
 ): boolean => dims.width !== (group.width ?? 0) || dims.height !== (group.height ?? 0);
 
+/** The kind-independent geometry needed to place a copy. */
+export type CopySubject = {
+    id: string;
+    kind: GridItem["kind"];
+    positionX: number;
+    positionY: number;
+    width: number;
+    height: number;
+    inset: number;
+};
+
 /**
  * Takes the whole tree rather than a pre-filtered `groupDrafts` because both
  * branches that need children need them shaped differently — the grid branch
@@ -72,12 +84,15 @@ const resizesGroup = (
  * already drifted three ways.
  */
 export const resolveCopyPlacement = (args: {
-    draft: CanvasDraft;
+    subject: CopySubject;
     group: CanvasGroup | undefined;
     tree: CanvasTree;
     layout: CardLayout;
 }): CopyPlacement => {
-    const { draft, group, tree, layout } = args;
+    const { subject, group, tree, layout } = args;
+    const footprint: GridFootprint = {
+        cols: spanFor(subject.width, cardWidth(layout), GRID_CELL_GAP)
+    };
 
     if (group?.type === "custom" && group.metadata.layout === "grid") {
         // The MUST-FIT term was missing here, and only that (plan A11). A copy
@@ -96,25 +111,25 @@ export const resolveCopyPlacement = (args: {
             maxChildSpanCols(tree, group.id, layout)
         );
         const items = gridItemsOf(tree, group.id, layout, cols);
-        const cell = firstEmptyRect(items, CARD_FOOTPRINT, cols);
+        const cell = firstEmptyRect(items, footprint, cols);
         // A copy is a brand-new Card and is by definition NOT in `items`, so it
         // has to be projected in before materializing — `materializeGrid`
         // throws on an assignment with no item rather than guessing a Card's
         // geometry. Its `position` here is a placeholder; the row model
         // replaces it below.
         const copy: GridItem = {
-            id: `${draft.draft_id}-copy`,
-            kind: "card",
-            footprint: CARD_FOOTPRINT,
+            id: `${subject.id}-copy`,
+            kind: subject.kind,
+            footprint,
             position: cellToPosition(cell, layout),
             cell,
-            inset: GROUP_BORDER_WIDTH,
-            height: cardHeight(layout)
+            inset: subject.inset,
+            height: subject.height
         };
         const projected = [...items, copy];
         const { rows } = materializeGrid({
             items: projected,
-            assignments: [{ id: copy.id, kind: "card", cell }],
+            assignments: [{ id: copy.id, kind: subject.kind, cell }],
             layout
         });
         // §6.0a rule 2: the container's height is the sum of its ROW BANDS, so
@@ -149,25 +164,32 @@ export const resolveCopyPlacement = (args: {
     }
 
     if (group?.type === "custom") {
-        const positionX = draft.positionX;
-        const positionY = draft.positionY + cardHeight(layout) + GRID_CELL_GAP;
+        const positionX = subject.positionX;
+        const positionY = subject.positionY + subject.height + GRID_CELL_GAP;
         // The union of what is already in the container plus the copy, rather
         // than the copy alone against the container's current size — the same
         // content-bounds rule the drop path uses, so the two agree.
         const dims = resolveContainerDims(
             group,
             contentBoundsOf([
-                ...childCardsOf(tree, group.id).map((child) => ({
-                    x: child.positionX,
-                    y: child.positionY,
-                    width: cardWidth(layout),
-                    height: cardHeight(layout)
-                })),
+                ...childrenOf(tree, group.id)
+                    .filter((node) => node.kind !== "group")
+                    .map((node) => ({
+                        x:
+                            node.kind === "card"
+                                ? node.card.positionX
+                                : node.annotation.positionX,
+                        y:
+                            node.kind === "card"
+                                ? node.card.positionY
+                                : node.annotation.positionY,
+                        ...nodeSize(tree, node, layout)
+                    })),
                 {
                     x: positionX,
                     y: positionY,
-                    width: cardWidth(layout),
-                    height: cardHeight(layout)
+                    width: subject.width,
+                    height: subject.height
                 }
             ])
         );
@@ -180,13 +202,20 @@ export const resolveCopyPlacement = (args: {
     }
 
     if (group?.type === "series") {
+        if (subject.kind !== "card") {
+            return {
+                positionX: subject.positionX,
+                positionY: subject.positionY + subject.height + GRID_CELL_GAP,
+                group_id: null
+            };
+        }
         // `childCardsOf` sorts a series into play order, which puts an
         // index-less game LAST — this file carried a fifth copy of the
         // `seriesIndex ?? 0` comparator that sorted it first, so a copy of a
         // game in such a series landed under the wrong slot.
         const sortedDrafts = childCardsOf(tree, group.id);
         const draftIndex = sortedDrafts.findIndex(
-            (groupDraft) => groupDraft.Draft.id === draft.Draft.id
+            (groupDraft) => groupDraft.draft_id === subject.id
         );
         const sourceIndex = Math.max(0, draftIndex);
         const seriesDims = getSeriesGroupDimensions(sortedDrafts.length, layout);
@@ -201,8 +230,8 @@ export const resolveCopyPlacement = (args: {
     }
 
     return {
-        positionX: draft.positionX,
-        positionY: draft.positionY + cardHeight(layout) + GRID_CELL_GAP,
+        positionX: subject.positionX,
+        positionY: subject.positionY + subject.height + GRID_CELL_GAP,
         group_id: null
     };
 };

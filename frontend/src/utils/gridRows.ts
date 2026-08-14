@@ -77,17 +77,19 @@ const baselineOf = (bucket: Chrome[]): number => {
 };
 
 /**
- * Rule 2: baseline plus the furthest any member reaches below its own inset,
- * floored at one card so an all-Card row is exactly the lattice it always was.
+ * Rule 2: an occupied row is exactly its baseline plus the furthest any member
+ * reaches below its own inset. An all-Card row is still exactly `cardHeight`:
+ * its baseline is the Card inset and its below-baseline extent is
+ * `cardHeight - inset`, so no explicit floor is needed.
  *
  * Shared by `rowsOf`'s gap inference and `rowsOfIndexed`'s materialization on
  * purpose: if the two ever computed height differently, reading back a layout
  * this module wrote would not reproduce it.
  */
-const heightOf = (bucket: Chrome[], minHeight: number): number => {
+const heightOf = (bucket: Chrome[]): number => {
     let below = 0;
     for (const member of bucket) below = Math.max(below, member.height - member.inset);
-    return Math.max(minHeight, baselineOf(bucket) + below);
+    return baselineOf(bucket) + below;
 };
 
 /**
@@ -173,7 +175,7 @@ export const rowsOf = (members: RowMember[], layout: CardLayout): RowMetrics[] =
             });
         }
         previousTop = currentTop;
-        previousHeight = heightOf(bucket, minHeight);
+        previousHeight = heightOf(bucket);
     }
     return rowsOfIndexed(indexed, layout);
 };
@@ -217,7 +219,7 @@ export const rowsOfIndexed = (
                   (index - previous.index - 1) * step
                 : firstRowOffset() + index * step,
             baseline: baselineOf(bucket),
-            height: heightOf(bucket, minHeight),
+            height: heightOf(bucket),
             ids: bucket.map((m) => m.id)
         };
         rows.push(row);

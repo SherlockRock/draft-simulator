@@ -211,11 +211,14 @@ describe("annotations in the tree", () => {
                 rowLabels: ["S", "A", "Situational"]
             }
         });
-        const cells = [
-            cellToPosition({ row: 0, col: 0 }, LAYOUT),
-            cellToPosition({ row: 1, col: 0 }, LAYOUT),
-            cellToPosition({ row: 2, col: 0 }, LAYOUT)
-        ];
+        const first = cellToPosition({ row: 0, col: 0 }, LAYOUT);
+        // D13 is a newly materialized annotation pool, so consecutive occupied
+        // rows stack by the note height. Old Card-pitch pixels are covered by
+        // gridRows' explicit legacy-layout hazard test.
+        const cells = [0, 1, 2].map((row) => ({
+            x: first.x,
+            y: first.y + row * (120 + GRID_CELL_GAP)
+        }));
         const t = tree(
             [pool],
             [],

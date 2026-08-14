@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { CardLayout } from "./canvasCardLayout";
 import type { CanvasDraft, CanvasGroup } from "./schemas";
-import { resolveCopyPlacement } from "./copyPlacement";
+import { resolveCopyPlacement, type CopySubject } from "./copyPlacement";
 import {
     cardHeight,
     cardWidth,
     getSeriesGroupDimensions,
+    GROUP_BORDER_WIDTH,
     SERIES_CARD_GAP,
     SERIES_PADDING_X
 } from "./helpers";
@@ -74,6 +75,18 @@ function groupWith(args: {
     };
 }
 
+function cardSubject(draft: CanvasDraft, cardLayout: CardLayout = layout): CopySubject {
+    return {
+        id: draft.draft_id,
+        kind: "card",
+        positionX: draft.positionX,
+        positionY: draft.positionY,
+        width: cardWidth(cardLayout),
+        height: cardHeight(cardLayout),
+        inset: GROUP_BORDER_WIDTH
+    };
+}
+
 describe("resolveCopyPlacement", () => {
     it("places grid copies in the first empty cell and grows when a row fills", () => {
         const group = groupWith({
@@ -92,7 +105,7 @@ describe("resolveCopyPlacement", () => {
         ];
 
         const placement = resolveCopyPlacement({
-            draft: drafts[0],
+            subject: cardSubject(drafts[0]),
             group,
             tree: { groups: [group], drafts, annotations: [] },
             layout
@@ -140,7 +153,7 @@ describe("resolveCopyPlacement", () => {
         ];
 
         const placement = resolveCopyPlacement({
-            draft: drafts[0],
+            subject: cardSubject(drafts[0]),
             group,
             tree: { groups: [group], drafts, annotations: [] },
             layout
@@ -163,7 +176,7 @@ describe("resolveCopyPlacement", () => {
         const drafts = [draftAt("a", 0, 0, group.id)];
 
         const placement = resolveCopyPlacement({
-            draft: drafts[0],
+            subject: cardSubject(drafts[0]),
             group,
             tree: { groups: [group], drafts, annotations: [] },
             layout
@@ -189,7 +202,7 @@ describe("resolveCopyPlacement", () => {
 
         expect(
             resolveCopyPlacement({
-                draft,
+                subject: cardSubject(draft),
                 group,
                 tree: { groups: [group], drafts: [draft], annotations: [] },
                 layout
@@ -213,7 +226,7 @@ describe("resolveCopyPlacement", () => {
         });
         const draft = draftAt("a", 40, 40, group.id);
         const placement = resolveCopyPlacement({
-            draft,
+            subject: cardSubject(draft),
             group,
             tree: { groups: [group], drafts: [draft], annotations: [] },
             layout
@@ -260,7 +273,7 @@ describe("resolveCopyPlacement", () => {
         const draft = draftAt("a", occupant.x, occupant.y, "g1");
 
         const placement = resolveCopyPlacement({
-            draft,
+            subject: cardSubject(draft),
             group,
             tree: {
                 groups: [group, wideChild],
@@ -289,7 +302,7 @@ describe("resolveCopyPlacement", () => {
         });
         const draft = draftAt("a", 40, 40, group.id);
         const placement = resolveCopyPlacement({
-            draft,
+            subject: cardSubject(draft),
             group,
             tree: { groups: [group], drafts: [draft], annotations: [] },
             layout
@@ -316,7 +329,7 @@ describe("resolveCopyPlacement", () => {
 
         expect(
             resolveCopyPlacement({
-                draft,
+                subject: cardSubject(draft),
                 group,
                 tree: { groups: [group], drafts: groupDrafts, annotations: [] },
                 layout
@@ -328,12 +341,46 @@ describe("resolveCopyPlacement", () => {
         });
     });
 
+    it("aligns a series copy by Canvas Card identity when Draft identity repeats", () => {
+        const group = groupWith({
+            id: "series-1",
+            type: "series",
+            positionX: 300,
+            positionY: 400
+        });
+        const firstBase = draftAt("card-a", 0, 0, group.id, 0);
+        const secondBase = draftAt("card-b", 0, 0, group.id, 1);
+        const firstDraft: CanvasDraft = {
+            ...firstBase,
+            Draft: { ...firstBase.Draft, id: "shared-draft" }
+        };
+        const secondDraft: CanvasDraft = {
+            ...secondBase,
+            Draft: { ...secondBase.Draft, id: "shared-draft" }
+        };
+
+        const placement = resolveCopyPlacement({
+            subject: cardSubject(secondDraft),
+            group,
+            tree: {
+                groups: [group],
+                drafts: [firstDraft, secondDraft],
+                annotations: []
+            },
+            layout
+        });
+
+        expect(placement.positionX).toBe(
+            group.positionX + SERIES_PADDING_X + cardWidth(layout) + SERIES_CARD_GAP
+        );
+    });
+
     it("places ungrouped copies directly below the source", () => {
         const draft = draftAt("a", 800, 900, null);
 
         expect(
             resolveCopyPlacement({
-                draft,
+                subject: cardSubject(draft),
                 group: undefined,
                 tree: { groups: [], drafts: [draft], annotations: [] },
                 layout
@@ -343,5 +390,87 @@ describe("resolveCopyPlacement", () => {
             positionY: 900 + cardHeight(layout) + GRID_CELL_GAP,
             group_id: null
         });
+    });
+});
+
+describe("resolveCopyPlacement over a generalised subject", () => {
+    it("finds a 2-cell hole for a 2-column annotation", () => {
+        const pool = groupWith({
+            id: "g-pool",
+            type: "custom",
+            layout: "grid",
+            gridCols: 3
+        });
+        const left = cellToPosition({ row: 0, col: 0 }, "compact");
+        const right = cellToPosition({ row: 0, col: 2 }, "compact");
+        const drafts = [
+            draftAt("d1", left.x, left.y, "g-pool"),
+            draftAt("d2", right.x, right.y, "g-pool")
+        ];
+        const placement = resolveCopyPlacement({
+            subject: {
+                id: "a-wide",
+                kind: "annotation",
+                positionX: 0,
+                positionY: 0,
+                width: 720,
+                height: 200,
+                inset: GROUP_BORDER_WIDTH
+            },
+            group: pool,
+            tree: { groups: [pool], drafts, annotations: [] },
+            layout: "compact"
+        });
+
+        expect(placement.positionX).toBe(cellToPosition({ row: 1, col: 0 }, "compact").x);
+        expect(placement.positionY).toBe(cellToPosition({ row: 1, col: 0 }, "compact").y);
+    });
+
+    it("sizes the container from the subject's own height", () => {
+        const pool = groupWith({
+            id: "g-pool",
+            type: "custom",
+            layout: "grid",
+            gridCols: 1,
+            width: 0,
+            height: 0
+        });
+        const placement = resolveCopyPlacement({
+            subject: {
+                id: "a1",
+                kind: "annotation",
+                positionX: 0,
+                positionY: 0,
+                width: 380,
+                height: 120,
+                inset: GROUP_BORDER_WIDTH
+            },
+            group: pool,
+            tree: { groups: [pool], drafts: [], annotations: [] },
+            layout: "wide"
+        });
+
+        expect(placement.groupDims?.height).toBeLessThan(500);
+        expect(placement.groupDims?.height).toBe(200);
+    });
+
+    it("offsets a free-Group copy by the subject's own height", () => {
+        const free = groupWith({ id: "g-free", type: "custom", layout: "free" });
+        const placement = resolveCopyPlacement({
+            subject: {
+                id: "a1",
+                kind: "annotation",
+                positionX: 10,
+                positionY: 20,
+                width: 380,
+                height: 120,
+                inset: GROUP_BORDER_WIDTH
+            },
+            group: free,
+            tree: { groups: [free], drafts: [], annotations: [] },
+            layout: "wide"
+        });
+
+        expect(placement.positionY).toBe(20 + 120 + GRID_CELL_GAP);
     });
 });

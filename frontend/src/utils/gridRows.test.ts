@@ -8,6 +8,7 @@ import {
     rowMetricsAt,
     rowsFromHeight,
     rowsOf,
+    rowsOfIndexed,
     type RowMember
 } from "./gridRows";
 import {
@@ -104,9 +105,101 @@ describe("rowsOf", () => {
         expect(rows[0].height).toBe(SERIES_H);
     });
 
-    it("floors a row at cardHeight", () => {
+    it("sizes an occupied row from its members", () => {
         const rows = rowsOf([{ id: "tiny", y: top, inset: 2, height: 10 }], layout);
-        expect(rows[0].height).toBe(ch);
+        expect(rows[0].height).toBe(10);
+    });
+
+    it("keeps an all-Card row exactly cardHeight", () => {
+        expect(rowsOf([cardAt("card", top)], layout)[0].height).toBe(cardHeight(layout));
+    });
+
+    it("lets a Card dominate a mixed Card and annotation row", () => {
+        const annotation = { id: "note", y: top, inset: CARD_INSET, height: 120 };
+        expect(rowsOf([cardAt("card", top), annotation], layout)[0].height).toBe(ch);
+    });
+
+    it("sizes an annotation-only row to the annotation's height", () => {
+        const annotation = { id: "note", y: top, inset: CARD_INSET, height: 120 };
+        expect(rowsOf([annotation], layout)[0].height).toBe(120);
+    });
+
+    it("sizes a row containing only a short nested Group to that Group", () => {
+        const group = { id: "group", y: top, inset: 66, height: 100 };
+        expect(rowsOf([group], layout)[0].height).toBe(100);
+    });
+
+    it("makes three 120px annotation row bands 408px in every Card layout", () => {
+        const layouts: CardLayout[] = ["wide", "compact"];
+        for (const cardLayout of layouts) {
+            const rows = rowsOfIndexed(
+                [0, 1, 2].map((index) => ({
+                    id: `note-${index}`,
+                    index,
+                    inset: CARD_INSET,
+                    height: 120
+                })),
+                cardLayout
+            );
+            const rowBands =
+                rows.reduce((total, row) => total + row.height, 0) +
+                (rows.length - 1) * GRID_CELL_GAP;
+            expect(rowBands).toBe(408);
+        }
+    });
+
+    it("round-trips member-derived rows from indexed materialization through pixels", () => {
+        const indexed = [
+            { id: "note-a", index: 0, inset: CARD_INSET, height: 120 },
+            { id: "note-b", index: 1, inset: 66, height: 100 }
+        ];
+        const materialized = rowsOfIndexed(indexed, layout);
+        const members = indexed.map((member) => {
+            const row = materialized.find((candidate) =>
+                candidate.ids.includes(member.id)
+            );
+            if (!row) throw new Error(`missing materialized row for ${member.id}`);
+            return {
+                id: member.id,
+                y: memberY(row, member.inset),
+                inset: member.inset,
+                height: member.height
+            };
+        });
+
+        expect(rowsOf(members, layout)).toEqual(materialized);
+    });
+
+    it("keeps legacy note membership but infers and preserves a phantom empty row", () => {
+        const cardLayout: CardLayout = "wide";
+        const legacyStep = cardHeight(cardLayout) + GRID_CELL_GAP;
+        const legacy = rowsOf(
+            [
+                { id: "note-a", y: top, inset: CARD_INSET, height: 120 },
+                {
+                    id: "note-b",
+                    y: top + legacyStep,
+                    inset: CARD_INSET,
+                    height: 120
+                }
+            ],
+            cardLayout
+        );
+
+        expect(legacy.map((row) => row.ids)).toEqual([["note-a"], ["note-b"]]);
+        expect(legacy.map((row) => row.index)).toEqual([0, 2]);
+
+        const rewritten = rowsOfIndexed(
+            legacy.map((row) => ({
+                id: row.ids[0] ?? "missing",
+                index: row.index,
+                inset: CARD_INSET,
+                height: 120
+            })),
+            cardLayout
+        );
+        expect(rewritten.map((row) => row.index)).toEqual([0, 2]);
+        expect(rewritten[1].offset).toBe(top + 120 + GRID_CELL_GAP + legacyStep);
     });
 
     it("offsets each row by the previous row's height plus the gap", () => {

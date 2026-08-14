@@ -189,7 +189,6 @@ import {
     MIN_GROUP_WIDTH,
     MIN_GROUP_HEIGHT,
     arrangedRowCount,
-    GRID_CELL_GAP,
     CARD_FOOTPRINT,
     type GridFootprint,
     type GridItem,
@@ -4403,21 +4402,46 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const group = annotation.group_id
             ? canvasGroups.find((g) => g.id === annotation.group_id)
             : undefined;
-        // Slice 1 free-Group / loose offset. Grid-aware footprint placement is
-        // introduced as one whole branch in slice 2.
-        const placement = {
-            positionX: annotation.positionX,
-            positionY: annotation.positionY + annotation.height + GRID_CELL_GAP,
-            group_id: group?.id ?? null
+        const tree = canvasTree();
+        const node: TreeNode = { kind: "annotation", id: annotation.id, annotation };
+        const placement = resolveCopyPlacement({
+            subject: {
+                id: annotation.id,
+                kind: "annotation",
+                positionX: annotation.positionX,
+                positionY: annotation.positionY,
+                ...nodeSize(tree, node, props.cardLayout()),
+                inset: insetOf(tree, node, props.cardLayout())
+            },
+            group,
+            tree,
+            layout: props.cardLayout()
+        });
+
+        if (group && (placement.groupDims || placement.groupMetadata)) {
+            persistGroupDimensions(
+                group,
+                placement.groupDims ?? {
+                    width: group.width ?? DEFAULT_GROUP_WIDTH,
+                    height: group.height ?? DEFAULT_GROUP_HEIGHT
+                },
+                placement.groupMetadata
+            );
+        }
+
+        const annotationPlacement = {
+            positionX: placement.positionX,
+            positionY: placement.positionY,
+            group_id: placement.group_id
         };
         if (isLocalMode()) {
-            localCopyAnnotation(annotation.id, placement);
+            localCopyAnnotation(annotation.id, annotationPlacement);
             refreshFromLocal();
         } else {
             copyAnnotationMutation.mutate({
                 canvasId: canvasId(),
                 annotationId: annotation.id,
-                ...placement
+                ...annotationPlacement
             });
         }
     };
@@ -4636,7 +4660,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             : undefined;
 
         const placement = resolveCopyPlacement({
-            draft,
+            subject: {
+                id: draft.draft_id,
+                kind: "card",
+                positionX: draft.positionX,
+                positionY: draft.positionY,
+                width: cardWidth(props.cardLayout()),
+                height: cardHeight(props.cardLayout()),
+                inset: GROUP_BORDER_WIDTH
+            },
             group: sourceGroup,
             tree: canvasTree(),
             layout: props.cardLayout()

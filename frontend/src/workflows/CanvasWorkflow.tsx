@@ -61,6 +61,7 @@ import type { RestrictionGroup } from "../components/ChampionPanel";
 import { getDraftWorldPosition } from "../utils/canvasWorldPosition";
 import { resolveCopyPlacement } from "../utils/copyPlacement";
 import { DEFAULT_GROUP_WIDTH, DEFAULT_GROUP_HEIGHT } from "../utils/gridLayout";
+import { cardHeight, cardWidth, GROUP_BORDER_WIDTH } from "../utils/helpers";
 
 const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
     const params = useParams();
@@ -463,7 +464,15 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
             ? groups.find((group) => group.id === draft.group_id)
             : undefined;
         const placement = resolveCopyPlacement({
-            draft,
+            subject: {
+                id: draft.draft_id,
+                kind: "card",
+                positionX: draft.positionX,
+                positionY: draft.positionY,
+                width: cardWidth(cardLayout()),
+                height: cardHeight(cardLayout()),
+                inset: GROUP_BORDER_WIDTH
+            },
             group: sourceGroup,
             tree: { groups, drafts, annotations },
             layout: cardLayout()
