@@ -560,17 +560,16 @@ export const gridItemsOf = (
         return rowAtY(rows, item.position.y, layout);
     };
 
-    // TWO passes, and exactly two. A row span needs the row model, and the row
-    // model's INDEX inference needs the spans (a spanned row and an empty row
-    // have different pitches). The pass-1 model is built at span 1, which can
-    // under-count the indices below a spanning note; pass 2 rebuilds it with the
-    // real spans and is authoritative.
+    // TWO passes, and exactly two. Pass 2's model additionally contains the
+    // COVERED rows, which pass 1 (built at span 1) cannot know; `rowAtY`
+    // targeting for in-flight members reads those rows. Pass 2 is therefore
+    // authoritative even though covered and empty rows now share a pitch.
     //
     // This does NOT need to iterate to a fixpoint, because a span depends only
     // on row HEIGHTS and those are span-independent: a row is sized by its
-    // sizing members, or by the SPANNED_ROW_HEIGHT fallback, neither of which
-    // consults a span. `rowSpanFor` measuring un-modelled rows at that same
-    // fallback is what closes it.
+    // sizing members, or by the `cardHeight(layout)` fallback, neither of which
+    // consults a span. `rowSpanFor` measures un-modelled rows at that same
+    // fallback.
     const provisional = settled(items);
     const spanned = items.map((item) =>
         item.kind === "annotation"
@@ -581,7 +580,8 @@ export const gridItemsOf = (
                       rows: rowSpanFor(
                           item.height,
                           indexIn(provisional, item),
-                          provisional
+                          provisional,
+                          layout
                       )
                   }
               }

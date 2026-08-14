@@ -36,7 +36,7 @@ import type { CardLayout } from "./canvasCardLayout";
  * row height, which would then decide its span, which decides its height. The
  * fixpoint is broken by taking such members out of the measurement entirely —
  * rows are sized by "the other things within the row", and a row with no sizing
- * member falls back to `SPANNED_ROW_HEIGHT`.
+ * member falls back to `cardHeight(layout)`.
  *
  * Kind-agnostic on purpose. This module knows nothing about the tree, and a
  * boolean keeps it that way where a `kind` would not.
@@ -47,11 +47,10 @@ type RowSizing = {
      * How many rows this member COVERS from the one it starts in. 1 for
      * everything that cannot span, which is every kind but an annotation.
      *
-     * A covered row is OCCUPIED (maintainer ruling 2026-08-14): it exists in
-     * the model and measures `SPANNED_ROW_HEIGHT`, rather than being read as
-     * empty and taking the `cardHeight` lattice pitch. Without that a note
-     * grown one pixel past 120 jumped to a full card height — measured at 1004
-     * in `wide` — because the row it grew into had no member of its own.
+     * A covered row exists in the model even when no member starts there.
+     * Its existence, not a distinct height, is load-bearing: content height
+     * must include the entire painted span after a resize that does not update
+     * `metadata.gridRows`.
      */
     rowSpan: number;
 };
@@ -71,20 +70,6 @@ export type IndexedRowMember = RowSizing & {
     inset: number;
     height: number;
 };
-
-/**
- * A row sized by nothing — every member starting in it spans past it.
- *
- * Deliberately equal to `annotationSize.defaultAnnotationSize().height` and
- * deliberately NOT imported from there: `annotationSize` imports `canvasTree`,
- * which imports this module, so the import would close a cycle. The equality is
- * pinned by a test instead.
- *
- * NOT `cardHeight`. Task 24 removed the Card-height row floor precisely because
- * it made a note-only row 6.4x too tall, and this must not reintroduce it by
- * another name.
- */
-export const SPANNED_ROW_HEIGHT = 120;
 
 /**
  * A row band. `offset` is container-relative; `ids` is in the order the members
@@ -132,16 +117,16 @@ const baselineOf = (bucket: Chrome[]): number => {
  * `cardHeight`: its baseline is the Card inset and its below-baseline extent is
  * `cardHeight - inset`, so no explicit floor is needed.
  *
- * A row whose every member spans past it has nothing to measure and takes
- * `SPANNED_ROW_HEIGHT`. That is the maintainer's ruling of 2026-08-14 —
- * "covered rows keep their own height" — and it is what stops a spanning
- * member's height feeding back into the rows that decide its span.
+ * A row with no sizing member — whether nothing starts there or only spanning
+ * notes do — measures `cardHeight(layout)`. This is the explicit 2026-08-14
+ * REVERSAL of the earlier 120px ruling. It remains non-circular because a row's
+ * height never consults a member that can span.
  *
  * Shared by `rowsOf`'s gap inference and `rowsOfIndexed`'s materialization on
  * purpose: if the two ever computed height differently, reading back a layout
  * this module wrote would not reproduce it.
  */
-const heightOf = (bucket: Chrome[]): number => {
+const heightOf = (bucket: Chrome[], layout: CardLayout): number => {
     let below = 0;
     let sized = false;
     for (const member of bucket) {
@@ -149,7 +134,7 @@ const heightOf = (bucket: Chrome[]): number => {
         sized = true;
         below = Math.max(below, member.height - member.inset);
     }
-    if (!sized) return SPANNED_ROW_HEIGHT;
+    if (!sized) return cardHeight(layout);
     return baselineOf(bucket) + below;
 };
 
@@ -214,28 +199,21 @@ export const rowsOf = (members: RowMember[], layout: CardLayout): RowMetrics[] =
     const indexed: IndexedRowMember[] = [];
     let previousTop: number | null = null;
     let previousHeight = 0;
-    let previousSpan = 1;
     for (const key of keys) {
         const bucket = byKey.get(key) ?? [];
         const currentTop = rowTopOf(key, baselineOf(bucket));
         if (previousTop !== null) {
-            // The pixels between two START rows now hold two different kinds of
-            // row at two different pitches: rows the previous bucket SPANS INTO
-            // (`SPANNED_ROW_HEIGHT` each) and rows that are genuinely EMPTY
-            // (`cardHeight` each). Charging the spanned ones first is what keeps
-            // the remainder a whole number of empty lattice rows — without it
-            // the surplus divides by the wrong pitch and the indices compress,
-            // so a layout this module wrote does not read back as itself.
-            const spannedExtent =
-                (previousSpan - 1) * (SPANNED_ROW_HEIGHT + GRID_CELL_GAP);
-            const adjacent = previousHeight + spannedExtent + GRID_CELL_GAP;
+            // A spanned row and a truly empty row now have the same pitch
+            // (`cardHeight + gap`), so the division absorbs spanned rows for
+            // free. Advancing by the span as well would double-count them.
+            const adjacent = previousHeight + GRID_CELL_GAP;
             // Rounded, because stored pixels may carry ADR-0006's drift. On
             // tops the only residual IS that drift.
             const empty = Math.max(
                 0,
                 Math.round((currentTop - previousTop - adjacent) / step)
             );
-            index += previousSpan + empty;
+            index += 1 + empty;
         }
         for (const member of bucket) {
             indexed.push({
@@ -248,14 +226,7 @@ export const rowsOf = (members: RowMember[], layout: CardLayout): RowMetrics[] =
             });
         }
         previousTop = currentTop;
-        previousHeight = heightOf(bucket);
-        // The DEEPEST reach out of this row decides where the next one can
-        // start, exactly as the tallest member decides the row's own height.
-        previousSpan = bucket.reduce(
-            (deepest, member) =>
-                Math.max(deepest, Math.max(1, Math.round(member.rowSpan))),
-            1
-        );
+        previousHeight = heightOf(bucket, layout);
     }
     return rowsOfIndexed(indexed, layout);
 };
@@ -302,8 +273,9 @@ export const rowsOfIndexed = (
         (a, b) => a - b
     );
     for (const index of occupiedIndices) {
-        // A row that is only COVERED has an empty bucket, so `heightOf` returns
-        // SPANNED_ROW_HEIGHT and `baselineOf` returns 0 — exactly the ruling.
+        // A row that is only COVERED has an empty bucket. Its height now equals
+        // the empty-row lattice; materializing it remains necessary so content
+        // height reaches a spanning note's painted bottom.
         const bucket = byIndex.get(index) ?? [];
         const row: RowMetrics = {
             index,
@@ -314,7 +286,7 @@ export const rowsOfIndexed = (
                   (index - previous.index - 1) * step
                 : firstRowOffset() + index * step,
             baseline: baselineOf(bucket),
-            height: heightOf(bucket),
+            height: heightOf(bucket, layout),
             ids: bucket.map((m) => m.id)
         };
         rows.push(row);
@@ -550,14 +522,12 @@ export const rowsFromHeight = (
  * The height a row contributes to a footprint COVERING it.
  *
  * An occupied row answers with its own height — a Card sharing the row still
- * sizes it. A row not in the model answers `SPANNED_ROW_HEIGHT` rather than the
- * `cardHeight` lattice, because covering it is precisely what makes it an
- * occupied, un-sized row (maintainer ruling 2026-08-14). This is the one place
- * the span arithmetic deliberately disagrees with `rowMetricsAt`, whose job is
- * targeting rows nothing reaches.
+ * sizes it. A row not in the model answers `cardHeight(layout)`, the same as
+ * `rowMetricsAt`. Span arithmetic and targeting therefore agree on every
+ * unmodelled row.
  */
-const spanRowHeight = (rows: RowMetrics[], index: number): number =>
-    rowByIndex(rows, index)?.height ?? SPANNED_ROW_HEIGHT;
+const spanRowHeight = (rows: RowMetrics[], index: number, layout: CardLayout): number =>
+    rowByIndex(rows, index)?.height ?? cardHeight(layout);
 
 /**
  * How many rows a member of `height` starting at `startIndex` needs.
@@ -571,30 +541,24 @@ const spanRowHeight = (rows: RowMetrics[], index: number): number =>
  * heights (rule 2), so the span depends on WHICH rows are being covered, which
  * is why `startIndex` is a parameter and why this walks rather than divides.
  *
- * ⚠️ Rows past the model measure `SPANNED_ROW_HEIGHT`, NOT the `cardHeight`
- * lattice, and that is what makes this a single pass rather than a fixpoint.
- * A row this member is about to span into becomes an occupied, 120px row BY
- * THAT VERY ACT — the lattice pitch belongs to rows nothing reaches. Asking
- * `rowMetricsAt` here instead would answer with `cardHeight`, under-count the
- * span, and only settle after re-deriving the whole row model two or three
- * times.
+ * Rows past the model measure `cardHeight(layout)`. That fallback is
+ * span-independent, so this remains a single pass rather than a fixpoint: a
+ * row's height never consults any span.
  *
  * Bounded by `MAX_GROWTH_ROWS`, and terminating without it for any positive row
  * height, since the accumulator strictly increases.
- *
- * Takes no `CardLayout`, and that absence is the point: nothing on the span
- * path consults the `cardHeight` lattice any more.
  */
 export const rowSpanFor = (
     height: number,
     startIndex: number,
-    rows: RowMetrics[]
+    rows: RowMetrics[],
+    layout: CardLayout
 ): number => {
     if (!Number.isFinite(height)) return 1;
-    let covered = spanRowHeight(rows, startIndex);
+    let covered = spanRowHeight(rows, startIndex, layout);
     let span = 1;
     while (covered < height && span < MAX_GROWTH_ROWS) {
-        covered += GRID_CELL_GAP + spanRowHeight(rows, startIndex + span);
+        covered += GRID_CELL_GAP + spanRowHeight(rows, startIndex + span, layout);
         span++;
     }
     return span;
@@ -607,7 +571,7 @@ export const rowSpanFor = (
  * reason its objection does not bind: the rejected shape was `rows × cardHeight`,
  * which is wrong because "a row's height is a property of its MEMBERSHIP". This
  * asks the row model for each covered row's ACTUAL height instead, so the drop
- * highlight draws the true rectangle. `cardHeight` appears nowhere.
+ * highlight draws the true rectangle. Unmodelled rows use `cardHeight(layout)`.
  *
  * The width sibling is `gridLayout.footprintPixelWidth`, which CAN multiply,
  * because columns really are a uniform lattice.
@@ -615,12 +579,13 @@ export const rowSpanFor = (
 export const footprintPixelHeight = (
     rows: RowMetrics[],
     startIndex: number,
-    span: number
+    span: number,
+    layout: CardLayout
 ): number => {
     const count = Math.max(1, Math.round(span));
     let total = 0;
     for (let i = 0; i < count; i++) {
-        total += spanRowHeight(rows, startIndex + i);
+        total += spanRowHeight(rows, startIndex + i, layout);
     }
     return total + (count - 1) * GRID_CELL_GAP;
 };
@@ -630,9 +595,8 @@ export const footprintPixelHeight = (
  *
  * Distinct from `footprintPixelHeight` in exactly one way, and it matters: the
  * caller supplies the starting band. `landingBandOf` resolves a growth row via
- * `rowMetricsAt`, so a Card landing there gets a `cardHeight` band — and asking
- * the span arithmetic for that row instead would answer `SPANNED_ROW_HEIGHT`
- * and draw the highlight 120px tall under a 860px Card.
+ * `rowMetricsAt`. A projected band can be taller than the lattice (for example
+ * a Bo3 landing in a growth row), so the supplied first band must be honoured.
  *
  * Rows BELOW the first are measured the way a spanning member measures them,
  * because it is that member reaching them that makes them occupied.
@@ -640,12 +604,13 @@ export const footprintPixelHeight = (
 export const spannedBandHeight = (
     rows: RowMetrics[],
     band: RowMetrics,
-    span: number
+    span: number,
+    layout: CardLayout
 ): number => {
     const count = Math.max(1, Math.round(span));
     let total = band.height;
     for (let i = 1; i < count; i++) {
-        total += GRID_CELL_GAP + spanRowHeight(rows, band.index + i);
+        total += GRID_CELL_GAP + spanRowHeight(rows, band.index + i, layout);
     }
     return total;
 };
@@ -662,13 +627,14 @@ export const spannedBandHeight = (
 export const snapHeightToRows = (
     draggedHeight: number,
     startIndex: number,
-    rows: RowMetrics[]
+    rows: RowMetrics[],
+    layout: CardLayout
 ): number => {
     let span = 1;
-    let candidate = footprintPixelHeight(rows, startIndex, 1);
+    let candidate = footprintPixelHeight(rows, startIndex, 1, layout);
     if (!Number.isFinite(draggedHeight)) return candidate;
     while (candidate < draggedHeight && span < MAX_GROWTH_ROWS) {
-        const next = footprintPixelHeight(rows, startIndex, span + 1);
+        const next = footprintPixelHeight(rows, startIndex, span + 1, layout);
         if (next >= draggedHeight) {
             return draggedHeight - candidate <= next - draggedHeight ? candidate : next;
         }

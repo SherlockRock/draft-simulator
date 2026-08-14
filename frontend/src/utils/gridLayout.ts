@@ -404,14 +404,17 @@ const assignmentAt = (
 ): GridAssignment => ({ id: item.id, kind: item.kind, cell });
 
 /**
- * ⚠️ THE SWITCH FOR ROW SPANNING, and it is deliberately still OFF.
+ * ⚠️ THE SWITCH FOR ROW SPANNING, and it is ON — `false` is the spanning state.
  *
- * Flipping this to `false` is the one edit that stops an annotation's height
- * sizing its row and lets it span instead. Everything downstream of that —
- * `gridRows.heightOf`'s exclusion, its `SPANNED_ROW_HEIGHT` fallback,
- * `rowSpanFor`, `footprintPixelHeight`, `snapHeightToRows` — is built and
- * tested, but nothing yet CONSUMES a span, so turning it on now would only
- * make a tall note render at 120px and overflow its row.
+ * `false` stops an annotation's height sizing its row and lets it span instead.
+ * Everything downstream — `gridRows.heightOf`'s exclusion, its
+ * `cardHeight(layout)` fallback, `rowSpanFor`, `footprintPixelHeight`,
+ * `snapHeightToRows` — is built, tested and CONSUMED: `canvasTree.gridItemsOf`
+ * derives a real span and `annotationSize` paints it.
+ *
+ * ⚠️ The docblock here described the pre-flip state for two commits after the
+ * flip landed. If this constant and this text ever disagree again, the constant
+ * is the truth.
  *
  * Typed `boolean` rather than left to inference so the `||` below stays a real
  * runtime branch instead of narrowing to a constant.

@@ -51,8 +51,8 @@ export const autoFitHeight = (args: { measured: number; floor: number }): number
  *
  * Non-circular, and NOT because of a one-pass argument any more. A note that
  * can span is excluded from sizing rows entirely (`gridLayout.sizesRow`), so
- * row heights are decided by the OTHER members or by the
- * `SPANNED_ROW_HEIGHT` fallback — never by the note whose span is being
+ * row heights are decided by the OTHER members or by the `cardHeight` fallback
+ * — never by the note whose span is being
  * resolved. Its stored height is an input; no row height it reads is an output
  * of it.
  *
@@ -81,7 +81,8 @@ export const snappedAnnotationSize = (args: {
     height: footprintPixelHeight(
         args.rows,
         args.startRow,
-        rowSpanFor(args.storedHeight, args.startRow, args.rows)
+        rowSpanFor(args.storedHeight, args.startRow, args.rows, args.layout),
+        args.layout
     )
 });
 

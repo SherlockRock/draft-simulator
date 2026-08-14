@@ -13,11 +13,9 @@ import {
     footprintPixelHeight,
     spannedBandHeight,
     snapHeightToRows,
-    SPANNED_ROW_HEIGHT,
     type RowMember,
     type RowMetrics
 } from "./gridRows";
-import { defaultAnnotationSize } from "./annotationSize";
 import {
     GRID_CELL_GAP,
     GRID_HEADER_HEIGHT,
@@ -779,7 +777,9 @@ describe("row sizing excludes members that span", () => {
             [{ id: "note", y: top, inset: 0, height: 900, sizesRow: false, rowSpan: 1 }],
             layout
         );
-        expect(rows[0].height).toBe(SPANNED_ROW_HEIGHT);
+        // ⚠️ CONTRACT CHANGED: this was 120px; the 2026-08-14 maintainer
+        // reversal unifies every row with no sizing member at cardHeight.
+        expect(rows[0].height).toBe(ch);
     });
 
     // THE LOAD-BEARING ONE. The fallback alone would pass even if the member
@@ -840,80 +840,92 @@ describe("row sizing excludes members that span", () => {
         expect(rows[0].height).toBe(ch);
     });
 
-    it("is the default note height, which it cannot import without a cycle", () => {
-        const layouts: CardLayout[] = ["vertical", "horizontal", "wide", "compact"];
-        for (const cardLayout of layouts) {
-            expect(SPANNED_ROW_HEIGHT).toBe(defaultAnnotationSize(cardLayout).height);
-        }
-    });
-
-    it("is not the Card floor Task 24 removed", () => {
-        expect(SPANNED_ROW_HEIGHT).toBeLessThan(cardHeight("horizontal"));
+    it("measures exactly what a truly empty row measures", () => {
+        // ⚠️ CONTRACT REVERSED by explicit maintainer choice on 2026-08-14.
+        // Task 24 made note-only rows 120px; now all rows with no sizing member,
+        // including truly empty lattice rows, use the same cardHeight fallback.
+        const noteOnly = rowsOfIndexed(
+            [
+                {
+                    id: "note",
+                    index: 0,
+                    inset: 0,
+                    height: 120,
+                    sizesRow: false,
+                    rowSpan: 1
+                }
+            ],
+            layout
+        )[0];
+        expect(noteOnly.height).toBe(rowMetricsAt([], 0, layout).height);
     });
 });
 
 describe("rowSpanFor", () => {
     it("is one row for a height the starting row already covers", () => {
-        expect(rowSpanFor(ONE_ROW, 0, UNEVEN_ROWS)).toBe(1);
-        expect(rowSpanFor(1, 0, UNEVEN_ROWS)).toBe(1);
+        expect(rowSpanFor(ONE_ROW, 0, UNEVEN_ROWS, layout)).toBe(1);
+        expect(rowSpanFor(1, 0, UNEVEN_ROWS, layout)).toBe(1);
     });
 
     it("takes the next row the moment the height exceeds the first", () => {
-        expect(rowSpanFor(ONE_ROW + 1, 0, UNEVEN_ROWS)).toBe(2);
-        expect(rowSpanFor(TWO_ROWS, 0, UNEVEN_ROWS)).toBe(2);
-        expect(rowSpanFor(TWO_ROWS + 1, 0, UNEVEN_ROWS)).toBe(3);
+        expect(rowSpanFor(ONE_ROW + 1, 0, UNEVEN_ROWS, layout)).toBe(2);
+        expect(rowSpanFor(TWO_ROWS, 0, UNEVEN_ROWS, layout)).toBe(2);
+        expect(rowSpanFor(TWO_ROWS + 1, 0, UNEVEN_ROWS, layout)).toBe(3);
     });
 
     // The reason this walks instead of dividing. Starting in the SHORT row, the
     // same height needs a different span than it does from the tall one — a
     // division by any single row height cannot produce both answers.
     it("depends on which rows are being covered, not just how many", () => {
-        expect(rowSpanFor(220, 0, UNEVEN_ROWS)).toBe(2);
-        expect(rowSpanFor(51, 1, UNEVEN_ROWS)).toBe(2);
-        expect(rowSpanFor(51, 0, UNEVEN_ROWS)).toBe(1);
-        // Same height, different starting row, different answer: 220 fits in
-        // rows 0-1 (200 + gap + 50) but needs three from row 1 (50 + gap + 120
-        // + gap + 120). No division by any single row height produces both.
-        expect(rowSpanFor(220, 1, UNEVEN_ROWS)).toBe(3);
+        expect(rowSpanFor(220, 0, UNEVEN_ROWS, layout)).toBe(2);
+        expect(rowSpanFor(51, 1, UNEVEN_ROWS, layout)).toBe(2);
+        expect(rowSpanFor(51, 0, UNEVEN_ROWS, layout)).toBe(1);
+        // ⚠️ CONTRACT CHANGED: 220 formerly needed THREE rows from row 1, on
+        // the 120px fallback (50 + gap + 120 + gap + 120). Under the cardHeight
+        // fallback it needs two, which makes 220 answer 2 from BOTH rows and so
+        // stops discriminating at all. 500 restores the property, in the
+        // opposite direction: three rows from row 0
+        // (200 + gap + 50 + gap + ch), but only TWO from row 1
+        // (50 + gap + ch = 674, already past 500). Starting lower now needs
+        // FEWER rows, because the rows below the model are card-height.
+        expect(rowSpanFor(500, 0, UNEVEN_ROWS, layout)).toBe(3);
+        expect(rowSpanFor(500, 1, UNEVEN_ROWS, layout)).toBe(2);
     });
 
     it("terminates on an absurd height rather than hanging", () => {
-        expect(rowSpanFor(1e9, 0, UNEVEN_ROWS)).toBeLessThanOrEqual(64);
+        expect(rowSpanFor(1e9, 0, UNEVEN_ROWS, layout)).toBeLessThanOrEqual(64);
     });
 });
 
 describe("footprintPixelHeight", () => {
     it("is the row's own height at span one", () => {
-        expect(footprintPixelHeight(UNEVEN_ROWS, 0, 1)).toBe(ONE_ROW);
-        expect(footprintPixelHeight(UNEVEN_ROWS, 1, 1)).toBe(50);
+        expect(footprintPixelHeight(UNEVEN_ROWS, 0, 1, layout)).toBe(ONE_ROW);
+        expect(footprintPixelHeight(UNEVEN_ROWS, 1, 1, layout)).toBe(50);
     });
 
     // §6.0a rejected `rows × cardHeight`. This is the assertion that says the
     // replacement is member-derived: two rows here are 250 + gap, and no
     // multiple of cardHeight is.
     it("sums the ACTUAL heights of the rows it covers, plus their gaps", () => {
-        expect(footprintPixelHeight(UNEVEN_ROWS, 0, 2)).toBe(TWO_ROWS);
-        expect(footprintPixelHeight(UNEVEN_ROWS, 0, 2)).not.toBe(2 * ch + GRID_CELL_GAP);
+        expect(footprintPixelHeight(UNEVEN_ROWS, 0, 2, layout)).toBe(TWO_ROWS);
+        expect(footprintPixelHeight(UNEVEN_ROWS, 0, 2, layout)).not.toBe(
+            2 * ch + GRID_CELL_GAP
+        );
     });
 
     /**
-     * ⚠️ CONTRACT CHANGED 2026-08-14, from `cardHeight` to SPANNED_ROW_HEIGHT.
-     * A row past the model that a footprint COVERS is not an empty lattice row
-     * — covering it is what makes it an occupied, un-sized one. Measuring it at
-     * `cardHeight` is what made a 300px note paint 1004 in `wide`.
-     *
-     * `rowMetricsAt` still answers `cardHeight` for the same index, and that is
-     * correct: its job is targeting rows nothing reaches.
+     * ⚠️ CONTRACT CHANGED 2026-08-14, from the 120px spanned fallback back to
+     * `cardHeight`. Covered and truly empty rows now deliberately agree.
      */
-    it("measures a covered row past the model at the SPANNED height", () => {
-        expect(footprintPixelHeight(UNEVEN_ROWS, 0, 3)).toBe(
-            TWO_ROWS + GRID_CELL_GAP + SPANNED_ROW_HEIGHT
+    it("measures a covered row past the model at cardHeight", () => {
+        expect(footprintPixelHeight(UNEVEN_ROWS, 0, 3, layout)).toBe(
+            TWO_ROWS + GRID_CELL_GAP + ch
         );
         expect(rowMetricsAt(UNEVEN_ROWS, 2, layout).height).toBe(ch);
     });
 
     it("never reports less than the row it starts in", () => {
-        expect(footprintPixelHeight(UNEVEN_ROWS, 0, 0)).toBe(ONE_ROW);
+        expect(footprintPixelHeight(UNEVEN_ROWS, 0, 0, layout)).toBe(ONE_ROW);
     });
 });
 
@@ -922,33 +934,33 @@ describe("snapHeightToRows", () => {
     // the painted box, which sits exactly on ONE_ROW, so a ceil rule would buy
     // a whole extra row for one pixel of downward drift.
     it("holds the row against a nudge past the boundary", () => {
-        expect(snapHeightToRows(ONE_ROW + 1, 0, UNEVEN_ROWS)).toBe(ONE_ROW);
-        expect(snapHeightToRows(ONE_ROW + 20, 0, UNEVEN_ROWS)).toBe(ONE_ROW);
+        expect(snapHeightToRows(ONE_ROW + 1, 0, UNEVEN_ROWS, layout)).toBe(ONE_ROW);
+        expect(snapHeightToRows(ONE_ROW + 20, 0, UNEVEN_ROWS, layout)).toBe(ONE_ROW);
     });
 
     it("takes the next row once the drag passes the midpoint", () => {
         const midpoint = (ONE_ROW + TWO_ROWS) / 2;
-        expect(snapHeightToRows(midpoint - 1, 0, UNEVEN_ROWS)).toBe(ONE_ROW);
-        expect(snapHeightToRows(midpoint + 1, 0, UNEVEN_ROWS)).toBe(TWO_ROWS);
+        expect(snapHeightToRows(midpoint - 1, 0, UNEVEN_ROWS, layout)).toBe(ONE_ROW);
+        expect(snapHeightToRows(midpoint + 1, 0, UNEVEN_ROWS, layout)).toBe(TWO_ROWS);
     });
 
     it("never returns less than one row, however far the drag shrinks", () => {
-        expect(snapHeightToRows(0, 0, UNEVEN_ROWS)).toBe(ONE_ROW);
-        expect(snapHeightToRows(-500, 0, UNEVEN_ROWS)).toBe(ONE_ROW);
+        expect(snapHeightToRows(0, 0, UNEVEN_ROWS, layout)).toBe(ONE_ROW);
+        expect(snapHeightToRows(-500, 0, UNEVEN_ROWS, layout)).toBe(ONE_ROW);
     });
 
     it("is a fixpoint, and agrees with the span rowSpanFor derives", () => {
-        const snapped = snapHeightToRows(TWO_ROWS - 5, 0, UNEVEN_ROWS);
+        const snapped = snapHeightToRows(TWO_ROWS - 5, 0, UNEVEN_ROWS, layout);
         expect(snapped).toBe(TWO_ROWS);
-        expect(snapHeightToRows(snapped, 0, UNEVEN_ROWS)).toBe(snapped);
-        expect(rowSpanFor(snapped, 0, UNEVEN_ROWS)).toBe(2);
+        expect(snapHeightToRows(snapped, 0, UNEVEN_ROWS, layout)).toBe(snapped);
+        expect(rowSpanFor(snapped, 0, UNEVEN_ROWS, layout)).toBe(2);
     });
 });
 
 /**
- * Spanned-into rows are OCCUPIED (maintainer ruling 2026-08-14), measuring
- * SPANNED_ROW_HEIGHT rather than being read as empty and taking the cardHeight
- * lattice. Measured before the ruling: a 300px note painted 1004 in `wide`.
+ * Spanned-into rows exist even though no member starts there. Their height now
+ * matches the cardHeight lattice; existence remains necessary so container
+ * content height reaches the painted bottom of a spanning note.
  */
 describe("a row a footprint spans into", () => {
     const spanning = (id: string, index: number, rowSpan: number, height = 300) => ({
@@ -965,10 +977,11 @@ describe("a row a footprint spans into", () => {
         expect(rows.map((r) => r.index)).toEqual([0, 1]);
     });
 
-    it("measures SPANNED_ROW_HEIGHT, not the cardHeight lattice", () => {
+    it("measures the same cardHeight as the empty lattice", () => {
         const rows = rowsOfIndexed([spanning("note", 0, 2)], layout);
-        expect(rows[1].height).toBe(SPANNED_ROW_HEIGHT);
-        expect(rows[1].height).not.toBe(ch);
+        // ⚠️ CONTRACT CHANGED: this was 120px; the maintainer's 2026-08-14
+        // reversal makes every row with no sizing member measure cardHeight.
+        expect(rows[1].height).toBe(ch);
     });
 
     // `ids` still means "starts here". A spanning member listed in every row it
@@ -982,13 +995,20 @@ describe("a row a footprint spans into", () => {
 
     it("paints the height the ruling described", () => {
         const rows = rowsOfIndexed([spanning("note", 0, 2)], layout);
-        expect(footprintPixelHeight(rows, 0, 2)).toBe(
-            SPANNED_ROW_HEIGHT * 2 + GRID_CELL_GAP
-        );
+        // ⚠️ CONTRACT CHANGED: this painted two 120px rows; both unsized rows
+        // now paint at the unified cardHeight fallback.
+        expect(footprintPixelHeight(rows, 0, 2, layout)).toBe(ch * 2 + GRID_CELL_GAP);
     });
 
-    // Task 24's lattice pitch is untouched: only rows something REACHES are
-    // occupied. A gap nothing covers is still a card-pitch empty row.
+    it("extends content height through the painted bottom of a spanning note", () => {
+        const rows = rowsOfIndexed([spanning("note", 0, 2)], layout);
+        const paintedBottom =
+            rows[0].offset + footprintPixelHeight(rows, 0, 2, layout) + GRID_PADDING;
+        expect(gridContentHeight(rows)).toBe(paintedBottom);
+    });
+
+    // Rows nothing covers remain absent even though their pitch matches a
+    // covered row's pitch.
     it("leaves a truly empty row on the cardHeight lattice", () => {
         const rows = rowsOfIndexed(
             [spanning("note", 0, 2), { ...spanning("other", 4, 1), sizesRow: true }],
@@ -1052,19 +1072,11 @@ describe("a row a footprint spans into", () => {
     });
 
     /**
-     * ⚠️ THE DISCRIMINATING SPAN, and it has to be this deep.
-     *
-     * Dropping `spannedExtent` from the inference is invisible at a 2-row span:
-     * the error is one spanned pitch (144px), and `empty` divides it by a full
-     * lattice step (624 in `vertical`) and rounds to 0, so the index still comes
-     * out right. The error only becomes a PHANTOM EMPTY ROW once it passes half
-     * a step, which needs `(span - 1) * 144 >= 312` — a four-row span.
-     *
-     * Found by mutation testing: the two round-trip tests above BOTH survived
-     * that mutation. Without this case the spanned-extent term would have been
-     * deletable with a green suite.
+     * A layout this module writes must read back as itself even at a four-row
+     * span. Keeping this deep case protects the round-trip independently of the
+     * now-deleted split-pitch extent arithmetic.
      */
-    it("round-trips a deep span, where a missing extent term becomes a phantom row", () => {
+    it("round-trips a deep four-row span", () => {
         const indexed = [
             spanning("note-a", 0, 4),
             { ...spanning("note-b", 4, 1, 120), sizesRow: true }
@@ -1136,31 +1148,29 @@ describe("spannedBandHeight", () => {
     });
 
     it("is the band's own height at span one", () => {
-        expect(spannedBandHeight(UNEVEN_ROWS, band(0, 200), 1)).toBe(200);
+        expect(spannedBandHeight(UNEVEN_ROWS, band(0, 200), 1, layout)).toBe(200);
     });
 
     /**
-     * THE REASON THIS IS NOT `footprintPixelHeight`. `landingBandOf` resolves a
-     * growth row through `rowMetricsAt`, which answers `cardHeight` — so a Card
-     * dropped there must get a cardHeight highlight. The span arithmetic would
-     * answer SPANNED_ROW_HEIGHT for the same index and draw a 120px box under an
-     * 860px Card.
+     * THE REASON THIS IS NOT `footprintPixelHeight`: the caller may supply a
+     * PROJECTED growth band, such as a Bo3 landing that makes the first row
+     * taller than the cardHeight lattice. That projected height must win.
      */
-    it("trusts the caller's band for the first row, lattice height included", () => {
-        expect(spannedBandHeight(UNEVEN_ROWS, band(9, ch), 1)).toBe(ch);
-        expect(footprintPixelHeight(UNEVEN_ROWS, 9, 1)).toBe(SPANNED_ROW_HEIGHT);
+    it("trusts the caller's projected band for the first row", () => {
+        expect(spannedBandHeight(UNEVEN_ROWS, band(9, 500), 1, layout)).toBe(500);
+        expect(footprintPixelHeight(UNEVEN_ROWS, 9, 1, layout)).toBe(ch);
     });
 
     it("adds each further row at the spanned pitch", () => {
-        expect(spannedBandHeight(UNEVEN_ROWS, band(0, 200), 2)).toBe(
+        expect(spannedBandHeight(UNEVEN_ROWS, band(0, 200), 2, layout)).toBe(
             200 + GRID_CELL_GAP + 50
         );
-        expect(spannedBandHeight(UNEVEN_ROWS, band(0, 200), 3)).toBe(
-            200 + GRID_CELL_GAP + 50 + GRID_CELL_GAP + SPANNED_ROW_HEIGHT
+        expect(spannedBandHeight(UNEVEN_ROWS, band(0, 200), 3, layout)).toBe(
+            200 + GRID_CELL_GAP + 50 + GRID_CELL_GAP + ch
         );
     });
 
     it("floors a degenerate span at the band itself", () => {
-        expect(spannedBandHeight(UNEVEN_ROWS, band(0, 200), 0)).toBe(200);
+        expect(spannedBandHeight(UNEVEN_ROWS, band(0, 200), 0, layout)).toBe(200);
     });
 });

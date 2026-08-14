@@ -10,7 +10,7 @@ import {
     snapWidthToCells
 } from "./annotationSize";
 import { GRID_CELL_GAP } from "./gridLayout";
-import { rowsOfIndexed, SPANNED_ROW_HEIGHT } from "./gridRows";
+import { rowsOfIndexed } from "./gridRows";
 import { cardWidth, cardHeight } from "./helpers";
 import type { CardLayout } from "./canvasCardLayout";
 
@@ -194,11 +194,11 @@ describe("snappedAnnotationSize", () => {
         ).toBe(860);
     });
 
-    // The ruling: past its row, the note covers whole further rows, and a row it
-    // covers measures SPANNED_ROW_HEIGHT rather than the cardHeight lattice.
+    // ⚠️ CONTRACT CHANGED: the further row formerly measured 120px. Under the
+    // 2026-08-14 reversal it uses the same cardHeight fallback as an empty row.
     it("covers whole further rows once the note outgrows its own", () => {
         const rows = rowOfHeight(120, "wide");
-        const twoRows = 120 + GRID_CELL_GAP + SPANNED_ROW_HEIGHT;
+        const twoRows = 120 + GRID_CELL_GAP + cardHeight("wide");
         expect(
             snappedAnnotationSize({
                 storedWidth: 300,
@@ -208,8 +208,13 @@ describe("snappedAnnotationSize", () => {
                 layout: "wide"
             }).height
         ).toBe(twoRows);
-        // Not the empty-row lattice, which is what made this 1004.
-        expect(twoRows).toBeLessThan(cardHeight("wide"));
+        // Pinned as a LITERAL, because the previous line defines `twoRows` by
+        // the same expression and asserting it against itself proves nothing.
+        // 1004 is the number the reversal actually produces in `wide`, against
+        // 264 under the 120px ruling. The old contract asserted this sum could
+        // never reach a card height; it now deliberately exceeds one.
+        expect(twoRows).toBe(1004);
+        expect(twoRows).toBeGreaterThan(cardHeight("wide"));
     });
 
     // No fixpoint: a note that can span is excluded from SIZING rows, so no row
@@ -336,9 +341,8 @@ describe("annotationRenderSize", () => {
         ).toEqual({ width: 700, height: 120 });
     });
 
-    // The wired end of the ruling: a note taller than its row paints the band
-    // of rows it covers, and the row it grows into is a 120px occupied row
-    // rather than a cardHeight lattice row.
+    // ⚠️ CONTRACT CHANGED: the occupied row formerly painted at 120px; the
+    // reversal makes it paint at the cardHeight fallback.
     it("paints the spanned band for a note grown past its row", () => {
         expect(
             annotationRenderSize({
@@ -350,7 +354,7 @@ describe("annotationRenderSize", () => {
             })
         ).toEqual({
             width: 700,
-            height: 120 + GRID_CELL_GAP + SPANNED_ROW_HEIGHT
+            height: 120 + GRID_CELL_GAP + cardHeight("wide")
         });
     });
 });

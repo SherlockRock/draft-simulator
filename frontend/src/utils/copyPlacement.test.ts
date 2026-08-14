@@ -495,7 +495,7 @@ describe("resolveCopyPlacement over a generalised subject", () => {
         expect(placement.positionY).toBe(cellToPosition({ row: 1, col: 0 }, "compact").y);
     });
 
-    it("sizes the container from the subject's own height", () => {
+    it("sizes the container from the subject's cardHeight row", () => {
         const pool = groupWith({
             id: "g-pool",
             type: "custom",
@@ -519,8 +519,11 @@ describe("resolveCopyPlacement over a generalised subject", () => {
             layout: "wide"
         });
 
-        expect(placement.groupDims?.height).toBeLessThan(500);
-        expect(placement.groupDims?.height).toBe(200);
+        // ⚠️ CONTRACT CHANGED: this was 200px when an annotation-only row used
+        // the note's 120px height. The 2026-08-14 reversal makes a row with no
+        // sizing member use wide cardHeight, producing the 940px group frame.
+        expect(placement.groupDims?.height).toBeGreaterThan(500);
+        expect(placement.groupDims?.height).toBe(940);
     });
 
     it("offsets a free-Group copy by the subject's own height", () => {

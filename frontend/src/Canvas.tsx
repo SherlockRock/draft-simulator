@@ -4524,7 +4524,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
      * other row derivation on this path uses. It is stable across the gesture
      * even though the note's stored height is changing under it, because a note
      * does not SIZE its row — only the rows it covers change, and every covered
-     * row measures the same `SPANNED_ROW_HEIGHT` whichever one it is.
+     * row measures the same `cardHeight(layout)` whichever one it is.
      */
     const resizeHeightFor = (annotationId: string, height: number): number => {
         const annotation = annotations.find((a) => a.id === annotationId);
@@ -4538,7 +4538,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         );
         const row = rows.find((entry) => entry.ids.includes(annotationId));
         if (!row) return height;
-        return snapHeightToRows(height, row.index, rows);
+        return snapHeightToRows(height, row.index, rows, layout);
     };
 
     /** Live resize: paint only. No persistence and no floor write. */

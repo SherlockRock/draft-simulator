@@ -91,7 +91,8 @@ export const GridDropHighlight: Component<GridDropHighlightProps> = (props) => {
                     const height = spannedBandHeight(
                         entry.rect.rows,
                         band,
-                        entry.rect.footprint.rows
+                        entry.rect.footprint.rows,
+                        layout
                     );
                     return (
                         <div

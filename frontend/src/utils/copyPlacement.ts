@@ -120,13 +120,18 @@ export const resolveCopyPlacement = (args: {
         //
         // Measured from row 0 rather than from the landing row, which is not
         // known yet. The two agree except where a SIZING member sits inside the
-        // span: every row a note covers otherwise measures SPANNED_ROW_HEIGHT
+        // span: every un-sized row otherwise measures `cardHeight(layout)`
         // whatever its index, so the span does not depend on where it starts.
         const gridFootprint: GridFootprint =
             subject.kind === "annotation"
                 ? {
                       cols: footprint.cols,
-                      rows: rowSpanFor(subject.height, 0, rowsOfItems(items, layout))
+                      rows: rowSpanFor(
+                          subject.height,
+                          0,
+                          rowsOfItems(items, layout),
+                          layout
+                      )
                   }
                 : footprint;
         const cell = firstEmptyRect(items, gridFootprint, cols);
