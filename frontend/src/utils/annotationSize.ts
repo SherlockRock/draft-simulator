@@ -2,6 +2,7 @@ import type { CanvasAnnotation } from "./schemas";
 import type { CardLayout } from "./canvasCardLayout";
 import { cardWidth } from "./helpers";
 import { footprintPixelWidth, GRID_CELL_GAP } from "./gridLayout";
+import { footprintPixelHeight, rowSpanFor, type RowMetrics } from "./gridRows";
 import { spanFor } from "./canvasTree";
 
 export const MIN_ANNOTATION_WIDTH = 56;
@@ -45,20 +46,29 @@ export const autoFitHeight = (args: { measured: number; floor: number }): number
  * Group's effective column count. Un-snapped, a one-pixel resize drag would
  * silently reflow the whole grid horizontally.
  *
- * Height is the ROW's, not the note's. Non-circular in one pass: the STORED
- * height is an input to the row-height max (`gridRows.rowsOf` via
- * `canvasTree.nodeSize`), and the RENDERED height is its output — there is no
- * fixpoint to iterate.
+ * Height is the SPANNED ROWS', not the note's — one row for most notes, and
+ * the full band of rows a taller one covers (maintainer ruling 2026-08-14).
  *
- * Rows keep auto-sizing to their tallest member uniformly; annotations are not
- * excluded from the max. A special case for one member kind was proposed and
- * withdrawn, and the concern it addressed is handled by arithmetic instead: a
- * Card is 384–960px tall, so in any mixed row the Cards dominate.
+ * Non-circular, and NOT because of a one-pass argument any more. A note that
+ * can span is excluded from sizing rows entirely (`gridLayout.sizesRow`), so
+ * row heights are decided by the OTHER members or by the
+ * `SPANNED_ROW_HEIGHT` fallback — never by the note whose span is being
+ * resolved. Its stored height is an input; no row height it reads is an output
+ * of it.
+ *
+ * A special case excluding annotations from the row max was proposed and
+ * withdrawn at §6.0a on the argument that "a Card is 384–960px tall, so in any
+ * mixed row the Cards dominate". That argument was silent on the ZERO-CARD row,
+ * which is exactly the champion pool this feature was built for — and it is
+ * that case the ruling settled.
  */
 export const snappedAnnotationSize = (args: {
     storedWidth: number;
-    /** The band this note landed in — `gridRows.RowMetrics.height`. */
-    rowHeight: number;
+    storedHeight: number;
+    /** The lattice row this note STARTS in — `gridRows.RowMetrics.index`. */
+    startRow: number;
+    /** The settled row model it is being measured against. */
+    rows: RowMetrics[];
     layout: CardLayout;
 }): { width: number; height: number } => ({
     width: footprintPixelWidth(
@@ -68,7 +78,11 @@ export const snappedAnnotationSize = (args: {
         },
         args.layout
     ),
-    height: args.rowHeight
+    height: footprintPixelHeight(
+        args.rows,
+        args.startRow,
+        rowSpanFor(args.storedHeight, args.startRow, args.rows)
+    )
 });
 
 /**
@@ -118,10 +132,10 @@ export type AnnotationRenderSize = { width: number; height: number };
  * its intrinsic render geometry while it is in flight.
  */
 export const annotationRenderSize = (args: {
-    annotation: { id: string; width: number };
+    annotation: { id: string; width: number; height: number };
     activeAnnotationId: string | null;
     frozenSize: AnnotationRenderSize | null;
-    settledRows: ReadonlyArray<{ ids: ReadonlyArray<string>; height: number }>;
+    settledRows: RowMetrics[];
     layout: CardLayout;
 }): AnnotationRenderSize | null => {
     if (args.activeAnnotationId === args.annotation.id && args.frozenSize !== null) {
@@ -131,7 +145,11 @@ export const annotationRenderSize = (args: {
     if (!row) return null;
     return snappedAnnotationSize({
         storedWidth: args.annotation.width,
-        rowHeight: row.height,
+        storedHeight: args.annotation.height,
+        // `RowMetrics.index` is the ABSOLUTE lattice row, which is what the span
+        // walk needs; the array position would collapse every empty row.
+        startRow: row.index,
+        rows: args.settledRows,
         layout: args.layout
     });
 };

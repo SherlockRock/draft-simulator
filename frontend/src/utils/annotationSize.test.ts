@@ -10,7 +10,8 @@ import {
     snapWidthToCells
 } from "./annotationSize";
 import { GRID_CELL_GAP } from "./gridLayout";
-import { cardWidth } from "./helpers";
+import { rowsOfIndexed, SPANNED_ROW_HEIGHT } from "./gridRows";
+import { cardWidth, cardHeight } from "./helpers";
 import type { CardLayout } from "./canvasCardLayout";
 
 const LAYOUTS: CardLayout[] = [
@@ -125,75 +126,128 @@ describe("snapWidthToCells", () => {
 
         expect(snapped).toBe(threeCells);
         expect(snapWidthToCells(snapped, layout)).toBe(snapped);
-        expect(
-            snappedAnnotationSize({ storedWidth: snapped, rowHeight: 120, layout }).width
-        ).toBe(snapped);
+        expect(snapped2({ storedWidth: snapped, rowHeight: 120, layout }).width).toBe(
+            snapped
+        );
     });
 });
+
+/**
+ * A one-row model, so every WIDTH assertion below reads exactly as it did
+ * before the row axis existed. The height half is now the SPANNED extent, so
+ * those assertions changed and say so where they did.
+ */
+const rowOfHeight = (height: number, layout: CardLayout) =>
+    rowsOfIndexed(
+        [{ id: "note", index: 0, inset: 0, height, sizesRow: true, rowSpan: 1 }],
+        layout
+    );
+
+const snapped2 = (args: {
+    storedWidth: number;
+    storedHeight?: number;
+    rowHeight: number;
+    layout: CardLayout;
+}) =>
+    snappedAnnotationSize({
+        storedWidth: args.storedWidth,
+        storedHeight: args.storedHeight ?? args.rowHeight,
+        startRow: 0,
+        rows: rowOfHeight(args.rowHeight, args.layout),
+        layout: args.layout
+    });
 
 describe("snappedAnnotationSize", () => {
     // Width snaps to whole cells because span feeds maxChildSpanCols, which can
     // change the Group's effective column count — un-snapped, a 1px resize drag
     // would silently reflow the grid horizontally.
     it("rounds a 1-cell-ish width up to exactly one cell", () => {
-        expect(
-            snappedAnnotationSize({ storedWidth: 300, rowHeight: 600, layout: "wide" })
-                .width
-        ).toBe(700);
+        expect(snapped2({ storedWidth: 300, rowHeight: 600, layout: "wide" }).width).toBe(
+            700
+        );
     });
 
     it("spans two cells with the gap INSIDE the span", () => {
-        expect(
-            snappedAnnotationSize({ storedWidth: 720, rowHeight: 600, layout: "wide" })
-                .width
-        ).toBe(700 * 2 + GRID_CELL_GAP);
+        expect(snapped2({ storedWidth: 720, rowHeight: 600, layout: "wide" }).width).toBe(
+            700 * 2 + GRID_CELL_GAP
+        );
     });
 
     // 1401 is one pixel beyond two bare 700px cells, but still fits two cells
     // because the 24px gap is inside their footprint rather than extra width.
     it("keeps a width inside the two-cell gap boundary at two cells", () => {
         expect(
-            snappedAnnotationSize({
-                storedWidth: 1401,
-                rowHeight: 600,
-                layout: "wide"
-            }).width
+            snapped2({ storedWidth: 1401, rowHeight: 600, layout: "wide" }).width
         ).toBe(700 * 2 + GRID_CELL_GAP);
     });
 
-    // Height snaps to the ROW, not to the note.
-    it("takes the row's height verbatim", () => {
+    // Was "takes the row's height verbatim". Still verbatim when the note fits
+    // its row — which is every note that has not been grown past it.
+    it("takes the row's height when the note fits inside it", () => {
         expect(
-            snappedAnnotationSize({ storedWidth: 300, rowHeight: 860, layout: "wide" })
-                .height
+            snapped2({
+                storedWidth: 300,
+                storedHeight: 120,
+                rowHeight: 860,
+                layout: "wide"
+            }).height
         ).toBe(860);
     });
 
-    // One pass, no fixpoint: stored height is the INPUT to the row max, the
-    // rendered height is its OUTPUT. Calling this twice must not drift.
+    // The ruling: past its row, the note covers whole further rows, and a row it
+    // covers measures SPANNED_ROW_HEIGHT rather than the cardHeight lattice.
+    it("covers whole further rows once the note outgrows its own", () => {
+        const rows = rowOfHeight(120, "wide");
+        const twoRows = 120 + GRID_CELL_GAP + SPANNED_ROW_HEIGHT;
+        expect(
+            snappedAnnotationSize({
+                storedWidth: 300,
+                storedHeight: 121,
+                startRow: 0,
+                rows,
+                layout: "wide"
+            }).height
+        ).toBe(twoRows);
+        // Not the empty-row lattice, which is what made this 1004.
+        expect(twoRows).toBeLessThan(cardHeight("wide"));
+    });
+
+    // No fixpoint: a note that can span is excluded from SIZING rows, so no row
+    // height it reads is an output of its own height. Calling this twice with
+    // its own output must not drift.
     it("is idempotent — feeding its own output back changes nothing", () => {
+        const rows = rowOfHeight(860, "wide");
         const once = snappedAnnotationSize({
             storedWidth: 300,
-            rowHeight: 860,
+            storedHeight: 120,
+            startRow: 0,
+            rows,
             layout: "wide"
         });
         const twice = snappedAnnotationSize({
             storedWidth: once.width,
-            rowHeight: 860,
+            storedHeight: once.height,
+            startRow: 0,
+            rows,
             layout: "wide"
         });
         expect(twice).toEqual(once);
     });
 
     it("is idempotent across a two-cell span", () => {
+        const rows = rowOfHeight(860, "wide");
         const once = snappedAnnotationSize({
             storedWidth: 720,
-            rowHeight: 860,
+            storedHeight: 120,
+            startRow: 0,
+            rows,
             layout: "wide"
         });
         const twice = snappedAnnotationSize({
             storedWidth: once.width,
-            rowHeight: 860,
+            storedHeight: once.height,
+            startRow: 0,
+            rows,
             layout: "wide"
         });
         expect(twice).toEqual(once);
@@ -201,13 +255,15 @@ describe("snappedAnnotationSize", () => {
 
     // D5's accepted cost, pinned: the drift is bounded at ONE cell.
     it("drifts by at most one cell across a layout change", () => {
-        const inCompact = snappedAnnotationSize({
+        const inCompact = snapped2({
             storedWidth: 700,
+            storedHeight: 120,
             rowHeight: 432,
             layout: "compact"
         });
-        const inWide = snappedAnnotationSize({
+        const inWide = snapped2({
             storedWidth: 700,
+            storedHeight: 120,
             rowHeight: 860,
             layout: "wide"
         });
@@ -217,15 +273,26 @@ describe("snappedAnnotationSize", () => {
 });
 
 describe("annotationRenderSize", () => {
-    const settledRows = [{ ids: ["note"], height: 384 }];
+    const rowsWith = (specs: { id: string; height: number }[], index = 0) =>
+        rowsOfIndexed(
+            specs.map((spec) => ({
+                id: spec.id,
+                index,
+                inset: 0,
+                height: spec.height,
+                sizesRow: true,
+                rowSpan: 1
+            })),
+            "wide"
+        );
 
     it("derives a resting note's size from its settled row", () => {
         expect(
             annotationRenderSize({
-                annotation: { id: "note", width: 56 },
+                annotation: { id: "note", width: 56, height: 120 },
                 activeAnnotationId: null,
                 frozenSize: null,
-                settledRows,
+                settledRows: rowsWith([{ id: "note", height: 384 }]),
                 layout: "wide"
             })
         ).toEqual({ width: 700, height: 384 });
@@ -236,7 +303,7 @@ describe("annotationRenderSize", () => {
 
         expect(
             annotationRenderSize({
-                annotation: { id: "note", width: 56 },
+                annotation: { id: "note", width: 56, height: 120 },
                 activeAnnotationId: "note",
                 frozenSize,
                 settledRows: [],
@@ -248,7 +315,7 @@ describe("annotationRenderSize", () => {
     it("returns null for an in-flight remote note with no local snapshot", () => {
         expect(
             annotationRenderSize({
-                annotation: { id: "note", width: 56 },
+                annotation: { id: "note", width: 56, height: 120 },
                 activeAnnotationId: null,
                 frozenSize: null,
                 settledRows: [],
@@ -260,12 +327,30 @@ describe("annotationRenderSize", () => {
     it("does not give one active note another note's snapshot", () => {
         expect(
             annotationRenderSize({
-                annotation: { id: "other", width: 56 },
+                annotation: { id: "other", width: 56, height: 120 },
                 activeAnnotationId: "note",
                 frozenSize: { width: 700, height: 384 },
-                settledRows: [{ ids: ["other"], height: 120 }],
+                settledRows: rowsWith([{ id: "other", height: 120 }]),
                 layout: "wide"
             })
         ).toEqual({ width: 700, height: 120 });
+    });
+
+    // The wired end of the ruling: a note taller than its row paints the band
+    // of rows it covers, and the row it grows into is a 120px occupied row
+    // rather than a cardHeight lattice row.
+    it("paints the spanned band for a note grown past its row", () => {
+        expect(
+            annotationRenderSize({
+                annotation: { id: "note", width: 56, height: 200 },
+                activeAnnotationId: null,
+                frozenSize: null,
+                settledRows: rowsWith([{ id: "note", height: 120 }]),
+                layout: "wide"
+            })
+        ).toEqual({
+            width: 700,
+            height: 120 + GRID_CELL_GAP + SPANNED_ROW_HEIGHT
+        });
     });
 });

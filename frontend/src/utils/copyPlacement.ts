@@ -16,11 +16,12 @@ import {
     gridRowsOf,
     materializeGrid,
     resolveContainerDims,
+    rowsOfItems,
     resolveGridDims,
     type GridFootprint,
     type GridItem
 } from "./gridLayout";
-import { gridContentHeightForRows, memberY } from "./gridRows";
+import { gridContentHeightForRows, memberY, rowSpanFor } from "./gridRows";
 import {
     childCardsOf,
     childrenOf,
@@ -92,8 +93,8 @@ export const resolveCopyPlacement = (args: {
     const { subject, group, tree, layout } = args;
     const footprint: GridFootprint = {
         cols: spanFor(subject.width, cardWidth(layout), GRID_CELL_GAP),
-        // A copy lands one row tall. Row span needs the destination's row model,
-        // which this resolves only further down — wiring step 5.
+        // One row outside a grid, where rows do not exist. The grid branch
+        // below re-derives it against the destination's own row model.
         rows: 1
     };
 
@@ -114,7 +115,21 @@ export const resolveCopyPlacement = (args: {
             maxChildSpanCols(tree, group.id, layout)
         );
         const items = gridItemsOf(tree, group.id, layout, cols);
-        const cell = firstEmptyRect(items, footprint, cols);
+        // The copy must claim the rows it will PAINT, or a note that spans two
+        // lands in a one-row hole and overlaps whatever is under it.
+        //
+        // Measured from row 0 rather than from the landing row, which is not
+        // known yet. The two agree except where a SIZING member sits inside the
+        // span: every row a note covers otherwise measures SPANNED_ROW_HEIGHT
+        // whatever its index, so the span does not depend on where it starts.
+        const gridFootprint: GridFootprint =
+            subject.kind === "annotation"
+                ? {
+                      cols: footprint.cols,
+                      rows: rowSpanFor(subject.height, 0, rowsOfItems(items, layout))
+                  }
+                : footprint;
+        const cell = firstEmptyRect(items, gridFootprint, cols);
         // A copy is a brand-new Card and is by definition NOT in `items`, so it
         // has to be projected in before materializing — `materializeGrid`
         // throws on an assignment with no item rather than guessing a Card's
@@ -123,7 +138,7 @@ export const resolveCopyPlacement = (args: {
         const copy: GridItem = {
             id: `${subject.id}-copy`,
             kind: subject.kind,
-            footprint,
+            footprint: gridFootprint,
             position: cellToPosition(cell, layout),
             cell,
             inset: subject.inset,
@@ -148,7 +163,7 @@ export const resolveCopyPlacement = (args: {
         };
         // The count being APPLIED, so the container is sized to the row the
         // copy just landed on rather than to the floor it is leaving behind.
-        const configuredRows = configuredRowsAfterDrop(group, cell, footprint);
+        const configuredRows = configuredRowsAfterDrop(group, cell, gridFootprint);
         const dims = resolveGridDims(
             group,
             gridContentHeightForRows(rows, configuredRows, layout),

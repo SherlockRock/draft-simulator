@@ -416,7 +416,7 @@ const assignmentAt = (
  * Typed `boolean` rather than left to inference so the `||` below stays a real
  * runtime branch instead of narrowing to a constant.
  */
-export const ANNOTATIONS_SIZE_ROWS: boolean = true;
+export const ANNOTATIONS_SIZE_ROWS: boolean = false;
 
 /**
  * Whether an item's own geometry shapes the row it starts in — `gridRows`'

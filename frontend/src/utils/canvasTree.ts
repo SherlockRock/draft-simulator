@@ -21,7 +21,7 @@ import {
     type GridFootprint,
     type GridItem
 } from "./gridLayout";
-import { rowAtY } from "./gridRows";
+import { rowAtY, rowSpanFor, type RowMetrics } from "./gridRows";
 import { sortedSeriesDrafts } from "./canvasWorldPosition";
 
 /**
@@ -539,27 +539,58 @@ export const gridItemsOf = (
     });
 
     // Rows come from the SETTLED members only.
-    const rows = rowsOfItems(
-        items.filter((i) => !inFlightIds.has(i.id)),
-        layout
-    );
-    const rowIndexOf = new Map<string, number>();
-    for (const row of rows) {
-        // `row.index` — the ABSOLUTE lattice row. Using the array ordinal here
-        // collapses every empty row and silently puts `GridItem.cell.row` in a
-        // different coordinate system from `cellAt`/`rowAtY`, which return
-        // lattice rows. The two are then compared in `resolveGridDrop`'s
-        // collision set, `arrangeGrid`'s `ideal` and `reflowAfterGrowth`.
-        for (const id of row.ids) rowIndexOf.set(id, row.index);
-    }
-    return items.map((item) => ({
-        ...item,
-        cell: {
-            // An in-flight node has no settled row, so it is attached to the
-            // row its CURRENT y targets — against the settled membership, so it
-            // cannot perturb anyone else's index.
-            row: rowIndexOf.get(item.id) ?? rowAtY(rows, item.position.y, layout),
-            col: item.cell.col
+    const settled = (candidates: GridItem[]) =>
+        rowsOfItems(
+            candidates.filter((i) => !inFlightIds.has(i.id)),
+            layout
+        );
+    const indexIn = (rows: RowMetrics[], item: GridItem): number => {
+        for (const row of rows) {
+            // `row.index` — the ABSOLUTE lattice row. Using the array ordinal
+            // here collapses every empty row and silently puts
+            // `GridItem.cell.row` in a different coordinate system from
+            // `cellAt`/`rowAtY`, which return lattice rows. The two are then
+            // compared in `resolveGridDrop`'s collision set, `arrangeGrid`'s
+            // `ideal` and `reflowAfterGrowth`.
+            if (row.ids.includes(item.id)) return row.index;
         }
+        // An in-flight node has no settled row, so it is attached to the row its
+        // CURRENT y targets — against the settled membership, so it cannot
+        // perturb anyone else's index.
+        return rowAtY(rows, item.position.y, layout);
+    };
+
+    // TWO passes, and exactly two. A row span needs the row model, and the row
+    // model's INDEX inference needs the spans (a spanned row and an empty row
+    // have different pitches). The pass-1 model is built at span 1, which can
+    // under-count the indices below a spanning note; pass 2 rebuilds it with the
+    // real spans and is authoritative.
+    //
+    // This does NOT need to iterate to a fixpoint, because a span depends only
+    // on row HEIGHTS and those are span-independent: a row is sized by its
+    // sizing members, or by the SPANNED_ROW_HEIGHT fallback, neither of which
+    // consults a span. `rowSpanFor` measuring un-modelled rows at that same
+    // fallback is what closes it.
+    const provisional = settled(items);
+    const spanned = items.map((item) =>
+        item.kind === "annotation"
+            ? {
+                  ...item,
+                  footprint: {
+                      cols: item.footprint.cols,
+                      rows: rowSpanFor(
+                          item.height,
+                          indexIn(provisional, item),
+                          provisional
+                      )
+                  }
+              }
+            : item
+    );
+
+    const rows = settled(spanned);
+    return spanned.map((item) => ({
+        ...item,
+        cell: { row: indexIn(rows, item), col: item.cell.col }
     }));
 };

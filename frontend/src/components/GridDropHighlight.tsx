@@ -8,7 +8,7 @@ import {
     type GridCell,
     type GridFootprint
 } from "../utils/gridLayout";
-import type { RowMetrics } from "../utils/gridRows";
+import { spannedBandHeight, type RowMetrics } from "../utils/gridRows";
 
 /**
  * A landing (or displaced) rectangle: a top-left cell, how far it spans, and
@@ -19,11 +19,15 @@ import type { RowMetrics } from "../utils/gridRows";
  * Dragging a Bo3 into a grid is precisely the gesture whose point is that the
  * row grows to fit it, so a highlight drawn one card tall at a Card's offset
  * would mispromise exactly the thing §6.0a ships.
+ *
+ * `rows` is that same projected model, needed because a footprint spanning rows
+ * is taller than the band it starts in.
  */
 export type GridDropRect = {
     cell: GridCell;
     footprint: GridFootprint;
     rowMetrics: RowMetrics;
+    rows: RowMetrics[];
 };
 
 export type GridDropTarget = {
@@ -82,6 +86,13 @@ export const GridDropHighlight: Component<GridDropHighlightProps> = (props) => {
                     const left = cellToPosition(entry.rect.cell, layout).x;
                     const width = footprintPixelWidth(entry.rect.footprint, layout);
                     const band = entry.rect.rowMetrics;
+                    // The full spanned band, not just the row it starts in —
+                    // otherwise a two-row note promises a one-row landing.
+                    const height = spannedBandHeight(
+                        entry.rect.rows,
+                        band,
+                        entry.rect.footprint.rows
+                    );
                     return (
                         <div
                             class="absolute rounded-lg border-2"
@@ -97,7 +108,7 @@ export const GridDropHighlight: Component<GridDropHighlightProps> = (props) => {
                                 left: `${props.group.positionX + left}px`,
                                 top: `${props.group.positionY + band.offset}px`,
                                 width: `${width}px`,
-                                height: `${band.height}px`
+                                height: `${height}px`
                             }}
                         >
                             <Show when={entry.kind === "swap-target"}>

@@ -206,6 +206,7 @@ import {
 import {
     gridContentHeightForRows,
     rowMetricsAt,
+    snapHeightToRows,
     type RowMetrics
 } from "./utils/gridRows";
 import { seriesGrowthReflow } from "./utils/seriesGrowthReflow";
@@ -4503,9 +4504,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
      * test that decides whether the note paints snapped at all, so the handle
      * and the render agree about which world the note is in.
      *
-     * WIDTH ONLY, for now. Height's lattice is the row model, and a note has no
-     * legal intermediate heights to snap to until row spanning lands; today it
-     * simply grows its row, which already tracks the drag continuously.
+     * Both axes now. Height's lattice is the row model rather than a uniform
+     * cell, so its snap needs the rows and the note's own starting row — but the
+     * rule is the same one width uses: whole units, nearest rather than ceil.
      */
     const resizeWidthFor = (annotationId: string, width: number): number => {
         const annotation = annotations.find((a) => a.id === annotationId);
@@ -4515,6 +4516,31 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         return snapWidthToCells(width, props.cardLayout());
     };
 
+    /**
+     * The height a resize gesture is allowed to leave a note at: whole rows
+     * inside a grid, untouched outside one.
+     *
+     * The row model is read from SETTLED membership, the same exclusion every
+     * other row derivation on this path uses. It is stable across the gesture
+     * even though the note's stored height is changing under it, because a note
+     * does not SIZE its row — only the rows it covers change, and every covered
+     * row measures the same `SPANNED_ROW_HEIGHT` whichever one it is.
+     */
+    const resizeHeightFor = (annotationId: string, height: number): number => {
+        const annotation = annotations.find((a) => a.id === annotationId);
+        if (!annotation?.group_id) return height;
+        const group = canvasGroups.find((g) => g.id === annotation.group_id);
+        if (!group || !isGridGroup(group)) return height;
+        const layout = props.cardLayout();
+        const rows = rowsOfItems(
+            gridItemsFor(group).filter((item) => !inFlightIds().has(item.id)),
+            layout
+        );
+        const row = rows.find((entry) => entry.ids.includes(annotationId));
+        if (!row) return height;
+        return snapHeightToRows(height, row.index, rows);
+    };
+
     /** Live resize: paint only. No persistence and no floor write. */
     const handleAnnotationResize = (
         annotationId: string,
@@ -4522,8 +4548,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         height: number
     ) => {
         const snappedWidth = resizeWidthFor(annotationId, width);
-        setAnnotations((a) => a.id === annotationId, { width: snappedWidth, height });
-        debouncedEmitAnnotationResize(annotationId, snappedWidth, height);
+        const snappedHeight = resizeHeightFor(annotationId, height);
+        setAnnotations((a) => a.id === annotationId, {
+            width: snappedWidth,
+            height: snappedHeight
+        });
+        debouncedEmitAnnotationResize(annotationId, snappedWidth, snappedHeight);
     };
 
     /** Resize commit writes both the rendered size and the manual floor (D7). */
@@ -5197,6 +5227,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                   landing: {
                                       cell: landing.cell,
                                       footprint,
+                                      rows: landedRows,
                                       rowMetrics: landingBandOf(
                                           landedRows,
                                           gState.activeGroupId,
@@ -5316,6 +5347,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         landing: {
                             cell: landingCell,
                             footprint,
+                            rows: landedRows,
                             rowMetrics: landingBandOf(
                                 landedRows,
                                 annotation.id,
@@ -5328,6 +5360,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             ? {
                                   cell: displaced.cell,
                                   footprint: occupantFootprint,
+                                  rows: landedRows,
                                   rowMetrics: landingBandOf(
                                       landedRows,
                                       displaced.id,
@@ -5473,6 +5506,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         landing: {
                             cell: landingCell,
                             footprint: CARD_FOOTPRINT,
+                            rows: landedRows,
                             rowMetrics: landingBandOf(
                                 landedRows,
                                 draggedCard.draft_id,
@@ -5485,6 +5519,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             ? {
                                   cell: displaced.cell,
                                   footprint: occupantFootprint,
+                                  rows: landedRows,
                                   rowMetrics: landingBandOf(
                                       landedRows,
                                       displaced.id,
