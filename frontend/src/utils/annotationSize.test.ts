@@ -4,8 +4,10 @@ import {
     autoFitHeight,
     defaultAnnotationSize,
     MIN_ANNOTATION_HEIGHT,
-    MIN_ANNOTATION_WIDTH
+    MIN_ANNOTATION_WIDTH,
+    snappedAnnotationSize
 } from "./annotationSize";
+import { GRID_CELL_GAP } from "./gridLayout";
 import { cardWidth } from "./helpers";
 import type { CardLayout } from "./canvasCardLayout";
 
@@ -74,5 +76,90 @@ describe("autoFitHeight", () => {
 describe("MIN_ANNOTATION_WIDTH", () => {
     it("is small enough for a bare champion icon", () => {
         expect(MIN_ANNOTATION_WIDTH).toBeLessThanOrEqual(64);
+    });
+});
+
+describe("snappedAnnotationSize", () => {
+    // Width snaps to whole cells because span feeds maxChildSpanCols, which can
+    // change the Group's effective column count — un-snapped, a 1px resize drag
+    // would silently reflow the grid horizontally.
+    it("rounds a 1-cell-ish width up to exactly one cell", () => {
+        expect(
+            snappedAnnotationSize({ storedWidth: 300, rowHeight: 600, layout: "wide" })
+                .width
+        ).toBe(700);
+    });
+
+    it("spans two cells with the gap INSIDE the span", () => {
+        expect(
+            snappedAnnotationSize({ storedWidth: 720, rowHeight: 600, layout: "wide" })
+                .width
+        ).toBe(700 * 2 + GRID_CELL_GAP);
+    });
+
+    // 1401 is one pixel beyond two bare 700px cells, but still fits two cells
+    // because the 24px gap is inside their footprint rather than extra width.
+    it("keeps a width inside the two-cell gap boundary at two cells", () => {
+        expect(
+            snappedAnnotationSize({
+                storedWidth: 1401,
+                rowHeight: 600,
+                layout: "wide"
+            }).width
+        ).toBe(700 * 2 + GRID_CELL_GAP);
+    });
+
+    // Height snaps to the ROW, not to the note.
+    it("takes the row's height verbatim", () => {
+        expect(
+            snappedAnnotationSize({ storedWidth: 300, rowHeight: 860, layout: "wide" })
+                .height
+        ).toBe(860);
+    });
+
+    // One pass, no fixpoint: stored height is the INPUT to the row max, the
+    // rendered height is its OUTPUT. Calling this twice must not drift.
+    it("is idempotent — feeding its own output back changes nothing", () => {
+        const once = snappedAnnotationSize({
+            storedWidth: 300,
+            rowHeight: 860,
+            layout: "wide"
+        });
+        const twice = snappedAnnotationSize({
+            storedWidth: once.width,
+            rowHeight: 860,
+            layout: "wide"
+        });
+        expect(twice).toEqual(once);
+    });
+
+    it("is idempotent across a two-cell span", () => {
+        const once = snappedAnnotationSize({
+            storedWidth: 720,
+            rowHeight: 860,
+            layout: "wide"
+        });
+        const twice = snappedAnnotationSize({
+            storedWidth: once.width,
+            rowHeight: 860,
+            layout: "wide"
+        });
+        expect(twice).toEqual(once);
+    });
+
+    // D5's accepted cost, pinned: the drift is bounded at ONE cell.
+    it("drifts by at most one cell across a layout change", () => {
+        const inCompact = snappedAnnotationSize({
+            storedWidth: 700,
+            rowHeight: 432,
+            layout: "compact"
+        });
+        const inWide = snappedAnnotationSize({
+            storedWidth: 700,
+            rowHeight: 860,
+            layout: "wide"
+        });
+        expect(inCompact.width).toBe(380 * 2 + GRID_CELL_GAP);
+        expect(inWide.width).toBe(700);
     });
 });
