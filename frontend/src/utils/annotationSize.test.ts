@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+    annotationRenderSize,
     annotationFloor,
     autoFitHeight,
     defaultAnnotationSize,
@@ -161,5 +162,59 @@ describe("snappedAnnotationSize", () => {
         });
         expect(inCompact.width).toBe(380 * 2 + GRID_CELL_GAP);
         expect(inWide.width).toBe(700);
+    });
+});
+
+describe("annotationRenderSize", () => {
+    const settledRows = [{ ids: ["note"], height: 384 }];
+
+    it("derives a resting note's size from its settled row", () => {
+        expect(
+            annotationRenderSize({
+                annotation: { id: "note", width: 56 },
+                activeAnnotationId: null,
+                frozenSize: null,
+                settledRows,
+                layout: "wide"
+            })
+        ).toEqual({ width: 700, height: 384 });
+    });
+
+    it("keeps the local drag snapshot after the note leaves settled rows", () => {
+        const frozenSize = { width: 700, height: 384 };
+
+        expect(
+            annotationRenderSize({
+                annotation: { id: "note", width: 56 },
+                activeAnnotationId: "note",
+                frozenSize,
+                settledRows: [],
+                layout: "wide"
+            })
+        ).toBe(frozenSize);
+    });
+
+    it("returns null for an in-flight remote note with no local snapshot", () => {
+        expect(
+            annotationRenderSize({
+                annotation: { id: "note", width: 56 },
+                activeAnnotationId: null,
+                frozenSize: null,
+                settledRows: [],
+                layout: "wide"
+            })
+        ).toBeNull();
+    });
+
+    it("does not give one active note another note's snapshot", () => {
+        expect(
+            annotationRenderSize({
+                annotation: { id: "other", width: 56 },
+                activeAnnotationId: "note",
+                frozenSize: { width: 700, height: 384 },
+                settledRows: [{ ids: ["other"], height: 120 }],
+                layout: "wide"
+            })
+        ).toEqual({ width: 700, height: 120 });
     });
 });

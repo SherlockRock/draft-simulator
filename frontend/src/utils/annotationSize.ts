@@ -67,3 +67,32 @@ export const snappedAnnotationSize = (args: {
     ),
     height: args.rowHeight
 });
+
+export type AnnotationRenderSize = { width: number; height: number };
+
+/**
+ * Selects a grid annotation's render size from settled membership.
+ *
+ * The local drag snapshot wins even though the active note is absent from
+ * `settledRows`. A remotely dragged note has no local snapshot and therefore
+ * returns null once excluded from those rows, matching a relayed Card's use of
+ * its intrinsic render geometry while it is in flight.
+ */
+export const annotationRenderSize = (args: {
+    annotation: { id: string; width: number };
+    activeAnnotationId: string | null;
+    frozenSize: AnnotationRenderSize | null;
+    settledRows: ReadonlyArray<{ ids: ReadonlyArray<string>; height: number }>;
+    layout: CardLayout;
+}): AnnotationRenderSize | null => {
+    if (args.activeAnnotationId === args.annotation.id && args.frozenSize !== null) {
+        return args.frozenSize;
+    }
+    const row = args.settledRows.find((entry) => entry.ids.includes(args.annotation.id));
+    if (!row) return null;
+    return snappedAnnotationSize({
+        storedWidth: args.annotation.width,
+        rowHeight: row.height,
+        layout: args.layout
+    });
+};

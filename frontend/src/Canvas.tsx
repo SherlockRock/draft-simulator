@@ -219,10 +219,11 @@ import {
 } from "@draft-sim/shared-types";
 import { type CardLayout } from "./utils/canvasCardLayout";
 import {
+    annotationRenderSize,
     annotationFloor,
     autoFitHeight,
     defaultAnnotationSize,
-    snappedAnnotationSize
+    type AnnotationRenderSize
 } from "./utils/annotationSize";
 import { annotationKeyboardShortcut } from "./utils/annotationKeyboardShortcut";
 
@@ -368,13 +369,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         dragGroupId: string | null;
         originX: number;
         originY: number;
+        frozenSize: AnnotationRenderSize | null;
     }>({
         activeAnnotationId: null,
         offsetX: 0,
         offsetY: 0,
         dragGroupId: null,
         originX: 0,
-        originY: 0
+        originY: 0,
+        frozenSize: null
     });
     const draggedAnnotationId = () => annotationDragState().activeAnnotationId;
     const [vertexDragState, setVertexDragState] = createSignal<{
@@ -742,12 +745,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         annotation: CanvasAnnotation
     ): { width: number; height: number } | null => {
         const layout = props.cardLayout();
-        const rows = rowsOfItems(gridItemsFor(group), layout);
-        const row = rows.find((r) => r.ids.includes(annotation.id));
-        if (!row) return null;
-        return snappedAnnotationSize({
-            storedWidth: annotation.width,
-            rowHeight: row.height,
+        const drag = annotationDragState();
+        if (drag.activeAnnotationId === annotation.id && drag.frozenSize !== null) {
+            return annotationRenderSize({
+                annotation,
+                activeAnnotationId: drag.activeAnnotationId,
+                frozenSize: drag.frozenSize,
+                settledRows: [],
+                layout
+            });
+        }
+        const rows = rowsOfItems(
+            gridItemsFor(group).filter((item) => !inFlightIds().has(item.id)),
+            layout
+        );
+        return annotationRenderSize({
+            annotation,
+            activeAnnotationId: drag.activeAnnotationId,
+            frozenSize: drag.frozenSize,
+            settledRows: rows,
             layout
         });
     };
@@ -3114,10 +3130,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const annotationCenterPoint = (
         worldX: number,
         worldY: number,
-        annotation: CanvasAnnotation
+        annotation: CanvasAnnotation,
+        frozenSize: AnnotationRenderSize | null
     ) => ({
-        x: worldX + annotation.width / 2,
-        y: worldY + annotation.height / 2
+        x: worldX + (frozenSize?.width ?? annotation.width) / 2,
+        y: worldY + (frozenSize?.height ?? annotation.height) / 2
     });
 
     const isInteractiveCardTarget = (target: EventTarget | null) => {
@@ -3188,13 +3205,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const worldY = group
             ? group.positionY + annotation.positionY
             : annotation.positionY;
+        const frozenSize =
+            group && isGridGroup(group)
+                ? snappedAnnotationSizeFor(group, annotation)
+                : null;
         setAnnotationDragState({
             activeAnnotationId: annotation.id,
             offsetX: worldCoords.x - worldX,
             offsetY: worldCoords.y - worldY,
             dragGroupId: group?.id ?? null,
             originX: annotation.positionX,
-            originY: annotation.positionY
+            originY: annotation.positionY,
+            frozenSize
         });
     };
 
@@ -5157,7 +5179,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 const hoverPoint = annotationCenterPoint(
                     newWorldX,
                     newWorldY,
-                    annotation
+                    annotation,
+                    annotationState.frozenSize
                 );
                 const hoverGroup = findGroupAtPosition(hoverPoint.x, hoverPoint.y);
                 const currentGroupId = annotationState.dragGroupId ?? annotation.group_id;
@@ -5449,7 +5472,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     const worldY = sourceGroup
                         ? sourceGroup.positionY + annotation.positionY
                         : annotation.positionY;
-                    const dropPoint = annotationCenterPoint(worldX, worldY, annotation);
+                    const dropPoint = annotationCenterPoint(
+                        worldX,
+                        worldY,
+                        annotation,
+                        annotationState.frozenSize
+                    );
                     const dropGroup = findGroupAtPosition(dropPoint.x, dropPoint.y);
                     const sourceGroupId = annotationState.dragGroupId;
                     if (dropGroup && dropGroup.id !== annotation.group_id) {
@@ -5521,7 +5549,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     offsetY: 0,
                     dragGroupId: null,
                     originX: 0,
-                    originY: 0
+                    originY: 0,
+                    frozenSize: null
                 });
                 setDragOverGroupId(null);
                 setExitingGroupId(null);
