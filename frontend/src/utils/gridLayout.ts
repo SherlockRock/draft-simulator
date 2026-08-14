@@ -494,13 +494,25 @@ export const materializeGrid = (args: {
 const isUnit = (footprint: GridFootprint): boolean => spanOf(footprint).cols === 1;
 
 /**
+ * Kinds that may be EVICTED by a swap (design D6a).
+ *
+ * The gate is leaf-ness, not card-ness. Its original comment explains it exists
+ * so CONTAINERS are never evicted — and an annotation is a leaf, not a
+ * container, so that rationale never decided its case. Left as card-only, the
+ * champion-pool Group (every cell an annotation) could never be reordered:
+ * every drag would fling the note to the nearest free cell instead of swapping.
+ */
+const isLeafKind = (kind: GridItem["kind"]): boolean =>
+    kind === "card" || kind === "annotation";
+
+/**
  * Where a drop lands, and what (if anything) it displaces.
  *
  * Target = the top-left cell under the drop. Footprint fits free → place it.
- * Collision → **swap only when both nodes are `1×1` CARDS**; anything else
- * relocates the DRAGGED node to the nearest free rect and leaves the occupants
- * alone (decision 7). A `1×1` dragged onto a `2×4` series must not evict the
- * series.
+ * Collision → **swap only when both nodes are `1×1` LEAVES** — a Card or an
+ * annotation (D6a); anything else relocates the DRAGGED node to the nearest
+ * free rect and leaves the occupants alone (decision 7). A `1×1` dragged onto
+ * a `2×4` series must not evict the series.
  *
  * ⚠️ The `kind` half of that test is not redundant with `isUnit` (decision 7,
  * amended round 2). `isUnit` tests the FOOTPRINT, and a default 400×200 nested
@@ -548,8 +560,8 @@ export const resolveGridDrop = (args: {
     const occupant = collisions[0];
     if (
         collisions.length === 1 &&
-        dragged.kind === "card" &&
-        occupant.kind === "card" &&
+        isLeafKind(dragged.kind) &&
+        isLeafKind(occupant.kind) &&
         isUnit(dragged.footprint) &&
         isUnit(occupant.footprint)
     ) {

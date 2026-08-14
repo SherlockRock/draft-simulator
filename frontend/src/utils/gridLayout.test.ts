@@ -710,6 +710,157 @@ describe("resolveGridDrop", () => {
         });
     });
 
+    // D6a: the champion-pool Group is every cell an annotation. Without the
+    // leaf gate it can never be reordered — every drag flings the note to the
+    // nearest free cell.
+    it("swaps annotation onto annotation", () => {
+        const items = itemsInCells(
+            [
+                { id: "a1", cell: { row: 0, col: 0 }, kind: "annotation" },
+                { id: "a2", cell: { row: 0, col: 1 }, kind: "annotation" }
+            ],
+            "wide"
+        );
+        const target = cellToPosition({ row: 0, col: 1 }, "wide");
+        const result = drop({
+            items,
+            dragged: { id: "a1", kind: "annotation", footprint: CARD_FOOTPRINT },
+            draggedOrigin: items[0].position,
+            dropX: target.x + 5,
+            dropY: target.y + 5,
+            layout: "wide",
+            cols: 3
+        });
+        expect(result).toEqual([
+            { id: "a1", kind: "annotation", cell: { row: 0, col: 1 } },
+            { id: "a2", kind: "annotation", cell: { row: 0, col: 0 } }
+        ]);
+    });
+
+    it("swaps annotation onto Card", () => {
+        const annotationChrome = { inset: CARD_INSET, height: 120 };
+        const items = itemsInCells(
+            [
+                {
+                    id: "a1",
+                    cell: { row: 0, col: 0 },
+                    kind: "annotation",
+                    chrome: annotationChrome
+                },
+                {
+                    id: "d1",
+                    cell: { row: 0, col: 1 },
+                    kind: "card",
+                    chrome: cardChrome("wide")
+                }
+            ],
+            "wide"
+        );
+        const target = cellToPosition({ row: 0, col: 1 }, "wide");
+        const result = drop({
+            items,
+            dragged: { id: "a1", kind: "annotation", footprint: CARD_FOOTPRINT },
+            draggedOrigin: items[0].position,
+            dropX: target.x + 5,
+            dropY: target.y + 5,
+            layout: "wide",
+            cols: 3
+        });
+        expect(result).toEqual([
+            { id: "a1", kind: "annotation", cell: { row: 0, col: 1 } },
+            { id: "d1", kind: "card", cell: { row: 0, col: 0 } }
+        ]);
+    });
+
+    it("swaps Card onto annotation", () => {
+        const annotationChrome = { inset: CARD_INSET, height: 120 };
+        const items = itemsInCells(
+            [
+                {
+                    id: "d1",
+                    cell: { row: 0, col: 0 },
+                    kind: "card",
+                    chrome: cardChrome("wide")
+                },
+                {
+                    id: "a1",
+                    cell: { row: 0, col: 1 },
+                    kind: "annotation",
+                    chrome: annotationChrome
+                }
+            ],
+            "wide"
+        );
+        const target = cellToPosition({ row: 0, col: 1 }, "wide");
+        const result = drop({
+            items,
+            dragged: { id: "d1", kind: "card", footprint: CARD_FOOTPRINT },
+            draggedOrigin: items[0].position,
+            dropX: target.x + 5,
+            dropY: target.y + 5,
+            layout: "wide",
+            cols: 3
+        });
+        expect(result).toEqual([
+            { id: "d1", kind: "card", cell: { row: 0, col: 1 } },
+            { id: "a1", kind: "annotation", cell: { row: 0, col: 0 } }
+        ]);
+    });
+
+    // The gate's original rationale, unchanged: a container is never evicted.
+    it("still refuses to evict a Group for an annotation", () => {
+        const items = itemsInCells(
+            [
+                { id: "a1", cell: { row: 0, col: 0 }, kind: "annotation" },
+                { id: "g1", cell: { row: 0, col: 1 }, kind: "group" }
+            ],
+            "wide"
+        );
+        const target = cellToPosition({ row: 0, col: 1 }, "wide");
+        const result = drop({
+            items,
+            dragged: { id: "a1", kind: "annotation", footprint: CARD_FOOTPRINT },
+            draggedOrigin: items[0].position,
+            dropX: target.x + 5,
+            dropY: target.y + 5,
+            layout: "wide",
+            cols: 3
+        });
+        expect(result).toEqual([
+            { id: "a1", kind: "annotation", cell: { row: 0, col: 0 } }
+        ]);
+    });
+
+    // The kind half is not redundant with isUnit: a 2-column annotation is a
+    // leaf but not a unit, and the swap is a unit-footprint operation.
+    it("does not swap a 2-column annotation", () => {
+        const items = itemsInCells(
+            [
+                {
+                    id: "a-wide",
+                    cell: { row: 0, col: 0 },
+                    footprint: { cols: 2 },
+                    kind: "annotation"
+                },
+                { id: "a1", cell: { row: 0, col: 2 }, kind: "annotation" }
+            ],
+            "wide"
+        );
+        const target = cellToPosition({ row: 0, col: 2 }, "wide");
+        const result = drop({
+            items,
+            dragged: { id: "a-wide", kind: "annotation", footprint: { cols: 2 } },
+            draggedOrigin: items[0].position,
+            dropX: target.x + 5,
+            dropY: target.y + 5,
+            layout: "wide",
+            cols: 4
+        });
+        expect(result).toEqual([
+            { id: "a-wide", kind: "annotation", cell: { row: 1, col: 2 } }
+        ]);
+    });
+
     it("refuses to swap a Card with a multi-column node: the Card takes the nearest free rect", () => {
         // Decision 7: swap survives only for one-column Card <-> Card.
         // Evicting a whole series because a Card landed on one of its cells is
