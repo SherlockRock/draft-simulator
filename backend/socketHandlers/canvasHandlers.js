@@ -54,6 +54,16 @@ function setupCanvasHandlers(socket, gate, wrapSocketHandler) {
     }),
   );
 
+  handle("annotationResize", (data, actor) =>
+    gate.relayAnnotationResize({
+      actor,
+      canvasId: data.canvasId,
+      annotationId: data.annotationId,
+      width: data.width,
+      height: data.height,
+    }),
+  );
+
   handle("vertexMove", (data, actor) =>
     gate.relayVertexMove({
       actor,

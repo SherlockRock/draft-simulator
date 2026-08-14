@@ -368,6 +368,25 @@ export const AnnotationMovedSchema = z.object({
   positionY: z.number(),
 });
 
+/**
+ * The live-resize relay's wire shape, and the twin of `GroupResizedSchema`
+ * rather than of `AnnotationMovedSchema` beside it.
+ *
+ * That split is deliberate. A move is relayed to the whole room, sender
+ * included, because the receiver discards its own echo by comparing against
+ * `draggedAnnotationId()`. A resize has no such signal, so it takes the Group
+ * shape and excludes the sender — see `relayAnnotationResize`.
+ *
+ * Paint-only, exactly like `handleAnnotationResize`: no `manualWidth` /
+ * `manualHeight`, because the D7 floor is written once on commit and the
+ * commit's own `canvasUpdate` snapshot is what carries it to observers.
+ */
+export const AnnotationResizedSchema = z.object({
+  annotationId: z.string(),
+  width: z.number(),
+  height: z.number(),
+});
+
 export const DraftPositionUpdateSchema = z.object({
   draft_id: z.string(),
   positionX: z.number(),
@@ -1104,6 +1123,7 @@ export type AnnotationPositionUpdate = z.infer<
   typeof AnnotationPositionUpdateSchema
 >;
 export type AnnotationMoved = z.infer<typeof AnnotationMovedSchema>;
+export type AnnotationResized = z.infer<typeof AnnotationResizedSchema>;
 export type ExportedCanvasAnnotation = z.infer<
   typeof ExportedCanvasAnnotationSchema
 >;

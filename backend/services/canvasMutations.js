@@ -267,6 +267,32 @@ function createCanvasMutationGate({ io }) {
     );
   }
 
+  /**
+   * The live channel for a note's resize handle — and the one relay that
+   * deliberately does NOT follow its own kind's move relay.
+   *
+   * `relayAnnotationMove` above includes the sender because the receiver
+   * discards its own echo (`draggedAnnotationId() !== data.annotationId`).
+   * There is no resize equivalent of that signal, so an echoed frame — stale
+   * by up to the client's 25ms debounce — would be written straight over the
+   * live optimistic size and rubber-band the note under the cursor. That is
+   * the same fight the Group note below describes, so this takes the Group
+   * shape: everyone except the actor.
+   *
+   * Paint-only. The D7 floor (`manualWidth`/`manualHeight`) is written once by
+   * the REST commit, which broadcasts its own `canvasUpdate` snapshot.
+   */
+  async function relayAnnotationResize({ actor, canvasId, annotationId, width, height }) {
+    await assertCanvasAccess({
+      userId: actor.userId,
+      canvasId,
+      level: "edit",
+    });
+    io.to(canvasId)
+      .except(actor.socketId)
+      .emit("annotationResized", { annotationId, width, height });
+  }
+
   async function relayVertexMove({ actor, canvasId, connectionId, vertexId, x, y }) {
     await assertCanvasAccess({ userId: actor.userId, canvasId });
     io.to(canvasId).emit("vertexMoved", { connectionId, vertexId, x, y });
@@ -304,6 +330,7 @@ function createCanvasMutationGate({ io }) {
     applyDraftPicks,
     relayObjectMove,
     relayAnnotationMove,
+    relayAnnotationResize,
     relayVertexMove,
     relayGroupMove,
     relayGroupResize,

@@ -424,6 +424,56 @@ describe("ephemeral relays — authorize → broadcast only", () => {
     expect(except).not.toHaveBeenCalled();
   });
 
+  it("relayAnnotationResize refuses a view-only actor without broadcasting", async () => {
+    mockPermissions({ "c-1": "view" });
+    const { gate, to, emit, exceptEmit } = buildGate();
+
+    await expect(
+      gate.relayAnnotationResize({
+        actor: ACTOR,
+        canvasId: "c-1",
+        annotationId: "a-1",
+        width: 700,
+        height: 384,
+      }),
+    ).rejects.toThrow(NotAuthorizedError);
+
+    expect(to).not.toHaveBeenCalled();
+    expect(emit).not.toHaveBeenCalled();
+    expect(exceptEmit).not.toHaveBeenCalled();
+  });
+
+  // The DELIBERATE asymmetry with `relayAnnotationMove` two tests up, which
+  // broadcasts to the whole room INCLUDING the sender. A resize follows the
+  // GROUP resize shape instead, because the client has no "am I resizing this
+  // one" signal to discard its own echo with — `annotationMoved`'s receiver
+  // guards on `draggedAnnotationId()`, and there is no resize equivalent. A
+  // 25ms-debounced echo carrying a stale size would land on top of the live
+  // optimistic store write and rubber-band the note under the cursor.
+  it("relayAnnotationResize excludes the sender's socket from the broadcast", async () => {
+    mockPermissions({ "c-1": "edit" });
+    const { gate, to, emit, except, exceptEmit } = buildGate();
+
+    await gate.relayAnnotationResize({
+      actor: ACTOR,
+      canvasId: "c-1",
+      annotationId: "a-1",
+      width: 700,
+      height: 384,
+    });
+
+    expect(to).toHaveBeenCalledWith("c-1");
+    expect(except).toHaveBeenCalledWith("sock-1");
+    expect(exceptEmit).toHaveBeenCalledWith("annotationResized", {
+      annotationId: "a-1",
+      width: 700,
+      height: 384,
+    });
+    // Both halves matter: dropping `.except` would route the broadcast through
+    // the plain `emit` spy, and this is what says that is not allowed.
+    expect(emit).not.toHaveBeenCalled();
+  });
+
   it("relayVertexMove broadcasts vertexMoved to the canvas room", async () => {
     mockPermissions({ "c-1": "edit" });
     const { gate, to, emit } = buildGate();

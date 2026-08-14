@@ -27,6 +27,7 @@ function buildFakeGate() {
     applyDraftPicks: vi.fn().mockResolvedValue(undefined),
     relayObjectMove: vi.fn().mockResolvedValue(undefined),
     relayAnnotationMove: vi.fn().mockResolvedValue(undefined),
+    relayAnnotationResize: vi.fn().mockResolvedValue(undefined),
     relayVertexMove: vi.fn().mockResolvedValue(undefined),
     relayGroupMove: vi.fn().mockResolvedValue(undefined),
     relayGroupResize: vi.fn().mockResolvedValue(undefined),
@@ -49,10 +50,11 @@ afterEach(() => {
 });
 
 describe("setupCanvasHandlers", () => {
-  it("registers the six canvas mutation events", () => {
+  it("registers the seven canvas mutation events", () => {
     const { handlers } = installHandlers();
     expect([...handlers.keys()].sort()).toEqual([
       "annotationMove",
+      "annotationResize",
       "canvasObjectMove",
       "groupMove",
       "groupResize",
@@ -149,6 +151,43 @@ describe("setupCanvasHandlers", () => {
 
     expect(socket.emit).toHaveBeenCalledWith("canvasMutationError", {
       event: "annotationMove",
+      code: "NOT_AUTHORIZED",
+      message: "Not authorized",
+    });
+  });
+
+  it("annotationResize maps the payload onto the gate call", async () => {
+    const { handlers, gate } = installHandlers();
+
+    await handlers.get("annotationResize")({
+      canvasId: "c-1",
+      annotationId: "a-1",
+      width: 700,
+      height: 384,
+    });
+
+    expect(gate.relayAnnotationResize).toHaveBeenCalledWith({
+      actor: { userId: "user-1", socketId: "sock-1" },
+      canvasId: "c-1",
+      annotationId: "a-1",
+      width: 700,
+      height: 384,
+    });
+  });
+
+  it("maps an annotationResize gate rejection to canvasMutationError", async () => {
+    const { socket, handlers, gate } = installHandlers();
+    gate.relayAnnotationResize.mockRejectedValue(new NotAuthorizedError());
+
+    await handlers.get("annotationResize")({
+      canvasId: "c-1",
+      annotationId: "a-1",
+      width: 700,
+      height: 384,
+    });
+
+    expect(socket.emit).toHaveBeenCalledWith("canvasMutationError", {
+      event: "annotationResize",
       code: "NOT_AUTHORIZED",
       message: "Not authorized",
     });

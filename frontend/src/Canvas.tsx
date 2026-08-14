@@ -57,6 +57,7 @@ import {
     GroupResizedSchema,
     CanvasDraftUpdateSchema,
     AnnotationMovedSchema,
+    AnnotationResizedSchema,
     CanvasAnnotation
 } from "./utils/schemas";
 import { validateSocketEvent } from "./utils/socketValidation";
@@ -2065,6 +2066,27 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
     const debouncedEmitAnnotationMove = debounce(emitAnnotationMove, 25);
 
+    // Mirrors the GROUP resize relay, not the annotation MOVE relay beside it:
+    // the server excludes this socket, because there is no "am I resizing this
+    // one" guard to discard an echo with the way `annotationMoved` has
+    // `draggedAnnotationId()`. See `relayAnnotationResize`.
+    const emitAnnotationResize = (
+        annotationId: string,
+        width: number,
+        height: number
+    ) => {
+        if (isLocalMode()) return;
+        const socket = socketAccessor();
+        if (!socket) return;
+        socket.emit("annotationResize", {
+            canvasId: canvasId(),
+            annotationId,
+            width,
+            height
+        });
+    };
+    const debouncedEmitAnnotationResize = debounce(emitAnnotationResize, 25);
+
     const emitVertexMove = (
         connectionId: string,
         vertexId: string,
@@ -2367,6 +2389,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 });
             }
         });
+        socket.on("annotationResized", (rawData: unknown) => {
+            const data = validateSocketEvent(
+                "annotationResized",
+                rawData,
+                AnnotationResizedSchema
+            );
+            if (!data) return;
+            // No `markRelayedDrag` and no `clearRelayedDrag`, unlike the two
+            // relays either side of this one. A resize does not move the note,
+            // so there is no arbitrary mid-gesture position for a row
+            // derivation to mistake for a settled one — and marking it
+            // in-flight would drop it from the settled rows and change the
+            // size it paints at on THIS client only. Nor is a live frame a
+            // commit, which is what `groupResized` clears on.
+            setAnnotations((a) => a.id === data.annotationId, {
+                width: data.width,
+                height: data.height
+            });
+        });
         socket.on("draftPositionsUpdated", (rawData: unknown) => {
             const data = validateSocketEvent(
                 "draftPositionsUpdated",
@@ -2568,6 +2609,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             socket.off("draftUpdate");
             socket.off("canvasObjectMoved");
             socket.off("annotationMoved");
+            socket.off("annotationResized");
             socket.off("draftPositionsUpdated");
             socket.off("connectionCreated");
             socket.off("connectionUpdated");
@@ -4456,6 +4498,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         height: number
     ) => {
         setAnnotations((a) => a.id === annotationId, { width, height });
+        debouncedEmitAnnotationResize(annotationId, width, height);
     };
 
     /** Resize commit writes both the rendered size and the manual floor (D7). */
