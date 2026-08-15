@@ -283,78 +283,25 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                 props.onStartEditing(props.annotation.id);
             }}
         >
-            {/* Collapsed to a bare colour block below the legibility floor
-                (design §4). The surface keeps painting its colour and the
-                champion strip below still renders — those read the note's
-                presence and category at a glance, which is the whole
-                affordance; the text at that size is a smear.
-
-                ⚠️ Editing is EXEMPT, and deliberately so. Unmounting a focused
-                textarea does not reliably fire `blur`, and `commitText` runs on
-                blur — so collapsing mid-edit would drop whatever the user had
-                typed. That is the same class of silent-loss bug as the
-                draft-rename regression this component's commit path already
-                carries a comment about. Zooming out far enough to collapse
-                while editing is rare; losing the edit when it happens is not
-                acceptable, and the exemption costs one condition.
-
-                Because the size is STORED, this is paint-only and can never
-                reflow anything. */}
-            <Show when={!props.isTextCollapsed() || isEditing() || isTextFocused()}>
-                <Show
-                    when={isEditing() || isTextFocused()}
-                    fallback={
-                        <div
-                            // `min-h-0 flex-1`, NOT `h-full`: the root is a flex
-                            // column and the strip is its second row. `h-full` makes
-                            // this child consume the whole content box, so the strip
-                            // lays out BELOW the note's border and D3's "text above,
-                            // icons below" never renders inside the frame.
-                            class="pointer-events-none min-h-0 flex-1 overflow-hidden whitespace-pre-wrap break-words p-2 text-darius-text-primary"
-                            style={{
-                                "font-size": `${fontPx()}px`,
-                                "line-height": "1.25",
-                                // Ellipsis/fade at rest (D7). An inner scroll
-                                // container was rejected: a scrollable element
-                                // inside a scale()d world layer fights canvas zoom
-                                // for wheel events, and hides content from a view
-                                // whose whole purpose is seeing everything at once.
-                                "mask-image":
-                                    "linear-gradient(to bottom, black calc(100% - 1.5em), transparent 100%)"
-                            }}
-                        >
-                            {props.annotation.text}
-                        </div>
-                    }
-                >
-                    <textarea
-                        ref={textareaRef}
-                        value={textSignal()}
-                        disabled={!props.canEdit()}
-                        class="h-full w-full resize-none bg-transparent p-2 text-darius-text-primary outline-none"
-                        style={{ "font-size": `${fontPx()}px`, "line-height": "1.25" }}
-                        onFocus={() => setIsTextFocused(true)}
-                        onInput={(e) => setTextSignal(e.currentTarget.value)}
-                        onKeyDown={(e) => {
-                            // Enter inserts a newline: the text is multi-line by
-                            // design (D6, `\n` preserved). Escape commits, matching
-                            // the draft-name field rather than the team-name field.
-                            if (e.key === "Escape") {
-                                e.stopPropagation();
-                                e.currentTarget.blur();
-                            }
-                        }}
-                        onBlur={commitText}
-                    />
-                </Show>
-            </Show>
-
             <Show when={props.annotation.championIds.length > 0 || canEditStrip()}>
-                {/* Text ABOVE, icons below (design D3). The strip wraps and
+                {/* ICONS ABOVE, text below — this REVERSES D3's incidental
+                    "text above a row of champion icons", on the maintainer's
+                    call after seeing it (2026-08-14). D3 carries no argument
+                    for the order: every rejection under it is about the type
+                    shape or about strip ORDERING (append/remove), never about
+                    vertical placement.
+
+                    It also removes a real wobble. The text block is `flex-1`
+                    and the strip is `shrink-0`, so when §4 collapses the text
+                    on zoom-out the text leaves the flex column entirely — and
+                    a bottom strip JUMPS to the top of the note as it goes.
+                    Icons-first, the strip never moves.
+
+                    The strip wraps and
                     clips with the box rather than scrolling — an inner scroll
                     container inside a scale()d world layer fights canvas zoom
                     for wheel events (D7). */}
-                <div class="pointer-events-auto flex shrink-0 flex-wrap gap-1 overflow-hidden px-2 pb-2">
+                <div class="pointer-events-auto flex shrink-0 flex-wrap gap-1 overflow-hidden px-2 pt-2">
                     <For each={resolveStripChampions(props.annotation.championIds)}>
                         {(chip) => (
                             <div class="group/chip relative">
@@ -404,6 +351,73 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                         </button>
                     </Show>
                 </div>
+            </Show>
+
+            {/* Collapsed to a bare colour block below the legibility floor
+                (design §4). The surface keeps painting its colour and the
+                champion strip below still renders — those read the note's
+                presence and category at a glance, which is the whole
+                affordance; the text at that size is a smear.
+
+                ⚠️ Editing is EXEMPT, and deliberately so. Unmounting a focused
+                textarea does not reliably fire `blur`, and `commitText` runs on
+                blur — so collapsing mid-edit would drop whatever the user had
+                typed. That is the same class of silent-loss bug as the
+                draft-rename regression this component's commit path already
+                carries a comment about. Zooming out far enough to collapse
+                while editing is rare; losing the edit when it happens is not
+                acceptable, and the exemption costs one condition.
+
+                Because the size is STORED, this is paint-only and can never
+                reflow anything. */}
+            <Show when={!props.isTextCollapsed() || isEditing() || isTextFocused()}>
+                <Show
+                    when={isEditing() || isTextFocused()}
+                    fallback={
+                        <div
+                            // `min-h-0 flex-1`, NOT `h-full`: the root is a flex
+                            // column and the strip is its FIRST row. `h-full` makes
+                            // this child consume the whole content box, so the strip
+                            // gets squeezed out past the note's border and never
+                            // renders inside the frame. Still true with the strip
+                            // above — `h-full` overflows the column either way.
+                            class="pointer-events-none min-h-0 flex-1 overflow-hidden whitespace-pre-wrap break-words p-2 text-darius-text-primary"
+                            style={{
+                                "font-size": `${fontPx()}px`,
+                                "line-height": "1.25",
+                                // Ellipsis/fade at rest (D7). An inner scroll
+                                // container was rejected: a scrollable element
+                                // inside a scale()d world layer fights canvas zoom
+                                // for wheel events, and hides content from a view
+                                // whose whole purpose is seeing everything at once.
+                                "mask-image":
+                                    "linear-gradient(to bottom, black calc(100% - 1.5em), transparent 100%)"
+                            }}
+                        >
+                            {props.annotation.text}
+                        </div>
+                    }
+                >
+                    <textarea
+                        ref={textareaRef}
+                        value={textSignal()}
+                        disabled={!props.canEdit()}
+                        class="h-full w-full resize-none bg-transparent p-2 text-darius-text-primary outline-none"
+                        style={{ "font-size": `${fontPx()}px`, "line-height": "1.25" }}
+                        onFocus={() => setIsTextFocused(true)}
+                        onInput={(e) => setTextSignal(e.currentTarget.value)}
+                        onKeyDown={(e) => {
+                            // Enter inserts a newline: the text is multi-line by
+                            // design (D6, `\n` preserved). Escape commits, matching
+                            // the draft-name field rather than the team-name field.
+                            if (e.key === "Escape") {
+                                e.stopPropagation();
+                                e.currentTarget.blur();
+                            }
+                        }}
+                        onBlur={commitText}
+                    />
+                </Show>
             </Show>
 
             <Show when={props.canEdit() && !props.isConnectionMode && props.isSelected()}>
