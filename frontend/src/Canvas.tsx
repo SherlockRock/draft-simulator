@@ -81,6 +81,7 @@ import { AnnotationChampionPicker } from "./components/AnnotationChampionPicker"
 import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./components/Dialog";
 import { ImportToCanvasDialog } from "./components/ImportToCanvasDialog";
 import {
+    AnnotationConnectionPreview,
     ConnectionComponent,
     ConnectionPreview,
     GroupConnectionPreview
@@ -241,6 +242,7 @@ import {
 } from "@draft-sim/shared-types";
 import { type CardLayout } from "./utils/canvasCardLayout";
 import {
+    annotationConnectionRect,
     annotationRenderSize,
     annotationFloor,
     autoFitHeight,
@@ -354,6 +356,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const groupConnectionSource = createMemo(() => {
         const source = connectionSource();
         return source?.ref.kind === "group" ? source.ref.id : null;
+    });
+    const annotationConnectionSource = createMemo(() => {
+        const source = connectionSource();
+        return source?.ref.kind === "annotation" ? source.ref.id : null;
     });
     const sourceAnchor = createMemo(() => {
         const source = connectionSource();
@@ -890,6 +896,35 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             layout
         });
     };
+
+    const annotationRenderRect = (
+        annotation: CanvasAnnotation
+    ): { width: number; height: number } => {
+        const group = annotation.group_id
+            ? (canvasGroups.find((entry) => entry.id === annotation.group_id) ?? null)
+            : null;
+        const snapped =
+            group && isGridGroup(group)
+                ? snappedAnnotationSizeFor(group, annotation)
+                : null;
+        return annotationConnectionRect(annotation, snapped);
+    };
+
+    const annotationConnectionPreview = createMemo(() => {
+        const source = connectionSource();
+        if (source?.ref.kind !== "annotation") return null;
+        const annotation = annotations.find((entry) => entry.id === source.ref.id);
+        if (!annotation) return null;
+        const group = annotation.group_id
+            ? (canvasGroups.find((entry) => entry.id === annotation.group_id) ?? null)
+            : null;
+        return {
+            annotation,
+            group,
+            renderSize: annotationRenderRect(annotation),
+            anchor: source.anchor
+        };
+    });
 
     /**
      * The item set a materialization must see: the container's current members,
@@ -2945,6 +2980,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const onGroupAnchorClick = (groupId: string, anchorType: AnchorType) =>
         onAnchorSelect({ kind: "group", id: groupId }, anchorType);
+
+    const onAnnotationAnchorClick = (annotationId: string, anchorType: AnchorType) =>
+        onAnchorSelect({ kind: "annotation", id: annotationId }, anchorType);
 
     const handleDeleteConnection = (connectionId: string) => {
         if (!canEdit()) return;
@@ -6366,6 +6404,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                     zoom={viewportZoom}
                                                     canEdit={canEdit}
                                                     isConnectionMode={isConnectionMode()}
+                                                    onAnchorClick={
+                                                        onAnnotationAnchorClick
+                                                    }
+                                                    connectionSource={
+                                                        annotationConnectionSource
+                                                    }
+                                                    sourceAnchor={sourceAnchor}
                                                     snappedSize={() =>
                                                         isGridGroup(group)
                                                             ? snappedAnnotationSizeFor(
@@ -6544,6 +6589,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     annotations={annotations}
                                     drafts={canvasDrafts}
                                     groups={canvasGroups}
+                                    annotationRect={annotationRenderRect}
                                     zoom={viewportZoom}
                                     screenToWorld={screenToWorld}
                                     onCreateVertex={handleCreateVertex}
@@ -6580,6 +6626,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     zoom={viewportZoom}
                                     seriesDraftCount={preview().seriesDraftCount}
                                     cardLayout={props.cardLayout}
+                                />
+                            )}
+                        </Show>
+                        <Show when={annotationConnectionPreview()}>
+                            {(preview) => (
+                                <AnnotationConnectionPreview
+                                    annotation={preview().annotation}
+                                    group={preview().group}
+                                    renderSize={preview().renderSize}
+                                    anchor={preview().anchor}
+                                    mousePos={previewMousePos()}
+                                    zoom={viewportZoom}
                                 />
                             )}
                         </Show>
@@ -6637,12 +6695,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             />
                         )}
                     </For>
-                    {/* Above Cards and Group containers, below the z-40 grid
-                        highlight, and above the connection SVG by DOM order.
-                        This known D8 deviation was accepted by the maintainer
-                        on 2026-08-13 while notes cannot own connections. Task
-                        32 must revisit it: raising lines reverses the measured
-                        Card order; lowering notes can make them unrecoverable. */}
+                    {/* Notes deliberately paint above connection lines (ruling
+                        2026-08-14). Their anchors are edge midpoints, so a
+                        connected line ends at the visible border and is barely
+                        occluded. Only an unrelated pass-through line is hidden;
+                        obstacle routing is a separate deferred design. */}
                     <For each={childAnnotationsOf(canvasTree(), null)}>
                         {(annotation) => (
                             <CanvasAnnotationItem
@@ -6651,6 +6708,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 zoom={viewportZoom}
                                 canEdit={canEdit}
                                 isConnectionMode={isConnectionMode()}
+                                onAnchorClick={onAnnotationAnchorClick}
+                                connectionSource={annotationConnectionSource}
+                                sourceAnchor={sourceAnchor}
                                 snappedSize={() => null}
                                 isSelected={() =>
                                     selectedAnnotationId() === annotation.id

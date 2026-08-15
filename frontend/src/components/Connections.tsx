@@ -38,6 +38,7 @@ export const ConnectionComponent = (props: {
     annotations: CanvasAnnotation[];
     drafts: CanvasDraft[];
     groups: CanvasGroup[];
+    annotationRect: (annotation: CanvasAnnotation) => { width: number; height: number };
     zoom: () => number;
     screenToWorld: (clientX: number, clientY: number) => { x: number; y: number };
     onCreateVertex: (connectionId: string, x: number, y: number) => void;
@@ -92,7 +93,17 @@ export const ConnectionComponent = (props: {
             const group = note.group_id
                 ? (props.groups.find((entry) => entry.id === note.group_id) ?? null)
                 : null;
-            return getAnnotationAnchorWorldPosition(note, endpoint.anchor_type, group);
+            const rect = props.annotationRect(note);
+            return getAnnotationAnchorWorldPosition(
+                {
+                    positionX: note.positionX,
+                    positionY: note.positionY,
+                    width: rect.width,
+                    height: rect.height
+                },
+                endpoint.anchor_type,
+                group
+            );
         }
         const draft = findDraft(endpoint.draft_id);
         if (!draft) return null;
@@ -330,6 +341,25 @@ export const ConnectionComponent = (props: {
     );
 };
 
+const PreviewLine = (props: {
+    startPos: () => { x: number; y: number };
+    /** World coordinates, like every other point in this file. */
+    mousePos: { x: number; y: number } | null;
+    zoom: () => number;
+}) => (
+    <Show when={props.mousePos}>
+        <line
+            x1={props.startPos().x}
+            y1={props.startPos().y}
+            x2={props.mousePos?.x ?? 0}
+            y2={props.mousePos?.y ?? 0}
+            stroke-width={2 / props.zoom()}
+            stroke-dasharray={`${4 / props.zoom()},${4 / props.zoom()}`}
+            class="pointer-events-none stroke-darius-purple-bright"
+        />
+    </Show>
+);
+
 export const ConnectionPreview = (props: {
     startDraft: CanvasDraft;
     startGroup?: CanvasGroup | null;
@@ -389,17 +419,7 @@ export const ConnectionPreview = (props: {
     };
 
     return (
-        <Show when={props.mousePos}>
-            <line
-                x1={startPos().x}
-                y1={startPos().y}
-                x2={props.mousePos?.x ?? 0}
-                y2={props.mousePos?.y ?? 0}
-                stroke-width={2 / props.zoom()}
-                stroke-dasharray={`${4 / props.zoom()},${4 / props.zoom()}`}
-                class="pointer-events-none stroke-darius-purple-bright"
-            />
-        </Show>
+        <PreviewLine startPos={startPos} mousePos={props.mousePos} zoom={props.zoom} />
     );
 };
 
@@ -442,16 +462,32 @@ export const GroupConnectionPreview = (props: {
     };
 
     return (
-        <Show when={props.mousePos}>
-            <line
-                x1={startPos().x}
-                y1={startPos().y}
-                x2={props.mousePos?.x ?? 0}
-                y2={props.mousePos?.y ?? 0}
-                stroke-width={2 / props.zoom()}
-                stroke-dasharray={`${4 / props.zoom()},${4 / props.zoom()}`}
-                class="pointer-events-none stroke-darius-purple-bright"
-            />
-        </Show>
+        <PreviewLine startPos={startPos} mousePos={props.mousePos} zoom={props.zoom} />
+    );
+};
+
+export const AnnotationConnectionPreview = (props: {
+    annotation: CanvasAnnotation;
+    group: CanvasGroup | null;
+    renderSize: { width: number; height: number };
+    anchor: AnchorType;
+    /** World coordinates, like every other point in this file. */
+    mousePos: { x: number; y: number } | null;
+    zoom: () => number;
+}) => {
+    const startPos = () =>
+        getAnnotationAnchorWorldPosition(
+            {
+                positionX: props.annotation.positionX,
+                positionY: props.annotation.positionY,
+                width: props.renderSize.width,
+                height: props.renderSize.height
+            },
+            props.anchor,
+            props.group
+        );
+
+    return (
+        <PreviewLine startPos={startPos} mousePos={props.mousePos} zoom={props.zoom} />
     );
 };

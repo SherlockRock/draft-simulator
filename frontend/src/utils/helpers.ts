@@ -104,16 +104,19 @@ export const getGroupAnchorWorldPosition = (
 /**
  * World coordinates for an annotation's anchor point.
  *
- * Four anchors like a Card (design D10). The one difference is that the rect
- * comes from the note's STORED width/height rather than from
- * `cardWidth`/`cardHeight` — connection geometry stays pure either way, it just
- * reads a different pair of numbers.
+ * Four anchors like a Card (design D10). The helper stays pure and resolves
+ * whatever rect it is handed.
  *
- * ⚠️ The STORED size, never the grid-snapped render size. Snapping is a paint
- * concern (D5a): a note inside a grid paints at a snapped size while storing
- * its own, and a note dragged out again must land back on its stored rect. An
- * anchor that followed the snapped size would move every connection endpoint
- * the moment a note entered or left a grid, with nothing the user did to it.
+ * ⚠️ Connection callers hand it the PAINTED rect (`annotationConnectionRect`),
+ * which inside a grid differs from the stored one — a note stored 380x120 can
+ * paint 700x860. This REVERSES the rule this docblock carried when the geometry
+ * landed, on a maintainer ruling (2026-08-14), and the reversed rule's objection
+ * was true rather than wrong: an anchor that follows the painted size DOES move
+ * every endpoint on that note when an unrelated row grows, or when the note
+ * enters or leaves a grid. It was judged the smaller cost, because the
+ * alternative puts the dot on the visible border and the line up to 740px
+ * inside the note — where D8's paint order hides it. Do not "restore" the
+ * stored rect here without re-opening that ruling.
  *
  * ⚠️ No header term, and that is deliberate. A grouped note PAINTS at
  * `positionY - CUSTOM_GROUP_HEADER_HEIGHT` (`annotationRenderTop`), and a

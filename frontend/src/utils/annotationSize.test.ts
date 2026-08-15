@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+    annotationConnectionRect,
     annotationRenderSize,
     annotationFloor,
     autoFitHeight,
@@ -22,6 +23,16 @@ const LAYOUTS: CardLayout[] = [
     "compact",
     "draft-order"
 ];
+
+describe("annotationConnectionRect", () => {
+    it("uses the painted size when snapped and the stored size otherwise", () => {
+        const stored = { width: 380, height: 120 };
+        const painted = { width: 700, height: 860 };
+
+        expect(annotationConnectionRect(stored, painted)).toBe(painted);
+        expect(annotationConnectionRect(stored, null)).toEqual(stored);
+    });
+});
 
 describe("defaultAnnotationSize", () => {
     it("is one cell wide in every card layout", () => {

@@ -1,20 +1,15 @@
 import { AnchorType } from "../utils/schemas";
-import { cardHeight, cardWidth } from "../utils/helpers";
-import { createMemo } from "solid-js";
-import type { CardLayout } from "../utils/canvasCardLayout";
 
 type AnchorPointProps = {
     onSelectAnchor: (anchorType: AnchorType) => void;
-    cardLayout: () => CardLayout;
+    width: () => number;
+    height: () => number;
     zoom: number;
     selected: () => boolean;
     sourceAnchor: () => { type: AnchorType } | null;
 };
 
 export const AnchorPoints = (props: AnchorPointProps) => {
-    const currentWidth = createMemo(() => cardWidth(props.cardLayout()));
-    const currentHeight = createMemo(() => cardHeight(props.cardLayout()));
-
     const anchorSize = () => Math.max(6, 8 / props.zoom);
     const anchorClass = (type: AnchorType) =>
         `pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border border-darius-border/70 shadow-[0_0_0_1px_rgba(26,16,24,0.55)] transition-colors ${
@@ -31,7 +26,7 @@ export const AnchorPoints = (props: AnchorPointProps) => {
                 style={{
                     width: `${anchorSize()}px`,
                     height: `${anchorSize()}px`,
-                    left: `${currentWidth() / 2}px`,
+                    left: `${props.width() / 2}px`,
                     top: "0px"
                 }}
                 onMouseDown={(e) => {
@@ -50,8 +45,8 @@ export const AnchorPoints = (props: AnchorPointProps) => {
                 style={{
                     width: `${anchorSize()}px`,
                     height: `${anchorSize()}px`,
-                    left: `${currentWidth() / 2}px`,
-                    top: `${currentHeight()}px`
+                    left: `${props.width() / 2}px`,
+                    top: `${props.height()}px`
                 }}
                 onMouseDown={(e) => {
                     e.stopPropagation();
@@ -70,7 +65,7 @@ export const AnchorPoints = (props: AnchorPointProps) => {
                     width: `${anchorSize()}px`,
                     height: `${anchorSize()}px`,
                     left: "0px",
-                    top: `${currentHeight() / 2}px`
+                    top: `${props.height() / 2}px`
                 }}
                 onMouseDown={(e) => {
                     e.stopPropagation();
@@ -88,8 +83,8 @@ export const AnchorPoints = (props: AnchorPointProps) => {
                 style={{
                     width: `${anchorSize()}px`,
                     height: `${anchorSize()}px`,
-                    left: `${currentWidth()}px`,
-                    top: `${currentHeight() / 2}px`
+                    left: `${props.width()}px`,
+                    top: `${props.height() / 2}px`
                 }}
                 onMouseDown={(e) => {
                     e.stopPropagation();

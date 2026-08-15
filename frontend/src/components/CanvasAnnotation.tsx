@@ -1,5 +1,8 @@
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
-import type { CanvasAnnotation as CanvasAnnotationRow } from "../utils/schemas";
+import type {
+    AnchorType,
+    CanvasAnnotation as CanvasAnnotationRow
+} from "../utils/schemas";
 import { resolveStripChampions } from "../utils/annotationStrip";
 import { annotationSurfaceClass, ANNOTATION_FONT_PX } from "../utils/annotationStyle";
 import { MIN_ANNOTATION_HEIGHT, MIN_ANNOTATION_WIDTH } from "../utils/annotationSize";
@@ -8,6 +11,7 @@ import { resizeFromLeft, resizeHandleWorldPx } from "../utils/resizeHandle";
 import { CUSTOM_GROUP_HEADER_HEIGHT } from "./CustomGroupContainer";
 import { ChampionPortrait } from "./ChampionPortrait";
 import { ResizeGrip } from "./ResizeGrip";
+import { AnchorPoints } from "./AnchorPoints";
 
 export const annotationRenderTop = (positionY: number, isGrouped: boolean): number =>
     isGrouped ? positionY - CUSTOM_GROUP_HEADER_HEIGHT : positionY;
@@ -18,6 +22,9 @@ type CanvasAnnotationProps = {
     zoom: () => number;
     canEdit: () => boolean;
     isConnectionMode: boolean;
+    onAnchorClick: (annotationId: string, anchorType: AnchorType) => void;
+    connectionSource: () => string | null;
+    sourceAnchor: () => { type: AnchorType } | null;
     snappedSize: () => { width: number; height: number } | null;
     isSelected: () => boolean;
     editingAnnotationId: () => string | null;
@@ -248,7 +255,7 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
             // Multi-class classList keys are fine and are the house idiom
             // (CanvasCard.tsx:636, :746): Solid's `toggleClassKey` does
             // `key.trim().split(/\s+/)` and toggles each name.
-            class="canvas-annotation absolute flex select-none flex-col overflow-hidden rounded-md border-2 transition-colors"
+            class="canvas-annotation absolute select-none rounded-md border-2 transition-colors"
             classList={{
                 [annotationSurfaceClass(props.annotation.color)]: true,
                 "cursor-grab": props.canEdit() && !props.isConnectionMode,
@@ -283,8 +290,17 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                 props.onStartEditing(props.annotation.id);
             }}
         >
-            <Show when={props.annotation.championIds.length > 0 || canEditStrip()}>
-                {/* ICONS ABOVE, text below — this REVERSES D3's incidental
+            {/* The clipping box the ROOT used to be, and the flex column the
+                content below is written against.
+
+                It exists because the anchor dots straddle the border: an
+                `overflow-hidden` root cuts each of them in half. `inset-0`
+                resolves to the padding box — the same box the content occupied
+                when it was the root's flex children — so this is a pure
+                re-parenting and the layout is unchanged. */}
+            <div class="absolute inset-0 flex flex-col overflow-hidden rounded-md">
+                <Show when={props.annotation.championIds.length > 0 || canEditStrip()}>
+                    {/* ICONS ABOVE, text below — this REVERSES D3's incidental
                     "text above a row of champion icons", on the maintainer's
                     call after seeing it (2026-08-14). D3 carries no argument
                     for the order: every rejection under it is about the type
@@ -301,59 +317,59 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                     clips with the box rather than scrolling — an inner scroll
                     container inside a scale()d world layer fights canvas zoom
                     for wheel events (D7). */}
-                <div class="pointer-events-auto flex shrink-0 flex-wrap gap-1 overflow-hidden px-2 pt-2">
-                    <For each={resolveStripChampions(props.annotation.championIds)}>
-                        {(chip) => (
-                            <div class="group/chip relative">
-                                <Show
-                                    when={chip.resolved}
-                                    fallback={
-                                        <div
-                                            class="flex h-8 w-8 items-center justify-center rounded border border-dashed border-darius-crimson text-[8px] text-darius-crimson"
-                                            title={`Unknown champion: ${chip.id}`}
-                                        >
-                                            {chip.id.slice(0, 4)}
-                                        </div>
-                                    }
-                                >
-                                    {(champion) => (
-                                        <ChampionPortrait
-                                            src={champion().img}
-                                            alt={champion().name}
-                                            class="h-8 w-8 rounded"
-                                        />
-                                    )}
-                                </Show>
-                                <Show when={canEditStrip()}>
-                                    <button
-                                        class="absolute -right-1 -top-1 hidden h-4 w-4 rounded-full bg-darius-crimson text-[10px] leading-none text-darius-text-primary group-hover/chip:block"
-                                        onMouseDown={(e) => e.stopPropagation()}
-                                        onClick={() =>
-                                            props.onRemoveChampion(
-                                                props.annotation.id,
-                                                chip.id
-                                            )
+                    <div class="pointer-events-auto flex shrink-0 flex-wrap gap-1 overflow-hidden px-2 pt-2">
+                        <For each={resolveStripChampions(props.annotation.championIds)}>
+                            {(chip) => (
+                                <div class="group/chip relative">
+                                    <Show
+                                        when={chip.resolved}
+                                        fallback={
+                                            <div
+                                                class="flex h-8 w-8 items-center justify-center rounded border border-dashed border-darius-crimson text-[8px] text-darius-crimson"
+                                                title={`Unknown champion: ${chip.id}`}
+                                            >
+                                                {chip.id.slice(0, 4)}
+                                            </div>
                                         }
                                     >
-                                        ×
-                                    </button>
-                                </Show>
-                            </div>
-                        )}
-                    </For>
-                    <Show when={canEditStrip()}>
-                        <button
-                            class="flex h-8 w-8 items-center justify-center rounded border border-dashed border-darius-purple-bright text-darius-purple-bright"
-                            onMouseDown={(e) => e.stopPropagation()}
-                            onClick={() => props.onAddChampion(props.annotation.id)}
-                        >
-                            +
-                        </button>
-                    </Show>
-                </div>
-            </Show>
+                                        {(champion) => (
+                                            <ChampionPortrait
+                                                src={champion().img}
+                                                alt={champion().name}
+                                                class="h-8 w-8 rounded"
+                                            />
+                                        )}
+                                    </Show>
+                                    <Show when={canEditStrip()}>
+                                        <button
+                                            class="absolute -right-1 -top-1 hidden h-4 w-4 rounded-full bg-darius-crimson text-[10px] leading-none text-darius-text-primary group-hover/chip:block"
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                            onClick={() =>
+                                                props.onRemoveChampion(
+                                                    props.annotation.id,
+                                                    chip.id
+                                                )
+                                            }
+                                        >
+                                            ×
+                                        </button>
+                                    </Show>
+                                </div>
+                            )}
+                        </For>
+                        <Show when={canEditStrip()}>
+                            <button
+                                class="flex h-8 w-8 items-center justify-center rounded border border-dashed border-darius-purple-bright text-darius-purple-bright"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={() => props.onAddChampion(props.annotation.id)}
+                            >
+                                +
+                            </button>
+                        </Show>
+                    </div>
+                </Show>
 
-            {/* Collapsed to a bare colour block below the legibility floor
+                {/* Collapsed to a bare colour block below the legibility floor
                 (design §4). The surface keeps painting its colour and the
                 champion strip below still renders — those read the note's
                 presence and category at a glance, which is the whole
@@ -370,55 +386,61 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
 
                 Because the size is STORED, this is paint-only and can never
                 reflow anything. */}
-            <Show when={!props.isTextCollapsed() || isEditing() || isTextFocused()}>
-                <Show
-                    when={isEditing() || isTextFocused()}
-                    fallback={
-                        <div
-                            // `min-h-0 flex-1`, NOT `h-full`: the root is a flex
-                            // column and the strip is its FIRST row. `h-full` makes
-                            // this child consume the whole content box, so the strip
-                            // gets squeezed out past the note's border and never
-                            // renders inside the frame. Still true with the strip
-                            // above — `h-full` overflows the column either way.
-                            class="pointer-events-none min-h-0 flex-1 overflow-hidden whitespace-pre-wrap break-words p-2 text-darius-text-primary"
+                <Show when={!props.isTextCollapsed() || isEditing() || isTextFocused()}>
+                    <Show
+                        when={isEditing() || isTextFocused()}
+                        fallback={
+                            <div
+                                // `min-h-0 flex-1`, NOT `h-full`: the clipping box
+                                // above is a flex column and the strip is its FIRST
+                                // row (it was the ROOT until the anchor dots needed
+                                // to escape the root's clip). `h-full` makes
+                                // this child consume the whole content box, so the strip
+                                // gets squeezed out past the note's border and never
+                                // renders inside the frame. Still true with the strip
+                                // above — `h-full` overflows the column either way.
+                                class="pointer-events-none min-h-0 flex-1 overflow-hidden whitespace-pre-wrap break-words p-2 text-darius-text-primary"
+                                style={{
+                                    "font-size": `${fontPx()}px`,
+                                    "line-height": "1.25",
+                                    // Ellipsis/fade at rest (D7). An inner scroll
+                                    // container was rejected: a scrollable element
+                                    // inside a scale()d world layer fights canvas zoom
+                                    // for wheel events, and hides content from a view
+                                    // whose whole purpose is seeing everything at once.
+                                    "mask-image":
+                                        "linear-gradient(to bottom, black calc(100% - 1.5em), transparent 100%)"
+                                }}
+                            >
+                                {props.annotation.text}
+                            </div>
+                        }
+                    >
+                        <textarea
+                            ref={textareaRef}
+                            value={textSignal()}
+                            disabled={!props.canEdit()}
+                            class="h-full w-full resize-none bg-transparent p-2 text-darius-text-primary outline-none"
                             style={{
                                 "font-size": `${fontPx()}px`,
-                                "line-height": "1.25",
-                                // Ellipsis/fade at rest (D7). An inner scroll
-                                // container was rejected: a scrollable element
-                                // inside a scale()d world layer fights canvas zoom
-                                // for wheel events, and hides content from a view
-                                // whose whole purpose is seeing everything at once.
-                                "mask-image":
-                                    "linear-gradient(to bottom, black calc(100% - 1.5em), transparent 100%)"
+                                "line-height": "1.25"
                             }}
-                        >
-                            {props.annotation.text}
-                        </div>
-                    }
-                >
-                    <textarea
-                        ref={textareaRef}
-                        value={textSignal()}
-                        disabled={!props.canEdit()}
-                        class="h-full w-full resize-none bg-transparent p-2 text-darius-text-primary outline-none"
-                        style={{ "font-size": `${fontPx()}px`, "line-height": "1.25" }}
-                        onFocus={() => setIsTextFocused(true)}
-                        onInput={(e) => setTextSignal(e.currentTarget.value)}
-                        onKeyDown={(e) => {
-                            // Enter inserts a newline: the text is multi-line by
-                            // design (D6, `\n` preserved). Escape commits, matching
-                            // the draft-name field rather than the team-name field.
-                            if (e.key === "Escape") {
-                                e.stopPropagation();
-                                e.currentTarget.blur();
-                            }
-                        }}
-                        onBlur={commitText}
-                    />
+                            onFocus={() => setIsTextFocused(true)}
+                            onInput={(e) => setTextSignal(e.currentTarget.value)}
+                            onKeyDown={(e) => {
+                                // Enter inserts a newline: the text is multi-line by
+                                // design (D6, `\n` preserved). Escape commits, matching
+                                // the draft-name field rather than the team-name field.
+                                if (e.key === "Escape") {
+                                    e.stopPropagation();
+                                    e.currentTarget.blur();
+                                }
+                            }}
+                            onBlur={commitText}
+                        />
+                    </Show>
                 </Show>
-            </Show>
+            </div>
 
             <Show when={props.canEdit() && !props.isConnectionMode && props.isSelected()}>
                 <ResizeGrip
@@ -442,6 +464,18 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                         Math.min(renderWidth(), renderHeight())
                     )}
                     onMouseDown={(e) => handleResizeMouseDown(e, "se")}
+                />
+            </Show>
+            <Show when={props.isConnectionMode}>
+                <AnchorPoints
+                    onSelectAnchor={(anchorType) =>
+                        props.onAnchorClick(props.annotation.id, anchorType)
+                    }
+                    width={renderWidth}
+                    height={renderHeight}
+                    zoom={props.zoom()}
+                    selected={() => props.connectionSource() === props.annotation.id}
+                    sourceAnchor={props.sourceAnchor}
                 />
             </Show>
         </div>

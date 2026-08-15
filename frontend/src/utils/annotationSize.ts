@@ -125,6 +125,19 @@ export const snapWidthToCells = (draggedWidth: number, layout: CardLayout): numb
 export type AnnotationRenderSize = { width: number; height: number };
 
 /**
+ * The rect a CONNECTION resolves against: painted when snapped, stored otherwise.
+ *
+ * The dot and line must agree on the border the user sees. A grid note can
+ * paint at a different size from storage, while `snappedAnnotationSizeFor`
+ * returns null both outside a grid and for a note absent from the settled rows;
+ * the stored rect is the right answer in both null cases.
+ */
+export const annotationConnectionRect = (
+    annotation: { width: number; height: number },
+    snapped: AnnotationRenderSize | null
+): AnnotationRenderSize => snapped ?? annotation;
+
+/**
  * Selects a grid annotation's render size from settled membership.
  *
  * The local drag snapshot wins even though the active note is absent from

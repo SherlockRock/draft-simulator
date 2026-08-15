@@ -683,7 +683,8 @@ export const CanvasCard = (props: CanvasCardProps) => {
                     onSelectAnchor={(anchorType) => {
                         props.onAnchorClick(props.canvasDraft.Draft.id, anchorType);
                     }}
-                    cardLayout={props.cardLayout}
+                    width={() => cardWidth(props.cardLayout())}
+                    height={() => cardHeight(props.cardLayout())}
                     zoom={props.zoom()}
                     selected={selected}
                     sourceAnchor={props.sourceAnchor}
