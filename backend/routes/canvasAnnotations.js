@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { CanvasAnnotation } = require("../models/Canvas.js");
+const { CanvasAnnotation, CanvasConnection } = require("../models/Canvas.js");
 const { protect } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
 const { assertCanvasAccess } = require("../services/canvasMutations");
@@ -162,6 +162,37 @@ router.delete("/:canvasId/annotations/:annotationId", protect, async (req, res) 
     });
     if (!annotation) {
       return res.status(404).json({ error: "Annotation not found" });
+    }
+
+    // Trim endpoints pointing at this note, from one pre-write snapshot, and
+    // destroy any connection left with an empty side — the same rule the draft
+    // delete applies (canvas.js:1297). Before annotations could be endpoints
+    // this route correctly did nothing here.
+    const allConnections = await CanvasConnection.findAll({
+      where: { canvas_id: canvasId },
+    });
+    for (const connection of allConnections) {
+      const isThisNote = (endpoint) =>
+        endpoint.type === "annotation" && endpoint.annotation_id === annotationId;
+      const filteredSources = (connection.source_draft_ids || []).filter(
+        (source) => !isThisNote(source),
+      );
+      const filteredTargets = (connection.target_draft_ids || []).filter(
+        (target) => !isThisNote(target),
+      );
+
+      if (filteredSources.length === 0 || filteredTargets.length === 0) {
+        await connection.destroy();
+      } else if (
+        filteredSources.length !== connection.source_draft_ids.length ||
+        filteredTargets.length !== connection.target_draft_ids.length
+      ) {
+        connection.source_draft_ids = filteredSources;
+        connection.target_draft_ids = filteredTargets;
+        connection.changed("source_draft_ids", true);
+        connection.changed("target_draft_ids", true);
+        await connection.save();
+      }
     }
 
     await annotation.destroy();

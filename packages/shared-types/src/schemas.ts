@@ -442,6 +442,14 @@ export const ConnectionEndpointSchema = z.union([
     group_id: z.string(),
     anchor_type: AnchorTypeSchema,
   }),
+  z.object({
+    // A discriminating `type` is REQUIRED here, unlike the draft variant whose
+    // is optional for legacy rows: there are no legacy annotation endpoints, and
+    // every consumer branches on `"annotation_id" in e` or on this literal.
+    type: z.literal("annotation"),
+    annotation_id: z.string(),
+    anchor_type: AnchorTypeSchema,
+  }),
 ]);
 
 export const VertexSchema = z.object({

@@ -84,6 +84,21 @@ function mockSeries(id = "vd-1") {
   return { id, origin: "manual", destroy: vi.fn().mockResolvedValue() };
 }
 
+function mockConnection(overrides = {}) {
+  return {
+    source_draft_ids: [
+      { type: "draft", draft_id: "outside", anchor_type: "bottom" },
+    ],
+    target_draft_ids: [
+      { type: "annotation", annotation_id: "a-1", anchor_type: "top" },
+    ],
+    changed: vi.fn(),
+    save: vi.fn().mockResolvedValue(),
+    destroy: vi.fn().mockResolvedValue(),
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(auth, "protect").mockImplementation((req, _res, next) => {
@@ -272,6 +287,61 @@ describe("annotations in group deletion", () => {
       group.destroy.mock.invocationCallOrder[0],
     );
   });
+
+  it("trims annotation endpoints deleted with the Group from the pre-write snapshot", async () => {
+    mockTransaction();
+    const group = mockGroup();
+    const connection = mockConnection({
+      target_draft_ids: [
+        { type: "annotation", annotation_id: "a-1", anchor_type: "top" },
+        {
+          type: "annotation",
+          annotation_id: "outside-note",
+          anchor_type: "top",
+        },
+      ],
+    });
+    CanvasGroup.findAll.mockResolvedValue([group]);
+    CanvasDraft.findAll.mockResolvedValueOnce([]);
+    CanvasAnnotation.findAll.mockResolvedValueOnce([{ id: "a-1" }]);
+    CanvasConnection.findAll.mockResolvedValueOnce([connection]);
+
+    const res = await request(buildApp()).delete(
+      "/api/canvas/c-1/group/g-1?keepDrafts=false",
+    );
+
+    expect(res.status).toBe(200);
+    expect(connection.target_draft_ids).toEqual([
+      {
+        type: "annotation",
+        annotation_id: "outside-note",
+        anchor_type: "top",
+      },
+    ]);
+    expect(connection.save).toHaveBeenCalledWith(
+      expect.objectContaining({ transaction: expect.anything() }),
+    );
+  });
+
+  it("destroys a connection when deleted Group annotations empty one side", async () => {
+    mockTransaction();
+    const group = mockGroup();
+    const connection = mockConnection();
+    CanvasGroup.findAll.mockResolvedValue([group]);
+    CanvasDraft.findAll.mockResolvedValueOnce([]);
+    CanvasAnnotation.findAll.mockResolvedValueOnce([{ id: "a-1" }]);
+    CanvasConnection.findAll.mockResolvedValueOnce([connection]);
+
+    const res = await request(buildApp()).delete(
+      "/api/canvas/c-1/group/g-1?keepDrafts=false",
+    );
+
+    expect(res.status).toBe(200);
+    expect(connection.destroy).toHaveBeenCalledWith(
+      expect.objectContaining({ transaction: expect.anything() }),
+    );
+    expect(connection.save).not.toHaveBeenCalled();
+  });
 });
 
 describe("DELETE /:canvasId series cleanup", () => {
@@ -343,9 +413,7 @@ describe("DELETE /:canvasId/draft/:draftId draft cleanup", () => {
   it("destroys the underlying draft once no card references it", async () => {
     const canvasDraft = arrangeDraftDelete();
 
-    const res = await request(buildApp()).delete(
-      "/api/canvas/c-1/draft/d-1",
-    );
+    const res = await request(buildApp()).delete("/api/canvas/c-1/draft/d-1");
 
     expect(res.status).toBe(200);
     expect(canvasDraft.destroy).toHaveBeenCalled();
@@ -359,9 +427,7 @@ describe("DELETE /:canvasId/draft/:draftId draft cleanup", () => {
   it("keeps the draft when another canvas still shows it", async () => {
     arrangeDraftDelete({ remainingCards: [{ draft_id: "d-1" }] });
 
-    const res = await request(buildApp()).delete(
-      "/api/canvas/c-1/draft/d-1",
-    );
+    const res = await request(buildApp()).delete("/api/canvas/c-1/draft/d-1");
 
     expect(res.status).toBe(200);
     expect(Draft.destroy).not.toHaveBeenCalled();

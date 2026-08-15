@@ -6644,6 +6644,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             {(connection) => (
                                 <ConnectionComponent
                                     connection={connection}
+                                    annotations={annotations}
                                     drafts={canvasDrafts}
                                     groups={canvasGroups}
                                     zoom={viewportZoom}

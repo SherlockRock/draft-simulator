@@ -269,6 +269,11 @@ export const localDeleteAnnotation = (annotationId: string) => {
         canvas.annotations = canvas.annotations.filter(
             (entry) => entry.id !== annotationId
         );
+        canvas.connections = pruneConnectionEndpoints(
+            canvas.connections,
+            (endpoint) =>
+                "annotation_id" in endpoint && endpoint.annotation_id === annotationId
+        );
         return { canvas, result: { success: true } };
     });
 };
@@ -300,9 +305,38 @@ export const localUpdateViewport = (viewport: Viewport) => {
     });
 };
 
+type LocalConnectionEndpointInput =
+    | { draftId: string; anchorType?: string }
+    | { groupId: string; anchorType?: string }
+    | { annotationId: string; anchorType?: string };
+
+const formatLocalEndpoint = (
+    endpoint: LocalConnectionEndpointInput,
+    defaultAnchor: AnchorType
+): ConnectionEndpoint => {
+    if ("groupId" in endpoint) {
+        return {
+            type: "group",
+            group_id: endpoint.groupId,
+            anchor_type: toAnchorType(endpoint.anchorType, defaultAnchor)
+        };
+    }
+    if ("annotationId" in endpoint) {
+        return {
+            type: "annotation",
+            annotation_id: endpoint.annotationId,
+            anchor_type: toAnchorType(endpoint.anchorType, defaultAnchor)
+        };
+    }
+    return {
+        draft_id: endpoint.draftId,
+        anchor_type: toAnchorType(endpoint.anchorType, defaultAnchor)
+    };
+};
+
 export const localCreateConnection = (data: {
-    sourceDraftIds: Array<{ draftId?: string; groupId?: string; anchorType?: string }>;
-    targetDraftIds: Array<{ draftId?: string; groupId?: string; anchorType?: string }>;
+    sourceDraftIds: LocalConnectionEndpointInput[];
+    targetDraftIds: LocalConnectionEndpointInput[];
     style?: "solid" | "dashed" | "dotted";
     vertices?: Array<{ id: string; x: number; y: number }>;
 }) => {
@@ -311,29 +345,11 @@ export const localCreateConnection = (data: {
         const connection: Connection = {
             id: connectionId,
             canvas_id: "local",
-            source_draft_ids: data.sourceDraftIds.map((e) =>
-                e.groupId
-                    ? {
-                          type: "group" as const,
-                          group_id: e.groupId,
-                          anchor_type: toAnchorType(e.anchorType, "bottom")
-                      }
-                    : {
-                          draft_id: e.draftId!,
-                          anchor_type: toAnchorType(e.anchorType, "bottom")
-                      }
+            source_draft_ids: data.sourceDraftIds.map((endpoint) =>
+                formatLocalEndpoint(endpoint, "bottom")
             ),
-            target_draft_ids: data.targetDraftIds.map((e) =>
-                e.groupId
-                    ? {
-                          type: "group" as const,
-                          group_id: e.groupId,
-                          anchor_type: toAnchorType(e.anchorType, "top")
-                      }
-                    : {
-                          draft_id: e.draftId!,
-                          anchor_type: toAnchorType(e.anchorType, "top")
-                      }
+            target_draft_ids: data.targetDraftIds.map((endpoint) =>
+                formatLocalEndpoint(endpoint, "top")
             ),
             vertices: data.vertices ?? [],
             style: data.style ?? "solid"
@@ -345,36 +361,18 @@ export const localCreateConnection = (data: {
 
 export const localUpdateConnection = (data: {
     connectionId: string;
-    addSource?: { draftId?: string; groupId?: string; anchorType?: string };
-    addTarget?: { draftId?: string; groupId?: string; anchorType?: string };
+    addSource?: LocalConnectionEndpointInput;
+    addTarget?: LocalConnectionEndpointInput;
 }) => {
     return mutateLocal((canvas) => {
         const conn = canvas.connections.find((c) => c.id === data.connectionId);
         if (conn) {
             if (data.addSource) {
-                const endpoint = data.addSource.groupId
-                    ? {
-                          type: "group" as const,
-                          group_id: data.addSource.groupId,
-                          anchor_type: toAnchorType(data.addSource.anchorType, "bottom")
-                      }
-                    : {
-                          draft_id: data.addSource.draftId!,
-                          anchor_type: toAnchorType(data.addSource.anchorType, "bottom")
-                      };
+                const endpoint = formatLocalEndpoint(data.addSource, "bottom");
                 conn.source_draft_ids.push(endpoint);
             }
             if (data.addTarget) {
-                const endpoint = data.addTarget.groupId
-                    ? {
-                          type: "group" as const,
-                          group_id: data.addTarget.groupId,
-                          anchor_type: toAnchorType(data.addTarget.anchorType, "top")
-                      }
-                    : {
-                          draft_id: data.addTarget.draftId!,
-                          anchor_type: toAnchorType(data.addTarget.anchorType, "top")
-                      };
+                const endpoint = formatLocalEndpoint(data.addTarget, "top");
                 conn.target_draft_ids.push(endpoint);
             }
         }
@@ -688,12 +686,18 @@ export const localDeleteGroup = (groupId: string, keepDrafts?: boolean) => {
     return mutateLocal((canvas) => {
         const deleted = canvas.groups.find((g) => g.id === groupId);
         const removedDraftIds = new Set<string>();
+        const removedAnnotationIds = new Set<string>();
 
         if (!keepDrafts) {
             for (const d of canvas.drafts) {
                 if (d.group_id === groupId) removedDraftIds.add(d.draft_id);
             }
             canvas.drafts = canvas.drafts.filter((d) => d.group_id !== groupId);
+            for (const annotation of canvas.annotations) {
+                if (annotation.group_id === groupId) {
+                    removedAnnotationIds.add(annotation.id);
+                }
+            }
             canvas.annotations = canvas.annotations.filter(
                 (annotation) => annotation.group_id !== groupId
             );
@@ -734,7 +738,11 @@ export const localDeleteGroup = (groupId: string, keepDrafts?: boolean) => {
         // Cards it took with it go on the !keepDrafts path, which used to leave
         // them stranded on drafts that no longer exist.
         canvas.connections = pruneConnectionEndpoints(canvas.connections, (e) =>
-            "group_id" in e ? e.group_id === groupId : removedDraftIds.has(e.draft_id)
+            "group_id" in e
+                ? e.group_id === groupId
+                : "annotation_id" in e
+                  ? removedAnnotationIds.has(e.annotation_id)
+                  : removedDraftIds.has(e.draft_id)
         );
         return { canvas, result: { success: true } };
     });

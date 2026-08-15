@@ -331,4 +331,37 @@ describe("syncLocalCanvasToServer", () => {
             vi.mocked(createConnection).mock.invocationCallOrder[0]
         );
     });
+
+    it("remaps annotation endpoint ids before creating Connections", async () => {
+        const canvas = createEmptyLocalCanvas("My Canvas");
+        canvas.drafts = [localDraft("d1")];
+        canvas.annotations = [localAnnotation("local-annotation")];
+        canvas.connections = [
+            {
+                id: "c1",
+                canvas_id: "local",
+                source_draft_ids: [{ draft_id: "d1", anchor_type: "right" }],
+                target_draft_ids: [
+                    {
+                        type: "annotation",
+                        annotation_id: "local-annotation",
+                        anchor_type: "left"
+                    }
+                ],
+                vertices: [],
+                style: "solid"
+            }
+        ];
+        saveLocalCanvas(canvas);
+
+        await syncLocalCanvasToServer();
+
+        expect(createConnection).toHaveBeenCalledWith(
+            expect.objectContaining({
+                targetDraftIds: [
+                    { annotationId: "server-annotation", anchorType: "left" }
+                ]
+            })
+        );
+    });
 });

@@ -45,6 +45,7 @@ const {
     localCreateAnnotation,
     localUpdateAnnotation,
     localDeleteAnnotation,
+    localUpdateConnection,
     localCopyAnnotation
 } = await import("./useLocalCanvasMutations");
 const { MAX_GROUP_DEPTH } = await import("@draft-sim/shared-types/canvas-tree-vector");
@@ -636,6 +637,159 @@ describe("localDeleteDraft, against the server's route", () => {
     });
 });
 
+describe("localDeleteAnnotation, against the server's route", () => {
+    const card = () =>
+        localNewDraft({
+            name: "source",
+            picks: Array(20).fill(""),
+            positionX: 0,
+            positionY: 0
+        });
+
+    const annotation = () =>
+        localCreateAnnotation({
+            positionX: 10,
+            positionY: 20,
+            width: 380,
+            height: 120,
+            group_id: null
+        }).annotation;
+
+    it("trims a deleted annotation endpoint from a multi-endpoint side", () => {
+        const source = card();
+        const doomed = annotation();
+        const survivor = annotation();
+        const canvas = getLocalCanvas();
+        if (!canvas) throw new Error("Expected local canvas");
+        canvas.connections.push({
+            id: "connection-1",
+            canvas_id: "local",
+            source_draft_ids: [{ draft_id: source.draft_id, anchor_type: "bottom" }],
+            target_draft_ids: [
+                {
+                    type: "annotation",
+                    annotation_id: doomed.id,
+                    anchor_type: "top"
+                },
+                {
+                    type: "annotation",
+                    annotation_id: survivor.id,
+                    anchor_type: "top"
+                }
+            ],
+            vertices: [],
+            style: "solid"
+        });
+        saveLocalCanvas(canvas);
+
+        localDeleteAnnotation(doomed.id);
+
+        const connections = getLocalCanvas()?.connections ?? [];
+        expect(connections).toHaveLength(1);
+        expect(connections[0].target_draft_ids).toEqual([
+            {
+                type: "annotation",
+                annotation_id: survivor.id,
+                anchor_type: "top"
+            }
+        ]);
+    });
+
+    it("destroys a connection when deleting the annotation empties one side", () => {
+        const source = card();
+        const doomed = annotation();
+        const canvas = getLocalCanvas();
+        if (!canvas) throw new Error("Expected local canvas");
+        canvas.connections.push({
+            id: "connection-1",
+            canvas_id: "local",
+            source_draft_ids: [{ draft_id: source.draft_id, anchor_type: "bottom" }],
+            target_draft_ids: [
+                {
+                    type: "annotation",
+                    annotation_id: doomed.id,
+                    anchor_type: "top"
+                }
+            ],
+            vertices: [],
+            style: "solid"
+        });
+        saveLocalCanvas(canvas);
+
+        localDeleteAnnotation(doomed.id);
+
+        expect(getLocalCanvas()?.connections ?? []).toHaveLength(0);
+    });
+});
+
+describe("local annotation connection endpoint formatting", () => {
+    it("creates an annotation endpoint with its discriminator", () => {
+        const annotation = localCreateAnnotation({
+            positionX: 10,
+            positionY: 20,
+            width: 380,
+            height: 120,
+            group_id: null
+        }).annotation;
+        const card = localNewDraft({
+            name: "target",
+            picks: Array(20).fill(""),
+            positionX: 0,
+            positionY: 0
+        });
+
+        const { connection } = localCreateConnection({
+            sourceDraftIds: [{ annotationId: annotation.id, anchorType: "right" }],
+            targetDraftIds: [{ draftId: card.draft_id, anchorType: "left" }]
+        });
+
+        expect(connection.source_draft_ids).toEqual([
+            {
+                type: "annotation",
+                annotation_id: annotation.id,
+                anchor_type: "right"
+            }
+        ]);
+    });
+
+    it("adds an annotation endpoint with its discriminator", () => {
+        const first = localNewDraft({
+            name: "source",
+            picks: Array(20).fill(""),
+            positionX: 0,
+            positionY: 0
+        });
+        const target = localNewDraft({
+            name: "target",
+            picks: Array(20).fill(""),
+            positionX: 0,
+            positionY: 0
+        });
+        const annotation = localCreateAnnotation({
+            positionX: 10,
+            positionY: 20,
+            width: 380,
+            height: 120,
+            group_id: null
+        }).annotation;
+        const { connection } = localCreateConnection({
+            sourceDraftIds: [{ draftId: first.draft_id }],
+            targetDraftIds: [{ draftId: target.draft_id }]
+        });
+
+        localUpdateConnection({
+            connectionId: connection.id,
+            addSource: { annotationId: annotation.id, anchorType: "left" }
+        });
+
+        expect(getLocalCanvas()?.connections[0].source_draft_ids[1]).toEqual({
+            type: "annotation",
+            annotation_id: annotation.id,
+            anchor_type: "left"
+        });
+    });
+});
+
 /**
  * Deleting a container is where the local runtime has drifted furthest from
  * `canvas.js`'s route: it wrote no position for the Cards it ungrouped, and it
@@ -706,6 +860,39 @@ describe("localDeleteGroup, against the server's route", () => {
         localDeleteGroup(group.id, false);
 
         expect(getLocalCanvas()?.annotations).toEqual([]);
+    });
+
+    it("drops an endpoint whose annotation is deleted with the container", () => {
+        const group = groupAt(100, 200);
+        const inside = localCreateAnnotation({
+            positionX: 30,
+            positionY: 40,
+            width: 380,
+            height: 120,
+            group_id: group.id
+        }).annotation;
+        const outside = cardIn(null, 500, 500);
+        const canvas = getLocalCanvas();
+        if (!canvas) throw new Error("Expected local canvas");
+        canvas.connections.push({
+            id: "connection-1",
+            canvas_id: "local",
+            source_draft_ids: [{ draft_id: outside.draft_id, anchor_type: "bottom" }],
+            target_draft_ids: [
+                {
+                    type: "annotation",
+                    annotation_id: inside.id,
+                    anchor_type: "top"
+                }
+            ],
+            vertices: [],
+            style: "solid"
+        });
+        saveLocalCanvas(canvas);
+
+        localDeleteGroup(group.id, false);
+
+        expect(getLocalCanvas()?.connections ?? []).toHaveLength(0);
     });
 
     it("leaves a Card outside the deleted container untouched", () => {

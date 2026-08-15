@@ -1985,6 +1985,7 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
       lock: true,
       transaction: t,
     });
+    const annotationIdsToRemove = new Set(groupAnnotations.map((a) => a.id));
 
     // The group is going away either way, so its backing series would describe
     // nothing. Load it now while the link still exists. Only manual series are
@@ -2079,11 +2080,21 @@ router.delete("/:canvasId/group/:groupId", protect, async (req, res) => {
       const filteredSources = (conn.source_draft_ids || []).filter(
         (src) =>
           !(!keepDrafts && draftIdsToRemove.has(src.draft_id)) &&
+          !(
+            !keepDrafts &&
+            src.type === "annotation" &&
+            annotationIdsToRemove.has(src.annotation_id)
+          ) &&
           !(src.type === "group" && src.group_id === groupId),
       );
       const filteredTargets = (conn.target_draft_ids || []).filter(
         (tgt) =>
           !(!keepDrafts && draftIdsToRemove.has(tgt.draft_id)) &&
+          !(
+            !keepDrafts &&
+            tgt.type === "annotation" &&
+            annotationIdsToRemove.has(tgt.annotation_id)
+          ) &&
           !(tgt.type === "group" && tgt.group_id === groupId),
       );
 
@@ -2765,11 +2776,23 @@ router.post("/:canvasId/connections", protect, async (req, res) => {
     });
     const validGroupIds = new Set(canvasGroups.map((g) => g.id));
 
+    const canvasAnnotations = await CanvasAnnotation.findAll({
+      where: { canvas_id: canvasId },
+      attributes: ["id"],
+    });
+    const validAnnotationIds = new Set(canvasAnnotations.map((a) => a.id));
+
     for (const src of sourceDraftIds) {
       if (src.groupId) {
         if (!validGroupIds.has(src.groupId)) {
           return res.status(400).json({
             error: `Source group ${src.groupId} not found on canvas`,
+          });
+        }
+      } else if (src.annotationId) {
+        if (!validAnnotationIds.has(src.annotationId)) {
+          return res.status(400).json({
+            error: `Source annotation ${src.annotationId} not found on canvas`,
           });
         }
       } else if (!validDraftIds.has(src.draftId)) {
@@ -2786,6 +2809,12 @@ router.post("/:canvasId/connections", protect, async (req, res) => {
             error: `Target group ${tgt.groupId} not found on canvas`,
           });
         }
+      } else if (tgt.annotationId) {
+        if (!validAnnotationIds.has(tgt.annotationId)) {
+          return res.status(400).json({
+            error: `Target annotation ${tgt.annotationId} not found on canvas`,
+          });
+        }
       } else if (!validDraftIds.has(tgt.draftId)) {
         return res.status(400).json({
           error: `Target draft ${tgt.draftId} not found on canvas`,
@@ -2799,6 +2828,13 @@ router.post("/:canvasId/connections", protect, async (req, res) => {
         return {
           type: "group",
           group_id: ep.groupId,
+          anchor_type: ep.anchorType || "top",
+        };
+      }
+      if (ep.annotationId) {
+        return {
+          type: "annotation",
+          annotation_id: ep.annotationId,
           anchor_type: ep.anchorType || "top",
         };
       }
@@ -2886,11 +2922,24 @@ router.patch(
       });
       const validGroupIds = new Set(canvasGroups.map((g) => g.id));
 
+      const canvasAnnotations = await CanvasAnnotation.findAll({
+        where: { canvas_id: canvasId },
+        attributes: ["id"],
+      });
+      const validAnnotationIds = new Set(canvasAnnotations.map((a) => a.id));
+
       const formatEndpoint = (ep) => {
         if (ep.groupId) {
           return {
             type: "group",
             group_id: ep.groupId,
+            anchor_type: ep.anchorType || "top",
+          };
+        }
+        if (ep.annotationId) {
+          return {
+            type: "annotation",
+            annotation_id: ep.annotationId,
             anchor_type: ep.anchorType || "top",
           };
         }
@@ -2908,6 +2957,12 @@ router.patch(
               error: `Group ${addSource.groupId} not found on canvas`,
             });
           }
+        } else if (addSource.annotationId) {
+          if (!validAnnotationIds.has(addSource.annotationId)) {
+            return res.status(400).json({
+              error: `Annotation ${addSource.annotationId} not found on canvas`,
+            });
+          }
         } else if (!validDraftIds.has(addSource.draftId)) {
           return res.status(400).json({
             error: `Draft ${addSource.draftId} not found on canvas`,
@@ -2920,7 +2975,10 @@ router.patch(
         const exists = connection.source_draft_ids.some((src) =>
           newSource.type === "group"
             ? src.type === "group" && src.group_id === newSource.group_id
-            : src.draft_id === newSource.draft_id,
+            : newSource.type === "annotation"
+              ? src.type === "annotation" &&
+                src.annotation_id === newSource.annotation_id
+              : src.draft_id === newSource.draft_id,
         );
 
         if (!exists) {
@@ -2939,6 +2997,12 @@ router.patch(
               error: `Group ${addTarget.groupId} not found on canvas`,
             });
           }
+        } else if (addTarget.annotationId) {
+          if (!validAnnotationIds.has(addTarget.annotationId)) {
+            return res.status(400).json({
+              error: `Annotation ${addTarget.annotationId} not found on canvas`,
+            });
+          }
         } else if (!validDraftIds.has(addTarget.draftId)) {
           return res.status(400).json({
             error: `Draft ${addTarget.draftId} not found on canvas`,
@@ -2951,7 +3015,10 @@ router.patch(
         const exists = connection.target_draft_ids.some((tgt) =>
           newTarget.type === "group"
             ? tgt.type === "group" && tgt.group_id === newTarget.group_id
-            : tgt.draft_id === newTarget.draft_id,
+            : newTarget.type === "annotation"
+              ? tgt.type === "annotation" &&
+                tgt.annotation_id === newTarget.annotation_id
+              : tgt.draft_id === newTarget.draft_id,
         );
 
         if (!exists) {

@@ -23,7 +23,8 @@ function buildApp() {
   // node still serves the cached canvasAnnotations.js module — whose `protect` was
   // captured once, on the first buildApp() call, and never updates. Every test after
   // the first would run the REAL auth middleware and 401 instead of hitting the mock.
-  const annotationsRoutePath = require.resolve("../../routes/canvasAnnotations");
+  const annotationsRoutePath =
+    require.resolve("../../routes/canvasAnnotations");
   delete require.cache[routePath];
   delete require.cache[annotationsRoutePath];
   const app = express();
@@ -66,6 +67,17 @@ const annotationRow = (overrides = {}) => ({
   ...overrides,
 });
 
+const connectionRow = (overrides = {}) => ({
+  source_draft_ids: [{ type: "draft", draft_id: "d1", anchor_type: "bottom" }],
+  target_draft_ids: [
+    { type: "annotation", annotation_id: "a1", anchor_type: "top" },
+  ],
+  changed: vi.fn(),
+  save: vi.fn().mockResolvedValue(undefined),
+  destroy: vi.fn().mockResolvedValue(undefined),
+  ...overrides,
+});
+
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(auth, "protect").mockImplementation((req, _res, next) => {
@@ -86,16 +98,25 @@ beforeEach(() => {
 
 describe("annotation routes — the Canvas Mutation Gate", () => {
   for (const [name, send] of [
-    ["create", (app) => request(app).post("/api/canvas/c1/annotations").send({})],
+    [
+      "create",
+      (app) => request(app).post("/api/canvas/c1/annotations").send({}),
+    ],
     [
       "update",
-      (app) => request(app).patch("/api/canvas/c1/annotations/a1").send({ text: "x" }),
+      (app) =>
+        request(app).patch("/api/canvas/c1/annotations/a1").send({ text: "x" }),
     ],
     ["delete", (app) => request(app).delete("/api/canvas/c1/annotations/a1")],
-    ["duplicate", (app) => request(app).post("/api/canvas/c1/annotations/a1/copy").send({})],
+    [
+      "duplicate",
+      (app) => request(app).post("/api/canvas/c1/annotations/a1/copy").send({}),
+    ],
   ]) {
     it(`403s ${name} for a view-only user and writes nothing`, async () => {
-      vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "view" });
+      vi.spyOn(UserCanvas, "findOne").mockResolvedValue({
+        permissions: "view",
+      });
       const create = vi.spyOn(CanvasAnnotation, "create");
       const res = await send(buildApp());
       expect(res.status).toBe(403);
@@ -126,7 +147,9 @@ describe("POST /:canvasId/annotations", () => {
   it("persists the hand-set size floor on create", async () => {
     const create = vi
       .spyOn(CanvasAnnotation, "create")
-      .mockResolvedValue(annotationRow({ manualWidth: 440, manualHeight: 260 }));
+      .mockResolvedValue(
+        annotationRow({ manualWidth: 440, manualHeight: 260 }),
+      );
 
     const res = await request(buildApp())
       .post("/api/canvas/c1/annotations")
@@ -255,10 +278,51 @@ describe("DELETE /:canvasId/annotations/:annotationId", () => {
   it("destroys the row and broadcasts", async () => {
     const row = annotationRow();
     vi.spyOn(CanvasAnnotation, "findOne").mockResolvedValue(row);
-    const res = await request(buildApp()).delete("/api/canvas/c1/annotations/a1");
+    const res = await request(buildApp()).delete(
+      "/api/canvas/c1/annotations/a1",
+    );
     expect(res.status).toBe(200);
     expect(row.destroy).toHaveBeenCalled();
     expectCanvasUpdateBroadcast();
+  });
+
+  it("trims an annotation endpoint while preserving a non-empty side", async () => {
+    const row = annotationRow();
+    const connection = connectionRow({
+      target_draft_ids: [
+        { type: "annotation", annotation_id: "a1", anchor_type: "top" },
+        { type: "annotation", annotation_id: "a2", anchor_type: "top" },
+      ],
+    });
+    vi.spyOn(CanvasAnnotation, "findOne").mockResolvedValue(row);
+    CanvasConnection.findAll.mockResolvedValue([connection]);
+
+    const res = await request(buildApp()).delete(
+      "/api/canvas/c1/annotations/a1",
+    );
+
+    expect(res.status).toBe(200);
+    expect(connection.destroy).not.toHaveBeenCalled();
+    expect(connection.target_draft_ids).toEqual([
+      { type: "annotation", annotation_id: "a2", anchor_type: "top" },
+    ]);
+    expect(connection.changed).toHaveBeenCalledWith("target_draft_ids", true);
+    expect(connection.save).toHaveBeenCalled();
+  });
+
+  it("destroys a connection when annotation deletion empties either side", async () => {
+    const row = annotationRow();
+    const connection = connectionRow();
+    vi.spyOn(CanvasAnnotation, "findOne").mockResolvedValue(row);
+    CanvasConnection.findAll.mockResolvedValue([connection]);
+
+    const res = await request(buildApp()).delete(
+      "/api/canvas/c1/annotations/a1",
+    );
+
+    expect(res.status).toBe(200);
+    expect(connection.destroy).toHaveBeenCalled();
+    expect(connection.save).not.toHaveBeenCalled();
   });
 });
 

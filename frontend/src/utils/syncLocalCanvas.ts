@@ -230,6 +230,12 @@ export const syncLocalCanvasToServer = async (): Promise<string | null> => {
                     anchorType: e.anchor_type
                 };
             }
+            if ("annotation_id" in e) {
+                return {
+                    annotationId: annotationIdMap.get(e.annotation_id) ?? e.annotation_id,
+                    anchorType: e.anchor_type
+                };
+            }
             return {
                 draftId: draftIdMap.get(e.draft_id) ?? e.draft_id,
                 anchorType: e.anchor_type

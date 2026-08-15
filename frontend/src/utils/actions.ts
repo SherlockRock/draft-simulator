@@ -399,7 +399,8 @@ export const removeUserFromCanvas = async (canvasId: string, userId: string) => 
 
 type ConnectionEndpointInput =
     | { draftId: string; anchorType?: string }
-    | { groupId: string; anchorType?: string };
+    | { groupId: string; anchorType?: string }
+    | { annotationId: string; anchorType?: string };
 
 export const createConnection = async (data: {
     canvasId: string;

@@ -1,7 +1,14 @@
 import { createSignal, Show, createMemo, For } from "solid-js";
-import { CanvasDraft, CanvasGroup, Connection, AnchorType } from "../utils/schemas";
+import {
+    CanvasAnnotation,
+    CanvasDraft,
+    CanvasGroup,
+    Connection,
+    AnchorType
+} from "../utils/schemas";
 import {
     getAnchorWorldPosition,
+    getAnnotationAnchorWorldPosition,
     getGroupAnchorWorldPosition,
     getSeriesGroupDimensions,
     getSeriesDraftWorldPosition,
@@ -28,6 +35,7 @@ import type { CardLayout } from "../utils/canvasCardLayout";
 
 export const ConnectionComponent = (props: {
     connection: Connection;
+    annotations: CanvasAnnotation[];
     drafts: CanvasDraft[];
     groups: CanvasGroup[];
     zoom: () => number;
@@ -75,6 +83,16 @@ export const ConnectionComponent = (props: {
                 );
             }
             return getGroupAnchorWorldPosition(group, endpoint.anchor_type);
+        }
+        if (endpoint.type === "annotation") {
+            const note = props.annotations.find(
+                (entry) => entry.id === endpoint.annotation_id
+            );
+            if (!note) return null;
+            const group = note.group_id
+                ? (props.groups.find((entry) => entry.id === note.group_id) ?? null)
+                : null;
+            return getAnnotationAnchorWorldPosition(note, endpoint.anchor_type, group);
         }
         const draft = findDraft(endpoint.draft_id);
         if (!draft) return null;
