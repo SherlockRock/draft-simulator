@@ -7,6 +7,8 @@
 // beside the Canvas Mutation Gate rather than inside it; access control for
 // joining happens in the socket handler via assertCanvasAccess.
 
+const ANNOTATION_LOCK_TTL_MS = 60_000;
+
 function createPresenceStore() {
   // canvasId -> Map<userId, { user, sockets: Set<socketId> }>
   const canvases = new Map();
@@ -16,6 +18,90 @@ function createPresenceStore() {
   // it before its async ACL lookup and aborts if it moved: an access check
   // that read the pre-revocation row must not grant room entry.
   const revocations = new Map();
+  // canvasId -> Map<annotationId, { userId, socketId, at }>
+  //
+  // ⚠️ ADVISORY ONLY (design D12). Last-write-wins on blur is the underlying
+  // truth and the PATCH never consults this — no persistence logic may depend
+  // on the lock holding, or a dropped socket stops being a lost hint and
+  // becomes a correctness bug. It exists so two people do not silently
+  // overwrite each other's paragraph, not to make that impossible.
+  const annotationLocks = new Map();
+
+  function acquireAnnotationLock(canvasId, annotationId, userId, socketId, now = Date.now()) {
+    let locks = annotationLocks.get(canvasId);
+    if (!locks) {
+      locks = new Map();
+      annotationLocks.set(canvasId, locks);
+    }
+
+    const held = locks.get(annotationId);
+    // The holder re-acquiring is not a conflict — it is how a long edit keeps
+    // refreshing `at` against the inactivity timeout.
+    if (
+      held &&
+      held.userId !== userId &&
+      now - held.at < ANNOTATION_LOCK_TTL_MS
+    ) {
+      return false;
+    }
+
+    locks.set(annotationId, { userId, socketId, at: now });
+    return true;
+  }
+
+  function releaseAnnotationLock(canvasId, annotationId, userId) {
+    const locks = annotationLocks.get(canvasId);
+    const held = locks?.get(annotationId);
+    if (!held || held.userId !== userId) return false;
+
+    locks.delete(annotationId);
+    if (locks.size === 0) annotationLocks.delete(canvasId);
+    return true;
+  }
+
+  function releaseLocksOf(socketId) {
+    const released = [];
+    for (const [canvasId, locks] of annotationLocks) {
+      for (const [annotationId, held] of locks) {
+        if (held.socketId !== socketId) continue;
+        locks.delete(annotationId);
+        released.push({ canvasId, annotationId });
+      }
+      if (locks.size === 0) annotationLocks.delete(canvasId);
+    }
+    return released;
+  }
+
+  // Disconnect alone is not enough: an idle open tab holds its socket, so its
+  // note would stay un-editable forever. The timeout trades a rare silent loss
+  // for never producing a common hard block.
+  function expireStaleAnnotationLocks(canvasId, now = Date.now()) {
+    const locks = annotationLocks.get(canvasId);
+    if (!locks) return [];
+
+    const expired = [];
+    for (const [annotationId, held] of locks) {
+      if (now - held.at < ANNOTATION_LOCK_TTL_MS) continue;
+      locks.delete(annotationId);
+      expired.push({ canvasId, annotationId });
+    }
+    if (locks.size === 0) annotationLocks.delete(canvasId);
+    return expired;
+  }
+
+  // FILTERS rather than sweeps, deliberately: a snapshot read is on the join
+  // path and must stay side-effect-free. It cannot lean on the sweep either —
+  // that rides `annotationEditStart`, so if nobody ever edits again a late
+  // joiner would be handed a phantom lock forever, on the exact channel that
+  // exists to inform late joiners. Removal stays with the sweep, the
+  // acquire-replacement and the disconnect/release paths.
+  function annotationLocksSnapshot(canvasId, now = Date.now()) {
+    const locks = annotationLocks.get(canvasId);
+    if (!locks) return [];
+    return [...locks]
+      .filter(([, held]) => now - held.at < ANNOTATION_LOCK_TTL_MS)
+      .map(([annotationId, held]) => ({ annotationId, userId: held.userId }));
+  }
 
   function revocationKey(canvasId, userId) {
     return `${canvasId}\0${userId}`;
@@ -130,6 +216,11 @@ function createPresenceStore() {
     setViewport,
     clearViewport,
     snapshot,
+    acquireAnnotationLock,
+    releaseAnnotationLock,
+    releaseLocksOf,
+    expireStaleAnnotationLocks,
+    annotationLocksSnapshot,
     markRevoked,
     revocationCount,
   };

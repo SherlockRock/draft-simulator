@@ -98,6 +98,88 @@ describe("createPresenceStore", () => {
     expect(store.snapshot("c-none")).toEqual([]);
   });
 
+  describe("annotation edit locks", () => {
+    it("grants a free lock and refuses it to another user", () => {
+      expect(
+        store.acquireAnnotationLock("c-1", "note-1", ALICE.userId, "sock-1", 0),
+      ).toBe(true);
+      expect(
+        store.acquireAnnotationLock("c-1", "note-1", BOB.userId, "sock-2", 1),
+      ).toBe(false);
+    });
+
+    it("lets the holder refresh its own lock", () => {
+      store.acquireAnnotationLock("c-1", "note-1", ALICE.userId, "sock-1", 0);
+
+      expect(
+        store.acquireAnnotationLock(
+          "c-1",
+          "note-1",
+          ALICE.userId,
+          "sock-1",
+          59_000,
+        ),
+      ).toBe(true);
+      expect(
+        store.acquireAnnotationLock("c-1", "note-1", BOB.userId, "sock-2", 61_000),
+      ).toBe(false);
+    });
+
+    it("allows another user to acquire a stale lock", () => {
+      store.acquireAnnotationLock("c-1", "note-1", ALICE.userId, "sock-1", 0);
+
+      expect(
+        store.acquireAnnotationLock("c-1", "note-1", BOB.userId, "sock-2", 61_000),
+      ).toBe(true);
+    });
+
+    it("reports held locks in a snapshot", () => {
+      store.acquireAnnotationLock("c-1", "note-1", ALICE.userId, "sock-1", 0);
+
+      expect(store.annotationLocksSnapshot("c-1", 59_000)).toEqual([
+        { annotationId: "note-1", userId: ALICE.userId },
+      ]);
+    });
+
+    it("releases only the holder's lock", () => {
+      store.acquireAnnotationLock("c-1", "note-1", ALICE.userId, "sock-1", 0);
+
+      expect(store.releaseAnnotationLock("c-1", "note-1", BOB.userId)).toBe(false);
+      expect(store.annotationLocksSnapshot("c-1", 1)).toHaveLength(1);
+      expect(store.releaseAnnotationLock("c-1", "note-1", ALICE.userId)).toBe(true);
+      expect(store.annotationLocksSnapshot("c-1", 1)).toEqual([]);
+    });
+
+    it("releases every lock held by a socket across canvases", () => {
+      store.acquireAnnotationLock("c-1", "note-1", ALICE.userId, "sock-1", 0);
+      store.acquireAnnotationLock("c-2", "note-2", ALICE.userId, "sock-1", 0);
+      store.acquireAnnotationLock("c-1", "note-3", BOB.userId, "sock-2", 0);
+
+      expect(store.releaseLocksOf("sock-1")).toEqual([
+        { canvasId: "c-1", annotationId: "note-1" },
+        { canvasId: "c-2", annotationId: "note-2" },
+      ]);
+      expect(store.annotationLocksSnapshot("c-1", 1)).toEqual([
+        { annotationId: "note-3", userId: BOB.userId },
+      ]);
+    });
+
+    it("expires locks after the timeout but not before", () => {
+      store.acquireAnnotationLock("c-1", "note-1", ALICE.userId, "sock-1", 0);
+
+      expect(store.expireStaleAnnotationLocks("c-1", 59_000)).toEqual([]);
+      expect(store.expireStaleAnnotationLocks("c-1", 61_000)).toEqual([
+        { canvasId: "c-1", annotationId: "note-1" },
+      ]);
+    });
+
+    it("omits a timed-out lock from the snapshot without a sweep", () => {
+      store.acquireAnnotationLock("c-1", "note-1", ALICE.userId, "sock-1", 0);
+
+      expect(store.annotationLocksSnapshot("c-1", 61_000)).toEqual([]);
+    });
+  });
+
   describe("last-known viewport", () => {
     const VIEWPORT = { x: 120.5, y: -40, zoom: 1.5 };
 
