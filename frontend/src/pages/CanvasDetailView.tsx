@@ -8,7 +8,7 @@ import { Viewport } from "../utils/schemas";
 import toast from "solid-toast";
 import { cardHeight, cardWidth } from "../utils/helpers";
 import { localNewDraft } from "../utils/useLocalCanvasMutations";
-import { getLocalCanvas } from "../utils/localCanvasStore";
+import { localCanvasResource, getLocalCanvas } from "../utils/localCanvasStore";
 import { useCanvasContext } from "../contexts/CanvasContext";
 
 const CanvasDetailView: Component = () => {
@@ -72,18 +72,7 @@ const CanvasDetailView: Component = () => {
                 });
                 const local = getLocalCanvas();
                 if (local) {
-                    mutateCanvas({
-                        id: "local",
-                        name: local.name,
-                        description: local.description,
-                        icon: local.icon,
-                        cardLayout: local.cardLayout ?? "vertical",
-                        drafts: local.drafts,
-                        connections: local.connections,
-                        groups: local.groups,
-                        lastViewport: local.viewport,
-                        userPermissions: "admin"
-                    });
+                    mutateCanvas(localCanvasResource(local));
                 }
                 toast.success("Successfully created new draft!");
             } else {

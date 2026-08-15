@@ -78,6 +78,34 @@ export const createEmptyLocalCanvas = (
     };
 };
 
+/**
+ * The stored local canvas as the canvas RESOURCE shape the views consume.
+ *
+ * Extracted because this mapping had already rotted: the anonymous canvas
+ * resource carried a hardcoded `annotations: []` while every sibling field read
+ * from `local`, so a local canvas painted no notes until some later mutation
+ * happened to call `refreshFromLocal`. The notes were never lost — the write
+ * path was fine — but on reload they were simply not read back. The second copy
+ * of this mapping, after creating a draft, omitted the key entirely and did the
+ * same thing.
+ *
+ * One mapper, one test, one call site each. A field added to `LocalCanvas` and
+ * forgotten here now fails a test rather than silently rendering as empty.
+ */
+export const localCanvasResource = (canvas: LocalCanvas) => ({
+    id: "local" as const,
+    name: canvas.name,
+    description: canvas.description ?? null,
+    icon: canvas.icon ?? null,
+    cardLayout: canvas.cardLayout ?? DEFAULT_CARD_LAYOUT,
+    drafts: canvas.drafts,
+    annotations: canvas.annotations,
+    connections: canvas.connections,
+    groups: canvas.groups,
+    lastViewport: canvas.viewport,
+    userPermissions: "admin" as const
+});
+
 export const hasLocalCanvas = (): boolean => {
     return localStorage.getItem(STORAGE_KEY) !== null;
 };

@@ -23,7 +23,11 @@ import {
     updateCanvasCardLayout,
     updateCanvasGroup
 } from "../utils/actions";
-import { getLocalCanvas, hasLocalCanvas } from "../utils/localCanvasStore";
+import {
+    localCanvasResource,
+    getLocalCanvas,
+    hasLocalCanvas
+} from "../utils/localCanvasStore";
 import FlowPanel from "../components/FlowPanel";
 import { VersionFooter } from "../components/VersionFooter";
 import CanvasSelector from "../components/CanvasSelector";
@@ -102,19 +106,7 @@ const CanvasWorkflow: Component<RouteSectionProps> = (props) => {
             if (id === "local") {
                 const local = getLocalCanvas();
                 if (!local) return undefined;
-                return {
-                    id: "local",
-                    name: local.name,
-                    description: local.description ?? null,
-                    icon: local.icon ?? null,
-                    cardLayout: local.cardLayout ?? "vertical",
-                    drafts: local.drafts,
-                    annotations: [],
-                    connections: local.connections,
-                    groups: local.groups,
-                    lastViewport: local.viewport,
-                    userPermissions: "admin" as const
-                };
+                return localCanvasResource(local);
             }
 
             try {
