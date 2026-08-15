@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+    LEGIBILITY_EXIT_RATIO,
+    LEGIBILITY_FLOOR_PX,
     LOD_ENTER_ZOOM,
     LOD_EXIT_ZOOM,
     MAX_ZOOM,
     MIN_VISIBLE_STROKE_PX,
     MIN_ZOOM,
     clampZoom,
+    nextLegibleState,
     nextLodState,
     scaledStrokePx,
     screenConstantPx,
@@ -254,5 +257,100 @@ describe("scaledStrokePx", () => {
         expect(scaledStrokePx(4, -1)).toBe(4);
         expect(scaledStrokePx(4, Number.NaN)).toBe(4);
         expect(scaledStrokePx(4, Number.POSITIVE_INFINITY)).toBe(4);
+    });
+});
+
+describe("nextLegibleState", () => {
+    // Zoom at which a 20px font sits exactly on the floor, and the zoom at
+    // which it clears the exit band. Derived, never hard-coded: the whole
+    // point of this helper is that the thresholds MOVE with the font size.
+    const enterZoom = (fontPx: number) => LEGIBILITY_FLOOR_PX / fontPx;
+    const exitZoom = (fontPx: number) =>
+        (LEGIBILITY_FLOOR_PX * LEGIBILITY_EXIT_RATIO) / fontPx;
+
+    // The whole reason nextLodState cannot be reused: it takes (previous, zoom)
+    // against fixed zoom thresholds, so every font preset would share one
+    // cutoff — and the large region labels fontSize exists for would collapse
+    // at exactly the zoom where they are most useful.
+    it("collapses a small font before a large one at the same zoom", () => {
+        expect(nextLegibleState(false, 14, 0.3)).toBe(true);
+        expect(nextLegibleState(false, 56, 0.3)).toBe(false);
+    });
+
+    it("collapses below the floor", () => {
+        expect(nextLegibleState(false, 20, enterZoom(20) - 0.01)).toBe(true);
+    });
+
+    // Hysteresis, for the same reason nextLodState has it: without a band,
+    // hovering on the threshold swaps every note's interior on alternate frames.
+    it("does not un-collapse the instant the floor is crossed back", () => {
+        expect(nextLegibleState(true, 20, enterZoom(20) + 0.0001)).toBe(true);
+    });
+
+    it("un-collapses once clear of the exit band", () => {
+        expect(nextLegibleState(true, 20, 1)).toBe(false);
+    });
+
+    // A transient NaN must not swap every note's interior.
+    it("holds state on an unusable zoom or font size", () => {
+        expect(nextLegibleState(true, 20, Number.NaN)).toBe(true);
+        expect(nextLegibleState(false, Number.NaN, 1)).toBe(false);
+        expect(nextLegibleState(true, 20, 0)).toBe(true);
+    });
+
+    // ⚠️ Each of these probes from the state the guard would NOT return anyway.
+    // A NaN needs no guard at all — every comparison against it is false, so the
+    // band's `return previous` already catches it, and asserting `(true, …, NaN)`
+    // is true proves nothing. Zero, negative and Infinity are the inputs that
+    // genuinely reach a branch, and only from the opposite inbound state.
+    it("holds state on a non-positive zoom, from the state a guard would change", () => {
+        // Ungated, `0 * 20 = 0` is below the floor and would COLLAPSE.
+        expect(nextLegibleState(false, 20, 0)).toBe(false);
+        expect(nextLegibleState(false, 20, -1)).toBe(false);
+    });
+
+    it("holds state on a non-positive font size", () => {
+        // Ungated, these are below the floor and would COLLAPSE.
+        expect(nextLegibleState(false, 0, 1)).toBe(false);
+        expect(nextLegibleState(false, -20, 1)).toBe(false);
+    });
+
+    it("holds state on an infinite zoom or font size", () => {
+        // Ungated, Infinity is above the exit band and would UN-collapse.
+        expect(nextLegibleState(true, 20, Number.POSITIVE_INFINITY)).toBe(true);
+        expect(nextLegibleState(true, Number.POSITIVE_INFINITY, 1)).toBe(true);
+    });
+
+    // The three zones, each pinned from BOTH inbound states. Without these the
+    // two outer zones look state-dependent, and a reader "restoring" a
+    // `!previous` guard to the collapse branch would break nothing visible.
+    // Only the BAND is allowed to consult the previous state.
+    it("collapses below the floor from either state", () => {
+        const below = enterZoom(20) - 0.05;
+        expect(nextLegibleState(false, 20, below)).toBe(true);
+        expect(nextLegibleState(true, 20, below)).toBe(true);
+    });
+
+    it("un-collapses above the exit band from either state", () => {
+        const above = exitZoom(20) + 0.05;
+        expect(nextLegibleState(false, 20, above)).toBe(false);
+        expect(nextLegibleState(true, 20, above)).toBe(false);
+    });
+
+    it("holds whatever it was given inside the band", () => {
+        // Strictly between the floor and the exit — the only zone where the
+        // previous state is allowed to decide the answer.
+        const inBand = (enterZoom(20) + exitZoom(20)) / 2;
+        expect(nextLegibleState(true, 20, inBand)).toBe(true);
+        expect(nextLegibleState(false, 20, inBand)).toBe(false);
+    });
+
+    // Every shipped preset must have its band strictly inside the usable zoom
+    // range, or the collapse is either unreachable or permanent for that font.
+    it("gives all four font presets a band inside the zoom range", () => {
+        for (const fontPx of [14, 20, 32, 56]) {
+            expect(enterZoom(fontPx)).toBeGreaterThan(MIN_ZOOM);
+            expect(exitZoom(fontPx)).toBeLessThan(MAX_ZOOM);
+        }
     });
 });

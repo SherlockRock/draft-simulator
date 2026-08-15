@@ -45,6 +45,63 @@ export const nextLodState = (previous: boolean, zoom: number): boolean => {
 };
 
 /**
+ * Smallest ON-SCREEN text size worth painting, in post-transform css px.
+ *
+ * Below this the glyphs are noise, and a solid colour block reads the note's
+ * presence and category faster than an unreadable smear does.
+ */
+export const LEGIBILITY_FLOOR_PX = 6;
+
+/**
+ * Exit is above enter, for exactly the reason `LOD_EXIT_ZOOM` is above
+ * `LOD_ENTER_ZOOM`: without a band, hovering on the threshold swaps every
+ * note's interior back and forth on alternate frames.
+ *
+ * It is the same 1.15 the LOD band uses (0.345 / 0.3), so the two agree by
+ * construction rather than by coincidence — and for the DEFAULT `md` preset
+ * the numbers land on top of each other exactly (6/20 = 0.3, 6.9/20 = 0.345).
+ * That coincidence is real but load-bearing on nothing: change the floor or a
+ * preset and it dissolves without breaking anything.
+ */
+export const LEGIBILITY_EXIT_RATIO = 1.15;
+
+/**
+ * Per-annotation legibility state machine — `true` means COLLAPSED to a colour
+ * block (design §4). Pure, so it can be tested directly.
+ *
+ * Parameterized on the font size, which is why `nextLodState` cannot be reused:
+ * that one takes `(previous, zoom)` against fixed ZOOM thresholds and would give
+ * every preset the same cutoff — collapsing the large region labels `fontSize`
+ * exists to support at exactly the zoom where they earn their keep. Concretely
+ * the four presets collapse at four different zooms: 0.43, 0.3, 0.19, 0.11.
+ *
+ * This COMPOSES with the global `lodActive()` rather than replacing it; global
+ * LOD drives Cards and the dot grid, and a blanket cutoff here would defeat the
+ * feature. Champion icons always render regardless, and because the annotation's
+ * size is STORED, the collapse is paint-only and can never reflow anything.
+ *
+ * ⚠️ Three zones, and only the BAND consults `previous`. Guarding the outer two
+ * on the previous state as well (`!previous && …` / `previous && …`, the shape
+ * `nextLodState` above is written in) cannot change a single answer: below the
+ * floor the result is `true` from either state, above the exit it is `false`
+ * from either. Those guards read as though the state matters in all three zones
+ * when it matters in exactly one, so they are deliberately absent here. Tests
+ * pin both outer zones from BOTH inbound states to keep them absent.
+ */
+export const nextLegibleState = (
+    previous: boolean,
+    fontSizePx: number,
+    zoom: number
+): boolean => {
+    if (!Number.isFinite(zoom) || zoom <= 0) return previous;
+    if (!Number.isFinite(fontSizePx) || fontSizePx <= 0) return previous;
+    const onScreen = fontSizePx * zoom;
+    if (onScreen < LEGIBILITY_FLOOR_PX) return true;
+    if (onScreen > LEGIBILITY_FLOOR_PX * LEGIBILITY_EXIT_RATIO) return false;
+    return previous;
+};
+
+/**
  * Width, in world px, for a stroke that must stay a constant DEVICE size.
  *
  * Everything inside `.canvas-world` is multiplied by `scale(zoom)`, so a stroke
