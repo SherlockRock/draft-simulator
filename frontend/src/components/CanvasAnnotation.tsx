@@ -6,7 +6,12 @@ import type {
 import { resolveStripChampions } from "../utils/annotationStrip";
 import { annotationSurfaceClass, ANNOTATION_FONT_PX } from "../utils/annotationStyle";
 import { MIN_ANNOTATION_HEIGHT, MIN_ANNOTATION_WIDTH } from "../utils/annotationSize";
-import { scaledStrokePx } from "../utils/viewport";
+import { scaledStrokePx, screenConstantPx } from "../utils/viewport";
+import {
+    LOCK_BADGE_DOT_SCREEN_PX,
+    LOCK_BADGE_TEXT_SCREEN_PX,
+    lockBadgeMode
+} from "../utils/annotationLockBadge";
 import { resizeFromLeft, resizeHandleWorldPx } from "../utils/resizeHandle";
 import { CUSTOM_GROUP_HEADER_HEIGHT } from "./CustomGroupContainer";
 import { ChampionPortrait } from "./ChampionPortrait";
@@ -29,6 +34,8 @@ type CanvasAnnotationProps = {
     isSelected: () => boolean;
     editingAnnotationId: () => string | null;
     lockedByName: () => string | null;
+    /** Feedback for a double-click declined because someone else holds the note. */
+    onBlockedByLock: (holderName: string) => void;
     onEditingComplete: () => void;
     /**
      * Enter inline edit. The component cannot do this itself: the textarea is
@@ -128,6 +135,31 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
     const renderHeight = () => props.snappedSize()?.height ?? props.annotation.height;
 
     const fontPx = createMemo(() => ANNOTATION_FONT_PX[props.annotation.fontSize]);
+
+    /*
+     * Edit-lock badge geometry. Declared HERE, below `renderWidth`, and not up
+     * beside the blur effect: `createMemo` evaluates its body eagerly at
+     * creation, so a memo reading `renderWidth` before that `const` initialises
+     * dies in the temporal dead zone rather than merely reading a stale value.
+     *
+     * Each is bound to its own const — `solid/reactivity` cannot analyse a
+     * `createMemo` written inline in an object literal, and the lint gate holds
+     * at exactly 64 warnings.
+     */
+    const badgeMode = createMemo(() => lockBadgeMode(props.zoom(), renderWidth()));
+    const badgeTextPx = createMemo(() =>
+        screenConstantPx(LOCK_BADGE_TEXT_SCREEN_PX, props.zoom())
+    );
+    const badgeInsetPx = createMemo(() => screenConstantPx(4, props.zoom()));
+    // Screen-constant, then capped at half the note's shortest side — the same
+    // two rules the resize grip resolves, for the same reason.
+    const dotSizePx = createMemo(() =>
+        resizeHandleWorldPx(
+            props.zoom(),
+            Math.min(renderWidth(), renderHeight()),
+            LOCK_BADGE_DOT_SCREEN_PX
+        )
+    );
 
     /**
      * Both bottom corners, which differ in exactly one thing: which horizontal
@@ -285,8 +317,20 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
             }}
             onMouseDown={(e) => props.onMouseDown(e, props.annotation)}
             onDblClick={(e) => {
-                if (!props.canEdit() || props.isConnectionMode || props.lockedByName())
+                if (!props.canEdit() || props.isConnectionMode) return;
+                // A held note declines to open the editor, and SAYS SO. Left
+                // silent this is indistinguishable from a double-click that
+                // missed — and the `annotationLockDenied` toast cannot cover
+                // it, because returning here means we never emit the
+                // `annotationEditStart` the server would have refused. That
+                // toast still covers the race where the lock lands after we
+                // have opened the editor.
+                const holder = props.lockedByName();
+                if (holder) {
+                    e.stopPropagation();
+                    props.onBlockedByLock(holder);
                     return;
+                }
                 e.stopPropagation();
                 // NOT `textareaRef?.focus()` — at rest the textarea is not
                 // mounted, so the ref is undefined and that would silently do
@@ -300,12 +344,49 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                 `readOnly` are the WHOLE enforcement. The note can still be
                 dragged, resized, duplicated and deleted while it is held, and
                 a PATCH from this client still succeeds — last-write-wins
-                remains the truth. */}
+                remains the truth.
+
+                Sized in SCREEN px, not world px, because it is the only
+                user-facing signal the lock has: `readOnly` is invisible and a
+                declined double-click looks like a missed one. A 10px world-space
+                badge is ~1px at MIN_ZOOM, i.e. no signal at all. */}
             <Show when={props.lockedByName()}>
                 {(name) => (
-                    <div class="pointer-events-none absolute right-1 top-1 z-10 rounded bg-darius-purple px-1.5 py-0.5 text-[10px] text-darius-text-primary shadow">
-                        {name()} is editing
-                    </div>
+                    <Show
+                        when={badgeMode() === "label"}
+                        fallback={
+                            <div
+                                // Collapsed. The words no longer fit beside the
+                                // note, but "held by someone" still has to read,
+                                // so it degrades to a dot rather than vanishing.
+                                // Capped against the note's shortest side by the
+                                // same rule the resize grip uses — screen-constant
+                                // alone would grow the dot until it covered a note
+                                // that is 6 screen px wide.
+                                class="pointer-events-none absolute z-10 rounded-full bg-darius-purple-bright shadow"
+                                title={`${name()} is editing`}
+                                style={{
+                                    top: `${badgeInsetPx()}px`,
+                                    right: `${badgeInsetPx()}px`,
+                                    width: `${dotSizePx()}px`,
+                                    height: `${dotSizePx()}px`
+                                }}
+                            />
+                        }
+                    >
+                        <div
+                            class="pointer-events-none absolute z-10 whitespace-nowrap rounded bg-darius-purple text-darius-text-primary shadow"
+                            style={{
+                                top: `${badgeInsetPx()}px`,
+                                right: `${badgeInsetPx()}px`,
+                                "font-size": `${badgeTextPx()}px`,
+                                "line-height": "1.4",
+                                padding: `${badgeTextPx() * 0.2}px ${badgeTextPx() * 0.5}px`
+                            }}
+                        >
+                            {name()} is editing
+                        </div>
+                    </Show>
                 )}
             </Show>
             {/* The clipping box the ROOT used to be, and the flex column the

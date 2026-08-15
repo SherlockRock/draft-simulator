@@ -562,6 +562,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     });
 
+    // Why a toast and not silence: a note held by someone else declines to open
+    // its editor, and without this that is indistinguishable from a
+    // double-click that missed. The `annotationLockDenied` toast cannot cover
+    // it — the component returns before we emit the `annotationEditStart` the
+    // server would have refused.
+    const toastAnnotationLocked = (holderName: string) => {
+        toast.error(`${holderName} is editing this note`);
+    };
+
     const annotationLockedByName = (annotationId: string): string | null => {
         const holderId = annotationLockOf(annotationId);
         if (!holderId) return null;
@@ -6477,6 +6486,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                             annotation.id
                                                         )
                                                     }
+                                                    onBlockedByLock={
+                                                        toastAnnotationLocked
+                                                    }
                                                     onEditingComplete={() =>
                                                         setEditingAnnotationId(null)
                                                     }
@@ -6768,6 +6780,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 }
                                 editingAnnotationId={editingAnnotationId}
                                 lockedByName={() => annotationLockedByName(annotation.id)}
+                                onBlockedByLock={toastAnnotationLocked}
                                 onEditingComplete={() => setEditingAnnotationId(null)}
                                 onStartEditing={setEditingAnnotationId}
                                 onMouseDown={onAnnotationMouseDown}
