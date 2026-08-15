@@ -76,6 +76,7 @@ import {
     CanvasChampionPicker,
     type PickerTarget
 } from "./components/CanvasChampionPicker";
+import { AnnotationChampionPicker } from "./components/AnnotationChampionPicker";
 import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./components/Dialog";
 import { ImportToCanvasDialog } from "./components/ImportToCanvasDialog";
 import {
@@ -146,6 +147,7 @@ import { DraftContextMenu } from "./components/DraftContextMenu";
 import { GroupContextMenu } from "./components/GroupContextMenu";
 import { AnnotationContextMenu } from "./components/AnnotationContextMenu";
 import CanvasAnnotationItem from "./components/CanvasAnnotation";
+import { addToStrip, removeFromStrip } from "./utils/annotationStrip";
 import { GridDropHighlight, type GridDropTarget } from "./components/GridDropHighlight";
 import { useCanvasContext, type ShareAnchor } from "./contexts/CanvasContext";
 import { useCanvasSocket } from "./providers/CanvasSocketProvider";
@@ -419,11 +421,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     });
     const [pickerTarget, setPickerTarget] = createSignal<PickerTarget | null>(null);
     const [pickerAnchorSession, setPickerAnchorSession] = createSignal(0);
+    const [stripPickerAnnotationId, setStripPickerAnnotationId] = createSignal<
+        string | null
+    >(null);
+    const [stripPickerAnchorSession, setStripPickerAnchorSession] = createSignal(0);
     const openPicker = (draftId: string, pickIndex: number) => {
         setPickerTarget({ draftId, pickIndex });
         setPickerAnchorSession((n) => n + 1);
     };
     const closePicker = () => setPickerTarget(null);
+    const openStripPicker = (annotationId: string) => {
+        setStripPickerAnnotationId(annotationId);
+        setStripPickerAnchorSession((n) => n + 1);
+    };
     const [isImportDialogOpen, setIsImportDialogOpen] = createSignal(false);
     const [importPosition, setImportPosition] = createSignal({ x: 0, y: 0 });
     const [isDeleteGroupDialogOpen, setIsDeleteGroupDialogOpen] = createSignal(false);
@@ -533,6 +543,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const canvasDraft = canvasDrafts.find((cd) => cd.Draft.id === target.draftId);
         if (!canvasDraft || canvasDraft.is_locked || !canEdit() || isConnectionMode()) {
             closePicker();
+        }
+    });
+
+    // Twin of the effect above, for the strip picker. The note DISAPPEARING is
+    // already covered — `AnnotationChampionPicker` takes an accessor that
+    // resolves to null, which closes the popover on its own. What that cannot
+    // see is the note surviving while the right to edit it does not, so this
+    // covers exactly the two cases that leave the note present: edit permission
+    // revoked live, and connection mode starting.
+    createEffect(() => {
+        if (!stripPickerAnnotationId()) return;
+        if (!canEdit() || isConnectionMode()) {
+            setStripPickerAnnotationId(null);
         }
     });
 
@@ -4678,6 +4701,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         if (annotation.group_id) resyncGroupSize(annotation.group_id);
     };
 
+    const handleStripChange = (annotationId: string, championIds: string[]) => {
+        setAnnotations((a) => a.id === annotationId, { championIds });
+        if (isLocalMode()) {
+            localUpdateAnnotation({ annotationId, championIds });
+        } else {
+            updateAnnotationMutation.mutate({
+                canvasId: canvasId(),
+                annotationId,
+                championIds
+            });
+        }
+    };
+
     const handleAnnotationDuplicate = (annotation: CanvasAnnotation) => {
         const group = annotation.group_id
             ? canvasGroups.find((g) => g.id === annotation.group_id)
@@ -6402,6 +6438,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                         setEditingAnnotationId
                                                     }
                                                     onMouseDown={onAnnotationMouseDown}
+                                                    onAddChampion={openStripPicker}
+                                                    onRemoveChampion={(
+                                                        annotationId,
+                                                        championId
+                                                    ) =>
+                                                        handleStripChange(
+                                                            annotationId,
+                                                            removeFromStrip(
+                                                                annotation.championIds,
+                                                                championId
+                                                            )
+                                                        )
+                                                    }
                                                     onCommitText={
                                                         handleAnnotationTextCommit
                                                     }
@@ -6691,6 +6740,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 onEditingComplete={() => setEditingAnnotationId(null)}
                                 onStartEditing={setEditingAnnotationId}
                                 onMouseDown={onAnnotationMouseDown}
+                                onAddChampion={openStripPicker}
+                                onRemoveChampion={(annotationId, championId) =>
+                                    handleStripChange(
+                                        annotationId,
+                                        removeFromStrip(
+                                            annotation.championIds,
+                                            championId
+                                        )
+                                    )
+                                }
                                 onCommitText={handleAnnotationTextCommit}
                                 onResize={handleAnnotationResize}
                                 onResizeEnd={handleAnnotationResizeEnd}
@@ -7202,6 +7261,26 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     getUnavailableChampionIds={getUnavailableChampionIds}
                     cardLayout={props.cardLayout}
                     viewport={props.viewport}
+                />
+                <AnnotationChampionPicker
+                    annotation={() =>
+                        annotations.find((a) => a.id === stripPickerAnnotationId()) ??
+                        null
+                    }
+                    anchorSession={stripPickerAnchorSession}
+                    viewport={props.viewport}
+                    onPick={(championId) => {
+                        const annotation = annotations.find(
+                            (a) => a.id === stripPickerAnnotationId()
+                        );
+                        if (annotation) {
+                            handleStripChange(
+                                annotation.id,
+                                addToStrip(annotation.championIds, championId)
+                            );
+                        }
+                    }}
+                    onClose={() => setStripPickerAnnotationId(null)}
                 />
             </div>
         </Show>

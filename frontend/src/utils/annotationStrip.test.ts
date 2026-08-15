@@ -4,6 +4,7 @@ import {
     addToStrip,
     removeFromStrip
 } from "./annotationStrip";
+import { resolveStripChampions } from "./annotationStrip";
 
 describe("isChampionAvailableForStrip", () => {
     // D18: a duplicate within ONE strip carries no meaning and is almost
@@ -44,5 +45,29 @@ describe("strip mutation", () => {
     it("returns a NEW array so the store write is a real change", () => {
         const before = ["Ahri"];
         expect(addToStrip(before, "Azir")).not.toBe(before);
+    });
+});
+
+describe("resolveStripChampions", () => {
+    it("resolves known ids to their champion record", () => {
+        const [chip] = resolveStripChampions(["Ahri"]);
+        expect(chip.resolved?.name).toBe("Ahri");
+        expect(chip.id).toBe("Ahri");
+    });
+
+    // D16: visibly unresolved showing the RAW ID. Rendering nothing reads as a
+    // layout bug rather than as missing data; dropping the id is silent loss.
+    it("keeps an unresolvable id and marks it unresolved", () => {
+        const [chip] = resolveStripChampions(["Champion2031"]);
+        expect(chip.resolved).toBe(null);
+        expect(chip.id).toBe("Champion2031");
+    });
+
+    it("preserves strip order across a mix", () => {
+        expect(resolveStripChampions(["Ahri", "Nope", "Azir"]).map((c) => c.id)).toEqual([
+            "Ahri",
+            "Nope",
+            "Azir"
+        ]);
     });
 });
