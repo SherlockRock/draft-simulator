@@ -74,6 +74,8 @@ describe("setupPresenceHandlers", () => {
   it("registers joinCanvas, leaveCanvas and disconnecting", () => {
     const { handlers } = installHandlers();
     expect([...handlers.keys()].sort()).toEqual([
+      "annotationEditEnd",
+      "annotationEditStart",
       "cursorLeave",
       "cursorMove",
       "disconnecting",
@@ -99,6 +101,7 @@ describe("setupPresenceHandlers", () => {
     });
     expect(socket.emit).toHaveBeenCalledWith("presenceSnapshot", {
       canvasId: "c-1",
+      annotationLocks: [],
       users: [ALICE_SNAPSHOT],
     });
   });
@@ -125,6 +128,7 @@ describe("setupPresenceHandlers", () => {
 
     expect(socket.emit).toHaveBeenCalledWith("presenceSnapshot", {
       canvasId: "c-1",
+      annotationLocks: [],
       users: [{ ...ALICE_SNAPSHOT, displayName: "Alice" }],
     });
   });
@@ -190,6 +194,7 @@ describe("setupPresenceHandlers", () => {
 
     expect(socket.emit).toHaveBeenCalledWith("presenceSnapshot", {
       canvasId: "c-1",
+      annotationLocks: [],
       users: [{ ...ALICE_SNAPSHOT, displayName: "Unknown" }],
     });
   });
@@ -267,6 +272,7 @@ describe("setupPresenceHandlers", () => {
     expect(second.roomEmit).not.toHaveBeenCalled();
     expect(second.socket.emit).toHaveBeenCalledWith("presenceSnapshot", {
       canvasId: "c-1",
+      annotationLocks: [],
       users: [ALICE_SNAPSHOT],
     });
   });
@@ -316,6 +322,194 @@ describe("setupPresenceHandlers", () => {
     expect(roomEmit).toHaveBeenCalledWith("presenceLeave", {
       canvasId: "c-2",
       userId: "u-alice",
+    });
+  });
+
+  describe("annotation edit locks", () => {
+    async function joinedSocket(overrides = {}, store = createPresenceStore()) {
+      const installed = installHandlers(overrides, store);
+      await installed.handlers.get("joinCanvas")({ canvasId: "c-1" });
+      installed.socket.to.mockClear();
+      installed.socket.emit.mockClear();
+      installed.roomEmit.mockClear();
+      return installed;
+    }
+
+    it("broadcasts the server-stamped holder on start", async () => {
+      const { handlers, roomEmit } = await joinedSocket();
+
+      await handlers.get("annotationEditStart")({
+        canvasId: "c-1",
+        annotationId: "note-1",
+        userId: "u-spoofed",
+      });
+
+      expect(roomEmit).toHaveBeenCalledWith("annotationLockChanged", {
+        canvasId: "c-1",
+        annotationId: "note-1",
+        userId: "u-alice",
+      });
+    });
+
+    it("ignores a start from a socket not in the room", async () => {
+      const { socket, handlers, roomEmit } = installHandlers();
+
+      await handlers.get("annotationEditStart")({
+        canvasId: "c-1",
+        annotationId: "note-1",
+      });
+
+      expect(socket.emit).not.toHaveBeenCalled();
+      expect(roomEmit).not.toHaveBeenCalled();
+    });
+
+    it("clears the holder on end even after the socket leaves the room", async () => {
+      const { socket, handlers, roomEmit } = await joinedSocket();
+      await handlers.get("annotationEditStart")({
+        canvasId: "c-1",
+        annotationId: "note-1",
+      });
+      socket.rooms.delete("c-1");
+      roomEmit.mockClear();
+
+      await handlers.get("annotationEditEnd")({
+        canvasId: "c-1",
+        annotationId: "note-1",
+      });
+
+      expect(roomEmit).toHaveBeenCalledWith("annotationLockChanged", {
+        canvasId: "c-1",
+        annotationId: "note-1",
+        userId: null,
+      });
+    });
+
+    it("emits nothing when a non-holder ends an edit", async () => {
+      const store = createPresenceStore();
+      store.acquireAnnotationLock("c-1", "note-1", "u-bob", "sock-bob");
+      const { socket, handlers, roomEmit } = installHandlers({}, store);
+
+      await handlers.get("annotationEditEnd")({
+        canvasId: "c-1",
+        annotationId: "note-1",
+      });
+
+      expect(socket.emit).not.toHaveBeenCalled();
+      expect(roomEmit).not.toHaveBeenCalled();
+    });
+
+    it("carries a held lock in a second socket's join snapshot", async () => {
+      const store = createPresenceStore();
+      const first = await joinedSocket({ id: "sock-1" }, store);
+      await first.handlers.get("annotationEditStart")({
+        canvasId: "c-1",
+        annotationId: "note-1",
+      });
+      const second = installHandlers({ id: "sock-2" }, store);
+
+      await second.handlers.get("joinCanvas")({ canvasId: "c-1" });
+
+      expect(second.socket.emit).toHaveBeenCalledWith("presenceSnapshot", {
+        canvasId: "c-1",
+        annotationLocks: [{ annotationId: "note-1", userId: "u-alice" }],
+        users: [ALICE_SNAPSHOT],
+      });
+    });
+
+    it("releases and broadcasts locks on disconnect", async () => {
+      const { handlers, roomEmit, store } = await joinedSocket();
+      await handlers.get("annotationEditStart")({
+        canvasId: "c-1",
+        annotationId: "note-1",
+      });
+      roomEmit.mockClear();
+
+      handlers.get("disconnecting")();
+
+      expect(roomEmit).toHaveBeenCalledWith("annotationLockChanged", {
+        canvasId: "c-1",
+        annotationId: "note-1",
+        userId: null,
+      });
+      expect(store.annotationLocksSnapshot("c-1")).toEqual([]);
+    });
+
+    // There is no server-side timer by design: the sweep rides the next
+    // start, which is the only moment anyone needs the answer. Without the
+    // broadcast half, the expiring holder's peers would keep painting a lock
+    // that no longer exists and no later event would ever correct them.
+    it("sweeps an expired lock, broadcasting its release before acquiring", async () => {
+      const store = createPresenceStore();
+      store.acquireAnnotationLock(
+        "c-1",
+        "note-stale",
+        "u-bob",
+        "sock-bob",
+        Date.now() - 61_000,
+      );
+      const { handlers, roomEmit } = await joinedSocket({}, store);
+
+      await handlers.get("annotationEditStart")({
+        canvasId: "c-1",
+        annotationId: "note-1",
+      });
+
+      expect(roomEmit).toHaveBeenCalledWith("annotationLockChanged", {
+        canvasId: "c-1",
+        annotationId: "note-stale",
+        userId: null,
+      });
+      expect(roomEmit).toHaveBeenLastCalledWith("annotationLockChanged", {
+        canvasId: "c-1",
+        annotationId: "note-1",
+        userId: "u-alice",
+      });
+    });
+
+    // The sweep must not block the acquire it precedes: Bob's stale hold on
+    // this very note is the case the sweep exists for.
+    it("grants the note a sweep just freed", async () => {
+      const store = createPresenceStore();
+      store.acquireAnnotationLock(
+        "c-1",
+        "note-1",
+        "u-bob",
+        "sock-bob",
+        Date.now() - 61_000,
+      );
+      const { socket, handlers, roomEmit } = await joinedSocket({}, store);
+
+      await handlers.get("annotationEditStart")({
+        canvasId: "c-1",
+        annotationId: "note-1",
+      });
+
+      expect(socket.emit).not.toHaveBeenCalledWith(
+        "annotationLockDenied",
+        expect.anything(),
+      );
+      expect(roomEmit).toHaveBeenLastCalledWith("annotationLockChanged", {
+        canvasId: "c-1",
+        annotationId: "note-1",
+        userId: "u-alice",
+      });
+    });
+
+    it("denies a refused acquire without broadcasting a lock change", async () => {
+      const store = createPresenceStore();
+      store.acquireAnnotationLock("c-1", "note-1", "u-bob", "sock-bob");
+      const { socket, handlers, roomEmit } = await joinedSocket({}, store);
+
+      await handlers.get("annotationEditStart")({
+        canvasId: "c-1",
+        annotationId: "note-1",
+      });
+
+      expect(socket.emit).toHaveBeenCalledWith("annotationLockDenied", {
+        canvasId: "c-1",
+        annotationId: "note-1",
+      });
+      expect(roomEmit).not.toHaveBeenCalled();
     });
   });
 

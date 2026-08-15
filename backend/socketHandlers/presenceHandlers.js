@@ -62,6 +62,9 @@ function setupPresenceHandlers(socket, store, wrapSocketHandler) {
       }
       socket.emit("presenceSnapshot", {
         canvasId,
+        // Relays only reach sockets already in the room; locks must ride the
+        // snapshot so a client joining mid-edit sees the current holder.
+        annotationLocks: store.annotationLocksSnapshot(canvasId),
         users: store.snapshot(canvasId),
       });
     } catch (err) {
@@ -213,7 +216,78 @@ function setupPresenceHandlers(socket, store, wrapSocketHandler) {
     });
   });
 
+  // Advisory edit lock (design D12), on the same thin-relay trust model as
+  // cursorMove: room membership is the access check and userId is stamped
+  // server-side. Fired on focus AND periodically while editing, so a long edit
+  // keeps refreshing its own lock against the inactivity timeout.
+  wrapSocketHandler(socket, "annotationEditStart", async (data) => {
+    const canvasId = data?.canvasId;
+    const annotationId = data?.annotationId;
+    if (typeof canvasId !== "string" || !canvasId) return;
+    if (typeof annotationId !== "string" || !annotationId) return;
+    if (!socket.rooms.has(canvasId)) return;
+    const user = getPresenceUser(socket);
+    if (!user) return;
+
+    // Sweep FIRST: an expired lock must not refuse a legitimate acquire.
+    // There is no server-side timer by design — the sweep rides the next
+    // request, which is the only moment anyone needs the answer — so this is
+    // also the only thing that tells the expired holder's peers to stop
+    // painting a lock that no longer exists.
+    for (const expired of store.expireStaleAnnotationLocks(canvasId)) {
+      socket.to(canvasId).emit("annotationLockChanged", {
+        ...expired,
+        userId: null,
+      });
+    }
+
+    if (
+      store.acquireAnnotationLock(
+        canvasId,
+        annotationId,
+        user.userId,
+        socket.id,
+      )
+    ) {
+      socket.to(canvasId).emit("annotationLockChanged", {
+        canvasId,
+        annotationId,
+        userId: user.userId,
+      });
+    } else {
+      // Refused. Advisory, so this is a HINT to the requester and never a
+      // block on the write: their PATCH still succeeds and LWW still decides.
+      socket.emit("annotationLockDenied", { canvasId, annotationId });
+    }
+  });
+
+  wrapSocketHandler(socket, "annotationEditEnd", async (data) => {
+    const canvasId = data?.canvasId;
+    const annotationId = data?.annotationId;
+    if (typeof canvasId !== "string" || !canvasId) return;
+    if (typeof annotationId !== "string" || !annotationId) return;
+    const user = getPresenceUser(socket);
+    if (!user) return;
+
+    // Deliberately no room check: a client that left the view must still be
+    // able to release; ownership in the store is the guard.
+    if (store.releaseAnnotationLock(canvasId, annotationId, user.userId)) {
+      socket.to(canvasId).emit("annotationLockChanged", {
+        canvasId,
+        annotationId,
+        userId: null,
+      });
+    }
+  });
+
   socket.on("disconnecting", () => {
+    for (const { canvasId, annotationId } of store.releaseLocksOf(socket.id)) {
+      socket.to(canvasId).emit("annotationLockChanged", {
+        canvasId,
+        annotationId,
+        userId: null,
+      });
+    }
     for (const { canvasId, userId, departed } of store.leaveAll(socket.id)) {
       if (departed) {
         socket.to(canvasId).emit("presenceLeave", { canvasId, userId });
