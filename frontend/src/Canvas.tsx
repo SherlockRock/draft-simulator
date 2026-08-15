@@ -170,6 +170,12 @@ import { createRemoteCursorTracker } from "./utils/remoteCursors";
 import { createLaserTrailTracker } from "./utils/laserTrails";
 import { createLaserKeyTracker } from "./utils/laserKey";
 import { resolveTeamNames } from "./utils/teamNames";
+import {
+    endpointInputFor,
+    resolveAnchorClick,
+    type ConnectionEndpointRef,
+    type ConnectionSelection
+} from "./utils/connectionSelection";
 import { CursorOverlay } from "./components/CursorOverlay";
 import { LaserOverlay } from "./components/LaserOverlay";
 import CanvasSidebar from "./components/CanvasSidebar";
@@ -339,13 +345,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [draftToDelete, setDraftToDelete] = createSignal<CanvasDraft | null>(null);
     const [loadedCanvasId, setLoadedCanvasId] = createSignal<string | null>(null);
     const [isConnectionMode, setIsConnectionMode] = createSignal(false);
-    const [connectionSource, setConnectionSource] = createSignal<string | null>(null);
-    const [groupConnectionSource, setGroupConnectionSource] = createSignal<string | null>(
-        null
-    );
-    const [sourceAnchor, setSourceAnchor] = createSignal<{
-        type: AnchorType;
-    } | null>(null);
+    const [connectionSource, setConnectionSource] =
+        createSignal<ConnectionSelection | null>(null);
+    const draftConnectionSource = createMemo(() => {
+        const source = connectionSource();
+        return source?.ref.kind === "draft" ? source.ref.id : null;
+    });
+    const groupConnectionSource = createMemo(() => {
+        const source = connectionSource();
+        return source?.ref.kind === "group" ? source.ref.id : null;
+    });
+    const sourceAnchor = createMemo(() => {
+        const source = connectionSource();
+        return source ? { type: source.anchor } : null;
+    });
     const [selectedVertexForConnection, setSelectedVertexForConnection] = createSignal<{
         connectionId: string;
         vertexId: string;
@@ -682,6 +695,33 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     });
 
     const getDraftsForGroup = (groupId: string) => childCardsOf(canvasTree(), groupId);
+
+    const draftConnectionPreview = createMemo(() => {
+        const source = connectionSource();
+        if (source?.ref.kind !== "draft") return null;
+        const draft = canvasDrafts.find((item) => item.Draft.id === source.ref.id);
+        if (!draft) return null;
+        const group = draft.group_id
+            ? (canvasGroups.find((item) => item.id === draft.group_id) ?? null)
+            : null;
+        const seriesDraftIndex =
+            group?.type === "series"
+                ? getDraftsForGroup(group.id).findIndex(
+                      (item) => item.Draft.id === draft.Draft.id
+                  )
+                : undefined;
+        return { draft, group, seriesDraftIndex };
+    });
+
+    const groupConnectionPreview = createMemo(() => {
+        const source = connectionSource();
+        if (source?.ref.kind !== "group") return null;
+        const group = canvasGroups.find((item) => item.id === source.ref.id);
+        if (!group) return null;
+        const seriesDraftCount =
+            group.type === "series" ? getDraftsForGroup(group.id).length : undefined;
+        return { group, seriesDraftCount };
+    });
 
     // Columns a grid Group actually offers as drop targets. Everything that
     // paints or resolves a grid cell must come through here, or the hint
@@ -2246,8 +2286,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         // Reset UI state
         setIsConnectionMode(false);
         setConnectionSource(null);
-        setGroupConnectionSource(null);
-        setSourceAnchor(null);
         setSelectedVertexForConnection(null);
         setSelectedAnnotationId(null);
         setEditingAnnotationId(null);
@@ -2836,24 +2874,21 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const clearConnectionSelection = () => {
         setConnectionSource(null);
-        setGroupConnectionSource(null);
-        setSourceAnchor(null);
         setPreviewMousePos(null);
     };
 
-    const onAnchorClick = (draftId: string, anchorType: AnchorType) => {
+    const onAnchorSelect = (ref: ConnectionEndpointRef, anchorType: AnchorType) => {
         if (!isConnectionMode() || !canEdit()) return;
 
         const selectedVertex = selectedVertexForConnection();
-        const source = connectionSource();
-        const groupSource = groupConnectionSource();
+        const clicked = { ref, anchor: anchorType };
 
-        // If a vertex is selected, add this draft as target
+        // If a vertex is selected, add this endpoint as target
         if (selectedVertex) {
             if (isLocalMode()) {
                 localUpdateConnection({
                     connectionId: selectedVertex.connectionId,
-                    addTarget: { draftId, anchorType }
+                    addTarget: endpointInputFor(ref, anchorType)
                 });
                 refreshFromLocal();
                 toast.success("Connection updated!");
@@ -2861,125 +2896,28 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 updateConnectionMutation.mutate({
                     canvasId: canvasId(),
                     connectionId: selectedVertex.connectionId,
-                    addTarget: { draftId, anchorType }
+                    addTarget: endpointInputFor(ref, anchorType)
                 });
             }
             setSelectedVertexForConnection(null);
             return;
         }
 
-        // If a group is the source, create group-to-draft connection
-        if (groupSource) {
-            const srcAnchor = sourceAnchor();
-            if (isLocalMode()) {
-                localCreateConnection({
-                    sourceDraftIds: [
-                        { groupId: groupSource, anchorType: srcAnchor?.type }
-                    ],
-                    targetDraftIds: [{ draftId, anchorType }]
-                });
-                refreshFromLocal();
-                toast.success("Connection created!");
-            } else {
-                createConnectionMutation.mutate({
-                    canvasId: canvasId(),
-                    sourceDraftIds: [
-                        { groupId: groupSource, anchorType: srcAnchor?.type }
-                    ],
-                    targetDraftIds: [{ draftId, anchorType }]
-                });
-            }
-            clearConnectionSelection();
-            return;
-        }
-
-        // If no anchor selected yet, select this anchor
-        if (!source) {
-            setConnectionSource(draftId);
-            setSourceAnchor({ type: anchorType });
-            setPreviewMousePos(null);
-        } else if (source !== draftId) {
-            // Different draft clicked - create new connection
-            const srcAnchor = sourceAnchor();
-            if (isLocalMode()) {
-                localCreateConnection({
-                    sourceDraftIds: [{ draftId: source, anchorType: srcAnchor?.type }],
-                    targetDraftIds: [{ draftId, anchorType }]
-                });
-                refreshFromLocal();
-                toast.success("Connection created!");
-            } else {
-                createConnectionMutation.mutate({
-                    canvasId: canvasId(),
-                    sourceDraftIds: [{ draftId: source, anchorType: srcAnchor?.type }],
-                    targetDraftIds: [{ draftId, anchorType }]
-                });
-            }
-            clearConnectionSelection();
-        } else if (source === draftId) {
-            clearConnectionSelection();
-        }
-    };
-
-    const onGroupAnchorClick = (groupId: string, anchorType: AnchorType) => {
-        if (!isConnectionMode() || !canEdit()) return;
-
-        const selectedVertex = selectedVertexForConnection();
-        const source = connectionSource();
-        const groupSource = groupConnectionSource();
-
-        // If a vertex is selected, add this group as target
-        if (selectedVertex) {
-            if (isLocalMode()) {
-                localUpdateConnection({
-                    connectionId: selectedVertex.connectionId,
-                    addTarget: { groupId, anchorType }
-                });
-                refreshFromLocal();
-                toast.success("Connection updated!");
-            } else {
-                updateConnectionMutation.mutate({
-                    canvasId: canvasId(),
-                    connectionId: selectedVertex.connectionId,
-                    addTarget: { groupId, anchorType }
-                });
-            }
-            setSelectedVertexForConnection(null);
-            return;
-        }
-
-        // If a draft source is selected, create draft-to-group connection
-        if (source) {
-            const srcAnchor = sourceAnchor();
-            if (isLocalMode()) {
-                localCreateConnection({
-                    sourceDraftIds: [{ draftId: source, anchorType: srcAnchor?.type }],
-                    targetDraftIds: [{ groupId, anchorType }]
-                });
-                refreshFromLocal();
-                toast.success("Connection created!");
-            } else {
-                createConnectionMutation.mutate({
-                    canvasId: canvasId(),
-                    sourceDraftIds: [{ draftId: source, anchorType: srcAnchor?.type }],
-                    targetDraftIds: [{ groupId, anchorType }]
-                });
-            }
-            clearConnectionSelection();
-            return;
-        }
-
-        // If a group source is selected
-        if (groupSource) {
-            if (groupSource !== groupId) {
-                // Different group - create group-to-group connection
-                const srcAnchor = sourceAnchor();
+        const action = resolveAnchorClick(connectionSource(), clicked);
+        switch (action.kind) {
+            case "select":
+                setConnectionSource(action.selection);
+                setPreviewMousePos(null);
+                break;
+            case "create":
                 if (isLocalMode()) {
                     localCreateConnection({
                         sourceDraftIds: [
-                            { groupId: groupSource, anchorType: srcAnchor?.type }
+                            endpointInputFor(action.source.ref, action.source.anchor)
                         ],
-                        targetDraftIds: [{ groupId, anchorType }]
+                        targetDraftIds: [
+                            endpointInputFor(action.target.ref, action.target.anchor)
+                        ]
                     });
                     refreshFromLocal();
                     toast.success("Connection created!");
@@ -2987,22 +2925,26 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     createConnectionMutation.mutate({
                         canvasId: canvasId(),
                         sourceDraftIds: [
-                            { groupId: groupSource, anchorType: srcAnchor?.type }
+                            endpointInputFor(action.source.ref, action.source.anchor)
                         ],
-                        targetDraftIds: [{ groupId, anchorType }]
+                        targetDraftIds: [
+                            endpointInputFor(action.target.ref, action.target.anchor)
+                        ]
                     });
                 }
-            }
-            clearConnectionSelection();
-            return;
+                clearConnectionSelection();
+                break;
+            case "clear":
+                clearConnectionSelection();
+                break;
         }
-
-        // No source selected yet - select this group as source
-        setGroupConnectionSource(groupId);
-        setConnectionSource(null);
-        setSourceAnchor({ type: anchorType });
-        setPreviewMousePos(null);
     };
+
+    const onAnchorClick = (draftId: string, anchorType: AnchorType) =>
+        onAnchorSelect({ kind: "draft", id: draftId }, anchorType);
+
+    const onGroupAnchorClick = (groupId: string, anchorType: AnchorType) =>
+        onAnchorSelect({ kind: "group", id: groupId }, anchorType);
 
     const handleDeleteConnection = (connectionId: string) => {
         if (!canEdit()) return;
@@ -3028,14 +2970,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         if (!isConnectionMode() || !canEdit()) return;
 
         const source = connectionSource();
-        const groupSource = groupConnectionSource();
-        const srcAnchor = sourceAnchor();
 
-        if (source && srcAnchor) {
+        if (source) {
             if (isLocalMode()) {
                 localUpdateConnection({
                     connectionId,
-                    addSource: { draftId: source, anchorType: srcAnchor.type }
+                    addSource: endpointInputFor(source.ref, source.anchor)
                 });
                 refreshFromLocal();
                 toast.success("Connection updated!");
@@ -3043,23 +2983,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 updateConnectionMutation.mutate({
                     canvasId: canvasId(),
                     connectionId,
-                    addSource: { draftId: source, anchorType: srcAnchor.type }
-                });
-            }
-            clearConnectionSelection();
-        } else if (groupSource && srcAnchor) {
-            if (isLocalMode()) {
-                localUpdateConnection({
-                    connectionId,
-                    addSource: { groupId: groupSource, anchorType: srcAnchor.type }
-                });
-                refreshFromLocal();
-                toast.success("Connection updated!");
-            } else {
-                updateConnectionMutation.mutate({
-                    canvasId: canvasId(),
-                    connectionId,
-                    addSource: { groupId: groupSource, anchorType: srcAnchor.type }
+                    addSource: endpointInputFor(source.ref, source.anchor)
                 });
             }
             clearConnectionSelection();
@@ -3070,14 +2994,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         if (!isConnectionMode() || !canEdit()) return;
 
         const source = connectionSource();
-        const groupSource = groupConnectionSource();
-        const srcAnchor = sourceAnchor();
 
-        if (source && srcAnchor) {
+        if (source) {
             if (isLocalMode()) {
                 localUpdateConnection({
                     connectionId,
-                    addSource: { draftId: source, anchorType: srcAnchor.type }
+                    addSource: endpointInputFor(source.ref, source.anchor)
                 });
                 refreshFromLocal();
                 toast.success("Connection updated!");
@@ -3085,26 +3007,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 updateConnectionMutation.mutate({
                     canvasId: canvasId(),
                     connectionId,
-                    addSource: { draftId: source, anchorType: srcAnchor.type }
-                });
-            }
-            clearConnectionSelection();
-            return;
-        }
-
-        if (groupSource && srcAnchor) {
-            if (isLocalMode()) {
-                localUpdateConnection({
-                    connectionId,
-                    addSource: { groupId: groupSource, anchorType: srcAnchor.type }
-                });
-                refreshFromLocal();
-                toast.success("Connection updated!");
-            } else {
-                updateConnectionMutation.mutate({
-                    canvasId: canvasId(),
-                    connectionId,
-                    addSource: { groupId: groupSource, anchorType: srcAnchor.type }
+                    addSource: endpointInputFor(source.ref, source.anchor)
                 });
             }
             clearConnectionSelection();
@@ -5198,11 +5101,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             }
             if (e.key === "Escape" && isConnectionMode()) {
                 e.preventDefault();
-                if (
-                    connectionSource() ||
-                    groupConnectionSource() ||
-                    selectedVertexForConnection()
-                ) {
+                if (connectionSource() || selectedVertexForConnection()) {
                     // First escape: clear any selections
                     clearConnectionSelection();
                     setSelectedVertexForConnection(null);
@@ -5257,11 +5156,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 }
             }
 
-            if (
-                isConnectionMode() &&
-                (connectionSource() || groupConnectionSource()) &&
-                canvasContainerRef
-            ) {
+            if (isConnectionMode() && connectionSource() && canvasContainerRef) {
                 // World coords: the preview line is drawn inside the world layer
                 setPreviewMousePos(screenToWorld(e.clientX, e.clientY));
             }
@@ -6395,7 +6290,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                     cardLayout={props.cardLayout}
                                                     isConnectionMode={isConnectionMode()}
                                                     onAnchorClick={onAnchorClick}
-                                                    connectionSource={connectionSource}
+                                                    connectionSource={
+                                                        draftConnectionSource
+                                                    }
                                                     sourceAnchor={sourceAnchor}
                                                     pickerTarget={pickerTarget}
                                                     onSlotOpen={openPicker}
@@ -6553,7 +6450,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 cardLayout={props.cardLayout}
                                                 isConnectionMode={isConnectionMode()}
                                                 onAnchorClick={onAnchorClick}
-                                                connectionSource={connectionSource}
+                                                connectionSource={draftConnectionSource}
                                                 sourceAnchor={sourceAnchor}
                                                 pickerTarget={pickerTarget}
                                                 onSlotOpen={openPicker}
@@ -6661,67 +6558,30 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 />
                             )}
                         </For>
-                        <Show when={connectionSource()}>
-                            <ConnectionPreview
-                                startDraft={
-                                    canvasDrafts.find(
-                                        (d) => d.Draft.id === connectionSource()!
-                                    )!
-                                }
-                                startGroup={(() => {
-                                    const draft = canvasDrafts.find(
-                                        (d) => d.Draft.id === connectionSource()!
-                                    );
-                                    if (!draft?.group_id) return null;
-                                    return (
-                                        canvasGroups.find(
-                                            (g) => g.id === draft.group_id
-                                        ) ?? null
-                                    );
-                                })()}
-                                seriesDraftIndex={(() => {
-                                    const draft = canvasDrafts.find(
-                                        (d) => d.Draft.id === connectionSource()!
-                                    );
-                                    if (!draft?.group_id) return undefined;
-                                    const group = canvasGroups.find(
-                                        (g) => g.id === draft.group_id
-                                    );
-                                    if (group?.type !== "series") return undefined;
-                                    // childCardsOf carries the one series sort;
-                                    // the `seriesIndex ?? 0` copy that used to
-                                    // live here put an index-less game first,
-                                    // so the preview line anchored to the
-                                    // wrong game.
-                                    return getDraftsForGroup(group.id).findIndex(
-                                        (d) => d.Draft.id === draft.Draft.id
-                                    );
-                                })()}
-                                sourceAnchor={sourceAnchor()}
-                                mousePos={previewMousePos()}
-                                zoom={viewportZoom}
-                                cardLayout={props.cardLayout}
-                            />
+                        <Show when={draftConnectionPreview()}>
+                            {(preview) => (
+                                <ConnectionPreview
+                                    startDraft={preview().draft}
+                                    startGroup={preview().group}
+                                    seriesDraftIndex={preview().seriesDraftIndex}
+                                    sourceAnchor={sourceAnchor()}
+                                    mousePos={previewMousePos()}
+                                    zoom={viewportZoom}
+                                    cardLayout={props.cardLayout}
+                                />
+                            )}
                         </Show>
-                        <Show when={groupConnectionSource()}>
-                            <GroupConnectionPreview
-                                startGroup={
-                                    canvasGroups.find(
-                                        (g) => g.id === groupConnectionSource()!
-                                    )!
-                                }
-                                sourceAnchor={sourceAnchor()}
-                                mousePos={previewMousePos()}
-                                zoom={viewportZoom}
-                                seriesDraftCount={(() => {
-                                    const group = canvasGroups.find(
-                                        (g) => g.id === groupConnectionSource()!
-                                    );
-                                    if (group?.type !== "series") return undefined;
-                                    return getDraftsForGroup(group.id).length;
-                                })()}
-                                cardLayout={props.cardLayout}
-                            />
+                        <Show when={groupConnectionPreview()}>
+                            {(preview) => (
+                                <GroupConnectionPreview
+                                    startGroup={preview().group}
+                                    sourceAnchor={sourceAnchor()}
+                                    mousePos={previewMousePos()}
+                                    zoom={viewportZoom}
+                                    seriesDraftCount={preview().seriesDraftCount}
+                                    cardLayout={props.cardLayout}
+                                />
+                            )}
                         </Show>
                     </svg>
 
@@ -6741,7 +6601,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 cardLayout={props.cardLayout}
                                 isConnectionMode={isConnectionMode()}
                                 onAnchorClick={onAnchorClick}
-                                connectionSource={connectionSource}
+                                connectionSource={draftConnectionSource}
                                 sourceAnchor={sourceAnchor}
                                 pickerTarget={pickerTarget}
                                 onSlotOpen={openPicker}
