@@ -4,6 +4,7 @@ import {
     SERIES_HEADER_HEIGHT,
     SERIES_PADDING_Y,
     cardHeight,
+    getAnnotationAnchorWorldPosition,
     getSeriesDraftWorldPosition,
     getSeriesGroupDimensions
 } from "./helpers";
@@ -82,5 +83,60 @@ describe("a series' arithmetic matches its painted box", () => {
         for (const layout of ALL_LAYOUTS) {
             expect(getSeriesGroupDimensions(3, layout).height).toBe(PAINTED[layout]);
         }
+    });
+});
+
+describe("getAnnotationAnchorWorldPosition", () => {
+    const note = { positionX: 100, positionY: 200, width: 380, height: 120 };
+
+    // Four anchors like a Card (D10). Unlike a Card, the rect comes from the
+    // note's STORED size rather than from cardWidth/cardHeight — connection
+    // geometry stays pure, it just reads a different width.
+    it("puts each anchor on the stored rect", () => {
+        expect(getAnnotationAnchorWorldPosition(note, "top")).toEqual({ x: 290, y: 200 });
+        expect(getAnnotationAnchorWorldPosition(note, "bottom")).toEqual({
+            x: 290,
+            y: 320
+        });
+        expect(getAnnotationAnchorWorldPosition(note, "left")).toEqual({
+            x: 100,
+            y: 260
+        });
+        expect(getAnnotationAnchorWorldPosition(note, "right")).toEqual({
+            x: 480,
+            y: 260
+        });
+    });
+
+    // Container-relative when grouped, exactly like a Card.
+    it("offsets by the container when grouped", () => {
+        expect(
+            getAnnotationAnchorWorldPosition(note, "top", {
+                positionX: 1000,
+                positionY: 500
+            })
+        ).toEqual({ x: 1290, y: 700 });
+    });
+
+    // ⚠️ Pinned because it looks wrong and is not. A grouped note PAINTS at
+    // `positionY - CUSTOM_GROUP_HEADER_HEIGHT` (annotationRenderTop), and a
+    // grouped Card does the same (CanvasCard.tsx:653) — that offset cancels the
+    // container's content box, which already starts one header below its own
+    // origin. Adding a header term here would double-count it and float every
+    // grouped note's line one header above the note.
+    it("adds no header term, matching the Card path", () => {
+        const grouped = getAnnotationAnchorWorldPosition(note, "top", {
+            positionX: 0,
+            positionY: 1000
+        });
+        expect(grouped.y).toBe(note.positionY + 1000);
+    });
+
+    // A resized note moves its own anchors: the rect is the STORED size, and
+    // nothing about connections is allowed to read the grid-snapped render size.
+    it("tracks the stored size rather than any snapped render size", () => {
+        const wide = { ...note, width: 800 };
+        expect(getAnnotationAnchorWorldPosition(wide, "right").x).toBe(900);
+        expect(getAnnotationAnchorWorldPosition(wide, "top").x).toBe(500);
     });
 });

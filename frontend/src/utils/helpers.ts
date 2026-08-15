@@ -1,4 +1,4 @@
-import { CanvasDraft, CanvasGroup, AnchorType } from "./schemas";
+import { CanvasAnnotation, CanvasDraft, CanvasGroup, AnchorType } from "./schemas";
 import { AnchorPosition } from "./types";
 import { CardLayout } from "./canvasCardLayout";
 
@@ -86,6 +86,55 @@ export const getGroupAnchorWorldPosition = (
     const baseY = group.positionY;
     const w = group.width ?? 400;
     const h = group.height ?? 200;
+
+    switch (anchorType) {
+        case "top":
+            return { x: baseX + w / 2, y: baseY };
+        case "bottom":
+            return { x: baseX + w / 2, y: baseY + h };
+        case "left":
+            return { x: baseX, y: baseY + h / 2 };
+        case "right":
+            return { x: baseX + w, y: baseY + h / 2 };
+        default:
+            return { x: baseX + w / 2, y: baseY + h / 2 };
+    }
+};
+
+/**
+ * World coordinates for an annotation's anchor point.
+ *
+ * Four anchors like a Card (design D10). The one difference is that the rect
+ * comes from the note's STORED width/height rather than from
+ * `cardWidth`/`cardHeight` — connection geometry stays pure either way, it just
+ * reads a different pair of numbers.
+ *
+ * ⚠️ The STORED size, never the grid-snapped render size. Snapping is a paint
+ * concern (D5a): a note inside a grid paints at a snapped size while storing
+ * its own, and a note dragged out again must land back on its stored rect. An
+ * anchor that followed the snapped size would move every connection endpoint
+ * the moment a note entered or left a grid, with nothing the user did to it.
+ *
+ * ⚠️ No header term, and that is deliberate. A grouped note PAINTS at
+ * `positionY - CUSTOM_GROUP_HEADER_HEIGHT` (`annotationRenderTop`), and a
+ * grouped Card does exactly the same (`CanvasCard.tsx:653`) — that subtraction
+ * cancels the container's content box, which already begins one header below
+ * the container's own origin. Adding the header back here would double-count
+ * it and float every grouped note's line one header above the note. The Card
+ * path (`getAnchorWorldPosition` above) omits it for the same reason.
+ *
+ * Takes only the rect rather than a whole `CanvasAnnotation`, so callers that
+ * have a size and a position — previews, drag ghosts — need not fabricate a row.
+ */
+export const getAnnotationAnchorWorldPosition = (
+    annotation: Pick<CanvasAnnotation, "positionX" | "positionY" | "width" | "height">,
+    anchorType: AnchorType,
+    group?: Pick<CanvasGroup, "positionX" | "positionY"> | null
+): AnchorPosition => {
+    const baseX = annotation.positionX + (group?.positionX ?? 0);
+    const baseY = annotation.positionY + (group?.positionY ?? 0);
+    const w = annotation.width;
+    const h = annotation.height;
 
     switch (anchorType) {
         case "top":
