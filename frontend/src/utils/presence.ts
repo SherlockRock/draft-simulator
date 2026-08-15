@@ -15,6 +15,11 @@ export const viewportSchema = z.object({
     zoom: z.number().finite().positive()
 });
 
+export const annotationLockSchema = z.object({
+    annotationId: z.string(),
+    userId: z.string()
+});
+
 export const presenceSnapshotSchema = z.object({
     canvasId: z.string(),
     users: z.array(
@@ -25,7 +30,11 @@ export const presenceSnapshotSchema = z.object({
             // instead of failing the snapshot.
             viewport: viewportSchema.nullable().catch(null)
         })
-    )
+    ),
+    // Like the per-user viewport above, one malformed lock must not be able
+    // to drop presence for everyone: clients validate the whole snapshot at
+    // once, so the lock collection degrades to empty instead.
+    annotationLocks: z.array(annotationLockSchema).catch([])
 });
 
 export const presenceJoinSchema = z.object({
@@ -36,6 +45,17 @@ export const presenceJoinSchema = z.object({
 export const presenceLeaveSchema = z.object({
     canvasId: z.string(),
     userId: z.string()
+});
+
+export const annotationLockChangedSchema = z.object({
+    canvasId: z.string(),
+    annotationId: z.string(),
+    userId: z.string().nullable()
+});
+
+export const annotationLockDeniedSchema = z.object({
+    canvasId: z.string(),
+    annotationId: z.string()
 });
 
 // Server-initiated ejection: the user's canvas access was revoked while

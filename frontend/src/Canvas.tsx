@@ -298,7 +298,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         connectionStatus,
         justReconnected,
         clearReconnected,
-        presenceUsers
+        presenceUsers,
+        annotationLockOf
     } = useCanvasSocket();
     const canvasContext = useCanvasContext();
 
@@ -524,6 +525,51 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [editingAnnotationId, setEditingAnnotationId] = createSignal<string | null>(
         null
     );
+
+    /**
+     * The advisory edit lock's client half (design D12): claim the note while
+     * this client is editing it, refresh well inside the server's 60s
+     * inactivity timeout, and release on the way out.
+     *
+     * `editingAnnotationId` is the right signal because the textarea only
+     * mounts once it is set, and `commitText` clears it AFTER committing — so
+     * the release below already lands after the write with no ordering to
+     * arrange.
+     *
+     * ⚠️ `connectionStatus()` is read BEFORE the socket checks so it is always
+     * a dependency. Written as `!sock || !sock.connected || status !== ...`,
+     * the short-circuit skips the signal read whenever the socket is missing or
+     * down, and the effect then never re-runs on reconnect — a note the user
+     * started editing while briefly disconnected would go unclaimed for the
+     * whole session. `sock.connected` is a plain property and tracks nothing.
+     */
+    createEffect(() => {
+        const annotationId = editingAnnotationId();
+        const status = connectionStatus();
+        if (!annotationId || isLocalMode()) return;
+        const sock = socketAccessor();
+        if (!sock || !sock.connected || status !== "connected") return;
+
+        const payload = { canvasId: canvasId(), annotationId };
+        sock.emit("annotationEditStart", payload);
+        const refresh = setInterval(() => {
+            if (sock.connected) sock.emit("annotationEditStart", payload);
+        }, 20_000);
+
+        onCleanup(() => {
+            clearInterval(refresh);
+            if (sock.connected) sock.emit("annotationEditEnd", payload);
+        });
+    });
+
+    const annotationLockedByName = (annotationId: string): string | null => {
+        const holderId = annotationLockOf(annotationId);
+        if (!holderId) return null;
+        return (
+            presenceUsers().find((presenceUser) => presenceUser.userId === holderId)
+                ?.displayName ?? "Someone else"
+        );
+    };
     const [annotationContextMenu, setAnnotationContextMenu] = createSignal<{
         annotation: CanvasAnnotation;
         position: { x: number; y: number };
@@ -6426,6 +6472,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                     editingAnnotationId={
                                                         editingAnnotationId
                                                     }
+                                                    lockedByName={() =>
+                                                        annotationLockedByName(
+                                                            annotation.id
+                                                        )
+                                                    }
                                                     onEditingComplete={() =>
                                                         setEditingAnnotationId(null)
                                                     }
@@ -6716,6 +6767,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     selectedAnnotationId() === annotation.id
                                 }
                                 editingAnnotationId={editingAnnotationId}
+                                lockedByName={() => annotationLockedByName(annotation.id)}
                                 onEditingComplete={() => setEditingAnnotationId(null)}
                                 onStartEditing={setEditingAnnotationId}
                                 onMouseDown={onAnnotationMouseDown}

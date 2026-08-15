@@ -3,6 +3,8 @@ import {
     PRESENCE_COLORS,
     createCursorThrottle,
     cursorMoveSchema,
+    annotationLockChangedSchema,
+    annotationLockDeniedSchema,
     presenceColor,
     presenceJoinSchema,
     presenceLeaveSchema,
@@ -40,6 +42,37 @@ describe("presence event schemas", () => {
             users: [user, { ...user, userId: "u-2", picture: "p.png" }]
         });
         expect(result.success).toBe(true);
+    });
+
+    it("defaults an absent annotationLocks snapshot key to an empty array", () => {
+        const result = presenceSnapshotSchema.safeParse({
+            canvasId: "c-1",
+            users: [user]
+        });
+        expect(result.success).toBe(true);
+        if (result.success) expect(result.data.annotationLocks).toEqual([]);
+    });
+
+    it("carries valid annotation locks and degrades a malformed collection", () => {
+        const valid = presenceSnapshotSchema.safeParse({
+            canvasId: "c-1",
+            users: [user],
+            annotationLocks: [{ annotationId: "note-1", userId: "u-2" }]
+        });
+        expect(valid.success).toBe(true);
+        if (valid.success) {
+            expect(valid.data.annotationLocks).toEqual([
+                { annotationId: "note-1", userId: "u-2" }
+            ]);
+        }
+
+        const malformed = presenceSnapshotSchema.safeParse({
+            canvasId: "c-1",
+            users: [user],
+            annotationLocks: [{ annotationId: "note-1" }]
+        });
+        expect(malformed.success).toBe(true);
+        if (malformed.success) expect(malformed.data.annotationLocks).toEqual([]);
     });
 
     it("rejects a snapshot user without a displayName", () => {
@@ -88,6 +121,24 @@ describe("presence event schemas", () => {
         if (result.success) {
             expect(result.data.users.map((u) => u.viewport)).toEqual([null, null, null]);
         }
+    });
+});
+
+describe("annotation lock schemas", () => {
+    it("accepts lock changes including release and denial payloads", () => {
+        expect(
+            annotationLockChangedSchema.safeParse({
+                canvasId: "c-1",
+                annotationId: "note-1",
+                userId: null
+            }).success
+        ).toBe(true);
+        expect(
+            annotationLockDeniedSchema.safeParse({
+                canvasId: "c-1",
+                annotationId: "note-1"
+            }).success
+        ).toBe(true);
     });
 });
 

@@ -22,18 +22,21 @@ import ConnectionBanner from "../ConnectionBanner";
 import { validateSocketEvent } from "../utils/socketValidation";
 import {
     PresenceUser,
+    annotationLockDeniedSchema,
     canvasAccessRevokedSchema,
     presenceSnapshotSchema,
     presenceJoinSchema,
     presenceLeaveSchema
 } from "../utils/presence";
 import { RemoteViewport, createRemoteViewportTracker } from "../utils/remoteViewports";
+import { createAnnotationLockTracker } from "../utils/annotationLocks";
 
 export type CanvasSocketContextValue = SocketContextValue & {
     presenceUsers: () => PresenceUser[];
     // Last-known viewport of another present user, undefined when they have
     // no live canvas viewport (never broadcast, in a draft view, or cleared).
     remoteViewportOf: (userId: string) => RemoteViewport | undefined;
+    annotationLockOf: (annotationId: string) => string | undefined;
 };
 
 const CanvasSocketContext = createContext<CanvasSocketContextValue>();
@@ -143,6 +146,7 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
     // events are throttled pan/zoom-frequency (not mousemove-frequency), so
     // an always-on listener is cheap. State machine is unit-tested.
     const viewportTracker = createRemoteViewportTracker(() => user()?.id);
+    const lockTracker = createAnnotationLockTracker(() => user()?.id);
 
     createEffect(() => {
         const sock = socket();
@@ -159,6 +163,7 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
             if (!parsed || parsed.canvasId !== presenceCanvasId()) return;
             setPresence("users", reconcile(parsed.users, { key: "userId" }));
             viewportTracker.handleSnapshot(parsed.users);
+            lockTracker.handleSnapshot(parsed.annotationLocks);
         };
 
         const onJoin = (data: unknown) => {
@@ -200,6 +205,22 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
             viewportTracker.handleViewportLeave(data, canvasId);
         };
 
+        const onAnnotationLockChanged = (data: unknown) => {
+            const canvasId = presenceCanvasId();
+            if (!canvasId) return;
+            lockTracker.handleLockChanged(data, canvasId);
+        };
+
+        const onAnnotationLockDenied = (data: unknown) => {
+            const parsed = validateSocketEvent(
+                "annotationLockDenied",
+                data,
+                annotationLockDeniedSchema
+            );
+            if (!parsed || parsed.canvasId !== presenceCanvasId()) return;
+            toast.error("Someone else is editing this note");
+        };
+
         // Server-side revocation ejection: our access was removed while we
         // were viewing this canvas (or its child draft view). The server has
         // already forced this socket out of the room; leave the dead UI.
@@ -219,6 +240,8 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
         sock.on("presenceLeave", onLeave);
         sock.on("viewportMove", onViewportMove);
         sock.on("viewportLeave", onViewportLeave);
+        sock.on("annotationLockChanged", onAnnotationLockChanged);
+        sock.on("annotationLockDenied", onAnnotationLockDenied);
         sock.on("canvasAccessRevoked", onAccessRevoked);
         onCleanup(() => {
             sock.off("presenceSnapshot", onSnapshot);
@@ -226,6 +249,8 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
             sock.off("presenceLeave", onLeave);
             sock.off("viewportMove", onViewportMove);
             sock.off("viewportLeave", onViewportLeave);
+            sock.off("annotationLockChanged", onAnnotationLockChanged);
+            sock.off("annotationLockDenied", onAnnotationLockDenied);
             sock.off("canvasAccessRevoked", onAccessRevoked);
         });
     });
@@ -243,6 +268,7 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
         onCleanup(() => {
             setPresence("users", reconcile([], { key: "userId" }));
             viewportTracker.reset();
+            lockTracker.reset();
             if (sock.connected) {
                 sock.emit("leaveCanvas", { canvasId });
             }
@@ -257,7 +283,8 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
         justReconnected,
         clearReconnected,
         presenceUsers: () => presence.users,
-        remoteViewportOf: viewportTracker.viewportOf
+        remoteViewportOf: viewportTracker.viewportOf,
+        annotationLockOf: lockTracker.lockedBy
     };
 
     // For anonymous users (local mode), skip the connection banner

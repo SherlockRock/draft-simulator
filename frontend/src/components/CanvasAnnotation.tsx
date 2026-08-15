@@ -28,6 +28,7 @@ type CanvasAnnotationProps = {
     snappedSize: () => { width: number; height: number } | null;
     isSelected: () => boolean;
     editingAnnotationId: () => string | null;
+    lockedByName: () => string | null;
     onEditingComplete: () => void;
     /**
      * Enter inline edit. The component cannot do this itself: the textarea is
@@ -109,6 +110,10 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
     });
 
     const isEditing = () => props.editingAnnotationId() === props.annotation.id;
+
+    createEffect(() => {
+        if (props.lockedByName() && isEditing()) textareaRef?.blur();
+    });
 
     // Snapped inside a grid, stored outside it (design D5a). Snapping happens
     // at RENDER and never at commit, so drag-into-grid then drag-back-out is a
@@ -280,7 +285,8 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
             }}
             onMouseDown={(e) => props.onMouseDown(e, props.annotation)}
             onDblClick={(e) => {
-                if (!props.canEdit() || props.isConnectionMode) return;
+                if (!props.canEdit() || props.isConnectionMode || props.lockedByName())
+                    return;
                 e.stopPropagation();
                 // NOT `textareaRef?.focus()` — at rest the textarea is not
                 // mounted, so the ref is undefined and that would silently do
@@ -290,6 +296,18 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                 props.onStartEditing(props.annotation.id);
             }}
         >
+            {/* Advisory only (design D12): this badge and the textarea's
+                `readOnly` are the WHOLE enforcement. The note can still be
+                dragged, resized, duplicated and deleted while it is held, and
+                a PATCH from this client still succeeds — last-write-wins
+                remains the truth. */}
+            <Show when={props.lockedByName()}>
+                {(name) => (
+                    <div class="pointer-events-none absolute right-1 top-1 z-10 rounded bg-darius-purple px-1.5 py-0.5 text-[10px] text-darius-text-primary shadow">
+                        {name()} is editing
+                    </div>
+                )}
+            </Show>
             {/* The clipping box the ROOT used to be, and the flex column the
                 content below is written against.
 
@@ -420,6 +438,15 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                             ref={textareaRef}
                             value={textSignal()}
                             disabled={!props.canEdit()}
+                            // `readOnly`, NOT `disabled`, and only for the LOCK
+                            // — the two say different things. No edit permission
+                            // is a hard fact about this user; a lock is a HINT
+                            // that someone else is typing, and the design (D12)
+                            // is explicit that it may never block a write. A
+                            // disabled textarea also cannot fire `blur`, and
+                            // `commitText` runs on blur, so disabling on a lock
+                            // arriving mid-edit would drop what was typed.
+                            readOnly={Boolean(props.lockedByName())}
                             class="h-full w-full resize-none bg-transparent p-2 text-darius-text-primary outline-none"
                             style={{
                                 "font-size": `${fontPx()}px`,
