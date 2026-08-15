@@ -58,7 +58,8 @@ import {
     CanvasDraftUpdateSchema,
     AnnotationMovedSchema,
     AnnotationResizedSchema,
-    CanvasAnnotation
+    CanvasAnnotation,
+    AnnotationFontSize
 } from "./utils/schemas";
 import { validateSocketEvent } from "./utils/socketValidation";
 import { CanvasCard } from "./components/CanvasCard";
@@ -157,7 +158,14 @@ import {
     createTrailingThrottle,
     presenceSnapshotSchema
 } from "./utils/presence";
-import { clampZoom, nextLodState, worldTransform, zoomAt } from "./utils/viewport";
+import {
+    clampZoom,
+    nextLegibleState,
+    nextLodState,
+    worldTransform,
+    zoomAt
+} from "./utils/viewport";
+import { ANNOTATION_FONT_PX } from "./utils/annotationStyle";
 import { createRemoteCursorTracker } from "./utils/remoteCursors";
 import { createLaserTrailTracker } from "./utils/laserTrails";
 import { createLaserKeyTracker } from "./utils/laserKey";
@@ -578,6 +586,51 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         (previous: boolean) => nextLodState(previous, viewportZoom()),
         false
     );
+
+    /**
+     * Note-text legibility collapse — ONE state machine per FONT PRESET, not one
+     * per note (design §4).
+     *
+     * §4 flagged the per-annotation memo as "acceptable in principle, measure
+     * before shipping", because it reintroduces the O(annotations) reactive
+     * recompute per zoom step that `lodActive` above exists to avoid. The
+     * measurement is unnecessary here BY CONSTRUCTION: `nextLegibleState` reads
+     * only `(previous, fontSizePx, zoom)`, and `fontSizePx` has exactly FOUR
+     * values, so every note sharing a preset has an identical trajectory and
+     * they can share one machine. This is the plan's own named alternative (a).
+     * Sixty notes cost four memos, and six hundred still cost four.
+     *
+     * Four separate boolean memos rather than one memo over a record, so each
+     * preset gets `createMemo`'s `===` equality independently: a zoom step that
+     * flips `sm` must not invalidate the notes reading `xl`. A record would
+     * allocate a fresh object per zoom step and propagate to every note.
+     *
+     * Each is bound to its own const before going into the record because
+     * `solid/reactivity` cannot analyse a `createMemo` written inline in an
+     * object literal, and warns on all four.
+     */
+    const collapsedTextSm = createMemo(
+        (p: boolean) => nextLegibleState(p, ANNOTATION_FONT_PX.sm, viewportZoom()),
+        false
+    );
+    const collapsedTextMd = createMemo(
+        (p: boolean) => nextLegibleState(p, ANNOTATION_FONT_PX.md, viewportZoom()),
+        false
+    );
+    const collapsedTextLg = createMemo(
+        (p: boolean) => nextLegibleState(p, ANNOTATION_FONT_PX.lg, viewportZoom()),
+        false
+    );
+    const collapsedTextXl = createMemo(
+        (p: boolean) => nextLegibleState(p, ANNOTATION_FONT_PX.xl, viewportZoom()),
+        false
+    );
+    const collapsedTextByFontSize: Record<AnnotationFontSize, () => boolean> = {
+        sm: collapsedTextSm,
+        md: collapsedTextMd,
+        lg: collapsedTextLg,
+        xl: collapsedTextXl
+    };
 
     // Screen-space pitch of the dot grid. Zoom-only: during a pan this recomputes to
     // the same number, so Solid's `===` equality suppresses the style write. That
@@ -6438,6 +6491,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                         setEditingAnnotationId
                                                     }
                                                     onMouseDown={onAnnotationMouseDown}
+                                                    isTextCollapsed={() =>
+                                                        collapsedTextByFontSize[
+                                                            annotation.fontSize
+                                                        ]()
+                                                    }
                                                     onAddChampion={openStripPicker}
                                                     onRemoveChampion={(
                                                         annotationId,
@@ -6740,6 +6798,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 onEditingComplete={() => setEditingAnnotationId(null)}
                                 onStartEditing={setEditingAnnotationId}
                                 onMouseDown={onAnnotationMouseDown}
+                                isTextCollapsed={() =>
+                                    collapsedTextByFontSize[annotation.fontSize]()
+                                }
                                 onAddChampion={openStripPicker}
                                 onRemoveChampion={(annotationId, championId) =>
                                     handleStripChange(

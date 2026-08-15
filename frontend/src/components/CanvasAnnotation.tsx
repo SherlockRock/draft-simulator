@@ -29,6 +29,16 @@ type CanvasAnnotationProps = {
      */
     onStartEditing: (annotationId: string) => void;
     onMouseDown: (e: MouseEvent, annotation: CanvasAnnotationRow) => void;
+    /**
+     * True once this note's text is too small on screen to read (design §4).
+     *
+     * Supplied by the parent rather than computed here, and that is the whole
+     * optimisation: the state machine depends only on the FONT PRESET and the
+     * zoom, so Canvas keeps four of them and every note shares one. Computing
+     * it per note would put a reactive node on every annotation for a value
+     * that has four distinct answers.
+     */
+    isTextCollapsed: () => boolean;
     onAddChampion: (annotationId: string) => void;
     onRemoveChampion: (annotationId: string, championId: string) => void;
     onCommitText: (annotationId: string, text: string, measuredHeight: number) => void;
@@ -273,51 +283,70 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                 props.onStartEditing(props.annotation.id);
             }}
         >
-            <Show
-                when={isEditing() || isTextFocused()}
-                fallback={
-                    <div
-                        // `min-h-0 flex-1`, NOT `h-full`: the root is a flex
-                        // column and the strip is its second row. `h-full` makes
-                        // this child consume the whole content box, so the strip
-                        // lays out BELOW the note's border and D3's "text above,
-                        // icons below" never renders inside the frame.
-                        class="pointer-events-none min-h-0 flex-1 overflow-hidden whitespace-pre-wrap break-words p-2 text-darius-text-primary"
-                        style={{
-                            "font-size": `${fontPx()}px`,
-                            "line-height": "1.25",
-                            // Ellipsis/fade at rest (D7). An inner scroll
-                            // container was rejected: a scrollable element
-                            // inside a scale()d world layer fights canvas zoom
-                            // for wheel events, and hides content from a view
-                            // whose whole purpose is seeing everything at once.
-                            "mask-image":
-                                "linear-gradient(to bottom, black calc(100% - 1.5em), transparent 100%)"
+            {/* Collapsed to a bare colour block below the legibility floor
+                (design §4). The surface keeps painting its colour and the
+                champion strip below still renders — those read the note's
+                presence and category at a glance, which is the whole
+                affordance; the text at that size is a smear.
+
+                ⚠️ Editing is EXEMPT, and deliberately so. Unmounting a focused
+                textarea does not reliably fire `blur`, and `commitText` runs on
+                blur — so collapsing mid-edit would drop whatever the user had
+                typed. That is the same class of silent-loss bug as the
+                draft-rename regression this component's commit path already
+                carries a comment about. Zooming out far enough to collapse
+                while editing is rare; losing the edit when it happens is not
+                acceptable, and the exemption costs one condition.
+
+                Because the size is STORED, this is paint-only and can never
+                reflow anything. */}
+            <Show when={!props.isTextCollapsed() || isEditing() || isTextFocused()}>
+                <Show
+                    when={isEditing() || isTextFocused()}
+                    fallback={
+                        <div
+                            // `min-h-0 flex-1`, NOT `h-full`: the root is a flex
+                            // column and the strip is its second row. `h-full` makes
+                            // this child consume the whole content box, so the strip
+                            // lays out BELOW the note's border and D3's "text above,
+                            // icons below" never renders inside the frame.
+                            class="pointer-events-none min-h-0 flex-1 overflow-hidden whitespace-pre-wrap break-words p-2 text-darius-text-primary"
+                            style={{
+                                "font-size": `${fontPx()}px`,
+                                "line-height": "1.25",
+                                // Ellipsis/fade at rest (D7). An inner scroll
+                                // container was rejected: a scrollable element
+                                // inside a scale()d world layer fights canvas zoom
+                                // for wheel events, and hides content from a view
+                                // whose whole purpose is seeing everything at once.
+                                "mask-image":
+                                    "linear-gradient(to bottom, black calc(100% - 1.5em), transparent 100%)"
+                            }}
+                        >
+                            {props.annotation.text}
+                        </div>
+                    }
+                >
+                    <textarea
+                        ref={textareaRef}
+                        value={textSignal()}
+                        disabled={!props.canEdit()}
+                        class="h-full w-full resize-none bg-transparent p-2 text-darius-text-primary outline-none"
+                        style={{ "font-size": `${fontPx()}px`, "line-height": "1.25" }}
+                        onFocus={() => setIsTextFocused(true)}
+                        onInput={(e) => setTextSignal(e.currentTarget.value)}
+                        onKeyDown={(e) => {
+                            // Enter inserts a newline: the text is multi-line by
+                            // design (D6, `\n` preserved). Escape commits, matching
+                            // the draft-name field rather than the team-name field.
+                            if (e.key === "Escape") {
+                                e.stopPropagation();
+                                e.currentTarget.blur();
+                            }
                         }}
-                    >
-                        {props.annotation.text}
-                    </div>
-                }
-            >
-                <textarea
-                    ref={textareaRef}
-                    value={textSignal()}
-                    disabled={!props.canEdit()}
-                    class="h-full w-full resize-none bg-transparent p-2 text-darius-text-primary outline-none"
-                    style={{ "font-size": `${fontPx()}px`, "line-height": "1.25" }}
-                    onFocus={() => setIsTextFocused(true)}
-                    onInput={(e) => setTextSignal(e.currentTarget.value)}
-                    onKeyDown={(e) => {
-                        // Enter inserts a newline: the text is multi-line by
-                        // design (D6, `\n` preserved). Escape commits, matching
-                        // the draft-name field rather than the team-name field.
-                        if (e.key === "Escape") {
-                            e.stopPropagation();
-                            e.currentTarget.blur();
-                        }
-                    }}
-                    onBlur={commitText}
-                />
+                        onBlur={commitText}
+                    />
+                </Show>
             </Show>
 
             <Show when={props.annotation.championIds.length > 0 || canEditStrip()}>
