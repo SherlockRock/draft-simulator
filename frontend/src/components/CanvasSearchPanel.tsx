@@ -99,7 +99,13 @@ export const CanvasSearchPanel = (props: CanvasSearchPanelProps) => {
     onMount(() => {
         const rect = containerRect();
         if (rect) setGeometry((g) => clampPanelGeometry(g, rect.width, rect.height));
-        setPlaced(true);
+        // Deferred one microtask: in the mount flush the focus effect runs
+        // before the root's classList render effect, so a synchronous flip
+        // would let it call .focus() while the root is still
+        // visibility:hidden — a silent no-op. After the microtask the flip
+        // is its own update cycle, where the reveal renders first and the
+        // focus effect re-runs against a focusable input.
+        queueMicrotask(() => setPlaced(true));
         const onWindowResize = () => {
             const r = containerRect();
             if (r) setGeometry((g) => clampPanelGeometry(g, r.width, r.height));
