@@ -83,21 +83,6 @@ type CanvasAnnotationProps = {
 };
 
 /**
- * Reset the element's height BEFORE reading `scrollHeight` (design D7).
- *
- * Without the reset, `scrollHeight` reports the CURRENT box whenever the
- * current box is the taller of the two, so the note grows and never shrinks —
- * and blur commits that stale height, permanently.
- */
-const measureContentHeight = (el: HTMLTextAreaElement): number => {
-    const restore = el.style.height;
-    el.style.height = "0px";
-    const measured = el.scrollHeight;
-    el.style.height = restore;
-    return measured;
-};
-
-/**
  * One renderer for both the display div and the auto-fit measure div (§5) —
  * shared so the measured layout cannot drift from the painted one.
  *
@@ -154,6 +139,7 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
     const [textSignal, setTextSignal] = createSignal(props.annotation.text);
     const [isTextFocused, setIsTextFocused] = createSignal(false);
     let textareaRef: HTMLTextAreaElement | undefined;
+    let measureRef: HTMLDivElement | undefined;
 
     // Both branches handled: when the store value changes under an unfocused
     // note we resync, and while focused we deliberately do not — that is the
@@ -321,9 +307,10 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
         // independent of effect scheduling rather than dependent on statement
         // order (CanvasCard.tsx:721 carries the twin of this comment).
         const typed = textSignal();
-        // Measured while the textarea is still auto-fit, for the same reason:
-        // once the flag clears, the element re-renders at the stored height.
-        const measured = textareaRef ? measureContentHeight(textareaRef) : 0;
+        // §5: the display rendering post-commit, not textarea scrollHeight. The
+        // snapshot-before-clearing-the-focus-flag discipline is unchanged and
+        // still load-bearing (see the comment above).
+        const measured = measureRef ? measureRef.scrollHeight : 0;
         setIsTextFocused(false);
         props.onCommitText(props.annotation.id, typed, measured);
         props.onEditingComplete();
@@ -602,6 +589,23 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                             }}
                             onBlur={commitText}
                         />
+                        {/* §5: auto-fit measures the DISPLAY rendering. Same
+                            width (inset-x-0 inside the same clipping box), same
+                            padding/font/wrap classes as the display div, same
+                            SegmentedText renderer — so the measured wrap is
+                            the wrap the note shows at rest. Invisible, never
+                            interactive. */}
+                        <div
+                            ref={measureRef}
+                            aria-hidden="true"
+                            class="invisible absolute inset-x-0 top-0 whitespace-pre-wrap break-words p-2"
+                            style={{
+                                "font-size": `${fontPx()}px`,
+                                "line-height": "1.25"
+                            }}
+                        >
+                            <SegmentedText segments={parseAnnotationText(textSignal())} />
+                        </div>
                     </Show>
                 </Show>
             </div>
