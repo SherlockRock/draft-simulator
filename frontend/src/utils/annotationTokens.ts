@@ -1,4 +1,4 @@
-import { championByName, type Champion } from "./constants";
+import { championByName, champions, type Champion } from "./constants";
 
 /**
  * Inline champion tokens (inline-champions design §1–§2).
@@ -78,4 +78,53 @@ export const insertChampionToken = (
         text: text.slice(0, start) + token + text.slice(end),
         caret: start + token.length
     };
+};
+
+/**
+ * The mention context at the caret (§3): the run of characters after the
+ * nearest `@` left of the caret. The run is bounded to name-shaped
+ * characters (letters, digits, apostrophe, period, ampersand, space, dash
+ * — the alphabet of the roster's display names) and 24 chars: a bracket
+ * means the user is inside or just past real token syntax; a newline or
+ * punctuation means prose; and an unbounded run would keep the popover —
+ * and its Enter suppression — armed across an arbitrary tail of typing.
+ */
+const MENTION_RUN = /^[A-Za-z0-9'.& -]{0,24}$/;
+
+export const mentionQueryAt = (
+    text: string,
+    caret: number
+): { start: number; query: string } | null => {
+    const upToCaret = text.slice(0, caret);
+    const at = upToCaret.lastIndexOf("@");
+    if (at === -1) return null;
+    const run = upToCaret.slice(at + 1);
+    if (!MENTION_RUN.test(run)) return null;
+    // A leading space means prose ("50/50 @ Ahri"), not a mention — every
+    // real completion starts typing the name directly after the @. Interior
+    // spaces stay legal for multi-word names (`@Aurelion S`).
+    if (run.startsWith(" ")) return null;
+    return { start: at, query: run };
+};
+
+/**
+ * Mention matching: the trimmed query must PREFIX a name or one of its
+ * words, case-insensitively, roster order preserved.
+ *
+ * Deliberate deviation from ChampionPickerCore's substring matching, and
+ * §3's "reuses the search logic" is read as intent, not letter: because a
+ * mention run legitimately contains spaces (`@Aurelion S`), substring
+ * matching makes prose after a stray `@` (" Zed maybe") light the popover
+ * mid-sentence — at which point Enter REPLACES the prose span instead of
+ * inserting a newline. Prefix-per-word keeps every real completion path
+ * (`@kai`, `@sol`) and closes that trap.
+ */
+export const championsMatchingQuery = (query: string): Champion[] => {
+    const needle = query.trim().toLowerCase();
+    if (needle === "") return [...champions];
+    return champions.filter((c) => {
+        const name = c.name.toLowerCase();
+        if (name.startsWith(needle)) return true;
+        return name.split(/[^a-z0-9]+/).some((word) => word.startsWith(needle));
+    });
 };

@@ -13,7 +13,9 @@ import type {
     CanvasAnnotation as CanvasAnnotationRow
 } from "../utils/schemas";
 import {
+    championsMatchingQuery,
     insertChampionToken,
+    mentionQueryAt,
     parseAnnotationText,
     uniqueChampions,
     type AnnotationSegment
@@ -175,6 +177,65 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
     // insert effect below is the tracked consumer.
     let consumedInsertSession = untrack(() => props.insertedChampion()?.session ?? 0);
 
+    const [caretPos, setCaretPos] = createSignal(0);
+    // Escape dismisses THIS mention until the user starts a different one; the
+    // literal text stays (§3). Keyed by (start, query-prefix), not position
+    // alone: delete-the-mention-then-type-a-new-@ can land at the same offset
+    // and must not inherit the dismissal, while typing MORE characters into
+    // the dismissed mention keeps it dismissed.
+    const [dismissedMention, setDismissedMention] = createSignal<{
+        start: number;
+        query: string;
+    } | null>(null);
+    const [mentionHighlight, setMentionHighlight] = createSignal(0);
+    // True once the user has engaged the list with the arrow keys — gates
+    // Enter-accept for the empty query (a bare "@" opens the popover per §3,
+    // but "@⏎" must still mean newline, not "insert the roster's first name").
+    const [mentionArmed, setMentionArmed] = createSignal(false);
+
+    const mention = createMemo(() => {
+        if (!isTextFocused()) return null;
+        return mentionQueryAt(textSignal(), caretPos());
+    });
+    const mentionMatches = createMemo(() => {
+        const m = mention();
+        if (!m) return [];
+        const dismissed = dismissedMention();
+        // An empty dismissed query suppresses ONLY the empty query — every
+        // string starts with "", so startsWith alone would let a dismissed
+        // bare "@" suppress all future typing at that offset.
+        if (
+            dismissed &&
+            dismissed.start === m.start &&
+            (dismissed.query === ""
+                ? m.query === ""
+                : m.query.startsWith(dismissed.query))
+        ) {
+            return [];
+        }
+        return championsMatchingQuery(m.query).slice(0, 8);
+    });
+    const isMentionOpen = () => mentionMatches().length > 0;
+
+    // New mention context: reset the highlight, disarm Enter, and clear a
+    // stale dismissal.
+    createEffect(() => {
+        const m = mention();
+        setMentionHighlight(0);
+        setMentionArmed(false);
+        if (m === null) setDismissedMention(null);
+    });
+
+    const acceptMention = (name: string) => {
+        const m = mention();
+        if (!m) return;
+        const next = insertChampionToken(textSignal(), m.start, caretPos(), name);
+        setTextSignal(next.text);
+        textareaRef?.focus();
+        textareaRef?.setSelectionRange(next.caret, next.caret);
+        setCaretPos(next.caret);
+    };
+
     // Both branches handled: when the store value changes under an unfocused
     // note we resync, and while focused we deliberately do not — that is the
     // whole reason the blur handler has to snapshot.
@@ -222,6 +283,9 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
         setTextSignal(next.text);
         textareaRef?.focus();
         textareaRef?.setSelectionRange(next.caret, next.caret);
+        // Without this, the mention memo evaluates against the pre-insert
+        // caret and can pop the autocomplete open on top of the fresh token.
+        setCaretPos(next.caret);
     });
 
     // Close-without-pick. Ordered guards: if a pick for this note is still
@@ -291,6 +355,24 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
     const fontPx = createMemo(() => ANNOTATION_FONT_PX[props.annotation.fontSize]);
 
     const segments = createMemo(() => parseAnnotationText(props.annotation.text));
+
+    // Rough viewport fit: the actual match-row count at ~1.6em per row, in
+    // screen px. Deliberately an estimate that reads layout imperatively —
+    // acceptable for a transient editor affordance, and recorded as such: the
+    // design asks for below-or-above-whichever-fits, not pixel-perfect
+    // clamping. Horizontal overflow is accepted (the note is on-screen while
+    // editing; the popover left-aligns to it).
+    const mentionOpensUpward = () => {
+        const el = textareaRef;
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        const popoverScreenPx = fontPx() * 1.6 * mentionMatches().length * props.zoom();
+        const fitsBelow = rect.bottom + popoverScreenPx <= window.innerHeight;
+        const fitsAbove = rect.top - popoverScreenPx >= 0;
+        // "Whichever fits": flip up only when below fails AND above works —
+        // flipping into a space that also doesn't fit just clips off the top.
+        return !fitsBelow && fitsAbove;
+    };
 
     /*
      * Edit-lock badge geometry. Declared HERE, below `renderWidth`, and not up
@@ -634,7 +716,10 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                                     props.onCloseInsertPicker();
                                 }
                                 setTextSignal(e.currentTarget.value);
+                                setCaretPos(e.currentTarget.selectionStart);
                             }}
+                            onClick={(e) => setCaretPos(e.currentTarget.selectionStart)}
+                            onKeyUp={(e) => setCaretPos(e.currentTarget.selectionStart)}
                             onContextMenu={(e) => {
                                 // §3: right-click is pan everywhere on the canvas EXCEPT
                                 // inside a focused annotation editor. preventDefault/
@@ -666,6 +751,47 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                                 );
                             }}
                             onKeyDown={(e) => {
+                                if (isMentionOpen()) {
+                                    if (e.key === "ArrowDown") {
+                                        e.preventDefault();
+                                        setMentionArmed(true);
+                                        setMentionHighlight((i) =>
+                                            Math.min(i + 1, mentionMatches().length - 1)
+                                        );
+                                        return;
+                                    }
+                                    if (e.key === "ArrowUp") {
+                                        e.preventDefault();
+                                        setMentionArmed(true);
+                                        setMentionHighlight((i) => Math.max(i - 1, 0));
+                                        return;
+                                    }
+                                    if (e.key === "Enter") {
+                                        const m = mention();
+                                        // Empty query + no arrow engagement: Enter
+                                        // keeps meaning newline — fall through past
+                                        // the mention branch.
+                                        if (m && (m.query !== "" || mentionArmed())) {
+                                            e.preventDefault();
+                                            const pick =
+                                                mentionMatches()[mentionHighlight()];
+                                            if (pick) acceptMention(pick.name);
+                                            return;
+                                        }
+                                    }
+                                    if (e.key === "Escape") {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        const m = mention();
+                                        if (m) {
+                                            setDismissedMention({
+                                                start: m.start,
+                                                query: m.query
+                                            });
+                                        }
+                                        return;
+                                    }
+                                }
                                 // Enter inserts a newline: the text is multi-line by
                                 // design (D6, `\n` preserved). Escape commits, matching
                                 // the draft-name field rather than the team-name field.
@@ -703,6 +829,62 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                 </Show>
             </div>
 
+            {/* §3: anchored to the editor box, not the caret — caret mirroring inside
+                a scale()d world layer was explicitly rejected. Below the note, unless
+                the note's bottom is too close to the viewport's; world-space, so it
+                zooms with the note like the text does. mousedown preventDefault keeps
+                the textarea focused — this popover must never trigger the blur commit. */}
+            <Show when={isMentionOpen()}>
+                <div
+                    // `annotation-editor-surface`: the same class the textarea carries —
+                    // onAuxMouseDown's exemption (Task 5) keeps right-drag on the
+                    // popover from panning the canvas (that listener is capture-phase,
+                    // so stopPropagation here could not). z-20 is scoped to this note's
+                    // stacking context; a later-rendered overlapping note can paint
+                    // over the popover — accepted for a transient editor affordance.
+                    class="annotation-editor-surface absolute left-0 z-20 overflow-hidden rounded-md border border-darius-purple-bright bg-slate-900 shadow-lg"
+                    style={{
+                        ...(mentionOpensUpward()
+                            ? { bottom: "100%", "margin-bottom": "4px" }
+                            : { top: "100%", "margin-top": "4px" }),
+                        "min-width": `${Math.max(renderWidth(), 180)}px`,
+                        "font-size": `${fontPx()}px`,
+                        "line-height": "1.25"
+                    }}
+                    onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }}
+                    onContextMenu={(e) => {
+                        // Without this, a right-click on the popover resolves through
+                        // dispatchContextMenu's `.canvas-annotation` branch and opens
+                        // the annotation menu on top of the list.
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }}
+                >
+                    <For each={mentionMatches()}>
+                        {(champion, index) => (
+                            <button
+                                type="button"
+                                class="flex w-full items-center gap-2 px-2 py-1 text-left text-darius-text-primary"
+                                classList={{
+                                    "bg-darius-purple": index() === mentionHighlight()
+                                }}
+                                onClick={() => acceptMention(champion.name)}
+                                onMouseEnter={() => setMentionHighlight(index())}
+                            >
+                                <ChampionPortrait
+                                    src={champion.img}
+                                    alt={champion.name}
+                                    class="h-[1.2em] w-[1.2em] rounded-sm"
+                                />
+                                <span class="truncate">{champion.name}</span>
+                            </button>
+                        )}
+                    </For>
+                </div>
+            </Show>
             <Show when={props.canEdit() && !props.isConnectionMode && props.isSelected()}>
                 <ResizeGrip
                     corner="sw"

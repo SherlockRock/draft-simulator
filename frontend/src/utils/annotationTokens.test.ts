@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { championById } from "./constants";
 import {
+    championsMatchingQuery,
     insertChampionToken,
+    mentionQueryAt,
     parseAnnotationText,
     uniqueChampions
 } from "./annotationTokens";
@@ -144,5 +146,87 @@ describe("insertChampionToken", () => {
             text: "a@[Ahri] c",
             caret: 9
         });
+    });
+});
+
+describe("mentionQueryAt", () => {
+    it("finds the run after @ up to the caret", () => {
+        expect(mentionQueryAt("ban @Ak", 7)).toEqual({ start: 4, query: "Ak" });
+    });
+
+    it("returns the empty query for a bare @", () => {
+        expect(mentionQueryAt("@", 1)).toEqual({ start: 0, query: "" });
+    });
+
+    it("returns null with no @ before the caret", () => {
+        expect(mentionQueryAt("plain text", 5)).toBeNull();
+    });
+
+    it("only looks at text before the caret", () => {
+        expect(mentionQueryAt("Ak @later", 2)).toBeNull();
+    });
+
+    it("returns null across a newline", () => {
+        expect(mentionQueryAt("@Ak\nri", 6)).toBeNull();
+    });
+
+    // A completed or in-progress token must not re-trigger the popover:
+    // after accepting, the text left of the caret is `@[Name] `.
+    it("returns null when the run contains bracket syntax", () => {
+        expect(mentionQueryAt("@[Ahri] ", 8)).toBeNull();
+        expect(mentionQueryAt("@[Ah", 4)).toBeNull();
+    });
+
+    // The run is bounded to name-shaped characters: punctuation ends the
+    // mention, so ordinary prose containing @ cannot arm the popover (and
+    // with it, Enter suppression) indefinitely.
+    it("returns null when the run leaves name-shaped characters", () => {
+        expect(mentionQueryAt("see @Ahri, then", 15)).toBeNull();
+    });
+
+    it("returns null past the length bound", () => {
+        expect(mentionQueryAt(`@${"a".repeat(25)}`, 26)).toBeNull();
+    });
+
+    // "50/50 @ Ahri" is prose; "@Aurelion S" is a mention. The difference
+    // is the LEADING space only.
+    it("rejects a leading space but allows interior spaces", () => {
+        expect(mentionQueryAt("odds @ Ahri", 11)).toBeNull();
+        expect(mentionQueryAt("@Aurelion S", 11)).toEqual({
+            start: 0,
+            query: "Aurelion S"
+        });
+    });
+});
+
+describe("championsMatchingQuery", () => {
+    it("prefix-matches names case-insensitively", () => {
+        const names = championsMatchingQuery("kai").map((c) => c.name);
+        expect(names).toContain("Kai'Sa");
+    });
+
+    it("prefix-matches any word of a multi-word name", () => {
+        expect(championsMatchingQuery("sol").map((c) => c.name)).toContain(
+            "Aurelion Sol"
+        );
+    });
+
+    // Deliberate deviation from ChampionPickerCore's substring matching (see
+    // the helper's comment): a prose tail like " Zed maybe" must NOT match.
+    it("does not substring-match mid-name or match prose tails", () => {
+        expect(championsMatchingQuery("urelion")).toEqual([]);
+        expect(championsMatchingQuery("Zed maybe")).toEqual([]);
+    });
+
+    it("returns every champion for the empty query", () => {
+        expect(championsMatchingQuery("").length).toBeGreaterThan(100);
+    });
+
+    // Pinned to concrete names so a relevance-sorting implementation fails
+    // it — a derived-reference assertion would be true by construction.
+    it("preserves roster order", () => {
+        const names = championsMatchingQuery("a").map((c) => c.name);
+        expect(names.indexOf("Aatrox")).toBeGreaterThanOrEqual(0);
+        expect(names.indexOf("Ahri")).toBeGreaterThan(names.indexOf("Aatrox"));
     });
 });
