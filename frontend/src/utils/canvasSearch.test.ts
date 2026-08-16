@@ -4,11 +4,15 @@ import { SCOPE_VALUES } from "./gameClassification";
 import {
     bucketFor,
     classifySlot,
+    computeMatchupScopeHint,
     computeSearchResults,
+    getOpponentNameOptions,
     getTeamNameOptions,
     isDraftInProgress,
     resolveGroupTeamNames,
+    sortDraftMatches,
     teamSideInDraft,
+    type DraftMatch,
     type SearchQuery
 } from "./canvasSearch";
 
@@ -1012,5 +1016,128 @@ describe("computeSearchResults — matchup (opponentTeamName)", () => {
     it("champion-only matches carry teamSide null", () => {
         const results = computeSearchResults(drafts, groups, championOnly("Jinx"), identity);
         expect(results.matches.every((m) => m.teamSide === null)).toBe(true);
+    });
+});
+
+describe("getOpponentNameOptions", () => {
+    it("is the scope-aware team list minus the selected team, case-insensitively", () => {
+        const groups = [
+            makeGroup("g-ab", { blueTeamName: "TSM", redTeamName: "C9", gameType: "scrim" }),
+            makeGroup("g-ac", { blueTeamName: "TSM", redTeamName: "TL", gameType: "scrim" })
+        ];
+        expect(getOpponentNameOptions(groups, "all", "tsm")).toEqual(["C9", "TL"]);
+    });
+});
+
+describe("sortDraftMatches", () => {
+    const groups = [
+        makeGroup("g-old", { gameType: "scrim" }),
+        makeGroup("g-new", { gameType: "scrim" })
+    ].map((group, i) => ({
+        ...group,
+        createdAt: i === 0 ? "2026-08-01T00:00:00Z" : "2026-08-10T00:00:00Z"
+    }));
+    const drafts = [
+        makeDraft("old-g2", fullPicks(), { group_id: "g-old", seriesIndex: 2 }),
+        makeDraft("old-g1", fullPicks(), { group_id: "g-old", seriesIndex: 1 }),
+        makeDraft("new-g1", fullPicks(), { group_id: "g-new", seriesIndex: 1 }),
+        {
+            ...makeDraft("loose-mid", fullPicks()),
+            createdAt: "2026-08-05T00:00:00Z"
+        }
+    ];
+    const asMatch = (draftId: string, groupId: string | null): DraftMatch => ({
+        draftId,
+        groupId,
+        teamSide: null,
+        slots: [],
+        inProgress: false,
+        outcome: null
+    });
+    const matches = [
+        asMatch("old-g2", "g-old"),
+        asMatch("loose-mid", null),
+        asMatch("new-g1", "g-new"),
+        asMatch("old-g1", "g-old")
+    ];
+
+    it("orders blocks newest-first, games ascending within a group, loose cards interleaved", () => {
+        const sorted = sortDraftMatches(matches, drafts, groups);
+        expect(sorted.map((m) => m.draftId)).toEqual([
+            "new-g1",
+            "loose-mid",
+            "old-g1",
+            "old-g2"
+        ]);
+    });
+
+    it("is deterministic regardless of input order", () => {
+        const reversed = [...matches].reverse();
+        expect(sortDraftMatches(reversed, drafts, groups).map((m) => m.draftId)).toEqual(
+            sortDraftMatches(matches, drafts, groups).map((m) => m.draftId)
+        );
+    });
+
+    it("missing dates sort AFTER dated entries, tiebroken by id", () => {
+        // The dated entry is load-bearing: a parseTime that mapped a missing
+        // date to +Infinity instead of 0 would put undated blocks FIRST under
+        // the descending block sort and still pass an all-undated fixture.
+        const mixed = [asMatch("b-loose", null), asMatch("dated", null), asMatch("a-loose", null)];
+        const mixedDrafts = [
+            makeDraft("b-loose", fullPicks()),
+            makeDraft("a-loose", fullPicks()),
+            { ...makeDraft("dated", fullPicks()), createdAt: "2026-08-05T00:00:00Z" }
+        ];
+        expect(sortDraftMatches(mixed, mixedDrafts, []).map((m) => m.draftId)).toEqual([
+            "dated",
+            "a-loose",
+            "b-loose"
+        ]);
+    });
+});
+
+describe("computeMatchupScopeHint", () => {
+    const groups = [
+        makeGroup("g-scrim", { blueTeamName: "TSM", redTeamName: "C9", gameType: "scrim" }),
+        makeGroup("g-scratch", { blueTeamName: "TSM", redTeamName: "C9", gameType: "scratch" })
+    ];
+    const drafts = [
+        makeDraft("s1", fullPicks(), { group_id: "g-scrim" }),
+        makeDraft("s2", fullPicks(), { group_id: "g-scrim" }),
+        makeDraft("x1", fullPicks(), { group_id: "g-scratch" })
+    ];
+
+    it("reports games under other named scopes when the primary scope hides them", () => {
+        expect(
+            computeMatchupScopeHint(drafts, groups, matchup("TSM", "C9", { scope: "official" }), identity)
+        ).toEqual([
+            { scope: "scrim", games: 2 },
+            { scope: "scratch", games: 1 }
+        ]);
+    });
+
+    it("under scope all (the counted rule) only scratch can hide games", () => {
+        expect(
+            computeMatchupScopeHint(drafts.slice(2), groups, matchup("TSM", "C9"), identity)
+        ).toEqual([{ scope: "scratch", games: 1 }]);
+    });
+
+    it("returns nothing for non-matchup queries", () => {
+        expect(computeMatchupScopeHint(drafts, groups, championOnly("Jinx"), identity)).toEqual([]);
+    });
+
+    it("keeps the champion filter: hint counts describe the same population as the sentence", () => {
+        const withJinx = [
+            makeDraft("j1", fullPicks({ 10: "Jinx" }), { group_id: "g-scrim" }),
+            makeDraft("plain", fullPicks(), { group_id: "g-scrim" })
+        ];
+        expect(
+            computeMatchupScopeHint(
+                withJinx,
+                groups,
+                matchup("TSM", "C9", { scope: "official", championId: "Jinx" }),
+                identity
+            )
+        ).toEqual([{ scope: "scrim", games: 1 }]);
     });
 });

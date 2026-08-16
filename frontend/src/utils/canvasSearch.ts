@@ -370,3 +370,109 @@ export const computeSearchResults = (
 
     return { matches, buckets, teamRecord: null };
 };
+
+/** The opponent dropdown: the same scope-aware list minus the selected team (R1). */
+export const getOpponentNameOptions = (
+    groups: readonly CanvasGroup[],
+    scope: SearchScope,
+    teamName: string
+): string[] => {
+    const target = teamName.trim().toLowerCase();
+    return getTeamNameOptions(groups, scope).filter(
+        (name) => name.trim().toLowerCase() !== target
+    );
+};
+
+const parseTime = (iso: string | undefined): number => {
+    if (!iso) return 0;
+    const time = Date.parse(iso);
+    return Number.isNaN(time) ? 0 : time;
+};
+
+type MatchSortKey = {
+    blockTime: number;
+    blockId: string;
+    seriesIndex: number;
+    draftTime: number;
+    draftId: string;
+};
+
+/**
+ * Stable deterministic result order (R10): blocks newest-first, where a block
+ * is a group (createdAt) or a loose card (its own single-row block); within a
+ * group, ascending seriesIndex, then draft createdAt, then draftId. Never
+ * match-discovery order, never world position — rows must not jump under the
+ * reader when cards move or picks land.
+ */
+export const sortDraftMatches = (
+    matches: readonly DraftMatch[],
+    drafts: readonly CanvasDraft[],
+    groups: readonly CanvasGroup[]
+): DraftMatch[] => {
+    const draftById = new Map(drafts.map((cd) => [cd.Draft.id, cd]));
+    const groupById = new Map(groups.map((group) => [group.id, group]));
+    const keyFor = (match: DraftMatch): MatchSortKey => {
+        const cd = draftById.get(match.draftId);
+        const group = match.groupId !== null ? groupById.get(match.groupId) : undefined;
+        const draftTime = parseTime(cd?.Draft.createdAt ?? cd?.createdAt);
+        if (group) {
+            return {
+                blockTime: parseTime(group.createdAt),
+                blockId: group.id,
+                seriesIndex: cd?.Draft.seriesIndex ?? Number.MAX_SAFE_INTEGER,
+                draftTime,
+                draftId: match.draftId
+            };
+        }
+        return {
+            blockTime: draftTime,
+            blockId: match.draftId,
+            seriesIndex: 0,
+            draftTime,
+            draftId: match.draftId
+        };
+    };
+    return matches
+        .map((match) => ({ match, key: keyFor(match) }))
+        .sort(
+            (a, b) =>
+                b.key.blockTime - a.key.blockTime ||
+                a.key.blockId.localeCompare(b.key.blockId) ||
+                a.key.seriesIndex - b.key.seriesIndex ||
+                a.key.draftTime - b.key.draftTime ||
+                a.key.draftId.localeCompare(b.key.draftId)
+        )
+        .map((entry) => entry.match);
+};
+
+export type ScopeHint = { scope: SearchScope; games: number };
+
+const NAMED_SCOPES: readonly SearchScope[] = ["official", "scrim", "scratch"];
+
+/**
+ * R5: distinguishes "never played" from "the scope is hiding them". Callers
+ * run this ONLY when the primary matchup result is empty — it re-runs the
+ * search once per other named scope (O(3 · drafts · 20), trivial).
+ *
+ * The WHOLE query is forwarded (championId and bucket included), so a hint's
+ * count always describes the same population as the empty-state sentence
+ * above it: "no Jinx games between A and B … 2 games exist under Scrims"
+ * means 2 JINX games. Stripping the champion here would make the hint claim
+ * games the sentence just denied.
+ */
+export const computeMatchupScopeHint = (
+    drafts: readonly CanvasDraft[],
+    groups: readonly CanvasGroup[],
+    query: SearchQuery,
+    resolvePick: (pickValue: string) => string
+): ScopeHint[] => {
+    if (query.teamName === null || query.opponentTeamName === null) return [];
+    const hints: ScopeHint[] = [];
+    for (const scope of NAMED_SCOPES) {
+        if (scope === query.scope) continue;
+        const games = computeSearchResults(drafts, groups, { ...query, scope }, resolvePick)
+            .matches.length;
+        if (games > 0) hints.push({ scope, games });
+    }
+    return hints;
+};
