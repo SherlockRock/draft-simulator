@@ -1,9 +1,10 @@
-import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
+import { For, Index, Show, createEffect, createMemo, createSignal } from "solid-js";
 import type {
     AnchorType,
     CanvasAnnotation as CanvasAnnotationRow
 } from "../utils/schemas";
 import { resolveStripChampions } from "../utils/annotationStrip";
+import { parseAnnotationText, type AnnotationSegment } from "../utils/annotationTokens";
 import { annotationSurfaceClass, ANNOTATION_FONT_PX } from "../utils/annotationStyle";
 import { MIN_ANNOTATION_HEIGHT, MIN_ANNOTATION_WIDTH } from "../utils/annotationSize";
 import { scaledStrokePx, screenConstantPx } from "../utils/viewport";
@@ -96,6 +97,59 @@ const measureContentHeight = (el: HTMLTextAreaElement): number => {
     return measured;
 };
 
+/**
+ * One renderer for both the display div and the auto-fit measure div (§5) —
+ * shared so the measured layout cannot drift from the painted one.
+ *
+ * `<Index>`, not `<For>`: `parseAnnotationText` returns fresh object
+ * identities every call, so `<For>` would reconcile nothing and rebuild
+ * every row per keystroke (the measure div re-parses on each input).
+ * `<Index>` keys by position and updates rows in place.
+ *
+ * Icon is `1em` of the note's own font: it scales with the text under zoom
+ * like any glyph, so world/screen-space is not in play. Icons opt back into
+ * pointer events (the display div is pointer-events-none) so `title` hover
+ * works; mousedown still bubbles to the root drag handler.
+ */
+const SegmentedText = (props: { segments: AnnotationSegment[] }) => (
+    <Index each={props.segments}>
+        {(segment) => <SegmentView segment={segment()} />}
+    </Index>
+);
+
+const SegmentView = (props: { segment: AnnotationSegment }) => (
+    <Show
+        when={props.segment.kind === "champion" ? props.segment : null}
+        fallback={props.segment.kind === "text" ? props.segment.value : null}
+    >
+        {(champion) => (
+            <Show
+                when={champion().resolved}
+                fallback={
+                    /* §2: same 1em box as the resolved icon — a taller
+                       chip would change line-box height and desync the
+                       auto-fit measurement from the icon case. */
+                    <span
+                        class="pointer-events-auto inline-flex h-[1em] max-w-[8em] items-center overflow-hidden rounded border border-dashed border-darius-crimson px-[0.2em] align-[-0.125em] text-[0.6em] leading-none text-darius-crimson"
+                        title={`Unknown champion: ${champion().raw}`}
+                    >
+                        <span class="truncate">{champion().raw}</span>
+                    </span>
+                }
+            >
+                {(resolved) => (
+                    <ChampionPortrait
+                        src={resolved().img}
+                        alt={resolved().name}
+                        title={resolved().name}
+                        class="pointer-events-auto inline-block h-[1em] w-[1em] rounded-sm align-[-0.125em]"
+                    />
+                )}
+            </Show>
+        )}
+    </Show>
+);
+
 export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
     const [textSignal, setTextSignal] = createSignal(props.annotation.text);
     const [isTextFocused, setIsTextFocused] = createSignal(false);
@@ -135,6 +189,8 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
     const renderHeight = () => props.snappedSize()?.height ?? props.annotation.height;
 
     const fontPx = createMemo(() => ANNOTATION_FONT_PX[props.annotation.fontSize]);
+
+    const segments = createMemo(() => parseAnnotationText(props.annotation.text));
 
     /*
      * Edit-lock badge geometry. Declared HERE, below `renderWidth`, and not up
@@ -511,7 +567,7 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                                         "linear-gradient(to bottom, black calc(100% - 1.5em), transparent 100%)"
                                 }}
                             >
-                                {props.annotation.text}
+                                <SegmentedText segments={segments()} />
                             </div>
                         }
                     >

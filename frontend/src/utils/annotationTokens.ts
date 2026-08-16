@@ -45,9 +45,7 @@ export const parseAnnotationText = (text: string): AnnotationSegment[] => {
  * order, unresolved excluded. Dedup at RENDER is a display concern — the
  * content model allows duplicates (D18 repealed).
  */
-export const uniqueChampions = (
-    segments: readonly AnnotationSegment[]
-): Champion[] => {
+export const uniqueChampions = (segments: readonly AnnotationSegment[]): Champion[] => {
     const seen = new Set<string>();
     const result: Champion[] = [];
     for (const segment of segments) {

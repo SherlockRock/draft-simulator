@@ -92,9 +92,7 @@ describe("parseAnnotationText", () => {
 
 describe("uniqueChampions", () => {
     it("dedupes by champion id in first-appearance order", () => {
-        const champs = uniqueChampions(
-            parseAnnotationText("@[Akali] @[Ahri] @[Akali]")
-        );
+        const champs = uniqueChampions(parseAnnotationText("@[Akali] @[Ahri] @[Akali]"));
         expect(champs.map((c) => c.name)).toEqual(["Akali", "Ahri"]);
     });
 
