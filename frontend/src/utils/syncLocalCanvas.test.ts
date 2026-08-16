@@ -63,7 +63,6 @@ const localAnnotation = (
     width: 380,
     height: 120,
     text: "",
-    championIds: [],
     color: "slate",
     fontSize: "md",
     ...over
@@ -90,8 +89,7 @@ describe("annotationSyncEntries", () => {
                 [
                     localAnnotation("local-a", {
                         group_id: "local-g",
-                        text: "S tier",
-                        championIds: ["Ahri"]
+                        text: "S tier"
                     })
                 ],
                 new Map([["local-g", "server-g"]])
@@ -100,8 +98,7 @@ describe("annotationSyncEntries", () => {
             expect.objectContaining({
                 sourceId: "local-a",
                 group_id: "server-g",
-                text: "S tier",
-                championIds: ["Ahri"]
+                text: "S tier"
             })
         ]);
     });

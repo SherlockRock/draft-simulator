@@ -55,7 +55,6 @@ const annotationRow = (overrides = {}) => ({
   manualWidth: null,
   manualHeight: null,
   text: "why we lost this one",
-  championIds: [],
   color: "slate",
   fontSize: "md",
   update: vi.fn().mockResolvedValue(undefined),
@@ -334,7 +333,6 @@ describe("POST /:canvasId/annotations/:annotationId/copy", () => {
   it("copies every content field and takes the caller's placement", async () => {
     vi.spyOn(CanvasAnnotation, "findOne").mockResolvedValue(
       annotationRow({
-        championIds: ["Ahri", "Orianna"],
         color: "purple",
         manualWidth: 320,
         manualHeight: 96,
@@ -355,7 +353,6 @@ describe("POST /:canvasId/annotations/:annotationId/copy", () => {
         positionX: 500,
         positionY: 300,
         group_id: null,
-        championIds: ["Ahri", "Orianna"],
         color: "purple",
         text: "why we lost this one",
         // The hand-set floor is part of the note's identity (router comment):

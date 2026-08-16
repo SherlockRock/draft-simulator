@@ -216,7 +216,6 @@ export const localCreateAnnotation = (data: {
             width: data.width,
             height: data.height,
             text: "",
-            championIds: [],
             color: "slate",
             fontSize: "md"
         };
@@ -234,7 +233,6 @@ export const localUpdateAnnotation = (data: {
     manualWidth?: number | null;
     manualHeight?: number | null;
     text?: string;
-    championIds?: string[];
     color?: AnnotationColor;
     fontSize?: AnnotationFontSize;
     group_id?: string | null;
@@ -253,9 +251,6 @@ export const localUpdateAnnotation = (data: {
                 annotation.manualHeight = data.manualHeight;
             }
             if (data.text !== undefined) annotation.text = data.text;
-            if (data.championIds !== undefined) {
-                annotation.championIds = [...data.championIds];
-            }
             if (data.color !== undefined) annotation.color = data.color;
             if (data.fontSize !== undefined) annotation.fontSize = data.fontSize;
             if (data.group_id !== undefined) annotation.group_id = data.group_id;
@@ -288,7 +283,6 @@ export const localCopyAnnotation = (
         const copy: CanvasAnnotation = {
             ...source,
             id: crypto.randomUUID(),
-            championIds: [...source.championIds],
             positionX: placement.positionX,
             positionY: placement.positionY,
             group_id: placement.group_id

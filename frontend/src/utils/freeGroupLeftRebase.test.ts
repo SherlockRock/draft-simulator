@@ -39,7 +39,6 @@ const annotation = (groupId: string): CanvasAnnotation => ({
     width: 200,
     height: 100,
     text: "note",
-    championIds: [],
     color: "slate",
     fontSize: "md"
 });

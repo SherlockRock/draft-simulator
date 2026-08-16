@@ -221,12 +221,6 @@ const CanvasAnnotation = sequelize.define("CanvasAnnotation", {
   // destination canvases is a unique violation (design D15, Task 9).
   source_id: { type: DataTypes.UUID, allowNull: true, defaultValue: null },
   text: { type: DataTypes.TEXT, allowNull: false, defaultValue: "" },
-  championIds: {
-    type: DataTypes.JSONB,
-    allowNull: false,
-    defaultValue: [],
-    comment: "Canonical champion ids, in strip order. Append/remove only (D3).",
-  },
   color: {
     type: DataTypes.ENUM(
       "none",

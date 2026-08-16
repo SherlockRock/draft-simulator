@@ -12,7 +12,6 @@ const note = (id: string): CanvasAnnotation => ({
     width: 380,
     height: 120,
     text: `note ${id}`,
-    championIds: [],
     color: "slate",
     fontSize: "md",
     manualWidth: null,

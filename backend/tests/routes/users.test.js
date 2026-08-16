@@ -245,7 +245,6 @@ describe("user export annotations", () => {
           manualWidth: 420,
           manualHeight: 180,
           text: "their jungler always flexes here",
-          championIds: ["Ahri"],
           color: "amber",
           fontSize: "lg",
           group_id: "group-1",
@@ -260,7 +259,6 @@ describe("user export annotations", () => {
       expect.objectContaining({
         id: "annotation-1",
         text: "their jungler always flexes here",
-        championIds: ["Ahri"],
         color: "amber",
         fontSize: "lg",
         manualWidth: 420,
@@ -282,7 +280,6 @@ describe("user export annotations", () => {
           manualWidth: null,
           manualHeight: null,
           text: "",
-          championIds: [],
           color: "slate",
           fontSize: "md",
           group_id: null,
@@ -343,7 +340,6 @@ describe("user import annotations", () => {
           manualWidth: 410,
           manualHeight: 170,
           text: "S tier",
-          championIds: [],
           color: "slate",
           fontSize: "md",
           group_id: "export-group",
@@ -382,7 +378,6 @@ describe("user import annotations", () => {
           manualWidth: null,
           manualHeight: null,
           text: "",
-          championIds: [],
           color: "slate",
           fontSize: "md",
           group_id: null,
@@ -416,7 +411,6 @@ describe("user import annotations", () => {
       width: 380,
       height: 120,
       text: "same note",
-      championIds: [],
       color: "slate",
       fontSize: "md",
       group_id: null,
@@ -441,7 +435,6 @@ describe("user import annotations", () => {
           width: 380,
           height: 120,
           text: "portable",
-          championIds: [],
           color: "slate",
           fontSize: "md",
           group_id: null,
@@ -467,43 +460,6 @@ describe("user import annotations", () => {
     const res = await importCanvasWith({});
     expect(res.status).toBe(200);
     expect(create).not.toHaveBeenCalled();
-  });
-
-  // Task 29's surviving obligation. D16's WARN half is deferred (the backend
-  // has no champion list and cannot judge resolution), but data integrity is
-  // the server's job and stays here.
-  //
-  // ⚠️ Only the empty/whitespace case is live, and the fixture says so: Zod has
-  // already run ExportedCanvasAnnotationSchema (`z.array(z.string()).default([])`)
-  // before this code, so a non-string is a 400 far upstream and a missing key is
-  // already []. `z.string()` is exactly what admits "" and "   ".
-  it("drops empty and whitespace-only champion ids, preserving the rest in order", async () => {
-    vi.spyOn(CanvasAnnotation, "findOne").mockResolvedValue(null);
-    const create = vi
-      .spyOn(CanvasAnnotation, "create")
-      .mockResolvedValue({ id: "new-annotation" });
-
-    const res = await importCanvasWith({
-      annotations: [
-        {
-          id: "export-annotation",
-          positionX: 5,
-          positionY: 6,
-          width: 420,
-          height: 180,
-          text: "pool",
-          championIds: ["Ahri", "", "   ", "Azir"],
-          color: "slate",
-          fontSize: "md",
-        },
-      ],
-    });
-
-    expect(res.status).toBe(200);
-    expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ championIds: ["Ahri", "Azir"] }),
-      expect.anything(),
-    );
   });
 
 });

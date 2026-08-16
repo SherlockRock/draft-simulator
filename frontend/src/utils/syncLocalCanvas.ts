@@ -76,7 +76,6 @@ export const annotationSyncEntries = (
     width: number;
     height: number;
     text: string;
-    championIds: string[];
     color: AnnotationColor;
     fontSize: AnnotationFontSize;
     manualWidth: number | null;
@@ -90,7 +89,6 @@ export const annotationSyncEntries = (
         width: annotation.width,
         height: annotation.height,
         text: annotation.text,
-        championIds: [...annotation.championIds],
         color: annotation.color,
         fontSize: annotation.fontSize,
         manualWidth: annotation.manualWidth ?? null,
@@ -213,7 +211,6 @@ export const syncLocalCanvasToServer = async (): Promise<string | null> => {
             manualWidth: entry.manualWidth,
             manualHeight: entry.manualHeight,
             text: entry.text,
-            championIds: entry.championIds,
             color: entry.color,
             fontSize: entry.fontSize,
             group_id: entry.group_id

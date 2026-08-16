@@ -102,7 +102,6 @@ function annotationAt(
         width: 380,
         height: 120,
         text: "",
-        championIds: [],
         color: "slate",
         fontSize: "md"
     };

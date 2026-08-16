@@ -16,7 +16,6 @@ describe("CanvasAnnotation model", () => {
       "width",
       "height",
       "text",
-      "championIds",
       "color",
       "fontSize",
       "manualWidth",
@@ -33,10 +32,9 @@ describe("CanvasAnnotation model", () => {
     expect(CanvasAnnotation.getAttributes().color.values).toContain("none");
   });
 
-  it("defaults text to empty and championIds to an empty array", () => {
+  it("defaults text to empty", () => {
     const attrs = CanvasAnnotation.getAttributes();
     expect(attrs.text.defaultValue).toBe("");
-    expect(attrs.championIds.defaultValue).toEqual([]);
   });
 
   it("allows a null group_id — a note loose on the canvas", () => {

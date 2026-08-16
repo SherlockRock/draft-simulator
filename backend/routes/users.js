@@ -430,7 +430,6 @@ router.get("/me/export", protect, async (req, res) => {
         width: annotation.width,
         height: annotation.height,
         text: annotation.text,
-        championIds: annotation.championIds ?? [],
         color: annotation.color,
         fontSize: annotation.fontSize,
         manualWidth: annotation.manualWidth ?? null,
@@ -848,20 +847,6 @@ router.post("/me/import", protect, async (req, res) => {
           width: importedAnnotation.width,
           height: importedAnnotation.height,
           text: importedAnnotation.text,
-          // Drop ids that are not usable strings — data integrity, which the
-          // server owns, as distinct from RESOLUTION, which it cannot do (D16:
-          // the backend has no champion list, and duplicating that codegen
-          // artifact is worse than the gap).
-          //
-          // Only the empty/whitespace case is live. `validateImportPayload` has
-          // already run ExportedCanvasAnnotationSchema, whose `championIds` is
-          // `z.array(z.string()).default([])` — so a non-string is a 400 long
-          // before this, and a missing key is already `[]`. A `typeof id ===
-          // "string"` guard here would be unreachable; `z.string()` is what
-          // admits "" and "   ".
-          championIds: (importedAnnotation.championIds ?? []).filter(
-            (id) => id.trim() !== "",
-          ),
           color: importedAnnotation.color,
           fontSize: importedAnnotation.fontSize,
           manualWidth: importedAnnotation.manualWidth ?? null,

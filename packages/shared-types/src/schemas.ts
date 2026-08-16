@@ -333,7 +333,6 @@ export const CanvasAnnotationSchema = z.object({
   manualWidth: z.number().nullable().optional(),
   manualHeight: z.number().nullable().optional(),
   text: z.string(),
-  championIds: z.array(z.string()),
   color: AnnotationColorSchema,
   fontSize: AnnotationFontSizeSchema,
   createdAt: z.string().optional(),
@@ -545,7 +544,6 @@ export const ExportedCanvasAnnotationSchema = z.object({
   manualWidth: z.number().nullable().optional(),
   manualHeight: z.number().nullable().optional(),
   text: z.string(),
-  championIds: z.array(z.string()).default([]),
   color: AnnotationColorSchema.default("slate"),
   fontSize: AnnotationFontSizeSchema.default("md"),
   // Container membership, as the EXPORT's own group id. A member's stored

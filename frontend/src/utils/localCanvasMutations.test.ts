@@ -161,7 +161,6 @@ describe("local annotations", () => {
         });
 
         expect(result.annotation.text).toBe("");
-        expect(result.annotation.championIds).toEqual([]);
         expect(result.annotation.color).toBe("slate");
         expect(getLocalCanvas()?.annotations).toHaveLength(1);
     });
@@ -221,7 +220,6 @@ describe("local annotations", () => {
         localUpdateAnnotation({
             annotationId: source.id,
             text: "S tier",
-            championIds: ["Ahri"],
             manualWidth: null,
             manualHeight: 240
         });
@@ -234,7 +232,6 @@ describe("local annotations", () => {
 
         const copy = getLocalCanvas()?.annotations[1];
         expect(copy?.text).toBe("S tier");
-        expect(copy?.championIds).toEqual(["Ahri"]);
         expect(copy?.id).not.toBe(source.id);
         expect(copy?.positionX).toBe(500);
         expect(copy?.manualWidth).toBeNull();

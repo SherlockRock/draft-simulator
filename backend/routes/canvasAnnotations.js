@@ -44,8 +44,6 @@ const FIELD_VALIDATORS = {
     value === null ||
     (typeof value === "number" && Number.isFinite(value) && value > 0),
   text: (value) => typeof value === "string",
-  championIds: (value) =>
-    Array.isArray(value) && value.every((id) => typeof id === "string"),
   color: (value) => VALID_COLORS.has(value),
   fontSize: (value) => VALID_FONT_SIZES.has(value),
   group_id: (value) => value === null || typeof value === "string",
@@ -93,7 +91,6 @@ router.post("/:canvasId/annotations", protect, async (req, res) => {
       manualWidth: updates.manualWidth ?? null,
       manualHeight: updates.manualHeight ?? null,
       text: updates.text ?? "",
-      championIds: updates.championIds ?? [],
       color: updates.color ?? "slate",
       fontSize: updates.fontSize ?? "md",
       group_id: updates.group_id ?? null,
@@ -240,7 +237,6 @@ router.post(
       const copy = await CanvasAnnotation.create({
         canvas_id: canvasId,
         text: source.text,
-        championIds: [...source.championIds],
         color: source.color,
         fontSize: source.fontSize,
         width: source.width,
