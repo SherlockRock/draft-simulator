@@ -368,6 +368,15 @@ export type Champion = (typeof champions)[number];
 export const championById = new Map<string, Champion>(
     champions.map((champion) => [champion.id, champion])
 );
+/**
+ * Display-name lookup for annotation tokens (inline-champions design §1).
+ * Names, not ids: the token is visible while editing, so it must read as what
+ * the user typed — Wukong's id is `MonkeyKing`. Exact match; a renamed
+ * champion un-resolving old notes is the same failure class D16 absorbs.
+ */
+export const championByName = new Map<string, Champion>(
+    champions.map((champion) => [champion.name, champion])
+);
 export const championIdToIndex = new Map<string, string>(
     champions.map((champion, index) => [champion.id, String(index)])
 );
