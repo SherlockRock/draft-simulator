@@ -17,8 +17,22 @@ const identity = (value: string) => value;
 const championOnly = (championId: string): SearchQuery => ({
     championId,
     teamName: null,
+    opponentTeamName: null,
     bucket: null,
     scope: "all"
+});
+
+const matchup = (
+    teamName: string,
+    opponentTeamName: string,
+    overrides: Partial<SearchQuery> = {}
+): SearchQuery => ({
+    championId: null,
+    teamName,
+    opponentTeamName,
+    bucket: null,
+    scope: "all",
+    ...overrides
 });
 
 const emptyPicks = (): string[] => Array.from({ length: 20 }, () => "");
@@ -281,6 +295,7 @@ describe("computeSearchResults — team-only (champion optional)", () => {
     ): SearchQuery => ({
         championId: null,
         teamName,
+        opponentTeamName: null,
         bucket: null,
         scope
     });
@@ -419,7 +434,13 @@ describe("computeSearchResults — team-only (champion optional)", () => {
         const championPlusTeam = computeSearchResults(
             drafts,
             groups,
-            { championId: "Jinx", teamName: "T1 Esports", bucket: null, scope: "all" },
+            {
+                championId: "Jinx",
+                teamName: "T1 Esports",
+                opponentTeamName: null,
+                bucket: null,
+                scope: "all"
+            },
             identity
         );
         expect(championPlusTeam.teamRecord).toBeNull();
@@ -435,6 +456,7 @@ describe("computeSearchResults — team filter", () => {
     ): SearchQuery => ({
         championId: "Jinx",
         teamName: "T1",
+        opponentTeamName: null,
         bucket,
         scope
     });
@@ -646,6 +668,7 @@ describe("champion-only search honours a NAMED scope", () => {
     const query = (scope: SearchQuery["scope"]): SearchQuery => ({
         championId: "Jinx",
         teamName: null,
+        opponentTeamName: null,
         bucket: null,
         scope
     });
@@ -726,12 +749,14 @@ describe("scope filter", () => {
     const teamOnly = (scope: SearchQuery["scope"]): SearchQuery => ({
         championId: null,
         teamName: "T1",
+        opponentTeamName: null,
         bucket: null,
         scope
     });
     const championPlusTeam = (scope: SearchQuery["scope"]): SearchQuery => ({
         championId: "Jinx",
         teamName: "T1",
+        opponentTeamName: null,
         bucket: null,
         scope
     });
@@ -871,5 +896,121 @@ describe("scope filter", () => {
             computeSearchResults(legacyDrafts, legacy, teamOnly("official"), identity)
                 .teamRecord?.games
         ).toBe(0);
+    });
+});
+
+describe("computeSearchResults — matchup (opponentTeamName)", () => {
+    const scrimTeams = (blue: string, red: string): CanvasGroup["metadata"] => ({
+        blueTeamName: blue,
+        redTeamName: red,
+        gameType: "scrim"
+    });
+    // TSM vs C9 (2 games, one with sides swapped), TSM vs TL, C9 vs TL.
+    const groups = [
+        makeGroup("g-ab", scrimTeams("TSM", "C9")),
+        makeGroup("g-ac", scrimTeams("TSM", "TL")),
+        makeGroup("g-bc", scrimTeams("C9", "TL"))
+    ];
+    const drafts = [
+        // TSM on blue (blueSideTeam defaults to 1), blue wins => TSM win
+        makeDraft("d1", fullPicks({ 10: "Jinx" }), {
+            group_id: "g-ab",
+            winner: "blue"
+        }),
+        // blueSideTeam 2 => C9 on blue; blue wins => TSM loss, TSM side red
+        makeDraft("d2", fullPicks(), {
+            group_id: "g-ab",
+            winner: "blue",
+            blueSideTeam: 2
+        }),
+        makeDraft("d3", fullPicks({ 10: "Jinx" }), { group_id: "g-ac", winner: "blue" }),
+        makeDraft("d4", fullPicks(), { group_id: "g-bc", winner: "blue" })
+    ];
+
+    it("team-only matchup narrows to head-to-head games only", () => {
+        const results = computeSearchResults(drafts, groups, matchup("TSM", "C9"), identity);
+        expect(results.matches.map((m) => m.draftId).sort()).toEqual(["d1", "d2"]);
+    });
+
+    it("keeps outcome and teamRecord from teamName's perspective", () => {
+        const results = computeSearchResults(drafts, groups, matchup("TSM", "C9"), identity);
+        const byId = new Map(results.matches.map((m) => [m.draftId, m]));
+        expect(byId.get("d1")?.outcome).toBe("win");
+        expect(byId.get("d2")?.outcome).toBe("loss");
+        expect(results.teamRecord).toMatchObject({ games: 2, wins: 1, losses: 1 });
+    });
+
+    it("carries teamSide, including the swapped-sides game", () => {
+        const results = computeSearchResults(drafts, groups, matchup("TSM", "C9"), identity);
+        const byId = new Map(results.matches.map((m) => [m.draftId, m]));
+        expect(byId.get("d1")?.teamSide).toBe("blue");
+        expect(byId.get("d2")?.teamSide).toBe("red");
+    });
+
+    it("champion + matchup filters slots and buckets to head-to-head games", () => {
+        const query = matchup("TSM", "C9", { championId: "Jinx" });
+        const results = computeSearchResults(drafts, groups, query, identity);
+        // Jinx appears in d1 (head-to-head) and d3 (TSM vs TL) — only d1 counts.
+        expect(results.matches.map((m) => m.draftId)).toEqual(["d1"]);
+        expect(results.buckets?.pickedBy.games).toBe(1);
+    });
+
+    it("does not resolve the OPPONENT via per-card name overrides (R3)", () => {
+        // The group resolves TSM only (team2 metadata absent); the card's own
+        // team2Name says C9. The primary team filter matches via the group —
+        // so a naive opponent check reading card overrides is the ONLY way
+        // this could wrongly pass. It must not.
+        const overrideGroups = [
+            makeGroup("g-o", { blueTeamName: "TSM", gameType: "scrim" })
+        ];
+        const withOverride: CanvasDraft = {
+            ...makeDraft("do", fullPicks(), { group_id: "g-o", winner: "blue" }),
+            team2Name: "C9"
+        };
+        const results = computeSearchResults(
+            [withOverride],
+            overrideGroups,
+            matchup("TSM", "C9"),
+            identity
+        );
+        expect(results.matches).toEqual([]);
+        // Sanity: the primary filter alone DOES see the game.
+        expect(
+            computeSearchResults(
+                [withOverride],
+                overrideGroups,
+                { ...matchup("TSM", "C9"), opponentTeamName: null },
+                identity
+            ).matches.map((m) => m.draftId)
+        ).toEqual(["do"]);
+    });
+
+    it("opponent identical to team can never match", () => {
+        const results = computeSearchResults(drafts, groups, matchup("TSM", "TSM"), identity);
+        expect(results.matches).toEqual([]);
+    });
+
+    it("is ignored without a team filter (championId-only query)", () => {
+        const query: SearchQuery = {
+            ...championOnly("Jinx"),
+            opponentTeamName: "C9"
+        };
+        const results = computeSearchResults(drafts, groups, query, identity);
+        expect(results.matches.map((m) => m.draftId).sort()).toEqual(["d1", "d3"]);
+    });
+
+    it("respects scope: an official-scoped matchup over scrim games is empty", () => {
+        const results = computeSearchResults(
+            drafts,
+            groups,
+            matchup("TSM", "C9", { scope: "official" }),
+            identity
+        );
+        expect(results.matches).toEqual([]);
+    });
+
+    it("champion-only matches carry teamSide null", () => {
+        const results = computeSearchResults(drafts, groups, championOnly("Jinx"), identity);
+        expect(results.matches.every((m) => m.teamSide === null)).toBe(true);
     });
 });

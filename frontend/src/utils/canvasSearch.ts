@@ -18,6 +18,13 @@ export type SearchQuery = {
     championId: string | null;
     /** Case-insensitive team-name filter; null = champion-only search. */
     teamName: string | null;
+    /**
+     * Narrows to head-to-head games (design R1); only meaningful with teamName
+     * set — the engine ignores it when teamName is null, and the UI disables
+     * the field until a team is chosen. teamName stays the perspective anchor:
+     * buckets, outcome and teamRecord keep their one-team semantics exactly.
+     */
+    opponentTeamName: string | null;
     /** Restrict match highlights to one bucket; null = all buckets. */
     bucket: SearchBucket | null;
     /**
@@ -48,6 +55,12 @@ export type MatchOutcome = "win" | "loss" | "noResult";
 export type DraftMatch = {
     draftId: string;
     groupId: string | null;
+    /**
+     * Side the filtered team played in this draft; null without a team filter.
+     * Carried so result rows can mark A's side (R2) and so the deferred side
+     * filter stays a one-guard diff.
+     */
+    teamSide: SlotSide | null;
     slots: MatchSlot[];
     inProgress: boolean;
     /** From the filtered team's perspective; null without team filter or while in progress. */
@@ -188,6 +201,23 @@ const computeOutcome = (
 };
 
 /**
+ * R1/R3: the opponent filter narrows to head-to-head games. It resolves via
+ * group identity exactly like the primary team filter — per-card name
+ * overrides never match — and a draft where the opponent resolves to the SAME
+ * side as the team (opponent === team) can never pass.
+ */
+const passesOpponentFilter = (
+    canvasDraft: CanvasDraft,
+    group: CanvasGroup | undefined,
+    opponentTeamName: string | null,
+    teamSide: SlotSide
+): boolean => {
+    if (opponentTeamName === null) return true;
+    const oppSide = teamSideInDraft(canvasDraft, group, opponentTeamName);
+    return oppSide !== null && oppSide !== teamSide;
+};
+
+/**
  * Team-only search: no champion, one card-level DraftMatch per draft the team
  * played, plus the team's canvas-wide W/L record. `slots` is empty because the
  * highlight is card-level (there is no champion to mark).
@@ -196,6 +226,7 @@ const computeTeamOnlyResults = (
     drafts: readonly CanvasDraft[],
     groupById: Map<string, CanvasGroup>,
     teamName: string,
+    opponentTeamName: string | null,
     scope: SearchScope
 ): SearchResults => {
     const matches: DraftMatch[] = [];
@@ -209,6 +240,7 @@ const computeTeamOnlyResults = (
         if (!countsInScope(effectiveGameType(canvasDraft, group), scope)) continue;
         const teamSide = teamSideInDraft(canvasDraft, group, teamName);
         if (teamSide === null) continue;
+        if (!passesOpponentFilter(canvasDraft, group, opponentTeamName, teamSide)) continue;
 
         const inProgress = isDraftInProgress(canvasDraft);
         const outcome = computeOutcome(canvasDraft, teamSide, inProgress);
@@ -222,6 +254,7 @@ const computeTeamOnlyResults = (
         matches.push({
             draftId: canvasDraft.Draft.id,
             groupId: canvasDraft.group_id ?? null,
+            teamSide,
             slots: [],
             inProgress,
             outcome
@@ -244,7 +277,13 @@ export const computeSearchResults = (
         if (query.teamName === null) {
             return { matches: [], buckets: null, teamRecord: null };
         }
-        return computeTeamOnlyResults(drafts, groupById, query.teamName, query.scope);
+        return computeTeamOnlyResults(
+            drafts,
+            groupById,
+            query.teamName,
+            query.opponentTeamName,
+            query.scope
+        );
     }
 
     const buckets =
@@ -278,6 +317,8 @@ export const computeSearchResults = (
         if (query.teamName !== null) {
             teamSide = teamSideInDraft(canvasDraft, group, query.teamName);
             if (teamSide === null) continue;
+            if (!passesOpponentFilter(canvasDraft, group, query.opponentTeamName, teamSide))
+                continue;
         }
 
         const allSlots: MatchSlot[] = [];
@@ -320,6 +361,7 @@ export const computeSearchResults = (
         matches.push({
             draftId: canvasDraft.Draft.id,
             groupId: canvasDraft.group_id ?? null,
+            teamSide,
             slots,
             inProgress,
             outcome

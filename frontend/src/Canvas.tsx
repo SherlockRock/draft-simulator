@@ -1195,7 +1195,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         return computeSearchResults(
             canvasDrafts,
             canvasGroups,
-            { championId, teamName, bucket: searchBucket(), scope: searchScope() },
+            {
+                championId,
+                teamName,
+                opponentTeamName: null,
+                bucket: searchBucket(),
+                scope: searchScope()
+            },
             resolveChampionId
         );
     });
