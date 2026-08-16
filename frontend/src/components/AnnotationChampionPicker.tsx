@@ -43,7 +43,7 @@ export const AnnotationChampionPicker: Component<AnnotationChampionPickerProps> 
                 // D18 is repealed (inline-champions §1): prose legitimately repeats
                 // champions, so the picker never greys one out.
                 isAvailable={() => true}
-                contextLabel="Add to note"
+                contextLabel="Insert into note"
                 targetKey={anchorKey() ?? ""}
             />
         </CanvasPickerPopover>

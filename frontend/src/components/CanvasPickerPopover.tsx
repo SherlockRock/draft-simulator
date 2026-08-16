@@ -165,7 +165,7 @@ export const CanvasPickerPopover: Component<CanvasPickerPopoverProps> = (props) 
         <Show when={props.anchorKey() !== null}>
             <div
                 ref={popoverEl}
-                class="fixed z-[60] w-96"
+                class="canvas-picker-popover fixed z-[60] w-96"
                 style={positionStyle()}
                 onMouseDown={(e) => e.stopPropagation()}
                 onWheel={(e) => e.stopPropagation()}

@@ -1,9 +1,19 @@
-import { For, Index, Show, createEffect, createMemo, createSignal } from "solid-js";
+import {
+    For,
+    Index,
+    Show,
+    createEffect,
+    createMemo,
+    createSignal,
+    onCleanup,
+    untrack
+} from "solid-js";
 import type {
     AnchorType,
     CanvasAnnotation as CanvasAnnotationRow
 } from "../utils/schemas";
 import {
+    insertChampionToken,
     parseAnnotationText,
     uniqueChampions,
     type AnnotationSegment
@@ -58,6 +68,20 @@ type CanvasAnnotationProps = {
      * that has four distinct answers.
      */
     isTextCollapsed: () => boolean;
+    /**
+     * Right-click insert (§3). The caret is captured HERE, not passed up and
+     * re-derived: it is a fact only this component's textarea knows
+     * (technique: don't re-derive caller facts). While an insert session is
+     * open, blur defers the commit — the picker steals focus by design.
+     */
+    onOpenInsertPicker: (annotationId: string) => void;
+    onCloseInsertPicker: () => void;
+    insertPickerOpenFor: () => string | null;
+    insertedChampion: () => {
+        annotationId: string;
+        championName: string;
+        session: number;
+    } | null;
     onCommitText: (annotationId: string, text: string, measuredHeight: number) => void;
     /**
      * `isLeftEdge` says which corner is being dragged, and it is passed rather
@@ -141,6 +165,15 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
     const [isTextFocused, setIsTextFocused] = createSignal(false);
     let textareaRef: HTMLTextAreaElement | undefined;
     let measureRef: HTMLDivElement | undefined;
+    // Non-reactive on purpose: nothing renders from these.
+    let insertSelection: { start: number; end: number } | null = null;
+    // Seeded from the CURRENT signal value, not 0: annotations remount when
+    // dragged between the grouped and loose <For> blocks, and a fresh instance
+    // starting at 0 would treat the last completed insert as unconsumed and
+    // replay it into a note nobody is editing.
+    // `untrack` because this is a one-time seed, not a subscription — the
+    // insert effect below is the tracked consumer.
+    let consumedInsertSession = untrack(() => props.insertedChampion()?.session ?? 0);
 
     // Both branches handled: when the store value changes under an unfocused
     // note we resync, and while focused we deliberately do not — that is the
@@ -160,7 +193,87 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
     const isEditing = () => props.editingAnnotationId() === props.annotation.id;
 
     createEffect(() => {
-        if (props.lockedByName() && isEditing()) textareaRef?.blur();
+        if (props.lockedByName() && isEditing()) {
+            // A lock landing while the insert picker is up: end the session
+            // first so the blur below commits instead of deferring.
+            if (insertSelection) {
+                insertSelection = null;
+                props.onCloseInsertPicker();
+            }
+            textareaRef?.blur();
+        }
+    });
+
+    // Applies a picked champion at the captured caret, then hands focus back.
+    createEffect(() => {
+        const inserted = props.insertedChampion();
+        if (!inserted || inserted.annotationId !== props.annotation.id) return;
+        if (inserted.session === consumedInsertSession) return;
+        consumedInsertSession = inserted.session;
+        const fallback = { start: textSignal().length, end: textSignal().length };
+        const selection = insertSelection ?? fallback;
+        insertSelection = null;
+        const next = insertChampionToken(
+            textSignal(),
+            selection.start,
+            selection.end,
+            inserted.championName
+        );
+        setTextSignal(next.text);
+        textareaRef?.focus();
+        textareaRef?.setSelectionRange(next.caret, next.caret);
+    });
+
+    // Close-without-pick. Ordered guards: if a pick for this note is still
+    // unconsumed, the insert effect owns the session — do not clear its
+    // captured caret. Otherwise the session is over, and there are two exits:
+    // an ordinary cancel (Escape) RESUMES the edit; an invalidating close
+    // (permission lost, lock arrived) COMMITS what was typed — resuming an
+    // editor the user is no longer allowed to be in contradicts why the
+    // picker closed, and dropping the text is the silent-loss bug this
+    // component's commit path exists to prevent.
+    createEffect(() => {
+        if (props.insertPickerOpenFor() === props.annotation.id) return;
+        if (!insertSelection) return;
+        const pending = props.insertedChampion();
+        if (
+            pending &&
+            pending.annotationId === props.annotation.id &&
+            pending.session !== consumedInsertSession
+        ) {
+            return;
+        }
+        insertSelection = null;
+        if (!props.canEdit() || props.lockedByName() || props.isConnectionMode) {
+            commitText();
+        } else {
+            textareaRef?.focus();
+        }
+    });
+
+    // While this note's insert session is open, a mousedown outside both the
+    // picker and this textarea ends the session and COMMITS — the user has
+    // moved on, and stranding the edit uncommitted is the silent-loss bug.
+    // Capture-phase, so it runs before whatever the click starts.
+    createEffect(() => {
+        if (props.insertPickerOpenFor() !== props.annotation.id) return;
+        const onWindowMouseDown = (e: MouseEvent) => {
+            if (!(e.target instanceof Element)) return;
+            if (e.target.closest(".canvas-picker-popover")) return;
+            if (e.target === textareaRef) {
+                // Clicking back into the textarea means "keep editing, drop
+                // the insert": cancel without committing — focus lands in the
+                // textarea naturally, and the stale captured caret dies here.
+                insertSelection = null;
+                props.onCloseInsertPicker();
+                return;
+            }
+            insertSelection = null;
+            props.onCloseInsertPicker();
+            commitText();
+        };
+        window.addEventListener("mousedown", onWindowMouseDown, true);
+        onCleanup(() => window.removeEventListener("mousedown", onWindowMouseDown, true));
     });
 
     // Snapped inside a grid, stored outside it (design D5a). Snapping happens
@@ -509,13 +622,49 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                             // `commitText` runs on blur, so disabling on a lock
                             // arriving mid-edit would drop what was typed.
                             readOnly={Boolean(props.lockedByName())}
-                            class="h-full w-full resize-none bg-transparent p-2 text-darius-text-primary outline-none"
+                            class="annotation-editor-surface h-full w-full resize-none bg-transparent p-2 text-darius-text-primary outline-none"
                             style={{
                                 "font-size": `${fontPx()}px`,
                                 "line-height": "1.25"
                             }}
                             onFocus={() => setIsTextFocused(true)}
-                            onInput={(e) => setTextSignal(e.currentTarget.value)}
+                            onInput={(e) => {
+                                if (insertSelection) {
+                                    insertSelection = null;
+                                    props.onCloseInsertPicker();
+                                }
+                                setTextSignal(e.currentTarget.value);
+                            }}
+                            onContextMenu={(e) => {
+                                // §3: right-click is pan everywhere on the canvas EXCEPT
+                                // inside a focused annotation editor. preventDefault/
+                                // stopPropagation run UNCONDITIONALLY: a locked (readOnly)
+                                // editor gets no picker, but it must not get the native
+                                // menu either — the smoke contract is "nothing opens".
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (!props.canEdit() || props.lockedByName()) return;
+                                const el = e.currentTarget;
+                                // queueMicrotask: on Linux/X11 `contextmenu` fires at
+                                // MOUSEDOWN time (Canvas.tsx's aux-pan comment), i.e.
+                                // before the browser has moved the caret to the click
+                                // point — a synchronous read captures the caret's
+                                // PREVIOUS position. One microtask later both orders
+                                // agree.
+                                // `untrack`: the microtask is a detached
+                                // continuation of this event handler, not a
+                                // tracked scope — the reads are deliberate
+                                // one-shots.
+                                queueMicrotask(() =>
+                                    untrack(() => {
+                                        insertSelection = {
+                                            start: el.selectionStart,
+                                            end: el.selectionEnd
+                                        };
+                                        props.onOpenInsertPicker(props.annotation.id);
+                                    })
+                                );
+                            }}
                             onKeyDown={(e) => {
                                 // Enter inserts a newline: the text is multi-line by
                                 // design (D6, `\n` preserved). Escape commits, matching
@@ -525,7 +674,13 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                                     e.currentTarget.blur();
                                 }
                             }}
-                            onBlur={commitText}
+                            onBlur={() => {
+                                // An open insert session means the picker took focus;
+                                // the commit runs when the session resolves (insert
+                                // effect or close effect below).
+                                if (insertSelection) return;
+                                commitText();
+                            }}
                         />
                         {/* §5: auto-fit measures the DISPLAY rendering. Same
                             width (inset-x-0 inside the same clipping box), same

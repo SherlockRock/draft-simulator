@@ -13,7 +13,8 @@ import {
     JSX
 } from "solid-js";
 import { createStore, produce, reconcile } from "solid-js/store";
-import { resolveChampionId } from "./utils/constants";
+import { championById, resolveChampionId } from "./utils/constants";
+import { AnnotationChampionPicker } from "./components/AnnotationChampionPicker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query";
 import {
     postNewDraft,
@@ -453,6 +454,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setPickerAnchorSession((n) => n + 1);
     };
     const closePicker = () => setPickerTarget(null);
+    const [insertPickerAnnotationId, setInsertPickerAnnotationId] = createSignal<
+        string | null
+    >(null);
+    const [insertPickerAnchorSession, setInsertPickerAnchorSession] = createSignal(0);
+    // The champion the picker handed back, for the note component to splice at
+    // its captured caret. Session-keyed so the same champion twice still fires.
+    const [insertedChampion, setInsertedChampion] = createSignal<{
+        annotationId: string;
+        championName: string;
+        session: number;
+    } | null>(null);
+    const openInsertPicker = (annotationId: string) => {
+        setInsertPickerAnnotationId(annotationId);
+        setInsertPickerAnchorSession((n) => n + 1);
+    };
+    const closeInsertPicker = () => setInsertPickerAnnotationId(null);
     const [isImportDialogOpen, setIsImportDialogOpen] = createSignal(false);
     const [importPosition, setImportPosition] = createSignal({ x: 0, y: 0 });
     const [isDeleteGroupDialogOpen, setIsDeleteGroupDialogOpen] = createSignal(false);
@@ -616,6 +633,26 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const canvasDraft = canvasDrafts.find((cd) => cd.Draft.id === target.draftId);
         if (!canvasDraft || canvasDraft.is_locked || !canEdit() || isConnectionMode()) {
             closePicker();
+        }
+    });
+
+    // Closes the picker whenever its session stops being legitimate. Note the
+    // deletion case is handled HERE, not by the popover: CanvasPickerPopover
+    // only fires onClose when anchor RESOLUTION fails — a null annotation
+    // accessor merely unmounts it visually and would leave this signal stale.
+    // The lock case matters doubly: the component defers its blur-commit while
+    // an insert session is open, so a picker left open under a lock would
+    // strand typed text uncommitted (the no-silent-loss discipline, D12).
+    createEffect(() => {
+        const annotationId = insertPickerAnnotationId();
+        if (!annotationId) return;
+        if (
+            !canEdit() ||
+            isConnectionMode() ||
+            annotationLockedByName(annotationId) ||
+            !annotations.some((a) => a.id === annotationId)
+        ) {
+            closeInsertPicker();
         }
     });
 
@@ -4873,6 +4910,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const onAuxMouseDown = (e: MouseEvent) => {
         if (e.button !== 1 && e.button !== 2) return;
+        // Right-click belongs to the annotation editor's surfaces while one is
+        // mounted — FOCUSED OR NOT. `isFocusedInteractiveTarget` below cannot
+        // cover the mid-insert-session case where focus sits on the picker's
+        // search box, and this listener is registered CAPTURE-phase on the canvas
+        // container, so an element-level stopPropagation can never preempt it.
+        if (
+            e.target instanceof Element &&
+            e.target.closest(".annotation-editor-surface")
+        ) {
+            return;
+        }
         if (isFocusedInteractiveTarget(e.target)) return;
         if (!isCanvasWorldTarget(e.target)) return;
         if (
@@ -6504,6 +6552,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                             annotation.fontSize
                                                         ]()
                                                     }
+                                                    onOpenInsertPicker={openInsertPicker}
+                                                    onCloseInsertPicker={
+                                                        closeInsertPicker
+                                                    }
+                                                    insertPickerOpenFor={
+                                                        insertPickerAnnotationId
+                                                    }
+                                                    insertedChampion={insertedChampion}
                                                     onCommitText={
                                                         handleAnnotationTextCommit
                                                     }
@@ -6777,6 +6833,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 isTextCollapsed={() =>
                                     collapsedTextByFontSize[annotation.fontSize]()
                                 }
+                                onOpenInsertPicker={openInsertPicker}
+                                onCloseInsertPicker={closeInsertPicker}
+                                insertPickerOpenFor={insertPickerAnnotationId}
+                                insertedChampion={insertedChampion}
                                 onCommitText={handleAnnotationTextCommit}
                                 onResize={handleAnnotationResize}
                                 onResizeEnd={handleAnnotationResizeEnd}
@@ -7288,6 +7348,27 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     getUnavailableChampionIds={getUnavailableChampionIds}
                     cardLayout={props.cardLayout}
                     viewport={props.viewport}
+                />
+                <AnnotationChampionPicker
+                    annotation={() =>
+                        annotations.find((a) => a.id === insertPickerAnnotationId()) ??
+                        null
+                    }
+                    anchorSession={insertPickerAnchorSession}
+                    viewport={props.viewport}
+                    onPick={(championId) => {
+                        const annotationId = insertPickerAnnotationId();
+                        const champion = championById.get(championId);
+                        if (annotationId && champion) {
+                            setInsertedChampion({
+                                annotationId,
+                                championName: champion.name,
+                                session: insertPickerAnchorSession()
+                            });
+                        }
+                        closeInsertPicker();
+                    }}
+                    onClose={closeInsertPicker}
                 />
             </div>
         </Show>
