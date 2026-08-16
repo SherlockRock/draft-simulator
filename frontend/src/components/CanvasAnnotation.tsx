@@ -3,8 +3,11 @@ import type {
     AnchorType,
     CanvasAnnotation as CanvasAnnotationRow
 } from "../utils/schemas";
-import { resolveStripChampions } from "../utils/annotationStrip";
-import { parseAnnotationText, type AnnotationSegment } from "../utils/annotationTokens";
+import {
+    parseAnnotationText,
+    uniqueChampions,
+    type AnnotationSegment
+} from "../utils/annotationTokens";
 import { annotationSurfaceClass, ANNOTATION_FONT_PX } from "../utils/annotationStyle";
 import { MIN_ANNOTATION_HEIGHT, MIN_ANNOTATION_WIDTH } from "../utils/annotationSize";
 import { scaledStrokePx, screenConstantPx } from "../utils/viewport";
@@ -55,8 +58,6 @@ type CanvasAnnotationProps = {
      * that has four distinct answers.
      */
     isTextCollapsed: () => boolean;
-    onAddChampion: (annotationId: string) => void;
-    onRemoveChampion: (annotationId: string, championId: string) => void;
     onCommitText: (annotationId: string, text: string, measuredHeight: number) => void;
     /**
      * `isLeftEdge` says which corner is being dragged, and it is passed rather
@@ -279,24 +280,6 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
         window.addEventListener("mouseup", onUp);
     };
 
-    /**
-     * The strip's EDIT affordances (the `+` and the per-chip `×`).
-     *
-     * ⚠️ `!isConnectionMode` is load-bearing and is why this is one accessor
-     * rather than the condition written out three times. Connection mode makes
-     * a click on a note mean "wire this endpoint", and every other affordance
-     * in this component already stands down for it — the drag cursor (:226),
-     * the drag itself (:248) and the resize grips (:367). These two buttons
-     * carry their own `onMouseDown` stopPropagation, so left ungated they do
-     * not merely show: they SWALLOW the connection click and open a champion
-     * picker instead.
-     *
-     * The chips themselves stay visible in connection mode. They are content,
-     * not an affordance.
-     */
-    const canEditStrip = () =>
-        props.isSelected() && props.canEdit() && !props.isConnectionMode;
-
     const commitText = () => {
         // ⚠️ Snapshot BEFORE clearing the focus flag. Solid flushes the resync
         // effect above SYNCHRONOUSLY on that write, which restores the OLD
@@ -441,73 +424,28 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                 when it was the root's flex children — so this is a pure
                 re-parenting and the layout is unchanged. */}
             <div class="absolute inset-0 flex flex-col overflow-hidden rounded-md">
-                <Show when={props.annotation.championIds.length > 0 || canEditStrip()}>
-                    {/* ICONS ABOVE, text below — this REVERSES D3's incidental
-                    "text above a row of champion icons", on the maintainer's
-                    call after seeing it (2026-08-14). D3 carries no argument
-                    for the order: every rejection under it is about the type
-                    shape or about strip ORDERING (append/remove), never about
-                    vertical placement.
-
-                    It also removes a real wobble. The text block is `flex-1`
-                    and the strip is `shrink-0`, so when §4 collapses the text
-                    on zoom-out the text leaves the flex column entirely — and
-                    a bottom strip JUMPS to the top of the note as it goes.
-                    Icons-first, the strip never moves.
-
-                    The strip wraps and
-                    clips with the box rather than scrolling — an inner scroll
-                    container inside a scale()d world layer fights canvas zoom
-                    for wheel events (D7). */}
-                    <div class="pointer-events-auto flex shrink-0 flex-wrap gap-1 overflow-hidden px-2 pt-2">
-                        <For each={resolveStripChampions(props.annotation.championIds)}>
-                            {(chip) => (
-                                <div class="group/chip relative">
-                                    <Show
-                                        when={chip.resolved}
-                                        fallback={
-                                            <div
-                                                class="flex h-8 w-8 items-center justify-center rounded border border-dashed border-darius-crimson text-[8px] text-darius-crimson"
-                                                title={`Unknown champion: ${chip.id}`}
-                                            >
-                                                {chip.id.slice(0, 4)}
-                                            </div>
-                                        }
-                                    >
-                                        {(champion) => (
-                                            <ChampionPortrait
-                                                src={champion().img}
-                                                alt={champion().name}
-                                                class="h-8 w-8 rounded"
-                                            />
-                                        )}
-                                    </Show>
-                                    <Show when={canEditStrip()}>
-                                        <button
-                                            class="absolute -right-1 -top-1 hidden h-4 w-4 rounded-full bg-darius-crimson text-[10px] leading-none text-darius-text-primary group-hover/chip:block"
-                                            onMouseDown={(e) => e.stopPropagation()}
-                                            onClick={() =>
-                                                props.onRemoveChampion(
-                                                    props.annotation.id,
-                                                    chip.id
-                                                )
-                                            }
-                                        >
-                                            ×
-                                        </button>
-                                    </Show>
-                                </div>
+                {/* Zoom-collapse face (design §4): when the text collapses, the note
+                    renders its champions — unique, first-appearance order, DERIVED from
+                    the tokens rather than stored. The strip's old geometry: flex-wrap,
+                    gap, clip with the box, no scrolling (D7's wheel argument holds).
+                    Editing exemption mirrors the text block's below: while the textarea
+                    is up, the text (and its tokens) are the face. */}
+                <Show when={props.isTextCollapsed() && !isEditing() && !isTextFocused()}>
+                    <div class="pointer-events-none flex shrink-0 flex-wrap gap-1 overflow-hidden px-2 pt-2">
+                        <For each={uniqueChampions(segments())}>
+                            {(champion) => (
+                                <ChampionPortrait
+                                    src={champion.img}
+                                    alt={champion.name}
+                                    title={champion.name}
+                                    // pointer-events-auto: the parent opts out so the cluster
+                                    // never blocks the note surface, but title-on-hover needs
+                                    // the icons themselves to receive events (same treatment
+                                    // as the inline icons in SegmentedText).
+                                    class="pointer-events-auto h-8 w-8 rounded"
+                                />
                             )}
                         </For>
-                        <Show when={canEditStrip()}>
-                            <button
-                                class="flex h-8 w-8 items-center justify-center rounded border border-dashed border-darius-purple-bright text-darius-purple-bright"
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={() => props.onAddChampion(props.annotation.id)}
-                            >
-                                +
-                            </button>
-                        </Show>
                     </div>
                 </Show>
 

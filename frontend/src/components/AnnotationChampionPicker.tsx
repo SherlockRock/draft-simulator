@@ -1,6 +1,5 @@
 import { Component, createMemo } from "solid-js";
 import type { CanvasAnnotation, Viewport } from "../utils/schemas";
-import { isChampionAvailableForStrip } from "../utils/annotationStrip";
 import { CanvasPickerPopover } from "./CanvasPickerPopover";
 import { ChampionPickerCore } from "./ChampionPickerCore";
 
@@ -41,9 +40,9 @@ export const AnnotationChampionPicker: Component<AnnotationChampionPickerProps> 
             <ChampionPickerCore
                 onPick={(championId) => props.onPick(championId)}
                 onClose={props.onClose}
-                isAvailable={isChampionAvailableForStrip(
-                    props.annotation()?.championIds ?? []
-                )}
+                // D18 is repealed (inline-champions §1): prose legitimately repeats
+                // champions, so the picker never greys one out.
+                isAvailable={() => true}
                 contextLabel="Add to note"
                 targetKey={anchorKey() ?? ""}
             />
