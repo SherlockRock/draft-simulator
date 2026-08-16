@@ -33,9 +33,15 @@ export const clampPanelGeometry = (
     containerHeight: number
 ): PanelGeometry => {
     const maxWidth = Math.max(containerWidth - PANEL_MARGIN * 2, SEARCH_PANEL_MIN_WIDTH);
-    const maxHeight = Math.max(containerHeight - PANEL_MARGIN * 2, SEARCH_PANEL_MIN_HEIGHT);
+    const maxHeight = Math.max(
+        containerHeight - PANEL_MARGIN * 2,
+        SEARCH_PANEL_MIN_HEIGHT
+    );
     const width = Math.min(Math.max(geometry.width, SEARCH_PANEL_MIN_WIDTH), maxWidth);
-    const height = Math.min(Math.max(geometry.height, SEARCH_PANEL_MIN_HEIGHT), maxHeight);
+    const height = Math.min(
+        Math.max(geometry.height, SEARCH_PANEL_MIN_HEIGHT),
+        maxHeight
+    );
     const maxX = Math.max(containerWidth - width - PANEL_MARGIN, PANEL_MARGIN);
     const maxY = Math.max(containerHeight - height - PANEL_MARGIN, PANEL_MARGIN);
     const x = Math.min(Math.max(geometry.x, PANEL_MARGIN), maxX);

@@ -14,11 +14,7 @@ import { Undo2, X } from "lucide-solid";
 import { SearchableSelect } from "./SearchableSelect";
 import { SearchResultRow } from "./SearchResultRow";
 import { championById, champions } from "../utils/constants";
-import type {
-    ScopeHint,
-    SearchBucket,
-    SearchResults
-} from "../utils/canvasSearch";
+import type { ScopeHint, SearchBucket, SearchResults } from "../utils/canvasSearch";
 import { SCOPE_VALUES, type SearchScope } from "../utils/gameClassification";
 import type { SearchRowModel } from "../utils/searchRowModel";
 import {
@@ -152,7 +148,9 @@ export const CanvasSearchPanel = (props: CanvasSearchPanelProps) => {
                     x: start.x + (ev.clientX - startX),
                     y: start.y + (ev.clientY - startY)
                 };
-                setGeometry(rect ? clampPanelGeometry(next, rect.width, rect.height) : next);
+                setGeometry(
+                    rect ? clampPanelGeometry(next, rect.width, rect.height) : next
+                );
             },
             () => savePanelGeometry(geometry())
         );
@@ -178,7 +176,9 @@ export const CanvasSearchPanel = (props: CanvasSearchPanelProps) => {
                     x = start.x + (start.width - width);
                 }
                 const next = { x, y: start.y, width, height };
-                setGeometry(rect ? clampPanelGeometry(next, rect.width, rect.height) : next);
+                setGeometry(
+                    rect ? clampPanelGeometry(next, rect.width, rect.height) : next
+                );
             },
             () => savePanelGeometry(geometry())
         );
@@ -259,7 +259,8 @@ export const CanvasSearchPanel = (props: CanvasSearchPanelProps) => {
     const handleRootKeyDown = (e: KeyboardEvent) => {
         if (e.key !== "Enter" || e.defaultPrevented) return;
         if (e.target instanceof HTMLButtonElement) return;
-        const first = rowsState.pinned[0]?.draftId ?? rowsState.results[0]?.draftId ?? null;
+        const first =
+            rowsState.pinned[0]?.draftId ?? rowsState.results[0]?.draftId ?? null;
         const target = props.selectedDraftId() ?? first;
         if (target === null) return;
         e.preventDefault();
@@ -271,8 +272,12 @@ export const CanvasSearchPanel = (props: CanvasSearchPanelProps) => {
         pinned: SearchRowModel[];
         results: SearchRowModel[];
     }>({ pinned: [], results: [] });
-    createEffect(() => setRowsState("pinned", reconcile(props.pinnedRows(), { key: "draftId" })));
-    createEffect(() => setRowsState("results", reconcile(props.resultRows(), { key: "draftId" })));
+    createEffect(() =>
+        setRowsState("pinned", reconcile(props.pinnedRows(), { key: "draftId" }))
+    );
+    createEffect(() =>
+        setRowsState("results", reconcile(props.resultRows(), { key: "draftId" }))
+    );
 
     // Keep the selected row visible when selection moves via keyboard.
     createEffect(() => {
@@ -426,7 +431,9 @@ export const CanvasSearchPanel = (props: CanvasSearchPanelProps) => {
                                 <span aria-hidden="true" class="opacity-40">
                                     ·
                                 </span>
-                                <span class="opacity-70">{record().noResult} no result</span>
+                                <span class="opacity-70">
+                                    {record().noResult} no result
+                                </span>
                             </Show>
                             <Show when={record().inProgress > 0}>
                                 <span aria-hidden="true" class="opacity-40">
@@ -571,8 +578,8 @@ export const CanvasSearchPanel = (props: CanvasSearchPanelProps) => {
                                 {(hint) => (
                                     <div class="mt-1">
                                         {hint.games}{" "}
-                                        {hint.games === 1 ? "game exists" : "games exist"} under{" "}
-                                        {SCOPE_LABELS[hint.scope]}
+                                        {hint.games === 1 ? "game exists" : "games exist"}{" "}
+                                        under {SCOPE_LABELS[hint.scope]}
                                     </div>
                                 )}
                             </For>

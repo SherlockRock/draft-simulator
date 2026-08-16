@@ -240,7 +240,8 @@ const computeTeamOnlyResults = (
         if (!countsInScope(effectiveGameType(canvasDraft, group), scope)) continue;
         const teamSide = teamSideInDraft(canvasDraft, group, teamName);
         if (teamSide === null) continue;
-        if (!passesOpponentFilter(canvasDraft, group, opponentTeamName, teamSide)) continue;
+        if (!passesOpponentFilter(canvasDraft, group, opponentTeamName, teamSide))
+            continue;
 
         const inProgress = isDraftInProgress(canvasDraft);
         const outcome = computeOutcome(canvasDraft, teamSide, inProgress);
@@ -317,7 +318,14 @@ export const computeSearchResults = (
         if (query.teamName !== null) {
             teamSide = teamSideInDraft(canvasDraft, group, query.teamName);
             if (teamSide === null) continue;
-            if (!passesOpponentFilter(canvasDraft, group, query.opponentTeamName, teamSide))
+            if (
+                !passesOpponentFilter(
+                    canvasDraft,
+                    group,
+                    query.opponentTeamName,
+                    teamSide
+                )
+            )
                 continue;
         }
 
@@ -470,8 +478,12 @@ export const computeMatchupScopeHint = (
     const hints: ScopeHint[] = [];
     for (const scope of NAMED_SCOPES) {
         if (scope === query.scope) continue;
-        const games = computeSearchResults(drafts, groups, { ...query, scope }, resolvePick)
-            .matches.length;
+        const games = computeSearchResults(
+            drafts,
+            groups,
+            { ...query, scope },
+            resolvePick
+        ).matches.length;
         if (games > 0) hints.push({ scope, games });
     }
     return hints;

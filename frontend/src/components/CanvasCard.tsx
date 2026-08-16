@@ -65,7 +65,7 @@ type CanvasCardProps = {
     disabledChampions?: string[];
     searchDimmed?: () => boolean;
     searchSlotPhase?: (pickIndex: number) => SlotPhase | null;
-    searchIsCurrent?: () => boolean;
+    searchSelected?: () => boolean;
     searchInProgress?: () => boolean;
 };
 
@@ -290,7 +290,7 @@ export const CanvasCard = (props: CanvasCardProps) => {
     const highlightOutline = createMemo((): JSX.CSSProperties => {
         const color = selected()
             ? "rgb(240 104 48)" // darius-ember
-            : props.isConnectionMode || (props.searchIsCurrent?.() ?? false)
+            : props.isConnectionMode || (props.searchSelected?.() ?? false)
               ? "rgb(155 80 192)" // darius-purple-bright
               : null;
         if (color === null) return {};

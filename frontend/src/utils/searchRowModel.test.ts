@@ -28,7 +28,11 @@ const match = (draftId: string, overrides: Partial<DraftMatch> = {}): DraftMatch
 
 describe("buildSearchRowModel", () => {
     it("maps matched slots to index -> phase and carries outcome/teamSide", () => {
-        const row = buildSearchRowModel(makeDraft("d1", fullPicks()), undefined, match("d1"));
+        const row = buildSearchRowModel(
+            makeDraft("d1", fullPicks()),
+            undefined,
+            match("d1")
+        );
         expect(row.matchedSlots).toEqual({ 2: "ban", 11: "pick" });
         expect(row.outcome).toBe("win");
         expect(row.teamSide).toBe("blue");
@@ -69,7 +73,9 @@ describe("buildSearchRowModel", () => {
             createdAt: "2026-08-02T00:00:00Z"
         };
         cd.Draft.createdAt = "2026-08-01T00:00:00Z";
-        expect(buildSearchRowModel(cd, undefined, null).date).toBe("2026-08-01T00:00:00Z");
+        expect(buildSearchRowModel(cd, undefined, null).date).toBe(
+            "2026-08-01T00:00:00Z"
+        );
         const cardOnly: CanvasDraft = {
             ...makeDraft("d6", fullPicks()),
             createdAt: "2026-08-02T00:00:00Z"
@@ -77,8 +83,9 @@ describe("buildSearchRowModel", () => {
         expect(buildSearchRowModel(cardOnly, undefined, null).date).toBe(
             "2026-08-02T00:00:00Z"
         );
-        expect(buildSearchRowModel(makeDraft("d7", fullPicks()), undefined, null).date)
-            .toBeNull();
+        expect(
+            buildSearchRowModel(makeDraft("d7", fullPicks()), undefined, null).date
+        ).toBeNull();
     });
 
     it("bare pins respect the versus completed flag for inProgress", () => {

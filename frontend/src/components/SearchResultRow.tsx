@@ -19,8 +19,11 @@ type SearchResultRowProps = {
 const formatDate = (iso: string): string =>
     new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
-const SlotIcon: Component<{ pick: string; highlight: "pick" | "ban" | null }> = (props) => {
-    const champ = () => (props.pick !== "" ? (resolveChampion(props.pick) ?? null) : null);
+const SlotIcon: Component<{ pick: string; highlight: "pick" | "ban" | null }> = (
+    props
+) => {
+    const champ = () =>
+        props.pick !== "" ? (resolveChampion(props.pick) ?? null) : null;
     return (
         <img
             src={champ()?.img ?? BlankSquare}
@@ -70,8 +73,10 @@ export const SearchResultRow: Component<SearchResultRowProps> = (props) => {
             onClick={() => props.onJump(props.row.draftId)}
             class="mt-2 cursor-pointer rounded-lg border bg-darius-bg/60 p-2 transition-colors"
             classList={{
-                "border-darius-purple-bright ring-1 ring-darius-purple-bright": props.selected,
-                "border-darius-border hover:border-darius-purple-bright/60": !props.selected
+                "border-darius-purple-bright ring-1 ring-darius-purple-bright":
+                    props.selected,
+                "border-darius-border hover:border-darius-purple-bright/60":
+                    !props.selected
             }}
         >
             <div class="flex items-center gap-2 text-xs">

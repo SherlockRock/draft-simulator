@@ -932,12 +932,22 @@ describe("computeSearchResults — matchup (opponentTeamName)", () => {
     ];
 
     it("team-only matchup narrows to head-to-head games only", () => {
-        const results = computeSearchResults(drafts, groups, matchup("TSM", "C9"), identity);
+        const results = computeSearchResults(
+            drafts,
+            groups,
+            matchup("TSM", "C9"),
+            identity
+        );
         expect(results.matches.map((m) => m.draftId).sort()).toEqual(["d1", "d2"]);
     });
 
     it("keeps outcome and teamRecord from teamName's perspective", () => {
-        const results = computeSearchResults(drafts, groups, matchup("TSM", "C9"), identity);
+        const results = computeSearchResults(
+            drafts,
+            groups,
+            matchup("TSM", "C9"),
+            identity
+        );
         const byId = new Map(results.matches.map((m) => [m.draftId, m]));
         expect(byId.get("d1")?.outcome).toBe("win");
         expect(byId.get("d2")?.outcome).toBe("loss");
@@ -945,7 +955,12 @@ describe("computeSearchResults — matchup (opponentTeamName)", () => {
     });
 
     it("carries teamSide, including the swapped-sides game", () => {
-        const results = computeSearchResults(drafts, groups, matchup("TSM", "C9"), identity);
+        const results = computeSearchResults(
+            drafts,
+            groups,
+            matchup("TSM", "C9"),
+            identity
+        );
         const byId = new Map(results.matches.map((m) => [m.draftId, m]));
         expect(byId.get("d1")?.teamSide).toBe("blue");
         expect(byId.get("d2")?.teamSide).toBe("red");
@@ -990,7 +1005,12 @@ describe("computeSearchResults — matchup (opponentTeamName)", () => {
     });
 
     it("opponent identical to team can never match", () => {
-        const results = computeSearchResults(drafts, groups, matchup("TSM", "TSM"), identity);
+        const results = computeSearchResults(
+            drafts,
+            groups,
+            matchup("TSM", "TSM"),
+            identity
+        );
         expect(results.matches).toEqual([]);
     });
 
@@ -1014,7 +1034,12 @@ describe("computeSearchResults — matchup (opponentTeamName)", () => {
     });
 
     it("champion-only matches carry teamSide null", () => {
-        const results = computeSearchResults(drafts, groups, championOnly("Jinx"), identity);
+        const results = computeSearchResults(
+            drafts,
+            groups,
+            championOnly("Jinx"),
+            identity
+        );
         expect(results.matches.every((m) => m.teamSide === null)).toBe(true);
     });
 });
@@ -1022,8 +1047,16 @@ describe("computeSearchResults — matchup (opponentTeamName)", () => {
 describe("getOpponentNameOptions", () => {
     it("is the scope-aware team list minus the selected team, case-insensitively", () => {
         const groups = [
-            makeGroup("g-ab", { blueTeamName: "TSM", redTeamName: "C9", gameType: "scrim" }),
-            makeGroup("g-ac", { blueTeamName: "TSM", redTeamName: "TL", gameType: "scrim" })
+            makeGroup("g-ab", {
+                blueTeamName: "TSM",
+                redTeamName: "C9",
+                gameType: "scrim"
+            }),
+            makeGroup("g-ac", {
+                blueTeamName: "TSM",
+                redTeamName: "TL",
+                gameType: "scrim"
+            })
         ];
         expect(getOpponentNameOptions(groups, "all", "tsm")).toEqual(["C9", "TL"]);
     });
@@ -1082,7 +1115,11 @@ describe("sortDraftMatches", () => {
         // The dated entry is load-bearing: a parseTime that mapped a missing
         // date to +Infinity instead of 0 would put undated blocks FIRST under
         // the descending block sort and still pass an all-undated fixture.
-        const mixed = [asMatch("b-loose", null), asMatch("dated", null), asMatch("a-loose", null)];
+        const mixed = [
+            asMatch("b-loose", null),
+            asMatch("dated", null),
+            asMatch("a-loose", null)
+        ];
         const mixedDrafts = [
             makeDraft("b-loose", fullPicks()),
             makeDraft("a-loose", fullPicks()),
@@ -1098,8 +1135,16 @@ describe("sortDraftMatches", () => {
 
 describe("computeMatchupScopeHint", () => {
     const groups = [
-        makeGroup("g-scrim", { blueTeamName: "TSM", redTeamName: "C9", gameType: "scrim" }),
-        makeGroup("g-scratch", { blueTeamName: "TSM", redTeamName: "C9", gameType: "scratch" })
+        makeGroup("g-scrim", {
+            blueTeamName: "TSM",
+            redTeamName: "C9",
+            gameType: "scrim"
+        }),
+        makeGroup("g-scratch", {
+            blueTeamName: "TSM",
+            redTeamName: "C9",
+            gameType: "scratch"
+        })
     ];
     const drafts = [
         makeDraft("s1", fullPicks(), { group_id: "g-scrim" }),
@@ -1109,7 +1154,12 @@ describe("computeMatchupScopeHint", () => {
 
     it("reports games under other named scopes when the primary scope hides them", () => {
         expect(
-            computeMatchupScopeHint(drafts, groups, matchup("TSM", "C9", { scope: "official" }), identity)
+            computeMatchupScopeHint(
+                drafts,
+                groups,
+                matchup("TSM", "C9", { scope: "official" }),
+                identity
+            )
         ).toEqual([
             { scope: "scrim", games: 2 },
             { scope: "scratch", games: 1 }
@@ -1118,12 +1168,19 @@ describe("computeMatchupScopeHint", () => {
 
     it("under scope all (the counted rule) only scratch can hide games", () => {
         expect(
-            computeMatchupScopeHint(drafts.slice(2), groups, matchup("TSM", "C9"), identity)
+            computeMatchupScopeHint(
+                drafts.slice(2),
+                groups,
+                matchup("TSM", "C9"),
+                identity
+            )
         ).toEqual([{ scope: "scratch", games: 1 }]);
     });
 
     it("returns nothing for non-matchup queries", () => {
-        expect(computeMatchupScopeHint(drafts, groups, championOnly("Jinx"), identity)).toEqual([]);
+        expect(
+            computeMatchupScopeHint(drafts, groups, championOnly("Jinx"), identity)
+        ).toEqual([]);
     });
 
     it("keeps the champion filter: hint counts describe the same population as the sentence", () => {

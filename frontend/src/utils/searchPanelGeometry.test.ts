@@ -9,14 +9,23 @@ import {
 
 describe("clampPanelGeometry", () => {
     it("enforces the minimum size (R8: one uncompromised row + header)", () => {
-        const clamped = clampPanelGeometry({ x: 10, y: 10, width: 50, height: 50 }, 1200, 800);
+        const clamped = clampPanelGeometry(
+            { x: 10, y: 10, width: 50, height: 50 },
+            1200,
+            800
+        );
         expect(clamped.width).toBe(SEARCH_PANEL_MIN_WIDTH);
         expect(clamped.height).toBe(SEARCH_PANEL_MIN_HEIGHT);
     });
 
     it("pulls an off-screen panel back inside the container", () => {
         const clamped = clampPanelGeometry(
-            { x: 5000, y: -300, width: SEARCH_PANEL_MIN_WIDTH, height: SEARCH_PANEL_MIN_HEIGHT },
+            {
+                x: 5000,
+                y: -300,
+                width: SEARCH_PANEL_MIN_WIDTH,
+                height: SEARCH_PANEL_MIN_HEIGHT
+            },
             1200,
             800
         );
@@ -26,13 +35,21 @@ describe("clampPanelGeometry", () => {
     });
 
     it("shrinks an oversized panel to fit", () => {
-        const clamped = clampPanelGeometry({ x: 0, y: 0, width: 4000, height: 4000 }, 1200, 800);
+        const clamped = clampPanelGeometry(
+            { x: 0, y: 0, width: 4000, height: 4000 },
+            1200,
+            800
+        );
         expect(clamped.width).toBeLessThanOrEqual(1200);
         expect(clamped.height).toBeLessThanOrEqual(800);
     });
 
     it("keeps the minimum even when the container is smaller than it", () => {
-        const clamped = clampPanelGeometry({ x: 0, y: 0, width: 500, height: 500 }, 300, 200);
+        const clamped = clampPanelGeometry(
+            { x: 0, y: 0, width: 500, height: 500 },
+            300,
+            200
+        );
         expect(clamped.width).toBe(SEARCH_PANEL_MIN_WIDTH);
         expect(clamped.height).toBe(SEARCH_PANEL_MIN_HEIGHT);
     });

@@ -64,15 +64,20 @@ import {
 } from "./utils/schemas";
 import { validateSocketEvent } from "./utils/socketValidation";
 import { CanvasCard } from "./components/CanvasCard";
-import { CanvasSearchBar } from "./components/CanvasSearchBar";
+import { CanvasSearchPanel } from "./components/CanvasSearchPanel";
 import {
+    computeMatchupScopeHint,
     computeSearchResults,
+    getOpponentNameOptions,
     getTeamNameOptions,
+    sortDraftMatches,
     type DraftMatch,
+    type ScopeHint,
     type SearchBucket,
     type SearchResults,
     type SlotPhase
 } from "./utils/canvasSearch";
+import { buildSearchRowModel, type SearchRowModel } from "./utils/searchRowModel";
 import type { SearchScope } from "./utils/gameClassification";
 import {
     CanvasChampionPicker,
@@ -1184,8 +1189,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [searchTeamName, setSearchTeamName] = createSignal<string | null>(null);
     const [searchBucket, setSearchBucket] = createSignal<SearchBucket | null>(null);
     const [searchScope, setSearchScope] = createSignal<SearchScope>("all");
-    const [searchMatchIndex, setSearchMatchIndex] = createSignal(0);
     const [searchFocusNonce, setSearchFocusNonce] = createSignal(0);
+    const [searchOpponentName, setSearchOpponentName] = createSignal<string | null>(null);
+    const [searchPinnedIds, setSearchPinnedIds] = createSignal<ReadonlySet<string>>(
+        new Set<string>()
+    );
+    const [searchSelectedDraftId, setSearchSelectedDraftId] = createSignal<string | null>(
+        null
+    );
+    const [searchReturnViewport, setSearchReturnViewport] = createSignal<Viewport | null>(
+        null
+    );
 
     const searchResults = createMemo<SearchResults | null>(() => {
         if (!searchOpen()) return null;
@@ -1198,7 +1212,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             {
                 championId,
                 teamName,
-                opponentTeamName: null,
+                opponentTeamName: searchOpponentName(),
                 bucket: searchBucket(),
                 scope: searchScope()
             },
@@ -1210,34 +1224,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const searchTeamOptions = createMemo(() =>
         getTeamNameOptions(canvasGroups, searchScope())
     );
-    const orderedSearchMatches = createMemo(() => {
-        const results = searchResults();
-        if (results === null) return [];
-        return results.matches
-            .map((match) => {
-                const cd = canvasDrafts.find((d) => d.Draft.id === match.draftId);
-                return { match, target: cd ? getDraftWorldPosition(cd) : null };
-            })
-            .sort(
-                (a, b) =>
-                    (a.target?.y ?? 0) - (b.target?.y ?? 0) ||
-                    (a.target?.x ?? 0) - (b.target?.x ?? 0)
-            );
-    });
-    const currentSearchIndex = createMemo(() =>
-        Math.min(searchMatchIndex(), Math.max(orderedSearchMatches().length - 1, 0))
-    );
-    const currentSearchDraftId = createMemo(
-        () => orderedSearchMatches()[currentSearchIndex()]?.match.draftId ?? null
-    );
     const searchMatchByDraftId = createMemo(() => {
         const map = new Map<string, DraftMatch>();
-        for (const { match } of orderedSearchMatches()) map.set(match.draftId, match);
+        for (const match of searchResults()?.matches ?? []) map.set(match.draftId, match);
         return map;
     });
     const searchSlotPhasesByDraft = createMemo(() => {
         const map = new Map<string, Map<number, SlotPhase>>();
-        for (const { match } of orderedSearchMatches()) {
+        for (const match of searchResults()?.matches ?? []) {
             map.set(
                 match.draftId,
                 new Map(match.slots.map((slot) => [slot.index, slot.phase]))
@@ -1248,17 +1242,141 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const searchActive = createMemo(() => searchResults() !== null);
     const searchSlotPhaseFor = (draftId: string, pickIndex: number): SlotPhase | null =>
         searchSlotPhasesByDraft().get(draftId)?.get(pickIndex) ?? null;
-    const goToSearchMatch = (direction: 1 | -1) => {
-        const list = orderedSearchMatches();
-        if (list.length === 0) return;
-        const next = (currentSearchIndex() + direction + list.length) % list.length;
-        setSearchMatchIndex(next);
-        const target = list[next].target;
-        if (target) navigateToDraft(target.x, target.y);
+
+    const searchDraftById = createMemo(
+        () => new Map(canvasDrafts.map((cd) => [cd.Draft.id, cd]))
+    );
+    // Map, not per-row .find(): the row-model memos below recompute on every
+    // live store change — O(matches × groups) scans there are exactly the cost
+    // class the R10 perf gate exists to catch.
+    const searchGroupById = createMemo(
+        () => new Map(canvasGroups.map((group) => [group.id, group]))
+    );
+    const searchGroupFor = (cd: CanvasDraft): CanvasGroup | undefined =>
+        cd.group_id ? searchGroupById().get(cd.group_id) : undefined;
+
+    const sortedSearchMatches = createMemo(() =>
+        sortDraftMatches(searchResults()?.matches ?? [], canvasDrafts, canvasGroups)
+    );
+
+    const searchOpponentOptions = createMemo(() => {
+        const teamName = searchTeamName();
+        if (teamName === null) return [];
+        return getOpponentNameOptions(canvasGroups, searchScope(), teamName);
+    });
+
+    // Pinned rows read the live store: an edited pin updates in place, a deleted
+    // pin drops out (R6). Rings only when the CURRENT query matches the pin.
+    const searchPinnedRowModels = createMemo<SearchRowModel[]>(() => {
+        if (!searchOpen()) return [];
+        const byId = searchDraftById();
+        const matchById = searchMatchByDraftId();
+        const rows: SearchRowModel[] = [];
+        for (const draftId of searchPinnedIds()) {
+            const cd = byId.get(draftId);
+            if (!cd) continue;
+            rows.push(
+                buildSearchRowModel(
+                    cd,
+                    searchGroupFor(cd),
+                    matchById.get(draftId) ?? null
+                )
+            );
+        }
+        return rows;
+    });
+
+    // A pinned row renders only in the pinned section — excluded here (Plan Decision 3).
+    const searchResultRowModels = createMemo<SearchRowModel[]>(() => {
+        const byId = searchDraftById();
+        const pinned = searchPinnedIds();
+        const rows: SearchRowModel[] = [];
+        for (const match of sortedSearchMatches()) {
+            if (pinned.has(match.draftId)) continue;
+            const cd = byId.get(match.draftId);
+            if (!cd) continue;
+            rows.push(buildSearchRowModel(cd, searchGroupFor(cd), match));
+        }
+        return rows;
+    });
+
+    const searchRowOrder = createMemo(() => [
+        ...searchPinnedRowModels().map((row) => row.draftId),
+        ...searchResultRowModels().map((row) => row.draftId)
+    ]);
+
+    // Selection tracks visible rows: a row that leaves the set deselects.
+    createEffect(() => {
+        const selected = searchSelectedDraftId();
+        if (selected !== null && !searchRowOrder().includes(selected)) {
+            setSearchSelectedDraftId(null);
+        }
+    });
+
+    // R5: computed ONLY when the primary matchup result is empty.
+    const searchScopeHints = createMemo<ScopeHint[]>(() => {
+        const results = searchResults();
+        if (results === null || results.matches.length > 0) return [];
+        const teamName = searchTeamName();
+        const opponentTeamName = searchOpponentName();
+        if (teamName === null || opponentTeamName === null) return [];
+        return computeMatchupScopeHint(
+            canvasDrafts,
+            canvasGroups,
+            {
+                championId: searchChampionId(),
+                teamName,
+                opponentTeamName,
+                bucket: searchBucket(),
+                scope: searchScope()
+            },
+            resolveChampionId
+        );
+    });
+
+    // R7: snapshot the pre-jump viewport (ONE snapshot, overwritten per jump);
+    // jumps don't persist the viewport — same as the old walk.
+    const jumpToSearchDraft = (draftId: string) => {
+        const cd = searchDraftById().get(draftId);
+        if (!cd) return;
+        setSearchSelectedDraftId(draftId);
+        setSearchReturnViewport(props.viewport());
+        const target = getDraftWorldPosition(cd);
+        navigateToDraft(target.x, target.y);
     };
+
+    const returnFromSearchJump = () => {
+        const snapshot = searchReturnViewport();
+        if (snapshot === null) return;
+        props.setViewport(snapshot);
+        setSearchReturnViewport(null);
+    };
+
+    const moveSearchSelection = (direction: 1 | -1) => {
+        const order = searchRowOrder();
+        if (order.length === 0) return;
+        const selected = searchSelectedDraftId();
+        const index = selected === null ? -1 : order.indexOf(selected);
+        const next =
+            index === -1
+                ? direction === 1
+                    ? 0
+                    : order.length - 1
+                : Math.min(Math.max(index + direction, 0), order.length - 1);
+        setSearchSelectedDraftId(order[next] ?? null);
+    };
+
+    const toggleSearchPin = (draftId: string) => {
+        setSearchPinnedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(draftId)) next.delete(draftId);
+            else next.add(draftId);
+            return next;
+        });
+    };
+
     const setSearchQueryChampion = (championId: string | null) => {
         setSearchChampionId(championId);
-        setSearchMatchIndex(0);
     };
     const setSearchQueryTeam = (teamName: string | null) => {
         setSearchTeamName(teamName);
@@ -1268,17 +1386,43 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         // filter. Now scope decides which teams the dropdown offers, so
         // resetting it would drop the scope the instant you picked one of the
         // teams only that scope could surface.
-        setSearchMatchIndex(0);
+        const opponent = searchOpponentName();
+        // Invariant: opponent ⇒ team, and opponent ≠ team (case-insensitive).
+        if (
+            teamName === null ||
+            (opponent !== null &&
+                teamName.trim().toLowerCase() === opponent.trim().toLowerCase())
+        ) {
+            setSearchOpponentName(null);
+        }
+    };
+    const setSearchQueryOpponent = (teamName: string | null) => {
+        setSearchOpponentName(teamName);
     };
     const setSearchQueryScope = (scope: SearchScope) => {
         setSearchScope(scope);
-        setSearchMatchIndex(0);
     };
     const setSearchQueryBucket = (bucket: SearchBucket | null) => {
         setSearchBucket(bucket);
-        setSearchMatchIndex(0);
     };
-    const closeSearch = () => setSearchOpen(false);
+    // Pins are session-only, cleared on panel close (R6); selection and the
+    // back-chip snapshot die with the panel too.
+    const closeSearch = () => {
+        setSearchOpen(false);
+        setSearchSelectedDraftId(null);
+        setSearchReturnViewport(null);
+        setSearchPinnedIds(new Set<string>());
+    };
+
+    // Canvas-to-canvas navigation keeps this component MOUNTED (see the
+    // cursorEmitter effect above) — search state must not leak to another
+    // canvas's corpus: stale pinned ids could bind to same-ID drafts there and
+    // the return snapshot is the previous canvas's coordinates. Keyed on the
+    // canvas identity; cleanup fires on the switch (and, harmlessly, on unmount).
+    createEffect(() => {
+        canvasId();
+        onCleanup(() => closeSearch());
+    });
 
     // Set the navigation callback in the context
     createEffect(() => {
@@ -5195,10 +5339,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
         const onKeyDown = (e: KeyboardEvent) => {
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
-                const isSearchBarTarget =
+                const isSearchPanelTarget =
                     e.target instanceof Element &&
-                    e.target.closest('[data-canvas-search-bar="true"]') !== null;
-                if (isFocusedInteractiveTarget(e.target) && !isSearchBarTarget) return;
+                    e.target.closest('[data-canvas-search-panel="true"]') !== null;
+                if (isFocusedInteractiveTarget(e.target) && !isSearchPanelTarget) return;
                 e.preventDefault();
                 if (searchOpen()) setSearchFocusNonce((n) => n + 1);
                 else setSearchOpen(true);
@@ -5211,17 +5355,18 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             if (searchOpen() && !isFocusedInteractiveTarget(e.target)) {
                 if (e.key === "Enter" && !isConnectionMode()) {
                     e.preventDefault();
-                    goToSearchMatch(e.shiftKey ? -1 : 1);
+                    const selected = searchSelectedDraftId();
+                    if (selected !== null) jumpToSearchDraft(selected);
                     return;
                 }
-                if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+                if (e.key === "ArrowDown") {
                     e.preventDefault();
-                    goToSearchMatch(1);
+                    moveSearchSelection(1);
                     return;
                 }
-                if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+                if (e.key === "ArrowUp") {
                     e.preventDefault();
-                    goToSearchMatch(-1);
+                    moveSearchSelection(-1);
                     return;
                 }
             }
@@ -6488,8 +6633,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                             pickIndex
                                                         )
                                                     }
-                                                    searchIsCurrent={() =>
-                                                        currentSearchDraftId() ===
+                                                    searchSelected={() =>
+                                                        searchSelectedDraftId() ===
                                                         cd.Draft.id
                                                     }
                                                     searchInProgress={() =>
@@ -6653,8 +6798,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                         pickIndex
                                                     )
                                                 }
-                                                searchIsCurrent={() =>
-                                                    currentSearchDraftId() === cd.Draft.id
+                                                searchSelected={() =>
+                                                    searchSelectedDraftId() ===
+                                                    cd.Draft.id
                                                 }
                                                 searchInProgress={() =>
                                                     searchMatchByDraftId().get(
@@ -6800,8 +6946,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 searchSlotPhase={(pickIndex) =>
                                     searchSlotPhaseFor(cd.Draft.id, pickIndex)
                                 }
-                                searchIsCurrent={() =>
-                                    currentSearchDraftId() === cd.Draft.id
+                                searchSelected={() =>
+                                    searchSelectedDraftId() === cd.Draft.id
                                 }
                                 searchInProgress={() =>
                                     searchMatchByDraftId().get(cd.Draft.id)?.inProgress ??
@@ -6851,19 +6997,28 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     </For>
                 </div>
                 <Show when={searchOpen()}>
-                    <CanvasSearchBar
+                    <CanvasSearchPanel
                         championId={searchChampionId}
                         onChampionChange={setSearchQueryChampion}
                         teamName={searchTeamName}
                         onTeamChange={setSearchQueryTeam}
+                        opponentTeamName={searchOpponentName}
+                        onOpponentChange={setSearchQueryOpponent}
                         teamOptions={searchTeamOptions}
+                        opponentOptions={searchOpponentOptions}
                         activeBucket={searchBucket}
                         onBucketChange={setSearchQueryBucket}
                         scope={searchScope}
                         onScopeChange={setSearchQueryScope}
                         results={searchResults}
-                        currentIndex={currentSearchIndex}
-                        onNavigate={goToSearchMatch}
+                        pinnedRows={searchPinnedRowModels}
+                        resultRows={searchResultRowModels}
+                        scopeHints={searchScopeHints}
+                        selectedDraftId={searchSelectedDraftId}
+                        onJumpToDraft={jumpToSearchDraft}
+                        onTogglePin={toggleSearchPin}
+                        canReturn={() => searchReturnViewport() !== null}
+                        onReturn={returnFromSearchJump}
                         onClose={closeSearch}
                         focusNonce={searchFocusNonce}
                     />
