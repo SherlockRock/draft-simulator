@@ -241,6 +241,7 @@ import {
     type GroupPositionUpdate
 } from "@draft-sim/shared-types";
 import { type CardLayout } from "./utils/canvasCardLayout";
+import { isCanvasWorldElement } from "./utils/canvasWorldTarget";
 import {
     annotationConnectionRect,
     annotationRenderSize,
@@ -4900,14 +4901,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         return interactive !== null && interactive === document.activeElement;
     };
 
-    // Canvas world surfaces: background (incl. the connections svg), group
-    // containers and cards. UI chrome (sidebar, dialogs, menus, pickers)
-    // keeps its current behavior.
+    // Canvas world surfaces: background, the transformed world layer (including
+    // the connections SVG), groups, cards and annotations. UI chrome (sidebar,
+    // dialogs, menus, pickers) keeps its current behavior.
     const isCanvasWorldTarget = (target: EventTarget | null) =>
-        target instanceof Element &&
-        target.closest(
-            ".canvas-background, .group-container, .canvas-card, .canvas-annotation"
-        ) !== null;
+        target instanceof Element && isCanvasWorldElement(target);
 
     const onAuxMouseDown = (e: MouseEvent) => {
         if (e.button !== 1 && e.button !== 2) return;
