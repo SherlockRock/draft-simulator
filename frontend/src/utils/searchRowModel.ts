@@ -27,6 +27,8 @@ export type SearchRowModel = {
     outcome: MatchOutcome | null;
     /** Side the searched team played (R2's side marker); null without a team filter. */
     teamSide: SlotSide | null;
+    /** Side that picked first this game (blue when unset); drives the pick-order underlines. */
+    firstPick: SlotSide;
     inProgress: boolean;
 };
 
@@ -48,6 +50,7 @@ export const buildSearchRowModel = (
         date: canvasDraft.Draft.createdAt ?? canvasDraft.createdAt ?? null,
         outcome: match?.outcome ?? null,
         teamSide: match?.teamSide ?? null,
+        firstPick: canvasDraft.Draft.firstPick ?? "blue",
         inProgress: match?.inProgress ?? isDraftInProgress(canvasDraft)
     };
 };

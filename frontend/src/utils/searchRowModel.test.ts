@@ -59,6 +59,15 @@ describe("buildSearchRowModel", () => {
         expect(row.inProgress).toBe(false);
     });
 
+    it("carries firstPick through, defaulting to blue when the draft omits it", () => {
+        expect(
+            buildSearchRowModel(makeDraft("d10", fullPicks()), undefined, null).firstPick
+        ).toBe("blue");
+        const redFirst = makeDraft("d11", fullPicks());
+        redFirst.Draft.firstPick = "red";
+        expect(buildSearchRowModel(redFirst, undefined, null).firstPick).toBe("red");
+    });
+
     it("copies the draft's own picks", () => {
         const picks = fullPicks();
         picks[10] = "Jinx";

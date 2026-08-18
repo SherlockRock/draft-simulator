@@ -13,6 +13,10 @@ type props = {
     onValidSelect?: (newValue: string) => void;
     theme?: SelectTheme;
     textInput?: boolean;
+    /** Same chrome, grayed out, all interaction off. */
+    disabled?: boolean;
+    /** Tooltip on the whole control (e.g. why it is disabled). */
+    title?: string;
 };
 
 export const SearchableSelect = (props: props) => {
@@ -52,6 +56,7 @@ export const SearchableSelect = (props: props) => {
     };
 
     const onFocusIn = () => {
+        if (props.disabled === true) return;
         setIsFocused(true);
         openDropdown();
     };
@@ -105,7 +110,7 @@ export const SearchableSelect = (props: props) => {
     });
 
     const handleKeyDown = (e: KeyboardEvent) => {
-        if (!isFocused()) return;
+        if (props.disabled === true || !isFocused()) return;
 
         // Special case: Escape clears text if dropdown is already closed
         if (e.key === "Escape" && !dropdownOpen()) {
@@ -126,16 +131,22 @@ export const SearchableSelect = (props: props) => {
         <div
             ref={selectRef}
             class="relative min-w-20 shrink"
+            title={props.title}
             onKeyDown={handleKeyDown}
             onFocusIn={onFocusIn}
             onFocusOut={onFocusOut}
-            tabIndex={0}
+            tabIndex={props.disabled === true ? -1 : 0}
         >
             <div
-                class={`flex h-10 items-center rounded-md border bg-darius-card ${colors().border}`}
+                class={`flex h-10 items-center rounded-md border bg-darius-card ${
+                    props.disabled === true
+                        ? "cursor-not-allowed border-darius-disabled opacity-60"
+                        : colors().border
+                }`}
             >
                 <input
                     value={props.selectText}
+                    disabled={props.disabled === true}
                     onInput={(e) => {
                         keyboard.resetIndex(0);
                         setDropdownOpen(true);
@@ -144,21 +155,37 @@ export const SearchableSelect = (props: props) => {
                     placeholder={props.placeholder}
                     name="select"
                     id="select"
-                    class="w-full select-text appearance-none bg-inherit px-4 text-darius-text-primary outline-none"
+                    class="w-full select-text appearance-none bg-inherit px-4 outline-none disabled:cursor-not-allowed"
+                    classList={{
+                        "text-darius-text-primary": props.disabled !== true,
+                        "text-darius-text-secondary": props.disabled === true
+                    }}
                 />
                 <button
+                    disabled={props.disabled === true}
                     onClick={() => {
                         props.setSelectText("");
                     }}
-                    class={`cursor-pointer text-darius-text-primary outline-none transition-all focus:outline-none ${colors().hoverText}`}
+                    class={`outline-none transition-all focus:outline-none ${
+                        props.disabled === true
+                            ? "cursor-not-allowed text-darius-text-secondary"
+                            : `cursor-pointer text-darius-text-primary ${colors().hoverText}`
+                    }`}
                 >
                     <X size={16} class="mx-2" />
                 </button>
                 <label
                     for="show_more"
-                    class={`cursor-pointer border-l border-darius-border text-darius-text-primary outline-none transition-all focus:outline-none ${colors().hoverText}`}
+                    class={`border-l border-darius-border outline-none transition-all focus:outline-none ${
+                        props.disabled === true
+                            ? "cursor-not-allowed text-darius-text-secondary"
+                            : `cursor-pointer text-darius-text-primary ${colors().hoverText}`
+                    }`}
                 >
-                    <button class="flex h-full justify-center">
+                    <button
+                        disabled={props.disabled === true}
+                        class="flex h-full justify-center disabled:cursor-not-allowed"
+                    >
                         <ChevronUp
                             size={16}
                             class={`mx-2 transform transition-transform ${

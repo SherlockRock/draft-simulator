@@ -8,15 +8,16 @@ export type PanelGeometry = { x: number; y: number; width: number; height: numbe
  * room) × query header + one row tall. Rows are never compromised to fit the
  * panel — the panel grows, not the row. The query header is WIDER than the
  * row when on one line (champion w-52 + team w-44 + opponent w-44 + gaps ≈
- * 576px), so the header section must flex-wrap below ~620px — the min width
- * is row-driven, the header stacks. The min HEIGHT is derived from the
- * worst-case wrapped header (~280px: panel header + three stacked selects +
- * scope chips + record strip + bucket chips) plus one full row (~100px).
- * The DEFAULT width keeps the header on one line.
+ * 576px + panel padding/border ≈ 602px), so the header section must
+ * flex-wrap below that — the min width is row-driven, the header stacks. The
+ * min HEIGHT is derived from the worst-case wrapped header (~280px: panel
+ * header + three stacked selects + scope chips + record strip + bucket chips)
+ * plus one full row (~100px). The DEFAULT width is the one-line header plus a
+ * hair of slack — no dead space right of the opponent select.
  */
 export const SEARCH_PANEL_MIN_WIDTH = 400;
 export const SEARCH_PANEL_MIN_HEIGHT = 380;
-export const SEARCH_PANEL_DEFAULT_WIDTH = 640;
+export const SEARCH_PANEL_DEFAULT_WIDTH = 608;
 const PANEL_MARGIN = 8;
 const STORAGE_KEY = "firstpick:canvas:search-panel";
 

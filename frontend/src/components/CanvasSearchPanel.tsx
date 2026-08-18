@@ -366,28 +366,22 @@ export const CanvasSearchPanel = (props: CanvasSearchPanelProps) => {
                         />
                     </div>
                     <div class="w-44">
-                        <Show
-                            when={props.teamName() !== null}
-                            fallback={
-                                <input
-                                    disabled
-                                    placeholder="Opponent…"
-                                    title="Pick a team first"
-                                    class="w-full cursor-not-allowed rounded-lg border border-darius-border bg-darius-card px-2 py-1 text-sm text-darius-text-secondary opacity-50"
-                                />
+                        <SearchableSelect
+                            placeholder="Opponent…"
+                            currentlySelected={props.opponentTeamName() ?? ""}
+                            sortOptions={props.opponentOptions()}
+                            selectText={opponentText()}
+                            setSelectText={handleOpponentText}
+                            onValidSelect={(name) => props.onOpponentChange(name)}
+                            theme="purple"
+                            textInput={true}
+                            disabled={props.teamName() === null}
+                            title={
+                                props.teamName() === null
+                                    ? "Pick a team first"
+                                    : undefined
                             }
-                        >
-                            <SearchableSelect
-                                placeholder="Opponent…"
-                                currentlySelected={props.opponentTeamName() ?? ""}
-                                sortOptions={props.opponentOptions()}
-                                selectText={opponentText()}
-                                setSelectText={handleOpponentText}
-                                onValidSelect={(name) => props.onOpponentChange(name)}
-                                theme="purple"
-                                textInput={true}
-                            />
-                        </Show>
+                        />
                     </div>
                 </div>
 
