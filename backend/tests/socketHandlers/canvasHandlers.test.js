@@ -31,6 +31,10 @@ function buildFakeGate() {
     relayVertexMove: vi.fn().mockResolvedValue(undefined),
     relayGroupMove: vi.fn().mockResolvedValue(undefined),
     relayGroupResize: vi.fn().mockResolvedValue(undefined),
+    applyPoolAddChampion: vi.fn().mockResolvedValue(undefined),
+    applyPoolRemoveChampion: vi.fn().mockResolvedValue(undefined),
+    applyPoolReplace: vi.fn().mockResolvedValue(undefined),
+    relayPoolMove: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -50,7 +54,7 @@ afterEach(() => {
 });
 
 describe("setupCanvasHandlers", () => {
-  it("registers the seven canvas mutation events", () => {
+  it("registers the eleven canvas mutation events", () => {
     const { handlers } = installHandlers();
     expect([...handlers.keys()].sort()).toEqual([
       "annotationMove",
@@ -59,6 +63,10 @@ describe("setupCanvasHandlers", () => {
       "groupMove",
       "groupResize",
       "newDraft",
+      "poolAddChampion",
+      "poolMove",
+      "poolRemoveChampion",
+      "poolReplace",
       "vertexMove",
     ]);
   });
@@ -225,6 +233,158 @@ describe("setupCanvasHandlers", () => {
       width: 100,
       height: 200,
       positionX: 3,
+    });
+  });
+
+  it("poolAddChampion maps the payload onto applyPoolAddChampion", async () => {
+    const { handlers, gate } = installHandlers();
+
+    await handlers.get("poolAddChampion")({
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "top",
+      championId: "Ahri",
+    });
+
+    expect(gate.applyPoolAddChampion).toHaveBeenCalledWith({
+      actor: { userId: "user-1", socketId: "sock-1" },
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "top",
+      championId: "Ahri",
+    });
+  });
+
+  it("maps a poolAddChampion gate rejection to canvasMutationError", async () => {
+    const { socket, handlers, gate } = installHandlers();
+    gate.applyPoolAddChampion.mockRejectedValue(new NotAuthorizedError());
+
+    await handlers.get("poolAddChampion")({
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "top",
+      championId: "Ahri",
+    });
+
+    expect(socket.emit).toHaveBeenCalledWith("canvasMutationError", {
+      event: "poolAddChampion",
+      code: "NOT_AUTHORIZED",
+      message: "Not authorized",
+    });
+  });
+
+  it("poolRemoveChampion maps the payload onto applyPoolRemoveChampion", async () => {
+    const { handlers, gate } = installHandlers();
+
+    await handlers.get("poolRemoveChampion")({
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "jungle",
+      championId: "LeeSin",
+    });
+
+    expect(gate.applyPoolRemoveChampion).toHaveBeenCalledWith({
+      actor: { userId: "user-1", socketId: "sock-1" },
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "jungle",
+      championId: "LeeSin",
+    });
+  });
+
+  it("maps a poolRemoveChampion gate rejection to canvasMutationError", async () => {
+    const { socket, handlers, gate } = installHandlers();
+    gate.applyPoolRemoveChampion.mockRejectedValue(new NotAuthorizedError());
+
+    await handlers.get("poolRemoveChampion")({
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "jungle",
+      championId: "LeeSin",
+    });
+
+    expect(socket.emit).toHaveBeenCalledWith("canvasMutationError", {
+      event: "poolRemoveChampion",
+      code: "NOT_AUTHORIZED",
+      message: "Not authorized",
+    });
+  });
+
+  it("poolReplace maps the payload onto applyPoolReplace", async () => {
+    const { handlers, gate } = installHandlers();
+    const champions = {
+      top: [],
+      jungle: [],
+      mid: [],
+      adc: [],
+      support: ["Braum"],
+    };
+
+    await handlers.get("poolReplace")({
+      canvasId: "c-1",
+      placementId: "pl-1",
+      champions,
+    });
+
+    expect(gate.applyPoolReplace).toHaveBeenCalledWith({
+      actor: { userId: "user-1", socketId: "sock-1" },
+      canvasId: "c-1",
+      placementId: "pl-1",
+      champions,
+    });
+  });
+
+  it("maps a poolReplace gate rejection to canvasMutationError", async () => {
+    const { socket, handlers, gate } = installHandlers();
+    gate.applyPoolReplace.mockRejectedValue(new NotAuthorizedError());
+
+    await handlers.get("poolReplace")({
+      canvasId: "c-1",
+      placementId: "pl-1",
+      champions: {},
+    });
+
+    expect(socket.emit).toHaveBeenCalledWith("canvasMutationError", {
+      event: "poolReplace",
+      code: "NOT_AUTHORIZED",
+      message: "Not authorized",
+    });
+  });
+
+  it("poolMove maps the payload onto relayPoolMove", async () => {
+    const { handlers, gate } = installHandlers();
+
+    await handlers.get("poolMove")({
+      canvasId: "c-1",
+      placementId: "pl-1",
+      positionX: 5,
+      positionY: 9,
+    });
+
+    expect(gate.relayPoolMove).toHaveBeenCalledWith({
+      actor: { userId: "user-1", socketId: "sock-1" },
+      canvasId: "c-1",
+      placementId: "pl-1",
+      positionX: 5,
+      positionY: 9,
+    });
+  });
+
+  it("maps a poolMove gate rejection to canvasMutationError", async () => {
+    const { socket, handlers, gate } = installHandlers();
+    gate.relayPoolMove.mockRejectedValue(new NotAuthorizedError());
+
+    await handlers.get("poolMove")({
+      canvasId: "c-1",
+      placementId: "pl-1",
+      positionX: 5,
+      positionY: 9,
+    });
+
+    expect(socket.emit).toHaveBeenCalledWith("canvasMutationError", {
+      event: "poolMove",
+      code: "NOT_AUTHORIZED",
+      message: "Not authorized",
     });
   });
 });

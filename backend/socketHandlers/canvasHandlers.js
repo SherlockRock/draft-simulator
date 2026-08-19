@@ -96,6 +96,45 @@ function setupCanvasHandlers(socket, gate, wrapSocketHandler) {
       positionX: data.positionX,
     }),
   );
+
+  handle("poolAddChampion", (data, actor) =>
+    gate.applyPoolAddChampion({
+      actor,
+      canvasId: data.canvasId,
+      placementId: data.placementId,
+      role: data.role,
+      championId: data.championId,
+    }),
+  );
+
+  handle("poolRemoveChampion", (data, actor) =>
+    gate.applyPoolRemoveChampion({
+      actor,
+      canvasId: data.canvasId,
+      placementId: data.placementId,
+      role: data.role,
+      championId: data.championId,
+    }),
+  );
+
+  handle("poolReplace", (data, actor) =>
+    gate.applyPoolReplace({
+      actor,
+      canvasId: data.canvasId,
+      placementId: data.placementId,
+      champions: data.champions,
+    }),
+  );
+
+  handle("poolMove", (data, actor) =>
+    gate.relayPoolMove({
+      actor,
+      canvasId: data.canvasId,
+      placementId: data.placementId,
+      positionX: data.positionX,
+      positionY: data.positionY,
+    }),
+  );
 }
 
 module.exports = { setupCanvasHandlers };

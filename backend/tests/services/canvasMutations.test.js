@@ -5,7 +5,14 @@ import { createRequire } from "node:module";
 // captured at require-time (same pattern as navigatorHandlers.test.js).
 const require = createRequire(import.meta.url);
 const Draft = require("../../models/Draft");
-const { UserCanvas, CanvasDraft, CanvasGroup } = require("../../models/Canvas");
+const {
+  UserCanvas,
+  CanvasDraft,
+  CanvasGroup,
+  CanvasPoolPlacement,
+} = require("../../models/Canvas");
+const Pool = require("../../models/Pool");
+const sequelize = require("../../config/database");
 const {
   createCanvasMutationGate,
   checkCanvasAccess,
@@ -72,6 +79,43 @@ function mockCanvasDrafts(containing, siblings = []) {
     if (where && where.draft_id) return containing;
     return siblings;
   });
+}
+
+const EMPTY_ROLE_POOL_MAP = {
+  top: [],
+  jungle: [],
+  mid: [],
+  adc: [],
+  support: [],
+};
+
+function poolRow(overrides = {}) {
+  return {
+    id: "pool-1",
+    name: "My Pool",
+    champions: { ...EMPTY_ROLE_POOL_MAP },
+    version: 0,
+    changed: vi.fn(),
+    save: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
+function placementRow(overrides = {}) {
+  return {
+    id: "pl-1",
+    canvas_id: "c-1",
+    pool_id: "pool-1",
+    ...overrides,
+  };
+}
+
+// Hands the transaction callback a fake `t` carrying LOCK.UPDATE, matching
+// what a real Sequelize transaction object exposes.
+function mockTransaction() {
+  const t = { LOCK: { UPDATE: "UPDATE" } };
+  vi.spyOn(sequelize, "transaction").mockImplementation(async (cb) => cb(t));
+  return t;
 }
 
 beforeEach(() => {
@@ -650,5 +694,294 @@ describe("assertCanvasAccess — required level", () => {
     expect(err).toBeInstanceOf(CanvasMutationError);
     expect(err).toBeInstanceOf(NotAuthorizedError);
     expect(err.code).toBe("NOT_AUTHORIZED");
+  });
+});
+
+describe("pool champion ops — applyPoolAddChampion / applyPoolRemoveChampion", () => {
+  it("adding the same champion twice (two separate calls) leaves one entry — idempotency at the call site", async () => {
+    mockPermissions({ "c-1": "edit" });
+    mockTransaction();
+    vi.spyOn(CanvasPoolPlacement, "findOne").mockResolvedValue(placementRow());
+    const pool = poolRow();
+    vi.spyOn(Pool, "findByPk").mockResolvedValue(pool);
+    const { gate } = buildGate();
+
+    await gate.applyPoolAddChampion({
+      actor: ACTOR,
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "top",
+      championId: "Ahri",
+    });
+    await gate.applyPoolAddChampion({
+      actor: ACTOR,
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "top",
+      championId: "Ahri",
+    });
+
+    expect(pool.champions.top).toEqual(["Ahri"]);
+    expect(pool.version).toBe(2);
+  });
+
+  it("rejects an actor without edit permission with NotAuthorizedError, no write, no emit", async () => {
+    mockPermissions({ "c-1": "view" });
+    const findOne = vi.spyOn(CanvasPoolPlacement, "findOne");
+    const findByPk = vi.spyOn(Pool, "findByPk");
+    const { gate, emit, exceptEmit } = buildGate();
+
+    await expect(
+      gate.applyPoolAddChampion({
+        actor: ACTOR,
+        canvasId: "c-1",
+        placementId: "pl-1",
+        role: "top",
+        championId: "Ahri",
+      }),
+    ).rejects.toThrow(NotAuthorizedError);
+
+    expect(findOne).not.toHaveBeenCalled();
+    expect(findByPk).not.toHaveBeenCalled();
+    expect(emit).not.toHaveBeenCalled();
+    expect(exceptEmit).not.toHaveBeenCalled();
+  });
+
+  it("a placementId scoped to a different canvas (findOne returns null) throws InvalidMutationError", async () => {
+    mockPermissions({ "c-1": "edit" });
+    mockTransaction();
+    // The lookup is scoped to { id, canvas_id }: a placement that exists but
+    // belongs to another canvas simply doesn't match and resolves null.
+    vi.spyOn(CanvasPoolPlacement, "findOne").mockResolvedValue(null);
+    const { gate } = buildGate();
+
+    await expect(
+      gate.applyPoolAddChampion({
+        actor: ACTOR,
+        canvasId: "c-1",
+        placementId: "pl-from-other-canvas",
+        role: "top",
+        championId: "Ahri",
+      }),
+    ).rejects.toThrow(InvalidMutationError);
+  });
+
+  it("removing a champion that isn't present leaves the map unchanged but still broadcasts the canonical state", async () => {
+    mockPermissions({ "c-1": "edit" });
+    mockTransaction();
+    vi.spyOn(CanvasPoolPlacement, "findOne").mockResolvedValue(placementRow());
+    const pool = poolRow({
+      champions: { ...EMPTY_ROLE_POOL_MAP, top: ["Zed"] },
+    });
+    vi.spyOn(Pool, "findByPk").mockResolvedValue(pool);
+    const { gate, to, except, exceptEmit, emit } = buildGate();
+
+    await gate.applyPoolRemoveChampion({
+      actor: ACTOR,
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "top",
+      championId: "Ahri", // not present
+    });
+
+    expect(pool.champions.top).toEqual(["Zed"]);
+    expect(to).toHaveBeenCalledWith("c-1");
+    expect(except).toHaveBeenCalledWith("sock-1");
+    expect(exceptEmit).toHaveBeenCalledWith("poolUpdate", {
+      placementId: "pl-1",
+      pool: {
+        id: pool.id,
+        name: pool.name,
+        champions: pool.champions,
+        version: pool.version,
+      },
+    });
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it("throws InvalidMutationError, not a bare TypeError, when the pool row is deleted between the two lookups", async () => {
+    mockPermissions({ "c-1": "edit" });
+    mockTransaction();
+    vi.spyOn(CanvasPoolPlacement, "findOne").mockResolvedValue(placementRow());
+    vi.spyOn(Pool, "findByPk").mockResolvedValue(null);
+    const { gate } = buildGate();
+
+    const err = await gate
+      .applyPoolAddChampion({
+        actor: ACTOR,
+        canvasId: "c-1",
+        placementId: "pl-1",
+        role: "top",
+        championId: "Ahri",
+      })
+      .then(
+        () => null,
+        (e) => e,
+      );
+
+    expect(err).toBeInstanceOf(InvalidMutationError);
+    expect(err).not.toBeInstanceOf(TypeError);
+  });
+
+  it("locks the pool row for update inside the transaction", async () => {
+    mockPermissions({ "c-1": "edit" });
+    const t = mockTransaction();
+    vi.spyOn(CanvasPoolPlacement, "findOne").mockResolvedValue(placementRow());
+    const pool = poolRow();
+    const findByPk = vi.spyOn(Pool, "findByPk").mockResolvedValue(pool);
+    const { gate } = buildGate();
+
+    await gate.applyPoolAddChampion({
+      actor: ACTOR,
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "top",
+      championId: "Ahri",
+    });
+
+    expect(findByPk).toHaveBeenCalledWith(
+      "pool-1",
+      expect.objectContaining({ lock: t.LOCK.UPDATE, transaction: t }),
+    );
+  });
+
+  it("broadcasts poolUpdate EXCLUDING the sender, with the version bumped by exactly 1", async () => {
+    mockPermissions({ "c-1": "edit" });
+    mockTransaction();
+    vi.spyOn(CanvasPoolPlacement, "findOne").mockResolvedValue(placementRow());
+    const pool = poolRow({ version: 3 });
+    vi.spyOn(Pool, "findByPk").mockResolvedValue(pool);
+    const { gate, to, except, exceptEmit, emit } = buildGate();
+
+    await gate.applyPoolAddChampion({
+      actor: ACTOR,
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "top",
+      championId: "Ahri",
+    });
+
+    expect(pool.version).toBe(4);
+    expect(to).toHaveBeenCalledWith("c-1");
+    expect(except).toHaveBeenCalledWith("sock-1");
+    expect(exceptEmit).toHaveBeenCalledWith("poolUpdate", {
+      placementId: "pl-1",
+      pool: {
+        id: pool.id,
+        name: pool.name,
+        champions: pool.champions,
+        version: 4,
+      },
+    });
+    expect(emit).not.toHaveBeenCalled();
+  });
+});
+
+describe("pool champion ops — applyPoolReplace", () => {
+  it("swaps the whole champions map", async () => {
+    mockPermissions({ "c-1": "edit" });
+    mockTransaction();
+    vi.spyOn(CanvasPoolPlacement, "findOne").mockResolvedValue(placementRow());
+    const pool = poolRow({
+      champions: { ...EMPTY_ROLE_POOL_MAP, top: ["Zed"] },
+    });
+    vi.spyOn(Pool, "findByPk").mockResolvedValue(pool);
+    const { gate } = buildGate();
+    const newMap = { ...EMPTY_ROLE_POOL_MAP, jungle: ["LeeSin"] };
+
+    await gate.applyPoolReplace({
+      actor: ACTOR,
+      canvasId: "c-1",
+      placementId: "pl-1",
+      champions: newMap,
+    });
+
+    expect(pool.champions).toEqual(newMap);
+  });
+
+  it("rejects an invalid map (missing a role key) with InvalidMutationError", async () => {
+    const { gate } = buildGate();
+
+    await expect(
+      gate.applyPoolReplace({
+        actor: ACTOR,
+        canvasId: "c-1",
+        placementId: "pl-1",
+        champions: { top: [], jungle: [], mid: [], adc: [] }, // missing support
+      }),
+    ).rejects.toThrow(InvalidMutationError);
+  });
+
+  it("broadcasts poolUpdate INCLUDING the sender (unlike add/remove)", async () => {
+    mockPermissions({ "c-1": "edit" });
+    mockTransaction();
+    vi.spyOn(CanvasPoolPlacement, "findOne").mockResolvedValue(placementRow());
+    const pool = poolRow({ version: 1 });
+    vi.spyOn(Pool, "findByPk").mockResolvedValue(pool);
+    const { gate, to, except, emit } = buildGate();
+    const newMap = { ...EMPTY_ROLE_POOL_MAP, support: ["Braum"] };
+
+    await gate.applyPoolReplace({
+      actor: ACTOR,
+      canvasId: "c-1",
+      placementId: "pl-1",
+      champions: newMap,
+    });
+
+    expect(to).toHaveBeenCalledWith("c-1");
+    expect(except).not.toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith("poolUpdate", {
+      placementId: "pl-1",
+      pool: {
+        id: pool.id,
+        name: pool.name,
+        champions: newMap,
+        version: 2,
+      },
+    });
+  });
+});
+
+describe("relayPoolMove — ephemeral drag relay", () => {
+  it("authorizes then broadcasts poolMoved to the whole room, sender included, with NO persistence", async () => {
+    mockPermissions({ "c-1": "edit" });
+    const findOne = vi.spyOn(CanvasPoolPlacement, "findOne");
+    const findByPk = vi.spyOn(Pool, "findByPk");
+    const { gate, to, emit, except } = buildGate();
+
+    await gate.relayPoolMove({
+      actor: ACTOR,
+      canvasId: "c-1",
+      placementId: "pl-1",
+      positionX: 5,
+      positionY: 9,
+    });
+
+    expect(to).toHaveBeenCalledWith("c-1");
+    expect(emit).toHaveBeenCalledWith(
+      "poolMoved",
+      { placementId: "pl-1", positionX: 5, positionY: 9 },
+      "c-1",
+    );
+    expect(except).not.toHaveBeenCalled();
+    expect(findOne).not.toHaveBeenCalled();
+    expect(findByPk).not.toHaveBeenCalled();
+  });
+
+  it("rejects a view-only actor without broadcasting", async () => {
+    mockPermissions({ "c-1": "view" });
+    const { gate, emit, exceptEmit } = buildGate();
+
+    await expect(
+      gate.relayPoolMove({
+        actor: ACTOR,
+        canvasId: "c-1",
+        placementId: "pl-1",
+        positionX: 5,
+        positionY: 9,
+      }),
+    ).rejects.toThrow(NotAuthorizedError);
+    expect(emit).not.toHaveBeenCalled();
+    expect(exceptEmit).not.toHaveBeenCalled();
   });
 });

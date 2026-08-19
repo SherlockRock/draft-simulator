@@ -1,8 +1,20 @@
 const Draft = require("../models/Draft");
-const { UserCanvas, CanvasDraft, CanvasGroup } = require("../models/Canvas");
+const {
+  UserCanvas,
+  CanvasDraft,
+  CanvasGroup,
+  CanvasPoolPlacement,
+} = require("../models/Canvas");
 const {
   getRestrictedChampionsForGroup,
 } = require("../utils/draftRestrictions");
+const sequelize = require("../config/database");
+const Pool = require("../models/Pool");
+const {
+  applyPoolChampionOp,
+  RolePoolMapSchema,
+  RoleSchema,
+} = require("@draft-sim/shared-types");
 
 // Canvas Mutation Gate (see CONTEXT.md): the single seam for "may this actor
 // change this Canvas-related thing, and apply it if so." Persisted mutations
@@ -332,6 +344,113 @@ function createCanvasMutationGate({ io }) {
       .emit("groupResized", { groupId, width, height, positionX });
   }
 
+  // Pool champion ops (design D4/§4.3): idempotent set semantics via the
+  // shared applyPoolChampionOp, serialized per pool by a row lock — concurrent
+  // ops from two editors interleave in either order to the same set. The
+  // broadcast carries the FULL payload plus a version, never the op, and
+  // EXCLUDES the sender: the actor already applied optimistically, and an
+  // echoed full map can land between two rapid adds and revert the second.
+  // Receivers drop stale versions — the lock serializes commits, but emits
+  // happen post-commit and can interleave. No canvas-timestamp touch,
+  // matching applyDraftPicks.
+  async function mutatePoolChampions({
+    actor, canvasId, placementId, mutate, excludeSender = true,
+  }) {
+    if (!canvasId || !placementId) {
+      throw new InvalidMutationError("Pool op needs canvasId and placementId");
+    }
+    await assertCanvasAccess({ userId: actor.userId, canvasId, level: "edit" });
+
+    const payload = await sequelize.transaction(async (t) => {
+      // Scoped lookup: a placementId living on another canvas is invalid
+      // here, not merely found elsewhere.
+      const placement = await CanvasPoolPlacement.findOne({
+        where: { id: placementId, canvas_id: canvasId },
+        transaction: t,
+      });
+      if (!placement) {
+        throw new InvalidMutationError("Pool not found on this canvas");
+      }
+      const pool = await Pool.findByPk(placement.pool_id, {
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+      // Under READ COMMITTED a concurrent DELETE can commit between the two
+      // lookups. A bare TypeError here would bypass the adapter's
+      // canvasMutationError translation — the client would never hear back.
+      if (!pool) {
+        throw new InvalidMutationError("Pool not found on this canvas");
+      }
+      pool.champions = mutate(pool.champions);
+      pool.version += 1;
+      pool.changed("champions", true);
+      await pool.save({ transaction: t });
+      return {
+        id: pool.id,
+        name: pool.name,
+        champions: pool.champions,
+        version: pool.version,
+      };
+    });
+
+    const room = io.to(canvasId);
+    (excludeSender ? room.except(actor.socketId) : room).emit("poolUpdate", {
+      placementId,
+      pool: payload,
+    });
+  }
+
+  function assertChampionOpFields({ role, championId }) {
+    if (!RoleSchema.safeParse(role).success) {
+      throw new InvalidMutationError("Invalid role");
+    }
+    if (typeof championId !== "string" || championId.length === 0) {
+      throw new InvalidMutationError("Invalid championId");
+    }
+  }
+
+  async function applyPoolAddChampion({ actor, canvasId, placementId, role, championId }) {
+    assertChampionOpFields({ role, championId });
+    await mutatePoolChampions({
+      actor, canvasId, placementId,
+      mutate: (map) => applyPoolChampionOp(map, { type: "add", role, championId }),
+    });
+  }
+
+  async function applyPoolRemoveChampion({ actor, canvasId, placementId, role, championId }) {
+    assertChampionOpFields({ role, championId });
+    await mutatePoolChampions({
+      actor, canvasId, placementId,
+      mutate: (map) => applyPoolChampionOp(map, { type: "remove", role, championId }),
+    });
+  }
+
+  // Overwrite-intent only (D4): import-from-saved. The overlay's commit is
+  // diffs-as-ops and must NEVER route here.
+  //
+  // Sender INCLUDED (unlike the op broadcasts): a replace is a single
+  // low-frequency intentional action — there is no rapid-succession echo
+  // fight — and it is not representable in the pending-op queue, so the
+  // sender needs its own canonical broadcast back to survive an interleaved
+  // foreign payload erasing the optimistic replacement.
+  async function applyPoolReplace({ actor, canvasId, placementId, champions }) {
+    const parsed = RolePoolMapSchema.safeParse(champions);
+    if (!parsed.success) {
+      throw new InvalidMutationError("champions must be a RolePoolMap");
+    }
+    await mutatePoolChampions({
+      actor, canvasId, placementId, excludeSender: false,
+      mutate: () => parsed.data, // parse RESULT — unknown keys never reach JSONB
+    });
+  }
+
+  // Ephemeral drag relay, the relayAnnotationMove twin: whole room, sender
+  // included — the dragging client discards its own echo via draggedPoolId().
+  async function relayPoolMove({ actor, canvasId, placementId, positionX, positionY }) {
+    await assertCanvasAccess({ userId: actor.userId, canvasId, level: "edit" });
+    io.to(canvasId).emit("poolMoved", { placementId, positionX, positionY }, canvasId);
+  }
+
   return {
     assertCanvasAccess,
     applyDraftPicks,
@@ -341,6 +460,10 @@ function createCanvasMutationGate({ io }) {
     relayVertexMove,
     relayGroupMove,
     relayGroupResize,
+    applyPoolAddChampion,
+    applyPoolRemoveChampion,
+    applyPoolReplace,
+    relayPoolMove,
   };
 }
 
