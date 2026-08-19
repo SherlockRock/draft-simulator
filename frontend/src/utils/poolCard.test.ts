@@ -1,9 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import {
+    commitPoolDrag,
     commitPoolNameEdit,
     commitPoolRename,
     flexRolesByChampion,
     poolChampionTotal,
+    poolDragPosition,
+    poolGrabOffset,
     sanitizeAgainstCatalog,
     type PoolRenameTarget
 } from "./poolCard";
@@ -188,5 +191,75 @@ describe("commitPoolRename", () => {
             mutate
         });
         expect(order).toEqual(["setName", "isLocalMode", "mutate"]);
+    });
+});
+
+describe("poolGrabOffset", () => {
+    it("returns the vector from the mousedown point back to the placement's position", () => {
+        const placement = { positionX: 100, positionY: 200 };
+        expect(poolGrabOffset(placement, 130, 215)).toEqual({
+            offsetX: 30,
+            offsetY: 15
+        });
+    });
+
+    it("is zero when the mousedown lands exactly on the placement's position", () => {
+        const placement = { positionX: 50, positionY: 60 };
+        expect(poolGrabOffset(placement, 50, 60)).toEqual({
+            offsetX: 0,
+            offsetY: 0
+        });
+    });
+});
+
+describe("poolDragPosition", () => {
+    it("is the inverse of poolGrabOffset — recovers the original position", () => {
+        const placement = { positionX: 100, positionY: 200 };
+        const { offsetX, offsetY } = poolGrabOffset(placement, 130, 215);
+        // Same world point fed back through the offset recovers positionX/Y.
+        expect(poolDragPosition(130, 215, offsetX, offsetY)).toEqual({
+            positionX: 100,
+            positionY: 200
+        });
+    });
+
+    it("tracks a later mousemove point by the recorded offset", () => {
+        const placement = { positionX: 100, positionY: 200 };
+        const { offsetX, offsetY } = poolGrabOffset(placement, 130, 215);
+        // Cursor moved +50/-15 in world space; the card should move with it.
+        expect(poolDragPosition(180, 200, offsetX, offsetY)).toEqual({
+            positionX: 150,
+            positionY: 185
+        });
+    });
+});
+
+describe("commitPoolDrag", () => {
+    it("dispatches the mutation in non-local mode", () => {
+        const mutate = vi.fn();
+        commitPoolDrag({
+            placementId: "placement-1",
+            positionX: 40,
+            positionY: 60,
+            isLocalMode: () => false,
+            mutate
+        });
+        expect(mutate).toHaveBeenCalledWith({
+            placementId: "placement-1",
+            positionX: 40,
+            positionY: 60
+        });
+    });
+
+    it("skips the mutation in local mode", () => {
+        const mutate = vi.fn();
+        commitPoolDrag({
+            placementId: "placement-1",
+            positionX: 40,
+            positionY: 60,
+            isLocalMode: () => true,
+            mutate
+        });
+        expect(mutate).not.toHaveBeenCalled();
     });
 });

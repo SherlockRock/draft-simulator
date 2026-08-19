@@ -115,3 +115,57 @@ export const commitPoolRename = (params: {
     if (params.isLocalMode()) return; // Task 12: localRenamePool + refreshFromLocal
     params.mutate({ placementId: params.placementId, name });
 };
+
+/**
+ * Grab-offset math for a pool drag: the vector from the mousedown's world
+ * point back to the placement's stored position, recorded once at
+ * mousedown. Pools carry no `group_id` (unlike drafts/annotations), so this
+ * is the offset math alone — no group-relative conversion to fold in.
+ */
+export const poolGrabOffset = (
+    placement: { positionX: number; positionY: number },
+    worldX: number,
+    worldY: number
+): { offsetX: number; offsetY: number } => ({
+    offsetX: worldX - placement.positionX,
+    offsetY: worldY - placement.positionY
+});
+
+/**
+ * Inverse of `poolGrabOffset`: applies the recorded offset to the current
+ * mousemove's world point to get the placement's new position. Called on
+ * every pool drag mousemove.
+ */
+export const poolDragPosition = (
+    worldX: number,
+    worldY: number,
+    offsetX: number,
+    offsetY: number
+): { positionX: number; positionY: number } => ({
+    positionX: worldX - offsetX,
+    positionY: worldY - offsetY
+});
+
+/**
+ * Guard + dispatch for a pool drag commit, extracted from Canvas.tsx's pool
+ * mouseup handler so the local/remote branch is unit-testable without
+ * mounting the canvas. Mirrors `commitPoolRename`'s shape: the optimistic
+ * store write already landed during mousemove (the relay is paint-only —
+ * this is the durable write), so this function only decides whether to hit
+ * the network. Local-mode dispatch is a stub until Task 12 wires
+ * `localMovePool` + `refreshFromLocal`.
+ */
+export const commitPoolDrag = (params: {
+    placementId: string;
+    positionX: number;
+    positionY: number;
+    isLocalMode: () => boolean;
+    mutate: (args: { placementId: string; positionX: number; positionY: number }) => void;
+}): void => {
+    if (params.isLocalMode()) return; // Task 12: localMovePool + refreshFromLocal
+    params.mutate({
+        placementId: params.placementId,
+        positionX: params.positionX,
+        positionY: params.positionY
+    });
+};

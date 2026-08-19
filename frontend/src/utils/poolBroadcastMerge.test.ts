@@ -286,4 +286,85 @@ describe("mergePoolSnapshotRow", () => {
         expect(row.Pool.champions.mid).toEqual(["Ahri"]);
     });
     /* eslint-enable solid/reactivity */
+
+    describe("isDragging guard (Task 7 review finding)", () => {
+        it("keeps the local row's position when it is the actively-dragged row, on the stale-version branch", () => {
+            const current = makePlacement(makePool(makeMap({ mid: ["Ahri"] }), 7), {
+                positionX: 500,
+                positionY: 600
+            });
+            // Snapshot built before the drag started — carries the pre-drag
+            // position and is also behind on champions version.
+            const incoming = makePlacement(makePool(makeMap({ mid: [] }), 5), {
+                positionX: 10,
+                positionY: 20
+            });
+
+            const { row } = mergePoolSnapshotRow(incoming, current, [], true);
+
+            expect(row.positionX).toBe(500);
+            expect(row.positionY).toBe(600);
+        });
+
+        it("keeps the local row's position when it is the actively-dragged row, on the fresh-version branch", () => {
+            const current = makePlacement(makePool(makeMap({ mid: ["Ahri"] }), 4), {
+                positionX: 500,
+                positionY: 600
+            });
+            const incoming = makePlacement(makePool(makeMap({ mid: ["Ahri"] }), 9), {
+                positionX: 10,
+                positionY: 20
+            });
+
+            const { row } = mergePoolSnapshotRow(incoming, current, [], true);
+
+            expect(row.positionX).toBe(500);
+            expect(row.positionY).toBe(600);
+        });
+
+        it("takes the incoming position when isDragging is omitted — unchanged default behavior", () => {
+            const current = makePlacement(makePool(makeMap({ mid: ["Ahri"] }), 4), {
+                positionX: 500,
+                positionY: 600
+            });
+            const incoming = makePlacement(makePool(makeMap({ mid: ["Ahri"] }), 9), {
+                positionX: 10,
+                positionY: 20
+            });
+
+            const { row } = mergePoolSnapshotRow(incoming, current, []);
+
+            expect(row.positionX).toBe(10);
+            expect(row.positionY).toBe(20);
+        });
+
+        it("takes the incoming position when isDragging is true but there is no current row to fall back to", () => {
+            const incoming = makePlacement(makePool(makeMap({ mid: ["Ahri"] }), 1), {
+                positionX: 10,
+                positionY: 20
+            });
+
+            const { row } = mergePoolSnapshotRow(incoming, undefined, [], true);
+
+            expect(row.positionX).toBe(10);
+            expect(row.positionY).toBe(20);
+        });
+
+        it("does not let the position guard leak into champions/version handling", () => {
+            const current = makePlacement(makePool(makeMap({ mid: ["Ahri"] }), 7), {
+                positionX: 500,
+                positionY: 600
+            });
+            const incoming = makePlacement(makePool(makeMap({ mid: [] }), 9), {
+                positionX: 10,
+                positionY: 20
+            });
+
+            const { row } = mergePoolSnapshotRow(incoming, current, [], true);
+
+            // Fresh version wins on champions even though position stayed local.
+            expect(row.Pool.champions.mid).toEqual([]);
+            expect(row.Pool.version).toBe(9);
+        });
+    });
 });

@@ -266,7 +266,12 @@ import {
     type AnnotationRenderSize
 } from "./utils/annotationSize";
 import { annotationKeyboardShortcut } from "./utils/annotationKeyboardShortcut";
-import { commitPoolRename } from "./utils/poolCard";
+import {
+    commitPoolDrag,
+    commitPoolRename,
+    poolDragPosition,
+    poolGrabOffset
+} from "./utils/poolCard";
 
 const debounce = <T extends unknown[]>(func: (...args: T) => void, limit: number) => {
     let inDebounce: boolean;
@@ -2592,6 +2597,21 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
     const debouncedEmitAnnotationMove = debounce(emitAnnotationMove, 25);
 
+    // Mirrors the annotation relay. Paint-only: `updatePoolMutation`'s
+    // `canvasUpdate` snapshot at mouseup is the durable write.
+    const emitPoolMove = (placementId: string, positionX: number, positionY: number) => {
+        if (isLocalMode()) return;
+        const socket = socketAccessor();
+        if (!socket) return;
+        socket.emit("poolMove", {
+            canvasId: canvasId(),
+            placementId,
+            positionX,
+            positionY
+        });
+    };
+    const debouncedEmitPoolMove = debounce(emitPoolMove, 25);
+
     // Mirrors the GROUP resize relay, not the annotation MOVE relay beside it:
     // the server excludes this socket, because there is no "am I resizing this
     // one" guard to discard an echo with the way `annotationMoved` has
@@ -2855,7 +2875,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     const { row, remaining } = mergePoolSnapshotRow(
                         incoming,
                         canvasPools.find((p) => p.id === incoming.id),
-                        pendingPoolOps.get(incoming.id) ?? []
+                        pendingPoolOps.get(incoming.id) ?? [],
+                        // A canvasUpdate snapshot arriving mid-drag must not
+                        // snap the actively-dragged card back to the
+                        // position it had when the snapshot was built.
+                        draggedPoolId() === incoming.id
                     );
                     pendingPoolOps.set(incoming.id, remaining);
                     return row;
@@ -3767,9 +3791,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     };
 
-    // Select-only stub for Task 8: drag wiring lands in a later task, so this
-    // only tracks selection. Gate mirrors onAnnotationMouseDown's (~3695) —
-    // pool selection is pool-local like annotation selection (design §6.3).
+    // Gate mirrors onAnnotationMouseDown's (~3695) — pool selection is
+    // pool-local like annotation selection (design §6.3). Pools carry no
+    // `group_id`, so the grab offset is plain world-space math (no
+    // group-relative conversion to fold in) — see `poolGrabOffset`.
     const onPoolMouseDown = (e: MouseEvent, placement: CanvasPoolPlacement) => {
         if (e.button !== 0) return;
         canvasContext.closeSharePopper();
@@ -3778,6 +3803,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         e.preventDefault();
         e.stopPropagation();
         setSelectedPoolId(placement.id);
+        const worldCoords = screenToWorld(e.clientX, e.clientY);
+        const { offsetX, offsetY } = poolGrabOffset(
+            placement,
+            worldCoords.x,
+            worldCoords.y
+        );
+        setPoolDragState({ activePoolId: placement.id, offsetX, offsetY });
     };
 
     const onBackgroundMouseDown = (e: MouseEvent) => {
@@ -5960,6 +5992,30 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 return;
             }
 
+            const poolState = poolDragState();
+            if (poolState.activePoolId) {
+                const placement = canvasPools.find(
+                    (p) => p.id === poolState.activePoolId
+                );
+                if (placement) {
+                    const worldCoords = screenToWorld(e.clientX, e.clientY);
+                    const { positionX, positionY } = poolDragPosition(
+                        worldCoords.x,
+                        worldCoords.y,
+                        poolState.offsetX,
+                        poolState.offsetY
+                    );
+                    // Optimistic paint. Pools carry no group_id — no
+                    // grid-drop / hover-group bookkeeping to mirror here.
+                    setCanvasPools((p) => p.id === placement.id, {
+                        positionX,
+                        positionY
+                    });
+                    debouncedEmitPoolMove(placement.id, positionX, positionY);
+                }
+                return;
+            }
+
             const state = dragState();
 
             if (state.isPanning) {
@@ -6242,6 +6298,33 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 setDragOverGroupId(null);
                 setExitingGroupId(null);
                 setGridDropCell(null);
+                return;
+            }
+
+            const poolState = poolDragState();
+            if (poolState.activePoolId) {
+                const placement = canvasPools.find(
+                    (p) => p.id === poolState.activePoolId
+                );
+                setPoolDragState({ activePoolId: null, offsetX: 0, offsetY: 0 });
+                if (placement) {
+                    // The optimistic store write already landed during
+                    // mousemove — this is the durable commit. Own-echo
+                    // discard on `poolMoved`/`canvasUpdate` keys off
+                    // `draggedPoolId()`, which is now cleared, so any
+                    // in-flight relay echo lands as a no-op equal write.
+                    commitPoolDrag({
+                        placementId: placement.id,
+                        positionX: placement.positionX,
+                        positionY: placement.positionY,
+                        isLocalMode,
+                        mutate: (args) =>
+                            updatePoolMutation.mutate({
+                                canvasId: canvasId(),
+                                ...args
+                            })
+                    });
+                }
                 return;
             }
 

@@ -59,12 +59,27 @@ export function mergePoolBroadcast(
  * The caller writes `remaining` back into its pending queue for this row
  * unconditionally; on the stale branch that is the queue it passed in
  * (nothing is acknowledged by a payload that is behind).
+ *
+ * `isDragging` guards the row's POSITION specifically (Task 7 review
+ * finding): a snapshot is built asynchronously and can land mid-drag,
+ * carrying whatever positionX/Y the row had when the snapshot was taken —
+ * which is stale the instant a local drag has moved it further. Applying
+ * that stale position mid-drag snaps the dragged card back under the
+ * cursor. When true (and a live `current` row exists to fall back to), the
+ * merged row keeps `current`'s position instead of `incoming`'s, on BOTH
+ * branches below — champions/version staleness and position staleness are
+ * independent axes.
  */
 export function mergePoolSnapshotRow(
     incoming: CanvasPoolPlacement,
     current: CanvasPoolPlacement | undefined,
-    pending: PoolChampionOp[]
+    pending: PoolChampionOp[],
+    isDragging = false
 ): { row: CanvasPoolPlacement; remaining: PoolChampionOp[] } {
+    const position =
+        isDragging && current
+            ? { positionX: current.positionX, positionY: current.positionY }
+            : { positionX: incoming.positionX, positionY: incoming.positionY };
     if (current && incoming.Pool.version <= current.Pool.version) {
         // Stale CHAMPIONS payload for this row. version is a champions
         // revision ONLY — renames broadcast snapshots without bumping it, so
@@ -74,6 +89,7 @@ export function mergePoolSnapshotRow(
         return {
             row: {
                 ...incoming,
+                ...position,
                 Pool: {
                     ...incoming.Pool,
                     champions: unwrap(current.Pool.champions),
@@ -84,5 +100,5 @@ export function mergePoolSnapshotRow(
         };
     }
     const { pool, remaining } = mergePoolBroadcast(incoming.Pool, pending);
-    return { row: { ...incoming, Pool: pool }, remaining };
+    return { row: { ...incoming, ...position, Pool: pool }, remaining };
 }
