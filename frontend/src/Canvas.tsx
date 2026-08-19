@@ -3732,6 +3732,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         if (e.button !== 0) return;
         canvasContext.closeSharePopper();
         if (isConnectionMode() || !canEdit()) return;
+        if (isInteractiveCardTarget(e.target)) return;
+        e.preventDefault();
         e.stopPropagation();
         setSelectedPoolId(placement.id);
     };
