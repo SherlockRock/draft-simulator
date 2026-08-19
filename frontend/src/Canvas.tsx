@@ -3726,10 +3726,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     // Select-only stub for Task 8: drag wiring lands in a later task, so this
-    // only tracks selection (mirrors onAnnotationMouseDown's guard shape).
+    // only tracks selection. Gate mirrors onAnnotationMouseDown's (~3695) —
+    // pool selection is pool-local like annotation selection (design §6.3).
     const onPoolMouseDown = (e: MouseEvent, placement: CanvasPoolPlacement) => {
         if (e.button !== 0) return;
         canvasContext.closeSharePopper();
+        if (isConnectionMode() || !canEdit()) return;
         e.stopPropagation();
         setSelectedPoolId(placement.id);
     };
