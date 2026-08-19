@@ -1,11 +1,9 @@
 import { Component, For, Show, createResource, createSignal } from "solid-js";
 import { ChevronDown } from "lucide-solid";
 import toast from "solid-toast";
-import type { Role, RolePoolMap, SavedPool } from "@draft-sim/shared-types";
+import type { RolePoolMap, SavedPool } from "@draft-sim/shared-types";
 import { fetchSavedPools } from "../../utils/savedPoolsApi";
-import { champions as allChampions } from "../../utils/constants";
-
-const ROLE_KEYS: Role[] = ["top", "jungle", "mid", "adc", "support"];
+import { sanitizeAgainstCatalog } from "../../utils/poolCard";
 
 interface SavedPoolDropdownProps {
     // Fires when the user picks a saved pool from the list.
@@ -14,31 +12,6 @@ interface SavedPoolDropdownProps {
     // Signal bumped by consumers to force a refetch (e.g. after SavePoolAsDialog
     // or JsonImportDialog creates a new pool).
     refreshKey: () => number;
-}
-
-function sanitizeAgainstCatalog(champions: RolePoolMap): {
-    champions: RolePoolMap;
-    droppedCount: number;
-} {
-    const validIds = new Set(allChampions.map((c) => c.id));
-    let dropped = 0;
-    const next: RolePoolMap = {
-        top: [],
-        jungle: [],
-        mid: [],
-        adc: [],
-        support: []
-    };
-    for (const role of ROLE_KEYS) {
-        for (const id of champions[role] ?? []) {
-            if (validIds.has(id)) {
-                next[role].push(id);
-            } else {
-                dropped += 1;
-            }
-        }
-    }
-    return { champions: next, droppedCount: dropped };
 }
 
 export const SavedPoolDropdown: Component<SavedPoolDropdownProps> = (props) => {

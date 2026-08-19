@@ -73,6 +73,7 @@ import { mergePoolBroadcast, mergePoolSnapshotRow } from "./utils/poolBroadcastM
 import { validateSocketEvent } from "./utils/socketValidation";
 import { CanvasCard } from "./components/CanvasCard";
 import { CanvasPoolCard } from "./components/CanvasPoolCard";
+import { NewPoolFromSavedDialog } from "./components/NewPoolFromSavedDialog";
 import { CanvasSearchPanel } from "./components/CanvasSearchPanel";
 import {
     computeMatchupScopeHint,
@@ -376,6 +377,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // broadcasts, so a foreign full payload arriving mid-flight would
     // otherwise silently drop them (design §4.3).
     const pendingPoolOps = new Map<string, PoolChampionOp[]>();
+    // World position the "New Pool from Saved…" background-menu entry was
+    // opened at; non-null drives NewPoolFromSavedDialog's isOpen.
+    const [newPoolFromSavedAt, setNewPoolFromSavedAt] = createSignal<{
+        x: number;
+        y: number;
+    } | null>(null);
+    // Pending pool delete, mirroring draftToDelete below — the Dialog's
+    // isOpen is derived from this being non-null rather than a second
+    // boolean signal, since there is nothing else that can open this dialog.
+    const [poolPendingDelete, setPoolPendingDelete] =
+        createSignal<CanvasPoolPlacement | null>(null);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = createSignal(false);
     const [draftToDelete, setDraftToDelete] = createSignal<CanvasDraft | null>(null);
     const [loadedCanvasId, setLoadedCanvasId] = createSignal<string | null>(null);
@@ -621,6 +633,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
     const [annotationContextMenu, setAnnotationContextMenu] = createSignal<{
         annotation: CanvasAnnotation;
+        position: { x: number; y: number };
+    } | null>(null);
+
+    const [poolContextMenu, setPoolContextMenu] = createSignal<{
+        placement: CanvasPoolPlacement;
         position: { x: number; y: number };
     } | null>(null);
 
@@ -2230,32 +2247,35 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             toast.error(`Failed to duplicate note: ${error.message}`)
     }));
 
-    // The three pool mutations are invoked by the toolbar / card UI added in
-    // the following tasks; the names are the contract those tasks bind to.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const createPoolMutation = useMutation(() => ({
         mutationFn: createCanvasPool,
-        onSuccess: (data) => {
+        onSuccess: (data, variables) => {
             // Guarded append: the route's own canvasUpdate broadcast can land
             // before the HTTP response and reconcile the row in first.
             if (!canvasPools.some((p) => p.id === data.pool.id)) {
                 setCanvasPools([...canvasPools, data.pool]);
             }
-            // Symmetric with the note create: select the new pool and open it
-            // straight into its name field.
             setSelectedPoolId(data.pool.id);
-            setRenamingPoolId(data.pool.id);
+            // Only the empty "New Champion Pool" background-menu entry omits
+            // `name` — that pool has nothing to show but a placeholder, so its
+            // first act is naming it (mirrors note create opening the
+            // editor). "New Pool from Saved…" always passes a name (copied
+            // from the saved pool), so it should just select, not force a
+            // rename the user didn't ask for.
+            if (variables.name === undefined) {
+                setRenamingPoolId(data.pool.id);
+            }
         },
         onError: (error: Error) => toast.error(`Failed to create pool: ${error.message}`)
     }));
 
+    // Bound by Task 10's rename commit.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const updatePoolMutation = useMutation(() => ({
         mutationFn: updateCanvasPool,
         onError: (error: Error) => toast.error(`Failed to update pool: ${error.message}`)
     }));
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const deletePoolMutation = useMutation(() => ({
         mutationFn: deleteCanvasPool,
         onMutate: (variables) => {
@@ -2663,6 +2683,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setRenamingPoolId(null);
         setPoolDragState({ activePoolId: null, offsetX: 0, offsetY: 0 });
         setAnnotationContextMenu(null);
+        setPoolContextMenu(null);
+        setNewPoolFromSavedAt(null);
+        setPoolPendingDelete(null);
         setContextMenuPosition(null);
         setIsDeleteDialogOpen(false);
         setDraftToDelete(null);
@@ -2691,6 +2714,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const userAccessor = useUser();
     const [currentUser] = userAccessor();
     const cursorTracker = createRemoteCursorTracker(() => currentUser()?.id);
+    // Pool creation entries (background menu) and "Save to My Pools" (card
+    // menu) are D7 server features — gate off the accessor already pulled in
+    // above for remote cursors, never a second useUser() call.
+    const isAuthenticated = () => Boolean(currentUser());
 
     // Owned teams for autocomplete linking in group settings. Unavailable on
     // local/anonymous canvases (no account) — string fallback covers those.
@@ -3743,6 +3770,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         canvasContext.closeSharePopper();
         setSelectedAnnotationId(null);
         setEditingAnnotationId(null);
+        setSelectedPoolId(null);
 
         if (isConnectionMode()) {
             clearConnectionSelection();
@@ -5340,6 +5368,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             return;
         }
 
+        const poolEl = el?.closest(".canvas-pool-card");
+        if (poolEl) {
+            if (!canEdit()) return;
+            const placement = canvasPools.find(
+                (p) => p.id === poolEl.getAttribute("data-pool-id")
+            );
+            if (placement) {
+                closeAllContextMenus();
+                setSelectedPoolId(placement.id);
+                setPoolContextMenu({ placement, position: { x, y } });
+            }
+            return;
+        }
+
         if (!canEdit()) return;
         closeAllContextMenus();
         setContextMenuWorldPosition(screenToWorld(x, y));
@@ -5373,6 +5415,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setContextMenuPosition(null);
         setDraftContextMenu(null);
         setAnnotationContextMenu(null);
+        setPoolContextMenu(null);
         setGroupContextMenu(null);
         setConnectionContextMenu(null);
     };
@@ -6484,6 +6527,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setDraftToDelete(null);
     };
 
+    // Pools only exist server-side today (creation is hidden in local mode
+    // until Task 12), so there is no local-delete branch to mirror here.
+    const onPoolDeleteConfirm = () => {
+        const pool = poolPendingDelete();
+        if (!pool) return;
+        deletePoolMutation.mutate({ canvasId: canvasId(), placementId: pool.id });
+        if (selectedPoolId() === pool.id) setSelectedPoolId(null);
+        setPoolPendingDelete(null);
+    };
+
+    const onPoolDeleteCancel = () => {
+        setPoolPendingDelete(null);
+    };
+
     return (
         <Show
             when={!props.isLoading && !props.isError}
@@ -7170,9 +7227,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         )}
                     </For>
                     {/* Pool cards: pure world-space, no zoom/LOD prop by
-                        design (Task 8). Rename/ops callbacks are wired as
-                        select-only/no-op stubs here until Tasks 9-11 and
-                        14-15 land the real behavior. */}
+                        design (Task 8). onStartRename sets renamingPoolId —
+                        the actual input mounts in Task 10, so this only opens
+                        the (currently invisible) rename state. Commit/cancel
+                        and the op callbacks are still no-op stubs until Tasks
+                        10-11 and 14-15 land. */}
                     <For each={canvasPools}>
                         {(pool) => (
                             <CanvasPoolCard
@@ -7180,7 +7239,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 canEdit={canEdit}
                                 isSelected={() => selectedPoolId() === pool.id}
                                 isRenaming={() => renamingPoolId() === pool.id}
-                                onStartRename={() => {}}
+                                onStartRename={(placementId) =>
+                                    setRenamingPoolId(placementId)
+                                }
                                 onCommitRename={() => {}}
                                 onCancelRename={() => {}}
                                 onMouseDown={onPoolMouseDown}
@@ -7248,6 +7309,60 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             </div>
                         </>
                     }
+                />
+                {/* Pools are deliverables, not disposable notes — confirm
+                    before destroy (unlike annotation delete's silent
+                    optimistic + rollback). Mirrors the draft-delete dialog
+                    immediately above; isOpen is derived from
+                    poolPendingDelete being non-null rather than a second
+                    boolean signal. */}
+                <Dialog
+                    isOpen={() => poolPendingDelete() !== null}
+                    onCancel={onPoolDeleteCancel}
+                    onConfirm={onPoolDeleteConfirm}
+                    body={
+                        <>
+                            <h3 class="mb-4 text-lg font-bold text-darius-text-primary">
+                                Delete Champion Pool?
+                            </h3>
+                            <p class="mb-6 text-darius-text-primary">
+                                This will permanently delete "
+                                {poolPendingDelete()?.Pool.name}" from this canvas.
+                            </p>
+                            <div class="flex justify-end gap-4">
+                                <button
+                                    onClick={onPoolDeleteCancel}
+                                    class="flex items-center gap-2 rounded bg-darius-ember px-4 py-2 text-darius-text-primary transition-[filter] hover:brightness-110"
+                                >
+                                    <span>Cancel</span>
+                                    <EscapeKeyHint />
+                                </button>
+                                <button
+                                    onClick={onPoolDeleteConfirm}
+                                    class="flex items-center gap-2 rounded bg-darius-crimson px-4 py-2 text-darius-text-primary transition-colors hover:bg-darius-ember"
+                                >
+                                    <span>Delete Pool</span>
+                                    <ReturnKeyHint />
+                                </button>
+                            </div>
+                        </>
+                    }
+                />
+                <NewPoolFromSavedDialog
+                    isOpen={() => newPoolFromSavedAt() !== null}
+                    onClose={() => setNewPoolFromSavedAt(null)}
+                    onCreate={(payload) => {
+                        const pos = newPoolFromSavedAt();
+                        if (!pos) return;
+                        createPoolMutation.mutate({
+                            canvasId: canvasId(),
+                            positionX: pos.x,
+                            positionY: pos.y,
+                            name: payload.name,
+                            champions: payload.champions
+                        });
+                        setNewPoolFromSavedAt(null);
+                    }}
                 />
                 <Dialog
                     isOpen={isImportDialogOpen}
@@ -7496,7 +7611,42 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                             });
                                         }
                                     }
-                                }
+                                },
+                                // Free-floating v1: unlike drafts/notes there is no
+                                // findGroupAtPosition branch here — a pool created
+                                // over a group still lands at absolute world
+                                // coordinates. Both entries HIDDEN (not dead) until
+                                // their prerequisites exist: "New Champion Pool"
+                                // hidden in local mode until Task 12 un-hides it
+                                // with a localCreatePool branch; "New Pool from
+                                // Saved…" always needs auth + server (D7).
+                                ...(isLocalMode()
+                                    ? [] // Task 12 replaces this guard with the localCreatePool branch
+                                    : [
+                                          {
+                                              label: "New Champion Pool",
+                                              action: () => {
+                                                  const worldPos =
+                                                      contextMenuWorldPosition();
+                                                  createPoolMutation.mutate({
+                                                      canvasId: canvasId(),
+                                                      positionX: worldPos.x,
+                                                      positionY: worldPos.y
+                                                  });
+                                              }
+                                          }
+                                      ]),
+                                ...(!isLocalMode() && isAuthenticated()
+                                    ? [
+                                          {
+                                              label: "New Pool from Saved…",
+                                              action: () =>
+                                                  setNewPoolFromSavedAt(
+                                                      contextMenuWorldPosition()
+                                                  )
+                                          }
+                                      ]
+                                    : [])
                             ]}
                             onClose={closeContextMenu}
                         />
@@ -7579,6 +7729,34 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 }
                             }}
                             onClose={() => setAnnotationContextMenu(null)}
+                        />
+                    )}
+                </Show>
+                {/* Pool Context Menu */}
+                <Show when={poolContextMenu()}>
+                    {(menu) => (
+                        <ContextMenu
+                            class="pool-context-menu"
+                            header={menu().placement.Pool.name}
+                            position={menu().position}
+                            actions={[
+                                {
+                                    label: "Rename",
+                                    action: () => setRenamingPoolId(menu().placement.id)
+                                },
+                                // "Save to My Pools" (D7, auth+server) is
+                                // stubbed until Task 17 wires it to
+                                // createSavedPool — omitted rather than shown
+                                // disabled: ContextMenuAction has no
+                                // disabled-row rendering, and a dead entry
+                                // would just confuse.
+                                {
+                                    label: "Delete",
+                                    action: () => setPoolPendingDelete(menu().placement),
+                                    destructive: true
+                                }
+                            ]}
+                            onClose={() => setPoolContextMenu(null)}
                         />
                     )}
                 </Show>
