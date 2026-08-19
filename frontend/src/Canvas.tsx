@@ -12,7 +12,7 @@ import {
     Accessor,
     JSX
 } from "solid-js";
-import { createStore, produce, reconcile } from "solid-js/store";
+import { createStore, produce, reconcile, unwrap } from "solid-js/store";
 import { championById, resolveChampionId } from "./utils/constants";
 import { AnnotationChampionPicker } from "./components/AnnotationChampionPicker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query";
@@ -40,7 +40,10 @@ import {
     createAnnotation,
     updateAnnotation,
     deleteAnnotation,
-    copyAnnotation
+    copyAnnotation,
+    createCanvasPool,
+    updateCanvasPool,
+    deleteCanvasPool
 } from "./utils/actions";
 import { useNavigate, useParams } from "@solidjs/router";
 import { toast } from "solid-toast";
@@ -60,8 +63,13 @@ import {
     AnnotationMovedSchema,
     AnnotationResizedSchema,
     CanvasAnnotation,
-    AnnotationFontSize
+    AnnotationFontSize,
+    CanvasPoolPlacement,
+    PoolUpdateSchema,
+    PoolMovedSchema
 } from "./utils/schemas";
+import type { PoolChampionOp } from "@draft-sim/shared-types";
+import { mergePoolBroadcast } from "./utils/poolBroadcastMerge";
 import { validateSocketEvent } from "./utils/socketValidation";
 import { CanvasCard } from "./components/CanvasCard";
 import { CanvasSearchPanel } from "./components/CanvasSearchPanel";
@@ -349,6 +357,26 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [connections, setConnections] = createStore<Connection[]>([]);
     const [canvasGroups, setCanvasGroups] = createStore<CanvasGroup[]>([]);
     const [annotations, setAnnotations] = createStore<CanvasAnnotation[]>([]);
+    const [canvasPools, setCanvasPools] = createStore<CanvasPoolPlacement[]>([]);
+    // Written here, read by the pool card/overlay UI in the following tasks.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [selectedPoolId, setSelectedPoolId] = createSignal<string | null>(null);
+    // Set by createPoolMutation.onSuccess so a freshly created pool opens
+    // straight into its name field; the rename input itself mounts in a later
+    // task, so today this is a write-only flag.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [renamingPoolId, setRenamingPoolId] = createSignal<string | null>(null);
+    const [poolDragState, setPoolDragState] = createSignal<{
+        activePoolId: string | null;
+        offsetX: number;
+        offsetY: number;
+    }>({ activePoolId: null, offsetX: 0, offsetY: 0 });
+    const draggedPoolId = () => poolDragState().activePoolId;
+    // Plain, NON-reactive map: this client's emitted champion ops that the
+    // server has not yet echoed back. The sender is excluded from its own op
+    // broadcasts, so a foreign full payload arriving mid-flight would
+    // otherwise silently drop them (design §4.3).
+    const pendingPoolOps = new Map<string, PoolChampionOp[]>();
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = createSignal(false);
     const [draftToDelete, setDraftToDelete] = createSignal<CanvasDraft | null>(null);
     const [loadedCanvasId, setLoadedCanvasId] = createSignal<string | null>(null);
@@ -2203,6 +2231,48 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             toast.error(`Failed to duplicate note: ${error.message}`)
     }));
 
+    // The three pool mutations are invoked by the toolbar / card UI added in
+    // the following tasks; the names are the contract those tasks bind to.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const createPoolMutation = useMutation(() => ({
+        mutationFn: createCanvasPool,
+        onSuccess: (data) => {
+            // Guarded append: the route's own canvasUpdate broadcast can land
+            // before the HTTP response and reconcile the row in first.
+            if (!canvasPools.some((p) => p.id === data.pool.id)) {
+                setCanvasPools([...canvasPools, data.pool]);
+            }
+            // Symmetric with the note create: select the new pool and open it
+            // straight into its name field.
+            setSelectedPoolId(data.pool.id);
+            setRenamingPoolId(data.pool.id);
+        },
+        onError: (error: Error) => toast.error(`Failed to create pool: ${error.message}`)
+    }));
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const updatePoolMutation = useMutation(() => ({
+        mutationFn: updateCanvasPool,
+        onError: (error: Error) => toast.error(`Failed to update pool: ${error.message}`)
+    }));
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const deletePoolMutation = useMutation(() => ({
+        mutationFn: deleteCanvasPool,
+        onMutate: (variables) => {
+            const removed = canvasPools.find((p) => p.id === variables.placementId);
+            setCanvasPools(canvasPools.filter((p) => p.id !== variables.placementId));
+            return { removed };
+        },
+        onError: (error: Error, _variables, context) => {
+            // A pool is authored work-product with no undo and no panel row to
+            // notice it went missing — same D11 reasoning as notes. A failed
+            // delete must put it back.
+            if (context?.removed) setCanvasPools([...canvasPools, context.removed]);
+            toast.error(`Failed to delete pool: ${error.message}`);
+        }
+    }));
+
     const updateViewportMutation = useMutation(() => ({
         mutationFn: updateCanvasViewport,
         onError: (error: Error) => {
@@ -2575,6 +2645,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setConnections(data.connections ?? []);
         setCanvasGroups(data.groups ?? []);
         setAnnotations(data.annotations ?? []);
+        setCanvasPools(data.pools ?? []);
+        // A fresh authoritative fetch supersedes anything still in flight. A
+        // never-committed optimistic op is legitimately dropped on
+        // reload/switch, matching how optimistic draft picks behave.
+        pendingPoolOps.clear();
 
         // Reset viewport for the new canvas
         props.setViewport(data.lastViewport ?? { x: 0, y: 0, zoom: 1 });
@@ -2585,6 +2660,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setSelectedVertexForConnection(null);
         setSelectedAnnotationId(null);
         setEditingAnnotationId(null);
+        setSelectedPoolId(null);
+        setRenamingPoolId(null);
+        setPoolDragState({ activePoolId: null, offsetX: 0, offsetY: 0 });
         setAnnotationContextMenu(null);
         setContextMenuPosition(null);
         setIsDeleteDialogOpen(false);
@@ -2705,6 +2783,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 connections: Connection[];
                 groups?: CanvasGroup[];
                 annotations?: CanvasAnnotation[];
+                pools?: CanvasPoolPlacement[];
             }) => {
                 // Reconcile (merge in place) instead of replacing the arrays
                 // wholesale. A wholesale replace hands `<For>` brand-new object
@@ -2724,6 +2803,38 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 // destroys and recreates the DOM under the cursor and strands
                 // :hover until the next real mousemove.
                 setAnnotations(reconcile(data.annotations ?? [], { key: "id" }));
+                // A snapshot is built BEFORE any concurrent champion op
+                // commits, so it must not overwrite newer champion state:
+                // guard per row on the champions revision, and replay this
+                // client's still-unacknowledged ops on top (design §4.3).
+                const mergedPools = (data.pools ?? []).map((incoming) => {
+                    const current = canvasPools.find((p) => p.id === incoming.id);
+                    if (current && incoming.Pool.version <= current.Pool.version) {
+                        // Stale CHAMPIONS payload for this row. version is a
+                        // champions revision ONLY — renames broadcast snapshots
+                        // without bumping it, so discarding the whole incoming
+                        // Pool here would swallow every rename. Keep local
+                        // champions+version, take everything else (name!) from
+                        // the incoming payload. unwrap(): current came from the
+                        // store — feeding a live proxy back into reconcile is
+                        // the pattern Solid warns about.
+                        return {
+                            ...incoming,
+                            Pool: {
+                                ...incoming.Pool,
+                                champions: unwrap(current.Pool.champions),
+                                version: current.Pool.version
+                            }
+                        };
+                    }
+                    const { pool, remaining } = mergePoolBroadcast(
+                        incoming.Pool,
+                        pendingPoolOps.get(incoming.id) ?? []
+                    );
+                    pendingPoolOps.set(incoming.id, remaining);
+                    return { ...incoming, Pool: pool };
+                });
+                setCanvasPools(reconcile(mergedPools, { key: "id" }));
                 canvasContext.mutateCanvas((prev: CanvasResposnse | undefined) => {
                     if (!prev) return prev;
                     return {
@@ -2735,7 +2846,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         drafts: data.drafts,
                         connections: data.connections,
                         groups: data.groups ?? prev.groups,
-                        annotations: data.annotations ?? prev.annotations
+                        annotations: data.annotations ?? prev.annotations,
+                        // The SAME merged array the store received, never the
+                        // raw payload: the cache re-seeds the stores on a
+                        // canvas switch-away-and-back, so a stale snapshot
+                        // written here would resurface after the pending queue
+                        // has been cleared.
+                        pools: data.pools ? mergedPools : prev.pools
                     };
                 });
             }
@@ -2842,6 +2959,63 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 height: data.height
             });
         });
+        socket.on("poolUpdate", (rawData: unknown) => {
+            const data = validateSocketEvent("poolUpdate", rawData, PoolUpdateSchema);
+            if (!data) return;
+            // Version guard (design §4.3): post-commit emits can interleave — a
+            // stale full payload must not roll champions back.
+            const current = canvasPools.find((p) => p.id === data.placementId);
+            if (!current || data.pool.version <= current.Pool.version) return;
+            // Pending-ops replay (design §4.3): a foreign editor's full payload
+            // can interleave BEFORE this client's optimistic op commits
+            // server-side; the sender is excluded from its own broadcast, so
+            // without the replay the optimistic op would be silently lost. Ops
+            // are idempotent + commutative, so replaying unacked local ops over
+            // any incoming map converges.
+            const { pool, remaining } = mergePoolBroadcast(
+                data.pool,
+                pendingPoolOps.get(data.placementId) ?? []
+            );
+            pendingPoolOps.set(data.placementId, remaining);
+            setCanvasPools((p) => p.id === data.placementId, "Pool", reconcile(pool));
+        });
+        socket.on("poolMoved", (rawData: unknown) => {
+            const data = validateSocketEvent("poolMoved", rawData, PoolMovedSchema);
+            if (!data) return;
+            if (draggedPoolId() !== data.placementId) {
+                setCanvasPools((p) => p.id === data.placementId, {
+                    positionX: data.positionX,
+                    positionY: data.positionY
+                });
+            }
+        });
+        socket.on(
+            "canvasMutationError",
+            (data: { event: string; code: string; message: string }) => {
+                if (
+                    data.event === "poolAddChampion" ||
+                    data.event === "poolRemoveChampion" ||
+                    data.event === "poolReplace"
+                ) {
+                    // The payload carries no placementId, so clear ALL pending
+                    // queues — the refetch re-seeds authoritative state anyway.
+                    // The sender is excluded from op broadcasts; without this a
+                    // failed op leaves its optimistic state silently diverged.
+                    pendingPoolOps.clear();
+                    // POOLS-SCOPED recovery (design §4.3/§6.3): refetch, then
+                    // reconcile ONLY canvasPools from the fresh result.
+                    // Deliberately NOT setLoadedCanvasId(null) — that re-runs
+                    // the whole seeding effect, resetting the viewport and
+                    // closing open editors: acceptable for a rare reconnect,
+                    // hostile for a foreground rejected op.
+                    void Promise.resolve(canvasContext.refetchCanvas()).then((fresh) => {
+                        const pools = fresh?.pools;
+                        if (pools) setCanvasPools(reconcile(pools, { key: "id" }));
+                    });
+                    toast.error(`Pool edit failed: ${data.message}`);
+                }
+            }
+        );
         socket.on("draftPositionsUpdated", (rawData: unknown) => {
             const data = validateSocketEvent(
                 "draftPositionsUpdated",
@@ -3044,6 +3218,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             socket.off("canvasObjectMoved");
             socket.off("annotationMoved");
             socket.off("annotationResized");
+            socket.off("poolUpdate");
+            socket.off("poolMoved");
+            socket.off("canvasMutationError");
             socket.off("draftPositionsUpdated");
             socket.off("connectionCreated");
             socket.off("connectionUpdated");

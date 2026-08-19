@@ -7,7 +7,14 @@ type CanvasContextType = {
     canvas: Resource<CanvasResponse | undefined>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutateCanvas: Setter<any>;
-    refetchCanvas: () => void;
+    // The resource's own refetch signature, not `() => void`: the pool-op
+    // failure recovery needs the fresh payload back so it can reconcile ONLY
+    // the pools slice. Callers that ignore the return are unaffected.
+    refetchCanvas: () =>
+        | CanvasResponse
+        | Promise<CanvasResponse | undefined>
+        | undefined
+        | null;
     canvasList: Resource<CanvasListItem[] | undefined>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutateCanvasList: Setter<any>;

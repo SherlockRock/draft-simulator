@@ -32,7 +32,8 @@ import {
     ShareCanvasVerifySchema,
     CardLayoutSchema,
     TeamSchema,
-    CanvasAnnotationSchema
+    CanvasAnnotationSchema,
+    CanvasPoolPlacementSchema
 } from "./schemas";
 import type {
     CanvasGroupMetadata,
@@ -43,6 +44,7 @@ import type {
     AnnotationColor,
     AnnotationFontSize,
     GameType,
+    RolePoolMap,
     RosterInput
 } from "@draft-sim/shared-types";
 
@@ -673,6 +675,51 @@ export const copyAnnotation = async (data: {
         },
         z.object({ success: z.boolean(), annotation: CanvasAnnotationSchema })
     );
+
+// =============================================================================
+// Pools
+// =============================================================================
+
+export const createCanvasPool = async (data: {
+    canvasId: string;
+    positionX: number;
+    positionY: number;
+    name?: string;
+    champions?: RolePoolMap;
+    sourceId?: string;
+}) => {
+    const result = await apiPost(
+        `/canvas/${data.canvasId}/pools`,
+        {
+            positionX: data.positionX,
+            positionY: data.positionY,
+            ...(data.name !== undefined ? { name: data.name } : {}),
+            ...(data.champions !== undefined ? { champions: data.champions } : {}),
+            ...(data.sourceId !== undefined ? { sourceId: data.sourceId } : {})
+        },
+        z.object({ success: z.boolean(), pool: CanvasPoolPlacementSchema })
+    );
+    track("canvas_pool_created");
+    return result;
+};
+
+export const updateCanvasPool = async (data: {
+    canvasId: string;
+    placementId: string;
+    positionX?: number;
+    positionY?: number;
+    name?: string;
+}) => {
+    const { canvasId, placementId, ...fields } = data;
+    return apiPatch(
+        `/canvas/${canvasId}/pools/${placementId}`,
+        fields,
+        z.object({ success: z.boolean(), pool: CanvasPoolPlacementSchema })
+    );
+};
+
+export const deleteCanvasPool = async (data: { canvasId: string; placementId: string }) =>
+    apiDelete(`/canvas/${data.canvasId}/pools/${data.placementId}`, SuccessSchema);
 
 // =============================================================================
 // Versus Operations
