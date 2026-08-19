@@ -10,6 +10,7 @@ const NavigatorDraft = require("./NavigatorDraft");
 const NavigatorEvent = require("./NavigatorEvent");
 const NavigatorSnapshot = require("./NavigatorSnapshot");
 const SavedPool = require("./SavedPool");
+const Pool = require("./Pool");
 const Team = require("./Team");
 const TeamPlayer = require("./TeamPlayer");
 
@@ -161,9 +162,15 @@ const setupAssociations = () => {
 
   NavigatorDraft.belongsTo(Draft, { foreignKey: "draft_id" });
 
-  // SavedPool associations (user-scoped Navigator pool presets)
+  // SavedPool associations: entry = (owner, pool). onDelete declared
+  // EXPLICITLY (Sequelize defaults to NO ACTION — the annotation scar).
   User.hasMany(SavedPool, { foreignKey: "owner_id", onDelete: "CASCADE" });
   SavedPool.belongsTo(User, { as: "owner", foreignKey: "owner_id" });
+
+  // Direct association so routes can include Pool FROM the entry (the
+  // belongsToMany include-from-join gotcha).
+  Pool.hasOne(SavedPool, { foreignKey: "pool_id", onDelete: "CASCADE" });
+  SavedPool.belongsTo(Pool, { foreignKey: "pool_id", onDelete: "CASCADE" });
 };
 
 module.exports = setupAssociations;

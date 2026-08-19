@@ -1,14 +1,8 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
 
-const EMPTY_ROLE_POOL_MAP = {
-  top: [],
-  jungle: [],
-  mid: [],
-  adc: [],
-  support: [],
-};
-
+// Pure parent link (design §1.2): entry = (owner, pool). Payload lives on the
+// Pools row; UNIQUE pool_id is the no-aliasing invariant (D1) at the DB.
 const SavedPool = sequelize.define("SavedPool", {
   id: {
     type: DataTypes.UUID,
@@ -20,18 +14,11 @@ const SavedPool = sequelize.define("SavedPool", {
     allowNull: false,
     references: { model: "Users", key: "id" },
   },
-  name: {
-    type: DataTypes.STRING(120),
+  pool_id: {
+    type: DataTypes.UUID,
     allowNull: false,
-    validate: {
-      notEmpty: true,
-      len: [1, 120],
-    },
-  },
-  champions: {
-    type: DataTypes.JSONB,
-    allowNull: false,
-    defaultValue: EMPTY_ROLE_POOL_MAP,
+    unique: true,
+    references: { model: "Pools", key: "id" },
   },
 });
 
