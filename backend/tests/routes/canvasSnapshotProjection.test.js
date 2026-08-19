@@ -15,7 +15,9 @@ const {
   CanvasGroup,
   CanvasConnection,
   CanvasAnnotation,
+  CanvasPoolPlacement,
 } = require("../../models/Canvas");
+const Pool = require("../../models/Pool");
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -25,6 +27,7 @@ beforeEach(() => {
   vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+  vi.spyOn(CanvasPoolPlacement, "findAll").mockResolvedValue([]);
 });
 
 describe("buildCanvasSnapshot", () => {
@@ -53,6 +56,57 @@ describe("buildCanvasSnapshot", () => {
     await buildCanvasSnapshot("c1");
     expect(findAll).toHaveBeenCalledWith(
       expect.objectContaining({ where: { canvas_id: "c1" } }),
+    );
+  });
+
+  // Same erasure rule applies to pools: a missing `pools` key wipes every
+  // pool card on every reconciling client.
+  it("always carries a pools array, even when there are none", async () => {
+    vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasPoolPlacement, "findAll").mockResolvedValue([]);
+    const payload = await buildCanvasSnapshot("c1");
+    expect(payload).toHaveProperty("pools");
+    expect(payload.pools).toEqual([]);
+  });
+
+  it("returns pool placements as plain JSON with the nested Pool payload", async () => {
+    vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasPoolPlacement, "findAll").mockResolvedValue([
+      {
+        toJSON: () => ({
+          id: "pp1",
+          canvas_id: "c1",
+          pool_id: "p1",
+          positionX: 50,
+          positionY: 50,
+          Pool: { id: "p1", name: "Scrims", champions: {} },
+        }),
+      },
+    ]);
+    const payload = await buildCanvasSnapshot("c1");
+    expect(payload.pools).toEqual([
+      {
+        id: "pp1",
+        canvas_id: "c1",
+        pool_id: "p1",
+        positionX: 50,
+        positionY: 50,
+        Pool: { id: "p1", name: "Scrims", champions: {} },
+      },
+    ]);
+  });
+
+  it("scopes the pool placement query to the canvas with nested Pool include", async () => {
+    vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
+    const findAll = vi
+      .spyOn(CanvasPoolPlacement, "findAll")
+      .mockResolvedValue([]);
+    await buildCanvasSnapshot("c1");
+    expect(findAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { canvas_id: "c1" },
+        include: [{ model: Pool }],
+      }),
     );
   });
 });

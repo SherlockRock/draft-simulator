@@ -14,6 +14,7 @@ const {
   CanvasConnection,
   CanvasGroup,
   CanvasAnnotation,
+  CanvasPoolPlacement,
 } = require("../../models/Canvas.js");
 const Draft = require("../../models/Draft.js");
 
@@ -71,6 +72,7 @@ beforeEach(() => {
   vi.spyOn(socketService, "emitToRoom").mockImplementation(() => {});
   vi.spyOn(CanvasDraft, "findOne").mockResolvedValue(null);
   vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
+  vi.spyOn(CanvasPoolPlacement, "findAll").mockResolvedValue([]);
   vi.spyOn(UserCanvas, "destroy").mockResolvedValue(0);
   vi.spyOn(presenceEjection, "ejectUserFromCanvas").mockImplementation(
     () => {},
@@ -281,5 +283,52 @@ describe("canvas route mutation access", () => {
 
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: "Failed to update canvas draft" });
+  });
+});
+
+describe("GET /:canvasId", () => {
+  // This route hand-builds its response instead of calling
+  // buildCanvasSnapshot — a second, independent place `pools` has to be
+  // added, or pool cards vanish on every page load (CanvasResponseSchema's
+  // `.default([])` silently papers over the omission).
+  it("carries a pools array with nested Pool payloads", async () => {
+    vi.spyOn(auth, "getUserFromRequest").mockResolvedValue({ id: "u1" });
+    vi.spyOn(Canvas, "findOne").mockResolvedValue(mockCanvasJson());
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue({
+      permissions: "edit",
+      lastViewportX: 0,
+      lastViewportY: 0,
+      lastZoomLevel: 1,
+    });
+    vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasPoolPlacement, "findAll").mockResolvedValue([
+      {
+        toJSON: () => ({
+          id: "pp1",
+          canvas_id: "c-1",
+          pool_id: "p1",
+          positionX: 50,
+          positionY: 50,
+          Pool: { id: "p1", name: "Scrims", champions: {} },
+        }),
+      },
+    ]);
+
+    const res = await request(buildApp()).get("/api/canvas/c-1");
+
+    expect(res.status).toBe(200);
+    expect(res.body.pools).toEqual([
+      {
+        id: "pp1",
+        canvas_id: "c-1",
+        pool_id: "p1",
+        positionX: 50,
+        positionY: 50,
+        Pool: { id: "p1", name: "Scrims", champions: {} },
+      },
+    ]);
   });
 });

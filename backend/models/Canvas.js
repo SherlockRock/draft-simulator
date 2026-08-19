@@ -241,6 +241,34 @@ const CanvasAnnotation = sequelize.define("CanvasAnnotation", {
   },
 });
 
+// Canvas parent of a Pool row (design §1.3). Free-floating v1: absolute world
+// position, no group_id (the group slice adds column + FK + relative-position
+// semantics together), no size columns (a pool card's height is a pure
+// function of its contents; the resize-capable slice adds columns with their
+// writer). source_id = import/sync provenance, same rule as annotations:
+// matched on, never reused as PK.
+const CanvasPoolPlacement = sequelize.define("CanvasPoolPlacement", {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  canvas_id: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: { model: Canvas, key: "id" },
+  },
+  pool_id: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    unique: true,
+    references: { model: "Pools", key: "id" },
+  },
+  positionX: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 50 },
+  positionY: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 50 },
+  source_id: { type: DataTypes.UUID, allowNull: true, defaultValue: null },
+});
+
 module.exports = {
   Canvas,
   UserCanvas,
@@ -249,4 +277,5 @@ module.exports = {
   CanvasConnection,
   CanvasGroup,
   CanvasAnnotation,
+  CanvasPoolPlacement,
 };

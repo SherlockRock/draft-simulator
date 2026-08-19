@@ -7,6 +7,7 @@ const {
   CanvasConnection,
   CanvasGroup,
   CanvasAnnotation,
+  CanvasPoolPlacement,
 } = require("../models/Canvas.js");
 const Draft = require("../models/Draft.js");
 const {
@@ -18,6 +19,10 @@ const {
 const User = require("../models/User.js");
 const VersusDraft = require("../models/VersusDraft.js");
 const Team = require("../models/Team.js");
+const Pool = require("../models/Pool.js");
+const {
+  destroyPoolsForCanvas,
+} = require("../services/poolCleanup");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
 const { assertCanvasAccess } = require("../services/canvasMutations");
@@ -414,6 +419,11 @@ router.get("/:canvasId", async (req, res) => {
       where: { canvas_id: canvas.id },
     });
 
+    const poolPlacements = await CanvasPoolPlacement.findAll({
+      where: { canvas_id: canvas.id },
+      include: [{ model: Pool }],
+    });
+
     // Calculate isInProgress based on drafts in each group
     const groupsWithProgress = groups.map((g) => {
       const groupDrafts = canvasDrafts.filter((cd) => cd.group_id === g.id);
@@ -436,6 +446,7 @@ router.get("/:canvasId", async (req, res) => {
       connections: connections,
       groups: groupsWithProgress,
       annotations: annotations.map((annotation) => annotation.toJSON()),
+      pools: poolPlacements.map((p) => p.toJSON()),
       lastViewport: {
         x: userCanvas.lastViewportX,
         y: userCanvas.lastViewportY,
@@ -2426,6 +2437,7 @@ router.delete("/:canvasId", protect, async (req, res) => {
       where: { canvas_id: canvasId },
       transaction: t,
     });
+    await destroyPoolsForCanvas(canvasId, t);
     await UserCanvas.destroy({
       where: { canvas_id: canvasId },
       transaction: t,

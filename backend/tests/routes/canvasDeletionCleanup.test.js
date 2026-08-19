@@ -18,9 +18,11 @@ const {
   CanvasConnection,
   CanvasGroup,
   CanvasAnnotation,
+  CanvasPoolPlacement,
 } = require("../../models/Canvas.js");
 const Draft = require("../../models/Draft.js");
 const VersusDraft = require("../../models/VersusDraft.js");
+const Pool = require("../../models/Pool.js");
 
 function loadRouter() {
   const routePath = require.resolve("../../routes/canvas");
@@ -116,6 +118,8 @@ beforeEach(() => {
   vi.spyOn(CanvasConnection, "destroy").mockResolvedValue(0);
   vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasAnnotation, "destroy").mockResolvedValue(0);
+  vi.spyOn(CanvasPoolPlacement, "findAll").mockResolvedValue([]);
+  vi.spyOn(Pool, "destroy").mockResolvedValue(0);
   vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
   // The delete route promotes direct child Groups before the destroy
   // (design §8.2.0): `parent_group_id` has no `onDelete`, so a container
@@ -391,6 +395,29 @@ describe("DELETE /:canvasId series cleanup", () => {
       expect.objectContaining({ where: { canvas_id: "c-1" } }),
     );
     expect(CanvasAnnotation.destroy.mock.invocationCallOrder[0]).toBeLessThan(
+      Canvas.destroy.mock.invocationCallOrder[0],
+    );
+  });
+
+  // The Pool row is the unit of deletion (design §1.4): its FK points pool ->
+  // canvas with ON DELETE CASCADE, never the other way, so a bulk canvas
+  // delete has to destroy the claimed Pool rows itself or they orphan.
+  it("destroys claimed pool rows before Canvas.destroy", async () => {
+    mockTransaction();
+    vi.spyOn(Canvas, "destroy").mockResolvedValue(1);
+    CanvasGroup.findAll.mockResolvedValue([]);
+    CanvasPoolPlacement.findAll.mockResolvedValue([
+      { pool_id: "p-1" },
+      { pool_id: "p-2" },
+    ]);
+
+    const res = await request(buildApp()).delete("/api/canvas/c-1");
+
+    expect(res.status).toBe(200);
+    expect(Pool.destroy).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: ["p-1", "p-2"] } }),
+    );
+    expect(Pool.destroy.mock.invocationCallOrder[0]).toBeLessThan(
       Canvas.destroy.mock.invocationCallOrder[0],
     );
   });

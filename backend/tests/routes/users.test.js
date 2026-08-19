@@ -15,10 +15,13 @@ const {
   CanvasGroup,
   CanvasConnection,
   CanvasAnnotation,
+  CanvasPoolPlacement,
 } = require("../../models/Canvas");
 const Draft = require("../../models/Draft");
 const VersusDraft = require("../../models/VersusDraft");
 const UserToken = require("../../models/UserToken");
+const Pool = require("../../models/Pool");
+const SavedPool = require("../../models/SavedPool");
 
 const IMPORT_FORBIDDEN =
   "Forbidden: You don't have permission to import into this canvas";
@@ -120,7 +123,11 @@ beforeEach(() => {
     groups: [],
     connections: [],
     annotations: [],
+    pools: [],
   });
+  vi.spyOn(CanvasPoolPlacement, "findAll").mockResolvedValue([]);
+  vi.spyOn(Pool, "destroy").mockResolvedValue(0);
+  vi.spyOn(SavedPool, "findAll").mockResolvedValue([]);
 });
 
 describe("user import route canvas access", () => {
@@ -217,6 +224,7 @@ describe("annotation deletion cleanup", () => {
     vi.spyOn(Draft, "destroy").mockResolvedValue(0);
     vi.spyOn(VersusDraft, "update").mockResolvedValue([0]);
     vi.spyOn(UserToken, "destroy").mockResolvedValue(1);
+    vi.spyOn(sequelize, "transaction").mockImplementation(async (cb) => cb({}));
 
     const res = await request(buildApp())
       .delete("/api/users/me")
@@ -228,6 +236,117 @@ describe("annotation deletion cleanup", () => {
     });
     expect(annotationDestroy.mock.invocationCallOrder[0]).toBeLessThan(
       Canvas.destroy.mock.invocationCallOrder[0],
+    );
+  });
+});
+
+// The Pool row is the unit of deletion (design §1.4): its FK points pool ->
+// parent with ON DELETE CASCADE, never the other way, so these bulk-parent
+// deletion paths must destroy claimed Pool rows themselves or they orphan.
+describe("pool deletion cleanup", () => {
+  it("new_canvases overwrite destroys claimed pools from an existing same-name canvas", async () => {
+    const transaction = {
+      finished: false,
+      commit: vi.fn().mockImplementation(async () => {
+        transaction.finished = "commit";
+      }),
+      rollback: vi.fn().mockImplementation(async () => {
+        transaction.finished = "rollback";
+      }),
+    };
+    vi.spyOn(sequelize, "transaction").mockResolvedValue(transaction);
+    const destinationCanvas = {
+      id: "c-1",
+      update: vi.fn().mockResolvedValue(),
+      changed: vi.fn(),
+      save: vi.fn().mockResolvedValue(),
+    };
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue({
+      Canvas: destinationCanvas,
+    });
+    vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasDraft, "destroy").mockResolvedValue(0);
+    vi.spyOn(CanvasConnection, "destroy").mockResolvedValue(0);
+    vi.spyOn(CanvasGroup, "destroy").mockResolvedValue(1);
+    vi.spyOn(CanvasAnnotation, "destroy").mockResolvedValue(0);
+    vi.spyOn(CanvasPoolPlacement, "findAll").mockResolvedValue([
+      { pool_id: "p-1" },
+    ]);
+    const poolDestroy = vi.spyOn(Pool, "destroy").mockResolvedValue(1);
+
+    const res = await request(buildApp())
+      .post("/api/users/me/import")
+      .send({
+        exportData: {
+          exportedAt: "2026-08-12T00:00:00.000Z",
+          canvases: [
+            {
+              id: "source-canvas",
+              name: "Collision",
+              drafts: [],
+              groups: [],
+              annotations: [],
+            },
+          ],
+          versusSeries: [],
+        },
+        options: {
+          canvasIds: ["source-canvas"],
+          versusSeriesIds: [],
+          dedupeStrategy: "overwrite",
+          canvasImportMode: "new_canvases",
+        },
+      });
+
+    expect(res.status).toBe(200);
+    expect(poolDestroy).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: ["p-1"] } }),
+    );
+    expect(poolDestroy.mock.invocationCallOrder[0]).toBeLessThan(
+      CanvasGroup.destroy.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("account deletion destroys claimed pools for each owned canvas before Canvas.destroy", async () => {
+    const user = { id: "u1", email: "owner@example.com", destroy: vi.fn() };
+    vi.spyOn(auth, "protect").mockImplementation((req, _res, next) => {
+      req.user = user;
+      next();
+    });
+    vi.spyOn(UserCanvas, "findAll").mockResolvedValue([{ canvas_id: "c-1" }]);
+    vi.spyOn(UserCanvas, "destroy").mockResolvedValue(1);
+    vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasConnection, "destroy").mockResolvedValue(0);
+    vi.spyOn(CanvasAnnotation, "destroy").mockResolvedValue(0);
+    vi.spyOn(CanvasPoolPlacement, "findAll").mockResolvedValue([
+      { pool_id: "p-1" },
+    ]);
+    const poolDestroy = vi.spyOn(Pool, "destroy").mockResolvedValue(1);
+    vi.spyOn(Canvas, "destroy").mockResolvedValue(1);
+    vi.spyOn(Draft, "destroy").mockResolvedValue(0);
+    vi.spyOn(VersusDraft, "update").mockResolvedValue([0]);
+    vi.spyOn(UserToken, "destroy").mockResolvedValue(1);
+    const transaction = vi
+      .spyOn(sequelize, "transaction")
+      .mockImplementation(async (cb) => cb({}));
+
+    const res = await request(buildApp())
+      .delete("/api/users/me")
+      .send({ confirmEmail: "owner@example.com" });
+
+    expect(res.status).toBe(200);
+    expect(poolDestroy).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: ["p-1"] } }),
+    );
+    expect(poolDestroy.mock.invocationCallOrder[0]).toBeLessThan(
+      Canvas.destroy.mock.invocationCallOrder[0],
+    );
+    // Deleting saved-entry pools is atomic with the user row (design §1.4
+    // site 5): a managed transaction wraps destroyPoolsForSavedEntries and
+    // req.user.destroy together.
+    expect(transaction).toHaveBeenCalled();
+    expect(user.destroy).toHaveBeenCalledWith(
+      expect.objectContaining({ transaction: expect.anything() }),
     );
   });
 });

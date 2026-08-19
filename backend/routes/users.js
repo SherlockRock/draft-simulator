@@ -20,6 +20,10 @@ const sequelize = require("../config/database");
 const socketService = require("../middleware/socketService");
 const { assertCanvasAccess } = require("../services/canvasMutations");
 const {
+  destroyPoolsForCanvas,
+  destroyPoolsForSavedEntries,
+} = require("../services/poolCleanup");
+const {
   respondCanvasMutationError,
 } = require("../middleware/canvasMutationErrors");
 const {
@@ -270,6 +274,9 @@ async function clearCanvasContents(canvasId, transaction) {
     where: { canvas_id: canvasId },
     transaction,
   });
+  // Pool row is the unit of deletion (design §1.4) — claimed pools must be
+  // destroyed before their parent, same children-first rule.
+  await destroyPoolsForCanvas(canvasId, transaction);
   await CanvasGroup.destroy({
     where: { canvas_id: canvasId },
     transaction,
@@ -1458,6 +1465,10 @@ router.delete("/me", protect, async (req, res) => {
       // Explicitly remove annotation children before the canvas itself.
       await CanvasAnnotation.destroy({ where: { canvas_id: canvasId } });
 
+      // Pool row is the unit of deletion (design §1.4) — claimed pools must
+      // be destroyed before the canvas cascade or they orphan.
+      await destroyPoolsForCanvas(canvasId);
+
       // Delete the canvas (cascades to CanvasDraft, CanvasGroup, etc.)
       await Canvas.destroy({ where: { id: canvasId } });
     }
@@ -1475,7 +1486,14 @@ router.delete("/me", protect, async (req, res) => {
     await UserCanvas.destroy({ where: { user_id: userId } });
 
     // 6. Delete user
-    await req.user.destroy();
+    // Atomic with the user row: the User.hasMany(SavedPool) cascade would
+    // remove entries and orphan their Pool rows if this didn't run, and
+    // running it non-atomically earlier could destroy pools while a later
+    // failure leaves the account alive.
+    await sequelize.transaction(async (t) => {
+      await destroyPoolsForSavedEntries(userId, t);
+      await req.user.destroy({ transaction: t });
+    });
 
     // 7. Clear cookies
     res.clearCookie("refreshToken", {

@@ -6,10 +6,12 @@ const {
   CanvasGroup,
   CanvasConnection,
   CanvasAnnotation,
+  CanvasPoolPlacement,
 } = require("../models/Canvas");
 const Draft = require("../models/Draft.js");
 const Team = require("../models/Team.js");
 const TeamPlayer = require("../models/TeamPlayer.js");
+const Pool = require("../models/Pool.js");
 
 // Single source of truth for the canvas payload shape. Fourteen call sites
 // used to re-declare these by hand and two drifted, dropping blueSideTeam so
@@ -75,7 +77,7 @@ const TEAM_INCLUDE = [
  * not at a call site.
  */
 async function buildCanvasSnapshot(canvasId) {
-  const [canvas, drafts, connections, groups, annotations] =
+  const [canvas, drafts, connections, groups, annotations, poolPlacements] =
     await Promise.all([
       Canvas.findByPk(canvasId),
       CanvasDraft.findAll({
@@ -91,6 +93,10 @@ async function buildCanvasSnapshot(canvasId) {
         include: TEAM_INCLUDE,
       }),
       CanvasAnnotation.findAll({ where: { canvas_id: canvasId } }),
+      CanvasPoolPlacement.findAll({
+        where: { canvas_id: canvasId },
+        include: [{ model: Pool }],
+      }),
     ]);
 
   return {
@@ -99,6 +105,7 @@ async function buildCanvasSnapshot(canvasId) {
     connections,
     groups: groups.map((group) => group.toJSON()),
     annotations: annotations.map((annotation) => annotation.toJSON()),
+    pools: poolPlacements.map((p) => p.toJSON()),
   };
 }
 

@@ -13,6 +13,7 @@ const {
   CanvasConnection,
   CanvasGroup,
   CanvasAnnotation,
+  CanvasPoolPlacement,
 } = require("../../models/Canvas.js");
 const Team = require("../../models/Team");
 const canvasMutations = require("../../services/canvasMutations");
@@ -85,6 +86,7 @@ beforeEach(() => {
   vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
+  vi.spyOn(CanvasPoolPlacement, "findAll").mockResolvedValue([]);
   vi.spyOn(Team, "findAll").mockResolvedValue([]);
 });
 

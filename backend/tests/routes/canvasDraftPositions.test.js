@@ -13,6 +13,7 @@ const {
   CanvasGroup,
   CanvasConnection,
   CanvasAnnotation,
+  CanvasPoolPlacement,
 } = require("../../models/Canvas");
 const Draft = require("../../models/Draft.js");
 
@@ -810,6 +811,7 @@ describe("POST /:canvasId/draft/:draftId/copy grid placement", () => {
     vi.spyOn(CanvasDraft, "findAll").mockResolvedValue([]);
     vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
     vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasPoolPlacement, "findAll").mockResolvedValue([]);
     // Doubles as the container-reference lookup: an explicit group_id must name
     // a Group on THIS canvas.
     vi.spyOn(CanvasGroup, "findAll").mockResolvedValue(

@@ -14,6 +14,7 @@ const {
   CanvasGroup,
   CanvasConnection,
   CanvasAnnotation,
+  CanvasPoolPlacement,
 } = require("../../models/Canvas");
 const VersusDraft = require("../../models/VersusDraft.js");
 const Team = require("../../models/Team");
@@ -88,6 +89,7 @@ beforeEach(() => {
   vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasAnnotation, "count").mockResolvedValue(0);
   vi.spyOn(CanvasAnnotation, "destroy").mockResolvedValue(0);
+  vi.spyOn(CanvasPoolPlacement, "findAll").mockResolvedValue([]);
   vi.spyOn(Team, "findAll").mockResolvedValue([]);
 });
 

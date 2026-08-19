@@ -17,6 +17,7 @@ const {
   CanvasConnection,
   CanvasGroup,
   CanvasAnnotation,
+  CanvasPoolPlacement,
 } = require("../../models/Canvas.js");
 
 const EDIT_FORBIDDEN =
@@ -73,6 +74,7 @@ beforeEach(() => {
   });
   vi.spyOn(socketService, "emitToRoom").mockImplementation(() => {});
   vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
+  vi.spyOn(CanvasPoolPlacement, "findAll").mockResolvedValue([]);
 });
 
 describe("draft route canvas access", () => {

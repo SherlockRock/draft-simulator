@@ -2,7 +2,7 @@ const UserToken = require("./UserToken");
 const User = require("./User");
 const Draft = require("./Draft");
 const DraftShare = require("./DraftShare");
-const { Canvas, UserCanvas, CanvasDraft, CanvasShare, CanvasGroup, CanvasAnnotation } = require("./Canvas");
+const { Canvas, UserCanvas, CanvasDraft, CanvasShare, CanvasGroup, CanvasAnnotation, CanvasPoolPlacement } = require("./Canvas");
 const VersusDraft = require("./VersusDraft");
 const VersusParticipant = require("./VersusParticipant");
 const NavigatorSession = require("./NavigatorSession");
@@ -171,6 +171,12 @@ const setupAssociations = () => {
   // belongsToMany include-from-join gotcha).
   Pool.hasOne(SavedPool, { foreignKey: "pool_id", onDelete: "CASCADE" });
   SavedPool.belongsTo(Pool, { foreignKey: "pool_id", onDelete: "CASCADE" });
+
+  // Canvas pool placements (design §1.3/§1.4). onDelete EXPLICIT throughout.
+  Canvas.hasMany(CanvasPoolPlacement, { foreignKey: "canvas_id", onDelete: "CASCADE" });
+  CanvasPoolPlacement.belongsTo(Canvas, { foreignKey: "canvas_id", onDelete: "CASCADE" });
+  Pool.hasOne(CanvasPoolPlacement, { foreignKey: "pool_id", onDelete: "CASCADE" });
+  CanvasPoolPlacement.belongsTo(Pool, { foreignKey: "pool_id", onDelete: "CASCADE" });
 };
 
 module.exports = setupAssociations;

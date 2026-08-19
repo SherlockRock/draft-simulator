@@ -13,6 +13,7 @@ const {
   CanvasConnection,
   CanvasGroup,
   CanvasAnnotation,
+  CanvasPoolPlacement,
 } = require("../../models/Canvas");
 
 function buildApp() {
@@ -93,6 +94,7 @@ beforeEach(() => {
   vi.spyOn(CanvasConnection, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
+  vi.spyOn(CanvasPoolPlacement, "findAll").mockResolvedValue([]);
 });
 
 describe("annotation routes — the Canvas Mutation Gate", () => {
