@@ -72,6 +72,7 @@ import type { PoolChampionOp } from "@draft-sim/shared-types";
 import { mergePoolBroadcast, mergePoolSnapshotRow } from "./utils/poolBroadcastMerge";
 import { validateSocketEvent } from "./utils/socketValidation";
 import { CanvasCard } from "./components/CanvasCard";
+import { CanvasPoolCard } from "./components/CanvasPoolCard";
 import { CanvasSearchPanel } from "./components/CanvasSearchPanel";
 import {
     computeMatchupScopeHint,
@@ -358,13 +359,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const [canvasGroups, setCanvasGroups] = createStore<CanvasGroup[]>([]);
     const [annotations, setAnnotations] = createStore<CanvasAnnotation[]>([]);
     const [canvasPools, setCanvasPools] = createStore<CanvasPoolPlacement[]>([]);
-    // Written here, read by the pool card/overlay UI in the following tasks.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    // Read by CanvasPoolCard's isSelected prop below.
     const [selectedPoolId, setSelectedPoolId] = createSignal<string | null>(null);
     // Set by createPoolMutation.onSuccess so a freshly created pool opens
-    // straight into its name field; the rename input itself mounts in a later
-    // task, so today this is a write-only flag.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    // straight into its name field; read by CanvasPoolCard's isRenaming prop
+    // below. The rename input itself mounts in a later task.
     const [renamingPoolId, setRenamingPoolId] = createSignal<string | null>(null);
     const [poolDragState, setPoolDragState] = createSignal<{
         activePoolId: string | null;
@@ -3724,6 +3723,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             originY: annotation.positionY,
             frozenSize
         });
+    };
+
+    // Select-only stub for Task 8: drag wiring lands in a later task, so this
+    // only tracks selection (mirrors onAnnotationMouseDown's guard shape).
+    const onPoolMouseDown = (e: MouseEvent, placement: CanvasPoolPlacement) => {
+        if (e.button !== 0) return;
+        canvasContext.closeSharePopper();
+        e.stopPropagation();
+        setSelectedPoolId(placement.id);
     };
 
     const onBackgroundMouseDown = (e: MouseEvent) => {
@@ -7154,6 +7162,26 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 onCommitText={handleAnnotationTextCommit}
                                 onResize={handleAnnotationResize}
                                 onResizeEnd={handleAnnotationResizeEnd}
+                            />
+                        )}
+                    </For>
+                    {/* Pool cards: pure world-space, no zoom/LOD prop by
+                        design (Task 8). Rename/ops callbacks are wired as
+                        select-only/no-op stubs here until Tasks 9-11 and
+                        14-15 land the real behavior. */}
+                    <For each={canvasPools}>
+                        {(pool) => (
+                            <CanvasPoolCard
+                                placement={pool}
+                                canEdit={canEdit}
+                                isSelected={() => selectedPoolId() === pool.id}
+                                isRenaming={() => renamingPoolId() === pool.id}
+                                onStartRename={() => {}}
+                                onCommitRename={() => {}}
+                                onCancelRename={() => {}}
+                                onMouseDown={onPoolMouseDown}
+                                onOpenRolePicker={() => {}}
+                                onRemoveChampion={() => {}}
                             />
                         )}
                     </For>
