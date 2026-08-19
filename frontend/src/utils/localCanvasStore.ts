@@ -100,6 +100,10 @@ export const localCanvasResource = (canvas: LocalCanvas) => ({
     cardLayout: canvas.cardLayout ?? DEFAULT_CARD_LAYOUT,
     drafts: canvas.drafts,
     annotations: canvas.annotations,
+    // `LocalCanvas` does not carry pools yet — that's design §6.4 (D7), a
+    // later task's full local-canvas mutation surface. This satisfies
+    // `CanvasResponse.pools` in the meantime so the resource shape typechecks.
+    pools: [],
     connections: canvas.connections,
     groups: canvas.groups,
     lastViewport: canvas.viewport,

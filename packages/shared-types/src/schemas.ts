@@ -427,6 +427,106 @@ export const GroupPositionUpdateSchema = z.object({
 });
 
 // =============================================================================
+// Navigator Pool Schemas
+// =============================================================================
+//
+// Relocated here (pure move, every export keeps its name) because the Canvas
+// Pool Schemas section below references RolePoolMapSchema/RoleSchema, and
+// `const` schemas are TDZ-bound — the original location (beside SavedPool,
+// further down this file) sits AFTER CanvasResponseSchema, which itself
+// references CanvasPoolPlacementSchema below. See design §3.
+
+export const RoleSchema = z.enum(["top", "jungle", "mid", "adc", "support"]);
+export type Role = z.infer<typeof RoleSchema>;
+
+export const RolePoolMapSchema = z.object({
+  top: z.array(z.string()),
+  jungle: z.array(z.string()),
+  mid: z.array(z.string()),
+  adc: z.array(z.string()),
+  support: z.array(z.string()),
+});
+export type RolePoolMap = z.infer<typeof RolePoolMapSchema>;
+
+export const TeamPoolSchema = z.object({
+  display: RolePoolMapSchema,
+  search: z.array(z.string()),
+});
+export type TeamPool = z.infer<typeof TeamPoolSchema>;
+
+export const EMPTY_ROLE_POOL_MAP: RolePoolMap = {
+  top: [],
+  jungle: [],
+  mid: [],
+  adc: [],
+  support: [],
+};
+
+export const EMPTY_TEAM_POOL: TeamPool = {
+  display: EMPTY_ROLE_POOL_MAP,
+  search: [],
+};
+
+// =============================================================================
+// Canvas Pool Schemas
+// =============================================================================
+
+export const PoolSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).max(120),
+  champions: RolePoolMapSchema,
+  // Champions revision (design §4.3): receivers drop poolUpdate broadcasts
+  // whose version is <= the stored one — post-commit emits can interleave.
+  version: z.number(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+// Nested `Pool`, mirroring CanvasDraft.Draft — placement is the wire identity
+// clients reconcile on; the payload rides inside it.
+export const CanvasPoolPlacementSchema = z.object({
+  id: z.string(),
+  canvas_id: z.string(),
+  pool_id: z.string(),
+  positionX: z.number(),
+  positionY: z.number(),
+  source_id: z.string().nullable().optional(),
+  Pool: PoolSchema,
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+// Socket op payloads (client → server)
+export const PoolChampionOpPayloadSchema = z.object({
+  canvasId: z.string(),
+  placementId: z.string(),
+  role: RoleSchema,
+  championId: z.string().min(1),
+});
+export const PoolReplacePayloadSchema = z.object({
+  canvasId: z.string(),
+  placementId: z.string(),
+  champions: RolePoolMapSchema,
+});
+export const PoolMovePayloadSchema = z.object({
+  canvasId: z.string(),
+  placementId: z.string(),
+  positionX: z.number(),
+  positionY: z.number(),
+});
+
+// Broadcasts (server → room)
+export const PoolUpdateSchema = z.object({
+  placementId: z.string(),
+  pool: PoolSchema,
+});
+export const PoolMovedSchema = z.object({
+  placementId: z.string(),
+  positionX: z.number(),
+  positionY: z.number(),
+});
+
+// =============================================================================
 // Connection Schemas
 // =============================================================================
 
@@ -799,6 +899,7 @@ export const CanvasResponseSchema = z.object({
   connections: z.array(ConnectionSchema),
   groups: z.array(CanvasGroupSchema),
   annotations: z.array(CanvasAnnotationSchema).default([]),
+  pools: z.array(CanvasPoolPlacementSchema).default([]),
   lastViewport: ViewportSchema,
   userPermissions: z.enum(["view", "edit", "admin"]),
 });
@@ -1154,6 +1255,10 @@ export type VersusRoleSelectResponse = z.infer<
   typeof VersusRoleSelectResponseSchema
 >;
 export type CanvasResponse = z.infer<typeof CanvasResponseSchema>;
+export type Pool = z.infer<typeof PoolSchema>;
+export type CanvasPoolPlacement = z.infer<typeof CanvasPoolPlacementSchema>;
+export type PoolUpdate = z.infer<typeof PoolUpdateSchema>;
+export type PoolMoved = z.infer<typeof PoolMovedSchema>;
 export type UserDetails = z.infer<typeof UserDetailsSchema>;
 export type CanvasListItem = z.infer<typeof CanvasListItemSchema>;
 export type Activity = z.infer<typeof ActivityItemSchema>;
@@ -1206,41 +1311,6 @@ export function getEffectiveSide(
   if (role === "team2_captain") return blueSideTeam === 1 ? "red" : "blue";
   return "blue"; // fallback (spectators don't call this)
 }
-
-// =============================================================================
-// Navigator Pool Schemas
-// =============================================================================
-
-export const RoleSchema = z.enum(["top", "jungle", "mid", "adc", "support"]);
-export type Role = z.infer<typeof RoleSchema>;
-
-export const RolePoolMapSchema = z.object({
-  top: z.array(z.string()),
-  jungle: z.array(z.string()),
-  mid: z.array(z.string()),
-  adc: z.array(z.string()),
-  support: z.array(z.string()),
-});
-export type RolePoolMap = z.infer<typeof RolePoolMapSchema>;
-
-export const TeamPoolSchema = z.object({
-  display: RolePoolMapSchema,
-  search: z.array(z.string()),
-});
-export type TeamPool = z.infer<typeof TeamPoolSchema>;
-
-export const EMPTY_ROLE_POOL_MAP: RolePoolMap = {
-  top: [],
-  jungle: [],
-  mid: [],
-  adc: [],
-  support: [],
-};
-
-export const EMPTY_TEAM_POOL: TeamPool = {
-  display: EMPTY_ROLE_POOL_MAP,
-  search: [],
-};
 
 // =============================================================================
 // SavedPool Schemas (Navigator)
