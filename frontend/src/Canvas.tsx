@@ -12,7 +12,7 @@ import {
     Accessor,
     JSX
 } from "solid-js";
-import { createStore, produce, reconcile, unwrap } from "solid-js/store";
+import { createStore, produce, reconcile } from "solid-js/store";
 import { championById, resolveChampionId } from "./utils/constants";
 import { AnnotationChampionPicker } from "./components/AnnotationChampionPicker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query";
@@ -69,7 +69,7 @@ import {
     PoolMovedSchema
 } from "./utils/schemas";
 import type { PoolChampionOp } from "@draft-sim/shared-types";
-import { mergePoolBroadcast } from "./utils/poolBroadcastMerge";
+import { mergePoolBroadcast, mergePoolSnapshotRow } from "./utils/poolBroadcastMerge";
 import { validateSocketEvent } from "./utils/socketValidation";
 import { CanvasCard } from "./components/CanvasCard";
 import { CanvasSearchPanel } from "./components/CanvasSearchPanel";
@@ -2807,32 +2807,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 // commits, so it must not overwrite newer champion state:
                 // guard per row on the champions revision, and replay this
                 // client's still-unacknowledged ops on top (design §4.3).
+                // Per-row version guard + pending-ops replay lives in
+                // mergePoolSnapshotRow (unit-tested); it unwraps the live
+                // store row it is handed, so nothing proxied reaches reconcile.
                 const mergedPools = (data.pools ?? []).map((incoming) => {
-                    const current = canvasPools.find((p) => p.id === incoming.id);
-                    if (current && incoming.Pool.version <= current.Pool.version) {
-                        // Stale CHAMPIONS payload for this row. version is a
-                        // champions revision ONLY — renames broadcast snapshots
-                        // without bumping it, so discarding the whole incoming
-                        // Pool here would swallow every rename. Keep local
-                        // champions+version, take everything else (name!) from
-                        // the incoming payload. unwrap(): current came from the
-                        // store — feeding a live proxy back into reconcile is
-                        // the pattern Solid warns about.
-                        return {
-                            ...incoming,
-                            Pool: {
-                                ...incoming.Pool,
-                                champions: unwrap(current.Pool.champions),
-                                version: current.Pool.version
-                            }
-                        };
-                    }
-                    const { pool, remaining } = mergePoolBroadcast(
-                        incoming.Pool,
+                    const { row, remaining } = mergePoolSnapshotRow(
+                        incoming,
+                        canvasPools.find((p) => p.id === incoming.id),
                         pendingPoolOps.get(incoming.id) ?? []
                     );
                     pendingPoolOps.set(incoming.id, remaining);
-                    return { ...incoming, Pool: pool };
+                    return row;
                 });
                 setCanvasPools(reconcile(mergedPools, { key: "id" }));
                 canvasContext.mutateCanvas((prev: CanvasResposnse | undefined) => {

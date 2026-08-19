@@ -1,6 +1,17 @@
 import { describe, it, expect } from "vitest";
-import type { Pool, PoolChampionOp, RolePoolMap } from "@draft-sim/shared-types";
-import { opReflected, pushPendingOp, mergePoolBroadcast } from "./poolBroadcastMerge";
+import { createStore, unwrap } from "solid-js/store";
+import type {
+    CanvasPoolPlacement,
+    Pool,
+    PoolChampionOp,
+    RolePoolMap
+} from "@draft-sim/shared-types";
+import {
+    opReflected,
+    pushPendingOp,
+    mergePoolBroadcast,
+    mergePoolSnapshotRow
+} from "./poolBroadcastMerge";
 
 const emptyMap = (): RolePoolMap => ({
     top: [],
@@ -167,4 +178,112 @@ describe("mergePoolBroadcast", () => {
         expect(champions.mid).toEqual(["Zed"]);
         expect(incoming.champions).toBe(champions);
     });
+});
+
+const makePlacement = (
+    pool: Pool,
+    overrides: Partial<Omit<CanvasPoolPlacement, "Pool">> = {}
+): CanvasPoolPlacement => ({
+    id: "placement-1",
+    canvas_id: "canvas-1",
+    pool_id: pool.id,
+    positionX: 0,
+    positionY: 0,
+    source_id: null,
+    Pool: pool,
+    ...overrides
+});
+
+describe("mergePoolSnapshotRow", () => {
+    it("keeps local champions+version on a stale row but takes the incoming name and position", () => {
+        const current = makePlacement(makePool(makeMap({ mid: ["Ahri", "Zed"] }), 7));
+        // Snapshot built before the local ops committed: behind on version,
+        // but it carries a rename and a move that DID commit.
+        const incoming = makePlacement(makePool(makeMap({ mid: [] }), 5), {
+            positionX: 120,
+            positionY: 340
+        });
+        incoming.Pool.name = "Renamed by a teammate";
+
+        const { row, remaining } = mergePoolSnapshotRow(incoming, current, []);
+
+        expect(row.Pool.champions).toEqual(makeMap({ mid: ["Ahri", "Zed"] }));
+        expect(row.Pool.version).toBe(7);
+        expect(row.Pool.name).toBe("Renamed by a teammate");
+        expect(row.positionX).toBe(120);
+        expect(row.positionY).toBe(340);
+        expect(remaining).toEqual([]);
+    });
+
+    it("treats an equal-version row as stale — champions are not rolled back", () => {
+        const current = makePlacement(makePool(makeMap({ top: ["Sett"] }), 4));
+        const incoming = makePlacement(makePool(makeMap({ top: [] }), 4));
+
+        const { row } = mergePoolSnapshotRow(incoming, current, []);
+
+        expect(row.Pool.champions.top).toEqual(["Sett"]);
+        expect(row.Pool.version).toBe(4);
+    });
+
+    it("hands a stale row's pending queue straight back — a payload that is behind acks nothing", () => {
+        const current = makePlacement(makePool(makeMap({ mid: ["Ahri"] }), 9));
+        const incoming = makePlacement(makePool(makeMap({ mid: ["Ahri"] }), 2));
+        const pending = [add("mid", "Ahri")];
+
+        const { remaining } = mergePoolSnapshotRow(incoming, current, pending);
+
+        expect(remaining).toBe(pending);
+    });
+
+    it("replays pending ops on a newer row and returns the remaining queue", () => {
+        const current = makePlacement(makePool(makeMap({ mid: ["Zed"] }), 3));
+        const incoming = makePlacement(makePool(makeMap({ mid: ["Zed", "Sett"] }), 4));
+
+        const { row, remaining } = mergePoolSnapshotRow(incoming, current, [
+            add("mid", "Ahri"),
+            add("mid", "Sett")
+        ]);
+
+        // Sett is already reflected and is acknowledged; Ahri replays.
+        expect(row.Pool.champions.mid).toEqual(["Zed", "Sett", "Ahri"]);
+        expect(row.Pool.version).toBe(4);
+        expect(remaining).toEqual([add("mid", "Ahri")]);
+    });
+
+    it("passes an unknown row through with the pending replay when there is no current row", () => {
+        const incoming = makePlacement(makePool(makeMap({ mid: ["Zed"] }), 1), {
+            id: "placement-new"
+        });
+
+        const { row, remaining } = mergePoolSnapshotRow(incoming, undefined, [
+            add("top", "Sett")
+        ]);
+
+        expect(row.id).toBe("placement-new");
+        expect(row.Pool.champions.mid).toEqual(["Zed"]);
+        expect(row.Pool.champions.top).toEqual(["Sett"]);
+        expect(remaining).toEqual([add("top", "Sett")]);
+    });
+
+    /* eslint-disable solid/reactivity -- reading the store proxy in an
+       untracked scope is precisely what this test asserts about. */
+    it("returns UNWRAPPED champion state on the stale branch when current is a live store row", () => {
+        // The real call site passes the row straight out of the canvasPools
+        // store, i.e. a Solid proxy. Reconcile must never be handed one back.
+        const [rows] = createStore<CanvasPoolPlacement[]>([
+            makePlacement(makePool(makeMap({ mid: ["Ahri"] }), 6))
+        ]);
+        const incoming = makePlacement(makePool(makeMap({ mid: [] }), 2));
+
+        const { row } = mergePoolSnapshotRow(incoming, rows[0], []);
+
+        // unwrap() of an already-raw value is the identity; of a proxy it is
+        // not. Both assertions together prove the value crossed out of the
+        // store's proxy layer.
+        expect(unwrap(row.Pool.champions)).toBe(row.Pool.champions);
+        expect(row.Pool.champions).toBe(unwrap(rows[0].Pool.champions));
+        expect(row.Pool.champions).not.toBe(rows[0].Pool.champions);
+        expect(row.Pool.champions.mid).toEqual(["Ahri"]);
+    });
+    /* eslint-enable solid/reactivity */
 });
