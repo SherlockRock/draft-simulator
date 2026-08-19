@@ -266,6 +266,7 @@ import {
     type AnnotationRenderSize
 } from "./utils/annotationSize";
 import { annotationKeyboardShortcut } from "./utils/annotationKeyboardShortcut";
+import { commitPoolRename } from "./utils/poolCard";
 
 const debounce = <T extends unknown[]>(func: (...args: T) => void, limit: number) => {
     let inDebounce: boolean;
@@ -363,8 +364,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // Read by CanvasPoolCard's isSelected prop below.
     const [selectedPoolId, setSelectedPoolId] = createSignal<string | null>(null);
     // Set by createPoolMutation.onSuccess so a freshly created pool opens
-    // straight into its name field; read by CanvasPoolCard's isRenaming prop
-    // below. The rename input itself mounts in a later task.
+    // straight into its name field; read by CanvasPoolCard's isRenaming prop,
+    // which mounts the rename input.
     const [renamingPoolId, setRenamingPoolId] = createSignal<string | null>(null);
     const [poolDragState, setPoolDragState] = createSignal<{
         activePoolId: string | null;
@@ -2269,8 +2270,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         onError: (error: Error) => toast.error(`Failed to create pool: ${error.message}`)
     }));
 
-    // Bound by Task 10's rename commit.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const updatePoolMutation = useMutation(() => ({
         mutationFn: updateCanvasPool,
         onError: (error: Error) => toast.error(`Failed to update pool: ${error.message}`)
@@ -2291,6 +2290,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             toast.error(`Failed to delete pool: ${error.message}`);
         }
     }));
+
+    // Guard + optimistic write + dispatch live in `commitPoolRename`
+    // (utils/poolCard.ts) so the branch logic is unit-testable without
+    // mounting the canvas — see its doc for the guard/ordering rationale.
+    const handlePoolRename = (placementId: string, rawName: string) => {
+        commitPoolRename({
+            pools: canvasPools,
+            placementId,
+            rawName,
+            setName: (id, name) =>
+                setCanvasPools((p) => p.id === id, "Pool", "name", name),
+            isLocalMode,
+            mutate: ({ placementId: id, name }) =>
+                updatePoolMutation.mutate({ canvasId: canvasId(), placementId: id, name })
+        });
+    };
 
     const updateViewportMutation = useMutation(() => ({
         mutationFn: updateCanvasViewport,
@@ -7227,11 +7242,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         )}
                     </For>
                     {/* Pool cards: pure world-space, no zoom/LOD prop by
-                        design (Task 8). onStartRename sets renamingPoolId —
-                        the actual input mounts in Task 10, so this only opens
-                        the (currently invisible) rename state. Commit/cancel
-                        and the op callbacks are still no-op stubs until Tasks
-                        10-11 and 14-15 land. */}
+                        design (Task 8). onStartRename sets renamingPoolId,
+                        which mounts CanvasPoolCard's rename input (Task 10).
+                        The op callbacks are still no-op stubs until Tasks
+                        14-15 land. */}
                     <For each={canvasPools}>
                         {(pool) => (
                             <CanvasPoolCard
@@ -7242,8 +7256,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 onStartRename={(placementId) =>
                                     setRenamingPoolId(placementId)
                                 }
-                                onCommitRename={() => {}}
-                                onCancelRename={() => {}}
+                                onCommitRename={handlePoolRename}
+                                onCancelRename={() => setRenamingPoolId(null)}
                                 onMouseDown={onPoolMouseDown}
                                 onOpenRolePicker={() => {}}
                                 onRemoveChampion={() => {}}

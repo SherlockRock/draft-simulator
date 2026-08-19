@@ -59,3 +59,59 @@ export const sanitizeAgainstCatalog = (
     }
     return { champions: next, droppedCount: dropped };
 };
+
+/**
+ * The pool-name input's blur/Enter commit path, extracted so the
+ * read-before-clear ordering is unit-testable without a DOM: `PoolNameInput`
+ * (`CanvasPoolCard.tsx`) has no render-test harness in this repo, and the
+ * ordering itself can't be proven by reading the JSX. `value` is passed as
+ * the signal accessor (not a pre-read string) so this reads it BEFORE
+ * calling `onCancelRename` — clearing the renaming flag unmounts the input
+ * via the card's `<Show>`, and calling `onCancelRename` first would risk
+ * reading a value from a component already torn down, or (if a resync
+ * effect were ever added here) a value clobbered by it. This is the
+ * `solidjs_blur_commit_ordering` scar's fix shape, applied verbatim even
+ * though this specific input has no resync effect to trip over.
+ */
+export const commitPoolNameEdit = (
+    value: () => string,
+    placementId: string,
+    onCancelRename: () => void,
+    onCommitRename: (placementId: string, name: string) => void
+): void => {
+    const typed = value();
+    onCancelRename();
+    onCommitRename(placementId, typed);
+};
+
+/** Just enough of `CanvasPoolPlacement` for the rename guard below — keeps
+ *  the helper decoupled from the full wire schema. */
+export type PoolRenameTarget = { id: string; Pool: { name: string } };
+
+/**
+ * Guard + optimistic write + dispatch for a pool rename, extracted from
+ * `Canvas.tsx`'s `handlePoolRename` so the branch logic is unit-testable
+ * without mounting the canvas. No-ops (no store write, no request) when the
+ * placement is unknown, the trimmed name is empty, or the name is unchanged
+ * from the pool's current name. Otherwise the optimistic write always runs
+ * BEFORE the local/remote dispatch — same lesson as the draft-name field:
+ * rename must not wait on the socket echo, or the input shows the stale
+ * name until it arrives. Local-mode dispatch is a stub until Task 12 wires
+ * `localRenamePool` + `refreshFromLocal`; the optimistic write still runs
+ * either way, only the request is skipped.
+ */
+export const commitPoolRename = (params: {
+    pools: PoolRenameTarget[];
+    placementId: string;
+    rawName: string;
+    setName: (placementId: string, name: string) => void;
+    isLocalMode: () => boolean;
+    mutate: (args: { placementId: string; name: string }) => void;
+}): void => {
+    const name = params.rawName.trim();
+    const placement = params.pools.find((p) => p.id === params.placementId);
+    if (!placement || name.length === 0 || name === placement.Pool.name) return;
+    params.setName(params.placementId, name);
+    if (params.isLocalMode()) return; // Task 12: localRenamePool + refreshFromLocal
+    params.mutate({ placementId: params.placementId, name });
+};

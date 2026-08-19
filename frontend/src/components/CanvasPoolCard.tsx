@@ -1,4 +1,4 @@
-import { Component, For, Show, createMemo } from "solid-js";
+import { Component, For, Show, createMemo, createSignal } from "solid-js";
 import type { CanvasPoolPlacement, Role } from "../utils/schemas";
 import { ROLES, ROLE_LABELS } from "../utils/championRoles";
 import { RoleIcon } from "./scouting/PlayerPanel";
@@ -6,6 +6,7 @@ import { champions as championCatalog } from "../utils/constants";
 import {
     POOL_CARD_WIDTH,
     POOL_PORTRAIT_PX,
+    commitPoolNameEdit,
     flexRolesByChampion,
     poolChampionTotal
 } from "../utils/poolCard";
@@ -30,6 +31,54 @@ type CanvasPoolCardProps = {
     // Slice 3 (wired as no-ops until Task 14/15):
     onOpenRolePicker: (placementId: string, role: Role) => void;
     onRemoveChampion: (placementId: string, role: Role, championId: string) => void;
+};
+
+type PoolNameInputProps = {
+    placementId: string;
+    initialName: string;
+    onCommitRename: (placementId: string, name: string) => void;
+    onCancelRename: () => void;
+};
+
+// Mounted fresh by the <Show> below only while renaming, so `value` seeds
+// once from `initialName` and is never resynced afterward — a resync effect
+// keyed off the pool's live name would blow away what the user is typing the
+// instant a collaborator's edit (or this rename's own optimistic write)
+// reconciles in. onBlur (and Enter, which just blurs) delegate to
+// `commitPoolNameEdit`, which reads `value()` before calling
+// `onCancelRename` — see that function's doc for why.
+const PoolNameInput: Component<PoolNameInputProps> = (props) => {
+    const [value, setValue] = createSignal(props.initialName);
+
+    return (
+        <input
+            type="text"
+            value={value()}
+            class="w-full select-text truncate rounded border border-darius-border bg-darius-card px-1 text-sm font-semibold text-darius-text-primary outline-none focus:border-darius-purple-bright"
+            onInput={(e) => setValue(e.currentTarget.value)}
+            onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                    e.currentTarget.blur();
+                    return;
+                }
+                if (e.key === "Escape") {
+                    // Cancels without committing — stopPropagation keeps this
+                    // Escape from also bubbling to canvas-level handling.
+                    e.stopPropagation();
+                    props.onCancelRename();
+                }
+            }}
+            onBlur={() =>
+                commitPoolNameEdit(
+                    value,
+                    props.placementId,
+                    props.onCancelRename,
+                    props.onCommitRename
+                )
+            }
+            autofocus
+        />
+    );
 };
 
 export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
@@ -59,16 +108,29 @@ export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
             }}
             onMouseDown={(e) => props.onMouseDown(e, props.placement)}
         >
-            {/* Header: name + unique count (rename input mounts here in Task 10) */}
+            {/* Header: name + unique count */}
             <div class="flex items-center justify-between border-b border-darius-border/60 px-3 py-2">
-                <span
-                    class="truncate text-sm font-semibold text-darius-text-primary"
-                    onDblClick={() => {
-                        if (props.canEdit()) props.onStartRename(props.placement.id);
-                    }}
+                <Show
+                    when={props.isRenaming()}
+                    fallback={
+                        <span
+                            class="truncate text-sm font-semibold text-darius-text-primary"
+                            onDblClick={() => {
+                                if (props.canEdit())
+                                    props.onStartRename(props.placement.id);
+                            }}
+                        >
+                            {props.placement.Pool.name}
+                        </span>
+                    }
                 >
-                    {props.placement.Pool.name}
-                </span>
+                    <PoolNameInput
+                        placementId={props.placement.id}
+                        initialName={props.placement.Pool.name}
+                        onCommitRename={props.onCommitRename}
+                        onCancelRename={props.onCancelRename}
+                    />
+                </Show>
                 <span class="ml-2 shrink-0 rounded-full border border-darius-border px-2 py-0.5 text-[10px] text-darius-text-secondary">
                     {total()} champions
                 </span>
