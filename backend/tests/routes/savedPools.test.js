@@ -80,6 +80,7 @@ describe("POST /api/saved-pools", () => {
       .send({ name: "Scrims", champions: EMPTY_MAP });
 
     expect(res.status).toBe(201);
+    expect(sequelize.transaction).toHaveBeenCalled();
     expect(poolCreate).toHaveBeenCalled();
     expect(entryCreate).toHaveBeenCalled();
     expect(res.body).toEqual({
