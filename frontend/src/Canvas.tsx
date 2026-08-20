@@ -81,6 +81,7 @@ import { CanvasPoolCard } from "./components/CanvasPoolCard";
 import { PoolChampionPicker } from "./components/PoolChampionPicker";
 import { PoolOverlayEditor } from "./components/PoolOverlayEditor";
 import { NewPoolFromSavedDialog } from "./components/NewPoolFromSavedDialog";
+import { createSavedPool } from "./utils/savedPoolsApi";
 import { CanvasSearchPanel } from "./components/CanvasSearchPanel";
 import {
     computeMatchupScopeHint,
@@ -2343,6 +2344,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             if (context?.removed) setCanvasPools([...canvasPools, context.removed]);
             toast.error(`Failed to delete pool: ${error.message}`);
         }
+    }));
+
+    // "Save to My Pools" (D8): a client-side copy bridge, zero backend
+    // changes — takes a name+champions snapshot of the card, no saved-pool
+    // id crosses back, so there is no linkage to alias out of sync later.
+    const saveToMyPoolsMutation = useMutation(() => ({
+        mutationFn: createSavedPool,
+        onSuccess: () => toast.success("Saved to your pools"),
+        onError: (error: Error) => toast.error(`Failed to save pool: ${error.message}`)
     }));
 
     // Guard + optimistic write + dispatch live in `commitPoolRename`
@@ -7994,12 +8004,23 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     label: "Edit in overlay",
                                     action: () => setOverlayPlacement(menu().placement)
                                 },
-                                // "Save to My Pools" (D7, auth+server) is
-                                // stubbed until Task 17 wires it to
-                                // createSavedPool — omitted rather than shown
-                                // disabled: ContextMenuAction has no
-                                // disabled-row rendering, and a dead entry
-                                // would just confuse.
+                                // "Save to My Pools" (D7, auth + server):
+                                // hidden locally, same gating as the
+                                // background menu's "New Pool from Saved…" —
+                                // saved pools are server entities.
+                                ...(!isLocalMode() && isAuthenticated()
+                                    ? [
+                                          {
+                                              label: "Save to My Pools",
+                                              action: () =>
+                                                  saveToMyPoolsMutation.mutate({
+                                                      name: menu().placement.Pool.name,
+                                                      champions:
+                                                          menu().placement.Pool.champions
+                                                  })
+                                          }
+                                      ]
+                                    : []),
                                 {
                                     label: "Delete",
                                     action: () => setPoolPendingDelete(menu().placement),

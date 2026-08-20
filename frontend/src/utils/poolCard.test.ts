@@ -11,6 +11,7 @@ import {
     poolDragPosition,
     poolGrabOffset,
     poolRoleGridEntries,
+    resolveOverlayApply,
     sanitizeAgainstCatalog,
     type PoolChampionOpTarget,
     type PoolRenameTarget
@@ -705,6 +706,85 @@ describe("commitPoolReplace", () => {
             emit: () => order.push("emit")
         });
         expect(order).toEqual(["clearPendingOps", "setChampions", "isLocalMode", "emit"]);
+    });
+});
+
+describe("resolveOverlayApply", () => {
+    const emptyMap: RolePoolMap = {
+        top: [],
+        jungle: [],
+        mid: [],
+        adc: [],
+        support: []
+    };
+
+    it("replaces with the staged map when an import happened this session, even with no diff", () => {
+        // A REPLACE intent must fire even if the imported champions happen
+        // to equal the opening snapshot — this is a value comparison
+        // (diffRolePoolMaps) never runs on the replace path, unlike ops.
+        const decision = resolveOverlayApply({
+            importedThisSession: true,
+            opening: emptyMap,
+            staged: emptyMap
+        });
+        expect(decision).toEqual({ kind: "replace", champions: emptyMap });
+    });
+
+    it("replaces with the staged map when an import happened and changed the pool", () => {
+        const staged: RolePoolMap = { ...emptyMap, mid: ["Ahri"] };
+        const decision = resolveOverlayApply({
+            importedThisSession: true,
+            opening: emptyMap,
+            staged
+        });
+        expect(decision).toEqual({ kind: "replace", champions: staged });
+    });
+
+    it("sends diff-as-ops when no import happened this session", () => {
+        const staged: RolePoolMap = { ...emptyMap, mid: ["Ahri"] };
+        const decision = resolveOverlayApply({
+            importedThisSession: false,
+            opening: emptyMap,
+            staged
+        });
+        expect(decision).toEqual({
+            kind: "ops",
+            ops: [{ type: "add", role: "mid", championId: "Ahri" }]
+        });
+    });
+
+    it("is a noop when no import happened and staged is unchanged from opening", () => {
+        const decision = resolveOverlayApply({
+            importedThisSession: false,
+            opening: emptyMap,
+            staged: { ...emptyMap }
+        });
+        expect(decision).toEqual({ kind: "noop" });
+    });
+
+    // THE downgrade rule (import -> manual tweak -> apply sends ops, not
+    // replace): PoolOverlayEditor clears `importedThisSession` on every
+    // accordion change (setRoleChampions), so by the time Apply runs after
+    // an import followed by a manual edit, the flag this function sees is
+    // already false — modeling that here pins the "import stops being the
+    // intent" rule at the decision boundary, restrictive against a version
+    // of this function that ignored the flag and always replaced after any
+    // import ever happened in the session.
+    it("downgrades to diff-as-ops when a manual edit followed the import (flag already cleared)", () => {
+        // opening: what the overlay saw when it mounted, before the import.
+        const opening: RolePoolMap = { ...emptyMap, top: ["Aatrox"] };
+        // staged: after import replaced the map, then a manual accordion
+        // edit added one more champion on top of the imported set.
+        const staged: RolePoolMap = { ...emptyMap, top: ["Aatrox"], mid: ["Ahri"] };
+        const decision = resolveOverlayApply({
+            importedThisSession: false,
+            opening,
+            staged
+        });
+        expect(decision).toEqual({
+            kind: "ops",
+            ops: [{ type: "add", role: "mid", championId: "Ahri" }]
+        });
     });
 });
 

@@ -1,22 +1,23 @@
-import { Component, For, createSignal } from "solid-js";
+import { Component, For, Show, createSignal } from "solid-js";
 import type {
     CanvasPoolPlacement,
     PoolChampionOp,
     Role,
-    RolePoolMap
+    RolePoolMap,
+    SavedPool
 } from "@draft-sim/shared-types";
-import { diffRolePoolMaps } from "@draft-sim/shared-types";
 import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./Dialog";
 import { PoolRoleAccordion } from "./PoolRoleAccordion";
+import { SavedPoolDropdown } from "./navigator/SavedPoolDropdown";
 import { ROLES } from "../utils/championRoles";
-import { poolChampionTotal } from "../utils/poolCard";
+import { poolChampionTotal, resolveOverlayApply } from "../utils/poolCard";
 
 type PoolOverlayEditorProps = {
     placement: CanvasPoolPlacement;
     onCommitOps: (placementId: string, ops: PoolChampionOp[]) => void;
-    // Wired now so the producer (Canvas.tsx's handlePoolReplace) and this
-    // component's prop shape stay stable — the overlay UI that actually
-    // CALLS onReplace (the "Import from Saved" launcher) lands in Task 17.
+    // The saved-pool import launcher (Task 17, below) is the only caller —
+    // see `resolveOverlayApply`'s doc for when Apply routes here instead of
+    // `onCommitOps`.
     onReplace: (placementId: string, champions: RolePoolMap) => void;
     onClose: () => void;
     isLocalMode: boolean;
@@ -48,6 +49,11 @@ export const PoolOverlayEditor: Component<PoolOverlayEditorProps> = (props) => {
     const opening = copyMap(props.placement.Pool.champions);
     const [staged, setStaged] = createSignal<RolePoolMap>(copyMap(opening));
     const [openRoles, setOpenRoles] = createSignal<Set<Role>>(new Set<Role>(["top"]));
+    // Task 17: set true when a saved pool is imported this session, cleared
+    // on ANY manual accordion edit that follows. See `resolveOverlayApply`'s
+    // doc (utils/poolCard.ts) for the Apply-time replace-vs-diff rule this
+    // drives.
+    const [importedThisSession, setImportedThisSession] = createSignal(false);
 
     const toggleOpen = (role: Role) => {
         setOpenRoles((prev) => {
@@ -59,17 +65,31 @@ export const PoolOverlayEditor: Component<PoolOverlayEditorProps> = (props) => {
     };
 
     const setRoleChampions = (role: Role, championIds: string[]) => {
+        setImportedThisSession(false);
         setStaged((prev) => ({ ...prev, [role]: championIds }));
+    };
+
+    // SavedPoolDropdown already sanitizes against the live catalog
+    // (`sanitizeAgainstCatalog`) and toasts about any dropped ids before
+    // calling onSelect — this just stages the result (a REPLACE of the whole
+    // map, not a per-role merge) and flips the import-intent flag.
+    const handleImportPool = (pool: SavedPool) => {
+        setStaged(copyMap(pool.champions));
+        setImportedThisSession(true);
     };
 
     const totalSelected = () => poolChampionTotal(staged());
 
     const applyChanges = () => {
-        const ops = diffRolePoolMaps(opening, staged());
-        // Zero ops means nothing changed across the whole session — skip the
-        // no-op dispatch and just close.
-        if (ops.length > 0) {
-            props.onCommitOps(props.placement.id, ops);
+        const decision = resolveOverlayApply({
+            importedThisSession: importedThisSession(),
+            opening,
+            staged: staged()
+        });
+        if (decision.kind === "replace") {
+            props.onReplace(props.placement.id, decision.champions);
+        } else if (decision.kind === "ops") {
+            props.onCommitOps(props.placement.id, decision.ops);
         }
         props.onClose();
     };
@@ -89,6 +109,18 @@ export const PoolOverlayEditor: Component<PoolOverlayEditorProps> = (props) => {
                             {totalSelected()} total
                         </span>
                     </div>
+
+                    {/* Import-from-saved (D7): hidden on local canvases and
+                        for anonymous users — saved pools are server
+                        entities. */}
+                    <Show when={props.isAuthenticated && !props.isLocalMode}>
+                        <div class="mt-2 flex justify-end">
+                            <SavedPoolDropdown
+                                onSelect={handleImportPool}
+                                refreshKey={() => 0}
+                            />
+                        </div>
+                    </Show>
 
                     <div class="custom-scrollbar mt-3 flex max-h-[60vh] flex-col gap-2 overflow-y-auto pr-1">
                         <For each={ROLES}>

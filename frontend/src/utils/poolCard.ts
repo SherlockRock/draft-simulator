@@ -1,5 +1,5 @@
 import type { Role, RolePoolMap, PoolChampionOp } from "@draft-sim/shared-types";
-import { applyPoolChampionOp } from "@draft-sim/shared-types";
+import { applyPoolChampionOp, diffRolePoolMaps } from "@draft-sim/shared-types";
 import { ROLES, championsInRole } from "./championRoles";
 import { champions as catalogChampions } from "./constants";
 
@@ -347,4 +347,42 @@ export const commitPoolReplace = (params: {
         return;
     }
     params.emit({ placementId: params.placementId, champions: params.champions });
+};
+
+/**
+ * Apply-time decision for `PoolOverlayEditor` (Task 17): the saved-pool
+ * import launcher (`SavedPoolDropdown` in the overlay header) replaces the
+ * STAGED map as a staging action, not a wire op — see the overlay's
+ * `handleImportPool`. If Apply fires with no manual accordion edit between
+ * the import and the click, the user's intent was REPLACE, so this sends a
+ * single `poolReplace` (via `onReplace`/`commitPoolReplace`) instead of a
+ * diff. Any manual edit after the import downgrades back to the normal
+ * diff-as-ops path — the import stops being "the intent" the instant the
+ * user touches a bucket by hand. The caller clears `importedThisSession` on
+ * every accordion change, so by the time this runs the flag already means
+ * "an import happened AND nothing manual followed it."
+ *
+ * Extracted (like the rest of this file) so the branch — and specifically
+ * the downgrade — is unit-testable without a Solid render harness. The
+ * zero-diff-skips-dispatch rule (`applyChanges`'s pre-Task-17 behavior)
+ * still applies, but only on the ops path: a replace always fires, even if
+ * the imported champions happen to equal the opening snapshot, because it
+ * expresses the user's REPLACE intent, not a value comparison.
+ */
+export type OverlayApplyDecision =
+    | { kind: "replace"; champions: RolePoolMap }
+    | { kind: "ops"; ops: PoolChampionOp[] }
+    | { kind: "noop" };
+
+export const resolveOverlayApply = (params: {
+    importedThisSession: boolean;
+    opening: RolePoolMap;
+    staged: RolePoolMap;
+}): OverlayApplyDecision => {
+    if (params.importedThisSession) {
+        return { kind: "replace", champions: params.staged };
+    }
+    const ops = diffRolePoolMaps(params.opening, params.staged);
+    if (ops.length === 0) return { kind: "noop" };
+    return { kind: "ops", ops };
 };
