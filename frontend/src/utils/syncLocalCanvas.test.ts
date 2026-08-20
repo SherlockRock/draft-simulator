@@ -10,19 +10,22 @@ vi.mock("./actions", () => ({
     updateAnnotation: vi.fn(),
     createConnection: vi.fn(),
     updateCanvasViewport: vi.fn(),
-    updateCanvasDraftPositions: vi.fn()
+    updateCanvasDraftPositions: vi.fn(),
+    createCanvasPool: vi.fn()
 }));
 import {
     annotationSyncEntries,
     nestedGroupSyncEntries,
+    poolSyncEntries,
     stripUnsyncableGroupMetadata,
     syncLocalCanvasToServer
 } from "./syncLocalCanvas";
-import type { CanvasAnnotation, CanvasDraft, CanvasGroup } from "./schemas";
+import type { CanvasAnnotation, CanvasDraft, CanvasGroup, CanvasPoolPlacement } from "./schemas";
 import {
     createAnnotation,
     createCanvas,
     createCanvasGroup,
+    createCanvasPool,
     createConnection,
     postNewDraft,
     updateAnnotation,
@@ -66,6 +69,21 @@ const localAnnotation = (
     color: "slate",
     fontSize: "md",
     ...over
+});
+
+const localPool = (id: string, over: Partial<CanvasPoolPlacement["Pool"]> = {}): CanvasPoolPlacement => ({
+    id,
+    canvas_id: "local",
+    pool_id: `${id}-pool`,
+    positionX: 10,
+    positionY: 20,
+    Pool: {
+        id: `${id}-pool`,
+        name: `Pool ${id}`,
+        champions: { top: [], jungle: [], mid: [], adc: [], support: [] },
+        version: 0,
+        ...over
+    }
 });
 
 const localDraft = (id: string): CanvasDraft => ({
@@ -127,6 +145,34 @@ describe("annotationSyncEntries", () => {
         expect(entries[1]).toEqual(
             expect.objectContaining({ manualWidth: null, manualHeight: null })
         );
+    });
+});
+
+describe("poolSyncEntries", () => {
+    it("maps local pools to the createCanvasPool payload shape, sourceId = local id", () => {
+        const pool = localPool("local-p1", {
+            name: "Scrim pool",
+            champions: { top: ["Aatrox"], jungle: [], mid: [], adc: [], support: [] }
+        });
+
+        expect(poolSyncEntries([pool])).toEqual([
+            {
+                sourceId: "local-p1",
+                positionX: 10,
+                positionY: 20,
+                name: "Scrim pool",
+                champions: { top: ["Aatrox"], jungle: [], mid: [], adc: [], support: [] }
+            }
+        ]);
+    });
+
+    it("maps an empty pool list to an empty array", () => {
+        expect(poolSyncEntries([])).toEqual([]);
+    });
+
+    it("maps multiple pools in order", () => {
+        const pools = [localPool("p1"), localPool("p2")];
+        expect(poolSyncEntries(pools).map((e) => e.sourceId)).toEqual(["p1", "p2"]);
     });
 });
 
@@ -275,6 +321,45 @@ describe("syncLocalCanvasToServer", () => {
                 style: "solid"
             }
         });
+        vi.mocked(createCanvasPool).mockResolvedValue({
+            success: true,
+            pool: localPool("server-pool")
+        });
+    });
+
+    // Without this step, signing up destroys every local pool — the local
+    // canvas is cleared after sync (Step 5) whether or not the pools loop ran.
+    it("syncs local pools with sourceId = the local placement id", async () => {
+        const canvas = createEmptyLocalCanvas("My Canvas");
+        canvas.pools = [
+            localPool("local-p1", {
+                name: "Scrim pool",
+                champions: { top: ["Aatrox"], jungle: [], mid: [], adc: [], support: [] }
+            })
+        ];
+        saveLocalCanvas(canvas);
+
+        await syncLocalCanvasToServer();
+
+        expect(createCanvasPool).toHaveBeenCalledWith({
+            canvasId: "server-canvas",
+            sourceId: "local-p1",
+            positionX: 10,
+            positionY: 20,
+            name: "Scrim pool",
+            champions: { top: ["Aatrox"], jungle: [], mid: [], adc: [], support: [] }
+        });
+    });
+
+    it("syncs a pools-only canvas instead of treating it as empty", async () => {
+        const canvas = createEmptyLocalCanvas("My Canvas");
+        canvas.pools = [localPool("local-p1")];
+        saveLocalCanvas(canvas);
+
+        const canvasId = await syncLocalCanvasToServer();
+
+        expect(canvasId).toBe("server-canvas");
+        expect(createCanvasPool).toHaveBeenCalledTimes(1);
     });
 
     it("syncs an annotation-only canvas instead of treating it as empty", async () => {

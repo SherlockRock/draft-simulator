@@ -7,16 +7,18 @@ import {
     updateCanvasDraft,
     createConnection,
     createAnnotation,
+    createCanvasPool,
     updateCanvasViewport,
     updateCanvasDraftPositions
 } from "./actions";
-import { CanvasGroup, ConnectionEndpoint } from "./schemas";
+import { CanvasGroup, CanvasPoolPlacement, ConnectionEndpoint } from "./schemas";
 import type {
     AnnotationColor,
     AnnotationFontSize,
     CanvasAnnotation,
     CanvasGroupMetadata,
-    GroupPositionUpdate
+    GroupPositionUpdate,
+    RolePoolMap
 } from "@draft-sim/shared-types";
 
 /**
@@ -96,6 +98,30 @@ export const annotationSyncEntries = (
         group_id: annotation.group_id
             ? (groupIdMap.get(annotation.group_id) ?? null)
             : null
+    }));
+
+/**
+ * The `createCanvasPool` payload for sync's pools pass (Step 3d): one entry
+ * per local pool, `sourceId` = the local placement id. `sourceId` is what
+ * makes a re-run of this loop idempotent against the server's partial unique
+ * index (see `canvasPools.js`'s `findExisting`/`SequelizeUniqueConstraintError`
+ * handling) — a retried sync must not double-create every pool.
+ */
+export const poolSyncEntries = (
+    pools: readonly CanvasPoolPlacement[]
+): {
+    sourceId: string;
+    positionX: number;
+    positionY: number;
+    name: string;
+    champions: RolePoolMap;
+}[] =>
+    pools.map((placement) => ({
+        sourceId: placement.id,
+        positionX: placement.positionX,
+        positionY: placement.positionY,
+        name: placement.Pool.name,
+        champions: placement.Pool.champions
     }));
 
 export const syncLocalCanvasToServer = async (): Promise<string | null> => {
@@ -216,6 +242,15 @@ export const syncLocalCanvasToServer = async (): Promise<string | null> => {
             group_id: entry.group_id
         });
         annotationIdMap.set(entry.sourceId, created.annotation.id);
+    }
+
+    // Step 3d: Pools. sourceId = the local id — the server's partial unique
+    // index makes a re-run idempotent. Without this step, signing up DESTROYS
+    // every local pool (the local canvas is cleared after sync).
+    // NB: the created-canvas id variable in syncLocalCanvasToServer is
+    // `canvasId` (line ~115), shadowing nothing — use it as-is.
+    for (const entry of poolSyncEntries(local.pools)) {
+        await createCanvasPool({ canvasId, ...entry });
     }
 
     // Step 4: Create connections with remapped IDs

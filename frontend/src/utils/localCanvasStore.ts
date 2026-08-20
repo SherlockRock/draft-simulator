@@ -1,6 +1,7 @@
 import {
     CanvasAnnotation,
     CanvasDraft,
+    CanvasPoolPlacement,
     Connection,
     CanvasGroup,
     Viewport
@@ -19,6 +20,7 @@ export type LocalCanvas = {
     connections: Connection[];
     groups: CanvasGroup[];
     annotations: CanvasAnnotation[];
+    pools: CanvasPoolPlacement[];
     viewport: Viewport;
     createdAt: string;
 };
@@ -42,6 +44,15 @@ export const getLocalCanvas = (): LocalCanvas | null => {
             connections: parsed.connections ?? [],
             groups: parsed.groups ?? [],
             annotations: parsed.annotations ?? [],
+            // Canvases saved before pools existed have no `pools` key at all;
+            // a canvas saved by an earlier build of THIS feature can have the
+            // key but a pool missing `version` (PoolSchema.version is
+            // required — an unbackfilled row would feed the version-guard
+            // garbage downstream).
+            pools: (parsed.pools ?? []).map((pool) => ({
+                ...pool,
+                Pool: { ...pool.Pool, version: pool.Pool.version ?? 0 }
+            })),
             viewport: parsed.viewport ?? { x: 0, y: 0, zoom: 1 },
             createdAt: parsed.createdAt ?? new Date().toISOString()
         };
@@ -73,6 +84,7 @@ export const createEmptyLocalCanvas = (
         connections: [],
         groups: [],
         annotations: [],
+        pools: [],
         viewport: { x: 0, y: 0, zoom: 1 },
         createdAt: new Date().toISOString()
     };
@@ -100,10 +112,7 @@ export const localCanvasResource = (canvas: LocalCanvas) => ({
     cardLayout: canvas.cardLayout ?? DEFAULT_CARD_LAYOUT,
     drafts: canvas.drafts,
     annotations: canvas.annotations,
-    // `LocalCanvas` does not carry pools yet — that's design §6.4 (D7), a
-    // later task's full local-canvas mutation surface. This satisfies
-    // `CanvasResponse.pools` in the meantime so the resource shape typechecks.
-    pools: [],
+    pools: canvas.pools,
     connections: canvas.connections,
     groups: canvas.groups,
     lastViewport: canvas.viewport,
@@ -122,7 +131,8 @@ export const isLocalCanvasEmpty = (): boolean => {
     const hasContent =
         canvas.drafts.length > 0 ||
         canvas.groups.length > 0 ||
-        canvas.annotations.length > 0;
+        canvas.annotations.length > 0 ||
+        canvas.pools.length > 0;
     const wasRenamed = canvas.name !== "My Canvas";
     return !hasContent && !wasRenamed;
 };

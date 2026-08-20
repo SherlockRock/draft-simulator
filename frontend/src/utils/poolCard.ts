@@ -96,9 +96,7 @@ export type PoolRenameTarget = { id: string; Pool: { name: string } };
  * from the pool's current name. Otherwise the optimistic write always runs
  * BEFORE the local/remote dispatch — same lesson as the draft-name field:
  * rename must not wait on the socket echo, or the input shows the stale
- * name until it arrives. Local-mode dispatch is a stub until Task 12 wires
- * `localRenamePool` + `refreshFromLocal`; the optimistic write still runs
- * either way, only the request is skipped.
+ * name until it arrives.
  */
 export const commitPoolRename = (params: {
     pools: PoolRenameTarget[];
@@ -107,12 +105,18 @@ export const commitPoolRename = (params: {
     setName: (placementId: string, name: string) => void;
     isLocalMode: () => boolean;
     mutate: (args: { placementId: string; name: string }) => void;
+    localRename: (args: { placementId: string; name: string }) => void;
+    refreshFromLocal: () => void;
 }): void => {
     const name = params.rawName.trim();
     const placement = params.pools.find((p) => p.id === params.placementId);
     if (!placement || name.length === 0 || name === placement.Pool.name) return;
     params.setName(params.placementId, name);
-    if (params.isLocalMode()) return; // Task 12: localRenamePool + refreshFromLocal
+    if (params.isLocalMode()) {
+        params.localRename({ placementId: params.placementId, name });
+        params.refreshFromLocal();
+        return;
+    }
     params.mutate({ placementId: params.placementId, name });
 };
 
@@ -152,8 +156,7 @@ export const poolDragPosition = (
  * mounting the canvas. Mirrors `commitPoolRename`'s shape: the optimistic
  * store write already landed during mousemove (the relay is paint-only —
  * this is the durable write), so this function only decides whether to hit
- * the network. Local-mode dispatch is a stub until Task 12 wires
- * `localMovePool` + `refreshFromLocal`.
+ * the network.
  */
 export const commitPoolDrag = (params: {
     placementId: string;
@@ -161,8 +164,22 @@ export const commitPoolDrag = (params: {
     positionY: number;
     isLocalMode: () => boolean;
     mutate: (args: { placementId: string; positionX: number; positionY: number }) => void;
+    localMove: (args: {
+        placementId: string;
+        positionX: number;
+        positionY: number;
+    }) => void;
+    refreshFromLocal: () => void;
 }): void => {
-    if (params.isLocalMode()) return; // Task 12: localMovePool + refreshFromLocal
+    if (params.isLocalMode()) {
+        params.localMove({
+            placementId: params.placementId,
+            positionX: params.positionX,
+            positionY: params.positionY
+        });
+        params.refreshFromLocal();
+        return;
+    }
     params.mutate({
         placementId: params.placementId,
         positionX: params.positionX,

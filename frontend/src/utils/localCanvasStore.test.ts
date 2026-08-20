@@ -1,7 +1,37 @@
-import { describe, expect, it } from "vitest";
-import { createEmptyLocalCanvas, localCanvasResource } from "./localCanvasStore";
+import { describe, expect, it, beforeEach } from "vitest";
+import {
+    createEmptyLocalCanvas,
+    getLocalCanvas,
+    localCanvasResource,
+    saveLocalCanvas
+} from "./localCanvasStore";
 import type { LocalCanvas } from "./localCanvasStore";
-import type { CanvasAnnotation, CanvasDraft, CanvasGroup } from "./schemas";
+import type { CanvasAnnotation, CanvasDraft, CanvasGroup, CanvasPoolPlacement } from "./schemas";
+
+class MemoryStorage {
+    private store = new Map<string, string>();
+    getItem(key: string): string | null {
+        return this.store.get(key) ?? null;
+    }
+    setItem(key: string, value: string): void {
+        this.store.set(key, value);
+    }
+    removeItem(key: string): void {
+        this.store.delete(key);
+    }
+    clear(): void {
+        this.store.clear();
+    }
+}
+
+Object.defineProperty(globalThis, "localStorage", {
+    value: new MemoryStorage(),
+    writable: true
+});
+
+beforeEach(() => {
+    localStorage.clear();
+});
 
 const note = (id: string): CanvasAnnotation => ({
     id,
@@ -39,11 +69,26 @@ const group = (id: string): CanvasGroup => ({
     metadata: {}
 });
 
+const pool = (id: string): CanvasPoolPlacement => ({
+    id,
+    canvas_id: "local",
+    pool_id: `${id}-pool`,
+    positionX: 100,
+    positionY: 200,
+    Pool: {
+        id: `${id}-pool`,
+        name: `Pool ${id}`,
+        champions: { top: [], jungle: [], mid: [], adc: [], support: [] },
+        version: 0
+    }
+});
+
 const populated = (): LocalCanvas => ({
     ...createEmptyLocalCanvas("Fixture", "desc", "icon", "wide"),
     drafts: [card("d1")],
     groups: [group("g1")],
     annotations: [note("a1"), note("a2")],
+    pools: [pool("p1")],
     viewport: { x: 5, y: 6, zoom: 0.5 }
 });
 
@@ -69,6 +114,16 @@ describe("localCanvasResource", () => {
         expect(resource.cardLayout).toBe("wide");
     });
 
+    // The one-mapper-one-test contract (design note above): `pools` is the
+    // field this task adds to `LocalCanvas`. This test exists specifically to
+    // force it into the enumeration below the moment it's added — the same
+    // shape as the annotations bug this mapper was already extracted to fix.
+    it("carries the stored pools, not a hardcoded empty list", () => {
+        const local = populated();
+
+        expect(localCanvasResource(local).pools).toEqual(local.pools);
+    });
+
     // A LocalCanvas key that the mapper forgets renders as absent/empty rather
     // than failing anything, which is exactly how the annotations bug survived.
     // Enumerating the keys makes the next omission fail here instead.
@@ -79,12 +134,13 @@ describe("localCanvasResource", () => {
             drafts: resource.drafts,
             groups: resource.groups,
             connections: resource.connections,
-            annotations: resource.annotations
+            annotations: resource.annotations,
+            pools: resource.pools
         };
 
-        for (const key of ["drafts", "groups", "connections", "annotations"]) {
+        for (const key of ["drafts", "groups", "connections", "annotations", "pools"]) {
             expect(carried[key], `${key} is missing from the resource mapping`).toEqual(
-                local[key as "drafts" | "groups" | "connections" | "annotations"]
+                local[key as "drafts" | "groups" | "connections" | "annotations" | "pools"]
             );
         }
     });
@@ -93,7 +149,51 @@ describe("localCanvasResource", () => {
         const resource = localCanvasResource(createEmptyLocalCanvas("Empty"));
 
         expect(resource.annotations).toEqual([]);
+        expect(resource.pools).toEqual([]);
         expect(resource.userPermissions).toBe("admin");
         expect(resource.id).toBe("local");
+    });
+});
+
+describe("getLocalCanvas pools backfill", () => {
+    it("backfills pools: [] on a canvas saved before the field existed", () => {
+        // Simulate a pre-Task-12 stored canvas: write raw JSON with no `pools`
+        // key at all, mirroring what a real anonymous user's localStorage would
+        // hold after this ships.
+        const legacy = createEmptyLocalCanvas("Legacy");
+        const legacyRecord = legacy as unknown as Record<string, unknown>;
+        delete legacyRecord.pools;
+        localStorage.setItem("draft-sim:local-canvas", JSON.stringify(legacy));
+
+        expect(getLocalCanvas()?.pools).toEqual([]);
+    });
+
+    it("backfills a stored pool's missing version to 0 rather than dropping it", () => {
+        const legacy = createEmptyLocalCanvas("Legacy");
+        const legacyPool = pool("p1");
+        const legacyPoolRecord = legacyPool.Pool as unknown as Record<string, unknown>;
+        delete legacyPoolRecord.version;
+        const legacyRecord = {
+            ...legacy,
+            pools: [legacyPool]
+        };
+        localStorage.setItem(
+            "draft-sim:local-canvas",
+            JSON.stringify(legacyRecord)
+        );
+
+        const loaded = getLocalCanvas();
+        expect(loaded?.pools).toHaveLength(1);
+        expect(loaded?.pools[0]?.Pool.version).toBe(0);
+    });
+
+    it("preserves a stored pool's existing version rather than resetting it", () => {
+        const withVersion: CanvasPoolPlacement = {
+            ...pool("p1"),
+            Pool: { ...pool("p1").Pool, version: 4 }
+        };
+        saveLocalCanvas({ ...createEmptyLocalCanvas("Fixture"), pools: [withVersion] });
+
+        expect(getLocalCanvas()?.pools[0]?.Pool.version).toBe(4);
     });
 });

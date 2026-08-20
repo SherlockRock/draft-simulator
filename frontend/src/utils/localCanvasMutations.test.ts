@@ -46,7 +46,13 @@ const {
     localUpdateAnnotation,
     localDeleteAnnotation,
     localUpdateConnection,
-    localCopyAnnotation
+    localCopyAnnotation,
+    localCreatePool,
+    localRenamePool,
+    localMovePool,
+    localDeletePool,
+    localPoolChampionOp,
+    localReplacePool
 } = await import("./useLocalCanvasMutations");
 const { MAX_GROUP_DEPTH } = await import("@draft-sim/shared-types/canvas-tree-vector");
 const {
@@ -346,6 +352,167 @@ describe("isLocalCanvasEmpty", () => {
         expect(getLocalCanvas()?.drafts).toEqual([]);
         expect(getLocalCanvas()?.groups).toEqual([]);
         expect(isLocalCanvasEmpty()).toBe(false);
+    });
+
+    // Data-loss gate (design D-something / brief): sync returns null when this
+    // says empty, and the caller clears localStorage after. A pools-only
+    // canvas is real authored content and must not be swept away silently.
+    it("a pools-only canvas is not empty", () => {
+        localCreatePool({ positionX: 10, positionY: 20 });
+
+        expect(getLocalCanvas()?.drafts).toEqual([]);
+        expect(getLocalCanvas()?.groups).toEqual([]);
+        expect(getLocalCanvas()?.annotations).toEqual([]);
+        expect(isLocalCanvasEmpty()).toBe(false);
+    });
+});
+
+describe("local pools", () => {
+    it("creates one with the server's defaults", () => {
+        const { placement } = localCreatePool({ positionX: 10, positionY: 20 });
+
+        expect(placement.Pool.name).toBe("New Pool");
+        expect(placement.Pool.version).toBe(0);
+        expect(placement.Pool.champions).toEqual({
+            top: [],
+            jungle: [],
+            mid: [],
+            adc: [],
+            support: []
+        });
+        expect(placement.canvas_id).toBe("local");
+        expect(getLocalCanvas()?.pools).toHaveLength(1);
+    });
+
+    it("creates one with an explicit name and champions when given", () => {
+        const { placement } = localCreatePool({
+            positionX: 10,
+            positionY: 20,
+            name: "Scrim pool",
+            champions: {
+                top: ["Aatrox"],
+                jungle: [],
+                mid: [],
+                adc: [],
+                support: []
+            }
+        });
+
+        expect(placement.Pool.name).toBe("Scrim pool");
+        expect(placement.Pool.champions.top).toEqual(["Aatrox"]);
+    });
+
+    it("renames a pool by placement id", () => {
+        const { placement } = localCreatePool({ positionX: 10, positionY: 20 });
+
+        localRenamePool({ placementId: placement.id, name: "Renamed" });
+
+        expect(getLocalCanvas()?.pools[0]?.Pool.name).toBe("Renamed");
+    });
+
+    it("moves a pool by placement id", () => {
+        const { placement } = localCreatePool({ positionX: 10, positionY: 20 });
+
+        localMovePool({ placementId: placement.id, positionX: 111, positionY: 222 });
+
+        const stored = getLocalCanvas()?.pools[0];
+        expect(stored?.positionX).toBe(111);
+        expect(stored?.positionY).toBe(222);
+    });
+
+    it("deletes a pool by placement id, removing the placement", () => {
+        const { placement } = localCreatePool({ positionX: 10, positionY: 20 });
+        const other = localCreatePool({ positionX: 30, positionY: 40 }).placement;
+
+        localDeletePool(placement.id);
+
+        const stored = getLocalCanvas()?.pools ?? [];
+        expect(stored.find((p) => p.id === placement.id)).toBeUndefined();
+        expect(stored.find((p) => p.id === other.id)).toBeDefined();
+        expect(stored).toHaveLength(1);
+    });
+
+    describe("localPoolChampionOp", () => {
+        it("add dedupes — adding an already-present champion is a no-op set write", () => {
+            const { placement } = localCreatePool({
+                positionX: 10,
+                positionY: 20,
+                champions: {
+                    top: ["Aatrox"],
+                    jungle: [],
+                    mid: [],
+                    adc: [],
+                    support: []
+                }
+            });
+
+            localPoolChampionOp({
+                placementId: placement.id,
+                op: { type: "add", role: "top", championId: "Aatrox" }
+            });
+
+            expect(getLocalCanvas()?.pools[0]?.Pool.champions.top).toEqual(["Aatrox"]);
+        });
+
+        it("remove of a missing champion no-ops rather than throwing", () => {
+            const { placement } = localCreatePool({ positionX: 10, positionY: 20 });
+
+            expect(() =>
+                localPoolChampionOp({
+                    placementId: placement.id,
+                    op: { type: "remove", role: "top", championId: "Ghost" }
+                })
+            ).not.toThrow();
+            expect(getLocalCanvas()?.pools[0]?.Pool.champions.top).toEqual([]);
+        });
+
+        // Proves the CALL SITE, not just the shared helper: the op's result
+        // must be written back onto the stored placement and persisted, not
+        // merely computed and discarded.
+        it("writes the applied result back to the stored placement and saves it", () => {
+            const { placement } = localCreatePool({ positionX: 10, positionY: 20 });
+
+            localPoolChampionOp({
+                placementId: placement.id,
+                op: { type: "add", role: "jungle", championId: "LeeSin" }
+            });
+
+            expect(getLocalCanvas()?.pools[0]?.Pool.champions.jungle).toEqual(["LeeSin"]);
+        });
+
+        it("bumps the pool's version on every applied op, mirroring the server's row-lock bump", () => {
+            const { placement } = localCreatePool({ positionX: 10, positionY: 20 });
+
+            localPoolChampionOp({
+                placementId: placement.id,
+                op: { type: "add", role: "top", championId: "Aatrox" }
+            });
+
+            expect(getLocalCanvas()?.pools[0]?.Pool.version).toBe(1);
+        });
+    });
+
+    it("localReplacePool overwrites the whole champions map and bumps version", () => {
+        const { placement } = localCreatePool({
+            positionX: 10,
+            positionY: 20,
+            champions: { top: ["Aatrox"], jungle: [], mid: [], adc: [], support: [] }
+        });
+
+        localReplacePool({
+            placementId: placement.id,
+            champions: { top: [], jungle: ["LeeSin"], mid: [], adc: [], support: [] }
+        });
+
+        const stored = getLocalCanvas()?.pools[0];
+        expect(stored?.Pool.champions).toEqual({
+            top: [],
+            jungle: ["LeeSin"],
+            mid: [],
+            adc: [],
+            support: []
+        });
+        expect(stored?.Pool.version).toBe(1);
     });
 });
 

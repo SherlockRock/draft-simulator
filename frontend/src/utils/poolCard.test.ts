@@ -114,6 +114,8 @@ describe("commitPoolRename", () => {
         const setName = vi.fn();
         const isLocalMode = vi.fn(() => false);
         const mutate = vi.fn();
+        const localRename = vi.fn();
+        const refreshFromLocal = vi.fn();
         const run = (placementId: string, rawName: string) =>
             commitPoolRename({
                 pools,
@@ -121,9 +123,11 @@ describe("commitPoolRename", () => {
                 rawName,
                 setName,
                 isLocalMode,
-                mutate
+                mutate,
+                localRename,
+                refreshFromLocal
             });
-        return { setName, isLocalMode, mutate, run };
+        return { setName, isLocalMode, mutate, localRename, refreshFromLocal, run };
     };
 
     it("no-ops on an unknown placement", () => {
@@ -157,20 +161,49 @@ describe("commitPoolRename", () => {
         });
     });
 
-    it("writes the store optimistically but skips the mutation in local mode", () => {
+    it("writes the store optimistically but skips the server mutation in local mode", () => {
         const pools = [target("Scrim pool")];
         const setName = vi.fn();
         const isLocalMode = vi.fn(() => true);
         const mutate = vi.fn();
+        const localRename = vi.fn();
+        const refreshFromLocal = vi.fn();
         commitPoolRename({
             pools,
             placementId: "placement-1",
             rawName: "Renamed pool",
             setName,
             isLocalMode,
-            mutate
+            mutate,
+            localRename,
+            refreshFromLocal
         });
         expect(setName).toHaveBeenCalledWith("placement-1", "Renamed pool");
+        expect(mutate).not.toHaveBeenCalled();
+    });
+
+    it("dispatches localRenamePool + refreshFromLocal in local mode instead of the server mutation", () => {
+        const pools = [target("Scrim pool")];
+        const setName = vi.fn();
+        const isLocalMode = vi.fn(() => true);
+        const mutate = vi.fn();
+        const localRename = vi.fn();
+        const refreshFromLocal = vi.fn();
+        commitPoolRename({
+            pools,
+            placementId: "placement-1",
+            rawName: "Renamed pool",
+            setName,
+            isLocalMode,
+            mutate,
+            localRename,
+            refreshFromLocal
+        });
+        expect(localRename).toHaveBeenCalledWith({
+            placementId: "placement-1",
+            name: "Renamed pool"
+        });
+        expect(refreshFromLocal).toHaveBeenCalledOnce();
         expect(mutate).not.toHaveBeenCalled();
     });
 
@@ -188,7 +221,9 @@ describe("commitPoolRename", () => {
             rawName: "Renamed pool",
             setName,
             isLocalMode,
-            mutate
+            mutate,
+            localRename: vi.fn(),
+            refreshFromLocal: vi.fn()
         });
         expect(order).toEqual(["setName", "isLocalMode", "mutate"]);
     });
@@ -235,31 +270,47 @@ describe("poolDragPosition", () => {
 });
 
 describe("commitPoolDrag", () => {
-    it("dispatches the mutation in non-local mode", () => {
+    it("dispatches the server mutation in non-local mode", () => {
         const mutate = vi.fn();
+        const localMove = vi.fn();
+        const refreshFromLocal = vi.fn();
         commitPoolDrag({
             placementId: "placement-1",
             positionX: 40,
             positionY: 60,
             isLocalMode: () => false,
-            mutate
+            mutate,
+            localMove,
+            refreshFromLocal
         });
         expect(mutate).toHaveBeenCalledWith({
             placementId: "placement-1",
             positionX: 40,
             positionY: 60
         });
+        expect(localMove).not.toHaveBeenCalled();
+        expect(refreshFromLocal).not.toHaveBeenCalled();
     });
 
-    it("skips the mutation in local mode", () => {
+    it("dispatches localMovePool + refreshFromLocal in local mode instead of the server mutation", () => {
         const mutate = vi.fn();
+        const localMove = vi.fn();
+        const refreshFromLocal = vi.fn();
         commitPoolDrag({
             placementId: "placement-1",
             positionX: 40,
             positionY: 60,
             isLocalMode: () => true,
-            mutate
+            mutate,
+            localMove,
+            refreshFromLocal
         });
         expect(mutate).not.toHaveBeenCalled();
+        expect(localMove).toHaveBeenCalledWith({
+            placementId: "placement-1",
+            positionX: 40,
+            positionY: 60
+        });
+        expect(refreshFromLocal).toHaveBeenCalledOnce();
     });
 });

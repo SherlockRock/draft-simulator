@@ -1,6 +1,7 @@
 import {
     CanvasDraft,
     CanvasAnnotation,
+    CanvasPoolPlacement,
     Connection,
     ConnectionEndpoint,
     CanvasGroup,
@@ -17,8 +18,11 @@ import type {
     AnnotationPositionUpdate,
     DraftPositionUpdate,
     GameType,
-    GroupPositionUpdate
+    GroupPositionUpdate,
+    PoolChampionOp,
+    RolePoolMap
 } from "@draft-sim/shared-types";
+import { applyPoolChampionOp, EMPTY_ROLE_POOL_MAP } from "@draft-sim/shared-types";
 import { getManualSeriesGameDefaults } from "./manualSeriesDefaults";
 import { childAnnotationsOf, childGroupsOf } from "./canvasTree";
 import { parentageRejection } from "./groupParentage";
@@ -860,5 +864,112 @@ export const localUpdateDraftMetadata = (data: {
                 draft.team2Name = data.team2Name.trim() || null;
         }
         return { canvas, result: { success: true } };
+    });
+};
+
+/**
+ * Local mirror of `POST /:canvasId/pools` (design D7): defaults match the
+ * server's exactly ("New Pool", empty champions) so a synced local pool
+ * looks the same locally as it will once it hits the server. `Pool.version`
+ * starts at 0 — `PoolSchema.version` is required, and every local champion
+ * op below bumps it, mirroring the row-lock bump `mutatePoolChampions`
+ * (backend/services/canvasMutations.js) does on commit.
+ */
+export const localCreatePool = (data: {
+    positionX: number;
+    positionY: number;
+    name?: string;
+    champions?: RolePoolMap;
+}) => {
+    return mutateLocal((canvas) => {
+        const poolId = crypto.randomUUID();
+        const placement: CanvasPoolPlacement = {
+            id: crypto.randomUUID(),
+            canvas_id: "local",
+            pool_id: poolId,
+            positionX: data.positionX,
+            positionY: data.positionY,
+            Pool: {
+                id: poolId,
+                name: data.name?.trim() || "New Pool",
+                champions: data.champions ?? EMPTY_ROLE_POOL_MAP,
+                version: 0
+            }
+        };
+        canvas.pools.push(placement);
+        return { canvas, result: { success: true, placement } };
+    });
+};
+
+export const localRenamePool = (data: { placementId: string; name: string }) => {
+    return mutateLocal((canvas) => {
+        const placement = canvas.pools.find((p) => p.id === data.placementId);
+        if (placement) {
+            placement.Pool.name = data.name;
+        }
+        return { canvas, result: { success: true } };
+    });
+};
+
+export const localMovePool = (data: {
+    placementId: string;
+    positionX: number;
+    positionY: number;
+}) => {
+    return mutateLocal((canvas) => {
+        const placement = canvas.pools.find((p) => p.id === data.placementId);
+        if (placement) {
+            placement.positionX = data.positionX;
+            placement.positionY = data.positionY;
+        }
+        return { canvas, result: { success: true } };
+    });
+};
+
+export const localDeletePool = (placementId: string) => {
+    return mutateLocal((canvas) => {
+        canvas.pools = canvas.pools.filter((p) => p.id !== placementId);
+        return { canvas, result: { success: true } };
+    });
+};
+
+/**
+ * Applies a single add/remove through the SHARED `applyPoolChampionOp`
+ * helper (design D4) — never reimplement the dedupe/no-op semantics here.
+ * Version bumps on every applied op, mirroring the server's row-lock bump.
+ */
+export const localPoolChampionOp = (data: {
+    placementId: string;
+    op: PoolChampionOp;
+}) => {
+    return mutateLocal((canvas) => {
+        const placement = canvas.pools.find((p) => p.id === data.placementId);
+        if (placement) {
+            placement.Pool.champions = applyPoolChampionOp(
+                placement.Pool.champions,
+                data.op
+            );
+            placement.Pool.version += 1;
+        }
+        return { canvas, result: { success: true, pool: placement?.Pool } };
+    });
+};
+
+/**
+ * Overwrite-intent only (D4), mirroring `applyPoolReplace` — the local twin
+ * of import-from-saved. The overlay's diffs-as-ops commit must never route
+ * here.
+ */
+export const localReplacePool = (data: {
+    placementId: string;
+    champions: RolePoolMap;
+}) => {
+    return mutateLocal((canvas) => {
+        const placement = canvas.pools.find((p) => p.id === data.placementId);
+        if (placement) {
+            placement.Pool.champions = data.champions;
+            placement.Pool.version += 1;
+        }
+        return { canvas, result: { success: true, pool: placement?.Pool } };
     });
 };

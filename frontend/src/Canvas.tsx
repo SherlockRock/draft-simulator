@@ -151,7 +151,11 @@ import {
     localCreateAnnotation,
     localUpdateAnnotation,
     localDeleteAnnotation,
-    localCopyAnnotation
+    localCopyAnnotation,
+    localCreatePool,
+    localRenamePool,
+    localMovePool,
+    localDeletePool
 } from "./utils/useLocalCanvasMutations";
 import { getLocalCanvas, saveLocalCanvas } from "./utils/localCanvasStore";
 import { handleLogin } from "./utils/actions";
@@ -358,6 +362,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             setConnections(local.connections);
             setCanvasGroups(local.groups);
             setAnnotations(local.annotations);
+            setCanvasPools(local.pools);
         }
     };
 
@@ -2308,7 +2313,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 setCanvasPools((p) => p.id === id, "Pool", "name", name),
             isLocalMode,
             mutate: ({ placementId: id, name }) =>
-                updatePoolMutation.mutate({ canvasId: canvasId(), placementId: id, name })
+                updatePoolMutation.mutate({
+                    canvasId: canvasId(),
+                    placementId: id,
+                    name
+                }),
+            localRename: ({ placementId: id, name }) =>
+                localRenamePool({ placementId: id, name }),
+            refreshFromLocal
         });
     };
 
@@ -6322,7 +6334,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             updatePoolMutation.mutate({
                                 canvasId: canvasId(),
                                 ...args
-                            })
+                            }),
+                        localMove: (args) => localMovePool(args),
+                        refreshFromLocal
                     });
                 }
                 return;
@@ -6625,12 +6639,15 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setDraftToDelete(null);
     };
 
-    // Pools only exist server-side today (creation is hidden in local mode
-    // until Task 12), so there is no local-delete branch to mirror here.
     const onPoolDeleteConfirm = () => {
         const pool = poolPendingDelete();
         if (!pool) return;
-        deletePoolMutation.mutate({ canvasId: canvasId(), placementId: pool.id });
+        if (isLocalMode()) {
+            localDeletePool(pool.id);
+            refreshFromLocal();
+        } else {
+            deletePoolMutation.mutate({ canvasId: canvasId(), placementId: pool.id });
+        }
         if (selectedPoolId() === pool.id) setSelectedPoolId(null);
         setPoolPendingDelete(null);
     };
@@ -7712,27 +7729,31 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 // Free-floating v1: unlike drafts/notes there is no
                                 // findGroupAtPosition branch here — a pool created
                                 // over a group still lands at absolute world
-                                // coordinates. Both entries HIDDEN (not dead) until
-                                // their prerequisites exist: "New Champion Pool"
-                                // hidden in local mode until Task 12 un-hides it
-                                // with a localCreatePool branch; "New Pool from
-                                // Saved…" always needs auth + server (D7).
-                                ...(isLocalMode()
-                                    ? [] // Task 12 replaces this guard with the localCreatePool branch
-                                    : [
-                                          {
-                                              label: "New Champion Pool",
-                                              action: () => {
-                                                  const worldPos =
-                                                      contextMenuWorldPosition();
-                                                  createPoolMutation.mutate({
-                                                      canvasId: canvasId(),
-                                                      positionX: worldPos.x,
-                                                      positionY: worldPos.y
-                                                  });
-                                              }
-                                          }
-                                      ]),
+                                // coordinates. "New Pool from Saved…" stays HIDDEN
+                                // in local mode — it always needs auth + server
+                                // (D7) — but "New Champion Pool" now works locally
+                                // via localCreatePool.
+                                {
+                                    label: "New Champion Pool",
+                                    action: () => {
+                                        const worldPos = contextMenuWorldPosition();
+                                        if (isLocalMode()) {
+                                            const { placement } = localCreatePool({
+                                                positionX: worldPos.x,
+                                                positionY: worldPos.y
+                                            });
+                                            refreshFromLocal();
+                                            setSelectedPoolId(placement.id);
+                                            setRenamingPoolId(placement.id);
+                                        } else {
+                                            createPoolMutation.mutate({
+                                                canvasId: canvasId(),
+                                                positionX: worldPos.x,
+                                                positionY: worldPos.y
+                                            });
+                                        }
+                                    }
+                                },
                                 ...(!isLocalMode() && isAuthenticated()
                                     ? [
                                           {
