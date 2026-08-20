@@ -69,7 +69,7 @@ import {
     PoolMovedSchema,
     Role
 } from "./utils/schemas";
-import type { PoolChampionOp } from "@draft-sim/shared-types";
+import type { PoolChampionOp, RolePoolMap } from "@draft-sim/shared-types";
 import {
     mergePoolBroadcast,
     mergePoolSnapshotRow,
@@ -79,6 +79,7 @@ import { validateSocketEvent } from "./utils/socketValidation";
 import { CanvasCard } from "./components/CanvasCard";
 import { CanvasPoolCard } from "./components/CanvasPoolCard";
 import { PoolChampionPicker } from "./components/PoolChampionPicker";
+import { PoolOverlayEditor } from "./components/PoolOverlayEditor";
 import { NewPoolFromSavedDialog } from "./components/NewPoolFromSavedDialog";
 import { CanvasSearchPanel } from "./components/CanvasSearchPanel";
 import {
@@ -162,7 +163,8 @@ import {
     localRenamePool,
     localMovePool,
     localDeletePool,
-    localPoolChampionOp
+    localPoolChampionOp,
+    localReplacePool
 } from "./utils/useLocalCanvasMutations";
 import { getLocalCanvas, saveLocalCanvas } from "./utils/localCanvasStore";
 import { handleLogin } from "./utils/actions";
@@ -281,6 +283,7 @@ import {
     commitPoolChampionOp,
     commitPoolDrag,
     commitPoolRename,
+    commitPoolReplace,
     poolDragPosition,
     poolGrabOffset
 } from "./utils/poolCard";
@@ -672,6 +675,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         placement: CanvasPoolPlacement;
         position: { x: number; y: number };
     } | null>(null);
+
+    // The pool whose bulk overlay editor is open, or null. Mounted via a
+    // `keyed <Show>` (Task 16) so the editor remounts — and its diff
+    // baseline resets — every time this is set to a new (or re-opened)
+    // placement.
+    const [overlayPlacement, setOverlayPlacement] =
+        createSignal<CanvasPoolPlacement | null>(null);
 
     const [groupContextMenu, setGroupContextMenu] = createSignal<{
         group: CanvasGroup;
@@ -2390,6 +2400,31 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     };
 
+    // Guard + optimistic write + local/remote dispatch live in
+    // `commitPoolReplace` (utils/poolCard.ts) — see its doc for why a replace
+    // clears the pending-ops queue instead of replaying into it. The
+    // overlay's diff-as-ops Apply NEVER calls this; the producer exists now
+    // for Task 17's saved-pool import path (plan-mandated staging).
+    const handlePoolReplace = (placementId: string, champions: RolePoolMap) => {
+        commitPoolReplace({
+            placementId,
+            champions,
+            setChampions: (id, next) =>
+                setCanvasPools((p) => p.id === id, "Pool", "champions", next),
+            clearPendingOps: (id) => pendingPoolOps.set(id, []),
+            isLocalMode,
+            localReplace: ({ placementId: id, champions: next }) =>
+                localReplacePool({ placementId: id, champions: next }),
+            refreshFromLocal,
+            emit: ({ placementId: id, champions: next }) =>
+                socketAccessor()?.emit("poolReplace", {
+                    canvasId: canvasId(),
+                    placementId: id,
+                    champions: next
+                })
+        });
+    };
+
     const updateViewportMutation = useMutation(() => ({
         mutationFn: updateCanvasViewport,
         onError: (error: Error) => {
@@ -2797,6 +2832,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setPoolDragState({ activePoolId: null, offsetX: 0, offsetY: 0 });
         setAnnotationContextMenu(null);
         setPoolContextMenu(null);
+        setOverlayPlacement(null);
         setNewPoolFromSavedAt(null);
         setPoolPendingDelete(null);
         setContextMenuPosition(null);
@@ -7434,6 +7470,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         championId
                                     })
                                 }
+                                onOpenOverlay={() => setOverlayPlacement(pool)}
                             />
                         )}
                     </For>
@@ -7551,6 +7588,24 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         setNewPoolFromSavedAt(null);
                     }}
                 />
+                {/* `keyed` is load-bearing (Task 16): it remounts the editor
+                    per open, so PoolOverlayEditor's diff baseline (captured
+                    as component-body state, not resynced by an effect)
+                    resets to a fresh snapshot every time. */}
+                <Show when={overlayPlacement()} keyed>
+                    {(placement) => (
+                        <PoolOverlayEditor
+                            placement={placement}
+                            onCommitOps={(id, ops) => {
+                                for (const op of ops) handlePoolChampionOp(id, op);
+                            }}
+                            onReplace={handlePoolReplace}
+                            onClose={() => setOverlayPlacement(null)}
+                            isLocalMode={isLocalMode()}
+                            isAuthenticated={isAuthenticated()}
+                        />
+                    )}
+                </Show>
                 <Dialog
                     isOpen={isImportDialogOpen}
                     onCancel={() => setIsImportDialogOpen(false)}
@@ -7934,6 +7989,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 {
                                     label: "Rename",
                                     action: () => setRenamingPoolId(menu().placement.id)
+                                },
+                                {
+                                    label: "Edit in overlay",
+                                    action: () => setOverlayPlacement(menu().placement)
                                 },
                                 // "Save to My Pools" (D7, auth+server) is
                                 // stubbed until Task 17 wires it to

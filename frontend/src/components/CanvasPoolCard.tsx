@@ -1,4 +1,5 @@
 import { Component, For, Show, createMemo, createSignal } from "solid-js";
+import { Pencil } from "lucide-solid";
 import type { CanvasPoolPlacement, Role } from "../utils/schemas";
 import { ROLES, ROLE_LABELS } from "../utils/championRoles";
 import { RoleIcon } from "./scouting/PlayerPanel";
@@ -32,6 +33,10 @@ type CanvasPoolCardProps = {
     // is still a no-op stub until Task 15's hover-× lands.
     onOpenRolePicker: (placementId: string, role: Role) => void;
     onRemoveChampion: (placementId: string, role: Role, championId: string) => void;
+    // Opens the bulk overlay editor (Task 16) for this placement. Header icon
+    // + the card's context menu ("Edit in overlay") both drive this — mirrors
+    // onStartRename's split between a header affordance and a menu entry.
+    onOpenOverlay: (placementId: string) => void;
 };
 
 type PoolNameInputProps = {
@@ -140,6 +145,19 @@ export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
                         onCommitRename={props.onCommitRename}
                         onCancelRename={props.onCancelRename}
                     />
+                </Show>
+                <Show when={props.canEdit()}>
+                    <button
+                        type="button"
+                        title="Edit in overlay"
+                        class="ml-2 shrink-0 rounded p-1 text-darius-text-secondary transition-colors hover:text-darius-purple-bright"
+                        // Must not start a card drag: mirrors the role-picker
+                        // "+" tile's onMouseDown stopPropagation above.
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={() => props.onOpenOverlay(props.placement.id)}
+                    >
+                        <Pencil size={14} />
+                    </button>
                 </Show>
                 <span class="ml-2 shrink-0 rounded-full border border-darius-border px-2 py-0.5 text-[10px] text-darius-text-secondary">
                     {total()} champions

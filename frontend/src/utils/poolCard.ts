@@ -1,12 +1,48 @@
 import type { Role, RolePoolMap, PoolChampionOp } from "@draft-sim/shared-types";
 import { applyPoolChampionOp } from "@draft-sim/shared-types";
-import { ROLES } from "./championRoles";
+import { ROLES, championsInRole } from "./championRoles";
 import { champions as catalogChampions } from "./constants";
 
 /** World px. Fixed in v1 — no resize slice is committed, so no stored size
  *  (design §1.3/§7); fits 8 portrait tiles per row. */
 export const POOL_CARD_WIDTH = 440;
 export const POOL_PORTRAIT_PX = 40;
+
+export type PoolGridEntry = { id: string; name: string; img: string | null };
+
+/**
+ * `PoolRoleAccordion`'s grid source (Task 16), extracted out of the
+ * component's `createMemo` so the ordering is unit-testable without a Solid
+ * render harness — same reasoning as `commitPoolNameEdit`'s doc.
+ *
+ * Deliberately NOT `championsInRole(role)` alone (that's the navigator
+ * original's `RolePoolAccordion`, untouched): a champion added off-meta
+ * through the card's "+" picker has no filter gating it, so it can already
+ * be selected without appearing in `championsInRole(role)` — hiding it here
+ * too would make it invisible YET COUNTED (the selected-count badge still
+ * includes it), and `clearAll` would silently drop it with no on-screen
+ * trace. Bucket entries render FIRST (including off-meta ones), then the
+ * rest of the meta-role catalog; a bucket id no longer in the live catalog
+ * at all (e.g. a champion renamed/removed upstream since it was added) gets
+ * a synthetic entry with `img: null`, which the caller renders as a dim
+ * fallback tile showing the raw id — the same "invisible-but-counted" bug,
+ * one layer further out.
+ */
+export const poolRoleGridEntries = (
+    role: Role,
+    selectedChampionIds: string[]
+): PoolGridEntry[] => {
+    const inRole = new Set(championsInRole(role));
+    const inBucket = new Set(selectedChampionIds);
+    const catalogIds = new Set(catalogChampions.map((c) => c.id));
+    return [
+        ...catalogChampions.filter((c) => inBucket.has(c.id)),
+        ...[...inBucket]
+            .filter((id) => !catalogIds.has(id))
+            .map((id) => ({ id, name: id, img: null })),
+        ...catalogChampions.filter((c) => inRole.has(c.id) && !inBucket.has(c.id))
+    ];
+};
 
 export const flexRolesByChampion = (map: RolePoolMap): Map<string, Role[]> => {
     const roleLists = new Map<string, Role[]>();
@@ -266,4 +302,48 @@ export const commitPoolChampionOp = (params: {
         params.pushPendingOp(params.getPendingOps(params.placementId), params.op)
     );
     params.emit({ placementId: params.placementId, op: params.op });
+};
+
+/**
+ * Guard + optimistic write + local/remote dispatch for a pool REPLACE — the
+ * overlay editor's Apply-with-zero-diff-avoidance sibling: `handlePoolReplace`
+ * (Canvas.tsx) is the producer Task 17's saved-pool import path calls; the
+ * overlay's own diff-as-ops commit never routes here (design D4 — see
+ * `PoolOverlayEditor`'s doc). Extracted for the same reason as
+ * `commitPoolRename`/`commitPoolDrag`/`commitPoolChampionOp`: unit-testable
+ * without mounting the canvas.
+ *
+ * A replace supersedes every queued per-role op for this placement, so the
+ * pending queue is CLEARED before the optimistic write/dispatch — not
+ * replayed into. Without this, a stale add/remove still sitting in the queue
+ * from before the replace would get re-applied on top of the server's
+ * `poolUpdate` echo (design §4.3's replay path in `mergePoolBroadcast`),
+ * silently reintroducing state the replace was meant to overwrite. Mirrors
+ * `commitPoolDrag`'s shape: the optimistic write always lands first, then the
+ * local/remote branch decides whether to hit the network — no canEdit/
+ * placement-existence guard here, same as `commitPoolDrag`, since the only
+ * caller (the overlay) is unreachable unless the card's edit affordances
+ * were already canEdit-gated to open it.
+ */
+export const commitPoolReplace = (params: {
+    placementId: string;
+    champions: RolePoolMap;
+    setChampions: (placementId: string, champions: RolePoolMap) => void;
+    clearPendingOps: (placementId: string) => void;
+    isLocalMode: () => boolean;
+    localReplace: (args: { placementId: string; champions: RolePoolMap }) => void;
+    refreshFromLocal: () => void;
+    emit: (args: { placementId: string; champions: RolePoolMap }) => void;
+}): void => {
+    params.clearPendingOps(params.placementId);
+    params.setChampions(params.placementId, params.champions);
+    if (params.isLocalMode()) {
+        params.localReplace({
+            placementId: params.placementId,
+            champions: params.champions
+        });
+        params.refreshFromLocal();
+        return;
+    }
+    params.emit({ placementId: params.placementId, champions: params.champions });
 };

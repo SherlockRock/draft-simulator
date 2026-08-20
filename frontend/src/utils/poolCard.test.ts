@@ -4,15 +4,18 @@ import {
     commitPoolDrag,
     commitPoolNameEdit,
     commitPoolRename,
+    commitPoolReplace,
     flexRolesByChampion,
     poolChampionIsAvailable,
     poolChampionTotal,
     poolDragPosition,
     poolGrabOffset,
+    poolRoleGridEntries,
     sanitizeAgainstCatalog,
     type PoolChampionOpTarget,
     type PoolRenameTarget
 } from "./poolCard";
+import { championsInRole } from "./championRoles";
 import { pushPendingOp } from "./poolBroadcastMerge";
 import type { PoolChampionOp, RolePoolMap } from "@draft-sim/shared-types";
 
@@ -595,5 +598,159 @@ describe("commitPoolChampionOp", () => {
             emit: vi.fn()
         });
         expect(order).toEqual(["setChampions", "isLocalMode", "localOp"]);
+    });
+});
+
+describe("commitPoolReplace", () => {
+    const replacement: RolePoolMap = {
+        top: ["Aatrox"],
+        jungle: [],
+        mid: ["Ahri"],
+        adc: [],
+        support: []
+    };
+
+    // DI harness mirroring commitPoolDrag's shape. pendingOps is a real
+    // in-memory map (not just a spy) so the queue-clear assertions read back
+    // actual state, same reasoning as commitPoolChampionOp's harness above.
+    const harness = (seedPending: PoolChampionOp[] = []) => {
+        const setChampions = vi.fn();
+        const isLocalMode = vi.fn(() => false);
+        const localReplace = vi.fn();
+        const refreshFromLocal = vi.fn();
+        const emit = vi.fn();
+        const pendingOps = new Map<string, PoolChampionOp[]>([
+            ["placement-1", seedPending]
+        ]);
+        const clearPendingOps = vi.fn((id: string) => pendingOps.set(id, []));
+        const run = () =>
+            commitPoolReplace({
+                placementId: "placement-1",
+                champions: replacement,
+                setChampions,
+                clearPendingOps,
+                isLocalMode,
+                localReplace,
+                refreshFromLocal,
+                emit
+            });
+        return {
+            setChampions,
+            isLocalMode,
+            localReplace,
+            refreshFromLocal,
+            emit,
+            pendingOps,
+            clearPendingOps,
+            run
+        };
+    };
+
+    it("clears a non-empty pending-ops queue for the placement", () => {
+        const pending: PoolChampionOp[] = [
+            { type: "add", role: "mid", championId: "Zed" }
+        ];
+        const { pendingOps, clearPendingOps, run } = harness(pending);
+        expect(pendingOps.get("placement-1")).toEqual(pending);
+        run();
+        expect(clearPendingOps).toHaveBeenCalledWith("placement-1");
+        expect(pendingOps.get("placement-1")).toEqual([]);
+    });
+
+    it("writes the optimistic champions map, then dispatches the server mutation in non-local mode", () => {
+        const { setChampions, localReplace, refreshFromLocal, emit, run } = harness();
+        run();
+        expect(setChampions).toHaveBeenCalledWith("placement-1", replacement);
+        expect(emit).toHaveBeenCalledWith({
+            placementId: "placement-1",
+            champions: replacement
+        });
+        expect(localReplace).not.toHaveBeenCalled();
+        expect(refreshFromLocal).not.toHaveBeenCalled();
+    });
+
+    it("dispatches localReplacePool + refreshFromLocal in local mode instead of the server mutation", () => {
+        const { setChampions, isLocalMode, localReplace, refreshFromLocal, emit, run } =
+            harness();
+        isLocalMode.mockReturnValue(true);
+        run();
+        expect(setChampions).toHaveBeenCalledWith("placement-1", replacement);
+        expect(localReplace).toHaveBeenCalledWith({
+            placementId: "placement-1",
+            champions: replacement
+        });
+        expect(refreshFromLocal).toHaveBeenCalledOnce();
+        expect(emit).not.toHaveBeenCalled();
+    });
+
+    it("clears the queue and writes optimistic state BEFORE branching local/remote", () => {
+        const order: string[] = [];
+        const pendingOps = new Map<string, PoolChampionOp[]>([
+            ["placement-1", [{ type: "add", role: "mid", championId: "Zed" }]]
+        ]);
+        commitPoolReplace({
+            placementId: "placement-1",
+            champions: replacement,
+            clearPendingOps: (id) => {
+                order.push("clearPendingOps");
+                pendingOps.set(id, []);
+            },
+            setChampions: () => order.push("setChampions"),
+            isLocalMode: () => {
+                order.push("isLocalMode");
+                return false;
+            },
+            localReplace: () => order.push("localReplace"),
+            refreshFromLocal: () => order.push("refreshFromLocal"),
+            emit: () => order.push("emit")
+        });
+        expect(order).toEqual(["clearPendingOps", "setChampions", "isLocalMode", "emit"]);
+    });
+});
+
+describe("poolRoleGridEntries", () => {
+    // "Ahri" is an established meta mid pick used across this suite
+    // (poolOps.test.ts, poolChampionIsAvailable above). "Aatrox" is a meta
+    // TOP pick, not mid — used here as the off-meta-for-this-role case.
+    it("with an empty bucket, returns exactly the meta-role catalog in catalog order", () => {
+        const entries = poolRoleGridEntries("mid", []);
+        expect(entries.map((e) => e.id)).toEqual(championsInRole("mid"));
+    });
+
+    it("puts a bucket entry FIRST even when it's already in the meta-role list, with no duplicate", () => {
+        const entries = poolRoleGridEntries("mid", ["Ahri"]);
+        expect(entries[0].id).toBe("Ahri");
+        expect(entries.filter((e) => e.id === "Ahri")).toHaveLength(1);
+    });
+
+    it("surfaces an off-meta bucket champion (in the catalog, not in this role) before the meta remainder", () => {
+        const entries = poolRoleGridEntries("mid", ["Aatrox"]);
+        expect(entries[0]).toMatchObject({ id: "Aatrox", img: expect.any(String) });
+        // Not duplicated into the meta-role remainder either.
+        expect(entries.filter((e) => e.id === "Aatrox")).toHaveLength(1);
+    });
+
+    it("gives an off-catalog bucket id a synthetic img:null tile instead of hiding it", () => {
+        const entries = poolRoleGridEntries("mid", ["NotARealChampion12345"]);
+        const synthetic = entries.find((e) => e.id === "NotARealChampion12345");
+        expect(synthetic).toEqual({
+            id: "NotARealChampion12345",
+            name: "NotARealChampion12345",
+            img: null
+        });
+    });
+
+    it("orders bucket-catalog, then bucket-off-catalog, then the meta-role remainder", () => {
+        const entries = poolRoleGridEntries("mid", ["Aatrox", "NotARealChampion12345"]);
+        expect(entries[0].id).toBe("Aatrox");
+        expect(entries[1]).toEqual({
+            id: "NotARealChampion12345",
+            name: "NotARealChampion12345",
+            img: null
+        });
+        // Everything after index 1 is the meta-role remainder: real mid
+        // picks, none of which are the two bucket ids above.
+        const remainder = entries.slice(2).map((e) => e.id);
+        expect(remainder).toEqual(championsInRole("mid").filter((id) => id !== "Aatrox"));
     });
 });
