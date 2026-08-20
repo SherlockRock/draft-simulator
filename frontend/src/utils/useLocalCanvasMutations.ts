@@ -892,7 +892,11 @@ export const localCreatePool = (data: {
             Pool: {
                 id: poolId,
                 name: data.name?.trim() || "New Pool",
-                champions: data.champions ?? EMPTY_ROLE_POOL_MAP,
+                // Cloned, not the shared module-level object: applyPoolChampionOp
+                // always returns a new object on write, but an untouched pool
+                // would otherwise hold the SAME EMPTY_ROLE_POOL_MAP reference as
+                // every other pool created with no initial champions.
+                champions: data.champions ?? { ...EMPTY_ROLE_POOL_MAP },
                 version: 0
             }
         };

@@ -6,7 +6,12 @@ import {
     saveLocalCanvas
 } from "./localCanvasStore";
 import type { LocalCanvas } from "./localCanvasStore";
-import type { CanvasAnnotation, CanvasDraft, CanvasGroup, CanvasPoolPlacement } from "./schemas";
+import type {
+    CanvasAnnotation,
+    CanvasDraft,
+    CanvasGroup,
+    CanvasPoolPlacement
+} from "./schemas";
 
 class MemoryStorage {
     private store = new Map<string, string>();
@@ -140,7 +145,9 @@ describe("localCanvasResource", () => {
 
         for (const key of ["drafts", "groups", "connections", "annotations", "pools"]) {
             expect(carried[key], `${key} is missing from the resource mapping`).toEqual(
-                local[key as "drafts" | "groups" | "connections" | "annotations" | "pools"]
+                local[
+                    key as "drafts" | "groups" | "connections" | "annotations" | "pools"
+                ]
             );
         }
     });
@@ -155,32 +162,58 @@ describe("localCanvasResource", () => {
     });
 });
 
+// The legacy (pre-Task-12) stored shape, typed via its own Omit<> rather
+// than produced by casting a modern LocalCanvas and deleting the field —
+// the field is genuinely absent in real pre-Task-12 localStorage, so the
+// fixture's type should say so directly.
+type LegacyLocalCanvas = Omit<LocalCanvas, "pools">;
+
+// The legacy (pre-Task-12, or a canvas saved by an earlier build of THIS
+// feature) stored pool shape: `version` genuinely absent, not deleted off a
+// fully-typed modern `Pool`.
+type LegacyPool = Omit<CanvasPoolPlacement["Pool"], "version">;
+type LegacyPoolPlacement = Omit<CanvasPoolPlacement, "Pool"> & { Pool: LegacyPool };
+
 describe("getLocalCanvas pools backfill", () => {
     it("backfills pools: [] on a canvas saved before the field existed", () => {
         // Simulate a pre-Task-12 stored canvas: write raw JSON with no `pools`
         // key at all, mirroring what a real anonymous user's localStorage would
         // hold after this ships.
-        const legacy = createEmptyLocalCanvas("Legacy");
-        const legacyRecord = legacy as unknown as Record<string, unknown>;
-        delete legacyRecord.pools;
+        const legacy: LegacyLocalCanvas = {
+            name: "Legacy",
+            description: "",
+            icon: "",
+            cardLayout: "vertical",
+            drafts: [],
+            connections: [],
+            groups: [],
+            annotations: [],
+            viewport: { x: 0, y: 0, zoom: 1 },
+            createdAt: new Date().toISOString()
+        };
         localStorage.setItem("draft-sim:local-canvas", JSON.stringify(legacy));
 
         expect(getLocalCanvas()?.pools).toEqual([]);
     });
 
     it("backfills a stored pool's missing version to 0 rather than dropping it", () => {
-        const legacy = createEmptyLocalCanvas("Legacy");
-        const legacyPool = pool("p1");
-        const legacyPoolRecord = legacyPool.Pool as unknown as Record<string, unknown>;
-        delete legacyPoolRecord.version;
+        const legacyPool: LegacyPoolPlacement = {
+            id: "p1",
+            canvas_id: "local",
+            pool_id: "p1-pool",
+            positionX: 100,
+            positionY: 200,
+            Pool: {
+                id: "p1-pool",
+                name: "Pool p1",
+                champions: { top: [], jungle: [], mid: [], adc: [], support: [] }
+            }
+        };
         const legacyRecord = {
-            ...legacy,
+            ...createEmptyLocalCanvas("Legacy"),
             pools: [legacyPool]
         };
-        localStorage.setItem(
-            "draft-sim:local-canvas",
-            JSON.stringify(legacyRecord)
-        );
+        localStorage.setItem("draft-sim:local-canvas", JSON.stringify(legacyRecord));
 
         const loaded = getLocalCanvas();
         expect(loaded?.pools).toHaveLength(1);
