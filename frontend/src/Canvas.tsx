@@ -70,11 +70,19 @@ import {
     Role
 } from "./utils/schemas";
 import type { PoolChampionOp, RolePoolMap } from "@draft-sim/shared-types";
+import { EMPTY_ROLE_POOL_MAP } from "@draft-sim/shared-types";
 import {
     mergePoolBroadcast,
     mergePoolSnapshotRow,
     pushPendingOp
 } from "./utils/poolBroadcastMerge";
+import { ROLES } from "./utils/championRoles";
+import {
+    resolvePoolDrop,
+    type PoolDragSource,
+    type PoolDropResult,
+    type PoolDropTarget
+} from "./utils/poolDropResolver";
 import { validateSocketEvent } from "./utils/socketValidation";
 import { CanvasCard } from "./components/CanvasCard";
 import { CanvasPoolCard } from "./components/CanvasPoolCard";
@@ -286,7 +294,8 @@ import {
     commitPoolRename,
     commitPoolReplace,
     poolDragPosition,
-    poolGrabOffset
+    poolGrabOffset,
+    POOL_PORTRAIT_PX
 } from "./utils/poolCard";
 
 const debounce = <T extends unknown[]>(func: (...args: T) => void, limit: number) => {
@@ -395,6 +404,33 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         offsetY: number;
     }>({ activePoolId: null, offsetX: 0, offsetY: 0 });
     const draggedPoolId = () => poolDragState().activePoolId;
+    // Task 18: resolver-driven in-place portrait drag, distinct from the
+    // CARD drag above. `source` is set at mousedown (armed=false — a
+    // pending drag, not yet real) so a plain click stays inert (design D3);
+    // mousemove promotes it to armed once past CHAMPION_DRAG_THRESHOLD_PX,
+    // and every armed move recomputes `target`/`result` via `resolvePoolDrop`
+    // (the drag-preview-resolver technique, `resolveGridDrop`'s precedent) so
+    // the highlight painted from `result` can never lie about what mouseup
+    // will apply.
+    const [championDragState, setChampionDragState] = createSignal<{
+        source: PoolDragSource | null;
+        startClientX: number;
+        startClientY: number;
+        armed: boolean;
+        clientX: number;
+        clientY: number;
+        target: PoolDropTarget | null;
+        result: PoolDropResult | null;
+    }>({
+        source: null,
+        startClientX: 0,
+        startClientY: 0,
+        armed: false,
+        clientX: 0,
+        clientY: 0,
+        target: null,
+        result: null
+    });
     // Plain, NON-reactive map: this client's emitted champion ops that the
     // server has not yet echoed back. The sender is excluded from its own op
     // broadcasts, so a foreign full payload arriving mid-flight would
@@ -3936,6 +3972,90 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setPoolDragState({ activePoolId: placement.id, offsetX, offsetY });
     };
 
+    // Small movement threshold so a plain click on a portrait stays inert
+    // (design D3) — mirrors PAN_DRAG_THRESHOLD_PX's shape (~5405), a
+    // separate constant because click-vs-drag-start on a 40px portrait tile
+    // is a different gesture than pan-vs-click on the canvas.
+    const CHAMPION_DRAG_THRESHOLD_PX = 4;
+
+    // Portrait mousedown ARMS a pending champion drag — not yet a real drag
+    // until mousemove crosses the threshold below. DISTINCT from
+    // onPoolMouseDown's card drag: the caller (CanvasPoolCard's portrait
+    // tile) stops propagation before this runs, so the card root's own
+    // onMouseDown never sees the event and no card drag starts. The
+    // hover-× remove chip nested inside the tile already stopPropagation's
+    // its own mousedown, so it short-circuits before reaching here.
+    const onPortraitMouseDown = (
+        e: MouseEvent,
+        placementId: string,
+        role: Role,
+        championId: string
+    ) => {
+        if (e.button !== 0) return;
+        if (!canEdit()) return;
+        setChampionDragState({
+            source: { placementId, role, championId },
+            startClientX: e.clientX,
+            startClientY: e.clientY,
+            armed: false,
+            clientX: e.clientX,
+            clientY: e.clientY,
+            target: null,
+            result: null
+        });
+    };
+
+    // Hit-tests the DOM under the cursor for a role row: `data-role` on
+    // CanvasPoolCard's row divs, `data-pool-id` on the card root. Both must
+    // resolve to count as a role-row target — anything else (empty canvas,
+    // another card's header, off-card entirely) is `off-card`.
+    const hitTestPoolDropTarget = (clientX: number, clientY: number): PoolDropTarget => {
+        const el = document.elementFromPoint(clientX, clientY);
+        const roleRowEl = el instanceof Element ? el.closest("[data-role]") : null;
+        const cardEl = el instanceof Element ? el.closest("[data-pool-id]") : null;
+        const roleAttr = roleRowEl?.getAttribute("data-role") ?? null;
+        const placementId = cardEl?.getAttribute("data-pool-id") ?? null;
+        const role = roleAttr ? ROLES.find((r) => r === roleAttr) : undefined;
+        if (roleRowEl && cardEl && placementId && role) {
+            return { kind: "role-row", placementId, role };
+        }
+        return { kind: "off-card" };
+    };
+
+    // Feeds resolvePoolDrop the target placement's CURRENT champions map
+    // (only read for a same-card role-row target — see the resolver's doc);
+    // falls back to the dragged champion's own placement when there is no
+    // target placement to look up, since that branch never reads it.
+    const resolveChampionDragResult = (
+        source: PoolDragSource,
+        target: PoolDropTarget
+    ): PoolDropResult => {
+        const targetPlacementId =
+            target.kind === "role-row" ? target.placementId : source.placementId;
+        const targetPlacement = canvasPools.find((p) => p.id === targetPlacementId);
+        const targetChampions = targetPlacement?.Pool.champions ?? EMPTY_ROLE_POOL_MAP;
+        return resolvePoolDrop({ source, target, targetChampions });
+    };
+
+    // Non-null only once a champion drag is ARMED (crossed the movement
+    // threshold) — feeds the ghost tile below. Kept separate from the raw
+    // signal so `<Show>`'s child callback gets `source` narrowed non-null.
+    const championDragPreview = (): {
+        source: PoolDragSource;
+        clientX: number;
+        clientY: number;
+        result: PoolDropResult | null;
+    } | null => {
+        const state = championDragState();
+        if (!state.armed || !state.source) return null;
+        return {
+            source: state.source,
+            clientX: state.clientX,
+            clientY: state.clientY,
+            result: state.result
+        };
+    };
+
     const onBackgroundMouseDown = (e: MouseEvent) => {
         if (e.button !== 0) return;
         canvasContext.closeSharePopper();
@@ -6140,6 +6260,31 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 return;
             }
 
+            const championState = championDragState();
+            if (championState.source) {
+                if (!championState.armed) {
+                    const dx = e.clientX - championState.startClientX;
+                    const dy = e.clientY - championState.startClientY;
+                    if (
+                        dx * dx + dy * dy <
+                        CHAMPION_DRAG_THRESHOLD_PX * CHAMPION_DRAG_THRESHOLD_PX
+                    ) {
+                        return;
+                    }
+                }
+                const target = hitTestPoolDropTarget(e.clientX, e.clientY);
+                const result = resolveChampionDragResult(championState.source, target);
+                setChampionDragState({
+                    ...championState,
+                    armed: true,
+                    clientX: e.clientX,
+                    clientY: e.clientY,
+                    target,
+                    result
+                });
+                return;
+            }
+
             const state = dragState();
 
             if (state.isPanning) {
@@ -6450,6 +6595,32 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         localMove: (args) => localMovePool(args),
                         refreshFromLocal
                     });
+                }
+                return;
+            }
+
+            const championState = championDragState();
+            if (championState.source) {
+                const { source, armed, result } = championState;
+                setChampionDragState({
+                    source: null,
+                    startClientX: 0,
+                    startClientY: 0,
+                    armed: false,
+                    clientX: 0,
+                    clientY: 0,
+                    target: null,
+                    result: null
+                });
+                // Never armed (never crossed the movement threshold): a
+                // plain click, inert per design D3 — no ops to apply.
+                if (armed && result && result.kind !== "none") {
+                    // The resolver emits remove-then-add for a move — apply
+                    // in order through the same commit path every other
+                    // per-role op uses (Task 14).
+                    for (const op of result.ops) {
+                        handlePoolChampionOp(source.placementId, op);
+                    }
                 }
                 return;
             }
@@ -7481,9 +7652,67 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     })
                                 }
                                 onOpenOverlay={() => setOverlayPlacement(pool)}
+                                onPortraitMouseDown={onPortraitMouseDown}
+                                dropHighlightRole={() => {
+                                    const state = championDragState();
+                                    if (!state.armed || !state.result) return null;
+                                    if (state.result.kind !== "move") return null;
+                                    if (
+                                        !state.target ||
+                                        state.target.kind !== "role-row" ||
+                                        state.target.placementId !== pool.id
+                                    ) {
+                                        return null;
+                                    }
+                                    return state.target.role;
+                                }}
                             />
                         )}
                     </For>
+                    {/* Ghost tile: follows the raw cursor while a champion
+                        drag is armed, so the preview shows what's being
+                        moved as well as where it will land. `fixed` +
+                        screen coordinates (not world-space) since it tracks
+                        clientX/clientY directly; pointer-events-none so it
+                        never shadows `hitTestPoolDropTarget`'s own
+                        elementFromPoint reads. Tinted red for a `remove`
+                        result (drag off-card, or onto a row already holding
+                        the champion) so the preview also promises WHAT will
+                        happen, not just where. */}
+                    <Show when={championDragPreview()}>
+                        {(state) => {
+                            const champ = () =>
+                                championById.get(state().source.championId);
+                            return (
+                                <div
+                                    class="pointer-events-none fixed z-50 overflow-hidden rounded border-2"
+                                    classList={{
+                                        "border-darius-purple-bright":
+                                            state().result?.kind !== "remove",
+                                        "border-red-500 opacity-60":
+                                            state().result?.kind === "remove"
+                                    }}
+                                    style={{
+                                        left: `${state().clientX - POOL_PORTRAIT_PX / 2}px`,
+                                        top: `${state().clientY - POOL_PORTRAIT_PX / 2}px`,
+                                        width: `${POOL_PORTRAIT_PX}px`,
+                                        height: `${POOL_PORTRAIT_PX}px`
+                                    }}
+                                >
+                                    <Show when={champ()}>
+                                        {(c) => (
+                                            <img
+                                                src={c().img}
+                                                alt={c().name}
+                                                draggable={false}
+                                                class="h-full w-full object-cover"
+                                            />
+                                        )}
+                                    </Show>
+                                </div>
+                            );
+                        }}
+                    </Show>
                 </div>
                 <Show when={searchOpen()}>
                     <CanvasSearchPanel

@@ -37,6 +37,20 @@ type CanvasPoolCardProps = {
     // + the card's context menu ("Edit in overlay") both drive this — mirrors
     // onStartRename's split between a header affordance and a menu entry.
     onOpenOverlay: (placementId: string) => void;
+    // Task 18: arms a pending champion drag (Canvas.tsx's
+    // `onPortraitMouseDown`) — DISTINCT from `onMouseDown` above, which is
+    // the card drag. The portrait tile stops propagation before calling this
+    // so the card root's onMouseDown never sees the event.
+    onPortraitMouseDown: (
+        e: MouseEvent,
+        placementId: string,
+        role: Role,
+        championId: string
+    ) => void;
+    // Non-null only for the row currently previewed as an armed champion
+    // drag's landing target (resolved via `resolvePoolDrop`, so it can never
+    // highlight a row the drop won't actually land on).
+    dropHighlightRole: () => Role | null;
 };
 
 type PoolNameInputProps = {
@@ -172,6 +186,10 @@ export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
                         <div
                             data-role={role}
                             class="flex min-h-[48px] items-start gap-2 border-b border-darius-border/40 px-3 py-1.5 last:rounded-b-lg last:border-b-0"
+                            classList={{
+                                "bg-darius-purple-bright/10 ring-1 ring-inset ring-darius-purple-bright":
+                                    props.dropHighlightRole() === role
+                            }}
                         >
                             {/* RoleIcon is already exported from
                                 scouting/PlayerPanel.tsx (~36) and does the
@@ -201,11 +219,31 @@ export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
                                         return (
                                             <div
                                                 class="group relative overflow-hidden rounded border border-darius-border"
+                                                classList={{
+                                                    "cursor-grab": props.canEdit()
+                                                }}
                                                 style={{
                                                     width: `${POOL_PORTRAIT_PX}px`,
                                                     height: `${POOL_PORTRAIT_PX}px`
                                                 }}
                                                 title={champ()?.name ?? championId}
+                                                // Arms a pending champion drag (Task 18) —
+                                                // stopPropagation keeps the card root's own
+                                                // onMouseDown (card drag) from also firing.
+                                                // Gated on canEdit so a view-only user's
+                                                // mousedown still bubbles to the card root
+                                                // exactly as before this task (where it
+                                                // no-ops on that handler's own canEdit check).
+                                                onMouseDown={(e) => {
+                                                    if (!props.canEdit()) return;
+                                                    e.stopPropagation();
+                                                    props.onPortraitMouseDown(
+                                                        e,
+                                                        props.placement.id,
+                                                        role,
+                                                        championId
+                                                    );
+                                                }}
                                             >
                                                 <Show
                                                     when={champ()}
@@ -240,9 +278,11 @@ export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
                                                 <Show when={props.canEdit()}>
                                                     <button
                                                         type="button"
-                                                        class="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-700"
+                                                        class="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white opacity-0 transition-opacity hover:bg-red-700 group-hover:opacity-100"
                                                         title="Remove from pool"
-                                                        onMouseDown={(e) => e.stopPropagation()}
+                                                        onMouseDown={(e) =>
+                                                            e.stopPropagation()
+                                                        }
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             props.onRemoveChampion(
