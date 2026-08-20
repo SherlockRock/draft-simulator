@@ -769,7 +769,10 @@ describe("user import pools", () => {
   });
 
   it("updates name/champions/position on the existing pair under dedupeStrategy overwrite", async () => {
-    const existingPool = { update: vi.fn().mockResolvedValue(undefined) };
+    const existingPool = {
+      version: 3,
+      update: vi.fn().mockResolvedValue(undefined),
+    };
     const existingPlacement = {
       id: "existing-placement",
       Pool: existingPool,
@@ -807,7 +810,7 @@ describe("user import pools", () => {
     expect(poolCreate).not.toHaveBeenCalled();
     expect(placementCreate).not.toHaveBeenCalled();
     expect(existingPool.update).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "Renamed pool", champions }),
+      expect.objectContaining({ name: "Renamed pool", champions, version: 4 }),
       expect.anything(),
     );
     expect(existingPlacement.update).toHaveBeenCalledWith(

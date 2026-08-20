@@ -928,6 +928,10 @@ router.post("/me/import", protect, async (req, res) => {
             {
               name: importedPool.name,
               champions: importedPool.champions,
+              // Bump so a live viewer's canvasUpdate snapshot (same version
+              // guard as mutatePoolChampions) isn't dropped as stale by
+              // mergePoolSnapshotRow's <= check.
+              version: existing.Pool.version + 1,
             },
             { transaction },
           );
