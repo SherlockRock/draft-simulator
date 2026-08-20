@@ -1,16 +1,20 @@
 import { describe, it, expect, vi } from "vitest";
 import {
+    commitPoolChampionOp,
     commitPoolDrag,
     commitPoolNameEdit,
     commitPoolRename,
     flexRolesByChampion,
+    poolChampionIsAvailable,
     poolChampionTotal,
     poolDragPosition,
     poolGrabOffset,
     sanitizeAgainstCatalog,
+    type PoolChampionOpTarget,
     type PoolRenameTarget
 } from "./poolCard";
-import type { RolePoolMap } from "@draft-sim/shared-types";
+import { pushPendingOp } from "./poolBroadcastMerge";
+import type { PoolChampionOp, RolePoolMap } from "@draft-sim/shared-types";
 
 const map: RolePoolMap = {
     top: ["Aatrox", "Gnar"],
@@ -373,5 +377,213 @@ describe("commitPoolDrag", () => {
             positionY: 60
         });
         expect(refreshFromLocal).toHaveBeenCalledOnce();
+    });
+});
+
+describe("poolChampionIsAvailable", () => {
+    // The picker's D3 flex rule: a champion in THIS role's bucket greys out
+    // (already added here), but a champion in a DIFFERENT role's bucket
+    // stays pickable — that's how one champion ends up flexed across roles.
+    it("greys out a champion already in the target role", () => {
+        const champions: RolePoolMap = {
+            top: [],
+            jungle: [],
+            mid: ["Ahri"],
+            adc: [],
+            support: []
+        };
+        expect(poolChampionIsAvailable(champions, "mid", "Ahri")).toBe(false);
+    });
+
+    it("stays available for a champion sitting in a DIFFERENT role's bucket", () => {
+        const champions: RolePoolMap = {
+            top: ["Ahri"],
+            jungle: [],
+            mid: [],
+            adc: [],
+            support: []
+        };
+        expect(poolChampionIsAvailable(champions, "mid", "Ahri")).toBe(true);
+    });
+
+    it("is available when the champion is in no bucket at all", () => {
+        const champions: RolePoolMap = {
+            top: [],
+            jungle: [],
+            mid: [],
+            adc: [],
+            support: []
+        };
+        expect(poolChampionIsAvailable(champions, "mid", "Ahri")).toBe(true);
+    });
+});
+
+describe("commitPoolChampionOp", () => {
+    const target = (champions: RolePoolMap): PoolChampionOpTarget => ({
+        id: "placement-1",
+        Pool: { champions }
+    });
+
+    const emptyMap: RolePoolMap = {
+        top: [],
+        jungle: [],
+        mid: [],
+        adc: [],
+        support: []
+    };
+
+    const addOp: PoolChampionOp = { type: "add", role: "mid", championId: "Ahri" };
+
+    // DI harness mirroring commitPoolRename/commitPoolDrag's shape above.
+    // pendingOps is a plain in-memory map standing in for Canvas.tsx's
+    // non-reactive pendingPoolOps, so getPendingOps/setPendingOps read back
+    // real state instead of just recording calls.
+    const harness = (pools: PoolChampionOpTarget[], canEditValue = true) => {
+        const setChampions = vi.fn();
+        const isLocalMode = vi.fn(() => false);
+        const localOp = vi.fn();
+        const emit = vi.fn();
+        const pendingOps = new Map<string, PoolChampionOp[]>();
+        const getPendingOps = vi.fn((id: string) => pendingOps.get(id) ?? []);
+        const setPendingOps = vi.fn((id: string, ops: PoolChampionOp[]) =>
+            pendingOps.set(id, ops)
+        );
+        const canEdit = vi.fn(() => canEditValue);
+        const run = (placementId: string, op: PoolChampionOp) =>
+            commitPoolChampionOp({
+                pools,
+                placementId,
+                op,
+                canEdit,
+                setChampions,
+                isLocalMode,
+                localOp,
+                getPendingOps,
+                setPendingOps,
+                pushPendingOp,
+                emit
+            });
+        return {
+            setChampions,
+            isLocalMode,
+            localOp,
+            emit,
+            pendingOps,
+            canEdit,
+            run
+        };
+    };
+
+    it("no-ops when editing is not allowed", () => {
+        const { setChampions, emit, localOp, run } = harness([target(emptyMap)], false);
+        run("placement-1", addOp);
+        expect(setChampions).not.toHaveBeenCalled();
+        expect(emit).not.toHaveBeenCalled();
+        expect(localOp).not.toHaveBeenCalled();
+    });
+
+    it("no-ops on an unknown placement", () => {
+        const { setChampions, emit, run } = harness([target(emptyMap)]);
+        run("placement-missing", addOp);
+        expect(setChampions).not.toHaveBeenCalled();
+        expect(emit).not.toHaveBeenCalled();
+    });
+
+    it("applies the op through applyPoolChampionOp and writes the result optimistically", () => {
+        const { setChampions, run } = harness([target(emptyMap)]);
+        run("placement-1", addOp);
+        expect(setChampions).toHaveBeenCalledWith("placement-1", {
+            ...emptyMap,
+            mid: ["Ahri"]
+        });
+    });
+
+    it("re-adding an already-present champion no-ops the bucket (idempotent set semantics)", () => {
+        const withAhri = { ...emptyMap, mid: ["Ahri"] };
+        const { setChampions, run } = harness([target(withAhri)]);
+        run("placement-1", addOp);
+        expect(setChampions).toHaveBeenCalledWith("placement-1", {
+            ...withAhri
+        });
+    });
+
+    it("removing a champion not present no-ops the bucket", () => {
+        const { setChampions, run } = harness([target(emptyMap)]);
+        run("placement-1", { type: "remove", role: "mid", championId: "Ahri" });
+        expect(setChampions).toHaveBeenCalledWith("placement-1", emptyMap);
+    });
+
+    it("socket mode: queues the pending op and emits, skips localOp", () => {
+        const { setChampions, localOp, emit, pendingOps, run } = harness([
+            target(emptyMap)
+        ]);
+        run("placement-1", addOp);
+        expect(setChampions).toHaveBeenCalled();
+        expect(localOp).not.toHaveBeenCalled();
+        expect(emit).toHaveBeenCalledWith({ placementId: "placement-1", op: addOp });
+        expect(pendingOps.get("placement-1")).toEqual([addOp]);
+    });
+
+    it("socket mode: a later op on the same (role, championId) collapses the pending queue to one entry", () => {
+        const { pendingOps, run } = harness([target(emptyMap)]);
+        run("placement-1", addOp);
+        run("placement-1", { type: "remove", role: "mid", championId: "Ahri" });
+        expect(pendingOps.get("placement-1")).toEqual([
+            { type: "remove", role: "mid", championId: "Ahri" }
+        ]);
+    });
+
+    it("local mode: dispatches localOp, never touches pendingOps or emit", () => {
+        const pools = [target(emptyMap)];
+        const setChampions = vi.fn();
+        const isLocalMode = vi.fn(() => true);
+        const localOp = vi.fn();
+        const emit = vi.fn();
+        const getPendingOps = vi.fn(() => []);
+        const setPendingOps = vi.fn();
+        commitPoolChampionOp({
+            pools,
+            placementId: "placement-1",
+            op: addOp,
+            canEdit: () => true,
+            setChampions,
+            isLocalMode,
+            localOp,
+            getPendingOps,
+            setPendingOps,
+            pushPendingOp,
+            emit
+        });
+        expect(setChampions).toHaveBeenCalledWith("placement-1", {
+            ...emptyMap,
+            mid: ["Ahri"]
+        });
+        expect(localOp).toHaveBeenCalledWith({ placementId: "placement-1", op: addOp });
+        expect(setPendingOps).not.toHaveBeenCalled();
+        expect(emit).not.toHaveBeenCalled();
+    });
+
+    it("writes the store optimistically before checking local mode (optimistic write happens first)", () => {
+        const order: string[] = [];
+        const setChampions = vi.fn(() => order.push("setChampions"));
+        const isLocalMode = vi.fn(() => {
+            order.push("isLocalMode");
+            return true;
+        });
+        const localOp = vi.fn(() => order.push("localOp"));
+        commitPoolChampionOp({
+            pools: [target(emptyMap)],
+            placementId: "placement-1",
+            op: addOp,
+            canEdit: () => true,
+            setChampions,
+            isLocalMode,
+            localOp,
+            getPendingOps: () => [],
+            setPendingOps: vi.fn(),
+            pushPendingOp,
+            emit: vi.fn()
+        });
+        expect(order).toEqual(["setChampions", "isLocalMode", "localOp"]);
     });
 });

@@ -28,7 +28,8 @@ type CanvasPoolCardProps = {
     // annotations have no such prop either. Task 9 adds the
     // ".canvas-pool-card" branch there; a per-component handler would open
     // the pool menu AND the background fallback menu together.
-    // Slice 3 (wired as no-ops until Task 14/15):
+    // Slice 3: onOpenRolePicker opens the + picker (Task 14); onRemoveChampion
+    // is still a no-op stub until Task 15's hover-× lands.
     onOpenRolePicker: (placementId: string, role: Role) => void;
     onRemoveChampion: (placementId: string, role: Role, championId: string) => void;
 };
@@ -223,7 +224,29 @@ export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
                                         );
                                     }}
                                 </For>
-                                {/* Task 14 mounts the ghost + tile here (canEdit only) */}
+                                <Show when={props.canEdit()}>
+                                    <button
+                                        type="button"
+                                        class="flex shrink-0 items-center justify-center rounded border border-dashed border-darius-border text-darius-text-secondary transition-colors hover:border-darius-purple-bright hover:text-darius-purple-bright"
+                                        style={{
+                                            width: `${POOL_PORTRAIT_PX}px`,
+                                            height: `${POOL_PORTRAIT_PX}px`
+                                        }}
+                                        title={`Add to ${ROLE_LABELS[role]}`}
+                                        // Must not start a card drag: the row's
+                                        // ancestor mousedown handler (props.onMouseDown
+                                        // on the card root) would otherwise fire first.
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        onClick={() =>
+                                            props.onOpenRolePicker(
+                                                props.placement.id,
+                                                role
+                                            )
+                                        }
+                                    >
+                                        +
+                                    </button>
+                                </Show>
                             </div>
                         </div>
                     );
@@ -232,9 +255,9 @@ export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
 
             <Show when={props.canEdit() && total() === 0}>
                 <div class="px-3 pb-2 pt-1 text-[10px] text-darius-text-secondary">
-                    {/* Task 14 upgrades this copy to name the + tiles and the
-                        overlay once those controls exist. */}
-                    No champions yet
+                    {/* Overlay editor lands in Task 16 — final copy names it
+                        too once it exists. */}
+                    Use the + tiles to add champions
                 </div>
             </Show>
         </div>

@@ -1,4 +1,5 @@
-import type { Role, RolePoolMap } from "@draft-sim/shared-types";
+import type { Role, RolePoolMap, PoolChampionOp } from "@draft-sim/shared-types";
+import { applyPoolChampionOp } from "@draft-sim/shared-types";
 import { ROLES } from "./championRoles";
 import { champions as catalogChampions } from "./constants";
 
@@ -30,6 +31,19 @@ export const poolChampionTotal = (map: RolePoolMap): number => {
     }
     return unique.size;
 };
+
+/**
+ * Per-bucket availability for `PoolChampionPicker`'s "+" tile (design D3): a
+ * champion already in THIS role greys out, but stays pickable for any OTHER
+ * role — that's how flexing (the amber flex badge) happens. Extracted out of
+ * the picker's `isAvailable` closure so the rule is unit-testable without a
+ * Solid render harness, same reasoning as `commitPoolNameEdit`'s doc.
+ */
+export const poolChampionIsAvailable = (
+    champions: RolePoolMap,
+    role: Role,
+    championId: string
+): boolean => !champions[role].includes(championId);
 
 /** Drops champion ids that no longer exist in the live catalog (e.g. a saved
  *  pool captured before a champion was removed/renamed upstream) and reports
@@ -197,4 +211,59 @@ export const commitPoolDrag = (params: {
         positionX: params.positionX,
         positionY: params.positionY
     });
+};
+
+/** Just enough of `CanvasPoolPlacement` for `commitPoolChampionOp` below —
+ *  keeps the helper decoupled from the full wire schema, same shape as
+ *  `PoolRenameTarget`. */
+export type PoolChampionOpTarget = { id: string; Pool: { champions: RolePoolMap } };
+
+/**
+ * Guard + optimistic apply + local/remote dispatch for a single per-role add
+ * or remove, extracted from Canvas.tsx's `handlePoolChampionOp` so the
+ * ordering is unit-testable without mounting the canvas — this is THE single
+ * op path Task 15 (hover-× remove) and slice 4 reuse.
+ *
+ * No-ops (no store write, no dispatch) when editing is not allowed or the
+ * placement is unknown — mirrors `commitPoolRename`'s guard shape.
+ * Otherwise the optimistic write via `applyPoolChampionOp` always lands
+ * BEFORE the local/remote dispatch, same lesson as `commitPoolRename` and
+ * `commitPoolDrag`: the eventual `poolUpdate` broadcast reconciles to the
+ * same value, so this is idempotent by construction and must not wait on
+ * the echo.
+ *
+ * In socket mode the op is also queued via `getPendingOps`/`setPendingOps`
+ * (backed by Canvas.tsx's plain, non-reactive `pendingPoolOps` map) BEFORE
+ * emitting — `pushPendingOp` collapses per (role, champion) so the queue
+ * holds only the user's LATEST intent per slot, replayed over any foreign
+ * `poolUpdate` that interleaves before the server echoes this op back
+ * (design §4.3; the sender is excluded from its own op broadcasts).
+ */
+export const commitPoolChampionOp = (params: {
+    pools: PoolChampionOpTarget[];
+    placementId: string;
+    op: PoolChampionOp;
+    canEdit: () => boolean;
+    setChampions: (placementId: string, champions: RolePoolMap) => void;
+    isLocalMode: () => boolean;
+    localOp: (args: { placementId: string; op: PoolChampionOp }) => void;
+    getPendingOps: (placementId: string) => PoolChampionOp[];
+    setPendingOps: (placementId: string, ops: PoolChampionOp[]) => void;
+    pushPendingOp: (pending: PoolChampionOp[], op: PoolChampionOp) => PoolChampionOp[];
+    emit: (args: { placementId: string; op: PoolChampionOp }) => void;
+}): void => {
+    if (!params.canEdit()) return;
+    const placement = params.pools.find((p) => p.id === params.placementId);
+    if (!placement) return;
+    const next = applyPoolChampionOp(placement.Pool.champions, params.op);
+    params.setChampions(params.placementId, next);
+    if (params.isLocalMode()) {
+        params.localOp({ placementId: params.placementId, op: params.op });
+        return;
+    }
+    params.setPendingOps(
+        params.placementId,
+        params.pushPendingOp(params.getPendingOps(params.placementId), params.op)
+    );
+    params.emit({ placementId: params.placementId, op: params.op });
 };

@@ -66,13 +66,19 @@ import {
     AnnotationFontSize,
     CanvasPoolPlacement,
     PoolUpdateSchema,
-    PoolMovedSchema
+    PoolMovedSchema,
+    Role
 } from "./utils/schemas";
 import type { PoolChampionOp } from "@draft-sim/shared-types";
-import { mergePoolBroadcast, mergePoolSnapshotRow } from "./utils/poolBroadcastMerge";
+import {
+    mergePoolBroadcast,
+    mergePoolSnapshotRow,
+    pushPendingOp
+} from "./utils/poolBroadcastMerge";
 import { validateSocketEvent } from "./utils/socketValidation";
 import { CanvasCard } from "./components/CanvasCard";
 import { CanvasPoolCard } from "./components/CanvasPoolCard";
+import { PoolChampionPicker } from "./components/PoolChampionPicker";
 import { NewPoolFromSavedDialog } from "./components/NewPoolFromSavedDialog";
 import { CanvasSearchPanel } from "./components/CanvasSearchPanel";
 import {
@@ -155,7 +161,8 @@ import {
     localCreatePool,
     localRenamePool,
     localMovePool,
-    localDeletePool
+    localDeletePool,
+    localPoolChampionOp
 } from "./utils/useLocalCanvasMutations";
 import { getLocalCanvas, saveLocalCanvas } from "./utils/localCanvasStore";
 import { handleLogin } from "./utils/actions";
@@ -271,6 +278,7 @@ import {
 } from "./utils/annotationSize";
 import { annotationKeyboardShortcut } from "./utils/annotationKeyboardShortcut";
 import {
+    commitPoolChampionOp,
     commitPoolDrag,
     commitPoolRename,
     poolDragPosition,
@@ -508,6 +516,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setPickerTarget({ draftId, pickIndex });
         setPickerAnchorSession((n) => n + 1);
     };
+    // Per-role "+" picker (Task 14): target carries IDs only (see
+    // PoolChampionPicker's doc) so the anchored placement/role always reads
+    // live from the canvasPools store rather than a captured snapshot.
+    const [poolPickerTarget, setPoolPickerTarget] = createSignal<{
+        placementId: string;
+        role: Role;
+    } | null>(null);
+    const [poolPickerAnchorSession, setPoolPickerAnchorSession] = createSignal(0);
+    const openPoolPicker = (placementId: string, role: Role) => {
+        setPoolPickerTarget({ placementId, role });
+        setPoolPickerAnchorSession((n) => n + 1);
+    };
+    const closePoolPicker = () => setPoolPickerTarget(null);
     const closePicker = () => setPickerTarget(null);
     const [insertPickerAnnotationId, setInsertPickerAnnotationId] = createSignal<
         string | null
@@ -693,6 +714,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const canvasDraft = canvasDrafts.find((cd) => cd.Draft.id === target.draftId);
         if (!canvasDraft || canvasDraft.is_locked || !canEdit() || isConnectionMode()) {
             closePicker();
+        }
+    });
+
+    // Close the per-role pool picker when its placement disappears, editing
+    // stops being allowed, or connection mode starts — mirrors the draft
+    // picker's guard effect above. Pools carry no lock, so this is a shorter
+    // check than the draft one.
+    createEffect(() => {
+        const target = poolPickerTarget();
+        if (!target) return;
+        const placement = canvasPools.find((p) => p.id === target.placementId);
+        if (!placement || !canEdit() || isConnectionMode()) {
+            closePoolPicker();
         }
     });
 
@@ -2321,6 +2355,38 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             localRename: ({ placementId: id, name }) =>
                 localRenamePool({ placementId: id, name }),
             refreshFromLocal
+        });
+    };
+
+    // Guard + optimistic apply + local/remote dispatch live in
+    // `commitPoolChampionOp` (utils/poolCard.ts) so the branch logic is
+    // unit-testable without mounting the canvas — see its doc for the
+    // ordering rationale. THE single per-role add/remove op path: Task 15
+    // (hover-× remove) and slice 4 (overlay diff commit) both reuse this.
+    const handlePoolChampionOp = (placementId: string, op: PoolChampionOp) => {
+        commitPoolChampionOp({
+            pools: canvasPools,
+            placementId,
+            op,
+            canEdit,
+            setChampions: (id, champions) =>
+                setCanvasPools((p) => p.id === id, "Pool", "champions", champions),
+            isLocalMode,
+            localOp: ({ placementId: id, op: appliedOp }) =>
+                localPoolChampionOp({ placementId: id, op: appliedOp }),
+            getPendingOps: (id) => pendingPoolOps.get(id) ?? [],
+            setPendingOps: (id, ops) => pendingPoolOps.set(id, ops),
+            pushPendingOp,
+            emit: ({ placementId: id, op: appliedOp }) =>
+                socketAccessor()?.emit(
+                    appliedOp.type === "add" ? "poolAddChampion" : "poolRemoveChampion",
+                    {
+                        canvasId: canvasId(),
+                        placementId: id,
+                        role: appliedOp.role,
+                        championId: appliedOp.championId
+                    }
+                )
         });
     };
 
@@ -7344,8 +7410,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     {/* Pool cards: pure world-space, no zoom/LOD prop by
                         design (Task 8). onStartRename sets renamingPoolId,
                         which mounts CanvasPoolCard's rename input (Task 10).
-                        The op callbacks are still no-op stubs until Tasks
-                        14-15 land. */}
+                        onOpenRolePicker opens the per-role "+" picker (Task
+                        14); onRemoveChampion is still a no-op stub until
+                        Task 15 lands. */}
                     <For each={canvasPools}>
                         {(pool) => (
                             <CanvasPoolCard
@@ -7359,7 +7426,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 onCommitRename={handlePoolRename}
                                 onCancelRename={() => setRenamingPoolId(null)}
                                 onMouseDown={onPoolMouseDown}
-                                onOpenRolePicker={() => {}}
+                                onOpenRolePicker={openPoolPicker}
                                 onRemoveChampion={() => {}}
                             />
                         )}
@@ -8020,6 +8087,29 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         closeInsertPicker();
                     }}
                     onClose={closeInsertPicker}
+                />
+                <PoolChampionPicker
+                    target={poolPickerTarget}
+                    resolvePlacement={(placementId) =>
+                        canvasPools.find((p) => p.id === placementId) ?? null
+                    }
+                    anchorSession={poolPickerAnchorSession}
+                    viewport={props.viewport}
+                    onPick={(championId) => {
+                        const target = poolPickerTarget();
+                        if (target) {
+                            handlePoolChampionOp(target.placementId, {
+                                type: "add",
+                                role: target.role,
+                                championId
+                            });
+                        }
+                        // Picker stays open for multi-add — dismissal is
+                        // Escape / the Cancel button (ChampionPickerCore) or
+                        // the guard effect above, same as the draft/
+                        // annotation pickers get; no separate close call here.
+                    }}
+                    onClose={closePoolPicker}
                 />
             </div>
         </Show>
