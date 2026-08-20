@@ -219,7 +219,24 @@ export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
                                                         />
                                                     )}
                                                 </Show>
-                                                {/* Task 15 mounts the hover-× here */}
+                                                <Show when={props.canEdit()}>
+                                                    <button
+                                                        type="button"
+                                                        class="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-700"
+                                                        title="Remove from pool"
+                                                        onMouseDown={(e) => e.stopPropagation()}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            props.onRemoveChampion(
+                                                                props.placement.id,
+                                                                role,
+                                                                championId
+                                                            );
+                                                        }}
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </Show>
                                             </div>
                                         );
                                     }}

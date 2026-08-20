@@ -7427,7 +7427,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 onCancelRename={() => setRenamingPoolId(null)}
                                 onMouseDown={onPoolMouseDown}
                                 onOpenRolePicker={openPoolPicker}
-                                onRemoveChampion={() => {}}
+                                onRemoveChampion={(placementId, role, championId) =>
+                                    handlePoolChampionOp(placementId, {
+                                        type: "remove",
+                                        role,
+                                        championId
+                                    })
+                                }
                             />
                         )}
                     </For>

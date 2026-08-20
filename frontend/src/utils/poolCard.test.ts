@@ -513,6 +513,16 @@ describe("commitPoolChampionOp", () => {
         expect(setChampions).toHaveBeenCalledWith("placement-1", emptyMap);
     });
 
+    it("removing a champion present in a role shrinks that bucket", () => {
+        const withAhri = { ...emptyMap, mid: ["Ahri", "Akali"] };
+        const { setChampions, run } = harness([target(withAhri)]);
+        run("placement-1", { type: "remove", role: "mid", championId: "Ahri" });
+        expect(setChampions).toHaveBeenCalledWith("placement-1", {
+            ...emptyMap,
+            mid: ["Akali"]
+        });
+    });
+
     it("socket mode: queues the pending op and emits, skips localOp", () => {
         const { setChampions, localOp, emit, pendingOps, run } = harness([
             target(emptyMap)
