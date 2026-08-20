@@ -3926,6 +3926,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         e.preventDefault();
         e.stopPropagation();
         setSelectedAnnotationId(annotation.id);
+        setSelectedPoolId(null);
         const worldCoords = screenToWorld(e.clientX, e.clientY);
         const group = annotation.group_id
             ? canvasGroups.find((entry) => entry.id === annotation.group_id)
@@ -3963,6 +3964,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         e.preventDefault();
         e.stopPropagation();
         setSelectedPoolId(placement.id);
+        setSelectedAnnotationId(null);
         const worldCoords = screenToWorld(e.clientX, e.clientY);
         const { offsetX, offsetY } = poolGrabOffset(
             placement,
