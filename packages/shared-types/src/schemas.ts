@@ -651,6 +651,18 @@ export const ExportedCanvasAnnotationSchema = z.object({
   group_id: z.string().nullable().optional(),
 });
 
+export const ExportedCanvasPoolSchema = z.object({
+  // Carried so import can dedupe on it (design D15's pool analogue). The
+  // exported id is the PLACEMENT id — the canvas-scoped identity that
+  // `source_id` matches on — never the Pool row's own id, which never
+  // leaves the server (Task 13).
+  id: z.string(),
+  name: z.string(),
+  champions: RolePoolMapSchema,
+  positionX: z.number(),
+  positionY: z.number(),
+});
+
 export const ExportedCanvasSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -660,6 +672,7 @@ export const ExportedCanvasSchema = z.object({
   drafts: z.array(ExportedCanvasDraftSchema).default([]),
   groups: z.array(ExportedCanvasGroupSchema).default([]),
   annotations: z.array(ExportedCanvasAnnotationSchema).default([]),
+  pools: z.array(ExportedCanvasPoolSchema).default([]),
 });
 
 export const ExportedVersusSeriesDraftSchema = z.object({
@@ -713,6 +726,9 @@ export const ImportUserDataResponseSchema = z.object({
     annotationsCreated: z.number().default(0),
     annotationsUpdated: z.number().default(0),
     annotationsSkipped: z.number().default(0),
+    poolsCreated: z.number().default(0),
+    poolsUpdated: z.number().default(0),
+    poolsSkipped: z.number().default(0),
     seriesCreated: z.number(),
     seriesUpdated: z.number(),
     seriesSkipped: z.number(),
@@ -1235,6 +1251,7 @@ export type AnnotationResized = z.infer<typeof AnnotationResizedSchema>;
 export type ExportedCanvasAnnotation = z.infer<
   typeof ExportedCanvasAnnotationSchema
 >;
+export type ExportedCanvasPool = z.infer<typeof ExportedCanvasPoolSchema>;
 export type DraftPositionUpdate = z.infer<typeof DraftPositionUpdateSchema>;
 export type DraftPositionsUpdated = z.infer<
   typeof DraftPositionsUpdatedSchema

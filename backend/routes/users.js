@@ -10,7 +10,9 @@ const {
   CanvasGroup,
   CanvasConnection,
   CanvasAnnotation,
+  CanvasPoolPlacement,
 } = require("../models/Canvas");
+const Pool = require("../models/Pool");
 const Draft = require("../models/Draft");
 const { buildCanvasSnapshot } = require("./canvasProjections");
 const VersusDraft = require("../models/VersusDraft");
@@ -392,6 +394,7 @@ router.get("/me/export", protect, async (req, res) => {
             { model: CanvasDraft, include: [{ model: Draft }] },
             { model: CanvasGroup },
             { model: CanvasAnnotation },
+            { model: CanvasPoolPlacement, include: [{ model: Pool }] },
           ],
         },
       ],
@@ -443,6 +446,16 @@ router.get("/me/export", protect, async (req, res) => {
         manualHeight: annotation.manualHeight ?? null,
         // Membership travels with the container-relative position.
         group_id: annotation.group_id ?? null,
+      })),
+      pools: uc.Canvas.CanvasPoolPlacements.map((placement) => ({
+        // The exported id is the PLACEMENT id — the canvas-scoped identity
+        // that source_id dedupes on. The Pool row's own id never leaves the
+        // server (Task 13).
+        id: placement.id,
+        name: placement.Pool.name,
+        champions: placement.Pool.champions,
+        positionX: placement.positionX,
+        positionY: placement.positionY,
       })),
     }));
 
@@ -556,6 +569,9 @@ router.post("/me/import", protect, async (req, res) => {
       annotationsCreated: 0,
       annotationsUpdated: 0,
       annotationsSkipped: 0,
+      poolsCreated: 0,
+      poolsUpdated: 0,
+      poolsSkipped: 0,
       seriesCreated: 0,
       seriesUpdated: 0,
       seriesSkipped: 0,
@@ -880,6 +896,76 @@ router.post("/me/import", protect, async (req, res) => {
           { transaction },
         );
         summary.annotationsCreated += 1;
+      }
+
+      // Free-floating v1 (design §1.3): no group_id to remap, unlike Cards
+      // and annotations.
+      for (const importedPool of importedCanvas.pools ?? []) {
+        // D15's pool analogue: matches the export's placement id in
+        // source_id, scoped to this canvas. The destination placement id
+        // and the Pool row's own id remain model-generated, allowing the
+        // same export to be imported into multiple canvases without a
+        // global-PK collision.
+        const existing =
+          dedupeStrategy === "rename"
+            ? null
+            : await CanvasPoolPlacement.findOne({
+                where: {
+                  canvas_id: destinationCanvas.id,
+                  source_id: importedPool.id,
+                },
+                include: [{ model: Pool }],
+                transaction,
+              });
+
+        if (existing && dedupeStrategy === "skip") {
+          summary.poolsSkipped += 1;
+          continue;
+        }
+
+        if (existing) {
+          await existing.Pool.update(
+            {
+              name: importedPool.name,
+              champions: importedPool.champions,
+            },
+            { transaction },
+          );
+          await existing.update(
+            {
+              positionX: importedPool.positionX,
+              positionY: importedPool.positionY,
+            },
+            { transaction },
+          );
+          summary.poolsUpdated += 1;
+          continue;
+        }
+
+        const createdPool = await Pool.create(
+          {
+            name: importedPool.name,
+            champions: importedPool.champions,
+          },
+          { transaction },
+        );
+
+        await CanvasPoolPlacement.create(
+          {
+            canvas_id: destinationCanvas.id,
+            pool_id: createdPool.id,
+            positionX: importedPool.positionX,
+            positionY: importedPool.positionY,
+            // Rename intentionally creates an independent copy; otherwise
+            // the export id is stored only as provenance, never as this
+            // row's id.
+            ...(dedupeStrategy === "rename"
+              ? {}
+              : { source_id: importedPool.id }),
+          },
+          { transaction },
+        );
+        summary.poolsCreated += 1;
       }
 
       destinationCanvas.changed("updatedAt", true);

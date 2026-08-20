@@ -62,7 +62,12 @@ function makeTransaction() {
   return transaction;
 }
 
-function mockOwnedCanvasWith({ annotations = [], groups = [], drafts = [] }) {
+function mockOwnedCanvasWith({
+  annotations = [],
+  groups = [],
+  drafts = [],
+  pools = [],
+}) {
   vi.spyOn(UserCanvas, "findAll").mockResolvedValue([
     {
       Canvas: {
@@ -74,6 +79,7 @@ function mockOwnedCanvasWith({ annotations = [], groups = [], drafts = [] }) {
         CanvasDrafts: drafts,
         CanvasGroups: groups,
         CanvasAnnotations: annotations,
+        CanvasPoolPlacements: pools,
       },
     },
   ]);
@@ -581,4 +587,278 @@ describe("user import annotations", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+});
+
+describe("user export pools", () => {
+  it("exports name, champions, and position keyed by the PLACEMENT id", async () => {
+    mockOwnedCanvasWith({
+      pools: [
+        {
+          id: "placement-1",
+          positionX: 15,
+          positionY: 25,
+          Pool: {
+            id: "pool-row-1",
+            name: "Blue side jungle",
+            champions: {
+              top: [],
+              jungle: ["Vi"],
+              mid: [],
+              adc: [],
+              support: [],
+            },
+          },
+        },
+      ],
+    });
+
+    const res = await request(buildApp()).get("/api/users/me/export");
+
+    expect(res.status).toBe(200);
+    expect(res.body.canvases[0].pools).toEqual([
+      {
+        id: "placement-1",
+        name: "Blue side jungle",
+        champions: {
+          top: [],
+          jungle: ["Vi"],
+          mid: [],
+          adc: [],
+          support: [],
+        },
+        positionX: 15,
+        positionY: 25,
+      },
+    ]);
+  });
+
+  it("never leaks the Pool row's own id, and emits an empty pools array when there are none", async () => {
+    mockOwnedCanvasWith({
+      pools: [
+        {
+          id: "placement-2",
+          positionX: 0,
+          positionY: 0,
+          Pool: {
+            id: "pool-row-2",
+            name: "Empty",
+            champions: {
+              top: [],
+              jungle: [],
+              mid: [],
+              adc: [],
+              support: [],
+            },
+          },
+        },
+      ],
+    });
+    const withPool = await request(buildApp()).get("/api/users/me/export");
+    expect(withPool.body.canvases[0].pools[0].id).toBe("placement-2");
+    expect(withPool.body.canvases[0].pools[0].id).not.toBe("pool-row-2");
+
+    mockOwnedCanvasWith({ pools: [] });
+    const empty = await request(buildApp()).get("/api/users/me/export");
+    expect(empty.body.canvases[0].pools).toEqual([]);
+  });
+});
+
+describe("user import pools", () => {
+  beforeEach(() => {
+    vi.spyOn(sequelize, "transaction").mockImplementation(async () =>
+      makeTransaction(),
+    );
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
+    vi.spyOn(Canvas, "findByPk").mockImplementation(async (id) => ({
+      id,
+      changed: vi.fn(),
+      save: vi.fn().mockResolvedValue(undefined),
+    }));
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
+    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(null);
+    vi.spyOn(CanvasDraft, "findOne").mockResolvedValue(null);
+  });
+
+  it("creates a Pool + placement with source_id = the exported placement id", async () => {
+    vi.spyOn(CanvasPoolPlacement, "findOne").mockResolvedValue(null);
+    const poolCreate = vi
+      .spyOn(Pool, "create")
+      .mockResolvedValue({ id: "new-pool-row" });
+    const placementCreate = vi
+      .spyOn(CanvasPoolPlacement, "create")
+      .mockResolvedValue({ id: "new-placement" });
+
+    const champions = {
+      top: ["Aatrox"],
+      jungle: [],
+      mid: [],
+      adc: [],
+      support: [],
+    };
+
+    const res = await importCanvasWith({
+      pools: [
+        {
+          id: "export-placement",
+          name: "Top laners",
+          champions,
+          positionX: 100,
+          positionY: 200,
+        },
+      ],
+    });
+
+    expect(res.status).toBe(200);
+    expect(poolCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Top laners", champions }),
+      expect.anything(),
+    );
+    expect(placementCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        canvas_id: "destination-canvas",
+        pool_id: "new-pool-row",
+        positionX: 100,
+        positionY: 200,
+        source_id: "export-placement",
+      }),
+      expect.anything(),
+    );
+    expect(res.body.summary.poolsCreated).toBe(1);
+  });
+
+  it("skips an existing placement under dedupeStrategy skip", async () => {
+    const existingPool = { update: vi.fn().mockResolvedValue(undefined) };
+    const existingPlacement = {
+      id: "existing-placement",
+      Pool: existingPool,
+      update: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.spyOn(CanvasPoolPlacement, "findOne").mockResolvedValue(
+      existingPlacement,
+    );
+    const poolCreate = vi.spyOn(Pool, "create");
+    const placementCreate = vi.spyOn(CanvasPoolPlacement, "create");
+
+    const res = await importCanvasWith(
+      {
+        pools: [
+          {
+            id: "export-placement",
+            name: "Top laners",
+            champions: {
+              top: [],
+              jungle: [],
+              mid: [],
+              adc: [],
+              support: [],
+            },
+            positionX: 0,
+            positionY: 0,
+          },
+        ],
+      },
+      { dedupeStrategy: "skip" },
+    );
+
+    expect(res.status).toBe(200);
+    expect(poolCreate).not.toHaveBeenCalled();
+    expect(placementCreate).not.toHaveBeenCalled();
+    expect(existingPool.update).not.toHaveBeenCalled();
+    expect(existingPlacement.update).not.toHaveBeenCalled();
+    expect(res.body.summary.poolsSkipped).toBe(1);
+  });
+
+  it("updates name/champions/position on the existing pair under dedupeStrategy overwrite", async () => {
+    const existingPool = { update: vi.fn().mockResolvedValue(undefined) };
+    const existingPlacement = {
+      id: "existing-placement",
+      Pool: existingPool,
+      update: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.spyOn(CanvasPoolPlacement, "findOne").mockResolvedValue(
+      existingPlacement,
+    );
+    const poolCreate = vi.spyOn(Pool, "create");
+    const placementCreate = vi.spyOn(CanvasPoolPlacement, "create");
+
+    const champions = {
+      top: [],
+      jungle: ["Vi"],
+      mid: [],
+      adc: [],
+      support: [],
+    };
+    const res = await importCanvasWith(
+      {
+        pools: [
+          {
+            id: "export-placement",
+            name: "Renamed pool",
+            champions,
+            positionX: 42,
+            positionY: 84,
+          },
+        ],
+      },
+      { dedupeStrategy: "overwrite" },
+    );
+
+    expect(res.status).toBe(200);
+    expect(poolCreate).not.toHaveBeenCalled();
+    expect(placementCreate).not.toHaveBeenCalled();
+    expect(existingPool.update).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Renamed pool", champions }),
+      expect.anything(),
+    );
+    expect(existingPlacement.update).toHaveBeenCalledWith(
+      expect.objectContaining({ positionX: 42, positionY: 84 }),
+      expect.anything(),
+    );
+    expect(res.body.summary.poolsUpdated).toBe(1);
+  });
+
+  it("creates an independent copy with null source_id under dedupeStrategy rename", async () => {
+    const findOne = vi.spyOn(CanvasPoolPlacement, "findOne");
+    const poolCreate = vi
+      .spyOn(Pool, "create")
+      .mockResolvedValue({ id: "new-pool-row" });
+    const placementCreate = vi
+      .spyOn(CanvasPoolPlacement, "create")
+      .mockResolvedValue({ id: "new-placement" });
+
+    const res = await importCanvasWith(
+      {
+        pools: [
+          {
+            id: "export-placement",
+            name: "Copy me",
+            champions: {
+              top: [],
+              jungle: [],
+              mid: [],
+              adc: [],
+              support: [],
+            },
+            positionX: 5,
+            positionY: 5,
+          },
+        ],
+      },
+      { dedupeStrategy: "rename" },
+    );
+
+    expect(res.status).toBe(200);
+    expect(findOne).not.toHaveBeenCalled();
+    expect(placementCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        canvas_id: "destination-canvas",
+        pool_id: "new-pool-row",
+        positionX: 5,
+        positionY: 5,
+      }),
+      expect.anything(),
+    );
+    expect(placementCreate.mock.calls[0][0]).not.toHaveProperty("source_id");
+    expect(res.body.summary.poolsCreated).toBe(1);
+  });
 });
