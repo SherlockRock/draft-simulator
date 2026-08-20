@@ -77,30 +77,91 @@ describe("sanitizeAgainstCatalog", () => {
 describe("commitPoolNameEdit", () => {
     // The RESTRICTIVE half (solidjs_blur_commit_ordering): `value` is read
     // BEFORE `onCancelRename` fires. Modeled as an accessor whose return
-    // value changes once "cancelled" — swapping the read and the cancel
-    // call in the implementation would make this see the post-cancel value
-    // and fail.
-    it("reads the typed value before cancelling, not after", () => {
-        let cancelled = false;
-        const value = () => (cancelled ? "STALE" : "New Pool Name");
+    // value changes once "cleared" — swapping the read and the cancel call
+    // in the implementation would make this see the post-clear value and
+    // fail.
+    it("reads the typed value before clearing the rename flag, not after", () => {
+        let cleared = false;
+        const value = () => (cleared ? "STALE" : "New Pool Name");
         const onCancelRename = vi.fn(() => {
-            cancelled = true;
+            cleared = true;
         });
         const onCommitRename = vi.fn();
 
-        commitPoolNameEdit(value, "placement-1", onCancelRename, onCommitRename);
+        commitPoolNameEdit(
+            value,
+            "placement-1",
+            onCancelRename,
+            onCommitRename,
+            () => false
+        );
 
         expect(onCommitRename).toHaveBeenCalledWith("placement-1", "New Pool Name");
     });
 
-    it("cancels before committing", () => {
+    it("cancels before committing, on the normal (non-cancelled) path", () => {
         const order: string[] = [];
         const onCancelRename = vi.fn(() => order.push("cancel"));
         const onCommitRename = vi.fn(() => order.push("commit"));
 
-        commitPoolNameEdit(() => "x", "placement-1", onCancelRename, onCommitRename);
+        commitPoolNameEdit(
+            () => "x",
+            "placement-1",
+            onCancelRename,
+            onCommitRename,
+            () => false
+        );
 
         expect(order).toEqual(["cancel", "commit"]);
+    });
+
+    // Runtime-confirmed regression: Escape sets its own cancelled flag and
+    // calls onCancelRename() directly, which unmounts the input via the
+    // card's <Show>. Removing a focused element fires a native `blur`
+    // synchronously, so this function runs a SECOND time right after Escape
+    // — with the guard, that second run must no-op instead of committing.
+    it("no-ops when already cancelled — does not commit, does not re-cancel", () => {
+        const onCancelRename = vi.fn();
+        const onCommitRename = vi.fn();
+
+        commitPoolNameEdit(
+            () => "typed before Escape",
+            "placement-1",
+            onCancelRename,
+            onCommitRename,
+            () => true
+        );
+
+        expect(onCommitRename).not.toHaveBeenCalled();
+        expect(onCancelRename).not.toHaveBeenCalled();
+    });
+
+    // Models the full runtime sequence end to end using the real function
+    // for both calls: Escape (cancel flag set, onCancelRename called once)
+    // immediately followed by the native blur it triggers (onBlur calling
+    // commitPoolNameEdit again). Restrictive against the pre-fix code: with
+    // no `wasCancelled` guard this called onCommitRename with the typed
+    // text and onCancelRename a second time.
+    it("models Escape -> unmount -> native blur: cancels once, never commits", () => {
+        let cancelled = false;
+        const onCancelRename = vi.fn();
+        const onCommitRename = vi.fn();
+
+        // Escape handler, as wired in PoolNameInput.
+        cancelled = true;
+        onCancelRename();
+
+        // The blur the unmount fires, as wired in PoolNameInput's onBlur.
+        commitPoolNameEdit(
+            () => "typed before Escape",
+            "placement-1",
+            onCancelRename,
+            onCommitRename,
+            () => cancelled
+        );
+
+        expect(onCommitRename).not.toHaveBeenCalled();
+        expect(onCancelRename).toHaveBeenCalledTimes(1);
     });
 });
 

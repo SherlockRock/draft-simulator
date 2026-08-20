@@ -49,6 +49,13 @@ type PoolNameInputProps = {
 // `onCancelRename` — see that function's doc for why.
 const PoolNameInput: Component<PoolNameInputProps> = (props) => {
     const [value, setValue] = createSignal(props.initialName);
+    // Set by Escape BEFORE onCancelRename() runs. Escape's onCancelRename()
+    // unmounts this input via the card's <Show>, and removing a focused
+    // element fires a native `blur` synchronously — so onBlur's
+    // commitPoolNameEdit call runs a second time right after Escape. This
+    // flag is what tells that second run to no-op instead of committing the
+    // just-cancelled edit (runtime-confirmed regression, not hypothetical).
+    let cancelled = false;
 
     return (
         <input
@@ -65,6 +72,7 @@ const PoolNameInput: Component<PoolNameInputProps> = (props) => {
                     // Cancels without committing — stopPropagation keeps this
                     // Escape from also bubbling to canvas-level handling.
                     e.stopPropagation();
+                    cancelled = true;
                     props.onCancelRename();
                 }
             }}
@@ -73,7 +81,8 @@ const PoolNameInput: Component<PoolNameInputProps> = (props) => {
                     value,
                     props.placementId,
                     props.onCancelRename,
-                    props.onCommitRename
+                    props.onCommitRename,
+                    () => cancelled
                 )
             }
             autofocus

@@ -72,13 +72,25 @@ export const sanitizeAgainstCatalog = (
  * effect were ever added here) a value clobbered by it. This is the
  * `solidjs_blur_commit_ordering` scar's fix shape, applied verbatim even
  * though this specific input has no resync effect to trip over.
+ *
+ * `wasCancelled` guards a SECOND hazard, runtime-confirmed in the browser:
+ * pressing Escape calls `onCancelRename()` directly, which unmounts this
+ * input via the card's `<Show>` — and removing a focused element from the
+ * DOM fires a native `blur` event synchronously, running this function a
+ * second time with the (untouched) typed value. Without this guard that
+ * second run committed the rename right after Escape cancelled it. Checked
+ * FIRST, before the read, so a cancelled edit short-circuits entirely; the
+ * normal (non-cancelled) path's read-then-clear-then-commit order is
+ * unchanged.
  */
 export const commitPoolNameEdit = (
     value: () => string,
     placementId: string,
     onCancelRename: () => void,
-    onCommitRename: (placementId: string, name: string) => void
+    onCommitRename: (placementId: string, name: string) => void,
+    wasCancelled: () => boolean
 ): void => {
+    if (wasCancelled()) return;
     const typed = value();
     onCancelRename();
     onCommitRename(placementId, typed);
