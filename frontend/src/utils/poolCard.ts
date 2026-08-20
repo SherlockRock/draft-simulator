@@ -322,8 +322,9 @@ export const commitPoolChampionOp = (params: {
  * `commitPoolDrag`'s shape: the optimistic write always lands first, then the
  * local/remote branch decides whether to hit the network — no canEdit/
  * placement-existence guard here, same as `commitPoolDrag`, since the only
- * caller (the overlay) is unreachable unless the card's edit affordances
- * were already canEdit-gated to open it.
+ * path that will reach this (Task 17's saved-pool import launcher, inside
+ * the overlay) is unreachable unless the card's edit affordances were
+ * already canEdit-gated to open the overlay in the first place.
  */
 export const commitPoolReplace = (params: {
     placementId: string;
