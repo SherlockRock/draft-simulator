@@ -3,6 +3,15 @@ import { champions } from "./constants";
 
 export const ROLES: Role[] = ["top", "jungle", "mid", "adc", "support"];
 
+/**
+ * Narrows a DOM attribute to `Role` without a type assertion. `getAttribute`
+ * is typed `string | null`, and the champion context menu reads the role off
+ * the row's `data-role` — so the guard is what keeps `dispatchContextMenu`
+ * free of `as Role`.
+ */
+export const isRole = (value: string | null | undefined): value is Role =>
+    value !== null && value !== undefined && ROLES.some((role) => role === value);
+
 export const ROLE_LABELS: Record<Role, string> = {
     top: "Top",
     jungle: "Jungle",

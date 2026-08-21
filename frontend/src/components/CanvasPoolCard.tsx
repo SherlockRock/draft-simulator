@@ -29,10 +29,13 @@ type CanvasPoolCardProps = {
     // annotations have no such prop either. Task 9 adds the
     // ".canvas-pool-card" branch there; a per-component handler would open
     // the pool menu AND the background fallback menu together.
-    // Slice 3: onOpenRolePicker opens the + picker (Task 14); onRemoveChampion
-    // is still a no-op stub until Task 15's hover-× lands.
+    // Slice 3: onOpenRolePicker opens the + picker (Task 14). Removal is NOT a
+    // prop: it lives on the champion context menu, resolved centrally by
+    // dispatchContextMenu off the tile's data-champion-id (same reason the
+    // card's own menu has no onContextMenu prop). The hover-× this replaced
+    // put a red button on every portrait and left right-click falling through
+    // to the pool menu, where a mis-aimed click offered to delete the pool.
     onOpenRolePicker: (placementId: string, role: Role) => void;
-    onRemoveChampion: (placementId: string, role: Role, championId: string) => void;
     // Opens the bulk overlay editor (Task 16) for this placement. Header icon
     // + the card's context menu ("Edit in overlay") both drive this — mirrors
     // onStartRename's split between a header affordance and a menu entry.
@@ -216,17 +219,36 @@ export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
                                         const champ = () =>
                                             championById().get(championId);
                                         const flexed = () => flexRoles().get(championId);
+                                        const flexTitle = () => {
+                                            const name = champ()?.name ?? championId;
+                                            const roles = flexed();
+                                            if (!roles) return name;
+                                            const others = roles
+                                                .filter((r) => r !== role)
+                                                .map((r) => ROLE_LABELS[r])
+                                                .join(", ");
+                                            return `${name} — also in ${others}`;
+                                        };
                                         return (
                                             <div
-                                                class="group relative overflow-hidden rounded border border-darius-border"
+                                                class="group relative overflow-hidden rounded"
+                                                data-champion-id={championId}
                                                 classList={{
-                                                    "cursor-grab": props.canEdit()
+                                                    "cursor-grab": props.canEdit(),
+                                                    // A flexed champion reads as a CLASS at any
+                                                    // zoom: the whole tile is outlined, not a 12px
+                                                    // corner wedge that dropped out below ~0.5
+                                                    // zoom and never said which tiles were the
+                                                    // same champion. The tooltip still names the
+                                                    // other roles.
+                                                    "border-2 border-amber-400": !!flexed(),
+                                                    "border border-darius-border": !flexed()
                                                 }}
                                                 style={{
                                                     width: `${POOL_PORTRAIT_PX}px`,
                                                     height: `${POOL_PORTRAIT_PX}px`
                                                 }}
-                                                title={champ()?.name ?? championId}
+                                                title={flexTitle()}
                                                 // Arms a pending champion drag (Task 18) —
                                                 // stopPropagation keeps the card root's own
                                                 // onMouseDown (card drag) from also firing.
@@ -261,39 +283,6 @@ export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
                                                             class="h-full w-full object-cover"
                                                         />
                                                     )}
-                                                </Show>
-                                                <Show when={flexed()}>
-                                                    {(roles) => (
-                                                        <span
-                                                            class="absolute bottom-0 right-0 h-3 w-3 rounded-tl bg-amber-400/90"
-                                                            title={`Also in: ${roles()
-                                                                .filter((r) => r !== role)
-                                                                .map(
-                                                                    (r) => ROLE_LABELS[r]
-                                                                )
-                                                                .join(", ")}`}
-                                                        />
-                                                    )}
-                                                </Show>
-                                                <Show when={props.canEdit()}>
-                                                    <button
-                                                        type="button"
-                                                        class="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white opacity-0 transition-opacity hover:bg-red-700 group-hover:opacity-100"
-                                                        title="Remove from pool"
-                                                        onMouseDown={(e) =>
-                                                            e.stopPropagation()
-                                                        }
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            props.onRemoveChampion(
-                                                                props.placement.id,
-                                                                role,
-                                                                championId
-                                                            );
-                                                        }}
-                                                    >
-                                                        ×
-                                                    </button>
                                                 </Show>
                                             </div>
                                         );

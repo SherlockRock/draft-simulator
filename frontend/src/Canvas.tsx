@@ -76,7 +76,7 @@ import {
     mergePoolSnapshotRow,
     pushPendingOp
 } from "./utils/poolBroadcastMerge";
-import { ROLES } from "./utils/championRoles";
+import { ROLES, ROLE_LABELS, isRole } from "./utils/championRoles";
 import {
     resolvePoolDrop,
     type PoolDragSource,
@@ -710,6 +710,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const [poolContextMenu, setPoolContextMenu] = createSignal<{
         placement: CanvasPoolPlacement;
+        position: { x: number; y: number };
+    } | null>(null);
+
+    // Champion-level menu (replaces the hover-×). Holds ids rather than the
+    // champion row itself: the pool's champions can change underneath an open
+    // menu (a collaborator's op), and the remove is addressed by
+    // (placement, role, championId) anyway — the same triple the op carries.
+    const [championContextMenu, setChampionContextMenu] = createSignal<{
+        placementId: string;
+        role: Role;
+        championId: string;
         position: { x: number; y: number };
     } | null>(null);
 
@@ -5661,6 +5672,38 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             return;
         }
 
+        // BEFORE the pool-card branch, exactly as the vertex branch precedes
+        // the connection branch: a portrait tile is inside .canvas-pool-card,
+        // so resolving the card first would make a champion right-click open
+        // the pool menu (whose Delete targets the whole pool).
+        const championEl = el?.closest("[data-champion-id]");
+        if (championEl) {
+            if (!canEdit()) return;
+            const poolCardEl = championEl.closest(".canvas-pool-card");
+            const roleEl = championEl.closest("[data-role]");
+            const championId = championEl.getAttribute("data-champion-id");
+            const role = roleEl?.getAttribute("data-role");
+            const placement = canvasPools.find(
+                (p) => p.id === poolCardEl?.getAttribute("data-pool-id")
+            );
+            // Deliberately does NOT return when unresolvable: only a portrait
+            // inside a pool card is a champion target, and swallowing the
+            // right-click here would leave a future data-champion-id elsewhere
+            // (annotation tokens, draft slots) with no menu at all. Anything
+            // else falls through to the branches below.
+            if (placement && championId && isRole(role)) {
+                closeAllContextMenus();
+                setSelectedPoolId(placement.id);
+                setChampionContextMenu({
+                    placementId: placement.id,
+                    role,
+                    championId,
+                    position: { x, y }
+                });
+                return;
+            }
+        }
+
         const poolEl = el?.closest(".canvas-pool-card");
         if (poolEl) {
             if (!canEdit()) return;
@@ -5709,6 +5752,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         setDraftContextMenu(null);
         setAnnotationContextMenu(null);
         setPoolContextMenu(null);
+        setChampionContextMenu(null);
         setGroupContextMenu(null);
         setConnectionContextMenu(null);
     };
@@ -7630,8 +7674,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         design (Task 8). onStartRename sets renamingPoolId,
                         which mounts CanvasPoolCard's rename input (Task 10).
                         onOpenRolePicker opens the per-role "+" picker (Task
-                        14); onRemoveChampion is still a no-op stub until
-                        Task 15 lands. */}
+                        14). Removal is not a prop — it lives on the champion
+                        context menu, resolved centrally in
+                        dispatchContextMenu. */}
                     <For each={canvasPools}>
                         {(pool) => (
                             <CanvasPoolCard
@@ -7646,13 +7691,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 onCancelRename={() => setRenamingPoolId(null)}
                                 onMouseDown={onPoolMouseDown}
                                 onOpenRolePicker={openPoolPicker}
-                                onRemoveChampion={(placementId, role, championId) =>
-                                    handlePoolChampionOp(placementId, {
-                                        type: "remove",
-                                        role,
-                                        championId
-                                    })
-                                }
                                 onOpenOverlay={() => setOverlayPlacement(pool)}
                                 onPortraitMouseDown={onPortraitMouseDown}
                                 dropHighlightRole={() => {
@@ -8259,6 +8297,33 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 }
                             ]}
                             onClose={() => setPoolContextMenu(null)}
+                        />
+                    )}
+                </Show>
+                {/* Champion Context Menu — replaces the per-portrait hover-× */}
+                <Show when={championContextMenu()}>
+                    {(menu) => (
+                        <ContextMenu
+                            class="champion-context-menu"
+                            // Name, not id — Wukong's id is "MonkeyKing".
+                            header={
+                                championById.get(menu().championId)?.name ??
+                                menu().championId
+                            }
+                            position={menu().position}
+                            actions={[
+                                {
+                                    label: `Remove from ${ROLE_LABELS[menu().role]}`,
+                                    action: () =>
+                                        handlePoolChampionOp(menu().placementId, {
+                                            type: "remove",
+                                            role: menu().role,
+                                            championId: menu().championId
+                                        }),
+                                    destructive: true
+                                }
+                            ]}
+                            onClose={() => setChampionContextMenu(null)}
                         />
                     )}
                 </Show>
