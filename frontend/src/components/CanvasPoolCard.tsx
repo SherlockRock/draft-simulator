@@ -56,6 +56,11 @@ type CanvasPoolCardProps = {
     // won't use — that identity is the whole reason the resolver takes an
     // index instead of re-deriving one at commit time.
     dropPreview: () => { role: Role; index: number } | null;
+    // The tile currently being carried, when it belongs to THIS card — so the
+    // source can paint a lifted state while the drag is armed. Matched on
+    // (role, championId), not championId alone: a flexed champion has a tile
+    // in several rows and only the one actually grabbed is in transit.
+    dragSource: () => { role: Role; championId: string } | null;
 };
 
 type PoolNameInputProps = {
@@ -115,17 +120,69 @@ const PoolNameInput: Component<PoolNameInputProps> = (props) => {
     );
 };
 
+/** The in-flow caret bar's own width. */
+const CARET_WIDTH_PX = 3;
+/** The row wrapper's `gap-1`, i.e. 0.25rem. */
+const ROW_GAP_PX = 4;
+
 /**
  * The insertion marker painted between two portraits during a champion drag.
  * Full tile height so it reads as a slot rather than a stray line, and sized
  * in world px like everything else on the card (§7: the card is pure
  * world-space, so this scales with zoom instead of staying screen-constant).
+ *
+ * Two parts, and the split is load-bearing:
+ *
+ *  - The 3px bar is the only thing IN FLOW. Its box is byte-identical to the
+ *    caret this replaced, which is what lets the runtime-proven hit-test
+ *    stability carry over unchanged: `insertionIndexFromRects` measures
+ *    `[data-champion-id]` rects, and the caret still only ever pushes tiles at
+ *    index >= i further from the cursor. Anything that widened this box, or
+ *    opened a real gap, would reflow those very rects and invalidate the proof.
+ *
+ *  - The landing rectangle is ABSOLUTELY positioned and therefore consumes no
+ *    layout at all. It shows the SLOT the portrait will occupy rather than
+ *    just the seam it goes through — the grid drop affordance's whole point
+ *    (`GridDropHighlight`), and it borrows that component's exact visual
+ *    vocabulary: a 2px purple border over a 10% purple fill.
+ *
+ * `pointer-events-none` matters as much as it does on the ghost: the rect
+ * paints over its neighbours, and `hitTestPoolDropTarget` resolves through
+ * `document.elementFromPoint`, so a hit-testable overlay here would shadow the
+ * tiles the hit-test is trying to read.
  */
+
+
 const DropCaret: Component = () => (
     <div
-        class="shrink-0 rounded-full bg-darius-purple-bright"
-        style={{ width: "3px", height: `${POOL_PORTRAIT_PX}px` }}
-    />
+        class="relative z-10 shrink-0 rounded-full bg-darius-purple-bright"
+        style={{ width: `${CARET_WIDTH_PX}px`, height: `${POOL_PORTRAIT_PX}px` }}
+    >
+        <div
+            class="pointer-events-none absolute rounded border-2 border-darius-purple-bright bg-darius-purple-bright/10"
+            style={{
+                // Sits ONE FULL SLOT over — flush against the tile that
+                // follows the caret — rather than centred on the bar.
+                //
+                // Centred, the rect reached 14.5px into the tile on either
+                // side (18.5px of overhang less the 4px gap), so it half-
+                // covered two champions and read as misalignment rather than
+                // as a claim on a slot.
+                //
+                // Offset by one gap past the bar it lands exactly on the
+                // following tile's footprint, which is precisely where the
+                // dragged portrait ends up: inserting at index i puts it where
+                // tile i currently sits and pushes tile i to the right. That
+                // holds at both ends of the row — at index 0 it covers the
+                // first tile, and at the tail it covers the "+" button, which
+                // is where an appended champion goes.
+                left: `${CARET_WIDTH_PX + ROW_GAP_PX}px`,
+                top: "0px",
+                width: `${POOL_PORTRAIT_PX}px`,
+                height: `${POOL_PORTRAIT_PX}px`
+            }}
+        />
+    </div>
 );
 
 export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
@@ -253,13 +310,30 @@ export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
                                                 .join(", ");
                                             return `${name} — also in ${others}`;
                                         };
+                                        // In transit: the grid drag's card
+                                        // physically leaves its cell, so the
+                                        // origin reads as vacated. A pool tile
+                                        // cannot leave without reflowing the
+                                        // row (and the rects the hit-test
+                                        // measures), so it stays in place and
+                                        // says the same thing in paint only.
+                                        const isDragSource = () => {
+                                            const src = props.dragSource();
+                                            return (
+                                                !!src &&
+                                                src.role === role &&
+                                                src.championId === championId
+                                            );
+                                        };
                                         return (
                                           <>
                                             <div
-                                                class="group relative overflow-hidden rounded"
+                                                class="group relative overflow-hidden rounded transition-opacity"
                                                 data-champion-id={championId}
                                                 classList={{
                                                     "cursor-grab": props.canEdit(),
+                                                    "opacity-35 grayscale":
+                                                        isDragSource(),
                                                     // A flexed champion reads as a CLASS at any
                                                     // zoom: the whole tile is outlined, not a 12px
                                                     // corner wedge that dropped out below ~0.5

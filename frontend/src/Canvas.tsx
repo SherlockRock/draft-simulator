@@ -7750,54 +7750,84 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                         index: state.target.index
                                     };
                                 }}
+                                // Unlike dropPreview this does NOT depend on
+                                // the resolved outcome or on there being a
+                                // valid target: the tile is in the user's hand
+                                // from the moment the drag arms, including
+                                // while it hovers dead space or a drop that
+                                // would resolve to `none`. Gated only on the
+                                // source belonging to this card.
+                                dragSource={() => {
+                                    const state = championDragState();
+                                    if (!state.armed || !state.source) return null;
+                                    if (state.source.placementId !== pool.id)
+                                        return null;
+                                    return {
+                                        role: state.source.role,
+                                        championId: state.source.championId
+                                    };
+                                }}
                             />
                         )}
                     </For>
-                    {/* Ghost tile: follows the raw cursor while a champion
-                        drag is armed, so the preview shows what's being
-                        moved as well as where it will land. `fixed` +
-                        screen coordinates (not world-space) since it tracks
-                        clientX/clientY directly; pointer-events-none so it
-                        never shadows `hitTestPoolDropTarget`'s own
-                        elementFromPoint reads. Tinted red for a `remove`
-                        result (drag off-card, or onto a row already holding
-                        the champion) so the preview also promises WHAT will
-                        happen, not just where. */}
-                    <Show when={championDragPreview()}>
-                        {(state) => {
-                            const champ = () =>
-                                championById.get(state().source.championId);
-                            return (
-                                <div
-                                    class="pointer-events-none fixed z-50 overflow-hidden rounded border-2"
-                                    classList={{
-                                        "border-darius-purple-bright":
-                                            state().result?.kind !== "remove",
-                                        "border-red-500 opacity-60":
-                                            state().result?.kind === "remove"
-                                    }}
-                                    style={{
-                                        left: `${state().clientX - POOL_PORTRAIT_PX / 2}px`,
-                                        top: `${state().clientY - POOL_PORTRAIT_PX / 2}px`,
-                                        width: `${POOL_PORTRAIT_PX}px`,
-                                        height: `${POOL_PORTRAIT_PX}px`
-                                    }}
-                                >
-                                    <Show when={champ()}>
-                                        {(c) => (
-                                            <img
-                                                src={c().img}
-                                                alt={c().name}
-                                                draggable={false}
-                                                class="h-full w-full object-cover"
-                                            />
-                                        )}
-                                    </Show>
-                                </div>
-                            );
-                        }}
-                    </Show>
                 </div>
+                {/* Ghost tile: follows the raw cursor while a champion drag is
+                    armed, so the preview shows what's being moved as well as
+                    where it will land. pointer-events-none so it never shadows
+                    `hitTestPoolDropTarget`'s own elementFromPoint reads. Tinted
+                    red for a `remove` result (drag off-card, or onto a row
+                    already holding the champion) so the preview also promises
+                    WHAT will happen, not just where.
+
+                    MUST render OUTSIDE `.canvas-world`. It positions itself in
+                    SCREEN coordinates (raw clientX/clientY), and a transformed
+                    ancestor becomes the containing block for a `fixed`
+                    descendant — so while this lived inside the world div, CSS
+                    ran those screen coordinates back through the world matrix
+                    and the ghost never sat under the cursor: measured +248,+25
+                    px off at zoom 1, and +782,+514 at zoom 2, drifting again
+                    with every pan.
+
+                    That same transform was also what happened to scale the
+                    ghost to match the tiles, so leaving the world means sizing
+                    it by `zoom` explicitly — the card is pure world-space (§7)
+                    and a screen-constant ghost would be double the tile size at
+                    zoom 0.5 and half at 2x. */}
+                <Show when={championDragPreview()}>
+                    {(state) => {
+                        const champ = () =>
+                            championById.get(state().source.championId);
+                        const size = () => POOL_PORTRAIT_PX * props.viewport().zoom;
+                        return (
+                            <div
+                                class="pointer-events-none fixed z-50 overflow-hidden rounded border-2"
+                                classList={{
+                                    "border-darius-purple-bright":
+                                        state().result?.kind !== "remove",
+                                    "border-red-500 opacity-60":
+                                        state().result?.kind === "remove"
+                                }}
+                                style={{
+                                    left: `${state().clientX - size() / 2}px`,
+                                    top: `${state().clientY - size() / 2}px`,
+                                    width: `${size()}px`,
+                                    height: `${size()}px`
+                                }}
+                            >
+                                <Show when={champ()}>
+                                    {(c) => (
+                                        <img
+                                            src={c().img}
+                                            alt={c().name}
+                                            draggable={false}
+                                            class="h-full w-full object-cover"
+                                        />
+                                    )}
+                                </Show>
+                            </div>
+                        );
+                    }}
+                </Show>
                 <Show when={searchOpen()}>
                     <CanvasSearchPanel
                         championId={searchChampionId}
