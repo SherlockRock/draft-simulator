@@ -117,6 +117,16 @@ function setupCanvasHandlers(socket, gate, wrapSocketHandler) {
     }),
   );
 
+  handle("poolReorderRole", (data, actor) =>
+    gate.applyPoolReorderRole({
+      actor,
+      canvasId: data.canvasId,
+      placementId: data.placementId,
+      role: data.role,
+      championIds: data.championIds,
+    }),
+  );
+
   handle("poolReplace", (data, actor) =>
     gate.applyPoolReplace({
       actor,

@@ -480,6 +480,38 @@ describe("local pools", () => {
             expect(getLocalCanvas()?.pools[0]?.Pool.champions.jungle).toEqual(["LeeSin"]);
         });
 
+        // The local path reaches reorder through the same shared helper, so
+        // this proves the CALL SITE carries the new op type through — an
+        // anonymous canvas is the one place with no server to fall back on.
+        it("applies a reorder and persists the new within-role order", () => {
+            const { placement } = localCreatePool({
+                positionX: 10,
+                positionY: 20,
+                champions: {
+                    top: ["Aatrox", "Gnar", "Sett"],
+                    jungle: [],
+                    mid: [],
+                    adc: [],
+                    support: []
+                }
+            });
+
+            localPoolChampionOp({
+                placementId: placement.id,
+                op: {
+                    type: "reorder",
+                    role: "top",
+                    championIds: ["Sett", "Aatrox", "Gnar"]
+                }
+            });
+
+            expect(getLocalCanvas()?.pools[0]?.Pool.champions.top).toEqual([
+                "Sett",
+                "Aatrox",
+                "Gnar"
+            ]);
+        });
+
         it("bumps the pool's version on every applied op, mirroring the server's row-lock bump", () => {
             const { placement } = localCreatePool({ positionX: 10, positionY: 20 });
 

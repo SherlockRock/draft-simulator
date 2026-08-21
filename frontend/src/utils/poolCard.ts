@@ -386,3 +386,26 @@ export const resolveOverlayApply = (params: {
     if (ops.length === 0) return { kind: "noop" };
     return { kind: "ops", ops };
 };
+
+/**
+ * Which insertion slot a cursor at `clientX` names, given the horizontal
+ * extents of a role row's portrait tiles in DOM order. Returns 0 for "before
+ * the first tile" through `rects.length` for "after the last".
+ *
+ * A tile claims the slot BEFORE it while the cursor is left of its midpoint
+ * and the slot after it beyond that, so the caret flips as the cursor crosses
+ * each tile's centre rather than at its edges — the drop is aimed at a gap,
+ * and gaps sit between midpoints, not between borders.
+ *
+ * Pure and rect-based so the geometry is unit-testable without a DOM; the
+ * caller supplies rects read off `[data-champion-id]` elements.
+ */
+export const insertionIndexFromRects = (
+    rects: { left: number; width: number }[],
+    clientX: number
+): number => {
+    for (let i = 0; i < rects.length; i++) {
+        if (clientX < rects[i].left + rects[i].width / 2) return i;
+    }
+    return rects.length;
+};

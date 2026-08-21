@@ -33,6 +33,7 @@ function buildFakeGate() {
     relayGroupResize: vi.fn().mockResolvedValue(undefined),
     applyPoolAddChampion: vi.fn().mockResolvedValue(undefined),
     applyPoolRemoveChampion: vi.fn().mockResolvedValue(undefined),
+    applyPoolReorderRole: vi.fn().mockResolvedValue(undefined),
     applyPoolReplace: vi.fn().mockResolvedValue(undefined),
     relayPoolMove: vi.fn().mockResolvedValue(undefined),
   };
@@ -54,7 +55,7 @@ afterEach(() => {
 });
 
 describe("setupCanvasHandlers", () => {
-  it("registers the eleven canvas mutation events", () => {
+  it("registers the twelve canvas mutation events", () => {
     const { handlers } = installHandlers();
     expect([...handlers.keys()].sort()).toEqual([
       "annotationMove",
@@ -66,6 +67,7 @@ describe("setupCanvasHandlers", () => {
       "poolAddChampion",
       "poolMove",
       "poolRemoveChampion",
+      "poolReorderRole",
       "poolReplace",
       "vertexMove",
     ]);
@@ -305,6 +307,43 @@ describe("setupCanvasHandlers", () => {
 
     expect(socket.emit).toHaveBeenCalledWith("canvasMutationError", {
       event: "poolRemoveChampion",
+      code: "NOT_AUTHORIZED",
+      message: "Not authorized",
+    });
+  });
+
+  it("poolReorderRole maps the payload onto applyPoolReorderRole", async () => {
+    const { handlers, gate } = installHandlers();
+
+    await handlers.get("poolReorderRole")({
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "top",
+      championIds: ["Sett", "Ahri"],
+    });
+
+    expect(gate.applyPoolReorderRole).toHaveBeenCalledWith({
+      actor: { userId: "user-1", socketId: "sock-1" },
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "top",
+      championIds: ["Sett", "Ahri"],
+    });
+  });
+
+  it("maps a poolReorderRole gate rejection to canvasMutationError", async () => {
+    const { socket, handlers, gate } = installHandlers();
+    gate.applyPoolReorderRole.mockRejectedValue(new NotAuthorizedError());
+
+    await handlers.get("poolReorderRole")({
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "top",
+      championIds: [],
+    });
+
+    expect(socket.emit).toHaveBeenCalledWith("canvasMutationError", {
+      event: "poolReorderRole",
       code: "NOT_AUTHORIZED",
       message: "Not authorized",
     });

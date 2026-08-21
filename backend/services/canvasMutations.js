@@ -12,6 +12,7 @@ const sequelize = require("../config/database");
 const Pool = require("../models/Pool");
 const {
   applyPoolChampionOp,
+  applyPoolRoleOrder,
   RolePoolMapSchema,
   RoleSchema,
 } = require("@draft-sim/shared-types");
@@ -425,6 +426,29 @@ function createCanvasMutationGate({ io }) {
     });
   }
 
+  // Within-role ordering. Carries the whole bucket order rather than an index
+  // move, and the shared applyPoolRoleOrder treats it as an ORDER over what is
+  // actually in the bucket at commit time — so a champion another editor added
+  // while this was in flight is appended rather than erased, and one they
+  // removed stays removed. Sender EXCLUDED like the other champion ops: the
+  // actor already applied optimistically, and the pending-op queue replays it
+  // over any payload that lands first.
+  async function applyPoolReorderRole({ actor, canvasId, placementId, role, championIds }) {
+    if (!RoleSchema.safeParse(role).success) {
+      throw new InvalidMutationError("Invalid role");
+    }
+    if (
+      !Array.isArray(championIds) ||
+      championIds.some((id) => typeof id !== "string" || id.length === 0)
+    ) {
+      throw new InvalidMutationError("championIds must be an array of champion ids");
+    }
+    await mutatePoolChampions({
+      actor, canvasId, placementId,
+      mutate: (map) => applyPoolRoleOrder(map, role, championIds),
+    });
+  }
+
   // Overwrite-intent only (D4): import-from-saved. The overlay's commit is
   // diffs-as-ops and must NEVER route here.
   //
@@ -462,6 +486,7 @@ function createCanvasMutationGate({ io }) {
     relayGroupResize,
     applyPoolAddChampion,
     applyPoolRemoveChampion,
+    applyPoolReorderRole,
     applyPoolReplace,
     relayPoolMove,
   };

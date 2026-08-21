@@ -503,6 +503,12 @@ export const PoolChampionOpPayloadSchema = z.object({
   role: RoleSchema,
   championId: z.string().min(1),
 });
+export const PoolReorderPayloadSchema = z.object({
+  canvasId: z.string(),
+  placementId: z.string(),
+  role: RoleSchema,
+  championIds: z.array(z.string().min(1)),
+});
 export const PoolReplacePayloadSchema = z.object({
   canvasId: z.string(),
   placementId: z.string(),

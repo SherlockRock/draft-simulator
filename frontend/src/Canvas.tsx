@@ -293,6 +293,7 @@ import {
     commitPoolDrag,
     commitPoolRename,
     commitPoolReplace,
+    insertionIndexFromRects,
     poolDragPosition,
     poolGrabOffset,
     POOL_PORTRAIT_PX
@@ -2444,7 +2445,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             getPendingOps: (id) => pendingPoolOps.get(id) ?? [],
             setPendingOps: (id, ops) => pendingPoolOps.set(id, ops),
             pushPendingOp,
-            emit: ({ placementId: id, op: appliedOp }) =>
+            emit: ({ placementId: id, op: appliedOp }) => {
+                if (appliedOp.type === "reorder") {
+                    socketAccessor()?.emit("poolReorderRole", {
+                        canvasId: canvasId(),
+                        placementId: id,
+                        role: appliedOp.role,
+                        championIds: appliedOp.championIds
+                    });
+                    return;
+                }
                 socketAccessor()?.emit(
                     appliedOp.type === "add" ? "poolAddChampion" : "poolRemoveChampion",
                     {
@@ -2453,7 +2463,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         role: appliedOp.role,
                         championId: appliedOp.championId
                     }
-                )
+                );
+            }
         });
     };
 
@@ -4022,6 +4033,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // CanvasPoolCard's row divs, `data-pool-id` on the card root. Both must
     // resolve to count as a role-row target — anything else (empty canvas,
     // another card's header, off-card entirely) is `off-card`.
+    // Thin DOM reader over `insertionIndexFromRects` — the tiles carry
+    // data-champion-id in bucket order, and the "+" button deliberately does
+    // not, so slot indices line up with bucket indices with no adjustment.
+    const poolRowInsertionIndex = (roleRowEl: Element, clientX: number): number => {
+        const rects = Array.from(roleRowEl.querySelectorAll("[data-champion-id]")).map(
+            (tile) => {
+                const rect = tile.getBoundingClientRect();
+                return { left: rect.left, width: rect.width };
+            }
+        );
+        return insertionIndexFromRects(rects, clientX);
+    };
+
     const hitTestPoolDropTarget = (clientX: number, clientY: number): PoolDropTarget => {
         const el = document.elementFromPoint(clientX, clientY);
         const roleRowEl = el instanceof Element ? el.closest("[data-role]") : null;
@@ -4030,7 +4054,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const placementId = cardEl?.getAttribute("data-pool-id") ?? null;
         const role = roleAttr ? ROLES.find((r) => r === roleAttr) : undefined;
         if (roleRowEl && cardEl && placementId && role) {
-            return { kind: "role-row", placementId, role };
+            return {
+                kind: "role-row",
+                placementId,
+                role,
+                index: poolRowInsertionIndex(roleRowEl, clientX)
+            };
         }
         return { kind: "off-card" };
     };
@@ -7693,10 +7722,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 onOpenRolePicker={openPoolPicker}
                                 onOpenOverlay={() => setOverlayPlacement(pool)}
                                 onPortraitMouseDown={onPortraitMouseDown}
-                                dropHighlightRole={() => {
+                                dropPreview={() => {
                                     const state = championDragState();
                                     if (!state.armed || !state.result) return null;
-                                    if (state.result.kind !== "move") return null;
+                                    // Only the outcomes that actually place the
+                                    // champion somewhere draw a caret. A bare
+                                    // "remove" (dropped where it already sits in
+                                    // a row it was already flexed into) moves
+                                    // nothing in the target row, so a caret
+                                    // there would promise a reposition that
+                                    // never happens.
+                                    if (
+                                        state.result.kind !== "move" &&
+                                        state.result.kind !== "reorder"
+                                    ) {
+                                        return null;
+                                    }
                                     if (
                                         !state.target ||
                                         state.target.kind !== "role-row" ||
@@ -7704,7 +7745,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     ) {
                                         return null;
                                     }
-                                    return state.target.role;
+                                    return {
+                                        role: state.target.role,
+                                        index: state.target.index
+                                    };
                                 }}
                             />
                         )}

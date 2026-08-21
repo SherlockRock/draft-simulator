@@ -6,6 +6,7 @@ import {
     commitPoolRename,
     commitPoolReplace,
     flexRolesByChampion,
+    insertionIndexFromRects,
     poolChampionIsAvailable,
     poolChampionTotal,
     poolDragPosition,
@@ -832,5 +833,34 @@ describe("poolRoleGridEntries", () => {
         // picks, none of which are the two bucket ids above.
         const remainder = entries.slice(2).map((e) => e.id);
         expect(remainder).toEqual(championsInRole("mid").filter((id) => id !== "Aatrox"));
+    });
+});
+
+describe("insertionIndexFromRects", () => {
+    // Three 40px tiles at 0, 40, 80 — midpoints 20, 60, 100.
+    const rects = [
+        { left: 0, width: 40 },
+        { left: 40, width: 40 },
+        { left: 80, width: 40 }
+    ];
+
+    it("names slot 0 anywhere left of the first tile's midpoint", () => {
+        expect(insertionIndexFromRects(rects, -10)).toBe(0);
+        expect(insertionIndexFromRects(rects, 19)).toBe(0);
+    });
+
+    it("flips at each midpoint, not at the tile borders", () => {
+        expect(insertionIndexFromRects(rects, 21)).toBe(1);
+        expect(insertionIndexFromRects(rects, 59)).toBe(1);
+        expect(insertionIndexFromRects(rects, 61)).toBe(2);
+    });
+
+    it("names the trailing slot beyond the last midpoint", () => {
+        expect(insertionIndexFromRects(rects, 101)).toBe(3);
+        expect(insertionIndexFromRects(rects, 9999)).toBe(3);
+    });
+
+    it("an empty row has exactly one slot", () => {
+        expect(insertionIndexFromRects([], 42)).toBe(0);
     });
 });

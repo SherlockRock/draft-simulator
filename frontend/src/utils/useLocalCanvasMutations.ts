@@ -938,9 +938,10 @@ export const localDeletePool = (placementId: string) => {
 };
 
 /**
- * Applies a single add/remove through the SHARED `applyPoolChampionOp`
- * helper (design D4) — never reimplement the dedupe/no-op semantics here.
- * Version bumps on every applied op, mirroring the server's row-lock bump.
+ * Applies a single add/remove/reorder through the SHARED
+ * `applyPoolChampionOp` helper (design D4) — never reimplement the
+ * dedupe/no-op/ordering semantics here. Version bumps on every applied op,
+ * mirroring the server's row-lock bump.
  */
 export const localPoolChampionOp = (data: {
     placementId: string;

@@ -43,6 +43,14 @@ const remove = (role: PoolChampionOp["role"], championId: string): PoolChampionO
     role,
     championId
 });
+const reorder = (
+    role: PoolChampionOp["role"],
+    championIds: string[]
+): PoolChampionOp => ({
+    type: "reorder",
+    role,
+    championIds
+});
 
 describe("opReflected", () => {
     it("reports an add as reflected once the map contains the champion", () => {
@@ -59,6 +67,28 @@ describe("opReflected", () => {
 
     it("is role-scoped — the same champion in another role does not reflect", () => {
         expect(opReflected(makeMap({ top: ["Ahri"] }), add("mid", "Ahri"))).toBe(false);
+    });
+
+    it("reports a reorder as reflected once the bucket already reads that way", () => {
+        expect(
+            opReflected(makeMap({ mid: ["Zed", "Ahri"] }), reorder("mid", ["Zed", "Ahri"]))
+        ).toBe(true);
+        expect(
+            opReflected(makeMap({ mid: ["Ahri", "Zed"] }), reorder("mid", ["Zed", "Ahri"]))
+        ).toBe(false);
+    });
+
+    // A reorder is an order over what's THERE, so a payload carrying a champion
+    // the op never mentioned still reflects it as long as the mentioned ids sit
+    // in the requested order — otherwise the op would replay forever, and each
+    // replay would shove the collaborator's champion back to the end.
+    it("treats a reorder as reflected when an unmentioned champion trails it", () => {
+        expect(
+            opReflected(
+                makeMap({ mid: ["Zed", "Ahri", "Kaisa"] }),
+                reorder("mid", ["Zed", "Ahri"])
+            )
+        ).toBe(true);
     });
 });
 
@@ -91,6 +121,41 @@ describe("pushPendingOp", () => {
         const pending = [add("mid", "Ahri")];
         pushPendingOp(pending, remove("mid", "Ahri"));
         expect(pending).toEqual([add("mid", "Ahri")]);
+    });
+
+    it("collapses a reorder onto the previous reorder of the same role", () => {
+        const pending = pushPendingOp(
+            [reorder("mid", ["Ahri", "Zed"])],
+            reorder("mid", ["Zed", "Ahri"])
+        );
+        expect(pending).toEqual([reorder("mid", ["Zed", "Ahri"])]);
+    });
+
+    it("keeps reorders of different roles apart", () => {
+        const pending = pushPendingOp(
+            [reorder("mid", ["Ahri", "Zed"])],
+            reorder("top", ["Gnar"])
+        );
+        expect(pending).toEqual([reorder("mid", ["Ahri", "Zed"]), reorder("top", ["Gnar"])]);
+    });
+
+    // Membership and order are independent concerns: collapsing across them
+    // would drop one of the two intents entirely.
+    it("a reorder does not collapse a pending add in the same role, or vice versa", () => {
+        const withAdd = pushPendingOp([reorder("mid", ["Ahri"])], add("mid", "Zed"));
+        expect(withAdd).toEqual([reorder("mid", ["Ahri"]), add("mid", "Zed")]);
+        const withReorder = pushPendingOp([add("mid", "Zed")], reorder("mid", ["Ahri"]));
+        expect(withReorder).toEqual([add("mid", "Zed"), reorder("mid", ["Ahri"])]);
+    });
+
+    it("preserves emission order, which replay depends on", () => {
+        // add appends, so [add Zed, reorder [Zed, Ahri]] and the reverse land
+        // on different buckets — the queue must not reshuffle them.
+        const pending = pushPendingOp(
+            pushPendingOp([], add("mid", "Zed")),
+            reorder("mid", ["Zed", "Ahri"])
+        );
+        expect(pending.map((op) => op.type)).toEqual(["add", "reorder"]);
     });
 });
 

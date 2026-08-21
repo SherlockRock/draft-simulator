@@ -50,10 +50,12 @@ type CanvasPoolCardProps = {
         role: Role,
         championId: string
     ) => void;
-    // Non-null only for the row currently previewed as an armed champion
-    // drag's landing target (resolved via `resolvePoolDrop`, so it can never
-    // highlight a row the drop won't actually land on).
-    dropHighlightRole: () => Role | null;
+    // Non-null only for the row+slot currently previewed as an armed champion
+    // drag's landing target. `index` is the SAME insertion index
+    // `resolvePoolDrop` consumes, so the caret cannot point at a slot the drop
+    // won't use — that identity is the whole reason the resolver takes an
+    // index instead of re-deriving one at commit time.
+    dropPreview: () => { role: Role; index: number } | null;
 };
 
 type PoolNameInputProps = {
@@ -112,6 +114,19 @@ const PoolNameInput: Component<PoolNameInputProps> = (props) => {
         />
     );
 };
+
+/**
+ * The insertion marker painted between two portraits during a champion drag.
+ * Full tile height so it reads as a slot rather than a stray line, and sized
+ * in world px like everything else on the card (§7: the card is pure
+ * world-space, so this scales with zoom instead of staying screen-constant).
+ */
+const DropCaret: Component = () => (
+    <div
+        class="shrink-0 rounded-full bg-darius-purple-bright"
+        style={{ width: "3px", height: `${POOL_PORTRAIT_PX}px` }}
+    />
+);
 
 export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
     const championById = createMemo(() => {
@@ -185,13 +200,19 @@ export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
             <For each={ROLES}>
                 {(role) => {
                     const bucket = () => props.placement.Pool.champions[role];
+                    // The caret slot for THIS row, or null when the drag is
+                    // aimed elsewhere.
+                    const caretIndex = (): number | null => {
+                        const preview = props.dropPreview();
+                        return preview && preview.role === role ? preview.index : null;
+                    };
                     return (
                         <div
                             data-role={role}
                             class="flex min-h-[48px] items-start gap-2 border-b border-darius-border/40 px-3 py-1.5 last:rounded-b-lg last:border-b-0"
                             classList={{
                                 "bg-darius-purple-bright/10 ring-1 ring-inset ring-darius-purple-bright":
-                                    props.dropHighlightRole() === role
+                                    caretIndex() !== null
                             }}
                         >
                             {/* RoleIcon is already exported from
@@ -214,8 +235,11 @@ export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
                                 />
                             </div>
                             <div class="flex flex-wrap gap-1">
+                                <Show when={caretIndex() === 0}>
+                                    <DropCaret />
+                                </Show>
                                 <For each={bucket()}>
-                                    {(championId) => {
+                                    {(championId, tileIndex) => {
                                         const champ = () =>
                                             championById().get(championId);
                                         const flexed = () => flexRoles().get(championId);
@@ -230,6 +254,7 @@ export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
                                             return `${name} — also in ${others}`;
                                         };
                                         return (
+                                          <>
                                             <div
                                                 class="group relative overflow-hidden rounded"
                                                 data-champion-id={championId}
@@ -285,6 +310,17 @@ export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
                                                     )}
                                                 </Show>
                                             </div>
+                                            {/* The caret for the slot AFTER
+                                                this tile. A fragment keeps it a
+                                                sibling, so it never lands
+                                                inside a [data-champion-id]
+                                                element the hit-test measures. */}
+                                            <Show
+                                                when={caretIndex() === tileIndex() + 1}
+                                            >
+                                                <DropCaret />
+                                            </Show>
+                                          </>
                                         );
                                     }}
                                 </For>

@@ -877,6 +877,134 @@ describe("pool champion ops — applyPoolAddChampion / applyPoolRemoveChampion",
   });
 });
 
+describe("pool champion ops — applyPoolReorderRole", () => {
+  it("permutes the bucket, bumps version, and excludes the sender from the broadcast", async () => {
+    mockPermissions({ "c-1": "edit" });
+    mockTransaction();
+    vi.spyOn(CanvasPoolPlacement, "findOne").mockResolvedValue(placementRow());
+    const pool = poolRow({
+      champions: { ...EMPTY_ROLE_POOL_MAP, top: ["Ahri", "Gnar", "Sett"] },
+    });
+    vi.spyOn(Pool, "findByPk").mockResolvedValue(pool);
+    const { gate, emit, exceptEmit } = buildGate();
+
+    await gate.applyPoolReorderRole({
+      actor: ACTOR,
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "top",
+      championIds: ["Sett", "Ahri", "Gnar"],
+    });
+
+    expect(pool.champions.top).toEqual(["Sett", "Ahri", "Gnar"]);
+    expect(pool.version).toBe(1);
+    expect(exceptEmit).toHaveBeenCalled();
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  // The reason the op carries an ORDER rather than an index move: it is
+  // resolved against whatever the bucket holds AT COMMIT TIME, so a champion
+  // another editor added while this was in flight is not erased by it.
+  it("appends a champion the payload never mentioned instead of dropping it", async () => {
+    mockPermissions({ "c-1": "edit" });
+    mockTransaction();
+    vi.spyOn(CanvasPoolPlacement, "findOne").mockResolvedValue(placementRow());
+    const pool = poolRow({
+      // Kaisa landed between the client reading the bucket and this commit.
+      champions: { ...EMPTY_ROLE_POOL_MAP, top: ["Ahri", "Gnar", "Kaisa"] },
+    });
+    vi.spyOn(Pool, "findByPk").mockResolvedValue(pool);
+    const { gate } = buildGate();
+
+    await gate.applyPoolReorderRole({
+      actor: ACTOR,
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "top",
+      championIds: ["Gnar", "Ahri"],
+    });
+
+    expect(pool.champions.top).toEqual(["Gnar", "Ahri", "Kaisa"]);
+  });
+
+  it("drops payload ids the bucket no longer holds (a concurrent remove stays removed)", async () => {
+    mockPermissions({ "c-1": "edit" });
+    mockTransaction();
+    vi.spyOn(CanvasPoolPlacement, "findOne").mockResolvedValue(placementRow());
+    const pool = poolRow({ champions: { ...EMPTY_ROLE_POOL_MAP, top: ["Gnar"] } });
+    vi.spyOn(Pool, "findByPk").mockResolvedValue(pool);
+    const { gate } = buildGate();
+
+    await gate.applyPoolReorderRole({
+      actor: ACTOR,
+      canvasId: "c-1",
+      placementId: "pl-1",
+      role: "top",
+      championIds: ["Ahri", "Gnar"],
+    });
+
+    expect(pool.champions.top).toEqual(["Gnar"]);
+  });
+
+  it("rejects a bad role and a non-array payload before touching the DB", async () => {
+    mockPermissions({ "c-1": "edit" });
+    const findOne = vi.spyOn(CanvasPoolPlacement, "findOne");
+    const { gate } = buildGate();
+
+    await expect(
+      gate.applyPoolReorderRole({
+        actor: ACTOR,
+        canvasId: "c-1",
+        placementId: "pl-1",
+        role: "botlane",
+        championIds: ["Ahri"],
+      }),
+    ).rejects.toThrow(InvalidMutationError);
+
+    await expect(
+      gate.applyPoolReorderRole({
+        actor: ACTOR,
+        canvasId: "c-1",
+        placementId: "pl-1",
+        role: "top",
+        championIds: "Ahri",
+      }),
+    ).rejects.toThrow(InvalidMutationError);
+
+    await expect(
+      gate.applyPoolReorderRole({
+        actor: ACTOR,
+        canvasId: "c-1",
+        placementId: "pl-1",
+        role: "top",
+        championIds: ["Ahri", ""],
+      }),
+    ).rejects.toThrow(InvalidMutationError);
+
+    expect(findOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects an actor without edit permission with NotAuthorizedError, no write", async () => {
+    mockPermissions({ "c-1": "view" });
+    const findByPk = vi.spyOn(Pool, "findByPk");
+    const { gate, emit, exceptEmit } = buildGate();
+
+    await expect(
+      gate.applyPoolReorderRole({
+        actor: ACTOR,
+        canvasId: "c-1",
+        placementId: "pl-1",
+        role: "top",
+        championIds: ["Ahri"],
+      }),
+    ).rejects.toThrow(NotAuthorizedError);
+
+    expect(findByPk).not.toHaveBeenCalled();
+    expect(emit).not.toHaveBeenCalled();
+    expect(exceptEmit).not.toHaveBeenCalled();
+  });
+});
+
 describe("pool champion ops — applyPoolReplace", () => {
   it("swaps the whole champions map", async () => {
     mockPermissions({ "c-1": "edit" });
