@@ -174,6 +174,44 @@ test("getMatchIdsByPuuid() builds correct URL with query params", async () => {
   assert.match(url, /count=50/);
 });
 
+test("getMatchTimeline() calls Match-V5 timeline endpoint", async () => {
+  const fetch = stubFetch([{ status: 200, body: { info: { frames: [] } } }]);
+  const client = new RiotClient({ apiKey: "k", fetch, sleep: noopSleep });
+  await client.getMatchTimeline("NA1_5012345678", "americas");
+  assert.match(
+    fetch.calls[0].url,
+    /^https:\/\/americas\.api\.riotgames\.com\/lol\/match\/v5\/matches\/NA1_5012345678\/timeline$/,
+  );
+});
+
+test("getLeagueEntries() calls entries endpoint with page, platform-routed", async () => {
+  const fetch = stubFetch([{ status: 200, body: [] }]);
+  const client = new RiotClient({ apiKey: "k", fetch, sleep: noopSleep });
+  await client.getLeagueEntries({
+    queue: "RANKED_SOLO_5x5",
+    tier: "DIAMOND",
+    division: "I",
+    page: 3,
+    platform: "euw1",
+  });
+  assert.match(
+    fetch.calls[0].url,
+    /^https:\/\/euw1\.api\.riotgames\.com\/lol\/league\/v4\/entries\/RANKED_SOLO_5x5\/DIAMOND\/I\?page=3$/,
+  );
+});
+
+test("getLeagueEntries() defaults to page 1", async () => {
+  const fetch = stubFetch([{ status: 200, body: [] }]);
+  const client = new RiotClient({ apiKey: "k", fetch, sleep: noopSleep });
+  await client.getLeagueEntries({
+    queue: "RANKED_SOLO_5x5",
+    tier: "DIAMOND",
+    division: "II",
+    platform: "na1",
+  });
+  assert.match(fetch.calls[0].url, /entries\/RANKED_SOLO_5x5\/DIAMOND\/II\?page=1$/);
+});
+
 test("getApexEntries() calls correct league endpoint per tier", async () => {
   const fetch = stubFetch([
     { status: 200, body: { entries: [] } },

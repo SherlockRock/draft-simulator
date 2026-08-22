@@ -153,6 +153,36 @@ export class RiotClient {
   }
 
   /**
+   * Match-V5: match timeline (per-minute frames + events).
+   * @param {string} matchId   e.g. "NA1_5012345678"
+   * @param {string} continent  "americas" | "europe" | "asia" | "sea"
+   */
+  getMatchTimeline(matchId, continent) {
+    return this.get(`/lol/match/v5/matches/${matchId}/timeline`, {
+      routing: "continent",
+      region: continent,
+    });
+  }
+
+  /**
+   * League-V4 paged entries for non-apex tiers — returns LeagueEntryDTO[].
+   * Apex tiers (CHALLENGER/GRANDMASTER/MASTER) use getApexEntries instead.
+   * @param {object} opts
+   * @param {string} opts.queue      e.g. "RANKED_SOLO_5x5"
+   * @param {string} opts.tier       e.g. "DIAMOND"
+   * @param {string} opts.division   "I".."IV"
+   * @param {number} [opts.page]     1-based, defaults to 1
+   * @param {string} opts.platform   e.g. "na1"
+   */
+  getLeagueEntries({ queue, tier, division, page = 1, platform }) {
+    return this.get(`/lol/league/v4/entries/${queue}/${tier}/${division}`, {
+      routing: "platform",
+      region: platform,
+      query: { page },
+    });
+  }
+
+  /**
    * League-V4 apex tiers (CHALLENGER / GRANDMASTER / MASTER) — single-page LeagueListDTO.
    * @param {object} opts
    * @param {"CHALLENGER" | "GRANDMASTER" | "MASTER"} opts.tier
