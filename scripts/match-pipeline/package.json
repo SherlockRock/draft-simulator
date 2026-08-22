@@ -1,0 +1,13 @@
+{
+  "name": "@firstpick/match-pipeline",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Standalone Riot Match-V5 crawler for custom-model training data. Own deps on purpose — no app-DB or Sequelize entanglement.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test *.test.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.16.0"
+  }
+}
