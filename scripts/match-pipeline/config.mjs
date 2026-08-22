@@ -69,6 +69,7 @@ export function loadConfig(env = process.env) {
     apexMatchIdPages: 3, // LoLDraftAI's high/low-elo asymmetry: depth for apex,
     diamondMatchIdPages: 1, // breadth (player count) for Diamond
     matchIdsPerPage: 100,
+    matchIdBatchSize: int(env, "COLLECTOR_MATCH_ID_BATCH", 25), // summoners polled per cycle
     backlogPauseThreshold: int(env, "COLLECTOR_BACKLOG_PAUSE", 50_000),
 
     // Processor loop
