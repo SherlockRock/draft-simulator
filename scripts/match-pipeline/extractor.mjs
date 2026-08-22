@@ -11,7 +11,7 @@
  * every row so exports can select by shape instead of re-crawling.
  */
 
-export const EXTRACTOR_VERSION = 2;
+export const EXTRACTOR_VERSION = 3;
 
 export const SNAPSHOT_TIMESTAMPS = [600_000, 900_000, 1_200_000, 1_500_000, 1_800_000];
 
@@ -62,7 +62,7 @@ export function extractMatch(matchDto, timelineDto) {
       // adds later (horde/grubs, atakhan, ...).
       objectives: teamDto(teamId).objectives,
       dragonSubtypes: [],
-      platesDestroyed: 0,
+      platesLost: 0,
       participants: {},
       teamStats: {},
     };
@@ -221,9 +221,12 @@ function applyEvent(event, kda, byParticipantId, teamStats, { teams, endgameOf }
       );
     } else if (event.monsterType === "RIFTHERALD") bucket.riftHeraldKills++;
   } else if (event.type === "TURRET_PLATE_DESTROYED") {
-    // Same as-is teamId bucketing as BUILDING_KILL.
+    // event.teamId is the plate's OWNER (killerId sits on the enemy team), so
+    // this counts plates LOST. In the current game plating exists on all lane
+    // turrets, so a razed team can lose up to 45 — not the classic 15.
+    // (challenges.turretPlatesTaken in the match DTO is inflated; don't use it.)
     const team = teams[String(event.teamId)];
-    if (team) team.platesDestroyed++;
+    if (team) team.platesLost++;
   } else if (event.type === "SKILL_LEVEL_UP") {
     const endgame = endgameOf(event.participantId);
     if (endgame) endgame.skillOrder += String(event.skillSlot);

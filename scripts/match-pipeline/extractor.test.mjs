@@ -207,8 +207,8 @@ test("skip: pre-11.4 patch (assertion — startTime makes this unreachable)", ()
 
 // ---- extractor v2: widened field set ----
 
-test("v2: EXTRACTOR_VERSION is 2 and snapshots include the 10-minute mark", () => {
-  assert.equal(EXTRACTOR_VERSION, 2);
+test("v2: EXTRACTOR_VERSION is 3 and snapshots include the 10-minute mark", () => {
+  assert.equal(EXTRACTOR_VERSION, 3);
   assert.deepEqual(SNAPSHOT_TIMESTAMPS, [600000, 900000, 1200000, 1500000, 1800000]);
   const { record } = extractMatch(buildMatchDto(), buildTimelineDto());
   const at10 = record.teams["100"].participants.TOP.timeline[600000];
@@ -278,9 +278,10 @@ test("v2: team objectives copied raw, dragon subtypes ordered, plates counted", 
   assert.deepEqual(t200.objectives.tower, { first: false, kills: 3 });
   assert.deepEqual(t100.dragonSubtypes, ["HEXTECH_DRAGON", "INFERNAL_DRAGON"]);
   assert.deepEqual(t200.dragonSubtypes, ["ELDER_DRAGON"]);
-  // Reference semantics: plates bucketed by the event's teamId as-is.
-  assert.equal(t200.platesDestroyed, 2);
-  assert.equal(t100.platesDestroyed, 1);
+  // Event teamId is the plate's OWNER (verified live: killerId sits on the
+  // opposing team), so the count is plates LOST by that team.
+  assert.equal(t200.platesLost, 2);
+  assert.equal(t100.platesLost, 1);
 });
 
 test("v2: surrender flags surface at match level", () => {
