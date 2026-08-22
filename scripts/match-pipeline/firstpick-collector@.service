@@ -1,0 +1,22 @@
+# Template unit: one collector per region.
+#   sudo cp firstpick-collector@.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now firstpick-collector@na1 firstpick-collector@euw1 firstpick-collector@kr
+[Unit]
+Description=First Pick match collector (%i)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=collector
+EnvironmentFile=/etc/firstpick-collector/env
+Environment=COLLECTOR_ENV_FILE=/etc/firstpick-collector/env
+WorkingDirectory=/opt/draft-simulator/scripts/match-pipeline
+ExecStart=/usr/bin/node collector.mjs --region %i
+Restart=always
+RestartSec=10
+# SIGTERM drains the in-flight batch; give it time before SIGKILL.
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

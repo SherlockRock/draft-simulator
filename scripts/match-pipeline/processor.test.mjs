@@ -150,6 +150,28 @@ test("an empty queue makes no client calls", async () => {
   assert.equal(client.calls.length, 0);
 });
 
+test("a key-manager abort leaves claimed rows pending for the next run", async () => {
+  await seedPending(["NA1_1", "NA1_2"]);
+  const client = {
+    async getMatch() {
+      throw new Error("key-manager aborted");
+    },
+    async getMatchTimeline() {
+      throw new Error("key-manager aborted");
+    },
+  };
+  const result = await runProcessorCycle({
+    client,
+    db,
+    config: loadConfig({}),
+    region: "na1",
+    logger: silentLogger,
+  });
+  assert.equal(result.failed, 0);
+  const { rows } = await db.query("SELECT count(*)::int AS n FROM matches WHERE status = 'pending'");
+  assert.equal(rows[0].n, 2);
+});
+
 test("bounded concurrency: in-flight matches never exceed processorConcurrency", async () => {
   const ids = Array.from({ length: 6 }, (_, i) => `NA1_${i}`);
   await seedPending(ids);

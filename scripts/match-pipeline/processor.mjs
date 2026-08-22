@@ -51,6 +51,11 @@ export async function runProcessorCycle({ client, db, config, region, logger }) 
           counts.fetched++;
         }
       } catch (err) {
+        if (/key-manager aborted/.test(err.message)) {
+          // Shutdown while paused on an expired key — leave the row pending
+          // so the next run re-claims it instead of burying it as failed.
+          return;
+        }
         await markMatchFailed(db, matchId, String(err.message).slice(0, 500));
         counts.failed++;
         logger.warn?.(`processor ${region}: ${matchId} failed: ${err.message}`);
