@@ -1,0 +1,21 @@
+# Discord key bot: stall alerts + reply-with-key intake.
+#   sudo cp firstpick-keybot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now firstpick-keybot
+# Requires DISCORD_BOT_TOKEN / DISCORD_CHANNEL_ID / DISCORD_USER_ID in the env file.
+[Unit]
+Description=First Pick collector key bot (Discord)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=collector
+EnvironmentFile=/etc/firstpick-collector/env
+Environment=COLLECTOR_ENV_FILE=/etc/firstpick-collector/env
+WorkingDirectory=/opt/draft-simulator/scripts/match-pipeline
+ExecStart=/usr/bin/node key-bot.mjs
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
