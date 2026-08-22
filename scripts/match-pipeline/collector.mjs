@@ -20,7 +20,7 @@
 import { parseArgs } from "node:util";
 import { loadConfig } from "./config.mjs";
 import { createDb, migrate } from "./db.mjs";
-import { TokenBucket, CompositeRateLimiter } from "./rate-limiter.mjs";
+import { SlidingWindowBucket, CompositeRateLimiter } from "./rate-limiter.mjs";
 import { RiotClient } from "./riot-client.mjs";
 import { KeyManager, wrapClientWithKeyRotation } from "./key-manager.mjs";
 import { runLadderOnce } from "./ladder.mjs";
@@ -65,8 +65,10 @@ if (!apiKey) {
 }
 keyManager.currentKey = apiKey;
 
+// Sliding-window buckets — Riot counts requests per window; a refill-style
+// token bucket double-spends the window at boot and 429-oscillates.
 const buckets = [...config.appBuckets, config.matchMethodBucket].map(
-  ([capacity, windowMs]) => new TokenBucket(capacity, windowMs),
+  ([capacity, windowMs]) => new SlidingWindowBucket(capacity, windowMs),
 );
 const rawClient = new RiotClient({
   apiKey,

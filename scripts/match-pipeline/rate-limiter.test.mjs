@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { TokenBucket, CompositeRateLimiter } from "./rate-limiter.mjs";
+import { TokenBucket, SlidingWindowBucket, CompositeRateLimiter } from "./rate-limiter.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -84,4 +84,62 @@ test("CompositeRateLimiter consumes from every bucket", async () => {
   // Both buckets should have decremented
   assert.ok(a.available() < 4);
   assert.ok(b.available() < 4);
+});
+// ---- SlidingWindowBucket (matches Riot's window-count semantics) ----
+
+test("SlidingWindowBucket allows capacity requests instantly", async () => {
+  const b = new SlidingWindowBucket(3, 500, { paddingMs: 0 });
+  const start = Date.now();
+  await b.acquire();
+  await b.acquire();
+  await b.acquire();
+  assert.ok(Date.now() - start < 50);
+});
+
+test("SlidingWindowBucket blocks request capacity+1 until the window slides", async () => {
+  const b = new SlidingWindowBucket(3, 300, { paddingMs: 0 });
+  const start = Date.now();
+  await b.acquire();
+  await b.acquire();
+  await b.acquire();
+  await b.acquire(); // must wait for the first stamp to leave the window
+  const elapsed = Date.now() - start;
+  assert.ok(elapsed >= 280, `expected >=280ms, got ${elapsed}ms`);
+});
+
+test("SlidingWindowBucket never exceeds capacity in any window (no refill burst)", async () => {
+  // The TokenBucket defect this class replaces: start-full + continuous refill
+  // let ~2x capacity land inside one provider window at boot.
+  const b = new SlidingWindowBucket(2, 200, { paddingMs: 0 });
+  const times = [];
+  for (let i = 0; i < 6; i++) {
+    await b.acquire();
+    times.push(Date.now());
+  }
+  for (let i = 0; i + 2 < times.length; i++) {
+    const spread = times[i + 2] - times[i];
+    assert.ok(spread >= 180, `requests ${i}..${i + 2} landed ${spread}ms apart (<180ms)`);
+  }
+});
+
+test("SlidingWindowBucket padding widens the effective window", async () => {
+  const b = new SlidingWindowBucket(1, 100, { paddingMs: 150 });
+  const start = Date.now();
+  await b.acquire();
+  await b.acquire();
+  const elapsed = Date.now() - start;
+  assert.ok(elapsed >= 230, `expected >=230ms, got ${elapsed}ms`);
+});
+
+test("SlidingWindowBucket works inside CompositeRateLimiter", async () => {
+  const limiter = new CompositeRateLimiter([
+    new SlidingWindowBucket(2, 150, { paddingMs: 0 }),
+    new SlidingWindowBucket(10, 1000, { paddingMs: 0 }),
+  ]);
+  const start = Date.now();
+  await limiter.acquire();
+  await limiter.acquire();
+  await limiter.acquire();
+  const elapsed = Date.now() - start;
+  assert.ok(elapsed >= 130, `expected >=130ms, got ${elapsed}ms`);
 });
