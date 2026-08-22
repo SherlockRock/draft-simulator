@@ -1,0 +1,23 @@
+# Live collector dashboard on the physical monitor (tty1, no X).
+#   sudo cp firstpick-dashboard.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now firstpick-dashboard
+[Unit]
+Description=First Pick collector dashboard (tty1)
+Conflicts=getty@tty1.service
+After=getty@tty1.service network-online.target postgresql.service
+
+[Service]
+EnvironmentFile=/etc/firstpick-collector/env
+WorkingDirectory=/opt/draft-simulator/scripts/match-pipeline
+ExecStart=/usr/bin/node dashboard.mjs
+StandardInput=tty
+StandardOutput=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

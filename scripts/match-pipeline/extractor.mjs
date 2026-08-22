@@ -11,9 +11,13 @@
  * every row so exports can select by shape instead of re-crawling.
  */
 
-export const EXTRACTOR_VERSION = 1;
+export const EXTRACTOR_VERSION = 2;
 
-export const SNAPSHOT_TIMESTAMPS = [900_000, 1_200_000, 1_500_000, 1_800_000];
+export const SNAPSHOT_TIMESTAMPS = [600_000, 900_000, 1_200_000, 1_500_000, 1_800_000];
+
+// The corpus gate stays the 15-min frame: a shorter game is a remake-tier
+// skip, and every game with a 15-min frame necessarily has the 10-min one.
+const REQUIRED_TIMESTAMP = 900_000;
 
 const POSITIONS = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
 const MIN_DURATION_SEC = 900;
@@ -54,6 +58,11 @@ export function extractMatch(matchDto, timelineDto) {
     teams[String(teamId)] = {
       win: teamDto(teamId).win,
       bans: (teamDto(teamId).bans ?? []).map((b) => b.championId),
+      // Raw copy: small, and automatically captures objective types Riot
+      // adds later (horde/grubs, atakhan, ...).
+      objectives: teamDto(teamId).objectives,
+      dragonSubtypes: [],
+      platesDestroyed: 0,
       participants: {},
       teamStats: {},
     };
@@ -70,8 +79,28 @@ export function extractMatch(matchDto, timelineDto) {
       totalDamageShieldedOnTeammates: p.totalDamageShieldedOnTeammates,
       totalDamageTaken: p.totalDamageTaken,
       damageSelfMitigated: p.damageSelfMitigated,
+      endgame: {
+        kills: p.kills,
+        deaths: p.deaths,
+        assists: p.assists,
+        champLevel: p.champLevel,
+        creepScore: (p.totalMinionsKilled ?? 0) + (p.neutralMinionsKilled ?? 0),
+        goldEarned: p.goldEarned,
+        goldSpent: p.goldSpent,
+        visionScore: p.visionScore,
+        totalDamageDealtToChampions: p.totalDamageDealtToChampions,
+        items: [p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, p.item6],
+        summonerSpells: [p.summoner1Id, p.summoner2Id],
+        perks: p.perks,
+        skillOrder: "",
+        itemPurchases: [],
+      },
     };
   }
+  const endgameOf = (pid) => {
+    const p = byParticipantId[pid];
+    return p ? teams[String(p.teamId)].participants[p.teamPosition].endgame : null;
+  };
 
   // Walk frames in order, accumulating K/D/A and objective events, snapshotting
   // at the relevant timestamps. Frame timestamps are rounded to the frame
@@ -95,7 +124,9 @@ export function extractMatch(matchDto, timelineDto) {
   }
 
   for (const frame of timelineDto.info.frames) {
-    for (const event of frame.events ?? []) applyEvent(event, kda, byParticipantId, runningTeamStats);
+    for (const event of frame.events ?? []) {
+      applyEvent(event, kda, byParticipantId, runningTeamStats, { teams, endgameOf });
+    }
 
     const timestamp = Math.round(frame.timestamp / frameInterval) * frameInterval;
     if (!SNAPSHOT_TIMESTAMPS.includes(timestamp)) continue;
@@ -124,7 +155,7 @@ export function extractMatch(matchDto, timelineDto) {
     }
   }
 
-  if (!(SNAPSHOT_TIMESTAMPS[0] in teams["100"].teamStats)) {
+  if (!(REQUIRED_TIMESTAMP in teams["100"].teamStats)) {
     return skip("missing 15-min frame");
   }
 
@@ -151,12 +182,14 @@ export function extractMatch(matchDto, timelineDto) {
       patchMinor,
       gameDurationSec: info.gameDuration,
       gameStartTimestampMs: info.gameStartTimestamp,
+      gameEndedInSurrender: info.participants[0]?.gameEndedInSurrender ?? false,
+      gameEndedInEarlySurrender: info.participants[0]?.gameEndedInEarlySurrender ?? false,
       teams,
     },
   };
 }
 
-function applyEvent(event, kda, byParticipantId, teamStats) {
+function applyEvent(event, kda, byParticipantId, teamStats, { teams, endgameOf }) {
   if (event.type === "CHAMPION_KILL") {
     if (event.killerId && kda[event.killerId]) {
       kda[event.killerId].kills++;
@@ -181,7 +214,21 @@ function applyEvent(event, kda, byParticipantId, teamStats) {
     const bucket = teamStats[event.killerTeamId];
     if (!bucket) return;
     if (event.monsterType === "BARON_NASHOR") bucket.baronKills++;
-    else if (event.monsterType === "DRAGON") bucket.dragonKills++;
-    else if (event.monsterType === "RIFTHERALD") bucket.riftHeraldKills++;
+    else if (event.monsterType === "DRAGON") {
+      bucket.dragonKills++;
+      teams[String(event.killerTeamId)]?.dragonSubtypes.push(
+        event.monsterSubType ?? event.monsterType,
+      );
+    } else if (event.monsterType === "RIFTHERALD") bucket.riftHeraldKills++;
+  } else if (event.type === "TURRET_PLATE_DESTROYED") {
+    // Same as-is teamId bucketing as BUILDING_KILL.
+    const team = teams[String(event.teamId)];
+    if (team) team.platesDestroyed++;
+  } else if (event.type === "SKILL_LEVEL_UP") {
+    const endgame = endgameOf(event.participantId);
+    if (endgame) endgame.skillOrder += String(event.skillSlot);
+  } else if (event.type === "ITEM_PURCHASED") {
+    const endgame = endgameOf(event.participantId);
+    if (endgame) endgame.itemPurchases.push([event.timestamp, event.itemId]);
   }
 }

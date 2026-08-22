@@ -22,6 +22,7 @@ export async function collectStatus(db, { regions, staleMinutes = 30 }) {
       db.query(
         `SELECT
            count(*) FILTER (WHERE updated_at > now() - interval '24 hours')::int AS last24h,
+           count(*) FILTER (WHERE updated_at > now() - interval '1 hour')::int AS lasthour,
            count(*) FILTER (WHERE updated_at > now() - make_interval(mins => $2))::int AS lastStale
          FROM matches WHERE region = $1 AND status = 'fetched'`,
         [region, staleMinutes],
@@ -39,6 +40,7 @@ export async function collectStatus(db, { regions, staleMinutes = 30 }) {
       summonersErrored: summonerRows.rows[0].errored,
       matches,
       fetchedLast24h: recent.rows[0].last24h,
+      fetchedLastHour: recent.rows[0].lasthour,
       patchMix: patchRows.rows.map((r) => ({
         patch: `${r.patch_major}.${r.patch_minor}`,
         count: r.n,

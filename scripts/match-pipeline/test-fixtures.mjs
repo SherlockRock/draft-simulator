@@ -21,8 +21,47 @@ export function buildParticipant({ participantId, teamId, teamPosition, champion
     totalDamageShieldedOnTeammates: 400 + participantId,
     totalDamageTaken: 15000 + participantId,
     damageSelfMitigated: 9000 + participantId,
+    // Endgame fields (extractor v2)
+    kills: participantId,
+    deaths: 10 - (participantId % 10),
+    assists: participantId * 2,
+    champLevel: 8 + participantId,
+    goldEarned: 10_000 + participantId,
+    goldSpent: 9_000 + participantId,
+    visionScore: 30 + participantId,
+    totalMinionsKilled: 200 + participantId,
+    neutralMinionsKilled: 20 + participantId,
+    totalDamageDealtToChampions: 25_000 + participantId,
+    item0: 3000 + participantId,
+    item1: 3100 + participantId,
+    item2: 3200 + participantId,
+    item3: 3300 + participantId,
+    item4: 3400 + participantId,
+    item5: 3500 + participantId,
+    item6: 3363,
+    summoner1Id: 4,
+    summoner2Id: participantId,
+    perks: {
+      statPerks: { defense: 5002, flex: 5008, offense: 5005 },
+      styles: [
+        { description: "primaryStyle", style: 8000, selections: [{ perk: 8005 + participantId }] },
+        { description: "subStyle", style: 8100, selections: [{ perk: 8120 }] },
+      ],
+    },
+    gameEndedInSurrender: false,
+    gameEndedInEarlySurrender: false,
   };
 }
+
+export const defaultObjectives = (won) => ({
+  baron: { first: won, kills: won ? 1 : 0 },
+  champion: { first: won, kills: won ? 20 : 10 },
+  dragon: { first: won, kills: won ? 3 : 1 },
+  horde: { first: won, kills: won ? 4 : 2 },
+  inhibitor: { first: won, kills: won ? 1 : 0 },
+  riftHerald: { first: won, kills: won ? 1 : 0 },
+  tower: { first: won, kills: won ? 9 : 3 },
+});
 
 /**
  * Ten participants: team 100 = pids 1–5 champions 1–5, team 200 = pids 6–10
@@ -68,11 +107,13 @@ export function buildMatchDto({
           teamId: 100,
           win: winner === 100,
           bans: bans100.map((championId, pickTurn) => ({ championId, pickTurn: pickTurn + 1 })),
+          objectives: defaultObjectives(winner === 100),
         },
         {
           teamId: 200,
           win: winner === 200,
           bans: bans200.map((championId, pickTurn) => ({ championId, pickTurn: pickTurn + 6 })),
+          objectives: defaultObjectives(winner === 200),
         },
       ],
     },
@@ -140,9 +181,32 @@ export const buildingKill = (timestamp, teamId, buildingType = "TOWER_BUILDING")
   buildingType,
 });
 
-export const monsterKill = (timestamp, killerTeamId, monsterType) => ({
+export const monsterKill = (timestamp, killerTeamId, monsterType, monsterSubType) => ({
   type: "ELITE_MONSTER_KILL",
   timestamp,
   killerTeamId,
   monsterType,
+  ...(monsterSubType ? { monsterSubType } : {}),
+});
+
+export const skillLevelUp = (timestamp, participantId, skillSlot) => ({
+  type: "SKILL_LEVEL_UP",
+  timestamp,
+  participantId,
+  skillSlot,
+  levelUpType: "NORMAL",
+});
+
+export const itemPurchased = (timestamp, participantId, itemId) => ({
+  type: "ITEM_PURCHASED",
+  timestamp,
+  participantId,
+  itemId,
+});
+
+export const turretPlateDestroyed = (timestamp, teamId) => ({
+  type: "TURRET_PLATE_DESTROYED",
+  timestamp,
+  teamId,
+  laneType: "MID_LANE",
 });

@@ -9,6 +9,9 @@ import {
   kill,
   buildingKill,
   monsterKill,
+  skillLevelUp,
+  itemPurchased,
+  turretPlateDestroyed,
 } from "./test-fixtures.mjs";
 
 test("EXTRACTOR_VERSION is a positive integer", () => {
@@ -200,4 +203,93 @@ test("skip: pre-11.4 patch (assertion — startTime makes this unreachable)", ()
     buildTimelineDto(),
   );
   assert.match(skipReason, /pre-11\.4/);
+});
+
+// ---- extractor v2: widened field set ----
+
+test("v2: EXTRACTOR_VERSION is 2 and snapshots include the 10-minute mark", () => {
+  assert.equal(EXTRACTOR_VERSION, 2);
+  assert.deepEqual(SNAPSHOT_TIMESTAMPS, [600000, 900000, 1200000, 1500000, 1800000]);
+  const { record } = extractMatch(buildMatchDto(), buildTimelineDto());
+  const at10 = record.teams["100"].participants.TOP.timeline[600000];
+  assert.equal(at10.totalGold, 500 + 10 + 1000); // pid 1, minute 10
+  assert.equal(at10.level, 6);
+});
+
+test("v2: endgame scalars, items, spells, and perks per participant", () => {
+  const { record } = extractMatch(buildMatchDto(), buildTimelineDto());
+  const jg200 = record.teams["200"].participants.JUNGLE.endgame; // pid 7
+  assert.equal(jg200.kills, 7);
+  assert.equal(jg200.deaths, 3);
+  assert.equal(jg200.assists, 14);
+  assert.equal(jg200.champLevel, 15);
+  assert.equal(jg200.goldEarned, 10_007);
+  assert.equal(jg200.goldSpent, 9_007);
+  assert.equal(jg200.visionScore, 37);
+  assert.equal(jg200.creepScore, 207 + 27);
+  assert.equal(jg200.totalDamageDealtToChampions, 25_007);
+  assert.deepEqual(jg200.items, [3007, 3107, 3207, 3307, 3407, 3507, 3363]);
+  assert.deepEqual(jg200.summonerSpells, [4, 7]);
+  assert.equal(jg200.perks.statPerks.offense, 5005);
+  assert.equal(jg200.perks.styles[0].selections[0].perk, 8012);
+});
+
+test("v2: skill order accumulates SKILL_LEVEL_UP slots in time order", () => {
+  const events = [
+    skillLevelUp(60_000, 1, 1),
+    skillLevelUp(120_000, 1, 2),
+    skillLevelUp(200_000, 1, 1),
+    skillLevelUp(90_000, 6, 3),
+  ];
+  const { record } = extractMatch(buildMatchDto(), buildTimelineDto({ events }));
+  assert.equal(record.teams["100"].participants.TOP.endgame.skillOrder, "121");
+  assert.equal(record.teams["200"].participants.TOP.endgame.skillOrder, "3");
+});
+
+test("v2: item purchases accumulate as [timestamp, itemId] pairs", () => {
+  const events = [
+    itemPurchased(30_000, 2, 1055),
+    itemPurchased(600_000, 2, 3057),
+    itemPurchased(45_000, 9, 1036),
+  ];
+  const { record } = extractMatch(buildMatchDto(), buildTimelineDto({ events }));
+  assert.deepEqual(record.teams["100"].participants.JUNGLE.endgame.itemPurchases, [
+    [30_000, 1055],
+    [600_000, 3057],
+  ]);
+  assert.deepEqual(record.teams["200"].participants.BOTTOM.endgame.itemPurchases, [
+    [45_000, 1036],
+  ]);
+});
+
+test("v2: team objectives copied raw, dragon subtypes ordered, plates counted", () => {
+  const events = [
+    monsterKill(8 * 60_000, 100, "DRAGON", "HEXTECH_DRAGON"),
+    monsterKill(14 * 60_000, 100, "DRAGON", "INFERNAL_DRAGON"),
+    monsterKill(35 * 60_000 - 30_000, 200, "DRAGON", "ELDER_DRAGON"),
+    turretPlateDestroyed(9 * 60_000, 200),
+    turretPlateDestroyed(10 * 60_000, 200),
+    turretPlateDestroyed(11 * 60_000, 100),
+  ];
+  const { record } = extractMatch(buildMatchDto(), buildTimelineDto({ minutes: 35, events }));
+  const t100 = record.teams["100"];
+  const t200 = record.teams["200"];
+  assert.deepEqual(t100.objectives.horde, { first: true, kills: 4 });
+  assert.deepEqual(t200.objectives.tower, { first: false, kills: 3 });
+  assert.deepEqual(t100.dragonSubtypes, ["HEXTECH_DRAGON", "INFERNAL_DRAGON"]);
+  assert.deepEqual(t200.dragonSubtypes, ["ELDER_DRAGON"]);
+  // Reference semantics: plates bucketed by the event's teamId as-is.
+  assert.equal(t200.platesDestroyed, 2);
+  assert.equal(t100.platesDestroyed, 1);
+});
+
+test("v2: surrender flags surface at match level", () => {
+  const clean = extractMatch(buildMatchDto(), buildTimelineDto()).record;
+  assert.equal(clean.gameEndedInSurrender, false);
+  assert.equal(clean.gameEndedInEarlySurrender, false);
+
+  const participants = buildMatchDto().info.participants;
+  for (const p of participants) p.gameEndedInSurrender = true;
+  const surrendered = extractMatch(buildMatchDto({ participants }), buildTimelineDto()).record;
+  assert.equal(surrendered.gameEndedInSurrender, true);
 });

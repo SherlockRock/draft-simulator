@@ -52,6 +52,7 @@ test("collectStatus aggregates summoners, statuses, last-24h, and patch mix per 
   assert.equal(na1.summonersErrored, 0);
   assert.deepEqual(na1.matches, { pending: 1, fetched: 2, skipped: 1, failed: 0 });
   assert.equal(na1.fetchedLast24h, 1);
+  assert.equal(na1.fetchedLastHour, 1);
   assert.deepEqual(na1.patchMix, [
     { patch: "15.15", count: 1 },
     { patch: "15.16", count: 1 },
