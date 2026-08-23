@@ -1300,10 +1300,45 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     let canvasContainerRef: HTMLDivElement | undefined;
 
+    // getBoundingClientRect forces synchronous layout; the drag loop writes the
+    // store (invalidating layout) between reads, so per-event reads thrash.
+    // Cache the rect and invalidate on the three ways the container's viewport
+    // position can change: its own resize, window resize, and ancestor scroll.
+    let cachedContainerRect: DOMRect | null = null;
+    const invalidateContainerRect = () => {
+        cachedContainerRect = null;
+    };
+    const containerRect = (): DOMRect | null => {
+        if (!canvasContainerRef) return null;
+        if (!cachedContainerRect) {
+            cachedContainerRect = canvasContainerRef.getBoundingClientRect();
+        }
+        return cachedContainerRect;
+    };
+
+    onMount(() => {
+        const observer = new ResizeObserver(invalidateContainerRect);
+        if (canvasContainerRef) observer.observe(canvasContainerRef);
+        window.addEventListener("resize", invalidateContainerRect);
+        // Scroll doesn't bubble, but capture-phase listeners on window still
+        // see every element's scroll events.
+        window.addEventListener("scroll", invalidateContainerRect, {
+            capture: true,
+            passive: true
+        });
+        onCleanup(() => {
+            observer.disconnect();
+            window.removeEventListener("resize", invalidateContainerRect);
+            window.removeEventListener("scroll", invalidateContainerRect, {
+                capture: true
+            });
+        });
+    });
+
     // Function to navigate viewport to a draft's position
     const navigateToDraft = (positionX: number, positionY: number) => {
-        if (canvasContainerRef) {
-            const container = canvasContainerRef.getBoundingClientRect();
+        const container = containerRect();
+        if (container) {
             const currentWidth = cardWidth(props.cardLayout());
             const currentHeight = cardHeight(props.cardLayout());
             props.setViewport((prev) => ({
@@ -3728,7 +3763,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const screenToWorld = (screenX: number, screenY: number) => {
         const vp = props.viewport();
-        const rect = canvasContainerRef?.getBoundingClientRect();
+        const rect = containerRect();
         const canvasX = rect ? screenX - rect.left : screenX;
         const canvasY = rect ? screenY - rect.top : screenY;
         return {
@@ -6932,7 +6967,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             }
             e.preventDefault();
             const vp = props.viewport();
-            const rect = canvasContainerRef?.getBoundingClientRect();
+            const rect = containerRect();
             const next = zoomAt(vp, clampZoom(vp.zoom * (e.deltaY > 0 ? 0.9 : 1.1)), {
                 x: e.clientX - (rect?.left ?? 0),
                 y: e.clientY - (rect?.top ?? 0)
@@ -6960,7 +6995,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // canvas does not start at the viewport origin.
     const zoomByFactor = (factor: number) => {
         const vp = props.viewport();
-        const rect = canvasContainerRef?.getBoundingClientRect();
+        const rect = containerRect();
         const next = zoomAt(vp, clampZoom(vp.zoom * factor), {
             x: (rect?.width ?? 0) / 2,
             y: (rect?.height ?? 0) / 2
