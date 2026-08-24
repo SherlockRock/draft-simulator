@@ -1,7 +1,7 @@
 {
-  "scrapedAt": "2026-04-15T02:03:38.797Z",
+  "scrapedAt": "2026-08-24T18:28:15.544Z",
   "source": "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1",
-  "championCount": 191,
+  "championCount": 236,
   "champions": {
     "Annie": {
       "numericId": 1,
@@ -4122,6 +4122,32 @@
         "championTagSecondary": "Sustained Damage"
       }
     },
+    "Locke": {
+      "numericId": 805,
+      "alias": "Locke",
+      "name": "Locke",
+      "roles": [
+        "assassin",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Mobile"
+      }
+    },
     "Sett": {
       "numericId": 875,
       "alias": "Sett",
@@ -4433,19 +4459,45 @@
         "championTagSecondary": "Mobile"
       }
     },
-    "Ruby_Urgot": {
-      "numericId": 66600,
-      "alias": "Ruby_Urgot",
-      "name": "Doom Bot Urgot",
+    "Jade_Annie": {
+      "numericId": 60001,
+      "alias": "Jade_Annie",
+      "name": "Annie",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Summon",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Jade_Olaf": {
+      "numericId": 60002,
+      "alias": "Jade_Olaf",
+      "name": "Olaf",
       "roles": [
         "fighter",
         "tank"
       ],
       "tacticalInfo": {
-        "style": 6,
+        "style": 4,
         "difficulty": 2,
         "damageType": "kPhysical",
-        "attackType": "ranged"
+        "attackType": "melee"
       },
       "playstyleInfo": {
         "damage": 2,
@@ -4455,203 +4507,22 @@
         "utility": 1
       },
       "championTagInfo": {
-        "championTagPrimary": "",
-        "championTagSecondary": ""
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Self Healing"
       }
     },
-    "Ruby_Corki": {
-      "numericId": 66602,
-      "alias": "Ruby_Corki",
-      "name": "Doom Bot Corki",
-      "roles": [
-        "marksman",
-        "mage"
-      ],
-      "tacticalInfo": {
-        "style": 1,
-        "difficulty": 1,
-        "damageType": "kMagic",
-        "attackType": "ranged"
-      },
-      "playstyleInfo": {
-        "damage": 1,
-        "durability": 1,
-        "crowdControl": 1,
-        "mobility": 1,
-        "utility": 1
-      },
-      "championTagInfo": {
-        "championTagPrimary": "",
-        "championTagSecondary": ""
-      }
-    },
-    "Ruby_Lux": {
-      "numericId": 66603,
-      "alias": "Ruby_Lux",
-      "name": "Doom Bot Lux",
+    "Jade_TwistedFate": {
+      "numericId": 60004,
+      "alias": "Jade_TwistedFate",
+      "name": "Twisted Fate",
       "roles": [
         "mage",
-        "support"
-      ],
-      "tacticalInfo": {
-        "style": 9,
-        "difficulty": 1,
-        "damageType": "kMagic",
-        "attackType": "ranged"
-      },
-      "playstyleInfo": {
-        "damage": 3,
-        "durability": 1,
-        "crowdControl": 2,
-        "mobility": 1,
-        "utility": 2
-      },
-      "championTagInfo": {
-        "championTagPrimary": "",
-        "championTagSecondary": ""
-      }
-    },
-    "Ruby_Amumu": {
-      "numericId": 66604,
-      "alias": "Ruby_Amumu",
-      "name": "Doom Bot Amumu",
-      "roles": [
-        "tank",
-        "support"
-      ],
-      "tacticalInfo": {
-        "style": 9,
-        "difficulty": 1,
-        "damageType": "kMagic",
-        "attackType": "melee"
-      },
-      "playstyleInfo": {
-        "damage": 2,
-        "durability": 3,
-        "crowdControl": 3,
-        "mobility": 1,
-        "utility": 1
-      },
-      "championTagInfo": {
-        "championTagPrimary": "",
-        "championTagSecondary": ""
-      }
-    },
-    "Ruby_Chogath": {
-      "numericId": 66605,
-      "alias": "Ruby_Chogath",
-      "name": "Doom Bot Cho'Gath",
-      "roles": [
-        "tank",
-        "mage"
-      ],
-      "tacticalInfo": {
-        "style": 7,
-        "difficulty": 1,
-        "damageType": "kMagic",
-        "attackType": "melee"
-      },
-      "playstyleInfo": {
-        "damage": 2,
-        "durability": 3,
-        "crowdControl": 2,
-        "mobility": 1,
-        "utility": 1
-      },
-      "championTagInfo": {
-        "championTagPrimary": "",
-        "championTagSecondary": ""
-      }
-    },
-    "Ruby_Tristana": {
-      "numericId": 66606,
-      "alias": "Ruby_Tristana",
-      "name": "Doom Bot Tristana",
-      "roles": [
-        "marksman",
-        "assassin"
-      ],
-      "tacticalInfo": {
-        "style": 3,
-        "difficulty": 1,
-        "damageType": "kPhysical",
-        "attackType": "ranged"
-      },
-      "playstyleInfo": {
-        "damage": 3,
-        "durability": 1,
-        "crowdControl": 2,
-        "mobility": 2,
-        "utility": 1
-      },
-      "championTagInfo": {
-        "championTagPrimary": "",
-        "championTagSecondary": ""
-      }
-    },
-    "Ruby_Nami": {
-      "numericId": 66607,
-      "alias": "Ruby_Nami",
-      "name": "Doom Bot Nami",
-      "roles": [
-        "support",
-        "mage"
-      ],
-      "tacticalInfo": {
-        "style": 9,
-        "difficulty": 2,
-        "damageType": "kMagic",
-        "attackType": "ranged"
-      },
-      "playstyleInfo": {
-        "damage": 1,
-        "durability": 1,
-        "crowdControl": 3,
-        "mobility": 1,
-        "utility": 2
-      },
-      "championTagInfo": {
-        "championTagPrimary": "",
-        "championTagSecondary": ""
-      }
-    },
-    "Ruby_LeeSin": {
-      "numericId": 66608,
-      "alias": "Ruby_LeeSin",
-      "name": "Doom Bot Lee Sin",
-      "roles": [
-        "fighter",
-        "assassin"
-      ],
-      "tacticalInfo": {
-        "style": 6,
-        "difficulty": 3,
-        "damageType": "kPhysical",
-        "attackType": "melee"
-      },
-      "playstyleInfo": {
-        "damage": 3,
-        "durability": 2,
-        "crowdControl": 2,
-        "mobility": 3,
-        "utility": 1
-      },
-      "championTagInfo": {
-        "championTagPrimary": "",
-        "championTagSecondary": ""
-      }
-    },
-    "Ruby_Caitlyn": {
-      "numericId": 66609,
-      "alias": "Ruby_Caitlyn",
-      "name": "Doom Bot Caitlyn",
-      "roles": [
         "marksman"
       ],
       "tacticalInfo": {
-        "style": 2,
-        "difficulty": 1,
-        "damageType": "kPhysical",
+        "style": 7,
+        "difficulty": 2,
+        "damageType": "kMagic",
         "attackType": "ranged"
       },
       "playstyleInfo": {
@@ -4659,95 +4530,17 @@
         "durability": 1,
         "crowdControl": 2,
         "mobility": 2,
-        "utility": 1
-      },
-      "championTagInfo": {
-        "championTagPrimary": "",
-        "championTagSecondary": ""
-      }
-    },
-    "Ruby_Nautilus": {
-      "numericId": 66610,
-      "alias": "Ruby_Nautilus",
-      "name": "Doom Bot Nautilus",
-      "roles": [
-        "tank",
-        "support"
-      ],
-      "tacticalInfo": {
-        "style": 8,
-        "difficulty": 2,
-        "damageType": "kMagic",
-        "attackType": "melee"
-      },
-      "playstyleInfo": {
-        "damage": 1,
-        "durability": 3,
-        "crowdControl": 3,
-        "mobility": 1,
-        "utility": 1
-      },
-      "championTagInfo": {
-        "championTagPrimary": "",
-        "championTagSecondary": ""
-      }
-    },
-    "Ruby_Maokai": {
-      "numericId": 66611,
-      "alias": "Ruby_Maokai",
-      "name": "Doom Bot Maokai",
-      "roles": [
-        "tank",
-        "support"
-      ],
-      "tacticalInfo": {
-        "style": 8,
-        "difficulty": 1,
-        "damageType": "kMagic",
-        "attackType": "melee"
-      },
-      "playstyleInfo": {
-        "damage": 1,
-        "durability": 3,
-        "crowdControl": 3,
-        "mobility": 1,
         "utility": 2
       },
       "championTagInfo": {
-        "championTagPrimary": "",
-        "championTagSecondary": ""
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Auto-attack"
       }
     },
-    "Ruby_Xerath": {
-      "numericId": 66612,
-      "alias": "Ruby_Xerath",
-      "name": "Doom Bot Xerath",
-      "roles": [
-        "mage",
-        "support"
-      ],
-      "tacticalInfo": {
-        "style": 9,
-        "difficulty": 2,
-        "damageType": "kMagic",
-        "attackType": "ranged"
-      },
-      "playstyleInfo": {
-        "damage": 3,
-        "durability": 1,
-        "crowdControl": 2,
-        "mobility": 1,
-        "utility": 1
-      },
-      "championTagInfo": {
-        "championTagPrimary": "",
-        "championTagSecondary": ""
-      }
-    },
-    "Ruby_Brand": {
-      "numericId": 66613,
-      "alias": "Ruby_Brand",
-      "name": "Doom Bot Brand",
+    "Jade_Fiddlesticks": {
+      "numericId": 60009,
+      "alias": "Jade_Fiddlesticks",
+      "name": "Fiddlesticks",
       "roles": [
         "mage",
         "support"
@@ -4761,45 +4554,173 @@
       "playstyleInfo": {
         "damage": 3,
         "durability": 1,
-        "crowdControl": 2,
+        "crowdControl": 3,
         "mobility": 1,
         "utility": 1
       },
       "championTagInfo": {
-        "championTagPrimary": "Burst",
+        "championTagPrimary": "Self Healing",
         "championTagSecondary": "AoE"
       }
     },
-    "Ruby_Wukong": {
-      "numericId": 66614,
-      "alias": "Ruby_Wukong",
-      "name": "Doom Bot Wukong",
+    "Jade_Kayle": {
+      "numericId": 60010,
+      "alias": "Jade_Kayle",
+      "name": "Kayle",
       "roles": [
-        "fighter",
-        "tank"
+        "mage",
+        "marksman"
       ],
       "tacticalInfo": {
-        "style": 6,
+        "style": 3,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Hypercarry",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Jade_MasterYi": {
+      "numericId": 60011,
+      "alias": "Jade_MasterYi",
+      "name": "Master Yi",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Auto-attack",
+        "championTagSecondary": "Hypercarry"
+      }
+    },
+    "Jade_Alistar": {
+      "numericId": 60012,
+      "alias": "Jade_Alistar",
+      "name": "Alistar",
+      "roles": [
+        "tank",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Initiator"
+      }
+    },
+    "Jade_Ryze": {
+      "numericId": 60013,
+      "alias": "Jade_Ryze",
+      "name": "Ryze",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Battlecaster",
+        "championTagSecondary": "Sustained Damage"
+      }
+    },
+    "Jade_Sion": {
+      "numericId": 60014,
+      "alias": "Jade_Sion",
+      "name": "Sion",
+      "roles": [
+        "tank",
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 7,
         "difficulty": 1,
         "damageType": "kPhysical",
         "attackType": "melee"
       },
       "playstyleInfo": {
         "damage": 2,
-        "durability": 2,
-        "crowdControl": 2,
-        "mobility": 2,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 1,
         "utility": 1
       },
       "championTagInfo": {
-        "championTagPrimary": "Duelist",
-        "championTagSecondary": "Stealth"
+        "championTagPrimary": "Durable",
+        "championTagSecondary": "Crowd Control"
       }
     },
-    "Ruby_Soraka": {
-      "numericId": 66615,
-      "alias": "Ruby_Soraka",
-      "name": "Doom Bot Soraka",
+    "Jade_Sivir": {
+      "numericId": 60015,
+      "alias": "Jade_Sivir",
+      "name": "Sivir",
+      "roles": [
+        "marksman"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "AoE",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Jade_Soraka": {
+      "numericId": 60016,
+      "alias": "Jade_Soraka",
+      "name": "Soraka",
       "roles": [
         "support",
         "mage"
@@ -4822,18 +4743,199 @@
         "championTagSecondary": "Crowd Control"
       }
     },
-    "Ruby_Diana": {
-      "numericId": 66616,
-      "alias": "Ruby_Diana",
-      "name": "Doom Bot Diana",
+    "Jade_Teemo": {
+      "numericId": 60017,
+      "alias": "Jade_Teemo",
+      "name": "Teemo",
+      "roles": [
+        "marksman",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Damage-over-Time",
+        "championTagSecondary": "Stealth"
+      }
+    },
+    "Jade_Tristana": {
+      "numericId": 60018,
+      "alias": "Jade_Tristana",
+      "name": "Tristana",
+      "roles": [
+        "marksman",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Jade_Warwick": {
+      "numericId": 60019,
+      "alias": "Jade_Warwick",
+      "name": "Warwick",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 1,
+        "damageType": "kMixed",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Self Healing",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Jade_Nunu": {
+      "numericId": 60020,
+      "alias": "Jade_Nunu",
+      "name": "Nunu & Willump",
+      "roles": [
+        "tank",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 3,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Initiator",
+        "championTagSecondary": "Battlecaster"
+      }
+    },
+    "Jade_MissFortune": {
+      "numericId": 60021,
+      "alias": "Jade_MissFortune",
+      "name": "Miss Fortune",
+      "roles": [
+        "marksman",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 4,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "AoE",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Jade_Ashe": {
+      "numericId": 60022,
+      "alias": "Jade_Ashe",
+      "name": "Ashe",
+      "roles": [
+        "marksman",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Auto-attack",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Jade_Tryndamere": {
+      "numericId": 60023,
+      "alias": "Jade_Tryndamere",
+      "name": "Tryndamere",
       "roles": [
         "fighter",
         "assassin"
       ],
       "tacticalInfo": {
-        "style": 7,
+        "style": 2,
         "difficulty": 1,
-        "damageType": "kMagic",
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Jade_Jax": {
+      "numericId": 60024,
+      "alias": "Jade_Jax",
+      "name": "Jax",
+      "roles": [
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 2,
+        "damageType": "kPhysical",
         "attackType": "melee"
       },
       "playstyleInfo": {
@@ -4844,19 +4946,124 @@
         "utility": 1
       },
       "championTagInfo": {
-        "championTagPrimary": "Burst",
-        "championTagSecondary": "Mobile"
+        "championTagPrimary": "Duelist",
+        "championTagSecondary": "Auto-attack"
       }
     },
-    "Ruby_Jinx": {
-      "numericId": 66617,
-      "alias": "Ruby_Jinx",
-      "name": "Doom Bot Jinx",
+    "Jade_Morgana": {
+      "numericId": 60025,
+      "alias": "Jade_Morgana",
+      "name": "Morgana",
       "roles": [
-        "marksman"
+        "support",
+        "mage"
       ],
       "tacticalInfo": {
-        "style": 2,
+        "style": 10,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Ally Protection"
+      }
+    },
+    "Jade_Zilean": {
+      "numericId": 60026,
+      "alias": "Jade_Zilean",
+      "name": "Zilean",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Ally Protection"
+      }
+    },
+    "Jade_Singed": {
+      "numericId": 60027,
+      "alias": "Jade_Singed",
+      "name": "Singed",
+      "roles": [
+        "tank",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Battlecaster",
+        "championTagSecondary": "Damage-over-Time"
+      }
+    },
+    "Jade_Evelynn": {
+      "numericId": 60028,
+      "alias": "Jade_Evelynn",
+      "name": "Evelynn",
+      "roles": [
+        "assassin",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Stealth",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Jade_Twitch": {
+      "numericId": 60029,
+      "alias": "Jade_Twitch",
+      "name": "Twitch",
+      "roles": [
+        "marksman",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 1,
         "difficulty": 2,
         "damageType": "kPhysical",
         "attackType": "ranged"
@@ -4864,25 +5071,128 @@
       "playstyleInfo": {
         "damage": 3,
         "durability": 1,
-        "crowdControl": 2,
-        "mobility": 1,
+        "crowdControl": 1,
+        "mobility": 2,
         "utility": 1
       },
       "championTagInfo": {
-        "championTagPrimary": "Auto-attack",
-        "championTagSecondary": "Hypercarry"
+        "championTagPrimary": "Hypercarry",
+        "championTagSecondary": "Stealth"
       }
     },
-    "Ruby_Malzahar": {
-      "numericId": 66618,
-      "alias": "Ruby_Malzahar",
-      "name": "Doom Bot Malzahar",
+    "Jade_Karthus": {
+      "numericId": 60030,
+      "alias": "Jade_Karthus",
+      "name": "Karthus",
       "roles": [
         "mage"
       ],
       "tacticalInfo": {
         "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "AoE",
+        "championTagSecondary": "Sustained Damage"
+      }
+    },
+    "Jade_Chogath": {
+      "numericId": 60031,
+      "alias": "Jade_Chogath",
+      "name": "Cho'Gath",
+      "roles": [
+        "tank",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 7,
         "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Durable",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Jade_Amumu": {
+      "numericId": 60032,
+      "alias": "Jade_Amumu",
+      "name": "Amumu",
+      "roles": [
+        "tank",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Initiator"
+      }
+    },
+    "Jade_Rammus": {
+      "numericId": 60033,
+      "alias": "Jade_Rammus",
+      "name": "Rammus",
+      "roles": [
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Jade_Anivia": {
+      "numericId": 60034,
+      "alias": "Jade_Anivia",
+      "name": "Anivia",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
         "damageType": "kMagic",
         "attackType": "ranged"
       },
@@ -4894,14 +5204,245 @@
         "utility": 2
       },
       "championTagInfo": {
-        "championTagPrimary": "Crowd Control",
-        "championTagSecondary": "Damage-over-Time"
+        "championTagPrimary": "AoE",
+        "championTagSecondary": "Crowd Control"
       }
     },
-    "Ruby_Blitzcrank": {
-      "numericId": 66619,
-      "alias": "Ruby_Blitzcrank",
-      "name": "Doom Bot Blitzcrank",
+    "Jade_Shaco": {
+      "numericId": 60035,
+      "alias": "Jade_Shaco",
+      "name": "Shaco",
+      "roles": [
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 5,
+        "difficulty": 3,
+        "damageType": "kMixed",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Stealth",
+        "championTagSecondary": "Summon"
+      }
+    },
+    "Jade_DrMundo": {
+      "numericId": 60036,
+      "alias": "Jade_DrMundo",
+      "name": "Dr. Mundo",
+      "roles": [
+        "tank",
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 1,
+        "damageType": "kMixed",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Durable",
+        "championTagSecondary": "Self Healing"
+      }
+    },
+    "Jade_Sona": {
+      "numericId": 60037,
+      "alias": "Jade_Sona",
+      "name": "Sona",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Ally Protection",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Jade_Kassadin": {
+      "numericId": 60038,
+      "alias": "Jade_Kassadin",
+      "name": "Kassadin",
+      "roles": [
+        "assassin",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Hypercarry",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Jade_Janna": {
+      "numericId": 60040,
+      "alias": "Jade_Janna",
+      "name": "Janna",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Ally Protection"
+      }
+    },
+    "Jade_Gangplank": {
+      "numericId": 60041,
+      "alias": "Jade_Gangplank",
+      "name": "Gangplank",
+      "roles": [
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "AoE",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Jade_Corki": {
+      "numericId": 60042,
+      "alias": "Jade_Corki",
+      "name": "Corki",
+      "roles": [
+        "marksman",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 5,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Auto-attack",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Jade_Taric": {
+      "numericId": 60044,
+      "alias": "Jade_Taric",
+      "name": "Taric",
+      "roles": [
+        "support",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Durable",
+        "championTagSecondary": "Ally Protection"
+      }
+    },
+    "Jade_Veigar": {
+      "numericId": 60045,
+      "alias": "Jade_Veigar",
+      "name": "Veigar",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Hypercarry",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Jade_Blitzcrank": {
+      "numericId": 60053,
+      "alias": "Jade_Blitzcrank",
+      "name": "Blitzcrank",
       "roles": [
         "tank",
         "support"
@@ -4921,6 +5462,626 @@
       },
       "championTagInfo": {
         "championTagPrimary": "Initiator",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Jade_Malphite": {
+      "numericId": 60054,
+      "alias": "Jade_Malphite",
+      "name": "Malphite",
+      "roles": [
+        "tank",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Initiator",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Jade_Katarina": {
+      "numericId": 60055,
+      "alias": "Jade_Katarina",
+      "name": "Katarina",
+      "roles": [
+        "assassin",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Jade_JarvanIV": {
+      "numericId": 60059,
+      "alias": "Jade_JarvanIV",
+      "name": "Jarvan IV",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Dive",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Jade_Wukong": {
+      "numericId": 60062,
+      "alias": "Jade_Wukong",
+      "name": "Wukong",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Dive",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Jade_Brand": {
+      "numericId": 60063,
+      "alias": "Jade_Brand",
+      "name": "Brand",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Damage-over-Time",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Jade_LeeSin": {
+      "numericId": 60064,
+      "alias": "Jade_LeeSin",
+      "name": "Lee Sin",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 6,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Jade_Vayne": {
+      "numericId": 60067,
+      "alias": "Jade_Vayne",
+      "name": "Vayne",
+      "roles": [
+        "marksman",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 1,
+        "difficulty": 2,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Hypercarry",
+        "championTagSecondary": "Stealth"
+      }
+    },
+    "Jade_Skarner": {
+      "numericId": 60072,
+      "alias": "Jade_Skarner",
+      "name": "Skarner",
+      "roles": [
+        "tank",
+        "fighter"
+      ],
+      "tacticalInfo": {
+        "style": 5,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Crowd Control",
+        "championTagSecondary": "Initiator"
+      }
+    },
+    "Jade_Heimerdinger": {
+      "numericId": 60074,
+      "alias": "Jade_Heimerdinger",
+      "name": "Heimerdinger",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Summon",
+        "championTagSecondary": "Sustained Damage"
+      }
+    },
+    "Jade_Nasus": {
+      "numericId": 60075,
+      "alias": "Jade_Nasus",
+      "name": "Nasus",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 3,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Durable",
+        "championTagSecondary": "Hypercarry"
+      }
+    },
+    "Jade_Nidalee": {
+      "numericId": 60076,
+      "alias": "Jade_Nidalee",
+      "name": "Nidalee",
+      "roles": [
+        "assassin",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Shapeshift",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Jade_Gragas": {
+      "numericId": 60079,
+      "alias": "Jade_Gragas",
+      "name": "Gragas",
+      "roles": [
+        "fighter",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Jade_Pantheon": {
+      "numericId": 60080,
+      "alias": "Jade_Pantheon",
+      "name": "Pantheon",
+      "roles": [
+        "fighter",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 2,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Dive",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Jade_Ezreal": {
+      "numericId": 60081,
+      "alias": "Jade_Ezreal",
+      "name": "Ezreal",
+      "roles": [
+        "marksman",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 1,
+        "difficulty": 3,
+        "damageType": "kPhysical",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Long Range",
+        "championTagSecondary": "Mobile"
+      }
+    },
+    "Jade_Akali": {
+      "numericId": 60084,
+      "alias": "Jade_Akali",
+      "name": "Akali",
+      "roles": [
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 3,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Jade_Kennen": {
+      "numericId": 60085,
+      "alias": "Jade_Kennen",
+      "name": "Kennen",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 7,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "AoE"
+      }
+    },
+    "Jade_Garen": {
+      "numericId": 60086,
+      "alias": "Jade_Garen",
+      "name": "Garen",
+      "roles": [
+        "fighter",
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 1,
+        "damageType": "kPhysical",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Durable",
+        "championTagSecondary": "Sustained Damage"
+      }
+    },
+    "Jade_Leona": {
+      "numericId": 60089,
+      "alias": "Jade_Leona",
+      "name": "Leona",
+      "roles": [
+        "tank",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 1,
+        "durability": 3,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Initiator",
+        "championTagSecondary": "Crowd Control"
+      }
+    },
+    "Jade_Malzahar": {
+      "numericId": 60090,
+      "alias": "Jade_Malzahar",
+      "name": "Malzahar",
+      "roles": [
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 3,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Damage-over-Time",
+        "championTagSecondary": "Summon"
+      }
+    },
+    "Jade_KogMaw": {
+      "numericId": 60096,
+      "alias": "Jade_KogMaw",
+      "name": "Kog'Maw",
+      "roles": [
+        "marksman",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 2,
+        "difficulty": 2,
+        "damageType": "kMixed",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 1,
+        "mobility": 1,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Hypercarry",
+        "championTagSecondary": "Auto-attack"
+      }
+    },
+    "Jade_Shen": {
+      "numericId": 60098,
+      "alias": "Jade_Shen",
+      "name": "Shen",
+      "roles": [
+        "tank"
+      ],
+      "tacticalInfo": {
+        "style": 5,
+        "difficulty": 1,
+        "damageType": "kMixed",
+        "attackType": "melee"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 3,
+        "crowdControl": 2,
+        "mobility": 2,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Ally Protection",
+        "championTagSecondary": "Duelist"
+      }
+    },
+    "Jade_Lux": {
+      "numericId": 60099,
+      "alias": "Jade_Lux",
+      "name": "Lux",
+      "roles": [
+        "mage",
+        "support"
+      ],
+      "tacticalInfo": {
+        "style": 9,
+        "difficulty": 1,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 2
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Burst",
+        "championTagSecondary": "Long Range"
+      }
+    },
+    "Jade_Ahri": {
+      "numericId": 60103,
+      "alias": "Jade_Ahri",
+      "name": "Ahri",
+      "roles": [
+        "mage",
+        "assassin"
+      ],
+      "tacticalInfo": {
+        "style": 10,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 3,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 3,
+        "utility": 1
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Mobile",
+        "championTagSecondary": "Burst"
+      }
+    },
+    "Jade_Lulu": {
+      "numericId": 60117,
+      "alias": "Jade_Lulu",
+      "name": "Lulu",
+      "roles": [
+        "support",
+        "mage"
+      ],
+      "tacticalInfo": {
+        "style": 8,
+        "difficulty": 2,
+        "damageType": "kMagic",
+        "attackType": "ranged"
+      },
+      "playstyleInfo": {
+        "damage": 2,
+        "durability": 1,
+        "crowdControl": 2,
+        "mobility": 1,
+        "utility": 3
+      },
+      "championTagInfo": {
+        "championTagPrimary": "Ally Protection",
         "championTagSecondary": "Crowd Control"
       }
     }
