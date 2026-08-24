@@ -4,6 +4,9 @@ mod data_loader;
 mod error;
 mod projection;
 
+#[cfg(test)]
+mod solver_roles_test;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
