@@ -142,3 +142,33 @@ test("runLadderOnce skips entries without a puuid", async () => {
   const count = await runLadderOnce({ client, db, config, region: "na1", logger: silentLogger });
   assert.equal(count, 1);
 });
+
+test("shouldStop ends the refresh between requests and returns what was upserted", async () => {
+  let stop = false;
+  const inner = mockClient({
+    apex: { CHALLENGER: [apexEntry("C1")], GRANDMASTER: [apexEntry("G1")], MASTER: [apexEntry("M1")] },
+    diamondPages: { "I/1": [diamondEntry("D1", "I")] },
+  });
+  const client = {
+    calls: inner.calls,
+    async getApexEntries(args) {
+      const r = await inner.getApexEntries(args);
+      stop = true; // shutdown arrives during the first request
+      return r;
+    },
+    getLeagueEntries: inner.getLeagueEntries,
+  };
+  const total = await runLadderOnce({
+    client,
+    db,
+    config: loadConfig({}),
+    region: "na1",
+    logger: { info() {} },
+    shouldStop: () => stop,
+  });
+  assert.equal(total, 1);
+  assert.equal(client.calls.apex.length, 1);
+  assert.equal(client.calls.entries.length, 0);
+  const { rows } = await db.query("SELECT count(*)::int AS n FROM summoners");
+  assert.equal(rows[0].n, 1);
+});

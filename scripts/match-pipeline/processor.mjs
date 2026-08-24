@@ -64,9 +64,10 @@ export async function runProcessorCycle({
           counts.fetched++;
         }
       } catch (err) {
-        if (/key-manager aborted/.test(err.message)) {
-          // Shutdown while paused on an expired key — leave the row pending
-          // so the next run re-claims it instead of burying it as failed.
+        if (/(key-manager|rate-limiter) aborted/.test(err.message)) {
+          // Shutdown while paused on an expired key or waiting for rate budget —
+          // leave the row pending so the next run re-claims it instead of
+          // burying it as failed.
           return;
         }
         await markMatchFailed(db, matchId, String(err.message).slice(0, 500));

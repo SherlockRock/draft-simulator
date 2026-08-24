@@ -78,6 +78,32 @@ export class SlidingWindowBucket {
     this.effectiveWindowMs = windowMs + paddingMs;
     this.stamps = [];
     this.tail = Promise.resolve();
+    this.abortError = null;
+    this.wakers = new Set();
+  }
+
+  /**
+   * Shutdown hook: a waiter parked on a saturated window can otherwise hold a
+   * SIGTERM drain for up to `effectiveWindowMs`. Rejects every pending and
+   * future acquire with "rate-limiter aborted"; callers leave their work
+   * unmarked for the next start.
+   */
+  abort() {
+    this.abortError = new Error("rate-limiter aborted");
+    for (const wake of this.wakers) wake();
+  }
+
+  /** Sleep that abort() can cut short. */
+  #wait(ms) {
+    return new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        this.wakers.delete(done);
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      this.wakers.add(done);
+    });
   }
 
   #evict(now) {
@@ -94,13 +120,14 @@ export class SlidingWindowBucket {
   acquire() {
     const next = this.tail.then(async () => {
       while (true) {
+        if (this.abortError) throw this.abortError;
         const now = Date.now();
         this.#evict(now);
         if (this.stamps.length < this.capacity) {
           this.stamps.push(now);
           return;
         }
-        await sleep(this.stamps[0] + this.effectiveWindowMs - now);
+        await this.#wait(this.stamps[0] + this.effectiveWindowMs - now);
       }
     });
     this.tail = next.catch(() => {});
@@ -127,5 +154,10 @@ export class CompositeRateLimiter {
     for (const bucket of this.buckets) {
       await bucket.acquire();
     }
+  }
+
+  /** Shutdown hook — see SlidingWindowBucket.abort. No-op for buckets without one. */
+  abort() {
+    for (const bucket of this.buckets) bucket.abort?.();
   }
 }

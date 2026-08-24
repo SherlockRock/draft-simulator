@@ -226,3 +226,25 @@ test("shouldStop stops pulling from the queue; unstarted rows stay pending", asy
   const { rows } = await db.query("SELECT count(*)::int AS n FROM matches WHERE status = 'pending'");
   assert.equal(rows[0].n, 5);
 });
+
+test("a rate-limiter abort leaves claimed rows pending, like a key-manager abort", async () => {
+  await seedPending(["NA1_1", "NA1_2"]);
+  const client = {
+    async getMatch() {
+      throw new Error("rate-limiter aborted");
+    },
+    async getMatchTimeline() {
+      throw new Error("rate-limiter aborted");
+    },
+  };
+  const result = await runProcessorCycle({
+    client,
+    db,
+    config: loadConfig({}),
+    region: "na1",
+    logger: silentLogger,
+  });
+  assert.equal(result.failed, 0);
+  const { rows } = await db.query("SELECT count(*)::int AS n FROM matches WHERE status = 'pending'");
+  assert.equal(rows[0].n, 2);
+});

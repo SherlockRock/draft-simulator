@@ -71,9 +71,10 @@ keyManager.currentKey = apiKey;
 const buckets = [...config.appBuckets, config.matchMethodBucket].map(
   ([capacity, windowMs]) => new SlidingWindowBucket(capacity, windowMs),
 );
+const rateLimiter = new CompositeRateLimiter(buckets);
 const rawClient = new RiotClient({
   apiKey,
-  rateLimiter: new CompositeRateLimiter(buckets),
+  rateLimiter,
   logger: makeLogger("http"),
 });
 const client = wrapClientWithKeyRotation(rawClient, keyManager, makeLogger("key"));
@@ -91,7 +92,7 @@ async function ladderLoop() {
   const logger = makeLogger("ladder");
   while (running) {
     try {
-      const n = await runLadderOnce({ client, db, config, region, logger });
+      const n = await runLadderOnce({ client, db, config, region, logger, shouldStop });
       logger.info(`refreshed ${n} summoners`);
     } catch (err) {
       logger.error(err.message);
@@ -141,6 +142,7 @@ const shutdown = (signal) => {
   log.info(`${signal} received, draining in-flight work`);
   running = false;
   keyManager.abort(); // unblock loops parked in KEY_EXPIRED
+  rateLimiter.abort(); // unblock requests parked on a saturated window (up to 2 min)
 };
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));

@@ -8,11 +8,18 @@
 
 import { upsertSummoners } from "./db.mjs";
 
-/** @returns {Promise<number>} summoners upserted */
-export async function runLadderOnce({ client, db, config, region, logger }) {
+/**
+ * `shouldStop` is polled before every request: a full refresh is ~83 requests
+ * (nearly one 100/2min window) and runs at every boot, so a SIGTERM drain
+ * must be able to leave it early. The next start re-runs it from scratch.
+ *
+ * @returns {Promise<number>} summoners upserted
+ */
+export async function runLadderOnce({ client, db, config, region, logger, shouldStop = () => false }) {
   let total = 0;
 
   for (const tier of config.apexTiers) {
+    if (shouldStop()) return total;
     const list = await client.getApexEntries({
       tier,
       queue: config.leagueQueue,
@@ -33,6 +40,7 @@ export async function runLadderOnce({ client, db, config, region, logger }) {
 
   for (const division of config.diamondDivisions) {
     for (let page = 1; page <= config.diamondPageCap; page++) {
+      if (shouldStop()) return total;
       const dtos = await client.getLeagueEntries({
         queue: config.leagueQueue,
         tier: "DIAMOND",

@@ -143,3 +143,25 @@ test("SlidingWindowBucket works inside CompositeRateLimiter", async () => {
   const elapsed = Date.now() - start;
   assert.ok(elapsed >= 130, `expected >=130ms, got ${elapsed}ms`);
 });
+
+test("SlidingWindowBucket.abort rejects a waiting acquire and every later one", async () => {
+  const b = new SlidingWindowBucket(1, 60_000);
+  await b.acquire(); // window now full for a minute
+  const waiting = b.acquire();
+  await sleep(10);
+  b.abort();
+  await assert.rejects(waiting, /rate-limiter aborted/);
+  await assert.rejects(b.acquire(), /rate-limiter aborted/);
+});
+
+test("CompositeRateLimiter.abort forwards to every bucket", async () => {
+  const a = new SlidingWindowBucket(1, 60_000);
+  const c = new SlidingWindowBucket(5, 60_000);
+  const limiter = new CompositeRateLimiter([a, c]);
+  await limiter.acquire();
+  const waiting = limiter.acquire(); // blocked on `a`
+  await sleep(10);
+  limiter.abort();
+  await assert.rejects(waiting, /rate-limiter aborted/);
+  await assert.rejects(c.acquire(), /rate-limiter aborted/);
+});
