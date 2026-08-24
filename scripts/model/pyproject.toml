@@ -1,0 +1,12 @@
+[project]
+name = "firstpick-model"
+version = "0.0.1"
+description = "Custom draft win-probability model: corpus exploration (Phase 2). Own Python env — not part of the pnpm workspace."
+requires-python = ">=3.11"
+dependencies = [
+  "duckdb>=1.1",
+  "pyarrow>=17",
+  "numpy>=2",
+  "pandas>=2.2",
+  "scikit-learn>=1.5",
+]

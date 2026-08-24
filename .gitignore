@@ -35,3 +35,8 @@ docs/spikes/v*-data/
 
 # Database orphan-cleanup exports (row backups, never committed)
 tmp/
+
+# custom-model training data + python env (scripts/model)
+data/training/
+scripts/model/.venv/
+__pycache__/
