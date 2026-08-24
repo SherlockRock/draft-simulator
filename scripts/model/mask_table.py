@@ -95,6 +95,28 @@ def leaf_turn(root_turn, depth):
     return min(t, TOTAL_TURNS)
 
 
+def is_reachable_leaf_turn(turn_index):
+    """Can a search LEAF sit at this turn index?
+
+    No, if the next action is the second half of a pair: `expand_pair` covers
+    both halves in one ply, so the search never stops between them. Such a state
+    is perfectly reachable as a search ROOT (a user can open the Navigator
+    mid-pair) — just never as a leaf.
+    """
+    if turn_index >= TOTAL_TURNS:
+        return True
+    return not TURN_SEQUENCE[turn_index][4]
+
+
+def reachable_leaf_turns(masked_min=0, masked_max=10):
+    """Leaf turns whose masked-pick-slot count falls in [masked_min, masked_max]."""
+    return [
+        t
+        for t in range(TOTAL_TURNS + 1)
+        if is_reachable_leaf_turn(t) and masked_min <= pattern_at(t)["masked_slots"] <= masked_max
+    ]
+
+
 def build_table(max_depth=BACKEND_MAX_DEPTH):
     rows = []
     for root in range(TOTAL_TURNS):
