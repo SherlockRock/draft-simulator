@@ -517,10 +517,15 @@ fn leaf_evaluation_stats_across_root_turns() {
     let timed_out: Vec<usize> = rows.iter().filter_map(|r| r.timed_out_at.map(|_| r.root_turn)).collect();
     if !timed_out.is_empty() {
         println!(
-            "\n  Root turns where a SINGLE iteration overruns the whole {} ms budget: {:?}\n  \
-             The engine cannot abandon an iteration once started and the backend arms no\n  \
-             wall-clock cancel, so these queries overrun in production too.",
-            AB_COMPUTE_BUDGET_MS, timed_out
+            "\n  Root turns whose NEXT iteration alone exceeds the whole {} ms budget: {:?}\n  \
+             Iterative deepening declines to start these, so on its own this is normal.\n  \
+             What is not normal: the engine cannot abandon an iteration once started\n  \
+             (deepen only chooses whether to BEGIN one) and the backend arms its\n  \
+             CancelToken on supersession only (navigatorEngine.js:243), never on a clock.\n  \
+             So when deepen's 2x estimate under-predicts, the query overruns unbounded:\n  \
+             an unenforced run of this same harness measured real compute() times of\n  \
+             9.5 s and 12.6 s at roots 0 and 1 against the same {} ms budget.",
+            AB_COMPUTE_BUDGET_MS, timed_out, AB_COMPUTE_BUDGET_MS
         );
     }
 

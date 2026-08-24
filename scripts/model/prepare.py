@@ -44,7 +44,12 @@ from common import (
     load_evaluable,
     load_id_to_alias,
 )
-from mask_table import TOTAL_TURNS, pattern_at, reachable_leaf_turns
+from mask_table import (
+    TOTAL_TURNS,
+    leaf_turn_distribution,
+    pattern_at,
+    reachable_leaf_turns,
+)
 
 # --- knobs, all recorded in the report -------------------------------------
 MIN_DURATION_S = 900          # extractor.mjs:31-51 already enforces this; asserted, not filtered
@@ -473,6 +478,33 @@ def build_sibling_sets(enc, train, evaluable_ids, id_to_alias, report, n_candida
     return sib
 
 
+
+LEAF_STATS = Path(__file__).resolve().parent / "leaf_eval_stats.json"
+
+
+def measured_leaf_turn_weights(turns):
+    """P(leaf turn | turn in this bucket), from Task 1b-b's measured depths.
+
+    Falls back to uniform (loudly) when the measurement has not been run, so a
+    missing artifact can never silently become a different experiment.
+    """
+    if not LEAF_STATS.exists():
+        return (np.full(len(turns), 1.0 / len(turns)),
+                f"UNIFORM FALLBACK — {LEAF_STATS.name} missing, run "
+                "`cargo test --release --test leaf_eval_stats -- --ignored` (Task 1b-b)")
+    doc = json.loads(LEAF_STATS.read_text())
+    depth_dist = {int(k): float(v) for k, v in doc["achieved_depth_distribution"].items()}
+    full = leaf_turn_distribution(depth_dist)
+    w = np.array([full.get(t, 0.0) for t in turns], dtype=float)
+    if w.sum() <= 0:
+        return (np.full(len(turns), 1.0 / len(turns)),
+                "UNIFORM FALLBACK — measured distribution puts no mass in this bucket")
+    return w / w.sum(), (
+        f"measured (Task 1b-b achieved depths {sorted(depth_dist)}), "
+        f"renormalised within the bucket"
+    )
+
+
 # ---------------------------------------------------------------------------
 # 7. Masked-state replica (gates 3 and 4)
 # ---------------------------------------------------------------------------
@@ -503,12 +535,20 @@ def build_masked_states(enc, report, bucket=MASK_BUCKET):
                    and t not in turns]
     if unreachable:
         log(f"excluded as mid-pair (never a search leaf): {unreachable}", report)
+
+    # Draw the leaf turn from the MEASURED leaf distribution restricted to this
+    # bucket, not uniformly: Task 1b-b recorded what depth the engine actually
+    # reaches inside AB_COMPUTE_BUDGET_MS, and that is the second factor of the
+    # mask table. Without it the replica would be a guess about the engine.
+    weights, source = measured_leaf_turn_weights(turns)
+    log(f"leaf-turn draw: {source}", report)
+    log("  " + ", ".join(f"t{t}={w:.4f}" for t, w in zip(turns, weights)), report)
     for t in turns:
         p = pattern_at(t)
         log(f"  turn {t}: picks b{p['blue_picks']}/r{p['red_picks']}  "
             f"bans b{p['blue_bans']}/r{p['red_bans']}  masked={p['masked_slots']}", report)
 
-    chosen = rng.choice(turns, size=len(test))
+    chosen = rng.choice(turns, size=len(test), p=weights)
     rows = []
     for i in range(len(test)):
         t = int(chosen[i])
