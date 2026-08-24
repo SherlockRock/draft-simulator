@@ -20,7 +20,14 @@ const APEX_TIERS = new Set(["CHALLENGER", "GRANDMASTER", "MASTER"]);
  * One polling cycle: claim a batch of due summoners, fetch their recent ranked
  * match ids, queue the new ones.
  */
-export async function runMatchIdCycle({ client, db, config, region, logger }) {
+export async function runMatchIdCycle({
+  client,
+  db,
+  config,
+  region,
+  logger,
+  shouldStop = () => false,
+}) {
   const { pending } = await countMatchesByStatus(db, region);
   if (pending > config.backlogPauseThreshold) {
     logger.info?.(`match-ids ${region}: backlog ${pending} > ${config.backlogPauseThreshold}, pausing`);
@@ -36,7 +43,11 @@ export async function runMatchIdCycle({ client, db, config, region, logger }) {
   });
 
   let discovered = 0;
+  let processed = 0;
   for (const summoner of summoners) {
+    // Polled between summoners so a SIGTERM drain doesn't wait on the whole batch.
+    if (shouldStop()) break;
+    processed++;
     const maxPages = APEX_TIERS.has(summoner.tier)
       ? config.apexMatchIdPages
       : config.diamondMatchIdPages;
@@ -71,5 +82,5 @@ export async function runMatchIdCycle({ client, db, config, region, logger }) {
     }
   }
 
-  return { paused: false, summonersProcessed: summoners.length, discovered };
+  return { paused: false, summonersProcessed: processed, discovered };
 }

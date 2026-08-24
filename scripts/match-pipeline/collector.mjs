@@ -12,7 +12,8 @@
  *   - match-id loop   continuous, backlog-aware
  *   - processor loop  continuous (match+timeline → extract → JSONB)
  *
- * SIGTERM/SIGINT finish the in-flight cycle, then exit (systemd-friendly).
+ * SIGTERM/SIGINT finish the in-flight items (not the whole batch — a processor
+ * batch is ~8 min of rate budget, systemd's TimeoutStopSec is 120s), then exit.
  * A 401/403 pauses all loops in KEY_EXPIRED until push-key.sh delivers a
  * fresh key to the env file; the DB is the only state.
  */
@@ -78,6 +79,7 @@ const rawClient = new RiotClient({
 const client = wrapClientWithKeyRotation(rawClient, keyManager, makeLogger("key"));
 
 let running = true;
+const shouldStop = () => !running;
 const sleepWhileRunning = async (ms) => {
   const until = Date.now() + ms;
   while (running && Date.now() < until) {
@@ -102,7 +104,7 @@ async function matchIdLoop() {
   const logger = makeLogger("match-ids");
   while (running) {
     try {
-      const r = await runMatchIdCycle({ client, db, config, region, logger });
+      const r = await runMatchIdCycle({ client, db, config, region, logger, shouldStop });
       if (r.discovered > 0 || r.summonersProcessed > 0) {
         logger.info(`summoners=${r.summonersProcessed} discovered=${r.discovered}`);
       }
@@ -118,7 +120,7 @@ async function processorLoop() {
   const logger = makeLogger("processor");
   while (running) {
     try {
-      const r = await runProcessorCycle({ client, db, config, region, logger });
+      const r = await runProcessorCycle({ client, db, config, region, logger, shouldStop });
       if (r.claimed > 0) {
         logger.info(
           `claimed=${r.claimed} fetched=${r.fetched} skipped=${r.skipped} failed=${r.failed}`,

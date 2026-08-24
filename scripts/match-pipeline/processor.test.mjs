@@ -196,3 +196,33 @@ test("bounded concurrency: in-flight matches never exceed processorConcurrency",
   assert.equal(result.fetched, 6);
   assert.ok(peak <= 2, `peak in-flight ${peak} > 2`);
 });
+
+test("shouldStop stops pulling from the queue; unstarted rows stay pending", async () => {
+  const ids = Array.from({ length: 6 }, (_, i) => `NA1_${i}`);
+  await seedPending(ids);
+  const fx = {};
+  for (const id of ids) fx[id] = { match: buildMatchDto({ matchId: id }), timeline: buildTimelineDto() };
+  let stop = false;
+  const client = {
+    async getMatch(matchId) {
+      stop = true; // shutdown arrives while the first item is in flight
+      return fx[matchId].match;
+    },
+    async getMatchTimeline(matchId) {
+      return fx[matchId].timeline;
+    },
+  };
+  const config = loadConfig({ COLLECTOR_PROCESSOR_CONCURRENCY: "1" });
+  const result = await runProcessorCycle({
+    client,
+    db,
+    config,
+    region: "na1",
+    logger: silentLogger,
+    shouldStop: () => stop,
+  });
+  assert.equal(result.claimed, 6);
+  assert.equal(result.fetched, 1); // the in-flight item completes normally
+  const { rows } = await db.query("SELECT count(*)::int AS n FROM matches WHERE status = 'pending'");
+  assert.equal(rows[0].n, 5);
+});

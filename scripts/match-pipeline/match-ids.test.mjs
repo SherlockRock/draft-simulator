@@ -190,3 +190,31 @@ test("backlog pause is per-region", async () => {
   assert.equal(result.paused, false);
   assert.equal(result.discovered, 1);
 });
+
+test("shouldStop ends the cycle between summoners; the rest stay unstamped", async () => {
+  await seedSummoner(db, "na1", "P1", "DIAMOND");
+  await seedSummoner(db, "na1", "P2", "DIAMOND");
+  await seedSummoner(db, "na1", "P3", "DIAMOND");
+  let stop = false;
+  const inner = mockClient({ P1: [["NA1_1"]], P2: [["NA1_2"]], P3: [["NA1_3"]] });
+  const client = {
+    async getMatchIdsByPuuid(...args) {
+      stop = true;
+      return inner.getMatchIdsByPuuid(...args);
+    },
+  };
+  const result = await runMatchIdCycle({
+    client,
+    db,
+    config: loadConfig({}),
+    region: "na1",
+    logger: silentLogger,
+    shouldStop: () => stop,
+  });
+  assert.equal(result.summonersProcessed, 1);
+  assert.equal(result.discovered, 1);
+  const { rows } = await db.query(
+    "SELECT count(*)::int AS n FROM summoners WHERE matches_fetched_at IS NULL",
+  );
+  assert.equal(rows[0].n, 2);
+});

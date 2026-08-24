@@ -16,7 +16,20 @@ import {
 } from "./db.mjs";
 import { extractMatch, EXTRACTOR_VERSION } from "./extractor.mjs";
 
-export async function runProcessorCycle({ client, db, config, region, logger }) {
+/**
+ * `shouldStop` is polled between items so a SIGTERM drain ends after the
+ * in-flight items rather than after the whole batch — a full batch is
+ * ~4 rate windows (200 × 2 requests at 100/2min) and systemd's stop timeout
+ * is 120s. Unstarted rows keep their `pending` status and are re-claimed.
+ */
+export async function runProcessorCycle({
+  client,
+  db,
+  config,
+  region,
+  logger,
+  shouldStop = () => false,
+}) {
   const claimed = await claimPendingMatches(db, {
     region,
     limit: config.processorBatchSize,
@@ -28,7 +41,7 @@ export async function runProcessorCycle({ client, db, config, region, logger }) 
   const queue = [...claimed];
 
   const worker = async () => {
-    for (let item = queue.shift(); item !== undefined; item = queue.shift()) {
+    for (let item = queue.shift(); item !== undefined && !shouldStop(); item = queue.shift()) {
       const { match_id: matchId } = item;
       try {
         const matchDto = await client.getMatch(matchId, continent);
