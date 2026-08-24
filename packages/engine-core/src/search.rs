@@ -1,6 +1,6 @@
 use crate::cancellation::{ensure_not_cancelled, CancelHandle};
 use crate::coverage::{coverage_score, missing_roles};
-use crate::draft_state::{is_taken, picks_remaining, ActionType, DraftState, Phase, Side, TurnInfo, TURN_SEQUENCE};
+use crate::draft_state::{is_taken, picks_remaining, ActionType, DraftState, Phase, Side, TurnInfo, TOTAL_TURNS, TURN_SEQUENCE};
 use crate::engine::EngineError;
 use crate::feasibility::can_complete_roles;
 use crate::evaluator::{phase_weight_for, score_pick, EvalContext, ScoreSet, SideValues};
@@ -69,6 +69,20 @@ struct SearchAccum {
     applied_forced: HashSet<usize>,
     nodes_evaluated: usize,
     nodes_pruned: usize,
+    leaf_evaluations: usize,
+    leaf_depth_histogram: [usize; LEAF_DEPTH_BUCKETS],
+}
+
+impl SearchAccum {
+    /// Record one static evaluation. Called at every `eval_state` site that the
+    /// search can reach on a cache miss: the depth-bound/terminal leaf, and the
+    /// two empty-candidate fallbacks (single-slot and pair), which also produce
+    /// a value from a static evaluation rather than from children.
+    fn record_leaf_eval(&mut self, params: &SearchParams, remaining_depth: usize) {
+        self.leaf_evaluations += 1;
+        let depth = params.max_depth.saturating_sub(remaining_depth);
+        self.leaf_depth_histogram[depth.min(LEAF_DEPTH_BUCKETS - 1)] += 1;
+    }
 }
 
 pub fn search(
@@ -115,6 +129,8 @@ pub fn search_with_stats(
             .forced_branches
             .len()
             .saturating_sub(accum.applied_forced.len()),
+        leaf_evaluations: accum.leaf_evaluations,
+        leaf_depth_histogram: accum.leaf_depth_histogram,
     };
     Ok((tree, stats))
 }
@@ -128,7 +144,21 @@ pub struct SearchStats {
     /// Forced branches whose `path` did not resolve against any actual lineage
     /// during the search. Spec: silent drop, telemetry-only.
     pub forced_branches_dropped: usize,
+    /// Static evaluations (`eval_state`) actually computed by this search —
+    /// cache **misses** only, since a transposition hit returns before any
+    /// evaluation happens. Distinct from `nodes_evaluated`, which counts
+    /// internal expansions, not evaluations. This is the quantity a batched
+    /// neural leaf evaluator would have to serve per query.
+    pub leaf_evaluations: usize,
+    /// Histogram of `params.max_depth - remaining_depth` at each counted
+    /// evaluation: index = plies from the search root. Depths at or beyond
+    /// `LEAF_DEPTH_BUCKETS` saturate into the last bucket.
+    pub leaf_depth_histogram: [usize; LEAF_DEPTH_BUCKETS],
 }
+
+/// A draft is `TOTAL_TURNS` turns long, so no leaf can sit more than that many
+/// plies below any root. One extra bucket holds depth 0 (the root itself).
+pub const LEAF_DEPTH_BUCKETS: usize = TOTAL_TURNS + 1;
 
 /// Up-front structural validation of forced branches. Currently catches the
 /// reverse-fill pair case (forcing `pair_start` when state has already moved
@@ -178,6 +208,7 @@ fn search_recursive(
 
     // Terminal or depth-bound: produce a leaf node carrying a static evaluation.
     if turn_opt.is_none() || remaining_depth == 0 {
+        accum.record_leaf_eval(params, remaining_depth);
         let value: SideValues = eval_state(state, eval_ctx);
         let leaf = TreeNode {
             champion_ids: vec![],
@@ -347,6 +378,7 @@ fn search_recursive(
 
     if children.is_empty() {
         // No legal candidates (e.g., depleted pool). Treat as terminal.
+        accum.record_leaf_eval(params, remaining_depth);
         best_value_pair = eval_state(state, eval_ctx);
     }
 
@@ -856,6 +888,9 @@ fn expand_pair(
     }
 
     if children.is_empty() {
+        // Pair expansion produced no legal pair. Same static-evaluation fallback
+        // as the single-slot path above.
+        accum.record_leaf_eval(params, remaining_depth);
         best_value_pair = eval_state(state, eval_ctx);
     }
     children.sort_by(|a, b| {
