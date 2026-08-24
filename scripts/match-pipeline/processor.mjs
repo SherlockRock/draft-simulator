@@ -75,7 +75,7 @@ export async function runProcessorCycle({
           // Shutdown while paused on an expired key or waiting for rate budget —
           // leave the row pending so the next run re-claims it instead of
           // burying it as failed.
-          return;
+          break;
         }
         await markMatchFailed(db, matchId, String(err.message).slice(0, 500));
         counts.failed++;
@@ -83,18 +83,21 @@ export async function runProcessorCycle({
       } finally {
         const f = inFlight.get(slot);
         inFlight.delete(slot);
-        if (stopSeenAt && f) {
+        if (shouldStop() && f) {
+          if (!stopSeenAt) {
+            // First worker to notice the stop reports what everyone else is on.
+            stopSeenAt = Date.now();
+            const stages = [...inFlight.values()].map((x) => `${x.stage}:${Date.now() - x.since}ms`);
+            logger.info?.(
+              `processor ${region}: stop requested, ${inFlight.size} still in flight [${stages.join(" ")}]`,
+            );
+          }
           logger.info?.(
-            `processor ${region}: drain — worker ${slot} finished ${f.matchId} at stage ${f.stage} ` +
-              `${Date.now() - stopSeenAt}ms after stop`,
+            `processor ${region}: drain — worker ${slot} left ${f.matchId} at stage ${f.stage} ` +
+              `${Date.now() - stopSeenAt}ms after first stop`,
           );
         }
       }
-    }
-    if (!stopSeenAt && shouldStop()) {
-      stopSeenAt = Date.now();
-      const stages = [...inFlight.values()].map((f) => `${f.stage}:${Date.now() - f.since}ms`);
-      logger.info?.(`processor ${region}: stop requested, ${inFlight.size} in flight [${stages.join(" ")}]`);
     }
   };
 
