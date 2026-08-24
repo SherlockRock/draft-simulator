@@ -9,3 +9,12 @@ Own Python environment (uv), deliberately outside the pnpm workspace.
 - `explore.py` — Phase 2 corpus exploration (handoff questions 2–8); read-only over the parquet,
   caches the flattened table next to it as `*.flat.parquet`.
 - Plan: `docs/plans/2026-08-24-custom-model-phase2-plan.md`. Training code lands per that plan.
+
+## Phase 2 pipeline
+
+| step | script | output |
+|---|---|---|
+| 0 | `node ../scrape-cdragon.mjs` + `common.py` | fresh aliases, `EVALUABLE` rule |
+| 1b-a | `mask_table.py` | `mask_table.json` — leaf fill pattern per (root turn, depth) |
+
+Tests: `.venv/bin/python -m pytest` from this directory.
