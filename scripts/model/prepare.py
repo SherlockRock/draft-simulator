@@ -584,9 +584,22 @@ def build_masked_states(enc, report, bucket=MASK_BUCKET):
 # ---------------------------------------------------------------------------
 
 def alias_frame(enc, id_to_alias):
+    """Picks AND bans as aliases.
+
+    The bans are not decoration: `search()` only returns the static
+    `eval_state` at a TERMINAL DraftState, and terminal means all 20 actions
+    are present (`draft_state.rs::turn_index`). A picks-only row would leave the
+    state at turn 10, where `search()` searches instead of evaluating.
+    """
     out = pd.DataFrame({"match_id": enc.match_id.values})
     for slot, (tag, pos) in enumerate([(t, p) for t in ("b", "r") for p in POSITIONS]):
         out[f"{tag}_{pos}"] = [id_to_alias[c] for c in enc[f"riot_{slot}"]]
+    for k in range(10):
+        side = "b" if k < 5 else "r"
+        raw = enc[f"ban_riot_{k}"].to_numpy()
+        # A forfeited ban has no champion; the harness pads those slots so the
+        # turn count still reaches 20.
+        out[f"ban_{side}{k % 5}"] = [id_to_alias[c] if c > 0 else "" for c in raw]
     out["win"] = enc.win.values
     out["evaluable"] = enc.evaluable.values
     return out

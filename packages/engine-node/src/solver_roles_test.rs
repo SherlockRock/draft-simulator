@@ -34,7 +34,7 @@ const ROLE_NAMES: [&str; 5] = ["TOP", "JUNGLE", "MIDDLE", "ADC", "SUPPORT"];
 /// noise (an off-role one-off) rather than a position the champion plays.
 const SYNTH_ROLE_THRESHOLD: f64 = 0.15;
 
-fn repo_root() -> PathBuf {
+pub(crate) fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(|p| p.parent())
@@ -44,13 +44,13 @@ fn repo_root() -> PathBuf {
 
 // --- a minimal CSV reader; every field here is an alias, an integer or empty --
 
-struct Csv {
+pub(crate) struct Csv {
     header: HashMap<String, usize>,
-    rows: Vec<Vec<String>>,
+    pub(crate) rows: Vec<Vec<String>>,
 }
 
 impl Csv {
-    fn read(path: &Path) -> Csv {
+    pub(crate) fn read(path: &Path) -> Csv {
         let raw = fs::read_to_string(path)
             .unwrap_or_else(|e| panic!("{} — run prepare.py first ({e})", path.display()));
         let mut lines = raw.lines();
@@ -68,7 +68,7 @@ impl Csv {
         Csv { header, rows }
     }
 
-    fn get<'a>(&self, row: &'a [String], name: &str) -> &'a str {
+    pub(crate) fn get<'a>(&self, row: &'a [String], name: &str) -> &'a str {
         let i = *self
             .header
             .get(name)
@@ -136,7 +136,7 @@ fn synthesise_missing_meta(meta: &mut HashMap<String, ChampionMeta>) -> Vec<Stri
     added
 }
 
-fn load_meta_with_synthesis() -> (HashMap<String, ChampionMeta>, Vec<String>) {
+pub(crate) fn load_meta_with_synthesis() -> (HashMap<String, ChampionMeta>, Vec<String>) {
     let root = repo_root();
     let (_meta, mut champion_meta) = load_engine_data(
         &root.join("data/compiled/champion-meta.json"),
@@ -219,7 +219,7 @@ fn team_roles(champions: &[&str], meta: &HashMap<String, ChampionMeta>) -> TeamR
     }
 }
 
-const SLOT_COLUMNS: [&str; 10] = [
+pub(crate) const SLOT_COLUMNS: [&str; 10] = [
     "b_TOP", "b_JUNGLE", "b_MIDDLE", "b_BOTTOM", "b_UTILITY",
     "r_TOP", "r_JUNGLE", "r_MIDDLE", "r_BOTTOM", "r_UTILITY",
 ];

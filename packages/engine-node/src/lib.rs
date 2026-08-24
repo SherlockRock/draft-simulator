@@ -7,6 +7,9 @@ mod projection;
 #[cfg(test)]
 mod solver_roles_test;
 
+#[cfg(test)]
+mod evaluator_scores_test;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
