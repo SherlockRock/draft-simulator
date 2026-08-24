@@ -136,7 +136,7 @@ def fm_arm(tr, va, te, dims, masks, report, seed=0):
     report.append(f"  {'antisymmetric FM':<26} lr={lr:.0e} wd={wd:.0e} val-A {val_loss:.5f}  "
                   f"test {row['log_loss']:.5f}  ({model.n_parameters():,} params, "
                   f"best epoch {early}/{FM_EPOCHS})")
-    return row, p_te
+    return row, p_te, model
 
 
 def run_split(ds, dims, masks, report, label, seed=0):
@@ -168,7 +168,7 @@ def run_split(ds, dims, masks, report, label, seed=0):
     rows.append(row_anti)
     preds["logreg_antisym"] = p_anti
 
-    row_fm, p_fm = fm_arm(tr, va, te, dims, masks, report, seed=seed)
+    row_fm, p_fm, fm_model = fm_arm(tr, va, te, dims, masks, report, seed=seed)
     rows.append(row_fm)
     preds["fm"] = p_fm
 
@@ -199,11 +199,12 @@ def run_split(ds, dims, masks, report, label, seed=0):
         verdict = "outside the MDE and positive: the constraint costs something real"
     report.append(f"  on test: {d.mean():+.5f} nats (negative = antisymmetric is better), "
                   f"MDE {m:.5f} -> {verdict}")
-    return {"label": label, "n_train": int(len(tr)), "n_test": int(len(te)),
-            "rows": rows, "comparisons": comparisons,
-            "antisymmetry_cost_val_a": float(anti_cost),
-            "antisymmetry_cost_test": float(d.mean()),
-            "antisymmetry_cost_test_mde": float(metrics.mde(d))}, preds
+    return ({"label": label, "n_train": int(len(tr)), "n_test": int(len(te)),
+             "rows": rows, "comparisons": comparisons,
+             "antisymmetry_cost_val_a": float(anti_cost),
+             "antisymmetry_cost_test": float(d.mean()),
+             "antisymmetry_cost_test_mde": float(metrics.mde(d))},
+            {"preds": preds, "fm_model": fm_model, "test_ids": te.match_id.to_numpy()})
 
 
 def main():
@@ -221,8 +222,14 @@ def main():
               f"vocab {n_champ} champions, {n_patch} patches, {n_region} regions"]
 
     result = {"main": None, "folds": [], "masked": None}
-    main_res, _ = run_split(ds, dims, {}, report, "main 80/10/10 split", seed=args.seed)
+    main_res, main_extra = run_split(ds, dims, {}, report, "main 80/10/10 split",
+                                     seed=args.seed)
     result["main"] = main_res
+    # Gate comparisons must be PAIRED against these exact predictions, and gate 1
+    # needs the fitted FM to score sibling candidates, so both are persisted.
+    np.savez(out_dir / "baseline_preds.npz",
+             test_ids=main_extra["test_ids"], **main_extra["preds"])
+    torch.save(main_extra["fm_model"].state_dict(), out_dir / "baseline_fm.pt")
 
     if args.masked:
         ms = pd.read_parquet(out_dir / "masked_states.parquet")
@@ -239,9 +246,13 @@ def main():
         by_split = {s: (vp_all[(ds.split == s).to_numpy()], vb_all[(ds.split == s).to_numpy()])
                     for s in ("train", "val_a", "test")}
         by_split["test"] = (vp, vb)
-        masked_res, _ = run_split(ds, dims, by_split, report,
-                                  "4-6 masked replica (gate 3 floor)", seed=args.seed)
+        masked_res, masked_extra = run_split(ds, dims, by_split, report,
+                                             "4-6 masked replica (gate 3 floor)",
+                                             seed=args.seed)
         result["masked"] = masked_res
+        np.savez(out_dir / "baseline_preds_masked.npz",
+                 test_ids=masked_extra["test_ids"], **masked_extra["preds"])
+        torch.save(masked_extra["fm_model"].state_dict(), out_dir / "baseline_fm_masked.pt")
 
     if args.folds:
         folds = pd.read_parquet(out_dir / "folds.parquet")
@@ -251,8 +262,8 @@ def main():
             sub["split"] = [roles[m] for m in sub.match_id]
             if not {"train", "val_a", "test"} <= set(sub.split.unique()):
                 continue
-            fold_res, _ = run_split(sub, dims, {}, report, f"rolling-origin fold {k}",
-                                    seed=args.seed)
+            fold_res, _fold_extra = run_split(sub, dims, {}, report,
+                                              f"rolling-origin fold {k}", seed=args.seed)
             result["folds"].append(fold_res)
 
     (out_dir / "baselines.json").write_text(json.dumps(result, indent=2))

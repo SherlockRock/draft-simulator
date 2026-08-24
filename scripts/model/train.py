@@ -226,7 +226,7 @@ AUG_GRID = [{"p": p, "p_swap": s} for p in (0.25, 0.5, 0.75) for s in (0.0, 0.1,
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stage", choices=["arch", "aug", "final"], default="arch")
+    ap.add_argument("--stage", choices=["arch", "aug", "final", "folds"], default="arch")
     ap.add_argument("--out", default=str(TRAIN_DIR))
     ap.add_argument("--epochs", type=int, default=None)
     args = ap.parse_args()
@@ -254,11 +254,43 @@ def main():
         winner = json.loads((Path(args.out) / "sweep_arch.json").read_text())["winner"]
         grid = [dict(base, **{k: winner[k] for k in ("width", "dropout", "aux")}, **g)
                 for g in AUG_GRID]
-    else:
+    elif args.stage == "final":
         winner = json.loads((Path(args.out) / "sweep_aug.json").read_text())["winner"]
         grid = [dict(base, **{k: winner[k] for k in
                               ("width", "dropout", "aux", "p", "p_swap")}, seed=s)
                 for s in (0, 1, 2)]
+    else:
+        # Rolling origin, gate 2. The tuning is FROZEN at fold 1's winner and
+        # reused unchanged on every fold: the main split's val/test windows
+        # overlap folds 4-5's test slices, so re-tuning per fold would leak.
+        winner = json.loads((Path(args.out) / "sweep_aug.json").read_text())["winner"]
+        cfg = {k: winner[k] for k in ("width", "dropout", "aux", "p", "p_swap")}
+        fold_preds = {}
+        for k in sorted(folds.fold.unique()):
+            fk = fold_frame(ds, folds, k)
+            if not {"train", "val_a", "test"} <= set(fk.fold_split.unique()):
+                continue
+            per_seed = []
+            for seed in (0, 1, 2):
+                print(f"\n[fold {k} seed {seed}] {cfg}")
+                res, model = train_one(
+                    dict(base, **cfg, seed=seed),
+                    (fk, i2a, dims, prior, factors),
+                )
+                res.pop("_val_a_rows", None)
+                te = fk[fk.fold_split == "test"].reset_index(drop=True)
+                t_te = tensors(te)
+                c, r = serve.riot_inputs(te)
+                _, lg = evaluate(model, t_te, torch.from_numpy(c).long(),
+                                 torch.from_numpy(r))
+                per_seed.append(1 / (1 + np.exp(-lg)))
+                print(f"  -> fold {k} seed {seed} val-A {res['best_val_a']:.5f}")
+            fold_preds[f"fold{k}"] = np.mean(per_seed, axis=0)
+            fold_preds[f"fold{k}_ids"] = te.match_id.to_numpy()
+            fold_preds[f"fold{k}_y"] = te.win.to_numpy()
+        np.savez(Path(args.out) / "model_fold_preds.npz", **fold_preds)
+        print(f"\nwrote {Path(args.out)}/model_fold_preds.npz")
+        return
 
     for i, cfg in enumerate(grid):
         label = ", ".join(f"{k}={cfg[k]}" for k in
