@@ -72,9 +72,19 @@ const buckets = [...config.appBuckets, config.matchMethodBucket].map(
   ([capacity, windowMs]) => new SlidingWindowBucket(capacity, windowMs),
 );
 const rateLimiter = new CompositeRateLimiter(buckets);
+// Riot's Retry-After on a 429 can be most of a window (82s observed). A worker
+// sleeping it off must wake at shutdown; its next acquire() then throws
+// "rate-limiter aborted" and the row stays pending.
+let releaseSleepers;
+const shutdownSignal = new Promise((resolve) => {
+  releaseSleepers = resolve;
+});
+const sleepUnlessStopping = (ms) =>
+  Promise.race([new Promise((r) => setTimeout(r, ms)), shutdownSignal]);
 const rawClient = new RiotClient({
   apiKey,
   rateLimiter,
+  sleep: sleepUnlessStopping,
   logger: makeLogger("http"),
 });
 const client = wrapClientWithKeyRotation(rawClient, keyManager, makeLogger("key"));
@@ -149,6 +159,7 @@ const shutdown = (signal) => {
   running = false;
   keyManager.abort(); // unblock loops parked in KEY_EXPIRED
   rateLimiter.abort(); // unblock requests parked on a saturated window (up to 2 min)
+  releaseSleepers(); // unblock requests sleeping off a 429 Retry-After
   // Drain diagnostics: systemd kills at TimeoutStopSec, so say what is holding us.
   const started = Date.now();
   const ticker = setInterval(() => {
