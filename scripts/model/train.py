@@ -226,7 +226,7 @@ AUG_GRID = [{"p": p, "p_swap": s} for p in (0.25, 0.5, 0.75) for s in (0.0, 0.1,
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stage", choices=["arch", "aug", "final", "folds"], default="arch")
+    ap.add_argument("--stage", choices=["arch", "aug", "final", "main", "folds"], default="arch")
     ap.add_argument("--out", default=str(TRAIN_DIR))
     ap.add_argument("--epochs", type=int, default=None)
     args = ap.parse_args()
@@ -259,6 +259,29 @@ def main():
         grid = [dict(base, **{k: winner[k] for k in
                               ("width", "dropout", "aux", "p", "p_swap")}, seed=s)
                 for s in (0, 1, 2)]
+    elif args.stage == "main":
+        # The deliverable checkpoints. Tuning is FROZEN at fold 1's winner; the
+        # main split's val-A picks this run's own checkpoint and val-B its
+        # temperature, and its selection numbers are diagnostic only.
+        winner = json.loads((Path(args.out) / "sweep_aug.json").read_text())["winner"]
+        cfg = {k: winner[k] for k in ("width", "dropout", "aux", "p", "p_swap")}
+        main_base = {"split_col": "split", "solver_roles": solver_roles}
+        for seed in (0, 1, 2):
+            print(f"\n[main split seed {seed}] {cfg}")
+            res, model = train_one(dict(main_base, **cfg, seed=seed), data)
+            res.pop("_val_a_rows", None)
+            torch.save(model.state_dict(), Path(args.out) / f"model_seed{seed}.pt")
+            print(f"  -> main-split val-A {res['best_val_a']:.5f} "
+                  f"at epoch {res['best_epoch']}")
+            results.append(res)
+        (Path(args.out) / "sweep_main.json").write_text(json.dumps(
+            {"stage": "main", "frozen_config": cfg, "results": results,
+             "mean_val_a": float(np.mean([r["best_val_a"] for r in results])),
+             "spread_val_a": float(np.std([r["best_val_a"] for r in results]))},
+            indent=2))
+        print(f"\nwrote {Path(args.out)}/sweep_main.json and model_seed{{0,1,2}}.pt")
+        return
+
     else:
         # Rolling origin, gate 2. The tuning is FROZEN at fold 1's winner and
         # reused unchanged on every fold: the main split's val/test windows
@@ -315,16 +338,22 @@ def main():
         r["delta_vs_best"] = float(d.mean())
         if r["delta_vs_best"] <= r["mde_vs_best"]:
             tied.append(r)
-    # "Smallest" among the tied: narrower trunk first, then MORE dropout, then
-    # no aux head, then less augmentation.
+    # "Pick the smallest" refers to MODEL SIZE - narrower trunk, then more
+    # dropout, then no auxiliary head. It does NOT extend to the augmentation
+    # axes: every config in the augmentation grid has identical parameters, so
+    # "smallest" is undefined there, and ordering on p_swap would have selected
+    # p_swap = 0 - dropping the one augmentation that targets the solver's
+    # actual failure mode (27% of teams have a champion in the wrong slot),
+    # which is precisely what gate 4 measures. When the capacity axes are equal,
+    # fall back to the best val-A, which is the serve-realistic quantity.
+    def capacity(r):
+        c = r["config"]
+        return (c.get("width", 0), -c.get("dropout", 0), c.get("aux", 0))
+
+    smallest = min(capacity(r) for r in tied)
     winner = min(
-        tied,
-        key=lambda r: (
-            r["config"].get("width", 0),
-            -r["config"].get("dropout", 0),
-            r["config"].get("aux", 0),
-            r["config"].get("p_swap", 0),
-        ),
+        (r for r in tied if capacity(r) == smallest),
+        key=lambda r: r["best_val_a"],
     )
     print(f"\n{'config':<54}{'val-A':>10}{'d vs best':>11}{'MDE':>9}  tied")
     for r in sorted(results, key=lambda x: x["best_val_a"]):

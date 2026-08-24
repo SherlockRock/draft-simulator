@@ -38,19 +38,31 @@ TRAIN_DIR = ROOT / "data/training"
 OPSET = 17
 
 
-class ExportWrapper(nn.Module):
-    """Adds the temperature-scaled probability and the accepted-and-ignored elo."""
+# LoLDraftAI's scheme has 7 elo levels; one spare row leaves room to append.
+N_ELO = 8
 
-    def __init__(self, model, temperature):
+
+class ExportWrapper(nn.Module):
+    """Adds the temperature-scaled probability and the reserved elo input.
+
+    `elo` is accepted and ignored in v1, but it cannot be ignored by simply
+    discarding it: the ONNX tracer constant-folds any input that does not reach
+    an output, and the exported graph then rejects `elo` as an unknown input.
+    So it is a real zero-initialised lookup added to the logit — a Gather the
+    exporter must keep. Contributing exactly 0.0, it leaves v1's numbers
+    untouched, and the day Diamond seeds are material (Q6) Phase 3 unfreezes the
+    table instead of changing the contract.
+    """
+
+    def __init__(self, model, temperature, n_elo=N_ELO):
         super().__init__()
         self.model = model
         self.register_buffer("temperature", torch.tensor(float(temperature)))
+        self.register_buffer("elo_table", torch.zeros(n_elo, 1))
 
     def forward(self, champions, role_probs, bans, patch, region, elo):
-        # `elo` is consumed so the graph declares the input, then discarded.
-        _ = elo.sum() * 0
         out = self.model(champions, role_probs, bans, patch, region)
-        logit = out["win_logit"]
+        logit = out["win_logit"] + self.elo_table[elo].squeeze(-1)
         return logit, torch.sigmoid(logit / self.temperature)
 
 
@@ -110,6 +122,9 @@ def main():
     with torch.no_grad():
         ref_logit, ref_p = wrapper(*inputs)
     feed = {n: v.numpy() for n, v in zip(names, inputs)}
+    assert {i.name for i in sess.get_inputs()} == set(names), (
+        f"the exported graph dropped an input: {[i.name for i in sess.get_inputs()]}"
+    )
     got_logit, got_p = sess.run(None, feed)
     d_logit = float(np.abs(ref_logit.numpy() - got_logit).max())
     d_p = float(np.abs(ref_p.numpy() - got_p).max())
@@ -160,7 +175,9 @@ def main():
         "- `p_blue_win` carries a SINGLE GLOBAL temperature and is calibrated at",
         "  FULL drafts. Per-bucket temperatures ship as a JSON table below and are",
         "  graph-baked in Phase 3.",
-        "- `elo` is accepted and IGNORED in v1 (the corpus is 100% apex).",
+        "- `elo` is accepted and IGNORED in v1 (the corpus is 100% apex): the",
+        "  graph carries a zero-initialised elo table that contributes exactly 0.0.",
+        f"  {N_ELO} rows reserved. Phase 3 unfreezes it rather than changing the contract.",
         "- `region = -1` is reserved for averaging the side bias.",
         "",
         "## Per-masked-slot-bucket temperatures",

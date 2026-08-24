@@ -42,18 +42,36 @@ def mrr_top1(score_sets, valid=None):
     return np.array(rr), np.array(t1), np.array(keep, dtype=int)
 
 
-def verdict_from(boot):
+def aggregate(verdicts):
+    """A FAIL dominates. An arm whose CI excludes zero on the WRONG side is a
+    real, replicated failure; calling the gate UNDERPOWERED because a *different*
+    arm was inconclusive would hide it."""
+    if not verdicts:
+        return "MISSING"
+    if "FAIL" in verdicts:
+        return "FAIL"
+    if all(v == "PASS" for v in verdicts):
+        return "PASS"
+    return "UNDERPOWERED"
+
+
+def verdict_from(boot, lower_is_better):
+    """`lower_is_better` is not cosmetic: the log-loss gates want a NEGATIVE
+    difference (model − rival) and the MRR gate wants a positive one. Reading
+    both the same way inverts four of the six gates."""
     if abs(boot["mean"]) < boot["mde"]:
         return "UNDERPOWERED"
-    if boot["ci_lo"] > 0:
+    better = boot["ci_hi"] < 0 if lower_is_better else boot["ci_lo"] > 0
+    worse = boot["ci_lo"] > 0 if lower_is_better else boot["ci_hi"] < 0
+    if better:
         return "PASS"
-    if boot["ci_hi"] < 0:
+    if worse:
         return "FAIL"
     return "UNDERPOWERED"
 
 
-def line(report, label, boot):
-    v = verdict_from(boot)
+def line(report, label, boot, lower_is_better=True):
+    v = verdict_from(boot, lower_is_better)
     report.append(
         f"| {label} | {boot['mean']:+.5f} | [{boot['ci_lo']:+.5f}, {boot['ci_hi']:+.5f}] | "
         f"{boot['mde']:.5f} | **{v}** |"
@@ -94,27 +112,52 @@ def gate1(report, result):
     zscore = (r_pop.mean() - chance) / se
     ok = abs(zscore) < 3
     report.append(
-        f"\n**Validity check.** Distractors are drawn ∝ (role, patch) pick frequency, "
-        f"which makes the true pick and its distractors exchangeable in frequency, so a "
-        f"popularity ranker must score at chance EXACTLY. Chance MRR at N={n_cand} is "
-        f"{chance:.4f}; popularity scores {r_pop.mean():.4f} (z = {zscore:+.2f}). "
-        + ("The candidate sets are exchangeable as designed."
-           if ok else "**NOT exchangeable — gate 1 is invalid as constructed.**")
+        f"\n**Validity check — FAILS, and the plan's premise is why.** Chance MRR at "
+        f"N={n_cand} is {chance:.4f}; the popularity ranker scores {r_pop.mean():.4f} "
+        f"(z = {zscore:+.1f})."
     )
-
+    report.append(
+        "\nThe plan asserts that frequency-proportional distractors make the true "
+        "pick and its distractors *exchangeable in frequency*, so a popularity "
+        "ranker scores at chance exactly. **That is not attainable by any "
+        "construction in which the true pick comes from the data.** Simulated on a "
+        "Zipf-like pick table:\n"
+        "\n| construction | popularity MRR | z vs chance |"
+        "\n|---|---|---|"
+        "\n| true pick ~ w, distractors ∝ w without replacement (what `prepare.py` does, per the plan) | 0.3988 | **+53** |"
+        "\n| draw the whole set of N ∝ w, then label one member the 'true' pick uniformly | 0.2921 | −0.6 |"
+        "\n"
+        "\nOnly the second is exchangeable, and it is unavailable: the true pick is "
+        "given by the match, not chosen by us. The asymmetry is the *exclusion* — a "
+        "distractor is drawn from the pick distribution conditioned on not being the "
+        "true pick, so whenever the true pick is popular no distractor can outrank "
+        "it. Rejection sampling does not fix it (measured: same bias)."
+    )
+    report.append(
+        "\n**What survives.** Every scorer ranks the SAME candidate sets, so the "
+        "construction bias cancels in a *paired* difference: model − FM and "
+        "model − evaluator remain valid relative tests. What does not survive is the "
+        "absolute MRR level and the 'popularity at chance' criterion. The meaningful "
+        "bar is therefore **model vs popularity**, reported below — a much harder "
+        "and more honest one."
+    )
     out = {"chance_mrr": chance, "popularity_z": float(zscore), "valid": bool(ok),
            "mrr": {a: float(rr[a][0].mean()) for a in rr}}
     report.append("\n| comparison (MRR) | Δ | 95% CI | MDE | verdict |")
     report.append("|---|---|---|---|---|")
     verdicts = []
-    for rival in ("fm", "evaluator"):
+    for rival in ("fm", "evaluator", "popularity"):
         common = np.intersect1d(rr["model"][1], rr[rival][1])
         a = rr["model"][0][np.isin(rr["model"][1], common)]
         b = rr[rival][0][np.isin(rr[rival][1], common)]
         boot = metrics.paired_bootstrap(a - b)
-        v = line(report, f"model − {rival}", boot)
+        v = line(report, f"model − {rival}", boot, lower_is_better=False)
         out[f"model_vs_{rival}"] = {**boot, "verdict": v, "n": int(len(common))}
-        verdicts.append(v)
+        # The plan's gate 1 is "model > evaluator's and > FM's". Popularity is
+        # the validity CONTROL, not an arm of the gate — it is reported (and it
+        # dominates every scorer) but it does not set the gate's verdict.
+        if rival != "popularity":
+            verdicts.append(v)
 
     # Spearman rho vs the evaluator: Phase 3 needs to know whether this is a
     # drop-in replacement (rho ~ 0.9) or a behaviour change (rho ~ 0.1).
@@ -136,8 +179,10 @@ def gate1(report, result):
         f"**Within-sibling logit spread**: {np.nanmean(spread):.4f} mean sd. A spread "
         "below the model's own noise would mean a search dominated by tie-breaks."
     )
-    passed = "PASS" if all(v == "PASS" for v in verdicts) else (
-        "UNDERPOWERED" if "UNDERPOWERED" in verdicts else "FAIL")
+    out["validity_check_passed"] = bool(ok)
+    passed = aggregate(verdicts)
+    if not ok:
+        passed = f"INVALID_CONSTRUCTION ({passed} on the relative arms)"
     return passed, out
 
 
@@ -206,8 +251,7 @@ def gate2(report, result):
     else:
         report.append("\n_model_fold_preds.npz missing — run `train.py --stage folds`._")
 
-    passed = "PASS" if all(v == "PASS" for v in verdicts) else (
-        "UNDERPOWERED" if "UNDERPOWERED" in verdicts else "FAIL")
+    passed = aggregate(verdicts)
     return passed, out
 
 
@@ -235,8 +279,7 @@ def gate3(report, result):
         v, boot = _paired(report, f"model − {rival}", p_model, bl[rival], y)
         out[rival] = {**boot, "verdict": v}
         verdicts.append(v)
-    passed = "PASS" if all(v == "PASS" for v in verdicts) else (
-        "UNDERPOWERED" if "UNDERPOWERED" in verdicts else "FAIL")
+    passed = aggregate(verdicts)
     return passed, out
 
 
@@ -262,8 +305,7 @@ def gate4(report, result):
             out[f"{arm}_vs_{rival}"] = {**boot, "verdict": v}
             if arm == "posterior":
                 verdicts.append(v)
-    passed = "PASS" if all(v == "PASS" for v in verdicts) else (
-        "UNDERPOWERED" if "UNDERPOWERED" in verdicts else "FAIL")
+    passed = aggregate(verdicts)
     return passed, out
 
 
