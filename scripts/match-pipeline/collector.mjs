@@ -136,13 +136,25 @@ async function processorLoop() {
   }
 }
 
-const loops = Promise.all([ladderLoop(), matchIdLoop(), processorLoop()]);
+const pendingLoops = new Set(["ladder", "match-ids", "processor"]);
+const track = (name, promise) => promise.finally(() => pendingLoops.delete(name));
+const loops = Promise.all([
+  track("ladder", ladderLoop()),
+  track("match-ids", matchIdLoop()),
+  track("processor", processorLoop()),
+]);
 
 const shutdown = (signal) => {
   log.info(`${signal} received, draining in-flight work`);
   running = false;
   keyManager.abort(); // unblock loops parked in KEY_EXPIRED
   rateLimiter.abort(); // unblock requests parked on a saturated window (up to 2 min)
+  // Drain diagnostics: systemd kills at TimeoutStopSec, so say what is holding us.
+  const started = Date.now();
+  const ticker = setInterval(() => {
+    log.warn(`still draining after ${Math.round((Date.now() - started) / 1000)}s: ${[...pendingLoops].join(", ")}`);
+  }, 10_000);
+  loops.finally(() => clearInterval(ticker));
 };
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));

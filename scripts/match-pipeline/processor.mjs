@@ -39,13 +39,20 @@ export async function runProcessorCycle({
 
   const continent = platformToContinent(region);
   const queue = [...claimed];
+  // Drain diagnostics: what each worker is on when a stop is requested.
+  const inFlight = new Map();
+  let stopSeenAt = null;
 
-  const worker = async () => {
+  const worker = async (slot) => {
     for (let item = queue.shift(); item !== undefined && !shouldStop(); item = queue.shift()) {
       const { match_id: matchId } = item;
+      const stage = (s) => inFlight.set(slot, { matchId, stage: s, since: Date.now() });
       try {
+        stage("match");
         const matchDto = await client.getMatch(matchId, continent);
+        stage("timeline");
         const timelineDto = await client.getMatchTimeline(matchId, continent);
+        stage("db");
         const { record, skipReason } = extractMatch(matchDto, timelineDto);
         if (skipReason) {
           await markMatchSkipped(db, matchId, skipReason);
@@ -73,13 +80,27 @@ export async function runProcessorCycle({
         await markMatchFailed(db, matchId, String(err.message).slice(0, 500));
         counts.failed++;
         logger.warn?.(`processor ${region}: ${matchId} failed: ${err.message}`);
+      } finally {
+        const f = inFlight.get(slot);
+        inFlight.delete(slot);
+        if (stopSeenAt && f) {
+          logger.info?.(
+            `processor ${region}: drain — worker ${slot} finished ${f.matchId} at stage ${f.stage} ` +
+              `${Date.now() - stopSeenAt}ms after stop`,
+          );
+        }
       }
+    }
+    if (!stopSeenAt && shouldStop()) {
+      stopSeenAt = Date.now();
+      const stages = [...inFlight.values()].map((f) => `${f.stage}:${Date.now() - f.since}ms`);
+      logger.info?.(`processor ${region}: stop requested, ${inFlight.size} in flight [${stages.join(" ")}]`);
     }
   };
 
   const workers = Array.from(
     { length: Math.max(1, Math.min(config.processorConcurrency, claimed.length)) },
-    worker,
+    (_, slot) => worker(slot),
   );
   await Promise.all(workers);
   return counts;
