@@ -79,3 +79,19 @@ def riot_inputs(ds):
     role[:, :5] = eye
     role[:, 5:] = eye
     return champ, role
+
+
+def coverage(ds, solver_roles, index_to_alias, state_kind="full"):
+    """Fraction of (match, side, champion) rows of `ds` that solver_roles scored.
+    train.py refuses to select checkpoints on a partially covered val set, so the
+    criterion is the same for every fold rather than a silent Riot/solver mix."""
+    sr = solver_roles[solver_roles.state_kind == state_kind]
+    have = set(zip(sr.match_id, sr.side, sr.champion))
+    n = hit = 0
+    champ = np.stack([ds[f"champ_{i}"].to_numpy() for i in range(10)], axis=1)
+    for i, m in enumerate(ds.match_id.to_numpy()):
+        for side, base in (("blue", 0), ("red", 5)):
+            for k in range(5):
+                n += 1
+                hit += (m, side, index_to_alias.get(int(champ[i, base + k]))) in have
+    return hit / n if n else 0.0

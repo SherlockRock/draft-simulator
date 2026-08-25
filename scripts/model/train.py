@@ -30,9 +30,9 @@ from torch import nn
 import metrics
 import serve
 from augment import Augmenter, Masker, load_depth_distribution
-from common import POSITIONS, ROOT
+from common import ROOT
 from model import DraftModel
-from roles import position_factor_table
+from roles import factor_table_from_prior, prior_from_frame
 
 TRAIN_DIR = ROOT / "data/training"
 LEAF_STATS = Path(__file__).resolve().parent / "leaf_eval_stats.json"
@@ -41,7 +41,6 @@ BATCH = 512
 LR = 4e-4
 WEIGHT_DECAY = 0.05
 CHAMPION_DECAY = 0.2
-AUX_WEIGHT_DEFAULT = 0.05
 
 
 def load_all():
@@ -52,12 +51,17 @@ def load_all():
     n_patch = len(json.loads((TRAIN_DIR / "patch_vocab.json").read_text())["patch_to_index"])
     n_region = len(json.loads((TRAIN_DIR / "region_vocab.json").read_text())["region_to_index"])
 
-    role_pct = json.loads((TRAIN_DIR / "role_percentages.json").read_text())
-    prior = np.full((n_champ, 5), 0.2, dtype=np.float32)
-    for riot_id, entry in role_pct.items():
-        prior[vocab["riot_id_to_index"][riot_id]] = [entry["roles"][p] for p in POSITIONS]
-    factors = position_factor_table(n_champ, i2a, role_pct)
+    # The augmentation prior and solver factors are built PER TRAINING FRAME in
+    # train_one (a rolling-origin fold's prior must not see its own test
+    # window); these are the main split's, for the scripts that only serve.
+    prior = prior_from_frame(ds[ds.split == "train"], n_champ)
+    factors = factor_table_from_prior(prior, i2a)
     return ds, i2a, (n_champ, n_patch, n_region), prior, factors
+
+
+def seed_checkpoints(out_dir):
+    """Every deliverable checkpoint, in seed order."""
+    return sorted(p.name for p in Path(out_dir).glob("model_seed*.pt"))
 
 
 def tensors(df):
@@ -91,11 +95,14 @@ def evaluate(model, t, champ, role, chunk=8192):
 
 
 def train_one(config, data, log=print):
-    ds, i2a, dims, prior, factors = data
+    ds, i2a, dims, _prior, _factors = data
     n_champ, n_patch, n_region = dims
     split_col = config.get("split_col", "split")
     tr = ds[ds[split_col] == "train"]
     va = ds[ds[split_col] == "val_a"]
+    # Prior and factors from THIS frame's train rows only.
+    prior = prior_from_frame(tr, n_champ)
+    factors = factor_table_from_prior(prior, i2a)
 
     t_tr, t_va = tensors(tr), tensors(va)
     # Targets standardised on TRAIN statistics only.
@@ -113,8 +120,15 @@ def train_one(config, data, log=print):
     va_riot = (torch.from_numpy(va_champ_riot).long(), torch.from_numpy(va_role_riot))
     va_solver = None
     if config.get("solver_roles") is not None:
-        c, r = serve.build(va, config["solver_roles"], i2a, "full", "posterior")
-        va_solver = (torch.from_numpy(c).long(), torch.from_numpy(r))
+        # All-or-nothing: a partially covered val would silently mix solver and
+        # Riot placements and make the selection criterion differ by fold.
+        cov = serve.coverage(va, config["solver_roles"], i2a)
+        if cov == 1.0:
+            c, r = serve.build(va, config["solver_roles"], i2a, "full", "posterior")
+            va_solver = (torch.from_numpy(c).long(), torch.from_numpy(r))
+        else:
+            log(f"    WARNING: solver roles cover {cov:.1%} of val-A — selecting on "
+                "Riot roles for this run (re-run Task 2b to fix)")
 
     depth_dist, depth_src = load_depth_distribution(LEAF_STATS)
     masker = Masker(depth_dist, seed=config["seed"])
@@ -203,6 +217,7 @@ def train_one(config, data, log=print):
         "config": {k: v for k, v in config.items() if k not in ("solver_roles",)},
         "best_val_a": best[0],
         "best_epoch": best[1],
+        "selection_criterion": "solver_posterior" if va_solver is not None else "riot",
         "n_parameters": model.n_parameters(),
         "depth_source": depth_src,
         "history": history,

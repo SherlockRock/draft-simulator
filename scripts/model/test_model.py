@@ -168,3 +168,15 @@ def test_diagnostics_report_the_antisymmetry_ratio():
         out = m(champ, role, bans, patch, region, diagnostics=True)
     assert "cos_h" in out and "a_over_s" in out
     assert torch.isfinite(out["cos_h"]) and torch.isfinite(out["a_over_s"])
+
+
+def test_region_minus_one_averages_the_side_bias():
+    m = make()
+    m.eval()
+    champ, role, bans, patch, _region = batch(8)
+    with torch.no_grad():
+        m.region_bias.copy_(torch.tensor([0.1, -0.3, 0.5]))
+        r0 = m(champ, role, bans, patch, torch.zeros(8, dtype=torch.long))["win_logit"]
+        r_avg = m(champ, role, bans, patch, torch.full((8,), -1, dtype=torch.long))["win_logit"]
+    expected = r0 - 0.1 + torch.tensor([0.1, -0.3, 0.5]).mean()
+    assert torch.allclose(r_avg, expected, atol=1e-6)

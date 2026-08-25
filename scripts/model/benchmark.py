@@ -35,48 +35,52 @@ def mrr_top1(score_sets, valid=None):
         s = np.asarray(s, dtype=float)
         if not np.isfinite(s).all():
             continue
-        rank = int((s > s[0]).sum()) + 1          # ties favour neither arm
+        # Mid-rank for ties: a scorer emitting equal scores gets no credit
+        # for rank 1 (46 popularity + 14 evaluator sets tied at 155k).
+        rank = 1 + float((s > s[0]).sum()) + 0.5 * float((s[1:] == s[0]).sum())
         rr.append(1.0 / rank)
         t1.append(float(rank == 1))
         keep.append(i)
     return np.array(rr), np.array(t1), np.array(keep, dtype=int)
 
 
-def aggregate(verdicts):
-    """A FAIL dominates. An arm whose CI excludes zero on the WRONG side is a
-    real, replicated failure; calling the gate UNDERPOWERED because a *different*
-    arm was inconclusive would hide it."""
-    if not verdicts:
-        return "MISSING"
-    if "FAIL" in verdicts:
-        return "FAIL"
-    if all(v == "PASS" for v in verdicts):
-        return "PASS"
-    return "UNDERPOWERED"
+aggregate = metrics.aggregate_verdicts
 
 
-def verdict_from(boot, lower_is_better):
-    """`lower_is_better` is not cosmetic: the log-loss gates want a NEGATIVE
-    difference (model − rival) and the MRR gate wants a positive one. Reading
-    both the same way inverts four of the six gates."""
-    if abs(boot["mean"]) < boot["mde"]:
-        return "UNDERPOWERED"
-    better = boot["ci_hi"] < 0 if lower_is_better else boot["ci_lo"] > 0
-    worse = boot["ci_lo"] > 0 if lower_is_better else boot["ci_hi"] < 0
-    if better:
-        return "PASS"
-    if worse:
-        return "FAIL"
-    return "UNDERPOWERED"
-
-
-def line(report, label, boot, lower_is_better=True):
-    v = verdict_from(boot, lower_is_better)
+def line(report, label, diffs_by_seed, lower_is_better=True):
+    """One row per comparison: effect mean +- spread over seeds, the (seed-mean)
+    CI and MDE, and the FAIL-dominated verdict over the per-seed bootstraps."""
+    summ = metrics.seed_summary(diffs_by_seed, lower_is_better)
     report.append(
-        f"| {label} | {boot['mean']:+.5f} | [{boot['ci_lo']:+.5f}, {boot['ci_hi']:+.5f}] | "
-        f"{boot['mde']:.5f} | **{v}** |"
+        f"| {label} | {summ['mean']:+.5f} ± {summ['spread']:.5f} | "
+        f"[{summ['ci_lo']:+.5f}, {summ['ci_hi']:+.5f}] | {summ['mde']:.5f} | "
+        f"{len(diffs_by_seed)} | **{summ['verdict']}** |"
     )
-    return v
+    return summ["verdict"], summ
+
+
+HEADER = "| comparison | Δ (mean ± seed spread) | 95% CI | MDE | seeds | verdict |\n|---|---|---|---|---|---|"
+
+
+def fold_pairs(bfolds, fp):
+    """(fold k, model preds, FM log-loss) paired by the fold NUMBER each side
+    carries, never by list position — baselines.py skips folds without all
+    three splits."""
+    out = []
+    for f in bfolds:
+        k = int(f["fold"])
+        if f"fold{k}" not in fp:
+            continue
+        fm_ll = {r["name"]: r["log_loss"] for r in f["rows"]}["antisymmetric FM"]
+        out.append((k, fp[f"fold{k}"], fm_ll))
+    return out
+
+
+def load_evaluator_rate(train_dir):
+    path = Path(train_dir) / "evaluator_throughput.json"
+    if not path.exists():
+        return None
+    return float(json.loads(path.read_text())["evals_per_second"])
 
 
 def gate1(report, result):
@@ -94,12 +98,19 @@ def gate1(report, result):
         return "MISSING", {}
     z = np.load(path)
     has_ev = z["has_evaluator"]
-    n_cand = z["model"].shape[1]
+    model_seeds = z["model"] if z["model"].ndim == 3 else z["model"][None]
+    n_seeds, _, n_cand = model_seeds.shape
 
     rr = {}
     report.append("\n| scorer | MRR | top-1 | n sets |")
     report.append("|---|---|---|---|")
-    for arm in ("model", "fm", "popularity", "evaluator"):
+    model_rr = []
+    for si in range(n_seeds):
+        r, t1, keep = mrr_top1(model_seeds[si])
+        model_rr.append((r, keep))
+        report.append(f"| model seed {si} | {r.mean():.4f} | {t1.mean():.4f} | {len(r):,} |")
+    rr["model"] = model_rr[0]
+    for arm in ("fm", "popularity", "evaluator"):
         valid = has_ev if arm == "evaluator" else None
         r, t1, keep = mrr_top1(z[arm], valid)
         rr[arm] = (r, keep)
@@ -143,16 +154,17 @@ def gate1(report, result):
     )
     out = {"chance_mrr": chance, "popularity_z": float(zscore), "valid": bool(ok),
            "mrr": {a: float(rr[a][0].mean()) for a in rr}}
-    report.append("\n| comparison (MRR) | Δ | 95% CI | MDE | verdict |")
-    report.append("|---|---|---|---|---|")
+    report.append("\n" + HEADER.replace("comparison", "comparison (MRR)"))
     verdicts = []
     for rival in ("fm", "evaluator", "popularity"):
-        common = np.intersect1d(rr["model"][1], rr[rival][1])
-        a = rr["model"][0][np.isin(rr["model"][1], common)]
-        b = rr[rival][0][np.isin(rr[rival][1], common)]
-        boot = metrics.paired_bootstrap(a - b)
-        v = line(report, f"model − {rival}", boot, lower_is_better=False)
-        out[f"model_vs_{rival}"] = {**boot, "verdict": v, "n": int(len(common))}
+        diffs = []
+        for r_model, keep_model in model_rr:
+            common = np.intersect1d(keep_model, rr[rival][1])
+            a = r_model[np.isin(keep_model, common)]
+            b = rr[rival][0][np.isin(rr[rival][1], common)]
+            diffs.append(a - b)
+        v, summ = line(report, f"model − {rival}", diffs, lower_is_better=False)
+        out[f"model_vs_{rival}"] = {**summ, "verdict": v, "n": int(len(common))}
         # The plan's gate 1 is "model > evaluator's and > FM's". Popularity is
         # the validity CONTROL, not an arm of the gate — it is reported (and it
         # dominates every scorer) but it does not set the gate's verdict.
@@ -162,7 +174,7 @@ def gate1(report, result):
     # Spearman rho vs the evaluator: Phase 3 needs to know whether this is a
     # drop-in replacement (rho ~ 0.9) or a behaviour change (rho ~ 0.1).
     rhos = [
-        stats.spearmanr(z["model"][i], z["evaluator"][i]).statistic
+        stats.spearmanr(model_seeds[0][i], z["evaluator"][i]).statistic
         for i in np.flatnonzero(has_ev)[:3000]
     ]
     rhos = [r for r in rhos if np.isfinite(r)]
@@ -173,7 +185,7 @@ def gate1(report, result):
         + ("Near 0.9 would make this a drop-in; near 0 makes Phase 3 a behaviour change."
            if True else "")
     )
-    spread = np.nanstd(z["model"], axis=1)
+    spread = np.nanstd(model_seeds[0], axis=1)
     out["within_set_logit_spread"] = float(np.nanmean(spread))
     report.append(
         f"**Within-sibling logit spread**: {np.nanmean(spread):.4f} mean sd. A spread "
@@ -186,10 +198,12 @@ def gate1(report, result):
     return passed, out
 
 
-def _paired(report, label, p_model, p_rival, y):
-    d = metrics.log_loss_rows(p_model, y) - metrics.log_loss_rows(p_rival, y)
-    boot = metrics.paired_bootstrap(d)
-    return line(report, label, boot), boot
+def _paired(report, label, p_model_by_seed, p_rival, y):
+    """p_model_by_seed: (S, n). The rival is a single fit; each seed is paired
+    against it on the same rows."""
+    rival = metrics.log_loss_rows(p_rival, y)
+    diffs = [metrics.log_loss_rows(p, y) - rival for p in np.atleast_2d(p_model_by_seed)]
+    return line(report, label, diffs)
 
 
 def gate2(report, result):
@@ -199,14 +213,13 @@ def gate2(report, result):
     ds = pd.read_parquet(TRAIN_DIR / "dataset.parquet")
     te = ds[ds.split == "test"]
     y = te.win.to_numpy()
-    p_model = preds[0]
+    p_model = preds[0]                      # (S, n) Riot-role arm, every seed
 
-    report.append("| comparison | Δ log-loss | 95% CI | MDE | verdict |")
-    report.append("|---|---|---|---|---|")
+    report.append(HEADER)
     out, verdicts = {}, []
     for rival in ("fm", "logreg_antisym", "logreg_side", "constant"):
-        v, boot = _paired(report, f"model − {rival}", p_model, bl[rival], y)
-        out[rival] = {**boot, "verdict": v}
+        v, summ = _paired(report, f"model − {rival}", p_model, bl[rival], y)
+        out[rival] = {**summ, "verdict": v}
         if rival in ("fm", "logreg_antisym"):
             verdicts.append(v)
 
@@ -224,30 +237,39 @@ def gate2(report, result):
         report.append("\n| fold | model log-loss | FM log-loss | Δ | sign |")
         report.append("|---|---|---|---|---|")
         signs = []
-        for i, f in enumerate(bfolds, start=1):
-            key = f"fold{i}"
-            if key not in fp:
-                continue
-            yk = fp[f"{key}_y"]
-            pm = fp[key]
-            fm_ll = {r["name"]: r["log_loss"] for r in f["rows"]}["antisymmetric FM"]
+        for k, pm, fm_ll in fold_pairs(bfolds, fp):
+            yk = fp[f"fold{k}_y"]
             m_ll = metrics.log_loss(pm, yk)
             delta = m_ll - fm_ll
             signs.append(np.sign(delta))
             report.append(
-                f"| {i} | {m_ll:.5f} | {fm_ll:.5f} | {delta:+.5f} | "
+                f"| {k} | {m_ll:.5f} | {fm_ll:.5f} | {delta:+.5f} | "
                 f"{'model better' if delta < 0 else 'FM better'} |"
             )
         if signs:
             neg = int(sum(1 for s in signs if s < 0))
             out["fold_sign_rule"] = {"folds": len(signs), "model_better": neg,
                                      "passes": bool(neg >= 4)}
+            n_f = len(signs)
+            # Under H0 a unanimous sign has probability 2 / 2^n (0.0625 at
+            # five folds), and consecutive folds share >= 80% of their training
+            # data — so a failed sign rule is evidence, not proof. It FAILS the
+            # gate only when the pooled comparison is not itself UNDERPOWERED;
+            # otherwise it is recorded as "leans FAIL" and the gate stays
+            # UNDERPOWERED, as the plan defines that verdict.
             report.append(
-                f"\nModel better in **{neg} of {len(signs)}** folds → "
+                f"\nModel better in **{neg} of {n_f}** folds → "
                 + ("**sign rule PASSES**" if neg >= 4 else "**sign rule FAILS**")
+                + f" (P(unanimous | no effect) = {2 / 2 ** n_f:.3f}, folds share ≥80% of training data)"
             )
             if neg < 4:
-                verdicts.append("FAIL")
+                if out["fm"]["verdict"] == "UNDERPOWERED":
+                    out["fold_sign_rule"]["note"] = "leans FAIL: pooled comparison UNDERPOWERED"
+                    report.append("Pooled model − FM is UNDERPOWERED, so this is **leans FAIL**, "
+                                  "not a decisive failure; Task 9 decides.")
+                    verdicts.append("UNDERPOWERED")
+                else:
+                    verdicts.append("FAIL")
     else:
         report.append("\n_model_fold_preds.npz missing — run `train.py --stage folds`._")
 
@@ -268,16 +290,15 @@ def gate3(report, result):
     if not (path.exists() and blp.exists()):
         report.append("\n_masked predictions missing._")
         return "MISSING", {}
-    p_model = np.load(path)
+    p_model = np.load(path)                 # (S, n)
     bl = np.load(blp, allow_pickle=True)
     ds = pd.read_parquet(TRAIN_DIR / "dataset.parquet")
     y = ds[ds.split == "test"].win.to_numpy()
-    report.append("\n| comparison | Δ log-loss | 95% CI | MDE | verdict |")
-    report.append("|---|---|---|---|---|")
+    report.append("\n" + HEADER)
     out, verdicts = {}, []
     for rival in ("fm", "logreg_antisym"):
-        v, boot = _paired(report, f"model − {rival}", p_model, bl[rival], y)
-        out[rival] = {**boot, "verdict": v}
+        v, summ = _paired(report, f"model − {rival}", p_model, bl[rival], y)
+        out[rival] = {**summ, "verdict": v}
         verdicts.append(v)
     passed = aggregate(verdicts)
     return passed, out
@@ -296,30 +317,38 @@ def gate4(report, result):
     bl = np.load(TRAIN_DIR / "baseline_preds.npz", allow_pickle=True)
     ds = pd.read_parquet(TRAIN_DIR / "dataset.parquet")
     y = ds[ds.split == "test"].win.to_numpy()
-    report.append("\n| comparison | Δ log-loss | 95% CI | MDE | verdict |")
-    report.append("|---|---|---|---|---|")
+    report.append(
+        "\nNote: the rivals are scored with Riot's ground-truth roles, so this gate "
+        "fails whenever gate 2 fails; the serve gap itself (posterior − Riot, "
+        "evaluate.json) is the serve-realism diagnostic."
+    )
+    report.append("\n" + HEADER)
     out, verdicts = {}, []
     for arm_i, arm in ((1, "argmax"), (2, "posterior")):
         for rival in ("fm", "logreg_antisym"):
-            v, boot = _paired(report, f"{arm} − {rival}", preds[arm_i], bl[rival], y)
-            out[f"{arm}_vs_{rival}"] = {**boot, "verdict": v}
+            v, summ = _paired(report, f"{arm} − {rival}", preds[arm_i], bl[rival], y)
+            out[f"{arm}_vs_{rival}"] = {**summ, "verdict": v}
             if arm == "posterior":
                 verdicts.append(v)
     passed = aggregate(verdicts)
     return passed, out
 
 
-def gate5(report, result):
+def gate5(report, result, train_dir=TRAIN_DIR):
     report.append("\n## Gate 5 — throughput\n")
     leaf = json.loads((Path(__file__).resolve().parent / "leaf_eval_stats.json").read_text())
     per_root = leaf["per_root"]
     evals = sorted(r["leaf_evaluations"] for r in per_root)
     median_leaf = evals[len(evals) // 2]
     max_leaf = evals[-1]
-    onnx_path = TRAIN_DIR / "onnx_latency.json"
+    onnx_path = Path(train_dir) / "onnx_latency.json"
     out = {"median_leaf_evals_per_query": median_leaf, "max_leaf_evals_per_query": max_leaf}
 
-    ev_rate = result.get("evaluator_evals_per_second", 328.0)
+    # The MEASURED rate from the Task 5 harness — never a constant.
+    ev_rate = load_evaluator_rate(train_dir)
+    if ev_rate is None:
+        report.append("\n_evaluator_throughput.json missing — run the Task 5 harness._")
+        return "MISSING", out
     out["evaluator_evals_per_second"] = ev_rate
     report.append(
         f"The current evaluator runs at **{ev_rate:.0f} evaluations/second** "

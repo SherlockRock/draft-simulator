@@ -9,4 +9,17 @@ dependencies = [
   "numpy>=2",
   "pandas>=2.2",
   "scikit-learn>=1.5",
+  "scipy>=1.14",
+  "torch==2.7.*",
+  "onnx>=1.16",
+  "onnxruntime>=1.19",
+  "pytest>=8",
 ]
+
+[tool.uv]
+# CPU wheel by default (forge and the WSL box train on CPU; forge's Pascal GTX
+# 1060 needs torch <= 2.7 if it is ever enabled - plan section B4).
+index = [{ name = "pytorch-cpu", url = "https://download.pytorch.org/whl/cpu", explicit = true }]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }

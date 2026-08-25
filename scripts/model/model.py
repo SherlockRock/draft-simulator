@@ -122,6 +122,13 @@ class DraftModel(nn.Module):
             torch.cat([bans[:, 5:], bans[:, :5]], dim=1),
         )
 
+    def _side_bias(self, region):
+        """region = -1 averages the per-region side bias (the ONNX contract's
+        region-agnostic query); a plain negative index would wrap to the last
+        region silently."""
+        gathered = self.region_bias[region.clamp(min=0)]
+        return torch.where(region < 0, self.region_bias.mean().expand_as(gathered), gathered)
+
     # -- forward ------------------------------------------------------------
 
     def forward(self, champ, role_probs, bans, patch, region, diagnostics=False):
@@ -134,7 +141,7 @@ class DraftModel(nn.Module):
         out = {
             # The search should consume this, not the probability: probabilities
             # compress near 0.5 and alpha-beta bounds live naturally in logits.
-            "win_logit": self.win_head(A).squeeze(-1) + self.region_bias[region],
+            "win_logit": self.win_head(A).squeeze(-1) + self._side_bias(region),
             # Standardising the gold target absorbs its side mean, so this head
             # needs no bias of its own.
             "gold_diff15": self.gold_head(A).squeeze(-1),

@@ -156,6 +156,19 @@ fn evaluator_scores_for_holdout_and_sibling_sets() {
         checksum
     );
 
+    // Gate 5 reads the MEASURED rate from this file; benchmark.py refuses to
+    // fall back to a constant.
+    fs::write(
+        root.join("data/training/evaluator_throughput.json"),
+        format!(
+            "{{\n  \"evals_per_second\": {:.1},\n  \"n\": {},\n  \"us_per_eval\": {:.1}\n}}\n",
+            1.0 / per_eval,
+            sample.len(),
+            per_eval * 1e6
+        ),
+    )
+    .expect("write evaluator_throughput.json");
+
     let siblings = Csv::read(&root.join("data/training/sibling_sets.csv"));
     let n_sets = siblings.rows.iter().filter(|r| siblings.get(r, "evaluable") == "True").count();
     let n_cand: usize = siblings

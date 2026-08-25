@@ -27,7 +27,7 @@ import serve
 from common import ROOT
 from model import DraftModel
 from prepare import build_masked_states
-from train import load_all, tensors
+from train import load_all, seed_checkpoints, tensors
 
 TRAIN_DIR = ROOT / "data/training"
 BUCKETS = [(0, 0), (1, 3), (4, 6), (7, 9)]
@@ -136,18 +136,27 @@ def probe_a_symmetry(model, t, champ, role, bans, region, report):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--checkpoint", default="model_seed0.pt")
+    ap.add_argument("--checkpoints", default=None,
+                    help="comma-separated; default = every model_seed*.pt")
     ap.add_argument("--out", default=str(TRAIN_DIR))
     args = ap.parse_args()
     out_dir = Path(args.out)
+    checkpoints = args.checkpoints.split(",") if args.checkpoints else seed_checkpoints(out_dir)
 
     ds, i2a, dims, prior, factors = load_all()
     n_champ, n_patch, n_region = dims
     sweep = json.loads((out_dir / "sweep_aug.json").read_text())["winner"]
-    model = DraftModel(n_champ, n_patch, n_region, width=sweep["width"],
-                       dropout=sweep["dropout"])
-    model.load_state_dict(torch.load(out_dir / args.checkpoint))
-    model.eval()
+
+    def load(ck):
+        m = DraftModel(n_champ, n_patch, n_region, width=sweep["width"], dropout=sweep["dropout"])
+        m.load_state_dict(torch.load(out_dir / ck))
+        m.eval()
+        return m
+
+    models = [load(ck) for ck in checkpoints]
+    # The detailed report (buckets, T, probes, card) is for seed 0; the gate
+    # predictions are saved for EVERY seed so benchmark.py can report mean +- spread.
+    model = models[0]
 
     solver_roles = pd.read_csv(out_dir / "solver_roles.csv")
     test = ds[ds.split == "test"].reset_index(drop=True)
@@ -156,9 +165,9 @@ def main():
     y_te = t_te["win"].numpy()
 
     report = ["# Task 4 — evaluation\n",
-              f"checkpoint `{args.checkpoint}`, config {sweep}",
+              f"checkpoints `{checkpoints}` (detail for the first), config {sweep}",
               f"test n = {len(test):,}"]
-    result = {"config": sweep, "n_test": int(len(test))}
+    result = {"config": sweep, "n_test": int(len(test)), "detail_checkpoint": checkpoints[0]}
 
     # --- arms on full drafts -------------------------------------------
     champ_riot, role_riot = serve.riot_inputs(test)
@@ -271,7 +280,6 @@ def main():
     ms_shared = pd.read_parquet(out_dir / "masked_states.parquet")
     cm, rm, bm, _, _ = apply_mask(champ_riot, role_riot, bans_te, ms_shared, test.match_id)
     p_masked = score_arm(model, t_te, cm, rm, bm)
-    np.save(out_dir / "model_masked_preds.npy", p_masked)
     row_masked = metrics.report_row("model @ shared 4-6 replica", p_masked, y_te,
                                     with_null=True)
     result["masked_shared"] = row_masked
@@ -281,10 +289,24 @@ def main():
         f"accuracy {row_masked['accuracy']:.4f}."
     )
 
+    # --- per-seed gate predictions: (arm, seed, row) and (seed, row) -------
+    test_by_seed, masked_by_seed = [], []
+    for m in models:
+        test_by_seed.append([score_arm(m, t_te, *arms[a], bans_te)
+                             for a in ("riot_roles", "solver_argmax", "solver_posterior")])
+        masked_by_seed.append(score_arm(m, t_te, cm, rm, bm))
+    np.save(out_dir / "model_test_preds.npy",
+            np.array(test_by_seed).transpose(1, 0, 2))          # (3 arms, S, n)
+    np.save(out_dir / "model_masked_preds.npy", np.array(masked_by_seed))   # (S, n)
+    result["checkpoints"] = checkpoints
+    result["per_seed_full_draft_log_loss"] = [
+        float(metrics.log_loss(t[0], y_te)) for t in test_by_seed
+    ]
+    report.append(f"\n**Seeds** {checkpoints}: full-draft log-loss per seed "
+                  + ", ".join(f"{v:.5f}" for v in result["per_seed_full_draft_log_loss"]))
+
     (out_dir / "evaluate.json").write_text(json.dumps(result, indent=2, default=float))
     (out_dir / "evaluate_report.md").write_text("\n".join(report) + "\n")
-    np.save(out_dir / "model_test_preds.npy",
-            np.stack([preds["riot_roles"], preds["solver_argmax"], preds["solver_posterior"]]))
     print("\n".join(report))
     print(f"\nwrote {out_dir}/evaluate.json")
 

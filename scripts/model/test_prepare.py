@@ -345,3 +345,23 @@ def test_holdout_drafts_is_exactly_the_test_split(prepared):
     holdout = pd.read_csv(prepared / "holdout_drafts.csv")
     assert set(holdout.match_id) == set(ds[ds.split == "test"].match_id)
     assert set(holdout.columns) >= {"win", "evaluable"}
+
+
+def test_solver_states_cover_every_folds_validation_rows(prepared):
+    """train.py selects checkpoints on solver-role val-A; every fold must have
+    solver roles for its val or the selection criterion silently differs by fold."""
+    solver = pd.read_csv(prepared / "solver_states.csv")
+    folds = pd.read_parquet(prepared / "folds.parquet")
+    for k in sorted(folds.fold.unique()):
+        val = folds[(folds.fold == k) & folds.role.isin(["val_a", "val_b"])]
+        if len(val) == 0:
+            continue
+        got = set(solver[solver.fold == k].match_id)
+        assert set(val.match_id) <= got, f"fold {k} val rows missing from solver_states.csv"
+
+
+def test_pick_frequency_falls_back_to_the_role_table_for_an_unseen_patch():
+    train = pd.DataFrame({"patch": ["16.15", "16.15"], **{f"riot_{i}": [10 + i, 10 + i] for i in range(10)}})
+    freq, role_freq = prepare.pick_frequency_tables(train)
+    assert prepare.popularity_table(freq, role_freq, "TOP", "16.15")[10] == 2
+    assert prepare.popularity_table(freq, role_freq, "TOP", "16.99")[10] == 2

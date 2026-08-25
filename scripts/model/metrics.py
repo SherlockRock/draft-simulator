@@ -236,3 +236,48 @@ def report_row(name, p, y, bins=15, with_null=False, seed=0):
     if with_null:
         out["ece_null"] = ece_null(p, y, bins=bins, seed=seed)
     return out
+
+
+def verdict(boot, lower_is_better=True):
+    """PASS / FAIL / UNDERPOWERED from one paired bootstrap. `lower_is_better`
+    is not cosmetic: log-loss gates want a negative model - rival difference,
+    the MRR gate a positive one."""
+    if abs(boot["mean"]) < boot["mde"]:
+        return "UNDERPOWERED"
+    better = boot["ci_hi"] < 0 if lower_is_better else boot["ci_lo"] > 0
+    worse = boot["ci_lo"] > 0 if lower_is_better else boot["ci_hi"] < 0
+    if better:
+        return "PASS"
+    if worse:
+        return "FAIL"
+    return "UNDERPOWERED"
+
+
+def aggregate_verdicts(verdicts):
+    """A FAIL dominates: an arm whose CI excludes zero on the wrong side is a
+    real result, and calling it UNDERPOWERED because a sibling was inconclusive
+    would hide it."""
+    if not verdicts:
+        return "MISSING"
+    if "FAIL" in verdicts:
+        return "FAIL"
+    if all(v == "PASS" for v in verdicts):
+        return "PASS"
+    return "UNDERPOWERED"
+
+
+def seed_summary(diff_rows_by_seed, lower_is_better=True, n_boot=1000, seed=0):
+    """One paired bootstrap per training seed; the gate reports mean +- spread
+    of the effect across seeds and takes the FAIL-dominated verdict over them."""
+    boots = [paired_bootstrap(d, n_boot=n_boot, seed=seed) for d in diff_rows_by_seed]
+    means = np.array([b["mean"] for b in boots])
+    per_seed_verdicts = [verdict(b, lower_is_better) for b in boots]
+    return {
+        "mean": float(means.mean()),
+        "spread": float(means.std()),
+        "mde": float(np.mean([b["mde"] for b in boots])),
+        "ci_lo": float(np.mean([b["ci_lo"] for b in boots])),
+        "ci_hi": float(np.mean([b["ci_hi"] for b in boots])),
+        "per_seed": [{**b, "verdict": v} for b, v in zip(boots, per_seed_verdicts)],
+        "verdict": aggregate_verdicts(per_seed_verdicts),
+    }

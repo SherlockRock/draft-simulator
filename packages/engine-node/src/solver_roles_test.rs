@@ -29,6 +29,11 @@ use crate::data_loader::load_engine_data;
 
 const ROLES: [Role; 5] = [Role::Top, Role::Jungle, Role::Middle, Role::Adc, Role::Support];
 const ROLE_NAMES: [&str; 5] = ["TOP", "JUNGLE", "MIDDLE", "ADC", "SUPPORT"];
+/// The keys `prepare.py` writes under `meta_roles` — champion-meta's own
+/// vocabulary, where the ADC role is spelled "BOTTOM". Indexing the JSON with
+/// `ROLE_NAMES` reads 0.0 for every marksman's ADC share. Pinned against
+/// roles.META_ROLE_NAMES by test_roles_unit.py.
+const META_ROLE_NAMES: [&str; 5] = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "SUPPORT"];
 /// A champion is credited with a role in its synthesised meta if that role
 /// holds at least this share of its corpus games. Below it, the appearance is
 /// noise (an off-role one-off) rather than a position the champion plays.
@@ -88,7 +93,10 @@ fn synthesise_missing_meta(meta: &mut HashMap<String, ChampionMeta>) -> Vec<Stri
     let raw = fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("{} — run prepare.py first ({e})", path.display()));
     let doc: serde_json::Value = serde_json::from_str(&raw).expect("role_percentages.json parses");
+    synthesise_from(&doc, meta)
+}
 
+fn synthesise_from(doc: &serde_json::Value, meta: &mut HashMap<String, ChampionMeta>) -> Vec<String> {
     let mut added = Vec::new();
     for (_riot_id, entry) in doc.as_object().expect("object at top level") {
         let alias = entry["alias"].as_str().expect("alias").to_string();
@@ -98,7 +106,7 @@ fn synthesise_missing_meta(meta: &mut HashMap<String, ChampionMeta>) -> Vec<Stri
         let shares = &entry["meta_roles"];
         let mut ranked: Vec<(Role, f64)> = ROLES
             .iter()
-            .zip(ROLE_NAMES)
+            .zip(META_ROLE_NAMES)
             .map(|(r, name)| (*r, shares[name].as_f64().unwrap_or(0.0)))
             .filter(|(_, share)| *share >= SYNTH_ROLE_THRESHOLD)
             .collect();
@@ -110,7 +118,7 @@ fn synthesise_missing_meta(meta: &mut HashMap<String, ChampionMeta>) -> Vec<Stri
             // posterior would be uniform for a champion that plainly is not.
             let best = ROLES
                 .iter()
-                .zip(ROLE_NAMES)
+                .zip(META_ROLE_NAMES)
                 .max_by(|a, b| {
                     shares[a.1]
                         .as_f64()
@@ -134,6 +142,45 @@ fn synthesise_missing_meta(meta: &mut HashMap<String, ChampionMeta>) -> Vec<Stri
     }
     added.sort();
     added
+}
+
+/// A champion in the vocab that neither champion-meta nor the train prior knows
+/// (a ban-only or val/test-only pick). `solve` panics on an unknown id by
+/// contract, so give it an empty position list: every role scores
+/// NON_LISTED_FACTOR and its posterior is uniform — no preference, like UNKNOWN.
+fn ensure_known(meta: &mut HashMap<String, ChampionMeta>, champs: &[&str]) -> usize {
+    let mut added = 0;
+    for c in champs {
+        if !meta.contains_key(*c) {
+            meta.insert(
+                c.to_string(),
+                ChampionMeta { id: c.to_string(), positions: vec![], ..Default::default() },
+            );
+            added += 1;
+        }
+    }
+    added
+}
+
+#[test]
+fn synthesised_meta_credits_the_adc_role_from_the_bottom_share() {
+    let doc = serde_json::json!({
+        "999": {"alias": "NewMarksman", "meta_roles":
+            {"TOP": 0.0, "JUNGLE": 0.0, "MIDDLE": 0.1, "BOTTOM": 0.9, "SUPPORT": 0.0}}
+    });
+    let mut meta = HashMap::new();
+    synthesise_from(&doc, &mut meta);
+    assert_eq!(meta["NewMarksman"].positions, vec![Role::Adc]);
+}
+
+#[test]
+fn unknown_champion_gets_an_empty_meta_and_a_uniform_posterior() {
+    let mut meta = HashMap::new();
+    assert_eq!(ensure_known(&mut meta, &["Nobody"]), 1);
+    let roles = team_roles(&["Nobody"], &meta);
+    for p in roles.posterior[0].1 {
+        assert!((p - 0.2).abs() < 1e-9);
+    }
 }
 
 pub(crate) fn load_meta_with_synthesis() -> (HashMap<String, ChampionMeta>, Vec<String>) {
@@ -253,7 +300,8 @@ fn emit(
 #[ignore]
 fn emit_solver_roles_for_every_benchmarked_state() {
     let root = repo_root();
-    let (meta, synthesised) = load_meta_with_synthesis();
+    let (mut meta, synthesised) = load_meta_with_synthesis();
+    let mut unknown_added = 0usize;
     println!(
         "champion-meta: {} champions; synthesised {} absent from it: {:?}",
         meta.len() - synthesised.len(),
@@ -274,6 +322,7 @@ fn emit_solver_roles_for_every_benchmarked_state() {
         let fold = solver_states.get(row, "fold");
         for (side, cols) in [("blue", &SLOT_COLUMNS[..5]), ("red", &SLOT_COLUMNS[5..])] {
             let champs: Vec<&str> = cols.iter().map(|c| solver_states.get(row, c)).collect();
+            unknown_added += ensure_known(&mut meta, &champs);
             let roles = team_roles(&champs, &meta);
             emit(&mut out, match_id, split, fold, "full", side, &roles);
         }
@@ -295,12 +344,16 @@ fn emit_solver_roles_for_every_benchmarked_state() {
             if champs.is_empty() {
                 continue; // a team with nothing revealed has no solver opinion
             }
+            unknown_added += ensure_known(&mut meta, &champs);
             let roles = team_roles(&champs, &meta);
             emit(&mut out, match_id, "test", "0", "masked", side, &roles);
             masked_teams += 1;
         }
     }
     println!("masked replica: {} states, {} teams solved", masked.rows.len(), masked_teams);
+    if unknown_added > 0 {
+        println!("WARNING: {unknown_added} champions had no meta at all — uniform posterior");
+    }
 
     let path = root.join("data/training/solver_roles.csv");
     fs::write(&path, &out).expect("write solver_roles.csv");

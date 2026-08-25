@@ -20,7 +20,6 @@ Four scorers:
 
 import argparse
 import json
-from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -31,7 +30,8 @@ import serve
 from common import POSITIONS, ROOT
 from fm import AntisymmetricFM
 from model import DraftModel
-from train import load_all
+from prepare import pick_frequency_tables, popularity_table
+from train import load_all, seed_checkpoints
 
 TRAIN_DIR = ROOT / "data/training"
 
@@ -100,15 +100,13 @@ def fm_scores(fm, champ, region, slots, chunk=16384):
 
 
 def popularity_scores(sib, ds, vocab):
-    train = ds[ds.split == "train"]
-    freq = defaultdict(lambda: defaultdict(int))
-    for slot in range(10):
-        role = POSITIONS[slot % 5]
-        for (patch, cid), n in train.groupby(["patch", f"riot_{slot}"]).size().items():
-            freq[(role, patch)][int(cid)] += int(n)
+    """Scored from the SAME table the set was drawn from (prepare.py's, with its
+    role-only fallback) — a (role, patch) absent from train would otherwise score
+    every candidate 0 and tie the whole set."""
+    freq, role_freq = pick_frequency_tables(ds[ds.split == "train"])
     out = []
     for row in sib.itertuples():
-        table = freq[(row.role, row.patch)]
+        table = popularity_table(freq, role_freq, row.role, row.patch)
         out.append(np.array([table.get(int(c), 0) for c in row.candidates], dtype=float))
     return out
 
@@ -122,8 +120,10 @@ def group(scores, set_id, n_sets):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--checkpoint", default="model_seed0.pt")
+    ap.add_argument("--checkpoints", default=None,
+                    help="comma-separated; default = every model_seed*.pt")
     args = ap.parse_args()
+    checkpoints = args.checkpoints.split(",") if args.checkpoints else seed_checkpoints(TRAIN_DIR)
 
     ds, i2a, dims, prior, factors = load_all()
     n_champ, n_patch, n_region = dims
@@ -134,18 +134,24 @@ def main():
     print(f"{len(sib):,} sibling sets -> {len(champ):,} draft variants")
 
     sweep = json.loads((TRAIN_DIR / "sweep_aug.json").read_text())["winner"]
-    model = DraftModel(n_champ, n_patch, n_region, width=sweep["width"],
-                       dropout=sweep["dropout"])
-    model.load_state_dict(torch.load(TRAIN_DIR / args.checkpoint))
-    model.eval()
+    models = []
+    for ck in checkpoints:
+        model = DraftModel(n_champ, n_patch, n_region, width=sweep["width"],
+                           dropout=sweep["dropout"])
+        model.load_state_dict(torch.load(TRAIN_DIR / ck))
+        model.eval()
+        models.append(model)
+    print(f"model arm: {len(models)} seeds {checkpoints}")
 
     fm = AntisymmetricFM(n_champ, n_region)
     fm.load_state_dict(torch.load(TRAIN_DIR / "baseline_fm.pt"))
     fm.eval()
 
     n_sets = len(sib)
+    # The model arm is per SEED: (S, sets, N). Gate 1 reports mean +- spread.
+    model_by_seed = [group(model_scores(m, champ, bans, patch, region, slots), set_id, n_sets)
+                     for m in models]
     scores = {
-        "model": group(model_scores(model, champ, bans, patch, region, slots), set_id, n_sets),
         "fm": group(fm_scores(fm, champ, region, slots), set_id, n_sets),
         "popularity": popularity_scores(sib, ds, vocab),
     }
@@ -170,11 +176,18 @@ def main():
         print(f"evaluator arm: {hit:,} of {n_sets:,} sets scored (evaluable subset)")
     scores["evaluator"] = evaluator
 
+    n_cand = len(sib.candidates.iloc[0])
+
+    def dense(vs):
+        return np.array([np.asarray(v) if v is not None else np.full(n_cand, np.nan) for v in vs],
+                        dtype=float)
+
     np.savez(
         TRAIN_DIR / "sibling_scores.npz",
-        **{k: np.array([np.asarray(v) if v is not None else np.full(len(sib.candidates.iloc[0]), np.nan)
-                        for v in vs], dtype=float) for k, vs in scores.items()},
+        model=np.stack([dense(vs) for vs in model_by_seed]),          # (S, sets, N)
+        **{k: dense(vs) for k, vs in scores.items()},
         has_evaluator=np.array([v is not None for v in evaluator]),
+        checkpoints=np.array(checkpoints),
     )
     print(f"wrote {TRAIN_DIR}/sibling_scores.npz")
 

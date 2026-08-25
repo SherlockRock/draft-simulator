@@ -158,3 +158,16 @@ def test_paired_bootstrap_ci_covers_the_true_mean():
     boot = metrics.paired_bootstrap(d, n_boot=400)
     assert boot["ci_lo"] <= 0.01 <= boot["ci_hi"]
     assert boot["excludes_zero"]
+
+
+def test_seed_summary_reports_mean_spread_and_a_fail_dominated_verdict():
+    rng = np.random.default_rng(0)
+    worse = [rng.normal(0.01, 0.05, 4000) for _ in range(2)]      # model worse, clearly
+    null = [rng.normal(0.0, 0.05, 4000)]
+    out = metrics.seed_summary(worse + null, lower_is_better=True)
+    assert len(out["per_seed"]) == 3
+    assert abs(out["mean"] - np.mean([d.mean() for d in worse + null])) < 1e-12
+    assert out["spread"] > 0
+    assert out["verdict"] == "FAIL"
+    better = [rng.normal(-0.01, 0.05, 4000) for _ in range(3)]
+    assert metrics.seed_summary(better, lower_is_better=True)["verdict"] == "PASS"

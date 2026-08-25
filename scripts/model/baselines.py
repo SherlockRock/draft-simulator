@@ -264,6 +264,7 @@ def main():
                 continue
             fold_res, _fold_extra = run_split(sub, dims, {}, report,
                                               f"rolling-origin fold {k}", seed=args.seed)
+            fold_res["fold"] = int(k)      # benchmark.py pairs by this, not by position
             result["folds"].append(fold_res)
 
     (out_dir / "baselines.json").write_text(json.dumps(result, indent=2))

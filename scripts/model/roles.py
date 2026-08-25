@@ -58,7 +58,15 @@ def position_factor_table(vocab_size, index_to_alias, role_percentages=None):
     table[1] = 1.0
     for idx, alias in index_to_alias.items():
         entry = meta.get(alias)
-        positions = entry["positions"] if entry else synthesised_positions(by_alias[alias])
+        if entry:
+            positions = entry["positions"]
+        elif alias in by_alias:
+            positions = synthesised_positions(by_alias[alias])
+        else:
+            # In the vocab (a ban, or a val/test-only pick) but in neither
+            # champion-meta nor the train prior: no preference, like UNKNOWN.
+            table[idx] = 1.0
+            continue
         for r, name in enumerate(META_ROLE_NAMES):
             if positions and positions[0] == name:
                 table[idx, r] = PRIMARY_FACTOR
@@ -121,3 +129,30 @@ def empty_slot_role_probs(filled_probs):
         residual = np.ones(5)
         s = 5.0
     return residual / s
+
+
+def prior_from_frame(df, n_champ):
+    """(n_champ, 5) share of this frame's games each champion spent in each role;
+    uniform 0.2 for a champion the frame never shows. Slot index IS the role.
+    Built per training frame so a rolling-origin fold's augmentation prior never
+    sees that fold's test window."""
+    counts = np.zeros((n_champ, 5), dtype=np.float64)
+    for slot in range(10):
+        ids, n = np.unique(df[f"champ_{slot}"].to_numpy(), return_counts=True)
+        counts[ids, slot % 5] += n
+    counts[0] = 0.0
+    counts[1] = 0.0
+    total = counts.sum(axis=1, keepdims=True)
+    return np.divide(counts, total, out=np.full_like(counts, 0.2), where=total > 0).astype(np.float32)
+
+
+def factor_table_from_prior(prior, index_to_alias):
+    """position_factor_table with the synthesised-meta source taken from a
+    prior matrix instead of role_percentages.json."""
+    role_percentages = {
+        str(idx): {"alias": alias,
+                   "meta_roles": {n: float(prior[idx, r]) for r, n in enumerate(META_ROLE_NAMES)}}
+        for idx, alias in index_to_alias.items()
+        if not np.allclose(prior[idx], 0.2)
+    }
+    return position_factor_table(prior.shape[0], index_to_alias, role_percentages)

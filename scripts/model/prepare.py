@@ -399,6 +399,28 @@ def build_folds(enc, report):
 # 6. Sibling sets (gate 1)
 # ---------------------------------------------------------------------------
 
+def pick_frequency_tables(train):
+    """(role, patch) -> {riot id: pick count} from TRAIN only, plus the role-only
+    marginal. Shared by the sibling-set builder and the popularity scorer so the
+    two can never disagree on which table a set was drawn from."""
+    freq = defaultdict(lambda: defaultdict(int))
+    for slot in range(10):
+        role = POSITIONS[slot % 5]
+        for (patch, cid), n in train.groupby(["patch", f"riot_{slot}"]).size().items():
+            freq[(role, patch)][int(cid)] += int(n)
+    role_freq = defaultdict(lambda: defaultdict(int))
+    for (role, _patch), d in freq.items():
+        for cid, n in d.items():
+            role_freq[role][cid] += n
+    return freq, role_freq
+
+
+def popularity_table(freq, role_freq, role, patch):
+    """The table a (role, patch) sibling set is drawn from and scored by: the
+    patch-specific one when train has it, the role marginal otherwise."""
+    return freq.get((role, patch)) or role_freq[role]
+
+
 def build_sibling_sets(enc, train, evaluable_ids, id_to_alias, report, n_candidates=SIBLING_N):
     """For each test game hold out one slot; score the true pick against N-1
     distractors drawn PROPORTIONAL TO their (role, patch) pick frequency in the
@@ -414,18 +436,7 @@ def build_sibling_sets(enc, train, evaluable_ids, id_to_alias, report, n_candida
     rng = np.random.default_rng(SEED)
     test = enc[enc.split == "test"].reset_index(drop=True)
 
-    # (role, patch) -> (champion riot ids, pick counts) from TRAIN only.
-    freq = defaultdict(lambda: defaultdict(int))
-    for slot in range(10):
-        role = POSITIONS[slot % 5]
-        for (patch, cid), n in (
-            train.groupby(["patch", f"riot_{slot}"]).size().items()
-        ):
-            freq[(role, patch)][int(cid)] += int(n)
-    role_freq = defaultdict(lambda: defaultdict(int))
-    for (role, _patch), d in freq.items():
-        for cid, n in d.items():
-            role_freq[role][cid] += n
+    freq, role_freq = pick_frequency_tables(train)
 
     held = rng.integers(0, 10, size=len(test))
     pick_riot = test[[f"riot_{i}" for i in range(10)]].values
@@ -437,7 +448,7 @@ def build_sibling_sets(enc, train, evaluable_ids, id_to_alias, report, n_candida
         role = POSITIONS[slot % 5]
         patch = test.patch.iloc[i]
         true_pick = int(pick_riot[i, slot])
-        table = freq.get((role, patch)) or role_freq[role]
+        table = popularity_table(freq, role_freq, role, patch)
         blocked = set(pick_riot[i].tolist()) | {int(b) for b in ban_riot[i] if b > 0}
         cand = [c for c, _ in table.items()
                 if c not in blocked and c in evaluable_ids]
@@ -616,23 +627,29 @@ def write_csv_mirrors(enc, folds, sib, ms, id_to_alias, out_dir, report):
     log(f"holdout_drafts.csv: {len(holdout):,} rows "
         f"({int(holdout.evaluable.sum()):,} evaluable) — Task 5 input", report)
 
-    # Task 2b scores full drafts of the main split's val-A/val-B/test AND fold
-    # 1's val, identified by split/fold columns.
+    # Task 2b scores full drafts of the main split's val-A/val-B/test AND every
+    # rolling-origin fold's val, identified by split/fold columns — train.py
+    # selects checkpoints on solver-role val-A, so every fold needs the same
+    # criterion available.
     main = enc[enc.split.isin(["val_a", "val_b", "test"])]
     solver = alias_frame(main, id_to_alias)
     solver.insert(1, "split", main.split.values)
     solver.insert(2, "fold", 0)
-    f1_val = folds[(folds.fold == 1) & (folds.role.isin(["val_a", "val_b"]))]
-    f1 = enc[enc.match_id.isin(set(f1_val.match_id))]
-    if len(f1):
-        f1_roles = dict(zip(f1_val.match_id, f1_val.role))
-        extra = alias_frame(f1, id_to_alias)
-        extra.insert(1, "split", [f1_roles[m] for m in f1.match_id])
-        extra.insert(2, "fold", 1)
-        solver = pd.concat([solver, extra], ignore_index=True)
+    parts = [solver]
+    for k in sorted(folds.fold.unique()):
+        fk_val = folds[(folds.fold == k) & (folds.role.isin(["val_a", "val_b"]))]
+        fk = enc[enc.match_id.isin(set(fk_val.match_id))]
+        if len(fk) == 0:
+            continue
+        fk_roles = dict(zip(fk_val.match_id, fk_val.role))
+        extra = alias_frame(fk, id_to_alias)
+        extra.insert(1, "split", [fk_roles[m] for m in fk.match_id])
+        extra.insert(2, "fold", int(k))
+        parts.append(extra)
+    solver = pd.concat(parts, ignore_index=True)
     solver.to_csv(out_dir / "solver_states.csv", index=False)
     log(f"solver_states.csv: {len(solver):,} rows — Task 2b input "
-        f"(fold 0 = main split, fold 1 = rolling-origin fold 1's val)", report)
+        f"(fold 0 = main split, fold k = rolling-origin fold k's val)", report)
     log("  " + ", ".join(f"{k}={v:,}" for k, v in
                          solver.groupby(['fold', 'split']).size().items()), report)
 
