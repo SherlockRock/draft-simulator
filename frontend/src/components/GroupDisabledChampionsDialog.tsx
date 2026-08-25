@@ -1,4 +1,11 @@
-import { createSignal, createEffect, createMemo, Show, Component } from "solid-js";
+import {
+    createSignal,
+    createEffect,
+    createMemo,
+    Show,
+    Component,
+    untrack
+} from "solid-js";
 import { ChevronDown, ChevronUp } from "lucide-solid";
 import type { DraftMode, GameType, Team } from "@draft-sim/shared-types";
 import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./Dialog";
@@ -9,6 +16,7 @@ import { GridSettingsFields, createGridSettingsForm } from "./GridSettingsFields
 import { resolveChampionId } from "../utils/constants";
 import { resolveTeamLink } from "../utils/teamLink";
 import { gameTypeHint } from "../utils/gameClassification";
+import { defaultNewGroupGameType } from "../utils/newGroupGameType";
 import { newGroupGridSettings } from "../utils/groupCreation";
 import type { GridSettingsInput } from "../utils/gridLayout";
 
@@ -127,6 +135,9 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
     const [team2Id, setTeam2Id] = createSignal<string | null>(null);
     const [length, setLength] = createSignal(3);
     const [gameType, setGameType] = createSignal<GameType | null>(null);
+    // True once the user picks a Game Type; the new-group default stops
+    // following the series toggle after that.
+    const [gameTypeTouched, setGameTypeTouched] = createSignal(false);
     const [disabledExpanded, setDisabledExpanded] = createSignal(false);
     const [gridEnabled, setGridEnabled] = createSignal(false);
     const gridForm = createGridSettingsForm();
@@ -176,7 +187,13 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
             setTeam1Id(props.initialTeam1Id ?? null);
             setTeam2Id(props.initialTeam2Id ?? null);
             setLength(clampSeriesLength(props.initialLength || 3));
-            setGameType(props.initialGameType ?? (props.isNewGroup ? "scratch" : null));
+            setGameTypeTouched(false);
+            setGameType(
+                props.initialGameType ??
+                    (props.isNewGroup
+                        ? defaultNewGroupGameType(untrack(seriesEnabled))
+                        : null)
+            );
             setDisabledExpanded(false);
             // Decision 13: a new custom Group is a grid. An existing one keeps
             // whatever it stored, `free` being the legacy default.
@@ -256,7 +273,10 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                             <div class="mt-2">
                                 <StyledSelect
                                     value={gameType() ?? ""}
-                                    onChange={(v) => setGameType(parseGameType(v))}
+                                    onChange={(v) => {
+                                        setGameTypeTouched(true);
+                                        setGameType(parseGameType(v));
+                                    }}
                                     options={GAME_TYPE_OPTIONS}
                                     theme="purple"
                                 />
@@ -283,9 +303,15 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                                     <input
                                         type="checkbox"
                                         checked={seriesEnabled()}
-                                        onChange={(e) =>
-                                            setSeriesEnabled(e.currentTarget.checked)
-                                        }
+                                        onChange={(e) => {
+                                            const enabled = e.currentTarget.checked;
+                                            setSeriesEnabled(enabled);
+                                            if (props.isNewGroup && !gameTypeTouched()) {
+                                                setGameType(
+                                                    defaultNewGroupGameType(enabled)
+                                                );
+                                            }
+                                        }}
                                         class="peer sr-only"
                                     />
                                     <span class="block h-6 w-11 rounded-full bg-darius-border transition-colors peer-checked:bg-darius-purple" />
