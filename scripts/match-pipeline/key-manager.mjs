@@ -4,6 +4,11 @@
  * issuing requests and polls the env file until the key changes (the user
  * pushes a fresh one via push-key.sh), then resumes. No restart, no crash
  * loop; the DB is the only state.
+ *
+ * A freshly regenerated key can be "Unknown apikey" at Riot for its first
+ * seconds, so a rejected key is also re-probed each poll: the file never
+ * changes in that case, and waiting for a *different* key stranded the
+ * collectors on a key that was valid moments later (seen 4x, 2026-08-23/25).
  */
 
 import { readFile as fsReadFile } from "node:fs/promises";
@@ -39,12 +44,14 @@ export class KeyManager {
     pollIntervalMs = 30_000,
     readFile = (p) => fsReadFile(p, "utf8"),
     sleep = defaultSleep,
+    probeKey = null,
     logger = console,
   }) {
     this.envFilePath = envFilePath;
     this.pollIntervalMs = pollIntervalMs;
     this.readFile = readFile;
     this.sleep = sleep;
+    this.probeKey = probeKey;
     this.logger = logger;
     this.state = "ok";
     this.currentKey = null;
@@ -72,7 +79,8 @@ export class KeyManager {
   /**
    * Called after a 401/403 seen with `badKey`. Resolves with a usable key:
    * immediately if the key already rotated, otherwise after polling the env
-   * file until it changes. Concurrent callers share one poll loop.
+   * file until it changes — or, when a `probeKey` is configured, until Riot
+   * starts accepting the same key. Concurrent callers share one poll loop.
    */
   async waitForNewKey(badKey) {
     if (this.currentKey && this.currentKey !== badKey) return this.currentKey;
@@ -99,9 +107,45 @@ export class KeyManager {
         this.logger.info?.("key-manager: new key detected, resuming");
         return key;
       }
+      if (key && this.probeKey && (await this.#probe(key))) {
+        this.state = "ok";
+        this.logger.info?.("key-manager: rejected key is now accepted by Riot, resuming");
+        return key;
+      }
     }
     throw new Error("key-manager aborted");
   }
+
+  async #probe(key) {
+    try {
+      return await this.probeKey(key);
+    } catch (err) {
+      this.logger.warn?.(`key-manager: probe failed, will retry: ${err.message}`);
+      return false;
+    }
+  }
+}
+
+/**
+ * Build a `probeKey` for KeyManager from a raw RiotClient: one cheap
+ * platform-data GET with the candidate key. Resolves true on success, false on
+ * 401/403; other errors (network, 5xx after retries) propagate so the caller
+ * can log them as "not yet" rather than "rejected".
+ */
+export function makeKeyProbe(rawClient, platform) {
+  return async (key) => {
+    const previous = rawClient.apiKey;
+    rawClient.apiKey = key;
+    try {
+      await rawClient.get("/lol/status/v4/platform-data", { routing: "platform", region: platform });
+      return true;
+    } catch (err) {
+      if (AUTH_ERROR.test(err.message)) return false;
+      throw err;
+    } finally {
+      rawClient.apiKey = previous;
+    }
+  };
 }
 
 const AUTH_ERROR = /Riot API (401|403)\b/;
@@ -119,7 +163,7 @@ export function wrapClientWithKeyRotation(client, keyManager, logger = console) 
           return await client[method](...args);
         } catch (err) {
           if (!AUTH_ERROR.test(err.message)) throw err;
-          logger.warn?.(`key rotation: ${method} got auth failure, waiting for new key`);
+          logger.warn?.(`key rotation: ${method} got auth failure, waiting for new key: ${err.message}`);
           client.apiKey = await keyManager.waitForNewKey(client.apiKey);
         }
       }

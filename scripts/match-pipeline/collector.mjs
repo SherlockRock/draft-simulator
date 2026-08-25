@@ -23,7 +23,7 @@ import { loadConfig } from "./config.mjs";
 import { createDb, migrate } from "./db.mjs";
 import { SlidingWindowBucket, CompositeRateLimiter } from "./rate-limiter.mjs";
 import { RiotClient } from "./riot-client.mjs";
-import { KeyManager, wrapClientWithKeyRotation } from "./key-manager.mjs";
+import { KeyManager, makeKeyProbe, wrapClientWithKeyRotation } from "./key-manager.mjs";
 import { runLadderOnce } from "./ladder.mjs";
 import { runMatchIdCycle } from "./match-ids.mjs";
 import { runProcessorCycle } from "./processor.mjs";
@@ -87,6 +87,9 @@ const rawClient = new RiotClient({
   sleep: sleepUnlessStopping,
   logger: makeLogger("http"),
 });
+// While KEY_EXPIRED, re-probe the file's key each poll so a key Riot rejected
+// during its first seconds (propagation lag) is picked up without a restart.
+keyManager.probeKey = makeKeyProbe(rawClient, region);
 const client = wrapClientWithKeyRotation(rawClient, keyManager, makeLogger("key"));
 
 let running = true;
