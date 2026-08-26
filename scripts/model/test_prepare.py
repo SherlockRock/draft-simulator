@@ -121,6 +121,23 @@ def test_ragged_tail_cut_drops_thin_days_per_region(tmp_path, id_pool):
         assert (counts >= prepare.RAGGED_TAIL_FRACTION * counts.median()).all()
 
 
+def test_patch_cut_drops_rows_after_max_patch(tmp_path, id_pool):
+    parquet = make_fixture(tmp_path, id_pool, n=60, both_false_rows=0)
+    df = prepare.apply_filters(prepare.flatten(parquet), [])
+    df.loc[:9, ["patch_major", "patch_minor"]] = [16, 17]
+    df.loc[10:14, ["patch_major", "patch_minor"]] = [17, 1]   # major bump: not "16.9 > 16.17"
+    cut = prepare.patch_cut(df, (16, 16), [])
+    assert len(cut) == 45
+    assert ((cut.patch_major < 16) | ((cut.patch_major == 16) & (cut.patch_minor <= 16))).all()
+    assert len(prepare.patch_cut(df, None, [])) == 60
+
+
+def test_parse_patch():
+    assert prepare.parse_patch("16.16") == (16, 16)
+    with pytest.raises(ValueError):
+        prepare.parse_patch("16")
+
+
 # --- vocabularies ----------------------------------------------------------
 
 def test_champion_vocab_reserves_unknown_and_none(prepared):

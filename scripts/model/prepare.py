@@ -132,6 +132,30 @@ def apply_filters(df, report):
     return df.reset_index(drop=True)
 
 
+def parse_patch(text):
+    """'16.16' -> (16, 16). Tuple comparison keeps 16.17 > 16.9 and 17.1 > 16.17."""
+    parts = text.split(".")
+    if len(parts) != 2:
+        raise ValueError(f"patch must be MAJOR.MINOR, got {text!r}")
+    return int(parts[0]), int(parts[1])
+
+
+def patch_cut(df, max_patch, report):
+    """Drop games newer than max_patch (inclusive keep). None keeps everything.
+
+    Used to freeze a corpus at a patch boundary: on patch day the newest patch
+    is hours old and would otherwise ride in as a few hundred stray rows.
+    """
+    if max_patch is None:
+        return df
+    major, minor = max_patch
+    keep = (df.patch_major < major) | ((df.patch_major == major) & (df.patch_minor <= minor))
+    out = df[keep].reset_index(drop=True)
+    log(f"\n## Patch cut\n\nkeep patch <= {major}.{minor}: {len(out):,} "
+        f"(-{len(df) - len(out):,})", report)
+    return out
+
+
 def ragged_tail_cut(df, report):
     """Per region, drop days holding under half that region's median day.
 
@@ -693,6 +717,8 @@ def main():
     ap.add_argument("parquet", nargs="?", default=None)
     ap.add_argument("--out", default=str(ROOT / "data/training"))
     ap.add_argument("--sibling-n", type=int, default=SIBLING_N)
+    ap.add_argument("--max-patch", type=parse_patch, default=None,
+                    help="keep games on this patch and older, e.g. 16.16")
     args = ap.parse_args()
 
     out_dir = Path(args.out)
@@ -705,6 +731,7 @@ def main():
     report = [f"# prepare.py report\n",
               f"generated {datetime.now(timezone.utc).isoformat()}",
               f"source parquet: `{Path(parquet).name}`",
+              f"max patch: {args.max_patch or 'none'}",
               f"seed: {SEED}"]
 
     id_to_alias = load_id_to_alias()
@@ -713,6 +740,7 @@ def main():
 
     df = flatten(parquet)
     df = apply_filters(df, report)
+    df = patch_cut(df, args.max_patch, report)
     df = ragged_tail_cut(df, report)
 
     id_to_index, champ_vocab = build_champion_vocab(df, id_to_alias, report)
