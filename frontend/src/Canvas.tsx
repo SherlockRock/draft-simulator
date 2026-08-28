@@ -1422,7 +1422,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         }
         return map;
     });
-    const searchActive = createMemo(() => searchResults() !== null);
     const searchSlotPhaseFor = (draftId: string, pickIndex: number): SlotPhase | null =>
         searchSlotPhasesByDraft().get(draftId)?.get(pickIndex) ?? null;
 
@@ -7360,12 +7359,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                     restrictedChampions={() =>
                                                         getRestrictedChampionsForDraft(cd)
                                                     }
-                                                    searchDimmed={() =>
-                                                        searchActive() &&
-                                                        !searchMatchByDraftId().has(
-                                                            cd.Draft.id
-                                                        )
-                                                    }
                                                     searchSlotPhase={(pickIndex) =>
                                                         searchSlotPhaseFor(
                                                             cd.Draft.id,
@@ -7525,12 +7518,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                                 restrictedChampions={() =>
                                                     getRestrictedChampionsForDraft(cd)
                                                 }
-                                                searchDimmed={() =>
-                                                    searchActive() &&
-                                                    !searchMatchByDraftId().has(
-                                                        cd.Draft.id
-                                                    )
-                                                }
                                                 searchSlotPhase={(pickIndex) =>
                                                     searchSlotPhaseFor(
                                                         cd.Draft.id,
@@ -7677,10 +7664,6 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 }
                                 restrictedChampions={() =>
                                     getRestrictedChampionsForDraft(cd)
-                                }
-                                searchDimmed={() =>
-                                    searchActive() &&
-                                    !searchMatchByDraftId().has(cd.Draft.id)
                                 }
                                 searchSlotPhase={(pickIndex) =>
                                     searchSlotPhaseFor(cd.Draft.id, pickIndex)
