@@ -7,7 +7,9 @@ const { UserCanvas } = require("../../models/Canvas.js");
 const {
   persistViewport,
   LOCK_TIMEOUT_MS,
+  STATEMENT_TIMEOUT_MS,
   PG_LOCK_NOT_AVAILABLE,
+  PG_QUERY_CANCELED,
 } = require("../../services/viewportPersistence");
 
 /**
@@ -38,7 +40,7 @@ const input = {
 };
 
 describe("persistViewport", () => {
-  it("issues SET LOCAL synchronous_commit off and lock_timeout inside the transaction, then one UPDATE", async () => {
+  it("issues SET LOCAL synchronous_commit off, lock_timeout, and statement_timeout inside the transaction, then one UPDATE", async () => {
     vi.spyOn(UserCanvas, "update").mockResolvedValue([1]);
 
     const result = await persistViewport(input);
@@ -47,6 +49,7 @@ describe("persistViewport", () => {
     expect(queries.map((q) => q.sql)).toEqual([
       "SET LOCAL synchronous_commit TO off",
       `SET LOCAL lock_timeout TO '${LOCK_TIMEOUT_MS}ms'`,
+      `SET LOCAL statement_timeout TO '${STATEMENT_TIMEOUT_MS}ms'`,
     ]);
     for (const q of queries) expect(q.opts).toEqual({ transaction: t });
 
@@ -72,6 +75,14 @@ describe("persistViewport", () => {
   it("returns lock-timeout when Postgres reports lock_not_available (55P03)", async () => {
     const err = new Error("canceling statement due to lock timeout");
     err.original = { code: PG_LOCK_NOT_AVAILABLE };
+    err.parent = err.original;
+    vi.spyOn(UserCanvas, "update").mockRejectedValue(err);
+    await expect(persistViewport(input)).resolves.toBe("lock-timeout");
+  });
+
+  it("returns lock-timeout when Postgres reports query_canceled (57014)", async () => {
+    const err = new Error("canceling statement due to statement timeout");
+    err.original = { code: PG_QUERY_CANCELED };
     err.parent = err.original;
     vi.spyOn(UserCanvas, "update").mockRejectedValue(err);
     await expect(persistViewport(input)).resolves.toBe("lock-timeout");
