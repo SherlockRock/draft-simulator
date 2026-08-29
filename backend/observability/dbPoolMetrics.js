@@ -2,8 +2,9 @@
  * Observable gauges over the Sequelize connection pool, named per the OTel
  * database semantic conventions so Grafana Cloud's DB panels read them.
  *
- * Sequelize 6 lazily creates `connectionManager.pool` on first connect, so
- * every callback re-reads it; before that, nothing is observed.
+ * Every callback re-reads `connectionManager.pool` rather than capturing it
+ * once, so pool replacement or `sequelize.close()` is tolerated — a missing
+ * pool just means nothing is observed for that tick.
  */
 function registerDbPoolMetrics(sequelize, meter) {
   const livePool = () => sequelize.connectionManager?.pool ?? null;

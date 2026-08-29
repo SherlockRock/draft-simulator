@@ -61,7 +61,7 @@ describe("registerDbPoolMetrics", () => {
     expect(observe(meter.gauges["db.client.connections.pending_requests"])[0].value).toBe(5);
   });
 
-  it("is a no-op when the pool is not initialised yet", () => {
+  it("tolerates a missing pool by observing nothing, rather than throwing", () => {
     const meter = fakeMeter();
     registerDbPoolMetrics({ options: { pool: { max: 10 } }, connectionManager: {} }, meter);
     expect(observe(meter.gauges["db.client.connections.usage"])).toEqual([]);
