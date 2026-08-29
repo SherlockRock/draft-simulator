@@ -4178,18 +4178,23 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // Single-flight, latest-wins: while one PATCH is in the air, newer
     // viewports collapse to the newest and go out when it settles. The
     // throttle below sets the cadence; this stops requests from piling up
-    // when one of them is slow.
-    const viewportFlight = createLatestWins<Viewport>((viewport) =>
-        updateViewportMutation
-            .mutateAsync({ canvasId: canvasId(), viewport })
-            .then(() => undefined, () => undefined)
+    // when one of them is slow. The canvasId travels in the payload rather
+    // than being read from the `canvasId()` signal when the queued run
+    // fires: this component isn't remounted on a `/canvas/:id` param
+    // change, so a run queued for canvas A could otherwise fire after
+    // navigation and write into canvas B's row.
+    const viewportFlight = createLatestWins<{ canvasId: string; viewport: Viewport }>(
+        ({ canvasId, viewport }) =>
+            updateViewportMutation
+                .mutateAsync({ canvasId, viewport })
+                .then(() => undefined, () => undefined)
     );
 
     const persistViewportNow = (viewport: Viewport) => {
         if (isLocalMode()) {
             localUpdateViewport(viewport);
         } else {
-            viewportFlight.send(viewport);
+            viewportFlight.send({ canvasId: canvasId(), viewport });
         }
     };
 
