@@ -72,4 +72,23 @@ describe("createLatestWins", () => {
         await Promise.resolve();
         expect(run).toHaveBeenCalledTimes(1);
     });
+
+    it("handles synchronous throw like a rejection", async () => {
+        const run = vi.fn()
+            .mockImplementationOnce(() => {
+                throw new Error("sync throw");
+            })
+            .mockResolvedValue(undefined);
+        const flight = createLatestWins<number>(run);
+        flight.send(1);
+        flight.send(2);
+        expect(run).toHaveBeenCalledTimes(1);
+
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(flight.inFlight()).toBe(false);
+        expect(run).toHaveBeenCalledTimes(2);
+        expect(run).toHaveBeenLastCalledWith(2);
+    });
 });

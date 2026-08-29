@@ -17,7 +17,13 @@ export function createLatestWins<T>(run: (value: T) => Promise<void>): {
 
     const start = (value: T) => {
         active = true;
-        run(value).then(settle, settle);
+        let promise: Promise<void>;
+        try {
+            promise = run(value);
+        } catch (e) {
+            promise = Promise.reject(e);
+        }
+        promise.then(settle, settle);
     };
 
     const settle = () => {
