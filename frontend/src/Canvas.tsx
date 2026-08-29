@@ -195,6 +195,7 @@ import {
     createTrailingThrottle,
     presenceSnapshotSchema
 } from "./utils/presence";
+import { createLatestWins } from "./utils/latestWins";
 import {
     clampZoom,
     nextLegibleState,
@@ -2527,10 +2528,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     };
 
+    // Viewport persistence is best-effort (server may answer persisted:false
+    // and drop it; the next pan re-sends). A failure here is not something
+    // the user can act on, so it is logged, not toasted — during the
+    // 2026-08-28 incident this toast fired once per second.
     const updateViewportMutation = useMutation(() => ({
         mutationFn: updateCanvasViewport,
         onError: (error: Error) => {
-            toast.error(`Error updating view: ${error.message}`);
+            console.warn("Viewport persist failed:", error.message);
         }
     }));
 
@@ -4170,17 +4175,30 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // viewport it STARTED at and discarded where the user actually released.
     // createTrailingThrottle is leading + trailing, so the resting viewport
     // always lands. Discrete events (zoom buttons, pan end) persist directly.
+    // Single-flight, latest-wins: while one PATCH is in the air, newer
+    // viewports collapse to the newest and go out when it settles. The
+    // throttle below sets the cadence; this stops requests from piling up
+    // when one of them is slow.
+    const viewportFlight = createLatestWins<Viewport>((viewport) =>
+        updateViewportMutation
+            .mutateAsync({ canvasId: canvasId(), viewport })
+            .then(() => undefined, () => undefined)
+    );
+
     const persistViewportNow = (viewport: Viewport) => {
         if (isLocalMode()) {
             localUpdateViewport(viewport);
         } else {
-            updateViewportMutation.mutate({ canvasId: canvasId(), viewport });
+            viewportFlight.send(viewport);
         }
     };
 
     const viewportSaver = createTrailingThrottle<Viewport>(persistViewportNow, 1000);
 
-    onCleanup(() => viewportSaver.cancel());
+    onCleanup(() => {
+        viewportSaver.cancel();
+        viewportFlight.cancel();
+    });
 
     // Viewport broadcast (presence slice 4): announce this client's viewport
     // on the presence channel, throttled with a trailing send so receivers
