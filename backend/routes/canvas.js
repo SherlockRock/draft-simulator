@@ -26,6 +26,7 @@ const {
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
 const { assertCanvasAccess } = require("../services/canvasMutations");
+const viewportPersistence = require("../services/viewportPersistence");
 const {
   MAX_GROUP_DEPTH,
   depthOf,
@@ -2488,31 +2489,30 @@ router.patch("/:canvasId/viewport", async (req, res) => {
       return res.status(400).json({ error: "Invalid viewport data" });
     }
 
-    const userCanvas = await UserCanvas.findOne({
-      where: {
-        canvas_id: canvasId,
-        user_id: user.id,
-      },
+    // One async-commit UPDATE with a lock timeout — see
+    // services/viewportPersistence.js for why this write must never queue.
+    const outcome = await viewportPersistence.persistViewport({
+      userId: user.id,
+      canvasId,
+      viewport: { x, y, zoom },
     });
 
-    if (!userCanvas) {
+    if (outcome === "no-access") {
       return res
         .status(403)
         .json({ error: "Forbidden: You don't have access to this canvas" });
     }
 
-    userCanvas.lastViewportX = x;
-    userCanvas.lastViewportY = y;
-    userCanvas.lastZoomLevel = zoom;
-    userCanvas.lastAccessedAt = new Date();
-    await userCanvas.save();
-
     res.status(200).json({
       success: true,
       message: "Viewport updated",
       viewport: { x, y, zoom },
+      // false = the row was busy and we dropped this write; the next pan
+      // re-sends it. The client must NOT retry.
+      persisted: outcome === "saved",
     });
   } catch (error) {
+    console.error("Failed to update viewport:", error);
     res.status(500).json({ error: "Failed to update viewport" });
   }
 });
