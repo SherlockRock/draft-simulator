@@ -157,7 +157,7 @@ def bucket_arm(models, ds, dims, report, out):
     te = ds[ds.split == "test"].reset_index(drop=True)
     c_te, r_te, y_t = tensors(te)
     y = te.win.to_numpy()
-    base = te.win.mean()
+    base = ds[ds.split == 'train'].win.mean()   # train-fitted constant (N8)
 
     report.append("\n## Fill-bucket coverage (test replicas; one mask per row/bucket)\n")
     report.append("| bucket | serve-FM | full-draft FM | 4-6 refit FM | constant | "

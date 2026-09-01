@@ -1,4 +1,7 @@
-"""Fill-bucket comparison of the three FM fits under the SHIPPED serving rule.
+"""Fill-bucket comparison of the three FM fits under a serving rule.
+
+--rule solver     : frozen-teammates solver posterior (rev 3)
+--rule population : export-baked expected linear from role_percentages (rev 4)
 
 Codex round-3 blocker 2: serve_fm_measure.py's bucket table used truth-slot
 roles; rev 3 serves solver-posterior linears (frozen-teammates rule: one
@@ -8,6 +11,7 @@ role tax are measured under serving semantics, per fit, per fill level.
 
 Fails hard on any coverage gap; writes bucket_role_measure.{json,md}.
 """
+import argparse
 import json
 
 import numpy as np
@@ -28,11 +32,26 @@ FITS = {"fulldraft_fm": "baseline_fm.pt", "serve_fm": "serve_fm_seed0.pt",
 
 sig = lambda z: 1 / (1 + np.exp(-z))
 
+ap = argparse.ArgumentParser()
+ap.add_argument("--rule", choices=["solver", "population"], default="solver")
+RULE = ap.parse_args().rule
+
 ds = pd.read_parquet(TRAIN_DIR / "dataset.parquet")
 te = ds[ds.split == "test"].reset_index(drop=True)
 dims = dims_of(ds)
 vocab = json.loads((TRAIN_DIR / "champion_vocab.json").read_text())
 factors = position_factor_table(dims[0], {int(k): v for k, v in vocab["index_to_alias"].items()})
+
+role_pct_raw = json.loads((TRAIN_DIR / "role_percentages.json").read_text())
+ROLE_KEYS = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"]
+POP = np.zeros((dims[0], 5))
+alias_to_idx = {a: int(k) for k, a in vocab["index_to_alias"].items()}
+for e in role_pct_raw.values():
+    i = alias_to_idx.get(e["alias"])
+    if i is not None:
+        POP[i] = [e["roles"].get(k, 0.0) for k in ROLE_KEYS]
+missing_pop = [vocab["index_to_alias"][str(i)] for i in range(2, dims[0]) if POP[i].sum() == 0]
+assert not missing_pop, f"champions without role prior: {missing_pop}"
 
 champ = champ_matrix(te)
 c_t = torch.from_numpy(champ).long()
@@ -65,7 +84,10 @@ def solver_linear_adjustment(W, vp):
             slots = np.flatnonzero(np.array(v))
             ids = champ[np.ix_(rows, slots.copy() + side * 5)]
             assert (ids >= 2).all(), "masked/NONE slot leaked into visible set"
-            post = team_posterior(factors[ids])            # (B, n, 5)
+            if RULE == "solver":
+                post = team_posterior(factors[ids])        # (B, n, 5)
+            else:
+                post = POP[ids]                            # (B, n, 5) state-independent
             w = W[ids]                                     # (B, n, 5)
             truth = np.take_along_axis(
                 w, np.broadcast_to(slot_role[slots + side * 5][None, :, None],
@@ -75,11 +97,11 @@ def solver_linear_adjustment(W, vp):
     return adj
 
 
-report = ["# Fill buckets under the shipped serving rule (solver-posterior linear)\n",
+report = [f"# Fill buckets under serving rule: {RULE}\n",
           "| bucket | " + " | ".join(FITS) + " | constant | fulldraft − serve (MDE) | role tax fulldraft |",
           "|---|---|---|---|---|---|---|"]
 out = {}
-base = te.win.mean()
+base = ds[ds.split == 'train'].win.mean()   # train-fitted constant (N8)
 const = float(np.mean(metrics.log_loss_rows(np.full(len(y), base), y)))
 for bucket in BUCKETS:
     ms = build_masked_states(ds, [], bucket=bucket)
@@ -106,7 +128,7 @@ for bucket in BUCKETS:
                 "fulldraft_minus_serve": float(d.mean()), "mde": metrics.mde(d),
                 "role_tax": tax}
 
-(TRAIN_DIR / "bucket_role_measure.json").write_text(json.dumps(out, indent=2))
+(TRAIN_DIR / f"bucket_role_measure_{RULE}.json").write_text(json.dumps(out, indent=2))
 text = "\n".join(report) + "\n"
-(TRAIN_DIR / "bucket_role_measure.md").write_text(text)
+(TRAIN_DIR / f"bucket_role_measure_{RULE}.md").write_text(text)
 print(text)
