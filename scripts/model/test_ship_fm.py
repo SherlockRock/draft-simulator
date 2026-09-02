@@ -104,7 +104,7 @@ def test_slot_allocation_decomposition_reproduces_forward_minus_region_bias():
         champ[rng.choice(10, size=n_mask, replace=False)] = 0
         region = int(rng.integers(0, R))
         with torch.no_grad():
-            want = float(m(torch.tensor([champ]), torch.tensor([region]))[0]
+            want = float(m(torch.from_numpy(champ[None].copy()).long(), torch.tensor([region]))[0]
                          - m.region_bias[region])
         got = fm_serve.slot_role_logit(W, S, A, B, champ)
         assert abs(got - want) < 1e-5, (trial, got, want)
