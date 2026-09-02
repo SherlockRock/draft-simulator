@@ -186,3 +186,14 @@ def test_recipe_round_trips_and_missing_path_raises(tmp_path):
     assert ship_fm.read_recipe(path) == info
     with pytest.raises(FileNotFoundError):
         ship_fm.read_recipe(tmp_path / "missing_recipe.json")
+
+
+import fm_retrain_gate
+
+
+def test_retrain_gate_blocks_only_a_regression_beyond_both_the_mde_and_the_seed_spread():
+    # design §5: block when Δ(new − previous) < 0 AND |Δ| > MDE AND |Δ| > 3-seed spread
+    assert fm_retrain_gate.decide(-0.010, mde=0.004, spread=0.002)[0] == "BLOCK"
+    assert fm_retrain_gate.decide(-0.003, mde=0.004, spread=0.002)[0] == "PASS"   # inside MDE
+    assert fm_retrain_gate.decide(-0.005, mde=0.004, spread=0.006)[0] == "PASS"   # inside seed spread
+    assert fm_retrain_gate.decide(+0.010, mde=0.004, spread=0.002)[0] == "PASS"   # improvement
