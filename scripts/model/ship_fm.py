@@ -83,6 +83,25 @@ def load_checkpoints(paths, dims):
     return out
 
 
+RECIPE_PATH = TRAIN_DIR / "ship_fm_recipe.json"
+
+
+def write_recipe(path, info):
+    """Persist the per-seed training recipe (lr, weight_decay, best_epoch,
+    val_a_log_loss) so a later --checkpoints run keeps full trained_on provenance."""
+    path.write_text(json.dumps(info, indent=1))
+
+
+def read_recipe(path):
+    if not path.exists():
+        raise FileNotFoundError(
+            f"training recipe not found at {path} — --checkpoints reuses state_dicts but needs "
+            f"the recipe (lr, weight_decay, best_epoch, val_a_log_loss) from the run that produced "
+            f"them; run ship_fm.py once without --checkpoints first, or restore this file."
+        )
+    return json.loads(path.read_text())
+
+
 def test_log_loss(model, te):
     p = 1 / (1 + np.exp(-predict_logit(model, torch.from_numpy(champ_matrix(te)).long(),
                                        torch.from_numpy(te.region_idx.to_numpy()).long())))
@@ -226,11 +245,13 @@ def main():
 
     if args.checkpoints:
         models = load_checkpoints(args.checkpoints.split(","), dims)
-        info, sweep_report = [{"seed": k} for k in range(3)], "(checkpoints reused)"
+        info = read_recipe(RECIPE_PATH)
+        sweep_report = "(checkpoints reused)"
     else:
         models, info, sweep_report = train_three_seeds(ds, dims)
         for k, m in enumerate(models):
             torch.save(m.state_dict(), TRAIN_DIR / f"ship_fm_seed{k}.pt")
+        write_recipe(RECIPE_PATH, info)
 
     # drift vs the measured checkpoint (Evidence §4 measured baseline_fm.pt)
     base = TRAIN_DIR / "baseline_fm.pt"

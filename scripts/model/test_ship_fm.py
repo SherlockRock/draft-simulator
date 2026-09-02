@@ -175,3 +175,14 @@ def test_parity_fixtures_are_clamp_free_and_self_consistent():
 
 def test_version_string_is_date_plus_sha():
     assert ship_fm.version_string("2026-09-01", "abc1234") == "fm-2026-09-01-abc1234"
+
+
+def test_recipe_round_trips_and_missing_path_raises(tmp_path):
+    info = [{"seed": 0, "lr": 0.01, "weight_decay": 0.0001, "best_epoch": 7, "val_a_log_loss": 0.69},
+            {"seed": 1, "lr": 0.01, "weight_decay": 0.0001, "best_epoch": 5, "val_a_log_loss": 0.70},
+            {"seed": 2, "lr": 0.01, "weight_decay": 0.0001, "best_epoch": 6, "val_a_log_loss": 0.70}]
+    path = tmp_path / "ship_fm_recipe.json"
+    ship_fm.write_recipe(path, info)
+    assert ship_fm.read_recipe(path) == info
+    with pytest.raises(FileNotFoundError):
+        ship_fm.read_recipe(tmp_path / "missing_recipe.json")
