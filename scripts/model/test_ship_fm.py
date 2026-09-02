@@ -197,3 +197,100 @@ def test_retrain_gate_blocks_only_a_regression_beyond_both_the_mde_and_the_seed_
     assert fm_retrain_gate.decide(-0.003, mde=0.004, spread=0.002)[0] == "PASS"   # inside MDE
     assert fm_retrain_gate.decide(-0.005, mde=0.004, spread=0.006)[0] == "PASS"   # inside seed spread
     assert fm_retrain_gate.decide(+0.010, mde=0.004, spread=0.002)[0] == "PASS"   # improvement
+
+
+# ---- fm_retrain_gate: evaluate() / main() (fix round 1 findings 1-3) --------
+
+def _gate_tables(seed_prev=0, seed_new=1):
+    return fm_serve.ServingTable(_artifact(seed=seed_prev)), fm_serve.ServingTable(_artifact(seed=seed_new))
+
+
+def _synthetic_reversal_sets(prev_table, new_table, n=200, seed=11):
+    """n sets of 3 candidates each, filtered so the true pick (index 0) is the
+    prev-table argmax and the new-table argmin among that set's candidates —
+    i.e. prev ranks it first, new ranks it last."""
+    names = prev_table.aliases
+    rng = np.random.default_rng(seed)
+    sets = []
+    tries = 0
+    while len(sets) < n and tries < 50000:
+        tries += 1
+        pool = rng.choice(names, size=8, replace=False)
+        team, opp, cand_pool = list(pool[:2]), list(pool[2:5]), list(pool[5:8])
+        pm = np.array([fm_serve.marginal(prev_table, c, team, opp) for c in cand_pool])
+        nm = np.array([fm_serve.marginal(new_table, c, team, opp) for c in cand_pool])
+        i = int(np.argmax(pm))
+        if i != int(np.argmin(nm)):
+            continue
+        candidates = [cand_pool[i]] + [c for j, c in enumerate(cand_pool) if j != i]
+        sets.append({"match_id": f"reversal-{len(sets)}", "slot": 0, "team": team, "opp": opp,
+                      "candidates": candidates})
+    assert len(sets) == n, f"only generated {len(sets)} qualifying synthetic sets"
+    return sets
+
+
+def _random_gate_sets(table, n=20, seed=5):
+    names = table.aliases
+    rng = np.random.default_rng(seed)
+    sets = []
+    for i in range(n):
+        pool = rng.choice(names, size=8, replace=False)
+        sets.append({"match_id": f"rand-{i}", "slot": 0, "team": list(pool[:2]), "opp": list(pool[2:5]),
+                     "candidates": list(pool[5:8])})
+    return sets
+
+
+def test_evaluate_blocks_when_the_new_table_reverses_the_true_picks_ranking():
+    prev_table, new_table = _gate_tables()
+    sets = _synthetic_reversal_sets(prev_table, new_table, n=200)
+    result = fm_retrain_gate.evaluate(new_table, prev_table, sets, spread=0.01)
+    assert result["verdict"] == "BLOCK"
+    assert result["mean"] < 0
+
+
+def test_evaluate_passes_and_reports_rho_one_when_new_equals_previous():
+    table = fm_serve.ServingTable(_artifact(seed=2))
+    sets = _random_gate_sets(table, n=20)
+    result = fm_retrain_gate.evaluate(table, table, sets, spread=0.01)
+    assert result["verdict"] == "PASS"
+    assert result["mean"] == 0
+    assert abs(result["rho"] - 1.0) < 1e-9
+
+
+def test_main_block_returns_1_and_leaves_the_card_file_untouched(tmp_path, monkeypatch):
+    prev_table, new_table = _gate_tables(seed_prev=0, seed_new=1)
+    sets = _synthetic_reversal_sets(prev_table, new_table, n=200)
+    monkeypatch.setattr(fm_retrain_gate, "load_sibling_sets", lambda: sets)
+
+    new_path, prev_path = tmp_path / "new.json", tmp_path / "prev.json"
+    new_path.write_text(json.dumps(_artifact(seed=1)))
+    prev_path.write_text(json.dumps(_artifact(seed=0)))
+
+    card_path = tmp_path / "card.json"
+    card_before = {"seed_sibling_mrr_spread": 0.002, "spearman_vs_previous_weights": None}
+    card_path.write_text(json.dumps(card_before))
+
+    rc = fm_retrain_gate.main(["--new", str(new_path), "--previous", str(prev_path), "--card", str(card_path)])
+
+    assert rc == 1
+    assert json.loads(card_path.read_text()) == card_before
+
+
+def test_main_pass_returns_0_and_writes_rho(tmp_path, monkeypatch):
+    art = _artifact(seed=3)
+    table = fm_serve.ServingTable(art)
+    sets = _random_gate_sets(table, n=20)
+    monkeypatch.setattr(fm_retrain_gate, "load_sibling_sets", lambda: sets)
+
+    new_path, prev_path = tmp_path / "new.json", tmp_path / "prev.json"
+    new_path.write_text(json.dumps(art))
+    prev_path.write_text(json.dumps(art))
+
+    card_path = tmp_path / "card.json"
+    card_path.write_text(json.dumps({"seed_sibling_mrr_spread": 0.002, "spearman_vs_previous_weights": None}))
+
+    rc = fm_retrain_gate.main(["--new", str(new_path), "--previous", str(prev_path), "--card", str(card_path)])
+
+    assert rc == 0
+    updated = json.loads(card_path.read_text())
+    assert abs(updated["spearman_vs_previous_weights"] - 1.0) < 1e-9
