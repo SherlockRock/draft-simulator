@@ -18,9 +18,13 @@ data/raw/*
 !data/raw/cdragon-champions.json
 data/compiled/*
 !data/compiled/.gitkeep
-# Engine reads these two at runtime; must be committed to ship in Railway's git context.
+# Engine reads these at runtime; must be committed to ship in Railway's git context.
 !data/compiled/champion-meta.json
 !data/compiled/matchup-data.json
+# Navigator FM evaluator (design docs/designs/fm-evaluator-ship-design.md §1). Without
+# these two lines prod silently stays on the legacy compStrength behind one warning line.
+!data/compiled/fm-weights.json
+!data/compiled/fm-parity.json
 
 # Rust
 target/

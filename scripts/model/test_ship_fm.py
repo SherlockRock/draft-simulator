@@ -150,3 +150,28 @@ def test_scale_statistic_on_a_synthetic_fixture():
     fmv = [fm_serve.within_set_sd([-1.0, 0.0, 1.0])] * 3            # sd 0.8165
     assert abs(fm_serve.scale_statistic(legacy, fmv) - 0.1) < 1e-12
     assert fm_serve.within_set_sd([1.0, 1.0]) == 0.0
+
+
+import ship_fm
+
+
+def test_parity_fixtures_are_clamp_free_and_self_consistent():
+    art = _artifact(scale=0.7)
+    table = fm_serve.ServingTable(art)
+    rng = np.random.default_rng(3)
+    names = table.aliases
+    drafts = [(list(rng.choice(names, 5, replace=False)), list(rng.choice(names, 5, replace=False)))
+              for _ in range(80)]
+    fx = ship_fm.generate_parity_fixtures(table, drafts, n=20, seed=0)
+    assert len(fx) == 20
+    fills = {len(f["blue"]) + len(f["red"]) for f in fx}
+    assert min(fills) < 10 <= max(fills), "fixtures must span partial and full drafts"
+    for f in fx:
+        assert abs(f["logit"] - (f["blue_allocation_sum"] - f["red_allocation_sum"])) < 1e-12
+        for side, opp in (("blue", "red"), ("red", "blue")):
+            for c in f[side]:
+                assert abs(table.scale * fm_serve.allocation(table, c, f[side], f[opp])) < 0.49
+
+
+def test_version_string_is_date_plus_sha():
+    assert ship_fm.version_string("2026-09-01", "abc1234") == "fm-2026-09-01-abc1234"

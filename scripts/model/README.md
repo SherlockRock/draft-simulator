@@ -35,3 +35,22 @@ Gates 1–4 run over every `model_seed*.pt` and report mean ± spread across see
 
 Tests: `.venv/bin/python -m pytest` from this directory (the data-dependent ones skip
 until 1a/2b have run). Rust harness unit tests: `cargo test -p engine-node`.
+
+## Phase 3 — the shipped FM evaluator
+
+`ship_fm.py` trains 3 seeds by the baselines recipe and writes `data/compiled/fm-weights.json`
+(seed 0, shipped), `data/compiled/fm-parity.json` (Rust parity fixtures), `reports/fm-weights-card.md`,
+and `data/training/fm-weights-seed{1,2}.json` (noise floor for the search A/B). Prerequisite: the
+Task 5 harness has been re-run so `evaluator_sibling_scores.csv` carries `comp_strength`.
+
+Per-patch retrain: `prepare.py <new parquet>` → re-run the Task 5 harness → `ship_fm.py` →
+`fm_retrain_gate.py` (blocks the commit on a paired sibling-MRR regression beyond both the MDE and the
+card's 3-seed spread) → `cargo test -p engine-core --test fm_parity` → commit weights + fixtures + card.
+
+Kill switch: `NAVIGATOR_FM=off` on the backend makes the engine boot without the FM (legacy
+`compStrength`). The engine is built at module load, so it takes effect on restart; on Railway a
+variable change redeploys. Weights rollback = git revert + redeploy.
+
+Release-day line: a champion missing from the table scores `clamp(winRate)` — structurally mid-pack —
+until `ship_fm.py` is re-run on a corpus containing them. Expect the Navigator to neither recommend
+nor warn about the newest champion until then.
