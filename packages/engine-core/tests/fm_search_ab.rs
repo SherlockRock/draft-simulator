@@ -188,7 +188,18 @@ fn production_request(
     }
 }
 
-fn budget_run(engine: &Engine, req: ComputeRequest) -> (u64, usize, Vec<String>, bool) {
+/// Returns `(wall_ms, depth_reached, top_move, timed_out, errored)`. `errored`
+/// is a distinct flag from `timed_out` — controller ruling (fix round 1,
+/// finding 3): an `Err` from `Engine::compute` must not silently masquerade as
+/// an ordinary 60 s timeout. It still contributes `WATCHDOG_MS` to the wall
+/// sum (conservative, as before), but is now printed and counted separately.
+fn budget_run(
+    engine: &Engine,
+    req: ComputeRequest,
+    state_idx: usize,
+    arm_label: &str,
+    rep: usize,
+) -> (u64, usize, Vec<String>, bool, bool) {
     let cancel = CancelHandle::new();
     let watchdog = cancel.clone();
     let t0 = Instant::now();
@@ -211,8 +222,14 @@ fn budget_run(engine: &Engine, req: ComputeRequest) -> (u64, usize, Vec<String>,
             r.depth_reached,
             r.tree.children.first().map(|c| c.champion_ids.clone()).unwrap_or_default(),
             timed_out,
+            false,
         ),
-        Err(_) => (WATCHDOG_MS, 0, vec![], true),
+        Err(err) => {
+            eprintln!(
+                "engine error: state {state_idx} arm {arm_label} rep {rep}: {err}"
+            );
+            (WATCHDOG_MS, 0, vec![], true, true)
+        }
     }
 }
 
@@ -308,9 +325,12 @@ fn fm_search_ab_thresholds() {
     // depth-controlled + budget-controlled, 3 reps, alternating order
     let engine = Engine::new(meta_off.clone(), champion_meta.clone());
     let mut nodes = vec![[vec![], vec![]]; states.len()]; // [off, on] per state
+    let mut leaves = vec![[vec![], vec![]]; states.len()]; // stats.leaf_evaluations, [off, on]
+    let mut pruned = vec![[vec![], vec![]]; states.len()]; // stats.nodes_pruned, [off, on]
     let mut walls = vec![[vec![], vec![]]; states.len()];
     let mut depths = vec![[vec![], vec![]]; states.len()];
     let mut timeouts: Vec<[Vec<bool>; 2]> = vec![[vec![], vec![]]; states.len()];
+    let mut errored: Vec<[Vec<bool>; 2]> = vec![[vec![], vec![]]; states.len()];
     let mut agree_per_state: Vec<Vec<bool>> = vec![vec![]; states.len()];
     let mut top_agree = 0usize;
     for (i, (_, _, st)) in states.iter().enumerate() {
@@ -330,11 +350,16 @@ fn fm_search_ab_thresholds() {
                 };
                 let (_, stats) = search_with_stats(st, &params, &ctx, &CancelHandle::new()).unwrap();
                 nodes[i][arm].push(stats.nodes_evaluated as f64);
+                leaves[i][arm].push(stats.leaf_evaluations as f64);
+                pruned[i][arm].push(stats.nodes_pruned as f64);
                 let req = production_request(st, side, &champion_meta, meta.clone());
-                let (ms, depth, top, timed_out) = budget_run(&engine, req);
+                let arm_label = if arm == OFF { "off" } else { "on" };
+                let (ms, depth, top, timed_out, arm_errored) =
+                    budget_run(&engine, req, i, arm_label, rep);
                 walls[i][arm].push(ms as f64);
                 depths[i][arm].push(depth as f64);
                 timeouts[i][arm].push(timed_out);
+                errored[i][arm].push(arm_errored);
                 tops[arm] = top;
             }
             let agreed = tops[OFF] == tops[ON];
@@ -357,6 +382,11 @@ fn fm_search_ab_thresholds() {
     };
     let node_ratio = sum_med(&nodes, ON) / sum_med(&nodes, OFF);
     let wall_ratio = sum_med(&walls, ON) / sum_med(&walls, OFF);
+    // Recorded, not gated (fix round 1, finding 2): at branch_width 5 / max_depth 2,
+    // `nodes_evaluated` is fixed by the width configuration, so `node_ratio` is
+    // structurally 1.000 and cannot fail. `leaf_evaluations` (actual `eval_state`
+    // cache misses) is the quantity that can actually differ between arms.
+    let leaf_ratio = sum_med(&leaves, ON) / sum_med(&leaves, OFF);
     let (scored, clamped) = seeds[0].clamp_stats();
     let clamp_frac = clamped as f64 / scored.max(1) as f64;
     let agreement = top_agree as f64 / (states.len() * REPS) as f64;
@@ -382,6 +412,7 @@ fn fm_search_ab_thresholds() {
             "turns": STRATA[si],
             "n_states": idx.len(),
             "node_ratio": idx_sum_med(&nodes, ON, &idx) / idx_sum_med(&nodes, OFF, &idx),
+            "leaf_ratio": idx_sum_med(&leaves, ON, &idx) / idx_sum_med(&leaves, OFF, &idx),
             "wall_ratio": idx_sum_med(&walls, ON, &idx) / idx_sum_med(&walls, OFF, &idx),
             "agreement": n_agree as f64 / (idx.len() * REPS) as f64,
             "mean_spread": idx.iter().map(|&i| spreads[i]).sum::<f64>() / idx.len() as f64,
@@ -403,12 +434,23 @@ fn fm_search_ab_thresholds() {
                 "floor": floors[i],
                 "nodes_off": nodes[i][OFF],
                 "nodes_on": nodes[i][ON],
+                "leaves_off": leaves[i][OFF],
+                "leaves_on": leaves[i][ON],
+                "pruned_off": pruned[i][OFF],
+                "pruned_on": pruned[i][ON],
                 "walls_off": walls[i][OFF],
                 "walls_on": walls[i][ON],
                 "depths_off": depths[i][OFF],
                 "depths_on": depths[i][ON],
                 "timed_out_off": timeouts[i][OFF],
                 "timed_out_on": timeouts[i][ON],
+                // Controller ruling (fix round 1, finding 3): counts, not per-rep
+                // arrays like timed_out_off/on — a distinct signal from an
+                // ordinary watchdog timeout. An errored run still counts as
+                // timed_out above (conservative, unchanged), but is now visible
+                // here and via the eprintln at the point of failure.
+                "errored_off": errored[i][OFF].iter().filter(|x| **x).count(),
+                "errored_on": errored[i][ON].iter().filter(|x| **x).count(),
                 "top_move_agreement": agree_per_state[i],
             })
         })
@@ -416,6 +458,8 @@ fn fm_search_ab_thresholds() {
 
     let timeouts_off: usize = timeouts.iter().map(|t| t[OFF].iter().filter(|x| **x).count()).sum();
     let timeouts_on: usize = timeouts.iter().map(|t| t[ON].iter().filter(|x| **x).count()).sum();
+    let errored_off: usize = errored.iter().map(|t| t[OFF].iter().filter(|x| **x).count()).sum();
+    let errored_on: usize = errored.iter().map(|t| t[ON].iter().filter(|x| **x).count()).sum();
 
     let thresholds = [
         ("clamp saturation", clamp_frac, 0.05, "<", clamp_frac < 0.05),
@@ -450,6 +494,8 @@ fn fm_search_ab_thresholds() {
             "below_floor": below_floor,
             "global_floor": global_floor,
             "node_ratio": node_ratio,
+            // Recorded, not gated — see the Deviations note in the .md report.
+            "leaf_ratio": leaf_ratio,
             "wall_ratio": wall_ratio,
             "agreement": agreement,
             "n_states": states.len(),
@@ -457,6 +503,8 @@ fn fm_search_ab_thresholds() {
             "depth_mode_max_depth": DEPTH_MODE_MAX_DEPTH,
             "timeouts_off": timeouts_off,
             "timeouts_on": timeouts_on,
+            "errored_off": errored_off,
+            "errored_on": errored_on,
         },
         "thresholds": thresholds.iter().map(|(name, value, limit, cmp, pass)| json!({
             "name": name, "value": value, "threshold": limit, "comparator": cmp, "pass": pass,
@@ -491,7 +539,10 @@ fn fm_search_ab_thresholds() {
          pair plies, so 500 makes that tree ~500² leaves (~5 min per call, >1 day for the run). Both arms use the \
          same width, so the node-count ratio is unaffected. Budget-controlled mode is unchanged production config \
          (`branch_width {BRANCH_WIDTH}`, `pair_branch_width {PAIR_BRANCH_WIDTH}`, `max_depth {BUDGET_MAX_DEPTH}`, \
-         {LATENCY_BUDGET_MS} ms budget, {WATCHDOG_MS} ms watchdog).\n\n"
+         {LATENCY_BUDGET_MS} ms budget, {WATCHDOG_MS} ms watchdog). At `branch_width {BRANCH_WIDTH}` / \
+         `max_depth {DEPTH_MODE_MAX_DEPTH}`, `nodes_evaluated` is fixed by the width configuration, so gate 3 \
+         is structurally 1.000 and cannot fail; the leaf-evaluation ratio below is the informative depth-mode \
+         quantity, and re-pointing gate 3 at it is a design decision left to the user.\n\n"
     ));
     md.push_str("## Thresholds\n\n| check | value | threshold | result |\n| --- | ---: | ---: | --- |\n");
     for (name, value, limit, cmp, pass) in &thresholds {
@@ -506,19 +557,22 @@ fn fm_search_ab_thresholds() {
     ));
     md.push_str(&format!(
         "\n**Recorded, not gated** — root top-move agreement: {agreement:.4} \
-         ({top_agree}/{} arm comparisons). Budget-mode watchdog timeouts: {timeouts_off} off, \
-         {timeouts_on} on (of {} runs each).\n",
+         ({top_agree}/{} arm comparisons). Leaf-evaluation ratio (on/off): {leaf_ratio:.3}x \
+         (sum over states of the per-state median of `leaf_evaluations`; see the Deviations note above). \
+         Budget-mode watchdog timeouts: {timeouts_off} off, {timeouts_on} on (of {} runs each). \
+         Engine errors: {errored_off} off, {errored_on} on.\n",
         states.len() * REPS,
         states.len() * REPS
     ));
-    md.push_str("\n## Per stratum\n\n| stratum | turns | states | node ratio | wall ratio | agreement | mean spread | mean floor | below floor |\n| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n");
+    md.push_str("\n## Per stratum\n\n| stratum | turns | states | node ratio | leaf ratio | wall ratio | agreement | mean spread | mean floor | below floor |\n| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n");
     for s in &per_stratum {
         md.push_str(&format!(
-            "| {} | `{}` | {} | {:.3} | {:.3} | {:.4} | {:.5} | {:.5} | {:.4} |\n",
+            "| {} | `{}` | {} | {:.3} | {:.3} | {:.3} | {:.4} | {:.5} | {:.5} | {:.4} |\n",
             s["stratum"].as_str().unwrap_or("?"),
             s["turns"],
             s["n_states"],
             s["node_ratio"].as_f64().unwrap_or(f64::NAN),
+            s["leaf_ratio"].as_f64().unwrap_or(f64::NAN),
             s["wall_ratio"].as_f64().unwrap_or(f64::NAN),
             s["agreement"].as_f64().unwrap_or(f64::NAN),
             s["mean_spread"].as_f64().unwrap_or(f64::NAN),
@@ -526,7 +580,7 @@ fn fm_search_ab_thresholds() {
             s["below_floor"].as_f64().unwrap_or(f64::NAN),
         ));
     }
-    md.push_str("\nEvery per-state number (nodes, walls, depths, timeouts, per-rep agreement) is in `fm_search_ab.json`.\n");
+    md.push_str("\nEvery per-state number (nodes, leaves, pruned, walls, depths, timeouts, errors, per-rep agreement) is in `fm_search_ab.json`.\n");
     std::fs::write(reports.join("fm_search_ab.md"), md).expect("write fm_search_ab.md");
     println!("\nwrote {}", reports.join("fm_search_ab.md").display());
     println!(
