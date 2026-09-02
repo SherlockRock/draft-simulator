@@ -304,8 +304,14 @@ fn search_recursive(
 
     // Apply forced branches at this single-slot expansion.
     let current_slot = state.turn_index();
-    let (forced_set, injected_ids) =
-        apply_single_slot_forces(&params.forced_branches, current_slot, lineage, accum, &ranked);
+    let (forced_set, injected_ids) = apply_single_slot_forces(
+        &params.forced_branches,
+        current_slot,
+        lineage,
+        accum,
+        &ranked,
+        state,
+    );
 
     let mut children: Vec<TreeNode> = Vec::with_capacity(forced_set.len());
     let mut best_value_pair = SideValues { blue: f64::NEG_INFINITY, red: f64::NEG_INFINITY };
@@ -546,12 +552,23 @@ fn feasibility_filter_pairs(
 /// `target_slot` equals `current_slot`. Sole mode replaces the candidate set
 /// with `[champion_id]`. Include mode appends `champion_id` after dedup.
 /// Each application records the branch's index in `accum.applied_forced`.
+///
+/// A force naming a champion already taken in the PROJECTED `state` (picked by
+/// either side, or banned) is skipped in both modes — not injected, and not
+/// recorded in `applied_forced`, so it reports as dropped. Honouring it would
+/// push the champion onto a team that already holds it or onto the team facing
+/// it, i.e. a champion on both sides at once. The legacy evaluator silently
+/// double-counted such a state; the FM evaluator asserts against it
+/// (`evaluator::fm_comp_strength`). Nothing upstream can catch this: forced
+/// paths resolve against a lineage PREFIX, so a request-time check cannot know
+/// which projected states a branch will match.
 fn apply_single_slot_forces(
     branches: &[ForcedBranch],
     current_slot: usize,
     lineage: &[(usize, Vec<String>)],
     accum: &mut SearchAccum,
     ranked: &[(String, f64)],
+    state: &DraftState,
 ) -> (Vec<(String, f64)>, HashSet<String>) {
     let mut out: Vec<(String, f64)> = ranked.to_vec();
     let mut injected: HashSet<String> = HashSet::new();
@@ -562,6 +579,9 @@ fn apply_single_slot_forces(
             continue;
         }
         if !matches!(resolve_path(&fb.path, lineage), PathMatch::Resolved { .. }) {
+            continue;
+        }
+        if is_taken(&fb.champion_id, state) {
             continue;
         }
         accum.applied_forced.insert(idx);
@@ -769,6 +789,7 @@ fn expand_pair(
         pair_end_slot,
         lineage,
         accum,
+        state,
     );
 
     // Pick2-only: identify roles where current picks have NO primary coverage
@@ -932,12 +953,17 @@ enum PairForce {
 /// Finds at most one matching pair force at the current pair node. Sole mode
 /// only — include-mode at a pair turn is dropped (and its index is NOT added
 /// to `applied_forced`, so it'll count as dropped at the end).
+///
+/// A force naming a champion already taken in the PROJECTED `state` is dropped
+/// the same way, and for the same reason as in `apply_single_slot_forces`: it
+/// would seat one champion on both teams.
 fn match_pair_force(
     branches: &[ForcedBranch],
     pair_start_slot: usize,
     pair_end_slot: usize,
     lineage: &[(usize, Vec<String>)],
     accum: &mut SearchAccum,
+    state: &DraftState,
 ) -> Option<PairForce> {
     for (idx, fb) in branches.iter().enumerate() {
         if fb.target_slot != pair_start_slot && fb.target_slot != pair_end_slot {
@@ -947,6 +973,9 @@ fn match_pair_force(
             continue;
         }
         if !matches!(resolve_path(&fb.path, lineage), PathMatch::Resolved { .. }) {
+            continue;
+        }
+        if is_taken(&fb.champion_id, state) {
             continue;
         }
         accum.applied_forced.insert(idx);
