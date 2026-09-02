@@ -112,3 +112,127 @@ fn comp_strength_maps_scales_clamps_and_counts() {
     assert!((v - want).abs() < 1e-12);
     assert_eq!(fm.clamp_stats(), (1, 0));
 }
+
+use engine_core::draft_state::{ActionType, DraftState, Phase, Side};
+use engine_core::evaluator::{score_pick, EvalContext, MetaData, PhaseWeightTable, PhaseWeights};
+use engine_core::pools::{Penalties, Role, RolePoolMap, TeamPool};
+use std::collections::HashMap;
+use std::sync::Arc;
+
+fn flat_weights() -> PhaseWeightTable {
+    let w = PhaseWeights { info: 0.0, comp: 1.0, coverage: 0.0 };
+    PhaseWeightTable { ban1: w, pick1: w, ban2: w, pick2: w }
+}
+
+fn empty_pool() -> TeamPool {
+    TeamPool {
+        display: RolePoolMap { top: vec![], jungle: vec![], middle: vec![], adc: vec![], support: vec![] },
+        search: vec![],
+    }
+}
+
+/// Fixture context (design §5): comp = 1, info = 0, coverage = 0, no pool penalty.
+fn fm_ctx(fm: Option<Arc<FmWeights>>, our: &[&str], opp: &[&str]) -> EvalContext {
+    let mut win_rates = HashMap::new();
+    win_rates.insert("Unlisted".to_string(), 0.61);
+    win_rates.insert("Bottomed".to_string(), -0.2);
+    EvalContext {
+        side: Side::Blue,
+        phase: Phase::Pick1,
+        our_pool: empty_pool(),
+        opp_pool: empty_pool(),
+        our_picks: s(our),
+        opp_picks: s(opp),
+        penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
+        champion_meta: HashMap::new(),
+        meta: MetaData { win_rates, fm, ..Default::default() },
+        phase_weights_blue: flat_weights(),
+        phase_weights_red: flat_weights(),
+        synergy_multiplier: 1.0,
+        counter_multiplier: 1.0,
+        flex_retention_weight: 1.0,
+        reveal_cost_weight: 1.0,
+        fm: None,
+    }
+}
+
+#[test]
+fn candidate_uses_marginal_and_team_member_uses_allocation() {
+    // The SAME champion, A, scored twice: as a candidate (team = {B}) and as a
+    // member (team = {A, B}). Same teammates either way, so the only difference
+    // is the mode — marginal vs allocation — which halves the pairwise terms.
+    let fm = Arc::new(w());
+    let state = DraftState::default();
+    let a = fm.champion("A").unwrap();
+
+    let as_candidate_ctx = fm_ctx(Some(fm.clone()), &["B"], &["C"]);
+    let p_cand = fm.perspective(&s(&["B"]), &s(&["C"]));
+    let cand = score_pick("A", Role::Top, &state, &as_candidate_ctx, ActionType::Pick).compStrength;
+    assert!((cand - (0.5 + fm.scale * fm.marginal(a, &p_cand, false))).abs() < 1e-12);
+
+    let as_member_ctx = fm_ctx(Some(fm.clone()), &["A", "B"], &["C"]);
+    let p_mem = fm.perspective(&s(&["A", "B"]), &s(&["C"]));
+    let member = score_pick("A", Role::Top, &state, &as_member_ctx, ActionType::Pick).compStrength;
+    assert!((member - (0.5 + fm.scale * fm.allocation(a, &p_mem, true))).abs() < 1e-12);
+
+    // pairwise terms are non-zero in the fixture, so halving them is visible
+    assert!((cand - member).abs() > 1e-9, "candidate {cand} vs member {member} must differ");
+    // and the halving is exactly what separates them: member − 0.5 = scale × (lin + ½(m − lin))
+    let lin = a.linear_expected;
+    let m = fm.marginal(a, &p_cand, false);
+    assert!(((member - 0.5) / fm.scale - (lin + 0.5 * (m - lin))).abs() < 1e-12);
+}
+
+#[test]
+fn ban_candidates_go_through_marginal_too() {
+    let fm = Arc::new(w());
+    let state = DraftState::default();
+    let ctx = fm_ctx(Some(fm), &["A"], &["C"]);
+    let pick = score_pick("D", Role::Top, &state, &ctx, ActionType::Pick).compStrength;
+    let ban = score_pick("D", Role::Top, &state, &ctx, ActionType::Ban).compStrength;
+    assert_eq!(pick, ban);
+}
+
+#[test]
+fn missing_candidate_falls_back_to_the_clamped_win_rate_only() {
+    let fm = Arc::new(w());
+    let state = DraftState::default();
+    let ctx = fm_ctx(Some(fm), &["A"], &["C"]);
+    assert_eq!(score_pick("Unlisted", Role::Top, &state, &ctx, ActionType::Pick).compStrength, 0.61);
+    assert_eq!(score_pick("Bottomed", Role::Top, &state, &ctx, ActionType::Pick).compStrength, 0.0);
+    assert_eq!(score_pick("NoWinRateEither", Role::Top, &state, &ctx, ActionType::Pick).compStrength, 0.5);
+}
+
+#[test]
+fn precomputed_perspective_matches_on_demand() {
+    let fm = Arc::new(w());
+    let mut state = DraftState::default();
+    state.blue_picks = s(&["A", "B"]);
+    state.red_picks = s(&["C"]);
+    let base = fm_ctx(Some(fm), &[], &[]);
+    let hot = base.for_perspective(Side::Blue, &state, Phase::Pick1); // fills ctx.fm
+    assert!(hot.fm.is_some());
+    let mut cold = hot.clone();
+    cold.fm = None;
+    for c in ["D", "A"] {
+        let h = score_pick(c, Role::Top, &state, &hot, ActionType::Pick).compStrength;
+        let k = score_pick(c, Role::Top, &state, &cold, ActionType::Pick).compStrength;
+        assert_eq!(h, k, "{c}");
+    }
+}
+
+#[test]
+#[should_panic(expected = "opposing team")]
+fn scoring_an_opponents_champion_is_a_broken_invariant() {
+    let fm = Arc::new(w());
+    let ctx = fm_ctx(Some(fm), &["A"], &["C"]);
+    let _ = score_pick("C", Role::Top, &DraftState::default(), &ctx, ActionType::Pick);
+}
+
+#[test]
+fn without_weights_the_legacy_path_is_unchanged() {
+    let state = DraftState::default();
+    let ctx = fm_ctx(None, &["A"], &["C"]);
+    assert_eq!(score_pick("Unlisted", Role::Top, &state, &ctx, ActionType::Pick).compStrength, 0.61);
+    assert_eq!(score_pick("A", Role::Top, &state, &ctx, ActionType::Pick).compStrength, 0.5);
+}

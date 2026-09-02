@@ -150,6 +150,7 @@ impl Engine {
             counter_multiplier,
             flex_retention_weight,
             reveal_cost_weight,
+            fm: None,
         };
         // At pair-start root states, the slot-17-class invariant: a tree with
         // remaining_depth=1 has every pair child hit the rem=0 terminal at the

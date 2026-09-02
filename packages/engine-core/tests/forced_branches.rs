@@ -131,6 +131,7 @@ fn ctx_with_pool(champs: &[&str]) -> EvalContext {
         counter_multiplier: 1.0,
         flex_retention_weight: 1.0,
         reveal_cost_weight: 1.0,
+        fm: None,
     }
 }
 

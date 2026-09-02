@@ -1,8 +1,10 @@
 use crate::coverage::coverage_marginal_gain;
 use crate::draft_state::{ActionType, DraftState, Phase, Side};
+use crate::fm::{FmPerspective, FmWeights};
 use crate::pools::{pool_multiplier, Penalties, Role, TeamPool};
 use crate::role_solver::ChampionMeta;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug)]
 pub struct PhaseWeights {
@@ -48,6 +50,8 @@ pub struct MetaData {
     pub win_rates: HashMap<String, f64>,
     pub synergies: Vec<SynergyRule>,
     pub counters: HashMap<String, HashMap<String, f64>>,
+    /// Phase 3 FM evaluator (design §3). `None` = legacy compStrength.
+    pub fm: Option<Arc<FmWeights>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
@@ -82,6 +86,10 @@ pub struct EvalContext {
     pub counter_multiplier: f64,
     pub flex_retention_weight: f64,
     pub reveal_cost_weight: f64,
+    /// FM aggregates for THIS perspective (`our_picks` / `opp_picks`). Filled by
+    /// `for_perspective` when `meta.fm` is set — the hot path. `None` means
+    /// "compute on demand" (direct `score_pick` callers, tests).
+    pub fm: Option<FmPerspective>,
 }
 
 impl EvalContext {
@@ -106,6 +114,11 @@ impl EvalContext {
                 next.opp_picks = state.blue_picks.clone();
             }
         }
+        next.fm = self
+            .meta
+            .fm
+            .as_deref()
+            .map(|fm| fm.perspective(&next.our_picks, &next.opp_picks));
         next
     }
 
@@ -196,12 +209,49 @@ fn role_coverage_for(
 }
 
 fn comp_strength_for(champion_id: &str, _role: Role, ctx: &EvalContext) -> f64 {
+    match ctx.meta.fm.as_deref() {
+        Some(fm) => fm_comp_strength(fm, champion_id, ctx),
+        None => legacy_comp_strength(champion_id, ctx),
+    }
+}
+
+/// design §3. Mode is selected by team membership (design §2): `side_total` scores
+/// champions already on their team (leaf → `allocation`); every candidate path
+/// filters used champions (`collect_candidates`, `is_taken` in the pair and forced
+/// paths), so a candidate is never on either team (→ `marginal`). A champion on the
+/// OPPOSING team has no defined score — its own counter vectors are inside
+/// `A_opp`/`B_opp` — so that is asserted, not `debug_assert`ed: the release
+/// `index.node` must fail loudly rather than double-count.
+fn fm_comp_strength(fm: &FmWeights, champion_id: &str, ctx: &EvalContext) -> f64 {
+    let Some(champ) = fm.champion(champion_id) else {
+        // Missing candidate (new champion before the retrain): pure u.gg deviation,
+        // no interaction terms. Structurally mid-pack — accepted v1 trade-off.
+        return ctx.meta.win_rates.get(champion_id).copied().unwrap_or(0.5).clamp(0.0, 1.0);
+    };
+    let in_team = ctx.our_picks.iter().any(|p| p == champion_id);
+    assert!(
+        !ctx.opp_picks.iter().any(|p| p == champion_id),
+        "FM comp_strength: {champion_id} is on the opposing team; every score_pick call \
+         site scores either an unused candidate or a member of ctx.our_picks (design §2)"
+    );
+    let built;
+    let perspective = match ctx.fm.as_ref() {
+        Some(p) => p,
+        None => {
+            built = fm.perspective(&ctx.our_picks, &ctx.opp_picks);
+            &built
+        }
+    };
+    fm.comp_strength(champ, perspective, in_team)
+}
+
+/// Unchanged legacy path: effectively `clamp(win_rate − counter_mult·counter_risk)`;
+/// `champion_tags` is a stub so synergy is always 0.
+fn legacy_comp_strength(champion_id: &str, ctx: &EvalContext) -> f64 {
     let win_rate = ctx.meta.win_rates.get(champion_id).copied().unwrap_or(0.5);
     let synergy = synergy_score(champion_id, &ctx.our_picks, &ctx.meta);
     let counter_risk = counter_risk(champion_id, &ctx.opp_picks, &ctx.meta);
-    let raw = win_rate
-        + ctx.synergy_multiplier * synergy
-        - ctx.counter_multiplier * counter_risk;
+    let raw = win_rate + ctx.synergy_multiplier * synergy - ctx.counter_multiplier * counter_risk;
     raw.clamp(0.0, 1.0)
 }
 

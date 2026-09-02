@@ -184,6 +184,7 @@ pub fn load_engine_data(
         win_rates,
         synergies,
         counters: matchup_file.counters,
+        fm: None,
     };
 
     Ok((meta, champion_meta))

@@ -186,6 +186,7 @@ fn load_production_data() -> (MetaData, HashMap<String, ChampionMeta>) {
             })
             .collect(),
         counters: matchup_file.counters,
+        fm: None,
     };
     (meta, champion_meta)
 }
@@ -326,6 +327,7 @@ fn eval_context(
         counter_multiplier: 1.0,
         flex_retention_weight: 1.0,
         reveal_cost_weight: 1.0,
+        fm: None,
     }
 }
 

@@ -73,6 +73,7 @@ fn ctx_with_pool(champs: &[&str]) -> EvalContext {
         counter_multiplier: 1.0,
         flex_retention_weight: 1.0,
         reveal_cost_weight: 1.0,
+        fm: None,
     }
 }
 
@@ -441,6 +442,7 @@ fn opp_turn_maximizes_opp_value() {
             win_rates: HashMap::from([("A".to_string(), 0.9), ("B".to_string(), 0.1)]),
             synergies: vec![],
             counters: HashMap::new(),
+            fm: None,
         },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
@@ -448,6 +450,7 @@ fn opp_turn_maximizes_opp_value() {
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     let params = SearchParams {
@@ -628,6 +631,7 @@ fn pick2_pair_seeding_includes_missing_role_specialists_via_bucket_2() {
             win_rates,
             synergies: vec![],
             counters: HashMap::new(),
+            fm: None,
         },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
@@ -635,6 +639,7 @@ fn pick2_pair_seeding_includes_missing_role_specialists_via_bucket_2() {
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     let params = SearchParams {
@@ -855,13 +860,14 @@ fn pick2_pair_seeding_surfaces_specialists_at_production_branch_width() {
         opp_picks: state.red_picks.clone(),
         penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
         champion_meta: meta_map,
-        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new() },
+        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new(), fm: None },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
         synergy_multiplier: 0.0,
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     let params = SearchParams {
@@ -980,13 +986,14 @@ fn leaf_eval_rewards_whole_comp_role_coverage() {
         opp_picks: vec![],
         penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
         champion_meta: meta_map,
-        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new() },
+        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new(), fm: None },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
         synergy_multiplier: 0.0,
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     let params = SearchParams::default();
@@ -1147,13 +1154,14 @@ fn pick2_pair_three_missing_roles_seeds_all_unordered_pair_shapes() {
         opp_picks: state.red_picks.clone(),
         penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
         champion_meta: meta_map,
-        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new() },
+        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new(), fm: None },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
         synergy_multiplier: 0.0,
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     // High branch_width to bypass per-pair value-sort truncation. The point
@@ -1305,13 +1313,14 @@ fn pick2_pair_role_balanced_outscores_high_winrate_mismatch() {
         opp_picks: state.red_picks.clone(),
         penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
         champion_meta: meta_map,
-        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new() },
+        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new(), fm: None },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
         synergy_multiplier: 0.0,
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     // Production widths: branch_width=5, pair_branch_width=500.
@@ -1472,13 +1481,14 @@ fn pick2_pair_three_missing_top_pair_must_fill_two_missing_roles() {
         opp_picks: state.red_picks.clone(),
         penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
         champion_meta: meta_map,
-        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new() },
+        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new(), fm: None },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
         synergy_multiplier: 0.0,
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     let params = SearchParams {
@@ -1677,13 +1687,14 @@ fn pick2_single_pick_includes_missing_role_specialist_in_branch_width() {
         opp_picks: state.blue_picks.clone(),
         penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
         champion_meta: meta_map,
-        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new() },
+        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new(), fm: None },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
         synergy_multiplier: 0.0,
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     // Production widths: branch_width=5.
@@ -1853,13 +1864,14 @@ fn pick2_pair_end_b5_after_lulu_must_pick_adc_or_top_not_milio() {
         opp_picks: state.red_picks.clone(),
         penalties: Penalties { out_of_role: 0.25, out_of_pool: 0.75 },
         champion_meta: meta_map,
-        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new() },
+        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new(), fm: None },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
         synergy_multiplier: 1.0,
         counter_multiplier: 1.0,
         flex_retention_weight: 1.0,
         reveal_cost_weight: 1.0,
+        fm: None,
     };
 
     let params = SearchParams {
@@ -1948,6 +1960,7 @@ fn ctx_with_typed_pool(
         counter_multiplier: 1.0,
         flex_retention_weight: 1.0,
         reveal_cost_weight: 1.0,
+        fm: None,
     }
 }
 

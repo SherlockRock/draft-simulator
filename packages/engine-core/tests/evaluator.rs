@@ -110,6 +110,7 @@ fn ctx() -> EvalContext {
         counter_multiplier: 1.0,
         flex_retention_weight: 1.0,
         reveal_cost_weight: 1.0,
+        fm: None,
     }
 }
 
@@ -278,6 +279,7 @@ fn score_pick_role_coverage_breaks_redundant_mid_tie() {
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     let s_annie = score_pick("Annie", Role::Middle, &state, &ctx, ActionType::Pick);
@@ -335,6 +337,7 @@ fn score_pick_role_coverage_silenced_when_weight_zero() {
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     let s_annie = score_pick("Annie", Role::Middle, &state, &ctx, ActionType::Pick);
@@ -386,6 +389,7 @@ fn score_pick_ban_uses_opponent_picks_for_coverage() {
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     let s_top = score_pick("BanTop", Role::Top, &state, &ctx, ActionType::Ban);

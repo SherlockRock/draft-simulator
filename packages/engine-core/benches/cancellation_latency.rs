@@ -104,6 +104,7 @@ fn synthetic_fixture() -> (DraftState, SearchParams, EvalContext) {
 
     let params = SearchParams {
         branch_width: 8,
+        pair_branch_width: 500,
         max_depth: 8,
         disable_alpha_beta: false,
         forced_branches: vec![],
@@ -127,6 +128,7 @@ fn synthetic_fixture() -> (DraftState, SearchParams, EvalContext) {
         counter_multiplier: 1.0,
         flex_retention_weight: 1.0,
         reveal_cost_weight: 1.0,
+        fm: None,
     };
 
     (state, params, ctx)
