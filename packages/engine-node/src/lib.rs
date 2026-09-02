@@ -55,12 +55,15 @@ impl CancelToken {
 pub struct CreateEngineOptions {
     pub champion_meta_path: String,
     pub matchup_data_path: String,
+    /// Optional FM weights (design §4). Omitted or unreadable → legacy compStrength.
+    pub fm_weights_path: Option<String>,
 }
 
 #[napi]
 pub struct Engine {
     inner: Arc<CoreEngine>,
     champion_meta: Arc<HashMap<String, ChampionMeta>>,
+    fm_status: String,
 }
 
 #[napi]
@@ -68,17 +71,51 @@ impl Engine {
     #[napi(factory)]
     pub fn create(options: CreateEngineOptions) -> napi::Result<Self> {
         let champion_meta_path = PathBuf::from(&options.champion_meta_path);
-        let (meta, champion_meta) = data_loader::load_engine_data(
+        let (mut meta, champion_meta) = data_loader::load_engine_data(
             &champion_meta_path,
             std::path::Path::new(&options.matchup_data_path),
         )
         .map_err(error::map_load_error)?;
+        let fm = options
+            .fm_weights_path
+            .as_deref()
+            .and_then(|p| data_loader::load_fm_weights(std::path::Path::new(p)));
+        let fm_status = match &fm {
+            Some(w) => {
+                let not_in_table: Vec<&str> = champion_meta
+                    .keys()
+                    .filter(|k| w.champion(k).is_none())
+                    .map(String::as_str)
+                    .collect();
+                if !not_in_table.is_empty() {
+                    eprintln!(
+                        "fm: {} champion-meta entries not in the FM table (score clamp(winRate) as candidates): {:?}",
+                        not_in_table.len(),
+                        not_in_table
+                    );
+                }
+                format!(
+                    "loaded version={} patches={} champions={}",
+                    w.version,
+                    w.patches.join(","),
+                    w.len()
+                )
+            }
+            None => "absent — legacy compStrength".to_string(),
+        };
+        meta.fm = fm;
         let champion_meta_for_engine = champion_meta.clone();
         let core = CoreEngine::new(meta, champion_meta_for_engine);
         Ok(Self {
             inner: Arc::new(core),
             champion_meta: Arc::new(champion_meta),
+            fm_status,
         })
+    }
+
+    #[napi]
+    pub fn fm_status(&self) -> String {
+        self.fm_status.clone()
     }
 
     #[napi]
