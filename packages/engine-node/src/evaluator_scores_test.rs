@@ -24,9 +24,9 @@ use std::fs;
 use std::time::Instant;
 
 use engine_core::cancellation::CancelHandle;
-use engine_core::draft_state::{DraftState, Phase, Side};
-use engine_core::evaluator::{EvalContext, MetaData, PhaseWeightTable, PhaseWeights};
-use engine_core::pools::{Penalties, RolePoolMap, TeamPool};
+use engine_core::draft_state::{ActionType, DraftState, Phase, Side};
+use engine_core::evaluator::{score_pick, EvalContext, MetaData, PhaseWeightTable, PhaseWeights};
+use engine_core::pools::{Penalties, Role, RolePoolMap, TeamPool};
 use engine_core::role_solver::ChampionMeta;
 use engine_core::search::{search_with_stats, SearchParams};
 
@@ -98,6 +98,25 @@ fn evaluate_terminal(state: &DraftState, ctx: &EvalContext) -> (f64, f64) {
     let (tree, _stats) =
         search_with_stats(state, &params, ctx, &cancel).expect("terminal search cannot fail");
     (tree.scores.composite_per_side.blue, tree.scores.composite_per_side.red)
+}
+
+/// The candidate's OWN `compStrength` at `state`, scored from its side's
+/// perspective. This is what design §3's `scale` statistic averages the
+/// within-set sd of; `side_total` composites are not it.
+fn candidate_comp_strength(
+    state: &DraftState,
+    slot: usize,
+    candidate: &str,
+    ctx: &EvalContext,
+    champion_meta: &HashMap<String, ChampionMeta>,
+) -> f64 {
+    let side = if slot < 5 { Side::Blue } else { Side::Red };
+    let side_ctx = ctx.for_perspective(side, state, Phase::Pick2);
+    let role = champion_meta
+        .get(candidate)
+        .and_then(|m| m.positions.first().copied())
+        .unwrap_or(Role::Top);
+    score_pick(candidate, role, state, &side_ctx, ActionType::Pick).compStrength
 }
 
 fn draft_from_row(csv: &Csv, row: &[String]) -> DraftState {
@@ -213,8 +232,9 @@ fn evaluator_scores_for_holdout_and_sibling_sets() {
         .iter()
         .map(|r| (holdout.get(r, "match_id"), r))
         .collect();
-    let mut sib_out =
-        String::from("match_id,slot,candidate,is_true_pick,blue_total,red_total,score_for_picker\n");
+    let mut sib_out = String::from(
+        "match_id,slot,candidate,is_true_pick,blue_total,red_total,score_for_picker,comp_strength\n",
+    );
     let mut sib_scored = 0usize;
     let t2 = Instant::now();
     for row in &siblings.rows {
@@ -238,8 +258,9 @@ fn evaluator_scores_for_holdout_and_sibling_sets() {
             let (b, r) = evaluate_terminal(&state, &ctx);
             // Value TO THE PICKING SIDE — that is what the pick is chosen for.
             let picker = if slot < 5 { b - r } else { r - b };
+            let comp = candidate_comp_strength(&state, slot, candidate, &ctx, &champion_meta);
             sib_out.push_str(&format!(
-                "{match_id},{slot},{candidate},{},{b:.6},{r:.6},{picker:.6}\n",
+                "{match_id},{slot},{candidate},{},{b:.6},{r:.6},{picker:.6},{comp:.6}\n",
                 candidate == true_pick
             ));
             sib_scored += 1;
@@ -331,4 +352,29 @@ fn empty_pools_with_zero_penalties_do_not_scale_any_champion() {
         assert_eq!(m, 1.0, "pool_multiplier must be exactly 1 for the benchmark context");
     }
     let _ = meta;
+}
+
+#[test]
+fn candidate_comp_strength_is_the_win_rate_when_nothing_counters_it() {
+    // Legacy comp_strength = clamp(win_rate + synergy - counter_risk); synergy is a
+    // stub (0) and an empty counters map makes counter_risk 0, so the column must be
+    // exactly the champion's winRate. Pins the helper to the candidate's OWN score,
+    // not a side total.
+    let (_, champion_meta) = load_engine_data(
+        &repo_root().join("data/compiled/champion-meta.json"),
+        &repo_root().join("data/compiled/matchup-data.json"),
+    )
+    .expect("engine data");
+    let mut win_rates = HashMap::new();
+    win_rates.insert("Ahri".to_string(), 0.5321);
+    let meta = MetaData { win_rates, ..Default::default() };
+
+    let mut state = DraftState::default();
+    for c in ["Gnar", "Sejuani", "Ahri", "Jinx", "Thresh"] { state.blue_picks.push(c.into()); }
+    for c in ["Renekton", "Viego", "Orianna", "Ezreal", "Leona"] { state.red_picks.push(c.into()); }
+    for i in 0..5 { state.blue_bans.push(format!("__noban{i}")); state.red_bans.push(format!("__noban{}", i + 5)); }
+    let ctx = production_context(&state, champion_meta.clone(), meta);
+
+    let v = candidate_comp_strength(&state, 2, "Ahri", &ctx, &champion_meta);
+    assert!((v - 0.5321).abs() < 1e-12, "got {v}");
 }
