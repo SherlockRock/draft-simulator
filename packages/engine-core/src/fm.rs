@@ -39,6 +39,8 @@ pub struct FmPerspective {
 pub enum FmParseError {
     #[error("fm-weights: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("fm-weights: format {0} but this build reads format 1")]
+    Format(u32),
     #[error("fm-weights: rank {0} but this build serves rank {RANK}")]
     Rank(usize),
     #[error("fm-weights: scale must be finite and > 0, got {0}")]
@@ -50,6 +52,8 @@ pub enum FmParseError {
 #[derive(Deserialize)]
 struct FmWeightsFile {
     version: String,
+    #[serde(default)]
+    format: u32,
     rank: usize,
     scale: f64,
     #[serde(default)]
@@ -82,6 +86,9 @@ fn add_into(acc: &mut [f64; RANK], v: &[f64; RANK]) {
 impl FmWeights {
     pub fn from_json_str(raw: &str) -> Result<Self, FmParseError> {
         let file: FmWeightsFile = serde_json::from_str(raw)?;
+        if file.format != 1 {
+            return Err(FmParseError::Format(file.format));
+        }
         if file.rank != RANK {
             return Err(FmParseError::Rank(file.rank));
         }

@@ -223,17 +223,17 @@ fn comp_strength_for(champion_id: &str, _role: Role, ctx: &EvalContext) -> f64 {
 /// `A_opp`/`B_opp` — so that is asserted, not `debug_assert`ed: the release
 /// `index.node` must fail loudly rather than double-count.
 fn fm_comp_strength(fm: &FmWeights, champion_id: &str, ctx: &EvalContext) -> f64 {
+    assert!(
+        !ctx.opp_picks.iter().any(|p| p == champion_id),
+        "FM comp_strength: {champion_id} is on the opposing team; every score_pick call \
+         site scores either an unused candidate or a member of ctx.our_picks (design §2)"
+    );
     let Some(champ) = fm.champion(champion_id) else {
         // Missing candidate (new champion before the retrain): pure u.gg deviation,
         // no interaction terms. Structurally mid-pack — accepted v1 trade-off.
         return ctx.meta.win_rates.get(champion_id).copied().unwrap_or(0.5).clamp(0.0, 1.0);
     };
     let in_team = ctx.our_picks.iter().any(|p| p == champion_id);
-    assert!(
-        !ctx.opp_picks.iter().any(|p| p == champion_id),
-        "FM comp_strength: {champion_id} is on the opposing team; every score_pick call \
-         site scores either an unused candidate or a member of ctx.our_picks (design §2)"
-    );
     let built;
     let perspective = match ctx.fm.as_ref() {
         Some(p) => p,

@@ -51,6 +51,18 @@ fn parses_and_validates() {
 }
 
 #[test]
+fn rejects_a_format_other_than_1() {
+    // Item 5: format is checked BEFORE rank, so a wrong-format file with a
+    // correct rank still fails on format, not on some later field.
+    let bad_format = weights_json(0.7).replace(r#""format":1"#, r#""format":2"#);
+    assert!(matches!(FmWeights::from_json_str(&bad_format), Err(FmParseError::Format(2))));
+
+    // A missing "format" key defaults to 0 (serde(default)) and is rejected too.
+    let no_format = weights_json(0.7).replace(r#""format":1,"#, "");
+    assert!(matches!(FmWeights::from_json_str(&no_format), Err(FmParseError::Format(0))));
+}
+
+#[test]
 fn allocation_sums_difference_to_the_structural_logit_and_marginal_is_the_delta() {
     let fm = w();
     let logit = |blue: &[String], red: &[String]| {
@@ -227,6 +239,17 @@ fn scoring_an_opponents_champion_is_a_broken_invariant() {
     let fm = Arc::new(w());
     let ctx = fm_ctx(Some(fm), &["A"], &["C"]);
     let _ = score_pick("C", Role::Top, &DraftState::default(), &ctx, ActionType::Pick);
+}
+
+#[test]
+#[should_panic(expected = "opposing team")]
+fn scoring_a_missing_champion_on_the_opposing_team_is_still_a_broken_invariant() {
+    // Item 3: the opposing-team assert must run even when the champion is not
+    // in the FM export — previously it sat after the `fm.champion(..)` early
+    // return, so a missing opponent's champion silently skipped the invariant.
+    let fm = Arc::new(w());
+    let ctx = fm_ctx(Some(fm), &["A"], &["NotInExport"]);
+    let _ = score_pick("NotInExport", Role::Top, &DraftState::default(), &ctx, ActionType::Pick);
 }
 
 #[test]
