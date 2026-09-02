@@ -103,6 +103,7 @@ pub fn search_with_stats(
     eval_ctx: &EvalContext,
     cancel: &CancelHandle,
 ) -> Result<(TreeNode, SearchStats), EngineError> {
+    validate_state(state)?;
     validate_forced_branches(state, &params.forced_branches)?;
 
     let mut cache: TranspositionCache<TreeNode> = TranspositionCache::new();
@@ -159,6 +160,39 @@ pub struct SearchStats {
 /// A draft is `TOTAL_TURNS` turns long, so no leaf can sit more than that many
 /// plies below any root. One extra bucket holds depth 0 (the root itself).
 pub const LEAF_DEPTH_BUCKETS: usize = TOTAL_TURNS + 1;
+
+/// Up-front structural validation of the root state: no champion may appear on
+/// both teams, or twice on one team.
+///
+/// A duplicate reaches `eval_state` → `side_total` → `comp_strength_for`, where
+/// the legacy evaluator silently double-counted it and the FM evaluator asserts
+/// (a champion on the opposing team has no defined score — its counter vectors
+/// are already inside the perspective's opponent aggregates). Rejecting it here
+/// keeps that assert an invariant rather than a reachable panic across the napi
+/// boundary. Bans are out of scope: a banned-and-picked champion is a different
+/// (and harmless to the evaluator) kind of malformed input.
+///
+/// `path` follows the Zod style of the other validators (`validate_forced_branches`,
+/// `projection::build_draft_state`). The wire carries one flat
+/// `draftState.picks` array of `{slot, side, championId}`, which the projection
+/// layer splits by side and sorts by slot; the index here is therefore the
+/// position within that side's picks in slot order, not the wire array index.
+fn validate_state(state: &DraftState) -> Result<(), EngineError> {
+    let mut seen: HashSet<&str> = HashSet::new();
+    for (field, picks) in [
+        ("bluePicks", &state.blue_picks),
+        ("redPicks", &state.red_picks),
+    ] {
+        for (idx, champ) in picks.iter().enumerate() {
+            if !seen.insert(champ.as_str()) {
+                return Err(EngineError::InvalidInput {
+                    path: vec!["draftState".to_string(), field.to_string(), idx.to_string()],
+                });
+            }
+        }
+    }
+    Ok(())
+}
 
 /// Up-front structural validation of forced branches. Currently catches the
 /// reverse-fill pair case (forcing `pair_start` when state has already moved
