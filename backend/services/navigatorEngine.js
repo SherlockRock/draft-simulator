@@ -65,9 +65,10 @@ function resolveEngineOptions(env = process.env) {
 
 // Engine.create is synchronous and parses JSON files at construction time.
 // Eager initialization keeps the first compute() call cold-cache-free.
-const engine = Engine.create(resolveEngineOptions());
+const engineOptions = resolveEngineOptions();
+const engine = Engine.create(engineOptions);
 console.log(
-  `[navigator] fm: ${engine.fmStatus()}${process.env.NAVIGATOR_FM === "off" ? " (NAVIGATOR_FM=off)" : ""}`,
+  `[navigator] fm: ${engine.fmStatus()}${!("fmWeightsPath" in engineOptions) ? " (NAVIGATOR_FM=off)" : ""}`,
 );
 
 // Per-session active token for the αβ supersession path. When a new compute

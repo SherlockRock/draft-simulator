@@ -144,6 +144,13 @@ async function loadAuthorizedContext(socket, data, options = {}) {
   return { session, draft, events };
 }
 
+// Every persisted event (pick or ban, any side, user_injected included) is
+// baked into the wire root state the engine validates, so the taken set is
+// simply every event's champion_id.
+function takenChampionIds(events) {
+  return new Set((events || []).map((event) => event.champion_id));
+}
+
 async function findLatestSnapshot(draftId) {
   return NavigatorSnapshot.findOne({
     where: { navigator_draft_id: draftId },
@@ -296,10 +303,9 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
       const ctx = await loadAuthorizedContext(socket, data, {
         requireDraftId: true,
-        fetchEvents: false,
       });
       if (!ctx) return;
-      const { session, draft } = ctx;
+      const { session, draft, events: priorEvents } = ctx;
       const { sessionId, draftId } = data;
 
       // Validate each slot is a pick turn.
@@ -312,6 +318,21 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
         }
         if (turn.type !== "pick") {
           emitNavigatorError(socket, `Slot ${slot} does not accept a pick`);
+          return;
+        }
+      }
+
+      // Reject a champion already reflected in the engine's wire root state
+      // (any persisted pick or ban, either side) before it can produce a
+      // duplicate-champion state the engine rejects as invalid input.
+      if (championIds.length === 2 && championIds[0] === championIds[1]) {
+        emitNavigatorError(socket, "A pair pick needs two different champions");
+        return;
+      }
+      const taken = takenChampionIds(priorEvents);
+      for (const id of championIds) {
+        if (taken.has(id)) {
+          emitNavigatorError(socket, `Champion ${id} is already picked or banned`);
           return;
         }
       }
@@ -366,10 +387,9 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
 
       const ctx = await loadAuthorizedContext(socket, data, {
         requireDraftId: true,
-        fetchEvents: false,
       });
       if (!ctx) return;
-      const { session, draft } = ctx;
+      const { session, draft, events: priorEvents } = ctx;
       const { sessionId, draftId } = data;
 
       const turn = getTurn(slot);
@@ -379,6 +399,11 @@ function setupNavigatorHandlers(io, socket, wrapSocketHandler) {
       }
       if (turn.type !== "ban") {
         emitNavigatorError(socket, `Slot ${slot} does not accept a ban`);
+        return;
+      }
+
+      if (takenChampionIds(priorEvents).has(championId)) {
+        emitNavigatorError(socket, `Champion ${championId} is already picked or banned`);
         return;
       }
 

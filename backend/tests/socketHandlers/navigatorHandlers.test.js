@@ -183,6 +183,156 @@ describe("navigatorBan recompute", () => {
   });
 });
 
+// Item 1: since engine-core 2c45cbd, a root state that lists the same
+// champion twice returns EngineError::InvalidInput. Duplicate picks/bans must
+// be rejected at the handler layer, before they are ever persisted.
+describe("navigatorPick / navigatorBan reject already-taken champions", () => {
+  function getNavigatorErrors(socket) {
+    return socket.emit.mock.calls
+      .filter(([event]) => event === "navigatorError")
+      .map(([, payload]) => payload.error);
+  }
+
+  it("navigatorPick: rejects a champion already in a persisted PICK event", async () => {
+    setupHappyMocks();
+    vi.spyOn(NavigatorEvent, "findAll").mockResolvedValue([
+      { champion_id: "Ahri", event_type: "pick", slot: 6, side: "blue" },
+    ]);
+    const createSpy = vi.spyOn(NavigatorEvent, "create");
+    const computeSpy = vi.spyOn(navigatorEngine, "computeForDraft");
+
+    const { socket, handlers } = buildFakeSocket();
+    installHandlers({ socket });
+
+    await handlers.get("navigatorPick")({
+      sessionId: "sess-1",
+      draftId: "draft-1",
+      championIds: ["Ahri"],
+      firstSlot: 6,
+    });
+
+    expect(getNavigatorErrors(socket)).toEqual(["Champion Ahri is already picked or banned"]);
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(computeSpy).not.toHaveBeenCalled();
+  });
+
+  it("navigatorPick: rejects a champion already in a persisted BAN event", async () => {
+    setupHappyMocks();
+    vi.spyOn(NavigatorEvent, "findAll").mockResolvedValue([
+      { champion_id: "Ahri", event_type: "ban", slot: 0, side: "blue" },
+    ]);
+    const createSpy = vi.spyOn(NavigatorEvent, "create");
+    const computeSpy = vi.spyOn(navigatorEngine, "computeForDraft");
+
+    const { socket, handlers } = buildFakeSocket();
+    installHandlers({ socket });
+
+    await handlers.get("navigatorPick")({
+      sessionId: "sess-1",
+      draftId: "draft-1",
+      championIds: ["Ahri"],
+      firstSlot: 6,
+    });
+
+    expect(getNavigatorErrors(socket)).toEqual(["Champion Ahri is already picked or banned"]);
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(computeSpy).not.toHaveBeenCalled();
+  });
+
+  it("navigatorPick: rejects a pair pick of the same champion twice", async () => {
+    setupHappyMocks();
+    const createSpy = vi.spyOn(NavigatorEvent, "create");
+    const computeSpy = vi.spyOn(navigatorEngine, "computeForDraft");
+
+    const { socket, handlers } = buildFakeSocket();
+    installHandlers({ socket });
+
+    // Slots 7+8 are both red pick1 → valid 2-slot pair window.
+    await handlers.get("navigatorPick")({
+      sessionId: "sess-1",
+      draftId: "draft-1",
+      championIds: ["Kalista", "Kalista"],
+      firstSlot: 7,
+    });
+
+    expect(getNavigatorErrors(socket)).toEqual(["A pair pick needs two different champions"]);
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(computeSpy).not.toHaveBeenCalled();
+  });
+
+  it("navigatorPick: rejects a pair pick when only the second id is taken, with zero creates", async () => {
+    setupHappyMocks();
+    vi.spyOn(NavigatorEvent, "findAll").mockResolvedValue([
+      { champion_id: "Braum", event_type: "pick", slot: 2, side: "blue" },
+    ]);
+    const createSpy = vi.spyOn(NavigatorEvent, "create");
+    const computeSpy = vi.spyOn(navigatorEngine, "computeForDraft");
+
+    const { socket, handlers } = buildFakeSocket();
+    installHandlers({ socket });
+
+    await handlers.get("navigatorPick")({
+      sessionId: "sess-1",
+      draftId: "draft-1",
+      championIds: ["Kalista", "Braum"],
+      firstSlot: 7,
+    });
+
+    expect(getNavigatorErrors(socket)).toEqual(["Champion Braum is already picked or banned"]);
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(computeSpy).not.toHaveBeenCalled();
+  });
+
+  it("navigatorBan: rejects a ban of an already-picked champion", async () => {
+    setupHappyMocks();
+    vi.spyOn(NavigatorEvent, "findAll").mockResolvedValue([
+      { champion_id: "Aatrox", event_type: "pick", slot: 6, side: "blue" },
+    ]);
+    const createSpy = vi.spyOn(NavigatorEvent, "create");
+    const computeSpy = vi.spyOn(navigatorEngine, "computeForDraft");
+
+    const { socket, handlers } = buildFakeSocket();
+    installHandlers({ socket });
+
+    await handlers.get("navigatorBan")({
+      sessionId: "sess-1",
+      draftId: "draft-1",
+      championId: "Aatrox",
+      slot: 0,
+    });
+
+    expect(getNavigatorErrors(socket)).toEqual(["Champion Aatrox is already picked or banned"]);
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(computeSpy).not.toHaveBeenCalled();
+  });
+
+  it("navigatorPick: a happy-path pick with a non-empty history of OTHER champions still creates and recomputes", async () => {
+    setupHappyMocks();
+    vi.spyOn(NavigatorEvent, "findAll").mockResolvedValue([
+      { champion_id: "Ahri", event_type: "pick", slot: 6, side: "blue" },
+      { champion_id: "Zed", event_type: "ban", slot: 0, side: "blue" },
+    ]);
+    const createSpy = vi.spyOn(NavigatorEvent, "create").mockResolvedValue({ id: "ev-2" });
+    const computeSpy = vi
+      .spyOn(navigatorEngine, "computeForDraft")
+      .mockResolvedValue({ version: 1, snapshot: null });
+
+    const { socket, handlers } = buildFakeSocket();
+    installHandlers({ socket });
+
+    await handlers.get("navigatorPick")({
+      sessionId: "sess-1",
+      draftId: "draft-1",
+      championIds: ["Kalista"],
+      firstSlot: 7,
+    });
+
+    expect(getNavigatorErrors(socket)).toEqual([]);
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(computeSpy).toHaveBeenCalled();
+  });
+});
+
 describe("loadAuthorizedContext", () => {
   let socket;
   let emittedErrors;
