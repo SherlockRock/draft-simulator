@@ -71,3 +71,24 @@ describe("persistSnapshot", () => {
     expect(result.tree).toEqual({ championIds: [] });
   });
 });
+
+const { resolveEngineOptions, FM_WEIGHTS_PATH } = require("../../services/navigatorEngine");
+
+describe("resolveEngineOptions (NAVIGATOR_FM kill switch, design §4)", () => {
+  it("passes the FM weights path by default", () => {
+    const opts = resolveEngineOptions({});
+    expect(opts.fmWeightsPath).toBe(FM_WEIGHTS_PATH);
+    expect(FM_WEIGHTS_PATH.endsWith("data/compiled/fm-weights.json")).toBe(true);
+    expect(opts.championMetaPath.endsWith("data/compiled/champion-meta.json")).toBe(true);
+  });
+
+  it("omits the path entirely when NAVIGATOR_FM=off", () => {
+    const opts = resolveEngineOptions({ NAVIGATOR_FM: "off" });
+    expect("fmWeightsPath" in opts).toBe(false);
+  });
+
+  it("treats any other value as on", () => {
+    expect(resolveEngineOptions({ NAVIGATOR_FM: "" }).fmWeightsPath).toBe(FM_WEIGHTS_PATH);
+    expect(resolveEngineOptions({ NAVIGATOR_FM: "OFF" }).fmWeightsPath).toBe(FM_WEIGHTS_PATH);
+  });
+});
