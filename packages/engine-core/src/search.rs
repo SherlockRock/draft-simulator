@@ -173,22 +173,16 @@ pub const LEAF_DEPTH_BUCKETS: usize = TOTAL_TURNS + 1;
 /// (and harmless to the evaluator) kind of malformed input.
 ///
 /// `path` follows the Zod style of the other validators (`validate_forced_branches`,
-/// `projection::build_draft_state`). The wire carries one flat
-/// `draftState.picks` array of `{slot, side, championId}`, which the projection
-/// layer splits by side and sorts by slot; the index here is therefore the
-/// position within that side's picks in slot order, not the wire array index.
+/// `projection::build_draft_state`). The wire carries a single flat
+/// `draftState.picks` array which the projection layer splits by side and sorts
+/// by slot, so no element index is recoverable here.
 fn validate_state(state: &DraftState) -> Result<(), EngineError> {
     let mut seen: HashSet<&str> = HashSet::new();
-    for (field, picks) in [
-        ("bluePicks", &state.blue_picks),
-        ("redPicks", &state.red_picks),
-    ] {
-        for (idx, champ) in picks.iter().enumerate() {
-            if !seen.insert(champ.as_str()) {
-                return Err(EngineError::InvalidInput {
-                    path: vec!["draftState".to_string(), field.to_string(), idx.to_string()],
-                });
-            }
+    for champ in state.blue_picks.iter().chain(state.red_picks.iter()) {
+        if !seen.insert(champ.as_str()) {
+            return Err(EngineError::InvalidInput {
+                path: vec!["draftState".to_string(), "picks".to_string()],
+            });
         }
     }
     Ok(())

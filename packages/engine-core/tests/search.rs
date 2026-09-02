@@ -2321,8 +2321,8 @@ fn a_champion_listed_on_both_teams_is_rejected_as_invalid_input_in_both_arms() {
     let refs: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
     let cancel = CancelHandle::new();
 
-    // Slot 11 (R3): 3 bans a side, 3 Blue picks, 2 Red picks. `ids[6]` is on
-    // BOTH teams — the second occurrence is `redPicks[1]`.
+    // Slot 11 (R3): 3 bans a side, 3 Blue picks, 2 Red picks, with `ids[6]` on
+    // BOTH teams.
     let mut state = DraftState::default();
     state.blue_bans = ids[0..3].to_vec();
     state.red_bans = ids[3..6].to_vec();
@@ -2338,8 +2338,8 @@ fn a_champion_listed_on_both_teams_is_rejected_as_invalid_input_in_both_arms() {
         match search_with_stats(&state, &dup_params(), &ctx, &cancel) {
             Err(EngineError::InvalidInput { path }) => assert_eq!(
                 path,
-                vec!["draftState".to_string(), "redPicks".to_string(), "1".to_string()],
-                "{arm}: path must point at the second occurrence"
+                vec!["draftState".to_string(), "picks".to_string()],
+                "{arm}: path must name the wire field"
             ),
             other => panic!("{arm}: expected InvalidInput, got {other:?}"),
         }
@@ -2365,7 +2365,7 @@ fn a_champion_listed_twice_on_one_team_is_rejected_too() {
         match search_with_stats(&state, &dup_params(), &ctx, &cancel) {
             Err(EngineError::InvalidInput { path }) => assert_eq!(
                 path,
-                vec!["draftState".to_string(), "bluePicks".to_string(), "1".to_string()],
+                vec!["draftState".to_string(), "picks".to_string()],
                 "{arm}"
             ),
             other => panic!("{arm}: expected InvalidInput, got {other:?}"),
