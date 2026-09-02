@@ -63,7 +63,6 @@ type CanvasCardProps = {
     ) => void;
     restrictedChampions?: () => string[];
     disabledChampions?: string[];
-    searchDimmed?: () => boolean;
     searchSlotPhase?: (pickIndex: number) => SlotPhase | null;
     searchSelected?: () => boolean;
     searchInProgress?: () => boolean;
@@ -631,11 +630,10 @@ export const CanvasCard = (props: CanvasCardProps) => {
         <div
             data-canvas-drag-root="true"
             data-draft-id={props.canvasDraft.Draft.id}
-            class="canvas-card flex flex-col rounded-xl border border-darius-border/90 bg-darius-card-hover/95 shadow-[0_16px_40px_rgba(15,23,42,0.42)] transition-opacity duration-150"
+            class="canvas-card flex flex-col rounded-xl border border-darius-border/90 bg-darius-card-hover/95 shadow-[0_16px_40px_rgba(15,23,42,0.42)]"
             classList={{
                 "absolute z-30": !props.isGrouped || props.groupType === "custom",
-                "relative flex-shrink-0": props.isGrouped && props.groupType === "series",
-                "opacity-40": props.searchDimmed?.() ?? false
+                "relative flex-shrink-0": props.isGrouped && props.groupType === "series"
             }}
             style={{
                 // Drawn as an outline rather than Tailwind's ring-4: a ring is a

@@ -497,7 +497,10 @@ export const CanvasSearchPanel = (props: CanvasSearchPanelProps) => {
                 </Show>
             </div>
 
-            <div ref={listRef} class="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+            <div
+                ref={listRef}
+                class="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-3"
+            >
                 <Show when={rowsState.pinned.length > 0}>
                     <div class="pt-2 text-xs font-semibold uppercase tracking-wide text-darius-text-secondary">
                         Pinned

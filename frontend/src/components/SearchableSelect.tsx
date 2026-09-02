@@ -153,6 +153,7 @@ export const SearchableSelect = (props: props) => {
                         props.setSelectText(e.target.value);
                     }}
                     placeholder={props.placeholder}
+                    autocomplete="off"
                     name="select"
                     id="select"
                     class="w-full select-text appearance-none bg-inherit px-4 outline-none disabled:cursor-not-allowed"

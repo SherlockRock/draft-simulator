@@ -50,20 +50,27 @@ const SlotIcon: Component<{
     const champ = () =>
         props.pick !== "" ? (resolveChampion(props.pick) ?? null) : null;
     return (
-        <img
-            src={champ()?.img ?? BlankSquare}
-            alt={champ()?.name ?? "empty"}
-            loading="lazy"
+        // The ring sits on a wrapper, not the img: `grayscale`/`opacity` on the
+        // img would desaturate the ring with it, and a matched ban should read
+        // as a knocked-out icon inside a full-colour crimson ring.
+        <div
             class="aspect-square min-w-7 flex-1 rounded"
             classList={{
-                // Bans read as knocked-out even when matched — the crimson ring
-                // alone marks the hit.
-                "grayscale opacity-75": props.variant === "ban" && champ() !== null,
-                "opacity-50": champ() === null,
                 "ring-2 ring-darius-ember/90": props.highlight === "pick",
                 "ring-2 ring-darius-crimson/90": props.highlight === "ban"
             }}
-        />
+        >
+            <img
+                src={champ()?.img ?? BlankSquare}
+                alt={champ()?.name ?? "empty"}
+                loading="lazy"
+                class="h-full w-full rounded"
+                classList={{
+                    "grayscale opacity-75": props.variant === "ban" && champ() !== null,
+                    "opacity-50": champ() === null
+                }}
+            />
+        </div>
     );
 };
 

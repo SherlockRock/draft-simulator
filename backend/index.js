@@ -1,6 +1,10 @@
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const sequelize = require("./config/database");
+const { metrics } = require("@opentelemetry/api");
+const { registerDbPoolMetrics } = require("./observability/dbPoolMetrics");
+// No-op when OTel is disabled: the API returns a no-op meter.
+registerDbPoolMetrics(sequelize, metrics.getMeter("sequelize"));
 const jwt = require("jsonwebtoken");
 const https = require("https");
 const http = require("http");
