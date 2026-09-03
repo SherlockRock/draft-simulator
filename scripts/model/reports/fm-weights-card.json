@@ -1,0 +1,73 @@
+{
+ "version": "fm-2026-09-01-6880daa",
+ "patches": [
+  "16.15",
+  "16.16"
+ ],
+ "n_train": 300885,
+ "recipe": [
+  {
+   "seed": 0,
+   "lr": 0.001,
+   "weight_decay": 0.1,
+   "best_epoch": 5,
+   "val_a_log_loss": 0.6868183016777039
+  },
+  {
+   "seed": 1,
+   "lr": 0.001,
+   "weight_decay": 0.1,
+   "best_epoch": 5,
+   "val_a_log_loss": 0.6865211129188538
+  },
+  {
+   "seed": 2,
+   "lr": 0.001,
+   "weight_decay": 0.1,
+   "best_epoch": 5,
+   "val_a_log_loss": 0.6868751645088196
+  }
+ ],
+ "seed_test_log_loss": [
+  0.6859490039314924,
+  0.6860502521397006,
+  0.6860501944695093
+ ],
+ "seed_test_log_loss_spread": 0.00010124820820822666,
+ "seed_sibling_mrr": [
+  0.300812632985706,
+  0.301985962471486,
+  0.30200080900847903
+ ],
+ "seed_sibling_mrr_spread": 0.0011881760227730465,
+ "scale": 0.7521586474771651,
+ "scale_inputs": {
+  "legacy_mean_sd": 0.060288515764034746,
+  "fm_mean_sd": 0.08015398874459534,
+  "n_sets": 34159
+ },
+ "scale_by_seed": [
+  0.7521586474771651,
+  0.7482873077216826,
+  0.7353020147603029
+ ],
+ "contribution_quantiles": {
+  "p0_1": -0.2620991441514964,
+  "p50": 0.007299640617987034,
+  "p99_9": 0.23212442629774935,
+  "frac_outside_clamp": 0.0
+ },
+ "role_tax": {
+  "delta": 0.000958270672035652,
+  "ci": [
+   0.0006519992501816539,
+   0.0012842507597427175
+  ],
+  "mde": 0.00031695027832286213,
+  "verdict": "B_BETTER"
+ },
+ "max_abs_delta_vs_baseline_fm_pt": 0.0,
+ "spearman_vs_previous_weights": null,
+ "fill_level_sd_drift_note": "Opus round-1 probe: legacy compStrength sd grows 0.014\u21920.074 empty\u2192full while FM contribution sd grows 0.027\u21920.095; global scale is v1, per-fill scale is a follow-up if the A/B shows early-draft imbalance (design \u00a73).",
+ "fallback_note": "A champion missing from the table scores clamp(win_rate): sd ~0.014 vs FM ~5x wider at full states, so it is structurally mid-pack until the retrain (design \u00a73)."
+}

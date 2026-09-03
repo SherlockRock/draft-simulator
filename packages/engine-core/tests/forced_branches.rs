@@ -131,6 +131,7 @@ fn ctx_with_pool(champs: &[&str]) -> EvalContext {
         counter_multiplier: 1.0,
         flex_retention_weight: 1.0,
         reveal_cost_weight: 1.0,
+        fm: None,
     }
 }
 
@@ -568,5 +569,202 @@ fn reverse_fill_pair_errors() {
             );
         }
         other => panic!("expected InvalidInput, got {:?}", other),
+    }
+}
+
+// --- Taken-champion forces --------------------------------------------------
+//
+// Regression for the seam shipped with the FM evaluator. The plan's premise
+// that "the forced paths filter with `is_taken`" was WRONG: `is_taken` only
+// ever guarded the feasibility POOLS (`search.rs` `feasibility_filter_*`).
+// `apply_single_slot_forces` and `match_pair_force` injected the forced
+// champion unconditionally, and both run AFTER the feasibility prune. Forcing
+// a champion the projected state already holds therefore seated one champion
+// on both teams. The legacy evaluator silently double-counted it; the FM
+// evaluator asserts. Both helpers now skip such a force, and — because the
+// index is never recorded in `applied_forced` — it reports through the
+// existing `forced_branches_dropped` counter (`total − applied`).
+//
+// `resolve_path` matches a lineage PREFIX, so a request-time check cannot
+// cover this: the guard has to live at the injection sites. These tests run
+// both evaluator arms over an identical state to show the behaviour is
+// arm-independent.
+
+use engine_core::fm::FmWeights;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+fn real_weights() -> Arc<FmWeights> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let raw = std::fs::read_to_string(root.join("data/compiled/fm-weights.json"))
+        .expect("fm-weights.json");
+    Arc::new(FmWeights::from_json_str(&raw).expect("weights parse"))
+}
+
+/// The first 17 champion ids of the export, sorted so the fixture is stable.
+/// Real ids matter: `fm_comp_strength` short-circuits to the win-rate fallback
+/// for champions absent from the weights, which would step around the assert
+/// this test exists to keep reachable.
+fn fixture_ids(fm: &FmWeights) -> Vec<String> {
+    let mut ids: Vec<String> = fm.aliases().map(|a| a.to_string()).collect();
+    ids.sort();
+    assert!(ids.len() >= 17, "export must be big enough to seat the fixture");
+    ids.truncate(17);
+    ids
+}
+
+/// Slot 11 (R3) is a single, non-pair Red pick. By then Blue holds three
+/// champions, so forcing one of Blue's picks onto Red is the invalid case.
+/// Slot 9 (B2) is a Blue pair-start; Red already holds two champions there.
+fn taken_force_state(ids: &[String], up_to_slot_11: bool) -> DraftState {
+    let mut state = DraftState::default();
+    state.blue_bans = ids[0..3].to_vec();
+    state.red_bans = ids[3..6].to_vec();
+    state.blue_picks = vec![ids[6].clone()];
+    state.red_picks = ids[7..9].to_vec();
+    if up_to_slot_11 {
+        state.blue_picks.push(ids[9].clone());
+        state.blue_picks.push(ids[10].clone());
+    }
+    state
+}
+
+fn taken_force_ctx(ids: &[String], fm: Option<Arc<FmWeights>>) -> EvalContext {
+    let refs: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
+    let mut ctx = ctx_with_pool(&refs);
+    ctx.meta.fm = fm;
+    ctx
+}
+
+fn params_with(force: ForcedBranch) -> SearchParams {
+    SearchParams {
+        branch_width: 4,
+        pair_branch_width: 8,
+        max_depth: 1,
+        disable_alpha_beta: false,
+        forced_branches: vec![force],
+    }
+}
+
+#[test]
+fn single_slot_force_on_a_taken_champion_is_dropped_in_both_evaluator_arms() {
+    let fm = real_weights();
+    let ids = fixture_ids(&fm);
+    let state = taken_force_state(&ids, true);
+    assert_eq!(state.turn_index(), 11, "fixture must sit at the R3 single pick");
+    assert_eq!(TURN_SEQUENCE[11].side, Side::Red);
+    assert!(!TURN_SEQUENCE[11].pair_start && !TURN_SEQUENCE[11].pair_end);
+
+    // The forced champion is one Blue already holds — honouring it would put it
+    // on both teams.
+    let taken = ids[6].clone();
+    assert!(state.blue_picks.contains(&taken));
+    let cancel = CancelHandle::new();
+
+    for mode in [ForcedMode::Include, ForcedMode::Sole] {
+        for (arm, weights) in [("fm", Some(fm.clone())), ("legacy", None)] {
+            let ctx = taken_force_ctx(&ids, weights);
+            let params = params_with(ForcedBranch {
+                path: vec![],
+                target_slot: 11,
+                champion_id: taken.clone(),
+                mode,
+            });
+            // Must not panic: without the guard the FM arm trips the
+            // `opposing team` assert in `fm_comp_strength`.
+            let (tree, stats) = search_with_stats(&state, &params, &ctx, &cancel)
+                .unwrap_or_else(|e| panic!("{arm}/{mode:?}: search failed: {e:?}"));
+
+            assert_eq!(
+                stats.forced_branches_dropped, 1,
+                "{arm}/{mode:?}: an unhonourable force must report as dropped"
+            );
+            assert!(
+                !tree.children.is_empty(),
+                "{arm}/{mode:?}: dropping the force must leave the normal candidates"
+            );
+            for child in &tree.children {
+                assert!(
+                    !child.champion_ids.contains(&taken),
+                    "{arm}/{mode:?}: no child may re-pick the already-taken {taken}"
+                );
+                assert!(
+                    !child.user_injected,
+                    "{arm}/{mode:?}: nothing was injected"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn pair_force_on_a_taken_champion_is_dropped_in_both_evaluator_arms() {
+    let fm = real_weights();
+    let ids = fixture_ids(&fm);
+    let state = taken_force_state(&ids, false);
+    assert_eq!(state.turn_index(), 9, "fixture must sit at the B2 pair start");
+    assert!(TURN_SEQUENCE[9].pair_start);
+
+    // Red already holds this one.
+    let taken = ids[7].clone();
+    assert!(state.red_picks.contains(&taken));
+    let cancel = CancelHandle::new();
+
+    for (arm, weights) in [("fm", Some(fm.clone())), ("legacy", None)] {
+        let ctx = taken_force_ctx(&ids, weights);
+        let params = params_with(ForcedBranch {
+            path: vec![],
+            target_slot: 9,
+            champion_id: taken.clone(),
+            mode: ForcedMode::Sole,
+        });
+        let (tree, stats) = search_with_stats(&state, &params, &ctx, &cancel)
+            .unwrap_or_else(|e| panic!("{arm}: search failed: {e:?}"));
+
+        assert_eq!(
+            stats.forced_branches_dropped, 1,
+            "{arm}: an unhonourable pair force must report as dropped"
+        );
+        assert!(!tree.children.is_empty(), "{arm}: normal pair candidates must proceed");
+        for child in &tree.children {
+            assert!(
+                !child.champion_ids.contains(&taken),
+                "{arm}: no pair child may re-pick the already-taken {taken}"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_taken_guard_does_not_swallow_a_legitimate_force() {
+    // Positive control: the same shape with an UNTAKEN champion is still
+    // honoured, so a guard that simply dropped every force would fail here.
+    let fm = real_weights();
+    let ids = fixture_ids(&fm);
+    let state = taken_force_state(&ids, true);
+    let free = ids[16].clone();
+    assert!(!engine_core::draft_state::is_taken(&free, &state));
+    let cancel = CancelHandle::new();
+
+    for (arm, weights) in [("fm", Some(fm.clone())), ("legacy", None)] {
+        let ctx = taken_force_ctx(&ids, weights);
+        let params = params_with(ForcedBranch {
+            path: vec![],
+            target_slot: 11,
+            champion_id: free.clone(),
+            mode: ForcedMode::Sole,
+        });
+        let (tree, stats) = search_with_stats(&state, &params, &ctx, &cancel)
+            .unwrap_or_else(|e| panic!("{arm}: search failed: {e:?}"));
+
+        assert_eq!(stats.forced_branches_dropped, 0, "{arm}: a legal force is applied");
+        assert_eq!(tree.children.len(), 1, "{arm}: sole mode replaces the candidate set");
+        assert_eq!(tree.children[0].champion_ids, vec![free.clone()], "{arm}");
+        assert!(tree.children[0].user_injected, "{arm}");
     }
 }

@@ -73,6 +73,7 @@ fn ctx_with_pool(champs: &[&str]) -> EvalContext {
         counter_multiplier: 1.0,
         flex_retention_weight: 1.0,
         reveal_cost_weight: 1.0,
+        fm: None,
     }
 }
 
@@ -441,6 +442,7 @@ fn opp_turn_maximizes_opp_value() {
             win_rates: HashMap::from([("A".to_string(), 0.9), ("B".to_string(), 0.1)]),
             synergies: vec![],
             counters: HashMap::new(),
+            fm: None,
         },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
@@ -448,6 +450,7 @@ fn opp_turn_maximizes_opp_value() {
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     let params = SearchParams {
@@ -628,6 +631,7 @@ fn pick2_pair_seeding_includes_missing_role_specialists_via_bucket_2() {
             win_rates,
             synergies: vec![],
             counters: HashMap::new(),
+            fm: None,
         },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
@@ -635,6 +639,7 @@ fn pick2_pair_seeding_includes_missing_role_specialists_via_bucket_2() {
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     let params = SearchParams {
@@ -855,13 +860,14 @@ fn pick2_pair_seeding_surfaces_specialists_at_production_branch_width() {
         opp_picks: state.red_picks.clone(),
         penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
         champion_meta: meta_map,
-        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new() },
+        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new(), fm: None },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
         synergy_multiplier: 0.0,
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     let params = SearchParams {
@@ -980,13 +986,14 @@ fn leaf_eval_rewards_whole_comp_role_coverage() {
         opp_picks: vec![],
         penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
         champion_meta: meta_map,
-        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new() },
+        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new(), fm: None },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
         synergy_multiplier: 0.0,
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     let params = SearchParams::default();
@@ -1147,13 +1154,14 @@ fn pick2_pair_three_missing_roles_seeds_all_unordered_pair_shapes() {
         opp_picks: state.red_picks.clone(),
         penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
         champion_meta: meta_map,
-        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new() },
+        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new(), fm: None },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
         synergy_multiplier: 0.0,
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     // High branch_width to bypass per-pair value-sort truncation. The point
@@ -1305,13 +1313,14 @@ fn pick2_pair_role_balanced_outscores_high_winrate_mismatch() {
         opp_picks: state.red_picks.clone(),
         penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
         champion_meta: meta_map,
-        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new() },
+        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new(), fm: None },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
         synergy_multiplier: 0.0,
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     // Production widths: branch_width=5, pair_branch_width=500.
@@ -1472,13 +1481,14 @@ fn pick2_pair_three_missing_top_pair_must_fill_two_missing_roles() {
         opp_picks: state.red_picks.clone(),
         penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
         champion_meta: meta_map,
-        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new() },
+        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new(), fm: None },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
         synergy_multiplier: 0.0,
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     let params = SearchParams {
@@ -1677,13 +1687,14 @@ fn pick2_single_pick_includes_missing_role_specialist_in_branch_width() {
         opp_picks: state.blue_picks.clone(),
         penalties: Penalties { out_of_role: 0.0, out_of_pool: 0.0 },
         champion_meta: meta_map,
-        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new() },
+        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new(), fm: None },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
         synergy_multiplier: 0.0,
         counter_multiplier: 0.0,
         flex_retention_weight: 0.0,
         reveal_cost_weight: 0.0,
+        fm: None,
     };
 
     // Production widths: branch_width=5.
@@ -1853,13 +1864,14 @@ fn pick2_pair_end_b5_after_lulu_must_pick_adc_or_top_not_milio() {
         opp_picks: state.red_picks.clone(),
         penalties: Penalties { out_of_role: 0.25, out_of_pool: 0.75 },
         champion_meta: meta_map,
-        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new() },
+        meta: MetaData { win_rates, synergies: vec![], counters: HashMap::new(), fm: None },
         phase_weights_blue: pw_table,
         phase_weights_red: pw_table,
         synergy_multiplier: 1.0,
         counter_multiplier: 1.0,
         flex_retention_weight: 1.0,
         reveal_cost_weight: 1.0,
+        fm: None,
     };
 
     let params = SearchParams {
@@ -1948,6 +1960,7 @@ fn ctx_with_typed_pool(
         counter_multiplier: 1.0,
         flex_retention_weight: 1.0,
         reveal_cost_weight: 1.0,
+        fm: None,
     }
 }
 
@@ -2249,4 +2262,139 @@ fn search_prunes_infeasible_pair_pick_branches() {
         !tree.children.is_empty(),
         "At least one feasible (ADC, SUP) pair must survive; got 0 children"
     );
+}
+
+// --- Root-state validation --------------------------------------------------
+//
+// A REQUEST-supplied root state can list the same champion on both teams: the
+// wire schema is a bare `draftState.picks` array and nothing downstream
+// deduplicated it. Such a state reaches `eval_state` → `side_total` →
+// `comp_strength_for`, where the legacy evaluator silently double-counted it
+// and the FM evaluator asserts — i.e. a panic across the napi boundary driven
+// by request data. `search_with_stats` now rejects it up front, alongside the
+// existing `validate_forced_branches` call, so the assert stays an invariant.
+
+use engine_core::engine::EngineError;
+use engine_core::fm::FmWeights;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+fn real_weights() -> Arc<FmWeights> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let raw = std::fs::read_to_string(root.join("data/compiled/fm-weights.json"))
+        .expect("fm-weights.json");
+    Arc::new(FmWeights::from_json_str(&raw).expect("weights parse"))
+}
+
+/// Real ids matter: `fm_comp_strength` short-circuits to the win-rate fallback
+/// for champions the export does not know, which would step around the assert
+/// this validation exists to keep unreachable.
+fn real_ids(fm: &FmWeights) -> Vec<String> {
+    // 20 ids: 11 seat the fixture state, the rest keep the candidate pool wide
+    // enough that the feasibility prune leaves children to assert on.
+    let mut ids: Vec<String> = fm.aliases().map(|a| a.to_string()).collect();
+    ids.sort();
+    assert!(ids.len() >= 20);
+    ids.truncate(20);
+    ids
+}
+
+fn dup_params() -> SearchParams {
+    SearchParams {
+        branch_width: 3,
+        pair_branch_width: 4,
+        max_depth: 1,
+        disable_alpha_beta: false,
+        forced_branches: vec![],
+    }
+}
+
+#[test]
+fn a_champion_listed_on_both_teams_is_rejected_as_invalid_input_in_both_arms() {
+    let fm = real_weights();
+    let ids = real_ids(&fm);
+    let refs: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
+    let cancel = CancelHandle::new();
+
+    // Slot 11 (R3): 3 bans a side, 3 Blue picks, 2 Red picks, with `ids[6]` on
+    // BOTH teams.
+    let mut state = DraftState::default();
+    state.blue_bans = ids[0..3].to_vec();
+    state.red_bans = ids[3..6].to_vec();
+    state.blue_picks = vec![ids[6].clone(), ids[9].clone(), ids[10].clone()];
+    state.red_picks = vec![ids[7].clone(), ids[6].clone()];
+    assert_eq!(state.turn_index(), 11);
+
+    for (arm, weights) in [("fm", Some(fm.clone())), ("legacy", None)] {
+        let mut ctx = ctx_with_pool(&refs);
+        ctx.meta.fm = weights;
+        // Must return, not panic: without the guard the FM arm trips the
+        // `opposing team` assert in `fm_comp_strength`.
+        match search_with_stats(&state, &dup_params(), &ctx, &cancel) {
+            Err(EngineError::InvalidInput { path }) => assert_eq!(
+                path,
+                vec!["draftState".to_string(), "picks".to_string()],
+                "{arm}: path must name the wire field"
+            ),
+            other => panic!("{arm}: expected InvalidInput, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn a_champion_listed_twice_on_one_team_is_rejected_too() {
+    let fm = real_weights();
+    let ids = real_ids(&fm);
+    let refs: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
+    let cancel = CancelHandle::new();
+
+    let mut state = DraftState::default();
+    state.blue_bans = ids[0..3].to_vec();
+    state.red_bans = ids[3..6].to_vec();
+    state.blue_picks = vec![ids[6].clone(), ids[6].clone(), ids[9].clone()];
+    state.red_picks = vec![ids[7].clone(), ids[8].clone()];
+
+    for (arm, weights) in [("fm", Some(fm.clone())), ("legacy", None)] {
+        let mut ctx = ctx_with_pool(&refs);
+        ctx.meta.fm = weights;
+        match search_with_stats(&state, &dup_params(), &ctx, &cancel) {
+            Err(EngineError::InvalidInput { path }) => assert_eq!(
+                path,
+                vec!["draftState".to_string(), "picks".to_string()],
+                "{arm}"
+            ),
+            other => panic!("{arm}: expected InvalidInput, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn the_duplicate_guard_does_not_reject_a_valid_state() {
+    // Positive control for the FM arm specifically. Every other test in this
+    // file is the legacy-arm control: all 22 of them now run through
+    // `validate_state`, so a guard that rejected valid states could not pass
+    // them (see e.g. `pick_turn_yields_branch_width_children`).
+    let fm = real_weights();
+    let ids = real_ids(&fm);
+    let refs: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
+    let cancel = CancelHandle::new();
+
+    let mut state = DraftState::default();
+    state.blue_bans = ids[0..3].to_vec();
+    state.red_bans = ids[3..6].to_vec();
+    state.blue_picks = vec![ids[6].clone(), ids[9].clone(), ids[10].clone()];
+    state.red_picks = vec![ids[7].clone(), ids[8].clone()];
+
+    for (arm, weights) in [("fm", Some(fm.clone())), ("legacy", None)] {
+        let mut ctx = ctx_with_pool(&refs);
+        ctx.meta.fm = weights;
+        let (tree, _stats) = search_with_stats(&state, &dup_params(), &ctx, &cancel)
+            .unwrap_or_else(|e| panic!("{arm}: a valid state must search: {e:?}"));
+        assert!(!tree.children.is_empty(), "{arm}");
+    }
 }

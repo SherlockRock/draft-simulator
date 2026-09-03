@@ -13,6 +13,10 @@ const MATCHUP_DATA_PATH = path.resolve(
   __dirname,
   "../../data/compiled/matchup-data.json",
 );
+const FM_WEIGHTS_PATH = path.resolve(
+  __dirname,
+  "../../data/compiled/fm-weights.json",
+);
 
 const EXPECTED_PROTOCOL_MAJOR = 1;
 
@@ -43,12 +47,29 @@ const DEFAULT_PHASE_WEIGHTS = {
   },
 };
 
+// NAVIGATOR_FM=off boots the engine without the FM evaluator (legacy compStrength).
+// The engine singleton is built at module load, so the switch is restart-effective;
+// on Railway a variable change redeploys, which is the rollback
+// (docs/designs/fm-evaluator-ship-design.md §4). Exact-match "off" on purpose: a
+// typo must not silently disable the shipped evaluator.
+function resolveEngineOptions(env = process.env) {
+  const options = {
+    championMetaPath: CHAMPION_META_PATH,
+    matchupDataPath: MATCHUP_DATA_PATH,
+  };
+  if (env.NAVIGATOR_FM !== "off") {
+    options.fmWeightsPath = FM_WEIGHTS_PATH;
+  }
+  return options;
+}
+
 // Engine.create is synchronous and parses JSON files at construction time.
 // Eager initialization keeps the first compute() call cold-cache-free.
-const engine = Engine.create({
-  championMetaPath: CHAMPION_META_PATH,
-  matchupDataPath: MATCHUP_DATA_PATH,
-});
+const engineOptions = resolveEngineOptions();
+const engine = Engine.create(engineOptions);
+console.log(
+  `[navigator] fm: ${engine.fmStatus()}${!("fmWeightsPath" in engineOptions) ? " (NAVIGATOR_FM=off)" : ""}`,
+);
 
 // Per-session active token for the αβ supersession path. When a new compute
 // is dispatched for a session, the prior token (if any) is cancelled so the
@@ -329,4 +350,6 @@ module.exports = {
   shapeSnapshot,
   persistSnapshot,
   getLastEventId,
+  resolveEngineOptions,
+  FM_WEIGHTS_PATH,
 };

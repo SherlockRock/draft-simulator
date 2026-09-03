@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 
 use engine_core::evaluator::{MetaData, SynergyRule};
+use engine_core::fm::FmWeights;
 use engine_core::pools::Role;
 use engine_core::role_solver::{
     CcProfile, ChampionMeta, ChampionTags, DamageProfile, ScalingProfile,
@@ -41,8 +43,12 @@ struct ChampionMetaEntry {
     scaling_profile: ScalingProfileFile,
     cc_profile: CcProfileFile,
     tags: ChampionTagsFile,
-    #[serde(default)]
+    #[serde(default = "neutral_win_rate")]
     win_rate: f64,
+}
+
+fn neutral_win_rate() -> f64 {
+    0.5
 }
 
 #[derive(Deserialize)]
@@ -88,6 +94,26 @@ struct MatchupDataFile {
 struct SynergyRuleFile {
     tags: [String; 2],
     bonus: f64,
+}
+
+/// Separate from `load_engine_data` on purpose: that function's single `Result`
+/// would make a missing FM fatal (lib.rs:63). Missing/unparseable → `None` +
+/// one warning line; construction never fails on the FM (design §4).
+pub fn load_fm_weights(path: &Path) -> Option<Arc<FmWeights>> {
+    let raw = match std::fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(err) => {
+            eprintln!("fm: absent — legacy compStrength ({}: {err})", path.display());
+            return None;
+        }
+    };
+    match FmWeights::from_json_str(&raw) {
+        Ok(weights) => Some(Arc::new(weights)),
+        Err(err) => {
+            eprintln!("fm: unparseable — legacy compStrength ({}: {err})", path.display());
+            None
+        }
+    }
 }
 
 fn parse_role(s: &str) -> Result<Role, EngineLoadError> {
@@ -184,7 +210,56 @@ pub fn load_engine_data(
         win_rates,
         synergies,
         counters: matchup_file.counters,
+        fm: None,
     };
 
     Ok((meta, champion_meta))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn write_tmp(name: &str, body: &str) -> std::path::PathBuf {
+        let p = std::env::temp_dir().join(format!("fm-loader-{}-{name}", std::process::id()));
+        std::fs::File::create(&p).unwrap().write_all(body.as_bytes()).unwrap();
+        p
+    }
+
+    const ENTRY: &str = r#"{"champions":{"Ahri":{"id":"Ahri","positions":["MIDDLE"],
+        "damageProfile":{"physical":0.1,"magic":0.9,"true":0.0},
+        "scalingProfile":{"early":0.5,"mid":0.6,"late":0.7},
+        "ccProfile":{"hasCc":true,"ccTypes":["charm"],"engageQuality":0.5,"peelQuality":0.2},
+        "tags":{"archetype":["mage"],"synergy":[]}WIN}}}"#;
+
+    #[test]
+    fn a_champion_without_win_rate_defaults_to_a_neutral_half_not_zero() {
+        // design §3: 0.0 pinned a fallback champion dead last.
+        let meta_path = write_tmp("meta.json", &ENTRY.replace("WIN", ""));
+        let matchup_path = write_tmp("matchup.json", r#"{"counters":{},"synergyRules":[]}"#);
+        let (meta, _) = load_engine_data(&meta_path, &matchup_path).unwrap();
+        assert_eq!(meta.win_rates["Ahri"], 0.5);
+        let meta_path = write_tmp("meta2.json", &ENTRY.replace("WIN", r#","winRate":0.52"#));
+        let (meta, _) = load_engine_data(&meta_path, &matchup_path).unwrap();
+        assert_eq!(meta.win_rates["Ahri"], 0.52);
+    }
+
+    #[test]
+    fn fm_loader_never_fails_construction() {
+        assert!(load_fm_weights(Path::new("/nonexistent/fm-weights.json")).is_none());
+        let corrupt = write_tmp("corrupt.json", "{ this is not json");
+        assert!(load_fm_weights(&corrupt).is_none());
+        let wrong_rank = write_tmp("rank.json", r#"{"version":"x","rank":4,"scale":1.0,"champions":{}}"#);
+        assert!(load_fm_weights(&wrong_rank).is_none());
+    }
+
+    #[test]
+    fn fm_loader_reads_the_shipped_artifact() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap();
+        let fm = load_fm_weights(&root.join("data/compiled/fm-weights.json")).expect("shipped weights load");
+        assert!(fm.len() >= 170);
+        assert!(fm.champion("Fiddlesticks").is_some(), "alias must be champion-meta's spelling");
+        assert!(fm.champion("FiddleSticks").is_none());
+    }
 }

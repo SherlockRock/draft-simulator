@@ -1,0 +1,81 @@
+{
+  "mrr": {
+    "evaluator": {
+      "mrr": 0.29674575023212796,
+      "top1": 0.10252056559032759
+    },
+    "fm": {
+      "mrr": 0.30224455708295983,
+      "top1": 0.107292368043561
+    },
+    "popularity": {
+      "mrr": 0.3389593464042089,
+      "top1": 0.1430955238736497
+    },
+    "logreg_antisym": {
+      "mrr": 0.29518020768423303,
+      "top1": 0.09971017886940484
+    }
+  },
+  "rank_paired": {
+    "fm": {
+      "mean": 0.005498806850831897,
+      "ci_lo": 0.0015100013185577155,
+      "ci_hi": 0.009895182165534868,
+      "excludes_zero": true,
+      "mde": 0.004203089538276311,
+      "verdict": "CANDIDATE_BETTER"
+    },
+    "logreg_antisym": {
+      "mean": -0.001565542547894973,
+      "ci_lo": -0.005621457858791316,
+      "ci_hi": 0.0028885223007304337,
+      "excludes_zero": false,
+      "mde": 0.0041773615090985846,
+      "verdict": "UNDERPOWERED"
+    },
+    "popularity": {
+      "mean": 0.04221359617208089,
+      "ci_lo": 0.03820699640109187,
+      "ci_hi": 0.046178043256890275,
+      "excludes_zero": true,
+      "mde": 0.004172248639961734,
+      "verdict": "CANDIDATE_BETTER"
+    }
+  },
+  "spearman_vs_evaluator": {
+    "fm": -0.1364620997393178,
+    "logreg_antisym": -0.15655105424451893,
+    "popularity": 0.07203909800146471
+  },
+  "fulldraft_paired": {
+    "fm": {
+      "a": "fm",
+      "b": "evaluator",
+      "delta_logloss_a_minus_b": -0.0060273702428867764,
+      "ci": [
+        -0.007208265997582313,
+        -0.004740240197417659
+      ],
+      "mde": 0.001248737623715799,
+      "verdict": "A_BETTER",
+      "n": 34159
+    },
+    "logreg_antisym": {
+      "a": "logreg_antisym",
+      "b": "evaluator",
+      "delta_logloss_a_minus_b": -0.005678691998961093,
+      "ci": [
+        -0.0068897125466569715,
+        -0.004608685734780223
+      ],
+      "mde": 0.0011593944335433564,
+      "verdict": "A_BETTER",
+      "n": 34159
+    }
+  },
+  "evaluator_calibrated": {
+    "log_loss": 0.6920179813056483,
+    "auc": 0.5134702993013517
+  }
+}

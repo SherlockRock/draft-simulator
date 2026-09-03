@@ -1,0 +1,27 @@
+{
+  "source": "cargo test --release --test leaf_eval_stats -- --ignored",
+  "config": {"branch_width": 5, "pair_branch_width": 500, "max_depth": 8, "budget_ms": 5000},
+  "achieved_depth_distribution": {"1": 0.15, "2": 0.25, "3": 0.1, "4": 0.3, "5": 0.1, "8": 0.1},
+  "per_root": [
+    {"root_turn": 0, "depth_within_budget": 5, "leaf_evaluations": 815, "cumulative_ms": 4102, "timed_out_at_depth": 6, "leaf_depth_histogram": [0, 0, 0, 0, 0, 815, 0, 0, 0]},
+    {"root_turn": 1, "depth_within_budget": 5, "leaf_evaluations": 815, "cumulative_ms": 4020, "timed_out_at_depth": 6, "leaf_depth_histogram": [0, 0, 0, 0, 0, 815, 0, 0, 0]},
+    {"root_turn": 2, "depth_within_budget": 4, "leaf_evaluations": 285, "cumulative_ms": 1179, "timed_out_at_depth": null, "leaf_depth_histogram": [0, 0, 0, 0, 285, 0, 0, 0, 0]},
+    {"root_turn": 3, "depth_within_budget": 4, "leaf_evaluations": 425, "cumulative_ms": 1483, "timed_out_at_depth": 5, "leaf_depth_histogram": [0, 0, 0, 0, 425, 0, 0, 0, 0]},
+    {"root_turn": 4, "depth_within_budget": 3, "leaf_evaluations": 125, "cumulative_ms": 415, "timed_out_at_depth": 4, "leaf_depth_histogram": [0, 0, 0, 125, 0, 0, 0, 0, 0]},
+    {"root_turn": 5, "depth_within_budget": 2, "leaf_evaluations": 25, "cumulative_ms": 84, "timed_out_at_depth": 3, "leaf_depth_histogram": [0, 0, 25, 0, 0, 0, 0, 0, 0]},
+    {"root_turn": 6, "depth_within_budget": 2, "leaf_evaluations": 2460, "cumulative_ms": 4502, "timed_out_at_depth": 3, "leaf_depth_histogram": [0, 0, 2460, 0, 0, 0, 0, 0, 0]},
+    {"root_turn": 7, "depth_within_budget": 1, "leaf_evaluations": 490, "cumulative_ms": 919, "timed_out_at_depth": 2, "leaf_depth_histogram": [0, 490, 0, 0, 0, 0, 0, 0, 0]},
+    {"root_turn": 8, "depth_within_budget": 2, "leaf_evaluations": 2406, "cumulative_ms": 4498, "timed_out_at_depth": 3, "leaf_depth_histogram": [0, 0, 2406, 0, 0, 0, 0, 0, 0]},
+    {"root_turn": 9, "depth_within_budget": 1, "leaf_evaluations": 480, "cumulative_ms": 859, "timed_out_at_depth": 2, "leaf_depth_histogram": [0, 480, 0, 0, 0, 0, 0, 0, 0]},
+    {"root_turn": 10, "depth_within_budget": 4, "leaf_evaluations": 625, "cumulative_ms": 2121, "timed_out_at_depth": 5, "leaf_depth_histogram": [0, 0, 0, 0, 625, 0, 0, 0, 0]},
+    {"root_turn": 11, "depth_within_budget": 4, "leaf_evaluations": 375, "cumulative_ms": 1681, "timed_out_at_depth": null, "leaf_depth_histogram": [0, 0, 0, 0, 375, 0, 0, 0, 0]},
+    {"root_turn": 12, "depth_within_budget": 4, "leaf_evaluations": 267, "cumulative_ms": 1129, "timed_out_at_depth": null, "leaf_depth_histogram": [0, 0, 0, 0, 267, 0, 0, 0, 0]},
+    {"root_turn": 13, "depth_within_budget": 4, "leaf_evaluations": 410, "cumulative_ms": 1735, "timed_out_at_depth": 5, "leaf_depth_histogram": [0, 0, 0, 0, 410, 0, 0, 0, 0]},
+    {"root_turn": 14, "depth_within_budget": 3, "leaf_evaluations": 125, "cumulative_ms": 480, "timed_out_at_depth": 4, "leaf_depth_histogram": [0, 0, 0, 125, 0, 0, 0, 0, 0]},
+    {"root_turn": 15, "depth_within_budget": 2, "leaf_evaluations": 25, "cumulative_ms": 96, "timed_out_at_depth": 3, "leaf_depth_histogram": [0, 0, 25, 0, 0, 0, 0, 0, 0]},
+    {"root_turn": 16, "depth_within_budget": 2, "leaf_evaluations": 1162, "cumulative_ms": 2981, "timed_out_at_depth": 3, "leaf_depth_histogram": [0, 0, 1162, 0, 0, 0, 0, 0, 0]},
+    {"root_turn": 17, "depth_within_budget": 1, "leaf_evaluations": 250, "cumulative_ms": 556, "timed_out_at_depth": 2, "leaf_depth_histogram": [0, 250, 0, 0, 0, 0, 0, 0, 0]},
+    {"root_turn": 18, "depth_within_budget": 8, "leaf_evaluations": 25, "cumulative_ms": 815, "timed_out_at_depth": null, "leaf_depth_histogram": [0, 0, 25, 0, 0, 0, 0, 0, 0]},
+    {"root_turn": 19, "depth_within_budget": 8, "leaf_evaluations": 5, "cumulative_ms": 249, "timed_out_at_depth": null, "leaf_depth_histogram": [0, 5, 0, 0, 0, 0, 0, 0, 0]}
+  ]
+}

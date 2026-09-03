@@ -1,0 +1,756 @@
+{
+ "version": "fm-2026-09-01-6880daa",
+ "tolerance": 1e-06,
+ "fixtures": [
+  {
+   "blue": [
+    "Jax",
+    "Graves",
+    "Diana",
+    "Tristana",
+    "Blitzcrank"
+   ],
+   "red": [
+    "Malphite",
+    "Zed",
+    "Syndra",
+    "Kaisa",
+    "Qiyana"
+   ],
+   "blue_allocation_sum": 0.02473592873401801,
+   "red_allocation_sum": 0.08518412466876189,
+   "logit": -0.06044819593474388
+  },
+  {
+   "blue": [
+    "Leblanc",
+    "MasterYi",
+    "Yasuo",
+    "Lux",
+    "Taric"
+   ],
+   "red": [
+    "Elise",
+    "Caitlyn"
+   ],
+   "blue_allocation_sum": 0.05180827414156717,
+   "red_allocation_sum": -0.04148745395576135,
+   "logit": 0.09329572809732853
+  },
+  {
+   "blue": [
+    "Jhin",
+    "Braum"
+   ],
+   "red": [
+    "Orianna",
+    "Pyke"
+   ],
+   "blue_allocation_sum": 0.008212216013898252,
+   "red_allocation_sum": 0.04099253941868374,
+   "logit": -0.03278032340478549
+  },
+  {
+   "blue": [],
+   "red": [
+    "Ezreal"
+   ],
+   "blue_allocation_sum": 0,
+   "red_allocation_sum": -0.0220239,
+   "logit": 0.0220239
+  },
+  {
+   "blue": [
+    "Maokai",
+    "XinZhao",
+    "Kassadin",
+    "Ezreal",
+    "Rakan"
+   ],
+   "red": [
+    "Renekton",
+    "Zed",
+    "Syndra",
+    "Vladimir",
+    "Lulu"
+   ],
+   "blue_allocation_sum": -0.13169020847348786,
+   "red_allocation_sum": 0.10014808066651305,
+   "logit": -0.23183828914000093
+  },
+  {
+   "blue": [
+    "Graves",
+    "Xayah",
+    "Jax"
+   ],
+   "red": [
+    "Garen",
+    "Fiddlesticks",
+    "Tristana",
+    "MissFortune",
+    "JarvanIV"
+   ],
+   "blue_allocation_sum": -0.05733539996733333,
+   "red_allocation_sum": 0.19393114234093684,
+   "logit": -0.25126654230827017
+  },
+  {
+   "blue": [],
+   "red": [
+    "Nasus",
+    "Fizz",
+    "Varus",
+    "Pyke"
+   ],
+   "blue_allocation_sum": 0,
+   "red_allocation_sum": 0.08926514605563199,
+   "logit": -0.08926514605563199
+  },
+  {
+   "blue": [
+    "Kaisa",
+    "Nautilus"
+   ],
+   "red": [],
+   "blue_allocation_sum": -0.009659780836728,
+   "red_allocation_sum": 0,
+   "logit": -0.009659780836728
+  },
+  {
+   "blue": [
+    "Gnar",
+    "Khazix",
+    "Lissandra",
+    "Ekko",
+    "Rell"
+   ],
+   "red": [
+    "Thresh",
+    "Talon",
+    "Ahri",
+    "Yasuo",
+    "Nautilus"
+   ],
+   "blue_allocation_sum": 0.09869223914266953,
+   "red_allocation_sum": 0.0008945054823669904,
+   "logit": 0.09779773366030253
+  },
+  {
+   "blue": [
+    "Irelia",
+    "Malphite",
+    "Viktor",
+    "Lucian",
+    "Nami"
+   ],
+   "red": [
+    "Renekton",
+    "Ezreal",
+    "Karma"
+   ],
+   "blue_allocation_sum": 0.1448057218798881,
+   "red_allocation_sum": -0.07220532502382476,
+   "logit": 0.21701104690371287
+  },
+  {
+   "blue": [
+    "Urgot",
+    "Kayn",
+    "Katarina",
+    "Seraphine"
+   ],
+   "red": [
+    "Hecarim",
+    "Janna"
+   ],
+   "blue_allocation_sum": -0.012430787768050889,
+   "red_allocation_sum": 0.12402181096091708,
+   "logit": -0.13645259872896798
+  },
+  {
+   "blue": [],
+   "red": [
+    "Tryndamere",
+    "Lulu"
+   ],
+   "blue_allocation_sum": 0,
+   "red_allocation_sum": 0.016434184216393005,
+   "logit": -0.016434184216393005
+  },
+  {
+   "blue": [
+    "Gragas",
+    "Hecarim",
+    "Akali",
+    "Xayah",
+    "Shen"
+   ],
+   "red": [
+    "Sejuani",
+    "Sylas",
+    "Lissandra",
+    "Tristana",
+    "Morgana"
+   ],
+   "blue_allocation_sum": 0.13179542308327133,
+   "red_allocation_sum": 0.14351536846471113,
+   "logit": -0.011719945381439806
+  },
+  {
+   "blue": [
+    "Malphite",
+    "Ryze",
+    "Kaisa",
+    "Thresh"
+   ],
+   "red": [
+    "Varus",
+    "Ahri",
+    "Jhin",
+    "Rakan"
+   ],
+   "blue_allocation_sum": -0.044337489275883185,
+   "red_allocation_sum": 0.022014783423040064,
+   "logit": -0.06635227269892324
+  },
+  {
+   "blue": [
+    "Zac",
+    "KogMaw",
+    "Milio"
+   ],
+   "red": [
+    "Kennen",
+    "Kaisa",
+    "Pyke"
+   ],
+   "blue_allocation_sum": 0.046700160914628294,
+   "red_allocation_sum": -0.05691181529167151,
+   "logit": 0.1036119762062998
+  },
+  {
+   "blue": [],
+   "red": [
+    "Khazix",
+    "Xerath"
+   ],
+   "blue_allocation_sum": 0,
+   "red_allocation_sum": -0.021981035292516,
+   "logit": 0.021981035292516
+  },
+  {
+   "blue": [
+    "Yone",
+    "Zyra",
+    "Viktor",
+    "Zeri",
+    "Lulu"
+   ],
+   "red": [
+    "Tryndamere",
+    "Khazix",
+    "Ahri",
+    "Jhin",
+    "Nautilus"
+   ],
+   "blue_allocation_sum": 0.03471092538619369,
+   "red_allocation_sum": 0.15828283318849287,
+   "logit": -0.12357190780229918
+  },
+  {
+   "blue": [
+    "Shen",
+    "LeeSin",
+    "Velkoz",
+    "Zeri",
+    "Alistar"
+   ],
+   "red": [
+    "Gnar",
+    "Diana",
+    "Nasus",
+    "Lucian"
+   ],
+   "blue_allocation_sum": 0.21420766665522337,
+   "red_allocation_sum": -0.15795975004032253,
+   "logit": 0.37216741669554587
+  },
+  {
+   "blue": [
+    "Nidalee",
+    "Renata"
+   ],
+   "red": [
+    "Aphelios",
+    "Lulu"
+   ],
+   "blue_allocation_sum": 0.09388638609318127,
+   "red_allocation_sum": -0.011132514520293946,
+   "logit": 0.10501890061347521
+  },
+  {
+   "blue": [],
+   "red": [
+    "Yone",
+    "Zilean"
+   ],
+   "blue_allocation_sum": 0,
+   "red_allocation_sum": 0.049852419313746996,
+   "logit": -0.049852419313746996
+  },
+  {
+   "blue": [
+    "Darius",
+    "Sylas",
+    "Mel",
+    "Yasuo",
+    "Alistar"
+   ],
+   "red": [
+    "Tryndamere",
+    "Shaco",
+    "Zilean",
+    "Kaisa",
+    "Neeko"
+   ],
+   "blue_allocation_sum": -0.187357459373289,
+   "red_allocation_sum": 0.13135174165158112,
+   "logit": -0.3187092010248701
+  },
+  {
+   "blue": [
+    "Jayce",
+    "Kayn",
+    "Caitlyn",
+    "Karma"
+   ],
+   "red": [
+    "Briar",
+    "Udyr",
+    "Annie",
+    "Viktor"
+   ],
+   "blue_allocation_sum": 0.002661976830823566,
+   "red_allocation_sum": 0.08354949613823479,
+   "logit": -0.08088751930741123
+  },
+  {
+   "blue": [
+    "Warwick",
+    "Lissandra"
+   ],
+   "red": [
+    "Zac",
+    "Viego",
+    "Azir",
+    "Senna"
+   ],
+   "blue_allocation_sum": 0.04789559249427579,
+   "red_allocation_sum": -0.03971767265076738,
+   "logit": 0.08761326514504317
+  },
+  {
+   "blue": [],
+   "red": [
+    "Gwen"
+   ],
+   "blue_allocation_sum": 0,
+   "red_allocation_sum": 0.0184535,
+   "logit": -0.0184535
+  },
+  {
+   "blue": [
+    "Kaisa",
+    "Kayn",
+    "Irelia",
+    "Draven",
+    "Morgana"
+   ],
+   "red": [
+    "Malphite",
+    "Taliyah",
+    "Yasuo",
+    "Caitlyn",
+    "Nautilus"
+   ],
+   "blue_allocation_sum": -0.06837036308615213,
+   "red_allocation_sum": 0.11605624097118565,
+   "logit": -0.1844266040573378
+  },
+  {
+   "blue": [
+    "Yasuo",
+    "Viktor",
+    "Zeri"
+   ],
+   "red": [
+    "Karma",
+    "Nidalee",
+    "Xayah",
+    "Bard"
+   ],
+   "blue_allocation_sum": -0.04299890349695707,
+   "red_allocation_sum": 0.18090011223643998,
+   "logit": -0.22389901573339704
+  },
+  {
+   "blue": [
+    "KSante",
+    "Syndra",
+    "Nautilus"
+   ],
+   "red": [
+    "Ambessa",
+    "Zyra"
+   ],
+   "blue_allocation_sum": -0.0037934254468624164,
+   "red_allocation_sum": 0.0247222110814405,
+   "logit": -0.02851563652830292
+  },
+  {
+   "blue": [],
+   "red": [
+    "Malphite"
+   ],
+   "blue_allocation_sum": 0,
+   "red_allocation_sum": 0.0117511,
+   "logit": -0.0117511
+  },
+  {
+   "blue": [
+    "Jax",
+    "Quinn",
+    "Malzahar",
+    "Tristana",
+    "Rakan"
+   ],
+   "red": [
+    "Ornn",
+    "MasterYi",
+    "Mel",
+    "Kaisa",
+    "Bard"
+   ],
+   "blue_allocation_sum": 0.12634213908341319,
+   "red_allocation_sum": -0.2309396359558074,
+   "logit": 0.3572817750392206
+  },
+  {
+   "blue": [
+    "Nasus",
+    "JarvanIV",
+    "Akshan",
+    "Karma"
+   ],
+   "red": [
+    "Graves",
+    "Syndra",
+    "Jinx"
+   ],
+   "blue_allocation_sum": 0.22577775400764213,
+   "red_allocation_sum": -0.12953099818784508,
+   "logit": 0.3553087521954872
+  },
+  {
+   "blue": [
+    "Poppy",
+    "Smolder",
+    "Soraka"
+   ],
+   "red": [
+    "Shaco",
+    "Zed"
+   ],
+   "blue_allocation_sum": 0.04126151493202726,
+   "red_allocation_sum": 0.04414185002871235,
+   "logit": -0.0028803350966850882
+  },
+  {
+   "blue": [
+    "MissFortune"
+   ],
+   "red": [
+    "Galio"
+   ],
+   "blue_allocation_sum": -0.017855809097100897,
+   "red_allocation_sum": 0.007573659097100898,
+   "logit": -0.025429468194201794
+  },
+  {
+   "blue": [
+    "Cassiopeia",
+    "Zed",
+    "Orianna",
+    "Lucian",
+    "Nami"
+   ],
+   "red": [
+    "Galio",
+    "Ekko",
+    "Ahri",
+    "Jhin",
+    "Zilean"
+   ],
+   "blue_allocation_sum": -0.03762434875544434,
+   "red_allocation_sum": 0.15149232088145367,
+   "logit": -0.18911666963689802
+  },
+  {
+   "blue": [
+    "Nasus",
+    "Syndra",
+    "Fiddlesticks"
+   ],
+   "red": [
+    "LeeSin",
+    "Gwen",
+    "Kaisa",
+    "Sona"
+   ],
+   "blue_allocation_sum": 0.021072521533630647,
+   "red_allocation_sum": -0.012507379563877364,
+   "logit": 0.03357990109750801
+  },
+  {
+   "blue": [
+    "Orianna",
+    "Kaisa",
+    "Pyke"
+   ],
+   "red": [
+    "LeeSin",
+    "Ryze",
+    "Draven"
+   ],
+   "blue_allocation_sum": 0.003701324407951418,
+   "red_allocation_sum": -0.003105168046448,
+   "logit": 0.006806492454399418
+  },
+  {
+   "blue": [],
+   "red": [
+    "Riven"
+   ],
+   "blue_allocation_sum": 0,
+   "red_allocation_sum": -0.00325146,
+   "logit": 0.00325146
+  },
+  {
+   "blue": [
+    "Yasuo",
+    "Sejuani",
+    "Kassadin",
+    "Jhin",
+    "Lulu"
+   ],
+   "red": [
+    "Malphite",
+    "XinZhao",
+    "Vladimir",
+    "Caitlyn",
+    "Milio"
+   ],
+   "blue_allocation_sum": 0.007628430701767944,
+   "red_allocation_sum": -0.1222712320807544,
+   "logit": 0.12989966278252235
+  },
+  {
+   "blue": [
+    "Nasus",
+    "Sylas",
+    "Zeri"
+   ],
+   "red": [
+    "KSante",
+    "Kayn",
+    "Cassiopeia",
+    "Vayne"
+   ],
+   "blue_allocation_sum": 0.08601316506495087,
+   "red_allocation_sum": -0.058597892338889596,
+   "logit": 0.14461105740384045
+  },
+  {
+   "blue": [
+    "Kindred",
+    "Akali",
+    "Pyke"
+   ],
+   "red": [
+    "KSante",
+    "Shaco",
+    "Ahri"
+   ],
+   "blue_allocation_sum": -0.0031162943296478285,
+   "red_allocation_sum": 0.01044920487799453,
+   "logit": -0.013565499207642358
+  },
+  {
+   "blue": [
+    "Leblanc",
+    "Lulu"
+   ],
+   "red": [
+    "Anivia"
+   ],
+   "blue_allocation_sum": 0.0341121888679599,
+   "red_allocation_sum": 0.007508870832578099,
+   "logit": 0.026603318035381802
+  },
+  {
+   "blue": [
+    "Irelia",
+    "Hecarim",
+    "Lux",
+    "Brand",
+    "Nami"
+   ],
+   "red": [
+    "Yasuo",
+    "Ambessa",
+    "Fizz",
+    "Caitlyn",
+    "Karma"
+   ],
+   "blue_allocation_sum": 0.09063807639048921,
+   "red_allocation_sum": -0.04486725983896752,
+   "logit": 0.13550533622945674
+  },
+  {
+   "blue": [
+    "Udyr",
+    "Ekko",
+    "Ashe",
+    "Braum"
+   ],
+   "red": [
+    "Kindred",
+    "Varus",
+    "Lulu"
+   ],
+   "blue_allocation_sum": 0.03884131026581343,
+   "red_allocation_sum": -0.020474768861174407,
+   "logit": 0.05931607912698784
+  },
+  {
+   "blue": [
+    "Sion",
+    "Vayne"
+   ],
+   "red": [
+    "Fiora",
+    "Velkoz"
+   ],
+   "blue_allocation_sum": -0.007596882594106638,
+   "red_allocation_sum": 0.07466173555617664,
+   "logit": -0.08225861815028328
+  },
+  {
+   "blue": [],
+   "red": [
+    "Seraphine"
+   ],
+   "blue_allocation_sum": 0,
+   "red_allocation_sum": 0.00925703,
+   "logit": -0.00925703
+  },
+  {
+   "blue": [
+    "Gnar",
+    "Naafiri",
+    "Ekko",
+    "Senna",
+    "Seraphine"
+   ],
+   "red": [
+    "Jayce",
+    "Elise",
+    "Tristana",
+    "Yunara",
+    "Yuumi"
+   ],
+   "blue_allocation_sum": -0.01297037472042945,
+   "red_allocation_sum": -0.03611011161898643,
+   "logit": 0.02313973689855698
+  },
+  {
+   "blue": [
+    "Shyvana",
+    "Talon",
+    "Braum"
+   ],
+   "red": [
+    "Chogath",
+    "Vi",
+    "Riven",
+    "Smolder",
+    "Nautilus"
+   ],
+   "blue_allocation_sum": 0.09292077723541896,
+   "red_allocation_sum": -0.10091905043108092,
+   "logit": 0.19383982766649988
+  },
+  {
+   "blue": [
+    "Ahri"
+   ],
+   "red": [
+    "Nunu",
+    "Zeri",
+    "Leona"
+   ],
+   "blue_allocation_sum": 0.038648552984842634,
+   "red_allocation_sum": 0.0924183945100213,
+   "logit": -0.05376984152517867
+  },
+  {
+   "blue": [
+    "Darius",
+    "Shen"
+   ],
+   "red": [
+    "Lucian"
+   ],
+   "blue_allocation_sum": 0.0325661630480971,
+   "red_allocation_sum": -0.030115256907511503,
+   "logit": 0.06268141995560861
+  },
+  {
+   "blue": [
+    "Kled",
+    "LeeSin",
+    "Galio",
+    "Samira",
+    "Janna"
+   ],
+   "red": [
+    "Zaahen",
+    "Amumu",
+    "Ryze",
+    "Lucian",
+    "Milio"
+   ],
+   "blue_allocation_sum": 0.04901349314462505,
+   "red_allocation_sum": -0.03466891536714782,
+   "logit": 0.08368240851177287
+  },
+  {
+   "blue": [
+    "Olaf",
+    "Graves",
+    "Thresh"
+   ],
+   "red": [
+    "Camille",
+    "XinZhao",
+    "Hwei",
+    "Brand",
+    "Rell"
+   ],
+   "blue_allocation_sum": 0.2273949665869997,
+   "red_allocation_sum": 0.040109324633800764,
+   "logit": 0.18728564195319894
+  }
+ ]
+}

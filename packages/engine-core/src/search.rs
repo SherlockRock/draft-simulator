@@ -1,6 +1,6 @@
 use crate::cancellation::{ensure_not_cancelled, CancelHandle};
 use crate::coverage::{coverage_score, missing_roles};
-use crate::draft_state::{is_taken, picks_remaining, ActionType, DraftState, Phase, Side, TurnInfo, TURN_SEQUENCE};
+use crate::draft_state::{is_taken, picks_remaining, ActionType, DraftState, Phase, Side, TurnInfo, TOTAL_TURNS, TURN_SEQUENCE};
 use crate::engine::EngineError;
 use crate::feasibility::can_complete_roles;
 use crate::evaluator::{phase_weight_for, score_pick, EvalContext, ScoreSet, SideValues};
@@ -69,6 +69,20 @@ struct SearchAccum {
     applied_forced: HashSet<usize>,
     nodes_evaluated: usize,
     nodes_pruned: usize,
+    leaf_evaluations: usize,
+    leaf_depth_histogram: [usize; LEAF_DEPTH_BUCKETS],
+}
+
+impl SearchAccum {
+    /// Record one static evaluation. Called at every `eval_state` site that the
+    /// search can reach on a cache miss: the depth-bound/terminal leaf, and the
+    /// two empty-candidate fallbacks (single-slot and pair), which also produce
+    /// a value from a static evaluation rather than from children.
+    fn record_leaf_eval(&mut self, params: &SearchParams, remaining_depth: usize) {
+        self.leaf_evaluations += 1;
+        let depth = params.max_depth.saturating_sub(remaining_depth);
+        self.leaf_depth_histogram[depth.min(LEAF_DEPTH_BUCKETS - 1)] += 1;
+    }
 }
 
 pub fn search(
@@ -89,6 +103,7 @@ pub fn search_with_stats(
     eval_ctx: &EvalContext,
     cancel: &CancelHandle,
 ) -> Result<(TreeNode, SearchStats), EngineError> {
+    validate_state(state)?;
     validate_forced_branches(state, &params.forced_branches)?;
 
     let mut cache: TranspositionCache<TreeNode> = TranspositionCache::new();
@@ -115,6 +130,8 @@ pub fn search_with_stats(
             .forced_branches
             .len()
             .saturating_sub(accum.applied_forced.len()),
+        leaf_evaluations: accum.leaf_evaluations,
+        leaf_depth_histogram: accum.leaf_depth_histogram,
     };
     Ok((tree, stats))
 }
@@ -128,6 +145,47 @@ pub struct SearchStats {
     /// Forced branches whose `path` did not resolve against any actual lineage
     /// during the search. Spec: silent drop, telemetry-only.
     pub forced_branches_dropped: usize,
+    /// Static evaluations (`eval_state`) actually computed by this search —
+    /// cache **misses** only, since a transposition hit returns before any
+    /// evaluation happens. Distinct from `nodes_evaluated`, which counts
+    /// internal expansions, not evaluations. This is the quantity a batched
+    /// neural leaf evaluator would have to serve per query.
+    pub leaf_evaluations: usize,
+    /// Histogram of `params.max_depth - remaining_depth` at each counted
+    /// evaluation: index = plies from the search root. Depths at or beyond
+    /// `LEAF_DEPTH_BUCKETS` saturate into the last bucket.
+    pub leaf_depth_histogram: [usize; LEAF_DEPTH_BUCKETS],
+}
+
+/// A draft is `TOTAL_TURNS` turns long, so no leaf can sit more than that many
+/// plies below any root. One extra bucket holds depth 0 (the root itself).
+pub const LEAF_DEPTH_BUCKETS: usize = TOTAL_TURNS + 1;
+
+/// Up-front structural validation of the root state: no champion may appear on
+/// both teams, or twice on one team.
+///
+/// A duplicate reaches `eval_state` → `side_total` → `comp_strength_for`, where
+/// the legacy evaluator silently double-counted it and the FM evaluator asserts
+/// (a champion on the opposing team has no defined score — its counter vectors
+/// are already inside the perspective's opponent aggregates). Rejecting it here
+/// keeps that assert an invariant rather than a reachable panic across the napi
+/// boundary. Bans are out of scope: a banned-and-picked champion is a different
+/// (and harmless to the evaluator) kind of malformed input.
+///
+/// `path` follows the Zod style of the other validators (`validate_forced_branches`,
+/// `projection::build_draft_state`). The wire carries a single flat
+/// `draftState.picks` array which the projection layer splits by side and sorts
+/// by slot, so no element index is recoverable here.
+fn validate_state(state: &DraftState) -> Result<(), EngineError> {
+    let mut seen: HashSet<&str> = HashSet::new();
+    for champ in state.blue_picks.iter().chain(state.red_picks.iter()) {
+        if !seen.insert(champ.as_str()) {
+            return Err(EngineError::InvalidInput {
+                path: vec!["draftState".to_string(), "picks".to_string()],
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Up-front structural validation of forced branches. Currently catches the
@@ -178,6 +236,7 @@ fn search_recursive(
 
     // Terminal or depth-bound: produce a leaf node carrying a static evaluation.
     if turn_opt.is_none() || remaining_depth == 0 {
+        accum.record_leaf_eval(params, remaining_depth);
         let value: SideValues = eval_state(state, eval_ctx);
         let leaf = TreeNode {
             champion_ids: vec![],
@@ -273,8 +332,14 @@ fn search_recursive(
 
     // Apply forced branches at this single-slot expansion.
     let current_slot = state.turn_index();
-    let (forced_set, injected_ids) =
-        apply_single_slot_forces(&params.forced_branches, current_slot, lineage, accum, &ranked);
+    let (forced_set, injected_ids) = apply_single_slot_forces(
+        &params.forced_branches,
+        current_slot,
+        lineage,
+        accum,
+        &ranked,
+        state,
+    );
 
     let mut children: Vec<TreeNode> = Vec::with_capacity(forced_set.len());
     let mut best_value_pair = SideValues { blue: f64::NEG_INFINITY, red: f64::NEG_INFINITY };
@@ -347,6 +412,7 @@ fn search_recursive(
 
     if children.is_empty() {
         // No legal candidates (e.g., depleted pool). Treat as terminal.
+        accum.record_leaf_eval(params, remaining_depth);
         best_value_pair = eval_state(state, eval_ctx);
     }
 
@@ -514,12 +580,23 @@ fn feasibility_filter_pairs(
 /// `target_slot` equals `current_slot`. Sole mode replaces the candidate set
 /// with `[champion_id]`. Include mode appends `champion_id` after dedup.
 /// Each application records the branch's index in `accum.applied_forced`.
+///
+/// A force naming a champion already taken in the PROJECTED `state` (picked by
+/// either side, or banned) is skipped in both modes — not injected, and not
+/// recorded in `applied_forced`, so it reports as dropped. Honouring it would
+/// push the champion onto a team that already holds it or onto the team facing
+/// it, i.e. a champion on both sides at once. The legacy evaluator silently
+/// double-counted such a state; the FM evaluator asserts against it
+/// (`evaluator::fm_comp_strength`). Nothing upstream can catch this: forced
+/// paths resolve against a lineage PREFIX, so a request-time check cannot know
+/// which projected states a branch will match.
 fn apply_single_slot_forces(
     branches: &[ForcedBranch],
     current_slot: usize,
     lineage: &[(usize, Vec<String>)],
     accum: &mut SearchAccum,
     ranked: &[(String, f64)],
+    state: &DraftState,
 ) -> (Vec<(String, f64)>, HashSet<String>) {
     let mut out: Vec<(String, f64)> = ranked.to_vec();
     let mut injected: HashSet<String> = HashSet::new();
@@ -530,6 +607,9 @@ fn apply_single_slot_forces(
             continue;
         }
         if !matches!(resolve_path(&fb.path, lineage), PathMatch::Resolved { .. }) {
+            continue;
+        }
+        if is_taken(&fb.champion_id, state) {
             continue;
         }
         accum.applied_forced.insert(idx);
@@ -737,6 +817,7 @@ fn expand_pair(
         pair_end_slot,
         lineage,
         accum,
+        state,
     );
 
     // Pick2-only: identify roles where current picks have NO primary coverage
@@ -856,6 +937,9 @@ fn expand_pair(
     }
 
     if children.is_empty() {
+        // Pair expansion produced no legal pair. Same static-evaluation fallback
+        // as the single-slot path above.
+        accum.record_leaf_eval(params, remaining_depth);
         best_value_pair = eval_state(state, eval_ctx);
     }
     children.sort_by(|a, b| {
@@ -897,12 +981,17 @@ enum PairForce {
 /// Finds at most one matching pair force at the current pair node. Sole mode
 /// only — include-mode at a pair turn is dropped (and its index is NOT added
 /// to `applied_forced`, so it'll count as dropped at the end).
+///
+/// A force naming a champion already taken in the PROJECTED `state` is dropped
+/// the same way, and for the same reason as in `apply_single_slot_forces`: it
+/// would seat one champion on both teams.
 fn match_pair_force(
     branches: &[ForcedBranch],
     pair_start_slot: usize,
     pair_end_slot: usize,
     lineage: &[(usize, Vec<String>)],
     accum: &mut SearchAccum,
+    state: &DraftState,
 ) -> Option<PairForce> {
     for (idx, fb) in branches.iter().enumerate() {
         if fb.target_slot != pair_start_slot && fb.target_slot != pair_end_slot {
@@ -912,6 +1001,9 @@ fn match_pair_force(
             continue;
         }
         if !matches!(resolve_path(&fb.path, lineage), PathMatch::Resolved { .. }) {
+            continue;
+        }
+        if is_taken(&fb.champion_id, state) {
             continue;
         }
         accum.applied_forced.insert(idx);
