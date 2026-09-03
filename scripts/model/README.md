@@ -47,6 +47,13 @@ Per-patch retrain: `prepare.py <new parquet>` → re-run the Task 5 harness → 
 `fm_retrain_gate.py` (blocks the commit on a paired sibling-MRR regression beyond both the MDE and the
 card's 3-seed spread) → `cargo test -p engine-core --test fm_parity` → commit weights + fixtures + card.
 
+Exploring the shipped weights: `fm_explore.py` scores any blue/red state the way `fm_comp_strength`
+does (marginal, allocation, `compStrength`, legacy side by side; `--explain` for the term-by-term
+decomposition, `--champion` for one champion's weights, `--engine` to cross-check allocation sums
+against the prebuilt `index.node` through `fm_engine_probe.cjs`); `fm_explore_scan.py` prints the
+fill-level spread and role-feasibility numbers. Write-ups: `reports/fm-explore-tour.md` (one
+champion, one state, the Rust cross-check) and `docs/designs/fm-fine-tuning-levers.md` (local).
+
 Kill switch: `NAVIGATOR_FM=off` on the backend makes the engine boot without the FM (legacy
 `compStrength`). The engine is built at module load, so it takes effect on restart; on Railway a
 variable change redeploys. Weights rollback = git revert + redeploy.
