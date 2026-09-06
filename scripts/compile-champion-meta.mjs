@@ -12,14 +12,19 @@
  *   tags.synergy   — from manual synergy-tags.json
  *   blindability   — defaults to 0.5 (needs counter data for proper computation)
  *   pickRate/banRate/winRate — defaults to 0 (no source available yet)
+ *   positions      — copied verbatim from champions.json (refreshed by
+ *                    refresh-champion-positions.mjs; provenance carried into sources.positions)
  *
- * Usage: node scripts/compile-champion-meta.mjs
+ * Usage: node scripts/compile-champion-meta.mjs [--champions PATH] [--out PATH]
  */
 
 import { readFileSync, existsSync } from "fs";
+import { parseArgs } from "node:util";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { writeJson, normalize } from "./lib/fetch-utils.mjs";
+import { assertChampionRows } from "./champion-positions/invariants.mjs";
+import { formatPositionsSource } from "./champion-positions/derive.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -236,12 +241,23 @@ function applyOverrides(champion, overrides) {
 async function main() {
   console.log("=== Compile Champion Meta ===\n");
 
+  const { values } = parseArgs({
+    options: {
+      champions: { type: "string", default: CHAMPIONS_PATH },
+      out: { type: "string", default: OUTPUT_PATH },
+    },
+  });
+
   if (!existsSync(MERAKI_PATH)) throw new Error(`Missing ${MERAKI_PATH} — run scrape-meraki.mjs first`);
   if (!existsSync(CDRAGON_PATH)) throw new Error(`Missing ${CDRAGON_PATH} — run scrape-cdragon.mjs first`);
 
   const merakiRaw = readJson(MERAKI_PATH);
   const cdragonRaw = readJson(CDRAGON_PATH);
-  const canonicalChamps = readJson(CHAMPIONS_PATH);
+  const canonicalChamps = readJson(values.champions);
+  // Input invariants on the ROWS (design § 5 "the compile repeats the id/name
+  // uniqueness check"): the compiled output is an object keyed by id, so a
+  // duplicate id would collapse before any check on the output could see it.
+  assertChampionRows(canonicalChamps.champions, { label: "champions.json", requirePositions: false });
   const ccMapping = readJson(CC_MAPPING_PATH);
   const synergyTags = readJson(SYNERGY_PATH);
   const overrides = readJson(OVERRIDES_PATH);
@@ -317,6 +333,17 @@ async function main() {
     champions[canonical.id] = entry;
   }
 
+  // Pre-write checks (design § 7 risk 5): vocabulary, non-empty, unique
+  // ids/names, count == champions.json count. Runs AFTER overrides, so an
+  // override that writes UTILITY or empties a list is caught here, before the
+  // artifact the backend loads at construction is on disk.
+  assertChampionRows(Object.values(champions), {
+    label: "champion-meta",
+    expectedCount: canonicalChamps.champions.length,
+    requirePositions: true,
+  });
+
+  const positionsSource = canonicalChamps.positionsSource;
   const output = {
     version: canonicalChamps.version,
     patch: canonicalChamps.version,
@@ -324,11 +351,13 @@ async function main() {
     sources: {
       cdragonScrapedAt: cdragonRaw.scrapedAt,
       merakiScrapedAt: merakiRaw.scrapedAt,
+      ...(positionsSource ? { positions: positionsSource } : {}),
     },
     champions,
   };
 
-  writeJson(OUTPUT_PATH, output);
+  writeJson(values.out, output);
+  console.log(`  positions source: ${formatPositionsSource(positionsSource)}${positionsSource ? "" : " — run refresh-champion-positions.mjs"}`);
 
   console.log(`\n  Compiled: ${Object.keys(champions).length} champions`);
   if (warnings.length > 0) {
