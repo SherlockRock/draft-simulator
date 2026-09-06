@@ -173,7 +173,12 @@ def test_engine_allocation_sums_match_fm_serve_on_a_real_state():
     red = ["Sejuani", "Sylas", "Lissandra", "Tristana"]
     check = fx.engine_cross_check(table, meta, blue, red, "red")
     assert "loaded version=" in check["status"]
-    assert check["n_children"] >= 10
+    # The two perspectives' top-32 lists overlapped on 29 children under Meraki's
+    # positions (red's open role was unambiguously SUPPORT); under the 2026-09
+    # play-rate positions Sylas and Lissandra flex, 65 distinct candidates expand
+    # and only 7 overlap. The assertion that matters is the sum agreement below;
+    # this floor only keeps it from passing on an empty intersection.
+    assert check["n_children"] >= 5
     for r in check["rows"]:
         assert r["engine_blue_sum"] == pytest.approx(r["python_blue_sum"], abs=1e-9)
         assert r["engine_red_sum"] == pytest.approx(r["python_red_sum"], abs=1e-9)

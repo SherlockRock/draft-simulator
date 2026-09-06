@@ -1,12 +1,27 @@
 {
   "version": "16.13.1",
   "updatedAt": "2026-07-14",
+  "positionsSource": {
+    "kind": "corpus",
+    "patches": [
+      "16.15",
+      "16.16"
+    ],
+    "games": 300885,
+    "threshold": 0.1,
+    "generatedAt": "2026-09-05T23:37:07.735Z",
+    "feasibility": {
+      "sets": 34159,
+      "bothSides": 0.785
+    }
+  },
   "champions": [
     {
       "name": "Aatrox",
       "id": "Aatrox",
       "positions": [
-        "TOP"
+        "TOP",
+        "JUNGLE"
       ]
     },
     {
@@ -42,29 +57,33 @@
       "name": "Ambessa",
       "id": "Ambessa",
       "positions": [
-        "TOP"
+        "TOP",
+        "JUNGLE"
       ]
     },
     {
       "name": "Amumu",
       "id": "Amumu",
       "positions": [
-        "JUNGLE",
-        "SUPPORT"
+        "SUPPORT",
+        "JUNGLE"
       ]
     },
     {
       "name": "Anivia",
       "id": "Anivia",
       "positions": [
-        "MIDDLE"
+        "MIDDLE",
+        "TOP",
+        "SUPPORT"
       ]
     },
     {
       "name": "Annie",
       "id": "Annie",
       "positions": [
-        "MIDDLE"
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
@@ -78,15 +97,15 @@
       "name": "Ashe",
       "id": "Ashe",
       "positions": [
-        "BOTTOM",
-        "SUPPORT"
+        "BOTTOM"
       ]
     },
     {
       "name": "Aurelion Sol",
       "id": "AurelionSol",
       "positions": [
-        "MIDDLE"
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
@@ -101,7 +120,8 @@
       "name": "Azir",
       "id": "Azir",
       "positions": [
-        "MIDDLE"
+        "MIDDLE",
+        "TOP"
       ]
     },
     {
@@ -129,9 +149,9 @@
       "name": "Brand",
       "id": "Brand",
       "positions": [
-        "JUNGLE",
-        "MIDDLE",
-        "SUPPORT"
+        "BOTTOM",
+        "SUPPORT",
+        "MIDDLE"
       ]
     },
     {
@@ -167,20 +187,25 @@
       "name": "Cassiopeia",
       "id": "Cassiopeia",
       "positions": [
-        "MIDDLE"
+        "MIDDLE",
+        "TOP",
+        "BOTTOM"
       ]
     },
     {
       "name": "Cho'Gath",
       "id": "Chogath",
       "positions": [
-        "TOP"
+        "TOP",
+        "MIDDLE",
+        "JUNGLE"
       ]
     },
     {
       "name": "Corki",
       "id": "Corki",
       "positions": [
+        "BOTTOM",
         "MIDDLE"
       ]
     },
@@ -188,22 +213,24 @@
       "name": "Darius",
       "id": "Darius",
       "positions": [
-        "TOP"
+        "TOP",
+        "JUNGLE"
       ]
     },
     {
       "name": "Diana",
       "id": "Diana",
       "positions": [
-        "JUNGLE",
-        "MIDDLE"
+        "MIDDLE",
+        "JUNGLE"
       ]
     },
     {
       "name": "Dr. Mundo",
       "id": "DrMundo",
       "positions": [
-        "TOP"
+        "TOP",
+        "JUNGLE"
       ]
     },
     {
@@ -225,7 +252,8 @@
       "name": "Elise",
       "id": "Elise",
       "positions": [
-        "JUNGLE"
+        "JUNGLE",
+        "SUPPORT"
       ]
     },
     {
@@ -246,7 +274,9 @@
       "name": "Fiddlesticks",
       "id": "Fiddlesticks",
       "positions": [
-        "JUNGLE"
+        "JUNGLE",
+        "SUPPORT",
+        "TOP"
       ]
     },
     {
@@ -260,7 +290,8 @@
       "name": "Fizz",
       "id": "Fizz",
       "positions": [
-        "MIDDLE"
+        "MIDDLE",
+        "JUNGLE"
       ]
     },
     {
@@ -275,14 +306,16 @@
       "name": "Gangplank",
       "id": "Gangplank",
       "positions": [
-        "TOP"
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
       "name": "Garen",
       "id": "Garen",
       "positions": [
-        "TOP"
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
@@ -296,9 +329,9 @@
       "name": "Gragas",
       "id": "Gragas",
       "positions": [
+        "TOP",
         "JUNGLE",
-        "MIDDLE",
-        "TOP"
+        "MIDDLE"
       ]
     },
     {
@@ -312,8 +345,9 @@
       "name": "Gwen",
       "id": "Gwen",
       "positions": [
+        "TOP",
         "JUNGLE",
-        "TOP"
+        "MIDDLE"
       ]
     },
     {
@@ -327,9 +361,10 @@
       "name": "Heimerdinger",
       "id": "Heimerdinger",
       "positions": [
+        "TOP",
+        "BOTTOM",
         "MIDDLE",
-        "SUPPORT",
-        "TOP"
+        "SUPPORT"
       ]
     },
     {
@@ -337,7 +372,7 @@
       "id": "Hwei",
       "positions": [
         "MIDDLE",
-        "SUPPORT"
+        "BOTTOM"
       ]
     },
     {
@@ -351,8 +386,8 @@
       "name": "Irelia",
       "id": "Irelia",
       "positions": [
-        "MIDDLE",
-        "TOP"
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
@@ -380,16 +415,17 @@
       "name": "Jax",
       "id": "Jax",
       "positions": [
-        "JUNGLE",
-        "TOP"
+        "TOP",
+        "JUNGLE"
       ]
     },
     {
       "name": "Jayce",
       "id": "Jayce",
       "positions": [
-        "MIDDLE",
-        "TOP"
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
@@ -431,16 +467,15 @@
       "name": "Karma",
       "id": "Karma",
       "positions": [
-        "MIDDLE",
-        "SUPPORT",
-        "TOP"
+        "SUPPORT"
       ]
     },
     {
       "name": "Karthus",
       "id": "Karthus",
       "positions": [
-        "JUNGLE"
+        "JUNGLE",
+        "BOTTOM"
       ]
     },
     {
@@ -454,14 +489,16 @@
       "name": "Katarina",
       "id": "Katarina",
       "positions": [
-        "MIDDLE"
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
       "name": "Kayle",
       "id": "Kayle",
       "positions": [
-        "TOP"
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
@@ -475,7 +512,8 @@
       "name": "Kennen",
       "id": "Kennen",
       "positions": [
-        "TOP"
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
@@ -503,14 +541,16 @@
       "name": "Kog'Maw",
       "id": "KogMaw",
       "positions": [
-        "BOTTOM"
+        "BOTTOM",
+        "MIDDLE"
       ]
     },
     {
       "name": "LeBlanc",
       "id": "Leblanc",
       "positions": [
-        "MIDDLE"
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
@@ -538,13 +578,17 @@
       "name": "Lissandra",
       "id": "Lissandra",
       "positions": [
-        "MIDDLE"
+        "MIDDLE",
+        "TOP"
       ]
     },
     {
       "name": "Locke",
       "id": "Locke",
-      "positions": ["MIDDLE"]
+      "positions": [
+        "MIDDLE",
+        "JUNGLE"
+      ]
     },
     {
       "name": "Lucian",
@@ -564,16 +608,15 @@
       "name": "Lux",
       "id": "Lux",
       "positions": [
+        "SUPPORT",
         "MIDDLE",
-        "SUPPORT"
+        "BOTTOM"
       ]
     },
     {
       "name": "Malphite",
       "id": "Malphite",
       "positions": [
-        "MIDDLE",
-        "SUPPORT",
         "TOP"
       ]
     },
@@ -588,8 +631,9 @@
       "name": "Maokai",
       "id": "Maokai",
       "positions": [
+        "SUPPORT",
         "JUNGLE",
-        "SUPPORT"
+        "TOP"
       ]
     },
     {
@@ -603,6 +647,7 @@
       "name": "Mel",
       "id": "Mel",
       "positions": [
+        "BOTTOM",
         "MIDDLE",
         "SUPPORT"
       ]
@@ -632,13 +677,16 @@
       "name": "Morgana",
       "id": "Morgana",
       "positions": [
-        "SUPPORT"
+        "SUPPORT",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
       "name": "Naafiri",
       "id": "Naafiri",
       "positions": [
+        "JUNGLE",
         "MIDDLE"
       ]
     },
@@ -653,7 +701,9 @@
       "name": "Nasus",
       "id": "Nasus",
       "positions": [
-        "TOP"
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
@@ -667,8 +717,8 @@
       "name": "Neeko",
       "id": "Neeko",
       "positions": [
-        "MIDDLE",
-        "SUPPORT"
+        "SUPPORT",
+        "MIDDLE"
       ]
     },
     {
@@ -696,14 +746,16 @@
       "name": "Nunu",
       "id": "Nunu",
       "positions": [
-        "JUNGLE"
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
       "name": "Olaf",
       "id": "Olaf",
       "positions": [
-        "TOP"
+        "TOP",
+        "JUNGLE"
       ]
     },
     {
@@ -724,18 +776,18 @@
       "name": "Pantheon",
       "id": "Pantheon",
       "positions": [
-        "JUNGLE",
-        "MIDDLE",
         "SUPPORT",
-        "TOP"
+        "TOP",
+        "JUNGLE"
       ]
     },
     {
       "name": "Poppy",
       "id": "Poppy",
       "positions": [
-        "JUNGLE",
-        "TOP"
+        "SUPPORT",
+        "TOP",
+        "JUNGLE"
       ]
     },
     {
@@ -749,6 +801,7 @@
       "name": "Qiyana",
       "id": "Qiyana",
       "positions": [
+        "JUNGLE",
         "MIDDLE"
       ]
     },
@@ -756,7 +809,9 @@
       "name": "Quinn",
       "id": "Quinn",
       "positions": [
-        "TOP"
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
@@ -770,7 +825,8 @@
       "name": "Rammus",
       "id": "Rammus",
       "positions": [
-        "JUNGLE"
+        "JUNGLE",
+        "SUPPORT"
       ]
     },
     {
@@ -805,30 +861,31 @@
       "name": "Rengar",
       "id": "Rengar",
       "positions": [
-        "JUNGLE",
-        "TOP"
+        "JUNGLE"
       ]
     },
     {
       "name": "Riven",
       "id": "Riven",
       "positions": [
-        "TOP"
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
       "name": "Rumble",
       "id": "Rumble",
       "positions": [
-        "MIDDLE",
-        "TOP"
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
       "name": "Ryze",
       "id": "Ryze",
       "positions": [
-        "MIDDLE"
+        "MIDDLE",
+        "TOP"
       ]
     },
     {
@@ -842,23 +899,24 @@
       "name": "Sejuani",
       "id": "Sejuani",
       "positions": [
-        "JUNGLE"
+        "JUNGLE",
+        "TOP"
       ]
     },
     {
       "name": "Senna",
       "id": "Senna",
       "positions": [
-        "BOTTOM",
-        "SUPPORT"
+        "SUPPORT",
+        "BOTTOM"
       ]
     },
     {
       "name": "Seraphine",
       "id": "Seraphine",
       "positions": [
-        "BOTTOM",
-        "SUPPORT"
+        "SUPPORT",
+        "BOTTOM"
       ]
     },
     {
@@ -895,14 +953,16 @@
       "name": "Singed",
       "id": "Singed",
       "positions": [
-        "TOP"
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
       "name": "Sion",
       "id": "Sion",
       "positions": [
-        "TOP"
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
@@ -917,6 +977,7 @@
       "id": "Skarner",
       "positions": [
         "JUNGLE",
+        "SUPPORT",
         "TOP"
       ]
     },
@@ -925,8 +986,7 @@
       "id": "Smolder",
       "positions": [
         "BOTTOM",
-        "MIDDLE",
-        "TOP"
+        "MIDDLE"
       ]
     },
     {
@@ -948,8 +1008,9 @@
       "id": "Swain",
       "positions": [
         "BOTTOM",
+        "SUPPORT",
         "MIDDLE",
-        "SUPPORT"
+        "TOP"
       ]
     },
     {
@@ -957,14 +1018,16 @@
       "id": "Sylas",
       "positions": [
         "MIDDLE",
-        "TOP"
+        "JUNGLE",
+        "SUPPORT"
       ]
     },
     {
       "name": "Syndra",
       "id": "Syndra",
       "positions": [
-        "MIDDLE"
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
@@ -972,29 +1035,31 @@
       "id": "TahmKench",
       "positions": [
         "SUPPORT",
-        "TOP"
+        "TOP",
+        "BOTTOM"
       ]
     },
     {
       "name": "Taliyah",
       "id": "Taliyah",
       "positions": [
+        "MIDDLE",
         "JUNGLE",
-        "MIDDLE"
+        "BOTTOM"
       ]
     },
     {
       "name": "Talon",
       "id": "Talon",
       "positions": [
-        "JUNGLE"
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
       "name": "Taric",
       "id": "Taric",
       "positions": [
-        "MIDDLE",
         "SUPPORT"
       ]
     },
@@ -1002,9 +1067,8 @@
       "name": "Teemo",
       "id": "Teemo",
       "positions": [
-        "JUNGLE",
-        "SUPPORT",
-        "TOP"
+        "TOP",
+        "JUNGLE"
       ]
     },
     {
@@ -1026,32 +1090,31 @@
       "name": "Trundle",
       "id": "Trundle",
       "positions": [
+        "TOP",
         "JUNGLE",
-        "TOP"
+        "SUPPORT"
       ]
     },
     {
       "name": "Tryndamere",
       "id": "Tryndamere",
       "positions": [
-        "TOP"
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
       "name": "Twisted Fate",
       "id": "TwistedFate",
       "positions": [
-        "BOTTOM",
-        "MIDDLE",
-        "TOP"
+        "MIDDLE"
       ]
     },
     {
       "name": "Twitch",
       "id": "Twitch",
       "positions": [
-        "BOTTOM",
-        "SUPPORT"
+        "BOTTOM"
       ]
     },
     {
@@ -1073,15 +1136,16 @@
       "name": "Varus",
       "id": "Varus",
       "positions": [
-        "BOTTOM"
+        "BOTTOM",
+        "TOP"
       ]
     },
     {
       "name": "Vayne",
       "id": "Vayne",
       "positions": [
-        "BOTTOM",
-        "TOP"
+        "TOP",
+        "BOTTOM"
       ]
     },
     {
@@ -1089,15 +1153,16 @@
       "id": "Veigar",
       "positions": [
         "MIDDLE",
-        "SUPPORT"
+        "BOTTOM"
       ]
     },
     {
       "name": "Vel'Koz",
       "id": "Velkoz",
       "positions": [
-        "MIDDLE",
-        "SUPPORT"
+        "SUPPORT",
+        "BOTTOM",
+        "MIDDLE"
       ]
     },
     {
@@ -1125,7 +1190,8 @@
       "name": "Viktor",
       "id": "Viktor",
       "positions": [
-        "MIDDLE"
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
@@ -1133,23 +1199,24 @@
       "id": "Vladimir",
       "positions": [
         "MIDDLE",
-        "TOP"
+        "TOP",
+        "BOTTOM"
       ]
     },
     {
       "name": "Volibear",
       "id": "Volibear",
       "positions": [
-        "JUNGLE",
-        "TOP"
+        "TOP",
+        "JUNGLE"
       ]
     },
     {
       "name": "Warwick",
       "id": "Warwick",
       "positions": [
-        "JUNGLE",
-        "TOP"
+        "TOP",
+        "JUNGLE"
       ]
     },
     {
@@ -1171,6 +1238,7 @@
       "name": "Xerath",
       "id": "Xerath",
       "positions": [
+        "BOTTOM",
         "MIDDLE",
         "SUPPORT"
       ]
@@ -1186,17 +1254,17 @@
       "name": "Yasuo",
       "id": "Yasuo",
       "positions": [
-        "BOTTOM",
         "MIDDLE",
-        "TOP"
+        "TOP",
+        "BOTTOM"
       ]
     },
     {
       "name": "Yone",
       "id": "Yone",
       "positions": [
-        "MIDDLE",
-        "TOP"
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
@@ -1223,14 +1291,16 @@
     {
       "name": "Zaahen",
       "id": "Zaahen",
-      "positions": ["TOP", "JUNGLE"]
+      "positions": [
+        "TOP",
+        "JUNGLE"
+      ]
     },
     {
       "name": "Zac",
       "id": "Zac",
       "positions": [
         "JUNGLE",
-        "SUPPORT",
         "TOP"
       ]
     },
@@ -1238,8 +1308,8 @@
       "name": "Zed",
       "id": "Zed",
       "positions": [
-        "JUNGLE",
-        "MIDDLE"
+        "MIDDLE",
+        "JUNGLE"
       ]
     },
     {
@@ -1261,21 +1331,25 @@
       "name": "Zilean",
       "id": "Zilean",
       "positions": [
-        "SUPPORT"
+        "SUPPORT",
+        "MIDDLE"
       ]
     },
     {
       "name": "Zoe",
       "id": "Zoe",
       "positions": [
-        "MIDDLE"
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
       "name": "Zyra",
       "id": "Zyra",
       "positions": [
-        "SUPPORT"
+        "JUNGLE",
+        "SUPPORT",
+        "BOTTOM"
       ]
     }
   ]
