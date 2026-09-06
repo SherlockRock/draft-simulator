@@ -22,8 +22,8 @@ from common import META_POS, POSITIONS, ROOT, load_champion_meta, load_id_to_ali
 PRIMARY_FACTOR = 1.0
 SECONDARY_FACTOR = 0.4
 NON_LISTED_FACTOR = 0.01
-# solver_roles_test.rs
-SYNTH_ROLE_THRESHOLD = 0.15
+# solver_roles_test.rs; equal to POSITIONS_THRESHOLD in scripts/champion-positions/derive.mjs
+SYNTH_ROLE_THRESHOLD = 0.10
 
 # engine Role order, which is also the canonical slot order.
 ROLE_NAMES = ["TOP", "JUNGLE", "MIDDLE", "ADC", "SUPPORT"]

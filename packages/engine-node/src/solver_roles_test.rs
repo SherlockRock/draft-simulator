@@ -37,7 +37,9 @@ const META_ROLE_NAMES: [&str; 5] = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "SUPPOR
 /// A champion is credited with a role in its synthesised meta if that role
 /// holds at least this share of its corpus games. Below it, the appearance is
 /// noise (an off-role one-off) rather than a position the champion plays.
-const SYNTH_ROLE_THRESHOLD: f64 = 0.15;
+/// Equal to POSITIONS_THRESHOLD in scripts/champion-positions/derive.mjs and
+/// SYNTH_ROLE_THRESHOLD in scripts/model/roles.py — pinned by test_roles_unit.py.
+const SYNTH_ROLE_THRESHOLD: f64 = 0.10;
 
 pub(crate) fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -166,11 +168,24 @@ fn ensure_known(meta: &mut HashMap<String, ChampionMeta>, champs: &[&str]) -> us
 fn synthesised_meta_credits_the_adc_role_from_the_bottom_share() {
     let doc = serde_json::json!({
         "999": {"alias": "NewMarksman", "meta_roles":
-            {"TOP": 0.0, "JUNGLE": 0.0, "MIDDLE": 0.1, "BOTTOM": 0.9, "SUPPORT": 0.0}}
+            {"TOP": 0.0, "JUNGLE": 0.0, "MIDDLE": 0.05, "BOTTOM": 0.95, "SUPPORT": 0.0}}
     });
     let mut meta = HashMap::new();
     synthesise_from(&doc, &mut meta);
     assert_eq!(meta["NewMarksman"].positions, vec![Role::Adc]);
+}
+
+#[test]
+fn synthesis_lists_a_role_at_exactly_the_threshold_as_a_secondary() {
+    // Pins SYNTH_ROLE_THRESHOLD = 0.10 behaviourally (test_roles_unit.py pins the
+    // literal): a 10% role is listed, ordered after the primary.
+    let doc = serde_json::json!({
+        "998": {"alias": "FlexMarksman", "meta_roles":
+            {"TOP": 0.0, "JUNGLE": 0.0, "MIDDLE": 0.10, "BOTTOM": 0.90, "SUPPORT": 0.0}}
+    });
+    let mut meta = HashMap::new();
+    synthesise_from(&doc, &mut meta);
+    assert_eq!(meta["FlexMarksman"].positions, vec![Role::Adc, Role::Middle]);
 }
 
 #[test]
@@ -363,18 +378,21 @@ fn emit_solver_roles_for_every_benchmarked_state() {
 // --- guards that run on every `cargo test` -----------------------------------
 
 #[test]
-fn locke_gets_a_synthesised_meta_and_solve_does_not_panic() {
-    // The regression this exists for: Locke (805) is the corpus's #1 ban and
-    // appears in 10.9% of games, and champion-meta.json has never heard of it.
-    // `solve` panics by contract on an unknown id, so without synthesis every
-    // gate-4 arm would abort on a tenth of the test split.
+fn locke_is_in_champion_meta_and_solve_does_not_panic() {
+    // Before the 2026-09 positions refresh champion-meta.json had never heard
+    // of Locke (the corpus's #1 ban, 10.9% of games) and this test asserted he
+    // was SYNTHESISED from role_percentages.json. The recompile added him; the
+    // synthesis path stays covered by
+    // synthesised_meta_credits_the_adc_role_from_the_bottom_share. If this
+    // fails with Locke in `synthesised`, champion-meta.json is stale — run
+    // refresh-champion-positions.mjs + compile-champion-meta.mjs.
     let (meta, synthesised) = load_meta_with_synthesis();
     assert!(
-        synthesised.contains(&"Locke".to_string()),
-        "Locke should have been synthesised; synthesised = {synthesised:?}"
+        !synthesised.contains(&"Locke".to_string()),
+        "Locke should come from champion-meta.json, not synthesis; synthesised = {synthesised:?}"
     );
     let locke = &meta["Locke"];
-    assert!(!locke.positions.is_empty(), "a synthesised meta needs a primary role");
+    assert_eq!(locke.positions.first(), Some(&Role::Middle), "Locke's primary is MIDDLE (0.74 at Master+)");
 
     let team = ["Locke", "Ahri", "Sejuani", "Jinx", "Thresh"];
     let roles = team_roles(&team, &meta);

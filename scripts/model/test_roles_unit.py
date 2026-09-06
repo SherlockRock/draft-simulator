@@ -47,7 +47,31 @@ def test_prior_from_frame_uses_only_that_frame():
 def test_factor_table_from_prior_synthesises_missing_meta_from_the_prior():
     i2a = {2: "NotInMeta"}
     prior = np.full((3, 5), 0.2)
-    prior[2] = [0.0, 0.0, 0.1, 0.9, 0.0]    # a marksman
+    prior[2] = [0.0, 0.0, 0.05, 0.95, 0.0]    # a marksman; MIDDLE below the 0.10 threshold
     table = roles.factor_table_from_prior(prior, i2a)
     assert table[2, 3] == roles.PRIMARY_FACTOR
     assert table[2, 2] == roles.NON_LISTED_FACTOR
+
+
+def test_factor_table_from_prior_lists_a_role_at_exactly_the_threshold_as_secondary():
+    """Behavioural pin of SYNTH_ROLE_THRESHOLD = 0.10 (the regex test pins the literal)."""
+    i2a = {2: "FlexMarksman"}
+    prior = np.full((3, 5), 0.2)
+    prior[2] = [0.0, 0.0, 0.10, 0.90, 0.0]
+    table = roles.factor_table_from_prior(prior, i2a)
+    assert table[2, 3] == roles.PRIMARY_FACTOR
+    assert table[2, 2] == roles.SECONDARY_FACTOR
+
+
+MJS = ROOT / "scripts/champion-positions/derive.mjs"
+
+
+def test_the_synthesis_thresholds_equal_the_shipped_positions_threshold():
+    """Design § 9: one threshold serves the shipped refresh rule (derive.mjs),
+    the Rust harness's synthesis for champions missing from champion-meta, and
+    the Python mirror. Two of these were 0.15 while the design chose 0.10."""
+    rust = re.search(r"const SYNTH_ROLE_THRESHOLD: f64 = ([0-9.]+);", RUST.read_text())
+    assert rust, "solver_roles_test.rs must declare SYNTH_ROLE_THRESHOLD"
+    mjs = re.search(r"export const POSITIONS_THRESHOLD = ([0-9.]+);", MJS.read_text())
+    assert mjs, "derive.mjs must export POSITIONS_THRESHOLD"
+    assert float(rust.group(1)) == roles.SYNTH_ROLE_THRESHOLD == float(mjs.group(1)) == 0.10
