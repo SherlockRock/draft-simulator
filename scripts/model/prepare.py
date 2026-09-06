@@ -11,7 +11,8 @@ Outputs (all under data/training/, which is gitignored):
     champion_vocab.json    raw Riot id -> dense index (0=UNKNOWN, 1=NONE)
     patch_vocab.json       "major.minor" -> dense index, release order
     region_vocab.json      region -> dense index
-    role_percentages.json  per champion, share of train games in each role
+    role_percentages.json  per champion, share of train games in each role — also the
+                           shipped source of champion-meta positions (refresh-champion-positions.mjs)
     folds.parquet          rolling-origin fold assignments (5 folds)
     holdout_drafts.csv     test split: 10 aliases + label  (Task 5 input)
     sibling_sets.parquet   held-out-slot candidate sets    (gate 1)

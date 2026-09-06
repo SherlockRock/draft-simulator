@@ -1,4 +1,5 @@
 const path = require("path");
+const fs = require("fs");
 
 const NavigatorSnapshot = require("../models/NavigatorSnapshot");
 const { getCrossGameExclusions } = require("../utils/navigatorSeriesRestrictions");
@@ -70,6 +71,40 @@ const engine = Engine.create(engineOptions);
 console.log(
   `[navigator] fm: ${engine.fmStatus()}${!("fmWeightsPath" in engineOptions) ? " (NAVIGATOR_FM=off)" : ""}`,
 );
+
+/**
+ * Boot line naming where champion-meta's positions came from (design
+ * champion-meta-positions-refresh § 5 / § 8 step 7). The engine parsed the
+ * file already; this parses it a second time (126 KB, once per boot) because
+ * the napi binding does not expose the `sources` block.
+ *
+ * formatPositionsSource below is a verbatim CommonJS copy of
+ * scripts/champion-positions/derive.mjs::formatPositionsSource (this file is
+ * CJS and cannot import the ESM module); the two tests pin the same strings.
+ */
+function formatPositionsSource(block) {
+  if (!block) return "none recorded (Meraki verbatim)";
+  const f = block.feasibility;
+  const feasibility = f
+    ? `${f.bothSides}${f.carriedFrom ? ` (carried from ${f.carriedFrom.generatedAt})` : ""}`
+    : "unmeasured";
+  return `${block.kind} patches=${block.patches.join(",")} threshold=${block.threshold} generated=${block.generatedAt} feasibility=${feasibility}${block.unmeasuredAtParity ? " [source unmeasured at parity]" : ""}`;
+}
+
+function formatPositionsSourceLine(sources) {
+  return `[navigator] champion-meta positions: ${formatPositionsSource(sources && sources.positions)}`;
+}
+
+function readChampionMetaSources() {
+  try {
+    return JSON.parse(fs.readFileSync(CHAMPION_META_PATH, "utf-8")).sources;
+  } catch (err) {
+    console.warn(`[navigator] champion-meta sources unreadable: ${err.message}`);
+    return undefined;
+  }
+}
+
+console.log(formatPositionsSourceLine(readChampionMetaSources()));
 
 // Per-session active token for the αβ supersession path. When a new compute
 // is dispatched for a session, the prior token (if any) is cancelled so the
@@ -351,5 +386,6 @@ module.exports = {
   persistSnapshot,
   getLastEventId,
   resolveEngineOptions,
+  formatPositionsSourceLine,
   FM_WEIGHTS_PATH,
 };

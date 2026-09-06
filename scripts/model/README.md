@@ -43,9 +43,29 @@ until 1a/2b have run). Rust harness unit tests: `cargo test -p engine-node`.
 and `data/training/fm-weights-seed{1,2}.json` (noise floor for the search A/B). Prerequisite: the
 Task 5 harness has been re-run so `evaluator_sibling_scores.csv` carries `comp_strength`.
 
-Per-patch retrain: `prepare.py <new parquet>` → re-run the Task 5 harness → `ship_fm.py` →
-`fm_retrain_gate.py` (blocks the commit on a paired sibling-MRR regression beyond both the MDE and the
-card's 3-seed spread) → `cargo test -p engine-core --test fm_parity` → commit weights + fixtures + card.
+Per-patch retrain: `prepare.py <new parquet>` → **`node ../refresh-champion-positions.mjs && node ../compile-champion-meta.mjs && node ../validate-compiled-data.mjs`** (positions from
+`role_percentages.json`, the TRAIN split's play rates at threshold 0.10, ordered by rate — design
+`docs/designs/champion-meta-positions-refresh-design.md`; it prints the primary flips and the
+both-sides feasibility of the holdout next to the previous run's and aborts a recurring run on a
+> 2-point drop or > 10 flips) → re-run the Task 5 harness (it bakes champion-meta's `winRate` into
+`comp_strength`, which `ship_fm.py` turns into `scale`, so it must see the meta that will ship) →
+`ship_fm.py` → `fm_retrain_gate.py` (blocks the commit on a paired sibling-MRR regression beyond both
+the MDE and the card's 3-seed spread) → `cargo test -p engine-core --test fm_parity` → commit weights +
+fixtures + card **+ `frontend/src/data/champions.json` + `data/compiled/champion-meta.json`**.
+Deploy both services together: the frontend bundles `champions.json` at build time and the backend
+loads champion-meta at engine construction. Rollback = revert both JSON files and redeploy; do not
+recompile. A champion released after the corpus freeze keeps whatever `champions.json` holds; if
+that is `[]` the compile refuses it — hand-enter positions until the next retrain. Saved Navigator
+pools are not rewritten: `pool_multiplier` keys by the champion's primary, so a pool built under the
+old primaries files some champions out-of-role (×0.75) until the user reloads defaults.
+`--source ugg` (per-role match counts in `data/compiled/winrates.json`) is the fallback for a machine
+without the corpus and is **unmeasured at parity**: the file on disk is patch 16_8 (the scraper's
+`PATCH` is a hard-coded constant) and scored 0.607 both-sides against the corpus's 0.785 — bump the
+patch and re-scrape before trusting it. **First post-refresh retrain card:** Locke is evaluable since the
+2026-09 refresh, so the sibling sets and holdout of the next `prepare.py` include him; the retrain gate
+compares on current sets, so this is fine, but note it on that card (design § 7 risk 6). After any
+champion-meta change re-run step 2b (`emit_solver_roles`, ~1 min) or `test_roles.py` compares against a
+stale `solver_roles.csv`.
 
 Exploring the shipped weights: `fm_explore.py` scores any blue/red state the way `fm_comp_strength`
 does (marginal, allocation, `compStrength`, legacy side by side; `--explain` for the term-by-term

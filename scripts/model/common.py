@@ -55,10 +55,10 @@ def load_evaluable(id_to_alias=None, meta=None):
     """EVALUABLE — the champion ids the engine's evaluator can score.
 
     Definition (plan Task 0): an alias present in champion-meta.json. The
-    evaluator reads per-champion positions/win rates from that compile, which is
-    a separate stale pipeline Task 0 does not refresh — so champions released
-    after it (notably Locke, id 805, present in 10.9% of corpus games and the
-    corpus's #1 ban) are NOT evaluable.
+    evaluator reads per-champion positions/win rates from that compile; since
+    the 2026-09 positions refresh the compile is regenerated alongside
+    prepare.py, so only a champion released after the corpus freeze is NOT
+    evaluable (Locke, id 805, was the example before the refresh).
 
     Returns (evaluable_ids, unevaluable_ids) over the ids cdragon knows.
     """
