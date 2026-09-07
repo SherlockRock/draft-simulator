@@ -266,17 +266,17 @@ const NavigatorDrafting: Component = () => {
     );
     createEffect(on(selectionScope, () => setSelectedPath([]), { defer: true }));
     // Phase 2 re-ranks the fan with the count unchanged: follow the champion, not the index.
+    // NOT deferred (execution ruling 2026-09-07): Solid's `on` skips `prevInput = input`
+    // on a deferred first run, so the FIRST fanout change after mount would see
+    // `prevF === undefined` and clamp by index. At mount the path is `[]`, so the
+    // extra run is a no-op through either branch.
     createEffect(
-        on(
-            fanout,
-            (f, prevF) => {
-                if (!f) return;
-                setSelectedPath((p) =>
-                    prevF ? remapSelectedPath(prevF, f, p) : clampSelectedPath(f, p)
-                );
-            },
-            { defer: true }
-        )
+        on(fanout, (f, prevF) => {
+            if (!f) return;
+            setSelectedPath((p) =>
+                prevF ? remapSelectedPath(prevF, f, p) : clampSelectedPath(f, p)
+            );
+        })
     );
     const columns = createMemo<ColumnModel[]>(() => {
         const f = fanout();

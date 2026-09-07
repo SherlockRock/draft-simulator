@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render } from "@solidjs/testing-library";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
+import { createSignal } from "solid-js";
 import type {
     NavigatorCompletedGame,
     NavigatorEventData,
@@ -135,11 +136,12 @@ const emptyTree: NavigatorTreeNode = {
 
 function mount(
     order: string[],
-    engineTree: NavigatorTreeNode,
+    initialEngineTree: NavigatorTreeNode,
     opts: { computing?: boolean; archive?: boolean } = {}
 ) {
     const computing = opts.computing ?? false;
     const evs = events(order);
+    const [engineTree, setEngineTree] = createSignal(initialEngineTree);
     const meta = {
         nodesEvaluated: 1,
         computeTimeMs: 371,
@@ -186,7 +188,7 @@ function mount(
             id: "snap",
             navigator_draft_id: "draft-1",
             after_event_id: "e18",
-            tree: engineTree,
+            tree: initialEngineTree,
             scenarios: [],
             meta,
             createdAt: null
@@ -195,14 +197,15 @@ function mount(
         connected: true,
         error: null
     };
-    const synthetic = synthesizeFullTree(engineTree, eventsToConfirmedTurns(evs));
+    const turns = eventsToConfirmedTurns(evs);
+    const synthetic = () => synthesizeFullTree(engineTree(), turns);
     const emitPickStep = vi.fn();
     const emitBan = vi.fn();
     const emitUndo = vi.fn();
     const viewGame = vi.fn();
     const value: NavigatorWorkflowContextValue = {
         navigatorContext: () => state,
-        syntheticTree: () => synthetic,
+        syntheticTree: synthetic,
         effectiveScenarios: () => [],
         isComputing: () => computing,
         currentMeta: () => state.snapshot?.meta ?? null,
@@ -241,7 +244,7 @@ function mount(
             </NavigatorWorkflowContext.Provider>
         </QueryClientProvider>
     ));
-    return { ...utils, emitPickStep, emitBan, emitUndo, viewGame };
+    return { ...utils, emitPickStep, emitBan, emitUndo, viewGame, setEngineTree };
 }
 const key = (k: string) => fireEvent.keyDown(window, { key: k });
 
@@ -304,6 +307,25 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
         );
         if (commit) fireEvent.click(commit);
         expect(emitPickStep).toHaveBeenCalledWith("draft-1", ["Pantheon"], 19);
+    });
+    test("selection follows the champion across the FIRST re-rank after mount (execution ruling 2026-09-07)", () => {
+        const { container, setEngineTree } = mount(ITEM5_ORDER, item5Tree);
+        const taric = container.querySelector(
+            "[data-column][data-depth='0'] [data-column-node][data-rank='2']"
+        );
+        expect(taric?.textContent).toContain("Taric");
+        if (taric) fireEvent.click(taric);
+        expect(
+            container.querySelector("[data-column-node][data-selected='true']")
+                ?.textContent
+        ).toContain("Taric");
+        const [first, second, ...rest] = item5Tree.children;
+        setEngineTree({ ...item5Tree, children: [second, first, ...rest] }); // Phase-2 re-rank: same events, Taric now #1
+        const selected = container.querySelector(
+            "[data-column-node][data-selected='true']"
+        );
+        expect(selected?.getAttribute("data-rank")).toBe("1");
+        expect(selected?.textContent).toContain("Taric");
     });
     test("item7: empty pill with the infeasibility reason and the empty-fan card", () => {
         const { container, emitUndo } = mount(ITEM7_ORDER, emptyTree);
