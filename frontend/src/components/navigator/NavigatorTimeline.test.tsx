@@ -67,6 +67,7 @@ describe("NavigatorTimeline", () => {
         const next = container.querySelector('[data-next-slot="true"]');
         expect(next?.getAttribute("aria-label")).toBe("Red Pick 1");
         expect(next?.getAttribute("data-timeline-slot")).toBe("7");
+        expect(next?.classList.contains("border-dashed")).toBe(true); // design § 1: "glowing dashed" (execution ruling 2026-09-07)
         if (next) fireEvent.click(next);
         expect(onClick).toHaveBeenCalledTimes(1);
         expect(onClick.mock.calls[0][0]).toBe(next);

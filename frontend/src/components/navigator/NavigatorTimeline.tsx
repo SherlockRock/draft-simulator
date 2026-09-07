@@ -67,7 +67,7 @@ export const NavigatorTimeline: Component<NavigatorTimelineProps> = (props) => {
                                             onClick={(e) =>
                                                 props.onNextSlotClick(e.currentTarget)
                                             }
-                                            class="relative h-7 w-7 cursor-pointer rounded-full border-2 border-sky-300 shadow-[0_0_0_3px_rgba(125,211,252,0.35)]"
+                                            class="relative h-7 w-7 cursor-pointer rounded-full border-2 border-dashed border-sky-300 shadow-[0_0_0_3px_rgba(125,211,252,0.35)]"
                                         >
                                             <span class="absolute left-1/2 top-8 -translate-x-1/2 whitespace-nowrap text-[10px] text-sky-300">
                                                 {turnLabel(i())}
