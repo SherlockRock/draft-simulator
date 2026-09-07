@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { CUSTOM_GROUP_HEADER_HEIGHT } from "./CustomGroupContainer";
 import { annotationRenderTop } from "./CanvasAnnotation";
