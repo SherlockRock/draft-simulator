@@ -1,29 +1,107 @@
-import { Component, Show, createEffect, createMemo, createSignal } from "solid-js";
+import {
+    Component,
+    Show,
+    createEffect,
+    createMemo,
+    createSignal,
+    on,
+    onCleanup,
+    onMount
+} from "solid-js";
+import { useQuery } from "@tanstack/solid-query";
 import toast from "solid-toast";
 import ChampionPicker, { type ChampionColorState } from "../ChampionPicker";
+import { ContextMenu } from "../ContextMenu";
 import { useNavigatorContext } from "../../contexts/NavigatorContext";
-import type { NavigatorTreeNode } from "../../contexts/NavigatorContext";
-import { getPickerState } from "../../utils/navigatorPool";
-import { TURN_SEQUENCE } from "../../utils/turnSequence";
-import { eventsToConfirmedTurns, pathStepsToIndexPath } from "../../utils/treeReconcile";
-import DraftInputPanel from "./DraftInputPanel";
-import DecisionTree, { type ScenarioPathTier } from "./DecisionTree";
-import ScenarioLanes from "./ScenarioLanes";
-import { SeriesTabStrip } from "./SeriesTabStrip";
+import type {
+    NavigatorEventData,
+    NavigatorTreeNode
+} from "../../contexts/NavigatorContext";
+import { fetchCanvasList, postNewDraft } from "../../utils/actions";
+import { ApiError } from "../../utils/apiClient";
+import { resolveChampion } from "../../utils/constants";
+import {
+    clampSelectedPath,
+    deriveColumns,
+    describeLine,
+    fanoutDepth,
+    fanoutParent,
+    lineNodes,
+    remapSelectedPath,
+    sidePicksBefore,
+    topLinePath,
+    type ColumnModel
+} from "../../utils/navigatorColumns";
+import { deriveEngineStatus } from "../../utils/navigatorEngineStatus";
+import {
+    EXPORT_CANVAS_STORAGE_KEY,
+    exportDraftDescription,
+    exportDraftName,
+    lineToCanvasPicks
+} from "../../utils/navigatorExport";
+import {
+    buildPaletteCommands,
+    type PaletteCommandId
+} from "../../utils/navigatorPalette";
+import {
+    detectStaleBuckets,
+    getPickerState,
+    rebucketDisplay,
+    staleBucketSummary
+} from "../../utils/navigatorPool";
+import {
+    ROLE_SHORT_LABELS,
+    emptyFanReason,
+    formatRoleGap,
+    roleGap,
+    roleLineForPick
+} from "../../utils/navigatorRoles";
+import { ROLES } from "../../utils/championRoles";
+import type { RolePoolMap, TeamPool } from "@draft-sim/shared-types";
+import { getOurSideForGame } from "../../utils/navigatorSide";
+import { eventsToConfirmedTurns } from "../../utils/treeReconcile";
+import {
+    PHASE_LABELS,
+    TURN_SEQUENCE,
+    turnLabel,
+    turnLabelForSlots
+} from "../../utils/turnSequence";
+import type { ContextMenuAction } from "../../utils/types";
 import { BetweenGamesPanel } from "./BetweenGamesPanel";
+import { EngineStatusPill } from "./EngineStatusPill";
+import { NavigatorColumns, type NodeRoleLine } from "./NavigatorColumns";
+import { NavigatorCommandPalette, type PaletteTurn } from "./NavigatorCommandPalette";
+import { NavigatorTimeline } from "./NavigatorTimeline";
+import { PoolEditModal } from "./PoolEditModal";
+import { SeriesTabStrip } from "./SeriesTabStrip";
+
+type ContentAddressedStep = { slot: number; championIds: string[] };
+const nameOf = (id: string): string => resolveChampion(id)?.name ?? id;
+
+function readStoredCanvasId(): string | null {
+    try {
+        return localStorage.getItem(EXPORT_CANVAS_STORAGE_KEY);
+    } catch {
+        return null;
+    }
+}
+function storeCanvasId(id: string): void {
+    try {
+        localStorage.setItem(EXPORT_CANVAS_STORAGE_KEY, id);
+    } catch {
+        /* storage unavailable — the choice just is not remembered */
+    }
+}
 
 const NavigatorDrafting: Component = () => {
     const {
-        joinSession,
         navigatorContext,
         syntheticTree,
-        effectiveScenarios,
-        isComputing: isComputingFromContext,
-        selectedScenarioIndex,
-        setSelectedScenarioIndex,
-        panRequest,
+        isComputing,
+        currentMeta,
         emitPickStep,
         emitBan,
+        emitUndo,
         swapChampion,
         createBranch,
         viewingGameNumber,
@@ -31,81 +109,24 @@ const NavigatorDrafting: Component = () => {
         startNextGame,
         updateSessionPools
     } = useNavigatorContext();
-    const [highlightedTreePath, setHighlightedTreePath] = createSignal<number[] | null>(
-        null
-    );
-    type ContentAddressedStep = { slot: number; championIds: string[] };
-    const [swapTarget, setSwapTarget] = createSignal<{
-        path: ContentAddressedStep[];
-        targetSlot: number;
-        oldChampionId: string;
-        contextLabel: string;
-        depth: number;
-    } | null>(null);
-    const [branchTarget, setBranchTarget] = createSignal<{
-        path: ContentAddressedStep[];
-        targetSlot: number;
-        contextLabel: string;
-        depth: number;
-    } | null>(null);
 
-    // Walks the synthetic tree using an index path and returns the
-    // content-addressed lineage (slot + championIds at each step). Returns the
-    // PARENT lineage (excludes the targeted node's own step), the targetSlot,
-    // and the target's championIds for the picker label. Matches the protocol
-    // EngineRequest.config.forcedBranches[].path shape.
-    const deriveContentAddressedTarget = (
-        indexPath: number[]
-    ): {
-        path: ContentAddressedStep[];
-        targetSlot: number;
-        championIds: string[];
-    } | null => {
-        const tree = syntheticTree();
-        if (!tree || indexPath.length === 0) return null;
-        const fullLineage: ContentAddressedStep[] = [];
-        let node: NavigatorTreeNode | null = tree;
-        for (const idx of indexPath) {
-            if (!node || !node.children[idx]) return null;
-            node = node.children[idx];
-            fullLineage.push({
-                slot: node.slots[0],
-                championIds: [...node.championIds]
-            });
-        }
-        if (!node) return null;
-        const target = fullLineage[fullLineage.length - 1];
-        return {
-            path: fullLineage.slice(0, -1),
-            targetSlot: target.slot,
-            championIds: node.championIds
-        };
-    };
-
+    // ---- session / draft / archive (unchanged semantics from the old file) ----
     const session = () => navigatorContext().session;
     const activeDraft = () => navigatorContext().draft;
     const completedGames = () => navigatorContext().completedGames;
-
     const viewingArchive = createMemo(() => {
         const gn = viewingGameNumber();
         if (gn === null) return null;
         return completedGames().find((c) => c.draft.game_number === gn) ?? null;
     });
-
-    const showBetweenGamesPanel = createMemo(() => {
-        if (viewingGameNumber() !== null) return false;
-        const draft = activeDraft();
-        if (!draft) return false;
-        return draft.status === "completed";
-    });
-
+    const showBetweenGamesPanel = createMemo(
+        () => viewingGameNumber() === null && activeDraft()?.status === "completed"
+    );
     const isSeriesComplete = createMemo(() => {
         const s = session();
-        const draft = activeDraft();
-        if (!s || !draft) return false;
-        return draft.status === "completed" && draft.game_number >= s.series_length;
+        const d = activeDraft();
+        return !!s && !!d && d.status === "completed" && d.game_number >= s.series_length;
     });
-
     const crossGameExcluded = createMemo(() => {
         const map = new Map<string, number>();
         const s = session();
@@ -117,197 +138,545 @@ const NavigatorDrafting: Component = () => {
                     event.event_type === "pick" ||
                     (includeBans && event.event_type === "ban")
                 ) {
-                    if (!map.has(event.champion_id)) {
+                    if (!map.has(event.champion_id))
                         map.set(event.champion_id, archive.draft.game_number);
-                    }
                 }
             }
         }
         return map;
     });
 
-    const treeData = createMemo(() => {
+    // ---- derived draft state ----
+    const confirmedEvents = createMemo<NavigatorEventData[]>(() => {
         const archive = viewingArchive();
-        if (archive) return archive.snapshot?.tree ?? null;
-        return syntheticTree();
+        const source = archive ? archive.events : navigatorContext().events;
+        return source
+            .filter((e) => e.event_type === "ban" || e.event_type === "pick")
+            .sort((a, b) => a.slot - b.slot);
     });
-
-    const scenarios = createMemo(() => {
-        const archive = viewingArchive();
-        if (archive) return archive.snapshot?.scenarios ?? [];
-        return effectiveScenarios();
+    const turns = createMemo(() => eventsToConfirmedTurns(confirmedEvents()));
+    const ourSide = createMemo<"blue" | "red">(() => {
+        const s = session();
+        const d = viewingArchive()?.draft ?? activeDraft();
+        return s && d ? getOurSideForGame(s, d) : "blue";
     });
-
-    const confirmedDepth = createMemo(() => {
-        const archive = viewingArchive();
-        const events = archive ? archive.events : navigatorContext().events;
-        return eventsToConfirmedTurns(events).length + 1;
-    });
-
-    const isStale = createMemo(
-        () =>
-            viewingGameNumber() === null &&
-            navigatorContext().snapshot === null &&
-            navigatorContext().events.length > 0 &&
-            !isComputingFromContext()
+    // Archive mode renders no columns (see the archive card below); the tree is the live one only.
+    const tree = createMemo<NavigatorTreeNode | null>(() =>
+        viewingArchive() ? null : syntheticTree()
     );
-    const activeSessionId = createMemo(() => navigatorContext().session?.id ?? null);
-    const usedChampionIdSet = createMemo<Set<string>>(() => {
-        const ids = new Set<string>();
-        for (const event of navigatorContext().events) {
-            if (event.event_type === "ban" || event.event_type === "pick") {
-                ids.add(event.champion_id);
-            }
-        }
-        return ids;
+    const fanout = createMemo(() => {
+        const t = tree();
+        return t ? fanoutParent(t, turns()) : null;
+    });
+    const fan = createMemo(() => fanout()?.children ?? []);
+    const computing = createMemo(() => (viewingArchive() ? false : isComputing()));
+    const canMutate = createMemo(
+        () => viewingArchive() === null && activeDraft()?.status === "active"
+    );
+    const draftComplete = createMemo(
+        () =>
+            confirmedEvents().length >= TURN_SEQUENCE.length ||
+            activeDraft()?.status === "completed"
+    );
+    const nextSlot = createMemo<number | null>(() =>
+        draftComplete() ? null : confirmedEvents().length
+    );
+    const nextTurn = createMemo(() => {
+        const slot = nextSlot();
+        return slot === null ? null : (TURN_SEQUENCE[slot] ?? null);
+    });
+    const picksOf = (side: "blue" | "red") =>
+        turns()
+            .filter((t) => t.actionType === "pick" && t.side === side)
+            .flatMap((t) => t.championIds);
+    const gapText = createMemo(() => ({
+        blue: formatRoleGap(roleGap(picksOf("blue")), picksOf("blue").length),
+        red: formatRoleGap(roleGap(picksOf("red")), picksOf("red").length)
+    }));
+    const usedChampionIdSet = createMemo(
+        () => new Set(confirmedEvents().map((e) => e.champion_id))
+    );
+    const unavailable = createMemo(
+        () => new Set([...usedChampionIdSet(), ...crossGameExcluded().keys()])
+    );
+    // The old picker's tooltip: "{Name} — picked in Game N (fearless|ironman)" (DraftInputPanel.tsx:386-395).
+    const unavailableReason = (championId: string): string | null => {
+        const game = crossGameExcluded().get(championId);
+        if (game === undefined)
+            return usedChampionIdSet().has(championId) ? "already used this game" : null;
+        return `picked in Game ${game} (${session()?.draft_mode ?? "fearless"})`;
+    };
+    const canEditPools = createMemo(() =>
+        canMutate()
+            ? confirmedEvents().length === 0
+            : activeDraft()?.status === "completed" && viewingArchive() === null
+    );
+    const stale = createMemo(() => {
+        const s = session();
+        return (
+            !!s &&
+            detectStaleBuckets(s.blue_pool).length +
+                detectStaleBuckets(s.red_pool).length >
+                0
+        );
     });
 
-    const swapColoringFor = (championId: string): ChampionColorState => {
-        const session = navigatorContext().session;
-        if (!session) return "neutral";
-        const depth = swapTarget()?.depth ?? 0;
-        const turnInfo = TURN_SEQUENCE[depth - 1];
-        return getPickerState(
-            championId,
-            turnInfo?.side ?? null,
-            session.blue_pool,
-            session.red_pool,
-            usedChampionIdSet()
-        );
-    };
-
-    const branchColoringFor = (championId: string): ChampionColorState => {
-        const session = navigatorContext().session;
-        if (!session) return "neutral";
-        const depth = branchTarget()?.depth ?? 0;
-        const turnInfo = TURN_SEQUENCE[depth - 1];
-        return getPickerState(
-            championId,
-            turnInfo?.side ?? null,
-            session.blue_pool,
-            session.red_pool,
-            usedChampionIdSet()
-        );
-    };
-
+    // ---- thinking clock (design § 4: elapsed on the client clock) ----
+    // Anchored on the transition INTO computing, not on the event count: a
+    // reconnect with an unchanged count and a stale snapshot would otherwise read
+    // minutes. Swap/branch recomputes never enter `isComputing` (the server sends
+    // no Phase-1 update for them) — accepted, see Self-review.
+    const [thinkingSince, setThinkingSince] = createSignal(Date.now());
+    const [elapsedMs, setElapsedMs] = createSignal(0);
+    createEffect(
+        on(computing, (now, prev) => {
+            if (now && prev !== true) setThinkingSince(Date.now());
+        })
+    );
     createEffect(() => {
-        const nextScenarios = scenarios();
-        const selectedIndex = selectedScenarioIndex();
-        const synth = syntheticTree();
-
-        if (nextScenarios.length === 0) {
-            setSelectedScenarioIndex(null);
-            setHighlightedTreePath(null);
-        } else if (selectedIndex !== null && selectedIndex >= nextScenarios.length) {
-            setSelectedScenarioIndex(null);
-        } else if (selectedIndex !== null && synth) {
-            const selected = nextScenarios[selectedIndex];
-            if (selected?.treePath) {
-                const indexPath = pathStepsToIndexPath(synth, selected.treePath);
-                if (indexPath) setHighlightedTreePath(indexPath);
-            }
+        if (!computing()) {
+            setElapsedMs(0);
+            return;
         }
+        const timer = setInterval(() => setElapsedMs(Date.now() - thinkingSince()), 100);
+        onCleanup(() => clearInterval(timer));
     });
+    const status = createMemo(() =>
+        deriveEngineStatus({
+            hasSnapshot:
+                (viewingArchive()?.snapshot ?? navigatorContext().snapshot) !== null,
+            eventCount: confirmedEvents().length,
+            draftComplete: draftComplete(),
+            isComputing: computing(),
+            fanCount: fan().length,
+            meta: currentMeta(),
+            elapsedMs: elapsedMs(),
+            reason: () => emptyFanReason(picksOf("blue"), picksOf("red"), nameOf)
+        })
+    );
 
-    const handleNodeClick = (nodePath: number[]) => {
-        const synth = syntheticTree();
-        const matchIdx = scenarios().findIndex((scenario) => {
-            if (!synth) return false;
-            const scenarioIndexPath = pathStepsToIndexPath(synth, scenario.treePath);
-            if (!scenarioIndexPath) return false;
-            if (nodePath.length > scenarioIndexPath.length) return false;
-            return nodePath.every((value, index) => scenarioIndexPath[index] === value);
+    // ---- columns + selection (design § 2) ----
+    const [selectedPath, setSelectedPath] = createSignal<number[]>([]);
+    // Reset when the SCOPE changes: a commit (count), a game switch or an archive
+    // switch (equal counts are common: 20 → 20). Phase 1 writes tree + events in
+    // one batch, so this fires exactly once per commit and never on Phase 2.
+    const selectionScope = createMemo(
+        () =>
+            `${viewingGameNumber() ?? "live"}|${viewingArchive()?.draft.id ?? activeDraft()?.id ?? ""}|${confirmedEvents().length}`
+    );
+    createEffect(on(selectionScope, () => setSelectedPath([]), { defer: true }));
+    // Phase 2 re-ranks the fan with the count unchanged: follow the champion, not the index.
+    createEffect(
+        on(
+            fanout,
+            (f, prevF) => {
+                if (!f) return;
+                setSelectedPath((p) =>
+                    prevF ? remapSelectedPath(prevF, f, p) : clampSelectedPath(f, p)
+                );
+            },
+            { defer: true }
+        )
+    );
+    const columns = createMemo<ColumnModel[]>(() => {
+        const f = fanout();
+        return f ? deriveColumns(f, selectedPath()) : [];
+    });
+    const selectedNodes = createMemo(() => {
+        const f = fanout();
+        return f ? lineNodes(f, selectedPath()) : [];
+    });
+    const roleLineFor = (node: NavigatorTreeNode, column: ColumnModel): NodeRoleLine => {
+        if (node.actionType === "ban" || node.side === null)
+            return { roles: [], shift: null };
+        const before = sidePicksBefore(turns(), column.lineage, node.side);
+        const line = roleLineForPick(
+            before,
+            node.championIds,
+            node.assignmentDistribution
+        );
+        return {
+            roles: line.roles.map((r) => (r ? ROLE_SHORT_LABELS[r] : "?")),
+            shift: line.shift
+                ? `${nameOf(line.shift.championId)} → ${ROLE_SHORT_LABELS[line.shift.to]}`
+                : null
+        };
+    };
+    const rankedRoleLine = (championId: string): string => {
+        const node = fan().find((n) => n.championIds.includes(championId));
+        if (!node) return "";
+        const line = roleLineFor(node, {
+            depth: 0,
+            nodes: fan(),
+            selectedIndex: null,
+            lineage: []
         });
-
-        setHighlightedTreePath(nodePath);
-        setSelectedScenarioIndex(matchIdx >= 0 ? matchIdx : null);
+        return [line.roles.join(" · "), line.shift].filter((s) => s).join(" · ");
     };
 
-    const handleRetry = () => {
-        const sessionId = activeSessionId();
-
-        if (sessionId) {
-            joinSession(sessionId);
-        }
+    // ---- commits (slot = confirmed event count, as DraftInputPanel did) ----
+    const commitChampions = (championIds: string[]) => {
+        const draftId = activeDraft()?.id;
+        const slot = nextSlot();
+        const turn = nextTurn();
+        if (!draftId || slot === null || !turn || championIds.length === 0) return;
+        if (turn.type === "pick") emitPickStep(draftId, championIds, slot);
+        else emitBan(draftId, championIds[0], slot);
+        closePalette();
+    };
+    const commitNode = (node: NavigatorTreeNode) => {
+        const confirmed = new Set(node.confirmedChampionIds ?? []);
+        commitChampions(node.championIds.filter((id) => !confirmed.has(id)));
+    };
+    const undo = () => {
+        const draftId = activeDraft()?.id;
+        if (draftId) emitUndo(draftId);
     };
 
-    const handlePromoteToScenario = (_path: number[]) => {
-        toast("Promote-to-scenario coming soon.", { icon: "ℹ️" });
-    };
+    // ---- modal state (declared first: the palette guard reads it) ----
+    const [poolEditOpen, setPoolEditOpen] = createSignal(false);
+    const [swapTarget, setSwapTarget] = createSignal<{
+        path: ContentAddressedStep[];
+        targetSlot: number;
+        oldChampionId: string;
+        contextLabel: string;
+        side: "blue" | "red" | null;
+    } | null>(null);
+    const [branchTarget, setBranchTarget] = createSignal<{
+        path: ContentAddressedStep[];
+        targetSlot: number;
+        contextLabel: string;
+        side: "blue" | "red" | null;
+    } | null>(null);
 
-    const handleConfirmProjectedPick = (path: number[]) => {
-        const synthetic = syntheticTree();
-        if (!synthetic) return;
-
-        let current: NavigatorTreeNode | null = synthetic;
-        for (const index of path) {
-            if (!current || !current.children[index]) return;
-            current = current.children[index];
-        }
-        if (!current) return;
-
-        const draftId = navigatorContext().draft?.id;
-        if (!draftId) return;
-
-        const championIds = current.championIds;
-        if (championIds.length === 0) return;
-
-        const turnIndex = navigatorContext().events.filter(
-            (event) => event.event_type === "ban" || event.event_type === "pick"
-        ).length;
-
-        if (current.actionType === "pick") {
-            // Pair-pick nodes carry two champions across two adjacent slots; emit atomically.
-            emitPickStep(draftId, championIds, turnIndex);
+    // ---- palette (design § 6) ----
+    const [palette, setPalette] = createSignal<{
+        anchor: { left: number; top: number } | null;
+    } | null>(null);
+    let pageEl: HTMLDivElement | undefined;
+    // Two meanings, kept apart: the timeline's next slot exists whenever the turn
+    // is open; the palette may additionally not open while a modal (swap/branch
+    // picker, pool editor) is up — both are z-50 window-keydown consumers and
+    // the palette would open behind them.
+    const turnIsOpen = () => canMutate() && !draftComplete();
+    const canOpenPalette = () =>
+        turnIsOpen() &&
+        swapTarget() === null &&
+        branchTarget() === null &&
+        !poolEditOpen();
+    const PALETTE_WIDTH = 720;
+    const openPalette = (anchorEl: HTMLElement | null) => {
+        if (!canOpenPalette()) return;
+        if (anchorEl && pageEl) {
+            const r = anchorEl.getBoundingClientRect();
+            const p = pageEl.getBoundingClientRect();
+            const left = Math.max(
+                8,
+                Math.min(r.left - p.left - 8, p.width - PALETTE_WIDTH - 16)
+            );
+            setPalette({ anchor: { left, top: r.bottom - p.top + 10 } });
         } else {
-            emitBan(draftId, championIds[0], turnIndex);
+            setPalette({ anchor: null });
+        }
+    };
+    const closePalette = () => {
+        setPalette(null);
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    };
+    const onSlashKey = (e: KeyboardEvent) => {
+        const t = e.target;
+        if (
+            t instanceof HTMLInputElement ||
+            t instanceof HTMLTextAreaElement ||
+            (t instanceof HTMLElement && t.isContentEditable)
+        )
+            return;
+        if (e.key === "/" && palette() === null && canOpenPalette()) {
+            e.preventDefault();
+            openPalette(null);
+        }
+    };
+    onMount(() => {
+        window.addEventListener("keydown", onSlashKey);
+        onCleanup(() => window.removeEventListener("keydown", onSlashKey));
+    });
+    const paletteTurn = createMemo<PaletteTurn | null>(() => {
+        const slot = nextSlot();
+        const turn = nextTurn();
+        if (slot === null || !turn) return null;
+        const last = turns()[turns().length - 1];
+        const partnerOf =
+            last?.pairState === "pair-pending" ? (last.championIds[0] ?? null) : null;
+        return { slot, type: turn.type, collect: turn.pairStart ? 2 : 1, partnerOf };
+    });
+    const paletteHeading = createMemo(() => {
+        const slot = nextSlot();
+        const turn = nextTurn();
+        if (slot === null || !turn) return "Draft complete";
+        return turn.pairStart ? turnLabelForSlots([slot, slot + 1]) : turnLabel(slot);
+    });
+    const commands = createMemo(() =>
+        buildPaletteCommands({
+            turn: paletteTurn()
+                ? { slot: paletteTurn()?.slot ?? 0, type: paletteTurn()?.type ?? "pick" }
+                : null,
+            slotLabel: paletteHeading(),
+            isOurTurn: nextTurn()?.side === ourSide(),
+            hasFan: fan().length > 0,
+            lastEventChampionName: (() => {
+                const last = confirmedEvents()[confirmedEvents().length - 1];
+                return last ? nameOf(last.champion_id) : null;
+            })(),
+            hasSelection: selectedPath().length > 0,
+            canEditPools: canEditPools(),
+            stale: stale()
+        })
+    );
+    const coloring = (championId: string): ChampionColorState => {
+        const s = session();
+        if (!s) return "neutral";
+        return getPickerState(
+            championId,
+            nextTurn()?.side ?? null,
+            s.blue_pool,
+            s.red_pool,
+            usedChampionIdSet()
+        );
+    };
+    // Re-bucketing is the one irreversible pool write in this PR, so it is never
+    // applied blind: the pool editor opens PRE-FILLED with the migration and its
+    // Save is the confirmation (the user can un-widen a bucket first).
+    // PoolEditModal re-seeds whenever these props CHANGE (its effect tracks them),
+    // not only on open — never write `seededPools` while the modal is open.
+    const [seededPools, setSeededPools] = createSignal<{
+        blue: TeamPool;
+        red: TeamPool;
+    } | null>(null);
+    const openRebucketReview = () => {
+        const s = session();
+        if (!s) return;
+        setSeededPools({
+            blue: rebucketDisplay(s.blue_pool),
+            red: rebucketDisplay(s.red_pool)
+        });
+        setPoolEditOpen(true);
+    };
+    const closePoolEditor = () => {
+        // Order matters: close first, then clear the seed — reversed, the modal's
+        // re-seed effect would fire once more (still open) with the un-migrated pools.
+        setPoolEditOpen(false);
+        setSeededPools(null);
+    };
+    const runCommand = (id: PaletteCommandId) => {
+        const f = fanout();
+        if (id === "top-line" && f) setSelectedPath(topLinePath(f));
+        else if (id === "undo") undo();
+        else if (id === "clear") setSelectedPath([]);
+        else if (id === "pools") setPoolEditOpen(true);
+        else if (id === "rebucket") openRebucketReview();
+        closePalette();
+    };
+    const explore = (championId: string) => {
+        const idx = fan().findIndex((n) => n.championIds.includes(championId));
+        setSelectedPath(idx >= 0 ? [idx] : []);
+        closePalette();
+    };
+    const bucketCounts = (side: "Blue" | "Red", display: RolePoolMap): string =>
+        `${side}: ${ROLES.map((r) => `${ROLE_SHORT_LABELS[r]} ${display[r].length}`).join(" · ")}`;
+    const preview = (id: PaletteCommandId): string[] => {
+        const f = fanout();
+        const s = session();
+        const n = confirmedEvents().length;
+        if (id === "top-line" && f)
+            return describeLine(lineNodes(f, topLinePath(f)), nameOf);
+        if (id === "undo")
+            return n > 0
+                ? [
+                      `Removes ${turnLabel(n - 1)}: ${nameOf(confirmedEvents()[n - 1].champion_id)}`
+                  ]
+                : ["Nothing to undo"];
+        if (id === "clear") return ["Collapses every column back to the ranked fan"];
+        if (id === "pools" && s)
+            return [
+                bucketCounts("Blue", s.blue_pool.display),
+                bucketCounts("Red", s.red_pool.display)
+            ];
+        if (id === "rebucket" && s)
+            return [
+                "Opens the pool editor pre-filled with the migration — review, then Save. Each champion is added to ALL its listed roles (hand-narrowed single-role entries widen too).",
+                ...staleBucketSummary(s.blue_pool, nameOf).map((l) => `Blue · ${l}`),
+                ...staleBucketSummary(s.red_pool, nameOf).map((l) => `Red · ${l}`)
+            ];
+        if (id === "export")
+            return selectedNodes().length > 0
+                ? ["Projected:", ...describeLine(selectedNodes(), nameOf)]
+                : ["Select a line first"];
+        return [];
+    };
+
+    // ---- export (design § 8) ----
+    const [rememberedCanvasId, setRememberedCanvasId] = createSignal<string | null>(
+        readStoredCanvasId()
+    );
+    // Only the export command needs the list: fetch when the palette is open AND a line is selected.
+    const canvasListQuery = useQuery(() => ({
+        queryKey: ["canvasList"],
+        queryFn: fetchCanvasList,
+        enabled: palette() !== null && selectedPath().length > 0,
+        staleTime: 60_000
+    }));
+    const exportLine = async (canvasId: string) => {
+        const s = session();
+        const d = activeDraft();
+        const nodes = selectedNodes();
+        if (!s || !d || nodes.length === 0) return;
+        const picks = lineToCanvasPicks(confirmedEvents(), nodes);
+        const first = nodes[0];
+        const confirmedHalf = new Set(first.confirmedChampionIds ?? []);
+        const lineChampion = nameOf(
+            first.championIds.find((id) => !confirmedHalf.has(id)) ??
+                first.championIds[0] ??
+                ""
+        );
+        closePalette();
+        try {
+            const draft = await postNewDraft({
+                name: exportDraftName(d.game_number, ourSide(), lineChampion),
+                public: false,
+                picks,
+                canvas_id: canvasId,
+                description: exportDraftDescription({
+                    sessionLabel: s.name ?? s.id,
+                    gameNumber: d.game_number,
+                    confirmedCount: confirmedEvents().length,
+                    nodes,
+                    nameOf
+                })
+            });
+            storeCanvasId(canvasId);
+            setRememberedCanvasId(canvasId);
+            const canvasName =
+                canvasListQuery.data?.find((c) => c.id === canvasId)?.name ?? "canvas";
+            toast.success(() => (
+                <span>
+                    Exported "{draft.name}" to {canvasName} —{" "}
+                    <a class="underline" href={`/canvas/${canvasId}`}>
+                        open
+                    </a>
+                </span>
+            ));
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 403)
+                toast.error("You can only export to canvases you can edit");
+            else toast.error("Export failed");
         }
     };
 
-    const handleOpenSwap = (indexPath: number[]) => {
-        const target = deriveContentAddressedTarget(indexPath);
-        if (!target) return;
-        const oldChampionId = target.championIds[0];
-        if (!oldChampionId) return;
-
-        const turnInfo = TURN_SEQUENCE[indexPath.length - 1];
-        const label = turnInfo
-            ? `${turnInfo.side.toUpperCase()} ${turnInfo.type.toUpperCase()} ${indexPath.length}`
-            : `TURN ${indexPath.length}`;
-
-        setSwapTarget({
-            path: target.path,
-            targetSlot: target.targetSlot,
-            oldChampionId,
-            contextLabel: label,
-            depth: indexPath.length
-        });
+    // ---- context menu → swap / branch / copy (kept from the radial tree) ----
+    const [menu, setMenu] = createSignal<{
+        node: NavigatorTreeNode;
+        depth: number;
+        index: number;
+        x: number;
+        y: number;
+    } | null>(null);
+    const indexPathFor = (depth: number, index: number): number[] => [
+        ...new Array<number>(fanoutDepth(turns())).fill(0),
+        ...selectedPath().slice(0, depth),
+        index
+    ];
+    // Walks the synthetic tree by index path; returns the PARENT lineage
+    // (content-addressed), the target slot and the target's championIds —
+    // the EngineRequest.config.forcedBranches[].path shape (unchanged).
+    const deriveContentAddressedTarget = (indexPath: number[]) => {
+        const t = tree();
+        if (!t || indexPath.length === 0) return null;
+        const lineage: ContentAddressedStep[] = [];
+        let node: NavigatorTreeNode = t;
+        for (const idx of indexPath) {
+            const next: NavigatorTreeNode | undefined = node.children[idx];
+            if (!next) return null;
+            node = next;
+            lineage.push({ slot: node.slots[0], championIds: [...node.championIds] });
+        }
+        const target = lineage[lineage.length - 1];
+        return {
+            path: lineage.slice(0, -1),
+            targetSlot: target.slot,
+            championIds: node.championIds,
+            side: node.side
+        };
     };
-
-    const handleOpenBranch = (indexPath: number[]) => {
-        const target = deriveContentAddressedTarget(indexPath);
-        if (!target) return;
-        const turnInfo = TURN_SEQUENCE[indexPath.length - 1];
-        const label = turnInfo
-            ? `${turnInfo.side.toUpperCase()} ${turnInfo.type.toUpperCase()} ${indexPath.length}`
-            : `TURN ${indexPath.length}`;
-        // For branch (mode: include) we add a sibling at the same slot as the
-        // node the user clicked — so targetSlot is the clicked node's slot,
-        // and path is the parent lineage (same as swap).
-        setBranchTarget({
-            path: target.path,
-            targetSlot: target.targetSlot,
-            contextLabel: label,
-            depth: indexPath.length
+    const menuActions = (
+        m: NonNullable<ReturnType<typeof menu>>
+    ): ContextMenuAction[] => {
+        const label = turnLabelForSlots(m.node.slots);
+        const actions: ContextMenuAction[] = [];
+        if (canMutate()) {
+            actions.push({
+                label: "Swap champion",
+                destructive: true,
+                action: () => {
+                    const target = deriveContentAddressedTarget(
+                        indexPathFor(m.depth, m.index)
+                    );
+                    const oldChampionId = target?.championIds[0];
+                    if (target && oldChampionId)
+                        setSwapTarget({
+                            path: target.path,
+                            targetSlot: target.targetSlot,
+                            oldChampionId,
+                            contextLabel: label,
+                            side: target.side
+                        });
+                }
+            });
+            actions.push({
+                label: "Create branch with champion…",
+                action: () => {
+                    const target = deriveContentAddressedTarget(
+                        indexPathFor(m.depth, m.index)
+                    );
+                    if (target)
+                        setBranchTarget({
+                            path: target.path,
+                            targetSlot: target.targetSlot,
+                            contextLabel: label,
+                            side: target.side
+                        });
+                }
+            });
+        }
+        actions.push({
+            label: "Copy champion name",
+            action: () => {
+                const text = m.node.championIds.map(nameOf).join(" + ");
+                navigator.clipboard
+                    .writeText(text)
+                    .then(() => toast.success(`Copied "${text}"`))
+                    .catch(() => toast.error("Failed to copy to clipboard"));
+            }
         });
+        return actions;
     };
-
-    const scenarioTier = (index: number): ScenarioPathTier =>
-        selectedScenarioIndex() === index ? "selected" : "unselected";
+    const pickerColoring =
+        (side: "blue" | "red" | null) =>
+        (championId: string): ChampionColorState => {
+            const s = session();
+            return s
+                ? getPickerState(
+                      championId,
+                      side,
+                      s.blue_pool,
+                      s.red_pool,
+                      usedChampionIdSet()
+                  )
+                : "neutral";
+        };
 
     return (
         <>
-            <div class="flex h-full w-full flex-col">
+            <div ref={(el) => (pageEl = el)} class="relative flex h-full w-full flex-col">
                 <Show when={session()}>
                     {(s) => (
                         <SeriesTabStrip
@@ -320,35 +689,180 @@ const NavigatorDrafting: Component = () => {
                     )}
                 </Show>
 
+                {/* Header row (design § 1) */}
                 <div
-                    class="grid min-h-0 w-full flex-1"
-                    style={{
-                        "grid-template-columns": "300px 1fr",
-                        "grid-template-rows": "1fr 280px"
-                    }}
+                    data-drafting-header
+                    class="flex items-center gap-4 border-b border-darius-border/60 bg-darius-card px-4 py-2"
                 >
-                    <div class="custom-scrollbar row-span-2 overflow-y-auto border-r border-slate-700/50">
+                    <div>
+                        <div class="text-[10px] uppercase tracking-wider text-slate-400">
+                            Draft Navigator
+                        </div>
+                        <div class="text-sm font-semibold text-slate-50">
+                            <Show
+                                when={nextTurn()}
+                                fallback={<span>Draft complete</span>}
+                            >
+                                {(t) => (
+                                    <>
+                                        {PHASE_LABELS[t().phase]} —{" "}
+                                        {turnLabel(nextSlot() ?? 0)}
+                                        <span
+                                            class={`ml-2 text-xs font-normal ${t().side === "blue" ? "text-blue-300" : "text-red-300"}`}
+                                        >
+                                            {t().side} on the clock
+                                            {t().side === ourSide() ? " · you" : ""}
+                                        </span>
+                                    </>
+                                )}
+                            </Show>
+                        </div>
+                    </div>
+                    <div class="ml-auto flex items-center gap-2">
                         <Show
-                            when={showBetweenGamesPanel()}
+                            when={viewingGameNumber() !== null}
+                            fallback={<EngineStatusPill status={status()} />}
+                        >
+                            <span
+                                data-reviewing-game
+                                class="rounded-full border border-slate-500/40 bg-slate-900/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-200"
+                            >
+                                Reviewing Game {viewingGameNumber()}
+                            </span>
+                        </Show>
+                        <Show when={stale() && viewingGameNumber() === null}>
+                            <button
+                                type="button"
+                                data-stale-pill
+                                title={
+                                    canEditPools()
+                                        ? "Re-bucket now"
+                                        : "Re-bucket between games"
+                                }
+                                onClick={() =>
+                                    canEditPools()
+                                        ? openRebucketReview()
+                                        : toast(
+                                              "Pools can be re-bucketed between games",
+                                              { icon: "ℹ️" }
+                                          )
+                                }
+                                class="rounded-full border border-amber-500/60 bg-amber-950/40 px-3 py-1 text-xs text-amber-300"
+                            >
+                                ⚠ Saved pool uses old role buckets · re-bucket
+                            </button>
+                        </Show>
+                        <Show when={canMutate()}>
+                            <button
+                                type="button"
+                                data-undo
+                                onClick={undo}
+                                class="rounded-full border border-darius-border px-3 py-1 text-xs text-slate-200 hover:border-slate-400"
+                            >
+                                Undo
+                            </button>
+                            <button
+                                type="button"
+                                data-open-palette
+                                onClick={() => openPalette(null)}
+                                disabled={!canOpenPalette()}
+                                class="rounded-full border border-darius-border px-3 py-1 text-xs text-slate-200 hover:border-slate-400 disabled:opacity-50"
+                            >
+                                Command{" "}
+                                <kbd class="ml-1 rounded border border-slate-600 px-1 text-[10px]">
+                                    /
+                                </kbd>
+                            </button>
+                        </Show>
+                    </div>
+                </div>
+
+                {/* Timeline row */}
+                <NavigatorTimeline
+                    events={confirmedEvents()}
+                    nextSlot={turnIsOpen() ? nextSlot() : null}
+                    ourSide={ourSide()}
+                    readOnly={!turnIsOpen()}
+                    gapText={gapText()}
+                    onNextSlotClick={(el) => openPalette(el)}
+                />
+
+                {/* Columns row, or the between-games panel, or the archive card */}
+                <Show
+                    when={showBetweenGamesPanel() && session() && activeDraft()}
+                    fallback={
+                        <Show
+                            when={viewingArchive()}
                             fallback={
-                                <DraftInputPanel
-                                    mode={
-                                        viewingGameNumber() !== null ? "review" : "active"
+                                <NavigatorColumns
+                                    columns={columns()}
+                                    ourSide={ourSide()}
+                                    dimmed={computing()}
+                                    canMutate={canMutate()}
+                                    emptyReason={
+                                        status().kind === "empty"
+                                            ? emptyFanReason(
+                                                  picksOf("blue"),
+                                                  picksOf("red"),
+                                                  nameOf
+                                              )
+                                            : null
                                     }
-                                    reviewEvents={viewingArchive()?.events}
-                                    crossGameExcluded={crossGameExcluded()}
+                                    canEditPools={canEditPools()}
+                                    roleLineFor={roleLineFor}
+                                    onSelect={(depth, index) =>
+                                        setSelectedPath((p) => [
+                                            ...p.slice(0, depth),
+                                            index
+                                        ])
+                                    }
+                                    onCommit={commitNode}
+                                    onContextMenu={(args) => setMenu(args)}
+                                    onUndo={undo}
+                                    onEditPools={() =>
+                                        canEditPools()
+                                            ? setPoolEditOpen(true)
+                                            : toast("Pools can be edited between games", {
+                                                  icon: "ℹ️"
+                                              })
+                                    }
                                 />
                             }
                         >
-                            <Show when={session() && activeDraft()}>
-                                {(_) => {
-                                    const s = session();
-                                    const d = activeDraft();
-                                    if (!s || !d) return null;
-                                    return (
+                            {(archive) => (
+                                <div
+                                    data-archive-card
+                                    class="m-4 max-w-md self-start rounded-lg border border-slate-600 bg-darius-card p-4 text-sm text-slate-200"
+                                >
+                                    <div class="font-semibold">
+                                        Game {archive().draft.game_number} complete —
+                                        timeline only
+                                    </div>
+                                    <div class="mt-1 text-slate-400">
+                                        The engine's projections at each decision aren't
+                                        persisted — only a game's final snapshot is.
+                                    </div>
+                                    <button
+                                        type="button"
+                                        data-back-to-current
+                                        onClick={() => viewGame(null)}
+                                        class="mt-3 rounded border border-darius-border px-2 py-1 text-xs text-slate-200 hover:border-slate-400"
+                                    >
+                                        Back to the current game
+                                    </button>
+                                </div>
+                            )}
+                        </Show>
+                    }
+                >
+                    <div class="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+                        <Show when={session()}>
+                            {(s) => (
+                                <Show when={activeDraft()}>
+                                    {(d) => (
                                         <BetweenGamesPanel
-                                            session={s}
-                                            completedDraft={d}
+                                            session={s()}
+                                            completedDraft={d()}
                                             isSeriesComplete={isSeriesComplete()}
                                             onStartNextGame={(override) =>
                                                 startNextGame(override)
@@ -357,90 +871,66 @@ const NavigatorDrafting: Component = () => {
                                                 updateSessionPools(blue, red)
                                             }
                                         />
-                                    );
-                                }}
-                            </Show>
+                                    )}
+                                </Show>
+                            )}
                         </Show>
                     </div>
+                </Show>
 
-                    <div class="relative min-h-0 bg-slate-900/20">
-                        <DecisionTree
-                            treeData={treeData()}
-                            isComputing={
-                                viewingGameNumber() === null
-                                    ? isComputingFromContext()
-                                    : false
-                            }
-                            highlightedPath={highlightedTreePath()}
-                            confirmedDepth={confirmedDepth()}
-                            scenarioPaths={(() => {
-                                const synth = syntheticTree();
-                                if (!synth) return [];
-                                return scenarios().flatMap((scenario, index) => {
-                                    const path = pathStepsToIndexPath(
-                                        synth,
-                                        scenario.treePath
-                                    );
-                                    if (!path) return [];
-                                    return [
-                                        {
-                                            path,
-                                            tier: scenarioTier(index)
-                                        }
-                                    ];
-                                });
-                            })()}
-                            panRequest={panRequest()}
-                            onNodeClick={handleNodeClick}
-                            onPromoteToScenario={handlePromoteToScenario}
-                            onConfirmProjectedPick={handleConfirmProjectedPick}
-                            onOpenSwap={handleOpenSwap}
-                            onOpenBranch={handleOpenBranch}
-                            canMutate={viewingArchive() === null}
-                        />
-
-                        <div class="pointer-events-none absolute right-4 top-4 flex items-center gap-2">
-                            <Show when={isStale()}>
-                                <span class="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-amber-300">
-                                    Stale
-                                </span>
-                                <button
-                                    type="button"
-                                    class="pointer-events-auto rounded-full border border-slate-600 bg-slate-900/90 px-3 py-1 text-xs font-medium text-slate-200 transition-colors hover:border-slate-500 hover:bg-slate-800"
-                                    onClick={handleRetry}
-                                >
-                                    Retry
-                                </button>
-                            </Show>
-                        </div>
-
-                        <Show when={viewingGameNumber() !== null}>
-                            <div class="pointer-events-none absolute left-4 top-4 rounded-full border border-slate-500/40 bg-slate-900/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-200">
-                                Reviewing Game {viewingGameNumber()}
-                            </div>
-                        </Show>
-                    </div>
-
-                    <ScenarioLanes
-                        scenarios={scenarios()}
-                        isComputing={
-                            viewingGameNumber() === null
-                                ? isComputingFromContext()
-                                : false
+                <NavigatorCommandPalette
+                    open={palette() !== null}
+                    anchor={palette()?.anchor ?? null}
+                    heading={paletteHeading()}
+                    commands={commands()}
+                    turn={paletteTurn()}
+                    fan={fan()}
+                    unavailable={unavailable()}
+                    unavailableReason={unavailableReason}
+                    coloring={coloring}
+                    rankedRoleLine={rankedRoleLine}
+                    preview={preview}
+                    canvases={canvasListQuery.data ?? []}
+                    canvasesLoading={
+                        canvasListQuery.isPending && canvasListQuery.isFetching
+                    }
+                    defaultCanvasId={rememberedCanvasId()}
+                    onCommit={commitChampions}
+                    onExplore={explore}
+                    onRun={runCommand}
+                    onExport={(id) => {
+                        if (selectedNodes().length === 0) {
+                            toast(
+                                "The selected line is no longer available — select again"
+                            );
+                            closePalette();
+                            return;
                         }
-                    />
-                </div>
+                        void exportLine(id);
+                    }}
+                    onClose={closePalette}
+                />
             </div>
+
+            <Show when={menu()}>
+                {(m) => (
+                    <ContextMenu
+                        position={{ x: m().x, y: m().y }}
+                        actions={menuActions(m())}
+                        header={m().node.championIds.map(nameOf).join(" + ")}
+                        onClose={() => setMenu(null)}
+                    />
+                )}
+            </Show>
             <Show when={swapTarget()}>
                 {(target) => (
                     <ChampionPicker
                         isOpen={true}
                         onClose={() => setSwapTarget(null)}
                         onSelect={(newChampionId) => {
-                            const currentTarget = target();
                             swapChampion({
-                                path: currentTarget.path,
-                                targetSlot: currentTarget.targetSlot,
+                                path: target().path,
+                                targetSlot: target().targetSlot,
                                 newChampionId
                             });
                             setSwapTarget(null);
@@ -448,7 +938,7 @@ const NavigatorDrafting: Component = () => {
                         contextLabel={target().contextLabel}
                         actionVerb="Swap to"
                         disabledChampionIds={usedChampionIdSet()}
-                        championColoring={(id) => swapColoringFor(id)}
+                        championColoring={pickerColoring(target().side)}
                     />
                 )}
             </Show>
@@ -458,10 +948,9 @@ const NavigatorDrafting: Component = () => {
                         isOpen={true}
                         onClose={() => setBranchTarget(null)}
                         onSelect={(newChampionId) => {
-                            const t = target();
                             createBranch({
-                                path: t.path,
-                                targetSlot: t.targetSlot,
+                                path: target().path,
+                                targetSlot: target().targetSlot,
                                 newChampionId
                             });
                             setBranchTarget(null);
@@ -469,7 +958,18 @@ const NavigatorDrafting: Component = () => {
                         contextLabel={target().contextLabel}
                         actionVerb="Add branch with"
                         disabledChampionIds={usedChampionIdSet()}
-                        championColoring={(id) => branchColoringFor(id)}
+                        championColoring={pickerColoring(target().side)}
+                    />
+                )}
+            </Show>
+            <Show when={session()}>
+                {(s) => (
+                    <PoolEditModal
+                        isOpen={poolEditOpen}
+                        initialBluePool={seededPools()?.blue ?? s().blue_pool}
+                        initialRedPool={seededPools()?.red ?? s().red_pool}
+                        onSave={(blue, red) => updateSessionPools(blue, red)}
+                        onClose={closePoolEditor}
                     />
                 )}
             </Show>

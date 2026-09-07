@@ -276,16 +276,18 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             meta: null,
             createdAt: new Date().toISOString()
         };
-        setSyntheticTreeSignal(entry.syntheticTree);
-        setNavigatorContext((p) => ({
-            ...p,
-            events: nextEvents,
-            snapshot: finalSnapshot,
-            error: null
-        }));
-        setLastEventIdSeen(
-            nextEvents.length > 0 ? nextEvents[nextEvents.length - 1].id : null
-        );
+        batch(() => {
+            setSyntheticTreeSignal(entry.syntheticTree);
+            setNavigatorContext((p) => ({
+                ...p,
+                events: nextEvents,
+                snapshot: finalSnapshot,
+                error: null
+            }));
+            setLastEventIdSeen(
+                nextEvents.length > 0 ? nextEvents[nextEvents.length - 1].id : null
+            );
+        });
         console.log("[nav] cache hit — restored prior snapshot from local cache");
     };
 
