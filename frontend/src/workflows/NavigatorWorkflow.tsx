@@ -460,16 +460,26 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         const prevSynthetic = untrack(syntheticTreeSignal);
         const prevSnapshot = prev.snapshot;
 
-        // v4 R1 monotonic guard — defends against late persist-on-pause broadcasts
-        // rolling the event list backward. Under v4 these broadcasts don't carry
-        // events at all (omitted from payload), so this branch's truthy path is
-        // rare; the guard exists for defense-in-depth.
+        // An undo removes exactly ONE event and keeps the rest by id
+        // (navigatorUndo destroys a single row); a next-game update changes the
+        // draft. Anything else shorter — including a vacuously-"prefix" empty
+        // list on the same draft — is the stale broadcast this guard defends
+        // against. This NARROWS that defence, it does not remove it: the server's
+        // version check covers only snapshot-carrying broadcasts.
+        const draftChanged = Boolean(
+            incomingDraft && prev.draft && incomingDraft.id !== prev.draft.id
+        );
+        const isUndoOfPrev = (next: NavigatorEventData[]) =>
+            next.length === prevEvents.length - 1 &&
+            next.every((e, i) => prevEvents[i]?.id === e.id);
         const nextEvents =
-            data.events !== undefined
-                ? data.events.length >= prevEvents.length
-                    ? data.events
-                    : prevEvents
-                : prevEvents;
+            data.events === undefined
+                ? prevEvents
+                : data.events.length >= prevEvents.length ||
+                    draftChanged ||
+                    isUndoOfPrev(data.events)
+                  ? data.events
+                  : prevEvents;
         const nextSnapshot = data.snapshot === undefined ? prevSnapshot : data.snapshot;
 
         const eventsChanged = nextEvents !== prevEvents;
