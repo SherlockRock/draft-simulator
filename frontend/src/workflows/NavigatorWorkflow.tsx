@@ -45,6 +45,10 @@ import type { ReconcilePriority } from "../utils/treeReconcile";
 import { validateSocketEvent } from "../utils/socketValidation";
 import { hashNavigatorEvents, makeCacheKey } from "../utils/navigatorEventHash";
 import { TURN_SEQUENCE } from "../utils/turnSequence";
+import {
+    NavigatorTreeNodeSchema,
+    NavigatorWeightedAssignmentSchema
+} from "../utils/navigatorTreeSchema";
 import { Socket } from "socket.io-client";
 
 const NavigatorDraftDataSchema = z.object({
@@ -84,42 +88,6 @@ const NavigatorEventDataSchema = z.object({
     user_injected: z.boolean(),
     createdAt: z.string()
 });
-
-const NavigatorScoreSetSchema = z.object({
-    composite: z.number(),
-    compStrength: z.number(),
-    informationValue: z.number(),
-    flexRetention: z.number(),
-    revealCost: z.number()
-});
-
-const NavigatorRoleAssignmentSchema = z.object({
-    TOP: z.string(),
-    JUNGLE: z.string(),
-    MIDDLE: z.string(),
-    ADC: z.string(),
-    SUPPORT: z.string()
-});
-
-const NavigatorWeightedAssignmentSchema = z.object({
-    assignment: NavigatorRoleAssignmentSchema,
-    weight: z.number()
-});
-
-const NavigatorTreeNodeSchema: z.ZodType<NavigatorTreeNode> = z.lazy(() =>
-    z.object({
-        championIds: z.array(z.string()),
-        actionType: z.enum(["ban", "pick"]),
-        phase: z.enum(["ban1", "pick1", "ban2", "pick2"]),
-        scores: NavigatorScoreSetSchema,
-        assignmentDistribution: z.array(NavigatorWeightedAssignmentSchema),
-        side: z.enum(["blue", "red"]).nullable(),
-        slots: z.array(z.number()),
-        userInjected: z.boolean(),
-        children: z.array(NavigatorTreeNodeSchema),
-        confirmedChampionIds: z.array(z.string()).optional()
-    })
-);
 
 const NavigatorScenarioSchema: z.ZodType<NavigatorScenario> = z.object({
     name: z.string(),

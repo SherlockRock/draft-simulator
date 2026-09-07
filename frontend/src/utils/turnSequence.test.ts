@@ -1,10 +1,13 @@
 import { describe, expect, test } from "vitest";
 import {
+    PHASE_LABELS,
     TURN_SEQUENCE,
     getPairPartnerSlot,
     isPairEndSlot,
     isPairStartSlot,
-    phaseForSlot
+    phaseForSlot,
+    turnLabel,
+    turnLabelForSlots
 } from "./turnSequence";
 
 describe("TURN_SEQUENCE data integrity", () => {
@@ -126,5 +129,33 @@ describe("phaseForSlot", () => {
     test("throws for invalid slot indices", () => {
         expect(() => phaseForSlot(-1)).toThrow(/invalid slot/);
         expect(() => phaseForSlot(20)).toThrow(/invalid slot/);
+    });
+});
+
+describe("turnLabel", () => {
+    test("counts the ordinal within (side, type)", () => {
+        expect(turnLabel(0)).toBe("Blue Ban 1");
+        expect(turnLabel(1)).toBe("Red Ban 1");
+        expect(turnLabel(6)).toBe("Blue Pick 1");
+        expect(turnLabel(7)).toBe("Red Pick 1");
+        expect(turnLabel(8)).toBe("Red Pick 2");
+        expect(turnLabel(9)).toBe("Blue Pick 2");
+        expect(turnLabel(12)).toBe("Red Ban 4");
+        expect(turnLabel(15)).toBe("Blue Ban 5");
+        expect(turnLabel(16)).toBe("Red Pick 4");
+        expect(turnLabel(17)).toBe("Blue Pick 4");
+        expect(turnLabel(18)).toBe("Blue Pick 5");
+        expect(turnLabel(19)).toBe("Red Pick 5");
+    });
+    test("slot 20 and beyond is 'Draft complete'", () => {
+        expect(turnLabel(20)).toBe("Draft complete");
+        expect(turnLabel(99)).toBe("Draft complete");
+    });
+    test("pair slots join with ' + '", () => {
+        expect(turnLabelForSlots([17, 18])).toBe("Blue Pick 4 + Blue Pick 5");
+        expect(turnLabelForSlots([19])).toBe("Red Pick 5");
+    });
+    test("phase labels", () => {
+        expect(PHASE_LABELS.pick2).toBe("Pick Phase 2");
     });
 });
