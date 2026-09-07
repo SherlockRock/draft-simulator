@@ -9,6 +9,8 @@ export interface NavigatorTimelineProps {
     events: NavigatorEventData[];
     /** Slot the palette would fill; null when the draft is complete or read-only. */
     nextSlot: number | null;
+    /** Accepted so active and archive rows share one prop shape; the header,
+     *  not the timeline, renders "you". */
     ourSide: "blue" | "red";
     readOnly: boolean;
     gapText: { blue: string; red: string };

@@ -54,6 +54,7 @@ function props(overrides: Partial<NavigatorColumnsProps> = {}): NavigatorColumns
         canMutate: true,
         emptyReason: null,
         canEditPools: false,
+        canUndo: true,
         roleLineFor: (n) => ({
             roles: n.championIds.map(() => "Sup"),
             shift: n.championIds[0] === "Ezreal" ? "Sylas → Sup" : null
@@ -162,6 +163,24 @@ describe("NavigatorColumns", () => {
         const pools = card?.querySelector("[data-remedy='pools']");
         expect(pools?.hasAttribute("disabled")).toBe(true); // mid-game: the server rejects pool edits (design § 7)
         expect(pools?.getAttribute("title")).toBe("between games");
+    });
+    test("empty fan's undo remedy is disabled at zero confirmed events (server rejects an undo)", () => {
+        const onUndo = vi.fn();
+        const { container } = render(() => (
+            <NavigatorColumns
+                {...props({
+                    columns: [],
+                    emptyReason:
+                        "red cannot fill five roles with Rengar, Nidalee, Yone, Ezreal",
+                    canUndo: false,
+                    onUndo
+                })}
+            />
+        ));
+        const undo = container.querySelector("[data-remedy='undo']");
+        expect(undo?.hasAttribute("disabled")).toBe(true);
+        if (undo) fireEvent.click(undo);
+        expect(onUndo).not.toHaveBeenCalled();
     });
     test("selecting twice keeps the hovered card's DOM (columns are positionally keyed)", () => {
         const [cols, setCols] = createSignal(deriveColumns(fanout, []));

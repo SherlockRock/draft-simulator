@@ -210,7 +210,8 @@ function uniq(ids: readonly string[]): string[] {
 export function roleLineForPick(
     sidePicksBefore: readonly string[],
     nodeChampionIds: readonly string[],
-    wire: readonly NavigatorWeightedAssignment[] = []
+    wire: readonly NavigatorWeightedAssignment[] = [],
+    confirmedChampionIds: readonly string[] = []
 ): RoleLine {
     const after = uniq([...sidePicksBefore, ...nodeChampionIds]);
     const top = wire.length > 0 ? maxWeight(wire) : topAssignment(after);
@@ -219,7 +220,11 @@ export function roleLineForPick(
     // `shift` compares a LOCAL top assignment of the earlier picks with `top`;
     // if an engine ever emits a distribution with a different tie-break the
     // amber shift could be spurious. Dead today (projection.rs:334 emits []).
-    const beforeOnly = sidePicksBefore.filter((id) => !nodeChampionIds.includes(id));
+    // Only the champions the node ADDS are excluded from the baseline — a
+    // pair-pending node's already-confirmed half stays in `beforeOnly` so its
+    // own shift (e.g. support → jungle) is still detected.
+    const added = nodeChampionIds.filter((id) => !confirmedChampionIds.includes(id));
+    const beforeOnly = sidePicksBefore.filter((id) => !added.includes(id));
     const prev = topAssignment(beforeOnly);
     const shift = prev ? firstShift(beforeOnly, prev.assignment, top.assignment) : null;
     return { roles, shift };

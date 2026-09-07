@@ -199,7 +199,7 @@ const NavigatorDrafting: Component = () => {
     const unavailable = createMemo(
         () => new Set([...usedChampionIdSet(), ...crossGameExcluded().keys()])
     );
-    // The old picker's tooltip: "{Name} — picked in Game N (fearless|ironman)" (DraftInputPanel.tsx:386-395).
+    // The old picker column's tooltip: "{Name} — picked in Game N (fearless|ironman)".
     const unavailableReason = (championId: string): string | null => {
         const game = crossGameExcluded().get(championId);
         if (game === undefined)
@@ -293,7 +293,8 @@ const NavigatorDrafting: Component = () => {
         const line = roleLineForPick(
             before,
             node.championIds,
-            node.assignmentDistribution
+            node.assignmentDistribution,
+            node.confirmedChampionIds ?? []
         );
         return {
             roles: line.roles.map((r) => (r ? ROLE_SHORT_LABELS[r] : "?")),
@@ -314,7 +315,7 @@ const NavigatorDrafting: Component = () => {
         return [line.roles.join(" · "), line.shift].filter((s) => s).join(" · ");
     };
 
-    // ---- commits (slot = confirmed event count, as DraftInputPanel did) ----
+    // ---- commits (slot = confirmed event count, as the old picker column did) ----
     const commitChampions = (championIds: string[]) => {
         const draftId = activeDraft()?.id;
         const slot = nextSlot();
@@ -511,6 +512,11 @@ const NavigatorDrafting: Component = () => {
             return selectedNodes().length > 0
                 ? ["Projected:", ...describeLine(selectedNodes(), nameOf)]
                 : ["Select a line first"];
+        // Reached only when the command is disabled — when enabled the ranked
+        // rows render instead.
+        if (id === "explore")
+            return ["Choose a candidate to open its line without committing it"];
+        if (id === "pick") return ["Choose a champion for this turn"];
         return [];
     };
 
@@ -756,8 +762,9 @@ const NavigatorDrafting: Component = () => {
                             <button
                                 type="button"
                                 data-undo
+                                disabled={confirmedEvents().length === 0}
                                 onClick={undo}
-                                class="rounded-full border border-darius-border px-3 py-1 text-xs text-slate-200 hover:border-slate-400"
+                                class="rounded-full border border-darius-border px-3 py-1 text-xs text-slate-200 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 Undo
                             </button>
@@ -809,6 +816,7 @@ const NavigatorDrafting: Component = () => {
                                             : null
                                     }
                                     canEditPools={canEditPools()}
+                                    canUndo={confirmedEvents().length > 0}
                                     roleLineFor={roleLineFor}
                                     onSelect={(depth, index) =>
                                         setSelectedPath((p) => [

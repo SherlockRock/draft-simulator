@@ -175,6 +175,22 @@ describe("roleLineForPick (design § 2 role line)", () => {
         expect(line.roles).toEqual(["top"]);
         expect(line.shift).toEqual({ championId: "Sylas", from: "mid", to: "support" });
     });
+    test("a pair-pending node's confirmed half stays in the shift baseline", () => {
+        // Gragas [top, jungle, mid] + confirmed Pantheon [support, top, jungle]; the node adds Shen [support, top].
+        // Top assignment after: Gragas top · Pantheon jungle · Shen support (0.4) — Pantheon MOVES from support.
+        const line = roleLineForPick(
+            ["Gragas", "Pantheon"],
+            ["Pantheon", "Shen"],
+            [],
+            ["Pantheon"]
+        );
+        expect(line.roles).toEqual(["jungle", "support"]);
+        expect(line.shift).toEqual({
+            championId: "Pantheon",
+            from: "support",
+            to: "jungle"
+        });
+    });
 });
 
 describe("roleGap — feasibility.rs semantics (listed roles only)", () => {

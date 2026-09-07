@@ -330,6 +330,13 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
         if (undo) fireEvent.click(undo);
         expect(emitUndo).toHaveBeenCalledWith("draft-1");
     });
+    test("zero confirmed events: the header undo button is disabled and does not emit", () => {
+        const { container, emitUndo } = mount([], emptyTree);
+        const undo = container.querySelector("button[data-undo]");
+        expect(undo?.hasAttribute("disabled")).toBe(true);
+        if (undo) fireEvent.click(undo);
+        expect(emitUndo).not.toHaveBeenCalled();
+    });
     test("thinking: pill says thinking, columns dimmed, palette still opens", () => {
         const { container } = mount(ITEM5_ORDER, item5Tree, { computing: true });
         expect(

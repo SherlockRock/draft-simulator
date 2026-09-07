@@ -19,6 +19,8 @@ export interface NavigatorColumnsProps {
     canMutate: boolean;
     emptyReason: string | null;
     canEditPools: boolean;
+    /** False at zero confirmed events — the server rejects an undo. */
+    canUndo: boolean;
     roleLineFor: (node: NavigatorTreeNode, column: ColumnModel) => NodeRoleLine;
     onSelect: (depth: number, index: number) => void;
     onCommit: (node: NavigatorTreeNode) => void;
@@ -90,8 +92,12 @@ export const NavigatorColumns: Component<NavigatorColumnsProps> = (props) => {
                         <button
                             type="button"
                             data-remedy="undo"
+                            disabled={!props.canUndo}
+                            title={
+                                props.canUndo ? "Undo the last pick" : "nothing to undo"
+                            }
                             onClick={() => props.onUndo()}
-                            class="rounded border border-darius-border px-2 py-1 text-xs text-slate-200 hover:border-slate-400"
+                            class="rounded border border-darius-border px-2 py-1 text-xs text-slate-200 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             Undo the last pick
                         </button>
