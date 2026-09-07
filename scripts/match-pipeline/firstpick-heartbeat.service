@@ -1,0 +1,23 @@
+# Dead-man's switch: tell an off-box monitor that forge is alive.
+#
+# The key bot's stall watch runs ON forge, so it can never report that forge
+# itself is down — a power cut takes the alerting down with the collectors.
+# (Sep 2026: a 42h outage went unnoticed for exactly this reason.) This unit
+# pings an external check-in URL; the monitor alerts when the pings STOP.
+#
+#   sudo cp firstpick-heartbeat.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now firstpick-heartbeat.timer
+#
+# Requires HEARTBEAT_URL in the env file (healthchecks.io check URL or similar).
+# A missing/blank URL fails the curl on purpose: silence must mean "down".
+[Unit]
+Description=First Pick collector liveness heartbeat
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=collector
+EnvironmentFile=/etc/firstpick-collector/env
+ExecStart=/usr/bin/curl -fsS -m 10 --retry 3 --retry-delay 5 -o /dev/null ${HEARTBEAT_URL}

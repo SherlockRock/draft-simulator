@@ -1,0 +1,14 @@
+# Ping every 5 minutes; see firstpick-heartbeat.service for install steps.
+# Grace on the monitor side should be >= 2 intervals so one dropped ping
+# (transient DNS, ISP blip) does not page anyone.
+[Unit]
+Description=First Pick collector liveness heartbeat (every 5 min)
+
+[Timer]
+# Ping soon after boot so a recovery clears the alert without waiting a cycle.
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
