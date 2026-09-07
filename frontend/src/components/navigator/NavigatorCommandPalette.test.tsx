@@ -225,6 +225,30 @@ describe("NavigatorCommandPalette", () => {
         if (braum) fireEvent.click(braum);
         expect(onCommit).toHaveBeenCalledWith(["Xayah", "Braum"]);
     });
+    test("arrow keys cross the ranked/pool boundary by column, not by flat index (execution ruling 2026-09-07)", () => {
+        const { container } = render(() => <NavigatorCommandPalette {...props()} />);
+        key("Enter");
+        const pane = container.querySelector("[data-champion-pane]");
+        expect(
+            pane
+                ?.querySelector("button[data-champion='Pantheon']")
+                ?.getAttribute("data-highlighted")
+        ).toBe("true");
+        key("ArrowDown");
+        // Two ranked tiles occupy columns 0–1; "below" Pantheon is the FIRST pool tile (column 0), not ordered()[6].
+        expect(
+            pane
+                ?.querySelector("button[data-ranked='false']")
+                ?.getAttribute("data-highlighted")
+        ).toBe("true");
+        expect(pane?.querySelectorAll("button[data-highlighted='true']")).toHaveLength(1);
+        key("ArrowUp");
+        expect(
+            pane
+                ?.querySelector("button[data-champion='Pantheon']")
+                ?.getAttribute("data-highlighted")
+        ).toBe("true");
+    });
     test("explore selects instead of committing", () => {
         const onExplore = vi.fn();
         const { container } = render(() => (

@@ -100,7 +100,30 @@ export const NavigatorChampionPane: Component<NavigatorChampionPaneProps> = (pro
         if (props.unavailable.has(id)) return;
         props.onChoose(id);
     };
+    /** Execution ruling 2026-09-07 (Task 6 review): the ranked and pool sections
+     *  are two separate 6-column grids, so a vertical move crosses the boundary
+     *  into the same COLUMN of the other section (clamped to its last tile) —
+     *  never by a flat ±6 through `ordered()`, which landed on a different
+     *  visual column (and Enter would have committed it). */
+    const moveVertical = (from: number, dir: 1 | -1): number => {
+        const R = ranked().length;
+        const P = pool().length;
+        const inRanked = from < R;
+        const base = inRanked ? 0 : R;
+        const len = inRanked ? R : P;
+        const local = from - base;
+        const within = local + dir * GRID_COLS;
+        if (within >= 0 && within < len) return base + within;
+        const col = local % GRID_COLS;
+        if (dir === 1 && inRanked && P > 0) return R + Math.min(col, P - 1);
+        if (dir === -1 && !inRanked && R > 0) {
+            const lastRowStart = Math.floor((R - 1) / GRID_COLS) * GRID_COLS;
+            return Math.min(lastRowStart + col, R - 1);
+        }
+        return from;
+    };
     const onKey = (e: KeyboardEvent) => {
+        if (e.defaultPrevented) return; // the palette's handler acted (defence in depth; it returns in this stage)
         const n = ordered().length;
         if (e.key === "Enter") {
             const id = exactMatch() ?? ordered()[highlight()];
@@ -111,9 +134,8 @@ export const NavigatorChampionPane: Component<NavigatorChampionPaneProps> = (pro
         if (n === 0) return;
         if (e.key === "ArrowRight") setHighlight((h) => Math.min(n - 1, h + 1));
         else if (e.key === "ArrowLeft") setHighlight((h) => Math.max(0, h - 1));
-        else if (e.key === "ArrowDown")
-            setHighlight((h) => Math.min(n - 1, h + GRID_COLS));
-        else if (e.key === "ArrowUp") setHighlight((h) => Math.max(0, h - GRID_COLS));
+        else if (e.key === "ArrowDown") setHighlight((h) => moveVertical(h, 1));
+        else if (e.key === "ArrowUp") setHighlight((h) => moveVertical(h, -1));
         else return;
         e.preventDefault();
     };
@@ -125,6 +147,7 @@ export const NavigatorChampionPane: Component<NavigatorChampionPaneProps> = (pro
             type="button"
             data-champion={id}
             data-ranked={score !== null ? "true" : "false"}
+            data-highlighted={highlight() === idx ? "true" : "false"}
             disabled={props.unavailable.has(id)}
             title={(() => {
                 const reason = props.unavailable.has(id)
