@@ -609,9 +609,16 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             );
         }
 
+        // Step 3d (execution ruling 2026-09-07): a next-game update carries
+        // `snapshot: null` and the server runs no root compute for game ≥ 2, so
+        // the previous game's snapshot must not survive the draft change —
+        // with the synthetic tree already cleared it read as a false
+        // "No legal completion" at 0 events. The archive keeps its own copy.
         const finalSnapshot = nextSnapshot
             ? { ...nextSnapshot, scenarios: nextScenarios }
-            : prevSnapshot;
+            : draftChanged
+              ? null
+              : prevSnapshot;
 
         let nextCompletedGames = prev.completedGames;
         const prevDraft = prev.draft;
