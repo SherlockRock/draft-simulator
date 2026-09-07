@@ -14,15 +14,12 @@ import toast from "solid-toast";
 import { TeamPoolSchema, type TeamPool } from "@draft-sim/shared-types";
 import {
     NavigatorEventData,
-    NavigatorPanRequest,
     NavigatorScenario,
-    NavigatorScenarioPathStep,
     NavigatorSessionState,
     NavigatorSnapshotData,
     NavigatorTreeNode,
     NavigatorWorkflowContext,
-    NavigatorWorkflowContextValue,
-    NodeLayoutOverride
+    NavigatorWorkflowContextValue
 } from "../contexts/NavigatorContext";
 import {
     NavigatorSocketProvider,
@@ -30,7 +27,6 @@ import {
 } from "../providers/NavigatorSocketProvider";
 import { draftEventsToState } from "../utils/draftEventsToState";
 import {
-    pathStepsToIndexPath,
     pathStepsToNodeKeyPath,
     eventsToConfirmedTurns,
     extendSpineOptimistic,
@@ -221,16 +217,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             setSelectedScenarioIndex(0);
         }
     });
-    const [panRequest, setPanRequest] = createSignal<NavigatorPanRequest | null>(null);
-    const [manualExpansionKeys, setManualExpansionKeysSignal] = createSignal<
-        ReadonlySet<string>
-    >(new Set<string>());
-    const [manualCollapseKeys, setManualCollapseKeysSignal] = createSignal<
-        ReadonlySet<string>
-    >(new Set<string>());
-    const [layoutOverrides, setLayoutOverridesSignal] = createSignal<
-        ReadonlyMap<string, NodeLayoutOverride>
-    >(new Map());
     const [syntheticTreeSignal, setSyntheticTreeSignal] =
         createSignal<NavigatorTreeNode | null>(null);
     const [lastEventIdSeen, setLastEventIdSeen] = createSignal<string | null>(null);
@@ -301,33 +287,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         return snapshot.after_event_id !== latestEventId;
     });
 
-    const setManualExpansionKeys = (
-        updater: (prev: ReadonlySet<string>) => ReadonlySet<string>
-    ) => setManualExpansionKeysSignal((prev) => updater(prev));
-    const setManualCollapseKeys = (
-        updater: (prev: ReadonlySet<string>) => ReadonlySet<string>
-    ) => setManualCollapseKeysSignal((prev) => updater(prev));
-    const setLayoutOverride = (nodeKey: string, override: NodeLayoutOverride | null) => {
-        setLayoutOverridesSignal((prev) => {
-            const next = new Map(prev);
-            if (override === null) {
-                next.delete(nodeKey);
-            } else {
-                next.set(nodeKey, override);
-            }
-            return next;
-        });
-    };
-    const clearAllLayoutOverrides = () => {
-        setLayoutOverridesSignal(new Map());
-    };
-    const requestScenarioPan = (treePath: NavigatorScenarioPathStep[]) => {
-        const synth = syntheticTreeSignal();
-        if (!synth) return;
-        const indexPath = pathStepsToIndexPath(synth, treePath);
-        if (!indexPath) return;
-        setPanRequest({ path: indexPath });
-    };
     let socketWithListeners: Socket | undefined = undefined;
 
     const getActiveSessionId = () =>
@@ -724,7 +683,9 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         }
         return {
             scenarioKeyPaths,
-            manualExpansionKeyPaths: untrack(manualExpansionKeys)
+            // The radial tree's manual expansions are gone (design § 1); the
+            // reconcile's priority contract keeps the field.
+            manualExpansionKeyPaths: new Set<string>()
         };
     }
 
@@ -1087,16 +1048,6 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         viewGame,
         selectedScenarioIndex,
         setSelectedScenarioIndex,
-        panRequest,
-        setPanRequest,
-        requestScenarioPan,
-        manualExpansionKeys,
-        manualCollapseKeys,
-        setManualExpansionKeys,
-        setManualCollapseKeys,
-        layoutOverrides,
-        setLayoutOverride,
-        clearAllLayoutOverrides,
         swapChampion,
         createBranch
     };

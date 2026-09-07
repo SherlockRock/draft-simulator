@@ -223,18 +223,7 @@ function mount(
         selectedScenarioIndex: () => null,
         setSelectedScenarioIndex: vi.fn(),
         swapChampion: vi.fn(),
-        createBranch: vi.fn(),
-        // Radial-tree members: still in the context type until Task 10 deletes them (and these ten lines).
-        panRequest: () => null,
-        setPanRequest: vi.fn(),
-        requestScenarioPan: vi.fn(),
-        manualExpansionKeys: () => new Set<string>(),
-        manualCollapseKeys: () => new Set<string>(),
-        setManualExpansionKeys: vi.fn(),
-        setManualCollapseKeys: vi.fn(),
-        layoutOverrides: () => new Map(),
-        setLayoutOverride: vi.fn(),
-        clearAllLayoutOverrides: vi.fn()
+        createBranch: vi.fn()
     };
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const utils = render(() => (

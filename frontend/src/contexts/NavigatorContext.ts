@@ -134,15 +134,6 @@ export interface NavigatorSnapshotData {
     createdAt: string | null;
 }
 
-export interface NavigatorPanRequest {
-    path: number[];
-}
-
-export interface NodeLayoutOverride {
-    /** Override angle in radians (radial coordinate, before the -π/2 rotation). */
-    angle: number;
-}
-
 export interface NavigatorWorkflowContextValue {
     navigatorContext: Accessor<NavigatorSessionState>;
     syntheticTree: Accessor<NavigatorTreeNode | null>;
@@ -164,20 +155,6 @@ export interface NavigatorWorkflowContextValue {
     viewGame: (gameNumber: number | null) => void;
     selectedScenarioIndex: Accessor<number | null>;
     setSelectedScenarioIndex: (index: number | null) => void;
-    panRequest: Accessor<NavigatorPanRequest | null>;
-    setPanRequest: (request: NavigatorPanRequest | null) => void;
-    requestScenarioPan: (treePath: NavigatorScenarioPathStep[]) => void;
-    manualExpansionKeys: Accessor<ReadonlySet<string>>;
-    manualCollapseKeys: Accessor<ReadonlySet<string>>;
-    setManualExpansionKeys: (
-        updater: (prev: ReadonlySet<string>) => ReadonlySet<string>
-    ) => void;
-    setManualCollapseKeys: (
-        updater: (prev: ReadonlySet<string>) => ReadonlySet<string>
-    ) => void;
-    layoutOverrides: Accessor<ReadonlyMap<string, NodeLayoutOverride>>;
-    setLayoutOverride: (nodeKey: string, override: NodeLayoutOverride | null) => void;
-    clearAllLayoutOverrides: () => void;
     swapChampion: (params: {
         path: { slot: number; championIds: string[] }[];
         targetSlot: number;
