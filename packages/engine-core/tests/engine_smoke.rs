@@ -37,6 +37,7 @@ pub(crate) fn default_request(state: DraftState) -> ComputeRequest {
         cross_game_exclusions: vec![],
         search_params: SearchParams::default(),
         latency_budget_ms: 5000,
+        min_completed_depth: None,
         champion_meta: HashMap::new(),
         meta_overrides: None,
         phase_weights_blue: PhaseWeightTable {
@@ -746,16 +747,16 @@ fn role_diverse_pick1_request(state: DraftState) -> ComputeRequest {
 }
 
 #[test]
-fn pair_start_root_forces_depth_two_under_zero_budget() {
-    // Regression for the slot-17 R5-missing bug. At pair-start roots, a
-    // depth-1 result has every pair child terminating at the pair's other
-    // slot (rem=0 leaf), so collect_leaves surfaces scenarios missing the
-    // next decision. engine.rs::compute now passes min_completed_depth=2 to
-    // iterative_deepening at pair-start states, forcing depth 2 to complete
-    // even when the budget heuristic would otherwise bail.
-    //
-    // Slot 7 is R1 Pick1 pair_start (B2-B3 — wait, R1-R2). Use it instead of
-    // slot 17 because the test pool stays small.
+fn pair_start_root_floor_yields_to_an_exhausted_budget() {
+    // The pair-start floor (min_completed_depth = 2, see
+    // `pair_start_root_keeps_its_floor_of_two_unless_the_request_raises_it`)
+    // exists for the slot-17 R5-missing bug: a depth-1 tree at a pair-start
+    // root has every pair child terminating at the pair's other slot, so
+    // collect_leaves surfaces scenarios missing the next decision. The floor
+    // suppresses the between-iteration BAIL HEURISTICS — it does not extend
+    // the budget. Once the budget is spent the deadline wins (slot 6's depth 2
+    // ran 6+ minutes when the floor was allowed to override it), so at zero
+    // budget a pair-start root comes back at depth 1, partial, not cancelled.
     let mut state = DraftState::default();
     fast_forward_to_slot(&mut state, 7);
 
@@ -764,12 +765,34 @@ fn pair_start_root_forces_depth_two_under_zero_budget() {
     let cancel = CancelHandle::new();
     let resp = engine.compute(req, &cancel).unwrap();
 
-    assert!(
-        resp.depth_reached >= 2,
-        "pair-start root must reach depth >= 2 even at zero budget; got {}",
+    assert_eq!(
+        resp.depth_reached, 1,
+        "the floor must not override a spent budget; got {}",
         resp.depth_reached
     );
     assert!(!resp.cancelled, "budget exhaustion is not a cancellation");
+}
+
+// ---- min_completed_depth resolution -----------------------------------------
+//
+// The pair-start floor (2) is an invariant of the tree shape and can only be
+// RAISED by the request's optional `minCompletedDepth`; a lower request keeps
+// the floor. Pure, so it is tested without a timed search.
+
+#[test]
+fn pair_start_root_keeps_its_floor_of_two_unless_the_request_raises_it() {
+    use engine_core::engine::effective_min_completed_depth;
+    let mut pair_start = DraftState::default();
+    fast_forward_to_slot(&mut pair_start, 7);
+    assert!(TURN_SEQUENCE[7].pair_start);
+    let mut single = DraftState::default();
+    fast_forward_to_slot(&mut single, 6);
+
+    assert_eq!(effective_min_completed_depth(&pair_start, None), 2);
+    assert_eq!(effective_min_completed_depth(&pair_start, Some(1)), 2);
+    assert_eq!(effective_min_completed_depth(&pair_start, Some(3)), 3);
+    assert_eq!(effective_min_completed_depth(&single, None), 1);
+    assert_eq!(effective_min_completed_depth(&single, Some(3)), 3);
 }
 
 #[test]

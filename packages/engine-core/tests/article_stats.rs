@@ -111,6 +111,7 @@ fn run_and_print(label: &str, start_slot: usize, max_depth: usize, branch_width:
         pair_branch_width: branch_width,
         max_depth,
         disable_alpha_beta: !ab,
+        single_pair_top_k: 32,
         forced_branches: vec![],
     };
     let cancel = CancelHandle::new();
@@ -190,6 +191,7 @@ fn run_with_budget(
         pair_branch_width: branch_width,
         max_depth,
         disable_alpha_beta: !ab,
+        single_pair_top_k: 32,
         forced_branches: vec![],
     };
     let cancel = CancelHandle::new();

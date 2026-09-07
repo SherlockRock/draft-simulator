@@ -145,6 +145,7 @@ fn pick_turn_yields_branch_width_children() {
         pair_branch_width: 5,
         max_depth: 1,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![],
     };
     let cancel = CancelHandle::new();
@@ -180,6 +181,7 @@ fn ranks_candidates_by_static_score() {
         pair_branch_width: 3,
         max_depth: 1,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![],
     };
     let cancel = CancelHandle::new();
@@ -211,6 +213,7 @@ fn pair_start_yields_pair_children() {
         pair_branch_width: 3,
         max_depth: 1,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![],
     };
     let cancel = CancelHandle::new();
@@ -246,6 +249,7 @@ fn pair_consumes_two_slots_in_recursion() {
         pair_branch_width: 2,
         max_depth: 2,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![],
     };
     let cancel = CancelHandle::new();
@@ -277,6 +281,7 @@ fn transposition_cache_populates_during_search() {
         pair_branch_width: 3,
         max_depth: 3,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![],
     };
     let cancel = CancelHandle::new();
@@ -302,6 +307,7 @@ fn transposition_cache_correct_under_side_values() {
         pair_branch_width: 3,
         max_depth: 3,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![],
     };
     let cancel = CancelHandle::new();
@@ -355,6 +361,7 @@ proptest! {
             pair_branch_width: 5,
             max_depth,
             disable_alpha_beta: false,
+            single_pair_top_k: 32,
             forced_branches: vec![],
         };
         let params_no_ab = SearchParams {
@@ -362,6 +369,7 @@ proptest! {
             pair_branch_width: 5,
             max_depth,
             disable_alpha_beta: true,
+            single_pair_top_k: 32,
             forced_branches: vec![],
         };
 
@@ -458,6 +466,7 @@ fn opp_turn_maximizes_opp_value() {
         pair_branch_width: 2,
         max_depth: 1,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![],
     };
     let cancel = CancelHandle::new();
@@ -2014,6 +2023,7 @@ fn search_prunes_infeasible_single_pick_branches() {
         pair_branch_width: 10,
         max_depth: 1,
         disable_alpha_beta: true,
+        single_pair_top_k: 32,
         forced_branches: vec![],
     };
     let cancel = CancelHandle::new();
@@ -2097,6 +2107,7 @@ fn search_prunes_ban_that_makes_either_side_infeasible() {
         pair_branch_width: 10,
         max_depth: 1,
         disable_alpha_beta: true,
+        single_pair_top_k: 32,
         forced_branches: vec![],
     };
     let cancel = CancelHandle::new();
@@ -2144,6 +2155,7 @@ fn search_at_pick1_applies_feasibility_check() {
             pair_branch_width: 10,
             max_depth: 1,
             disable_alpha_beta: true,
+            single_pair_top_k: 32,
             forced_branches: vec![],
         };
         let cancel = CancelHandle::new();
@@ -2176,6 +2188,7 @@ fn search_at_pick1_applies_feasibility_check() {
             pair_branch_width: 10,
             max_depth: 1,
             disable_alpha_beta: true,
+            single_pair_top_k: 32,
             forced_branches: vec![],
         };
         let cancel = CancelHandle::new();
@@ -2243,6 +2256,7 @@ fn search_prunes_infeasible_pair_pick_branches() {
         pair_branch_width: 500,
         max_depth: 1,
         disable_alpha_beta: true,
+        single_pair_top_k: 32,
         forced_branches: vec![],
     };
     let cancel = CancelHandle::new();
@@ -2310,6 +2324,7 @@ fn dup_params() -> SearchParams {
         pair_branch_width: 4,
         max_depth: 1,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![],
     }
 }

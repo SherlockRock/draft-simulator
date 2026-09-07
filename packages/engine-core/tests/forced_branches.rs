@@ -167,6 +167,7 @@ fn sole_mode_replaces_children() {
         pair_branch_width: 4,
         max_depth: 1,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![],
     };
     let baseline = search(&state, &baseline_params, &ctx, &cancel).unwrap();
@@ -181,6 +182,7 @@ fn sole_mode_replaces_children() {
         pair_branch_width: 4,
         max_depth: 1,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![ForcedBranch {
             path: vec![],
             target_slot: 6,
@@ -226,6 +228,7 @@ fn include_mode_augments_children() {
         pair_branch_width: 2,
         max_depth: 1,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![],
     };
     let baseline = search(&state, &baseline_params, &ctx, &cancel).unwrap();
@@ -243,6 +246,7 @@ fn include_mode_augments_children() {
         pair_branch_width: 2,
         max_depth: 1,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![ForcedBranch {
             path: vec![],
             target_slot: 6,
@@ -291,6 +295,7 @@ fn parent_lineage_resolves_after_swap() {
         pair_branch_width: 5,
         max_depth: 2,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![
             ForcedBranch {
                 path: vec![],
@@ -341,6 +346,7 @@ fn unresolved_path_drops_silently() {
         pair_branch_width: 3,
         max_depth: 2,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![ForcedBranch {
             // Path references "GHOST" at slot 0 — pool doesn't contain it, so
             // no actual lineage will ever match.
@@ -398,6 +404,7 @@ fn resolves_after_sibling_rerank() {
             pair_branch_width: 3,
             max_depth: 2,
             disable_alpha_beta: false,
+            single_pair_top_k: 32,
             forced_branches: vec![ForcedBranch {
                 path: vec![step(0, &["A"])],
                 target_slot: 1,
@@ -458,6 +465,7 @@ fn pair_start_force_optimizes_pair_end() {
         pair_branch_width: 10,
         max_depth: 1,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![ForcedBranch {
             path: vec![],
             target_slot: 7,
@@ -501,6 +509,7 @@ fn pair_end_force_optimizes_pair_start() {
         pair_branch_width: 10,
         max_depth: 1,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![ForcedBranch {
             path: vec![],
             target_slot: 8,
@@ -550,6 +559,7 @@ fn reverse_fill_pair_errors() {
         pair_branch_width: 4,
         max_depth: 1,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![ForcedBranch {
             path: vec![],
             target_slot: 7, // pair_start, already past — pair_end is confirmed
@@ -647,6 +657,7 @@ fn params_with(force: ForcedBranch) -> SearchParams {
         pair_branch_width: 8,
         max_depth: 1,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![force],
     }
 }

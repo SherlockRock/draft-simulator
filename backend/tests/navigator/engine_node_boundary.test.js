@@ -161,4 +161,51 @@ describe("engine-node boundary", () => {
     expect(decoded.code).toBe("engine.invalid_input");
     expect(decoded.path).toEqual(["forcedBranches", "0"]);
   });
+
+  it("singlePairTopK bounds the pairs searched while the root fan still lists every pair", async () => {
+    // Slot 7 (Red 1+2 pair start) after six bans and Blue's Zyra. With
+    // singlePairTopK: 2 and maxDepth: 2, exactly two root pairs carry the
+    // Blue 2+3 pair below them; the others are leaf pair children with the
+    // same wire shape (two championIds, no children). This is the wire the
+    // frontend's ranked fan reads.
+    const pool = ["Aatrox", "LeeSin", "Ahri", "Jinx", "Leona", "Zyra", "Garen", "Ezreal"];
+    const display = { TOP: [], JUNGLE: [], MIDDLE: [], ADC: [], SUPPORT: [] };
+    const req = JSON.parse(makeRequest());
+    req.draftState = {
+      format: "standard",
+      bans: ["Annie", "Brand", "Corki", "Darius", "Ekko", "Fizz"].map((championId, slot) => ({
+        championId,
+        side: slot % 2 === 0 ? "blue" : "red",
+        slot,
+      })),
+      picks: [{ championId: "Zyra", side: "blue", slot: 6 }],
+      currentPhase: "pick1",
+      currentSlot: 7,
+      currentSide: "red",
+    };
+    req.pools.blue = { display, search: pool };
+    req.pools.red = { display, search: pool };
+    req.config.search = {
+      ...req.config.search,
+      pairBranchWidth: 500,
+      singlePairTopK: 2,
+      maxDepth: 2,
+      latencyBudgetMs: 10000,
+    };
+    const token = new CancelToken();
+    const r = JSON.parse(await engine.compute(JSON.stringify(req), token));
+
+    const children = r.tree.children;
+    expect(children.length).toBeGreaterThan(2);
+    for (const child of children) {
+      expect(child.championIds).toHaveLength(2);
+      expect(child.slots).toEqual([7, 8]);
+    }
+    const searched = children.filter((c) => c.children.length > 0);
+    expect(searched).toHaveLength(2);
+    expect(searched.every((c) => c.children[0].slots[0] === 9)).toBe(true);
+    expect(children.slice(0, 2).every((c) => c.children.length > 0)).toBe(true);
+    expect(r.meta.depthReached).toBe(2);
+    expect(r.meta.cancelled).toBe(false);
+  });
 });

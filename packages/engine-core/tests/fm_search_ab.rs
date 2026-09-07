@@ -171,9 +171,11 @@ fn production_request(
             pair_branch_width: PAIR_BRANCH_WIDTH,
             max_depth: BUDGET_MAX_DEPTH,
             disable_alpha_beta: false,
+            single_pair_top_k: 32,
             forced_branches: vec![],
         },
         latency_budget_ms: LATENCY_BUDGET_MS,
+        min_completed_depth: None,
         champion_meta: champion_meta.clone(),
         meta_overrides: Some(meta),
         phase_weights_blue: phase_weights_blue(),
@@ -346,6 +348,7 @@ fn fm_search_ab_thresholds() {
                     pair_branch_width: DEPTH_MODE_PAIR_BRANCH_WIDTH,
                     max_depth: DEPTH_MODE_MAX_DEPTH,
                     disable_alpha_beta: false,
+                    single_pair_top_k: 32,
                     forced_branches: vec![],
                 };
                 let (_, stats) = search_with_stats(st, &params, &ctx, &CancelHandle::new()).unwrap();

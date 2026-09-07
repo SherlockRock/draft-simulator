@@ -28,6 +28,7 @@ fn node(
         action_type,
         phase: Phase::Ban1,
         user_injected: false,
+        unsearched: false,
         children,
     }
 }

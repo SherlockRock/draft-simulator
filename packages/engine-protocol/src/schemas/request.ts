@@ -54,6 +54,10 @@ const SearchConfigSchema = z.object({
   broadDepth: z.number().int().positive(),
   extensionTurnThreshold: z.number().int().positive(),
   latencyBudgetMs: z.number().int().positive(),
+  // Optional floor on the depth iterative deepening completes before its bail
+  // heuristics may return (the engine forces 2 at pair-start roots; this can
+  // only raise it). Never overrides the latency deadline.
+  minCompletedDepth: z.number().int().positive().optional(),
 });
 
 const PhaseWeightTableSchema = z.object({

@@ -125,7 +125,11 @@ pub fn collect_leaves(tree: &TreeNode) -> Vec<LeafInfo> {
     let mut blue_bans = Vec::new();
     let mut red_bans = Vec::new();
 
-    for child in &tree.children {
+    // A root pair child the search ranked but did not recurse into
+    // (`TreeNode::unsearched`) is not a leaf of the search: a scenario
+    // starting there would be missing the next decision — the slot-17-class
+    // defect the pair-start depth floor exists to prevent.
+    for child in tree.children.iter().filter(|c| !c.unsearched) {
         path.push(PathStep {
             slot: child.slots.first().copied().unwrap_or(0),
             champion_ids: child.champion_ids.clone(),

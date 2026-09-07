@@ -38,9 +38,25 @@ pub enum EngineError {
 }
 
 impl From<crate::cancellation::CancelError> for EngineError {
-    fn from(_: crate::cancellation::CancelError) -> Self {
-        EngineError::Cancelled
+    fn from(err: crate::cancellation::CancelError) -> Self {
+        match err {
+            crate::cancellation::CancelError::Cancelled => EngineError::Cancelled,
+            // The depth is not known at a wake point; `deepen` catches this
+            // and returns the last completed depth (or re-tags the error).
+            crate::cancellation::CancelError::DeadlineExceeded => EngineError::Timeout(0),
+        }
     }
+}
+
+/// The iterative-deepening floor for `state`: pair-start roots need depth 2
+/// (see `compute`), and the request may only RAISE it. Pure so the policy is
+/// testable without a timed search.
+pub fn effective_min_completed_depth(state: &DraftState, requested: Option<usize>) -> usize {
+    let pair_floor = state
+        .current_turn()
+        .map(|t| if t.pair_start { 2 } else { 1 })
+        .unwrap_or(1);
+    pair_floor.max(requested.unwrap_or(0))
 }
 
 /// Request to `Engine::compute()`. Task 7.1 keeps this minimal; Task 7.2
@@ -55,6 +71,11 @@ pub struct ComputeRequest {
     pub cross_game_exclusions: Vec<String>,
     pub search_params: SearchParams,
     pub latency_budget_ms: u64,
+    /// Optional floor on the depth iterative deepening must complete before
+    /// its bail heuristics may return (wire: `config.search.minCompletedDepth`).
+    /// Combined with the pair-start floor by `effective_min_completed_depth`;
+    /// never overrides the deadline.
+    pub min_completed_depth: Option<usize>,
     pub champion_meta: HashMap<String, ChampionMeta>,
     pub meta_overrides: Option<MetaData>,
     pub phase_weights_blue: PhaseWeightTable,
@@ -113,6 +134,7 @@ impl Engine {
             cross_game_exclusions,
             search_params,
             latency_budget_ms,
+            min_completed_depth,
             champion_meta,
             meta_overrides,
             phase_weights_blue,
@@ -155,13 +177,11 @@ impl Engine {
         // At pair-start root states, the slot-17-class invariant: a tree with
         // remaining_depth=1 has every pair child hit the rem=0 terminal at the
         // pair's other slot, so `collect_leaves` produces scenarios that are
-        // missing the next decision (e.g. R5 after a B4-B5 pair). Force the
+        // missing the next decision (e.g. R5 after a B4-B5 pair). Ask the
         // deepening loop to complete at least depth 2 from these states even
-        // when the budget heuristic would otherwise bail. Capped by max_depth.
-        let min_completed_depth: usize = state
-            .current_turn()
-            .map(|t| if t.pair_start { 2 } else { 1 })
-            .unwrap_or(1);
+        // when the budget heuristic would otherwise bail. Capped by max_depth,
+        // and the floor yields to the budget deadline (iterative_deepening.rs).
+        let min_completed_depth = effective_min_completed_depth(&state, min_completed_depth);
 
         let mut latest_stats = None;
         let result = iterative_deepening::deepen(

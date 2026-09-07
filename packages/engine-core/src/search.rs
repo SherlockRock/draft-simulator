@@ -30,6 +30,14 @@ pub struct SearchParams {
     /// `branch_width` is fully explored. Used by the correctness property test
     /// to validate that pruning never changes the back-propagated root score.
     pub disable_alpha_beta: bool,
+    /// How many of a pair turn's feasible pairs (sorted by static score,
+    /// `pair_branch_width` wide) are RECURSED into. Wired from
+    /// `singlePairTopK`. Bounds the pair-then-pair blow-up at slot 6 (Red
+    /// 1+2 then Blue 2+3): without it depth 2 there is up to 500 root pairs ×
+    /// a full pair expansion each. `0` (or ≥ width) recurses every pair. At
+    /// the search root the pairs beyond K stay in the fan as `unsearched`
+    /// leaf children; inner pair nodes keep only the K they searched.
+    pub single_pair_top_k: usize,
     /// Forced branches override or augment candidate sets at specific
     /// content-addressed paths. See `forced_branches.rs` and the spec section
     /// "Swap and Branch Semantics".
@@ -43,6 +51,7 @@ impl Default for SearchParams {
             pair_branch_width: 500,
             max_depth: 6,
             disable_alpha_beta: false,
+            single_pair_top_k: 32,
             forced_branches: Vec::new(),
         }
     }
@@ -57,6 +66,13 @@ pub struct TreeNode {
     pub action_type: ActionType,
     pub phase: Phase,
     pub user_injected: bool,
+    /// A root pair child that was ranked but not recursed into
+    /// (`SearchParams::single_pair_top_k`). Its `scores` are the static
+    /// evaluation of the state after the pair; it has no children, never
+    /// contributes to the parent's backed-up value, and `collect_leaves`
+    /// skips it so no scenario can start at an unsearched pair. Not on the
+    /// wire — the projection emits it like any other leaf pair child.
+    pub unsearched: bool,
     pub children: Vec<TreeNode>,
 }
 
@@ -250,6 +266,7 @@ fn search_recursive(
             action_type: turn_opt.map(|t| t.action_type).unwrap_or(ActionType::Pick),
             phase: turn_opt.map(|t| t.phase).unwrap_or(Phase::Pick2),
             user_injected: false,
+            unsearched: false,
             children: vec![],
         };
         cache.insert(cache_key, leaf.clone());
@@ -378,6 +395,7 @@ fn search_recursive(
             action_type: turn.action_type,
             phase: turn.phase,
             user_injected: injected_ids.contains(champ.as_str()),
+            unsearched: false,
             children: child_tree.children,
         };
         children.push(branch_node);
@@ -438,6 +456,7 @@ fn search_recursive(
         action_type: turn.action_type,
         phase: turn.phase,
         user_injected: false,
+        unsearched: false,
         children,
     };
     cache.insert(cache_key, result.clone());
@@ -736,7 +755,7 @@ fn score_and_rank(
     let mut scored: Vec<(String, f64)> = candidates
         .par_iter()
         .filter_map(|c| {
-            if cancel.is_cancelled() {
+            if cancel.should_stop() {
                 None
             } else {
                 let role = primary_role(c, &ctx.champion_meta).unwrap_or(Role::Top);
@@ -797,7 +816,7 @@ fn expand_pair(
     let scored_singles: Vec<(String, f64)> = candidates
         .par_iter()
         .filter_map(|c| {
-            if cancel.is_cancelled() {
+            if cancel.should_stop() {
                 None
             } else {
                 let role = primary_role(c, &eval_ctx.champion_meta).unwrap_or(Role::Top);
@@ -871,7 +890,16 @@ fn expand_pair(
 
     let injected = pair_force.is_some();
 
-    for (idx, (first, second, _static)) in scored_pairs.iter().enumerate() {
+    // Top-K: `scored_pairs` is sorted DESC by static value (build_pair_candidates;
+    // the feasibility retain keeps order), so the first K are the ones worth a
+    // recursion. 0 means "all".
+    let recurse_count = match params.single_pair_top_k {
+        0 => scored_pairs.len(),
+        k => k.min(scored_pairs.len()),
+    };
+    let (recursed_pairs, unsearched_pairs) = scored_pairs.split_at(recurse_count);
+
+    for (idx, (first, second, _static)) in recursed_pairs.iter().enumerate() {
         ensure_not_cancelled(cancel)?;
 
         let mut child_state = state.clone();
@@ -906,6 +934,7 @@ fn expand_pair(
             action_type: turn.action_type,
             phase: turn.phase,
             user_injected: injected,
+            unsearched: false,
             children: child_tree.children,
         });
 
@@ -931,7 +960,7 @@ fn expand_pair(
         // strictly sound — it assumes minimax. Keep as approximate heuristic;
         // benchmark in Task 2.5 quantifies its contribution.
         if !params.disable_alpha_beta && alpha >= beta {
-            accum.nodes_pruned += scored_pairs.len().saturating_sub(idx + 1);
+            accum.nodes_pruned += recursed_pairs.len().saturating_sub(idx + 1);
             break;
         }
     }
@@ -949,6 +978,61 @@ fn expand_pair(
             .unwrap_or(Ordering::Equal)
     });
 
+    // Root only: the pairs beyond K stay in the fan the user browses, as
+    // statically evaluated leaves listed AFTER the searched pairs (their
+    // depth-0 values are not comparable with a backed-up composite, and they
+    // never enter `best_value_pair`). Evaluated through `search_recursive` at
+    // remaining_depth 0 so the transposition cache serves them across
+    // deepening iterations — depth 1 has already evaluated every pair, so at
+    // depth ≥ 2 this loop is cache hits. Inner pair nodes skip this: a leaf
+    // per non-recursed pair at every inner node is exactly the evaluation
+    // bill top-K exists to avoid.
+    let is_root = remaining_depth == params.max_depth;
+    if is_root && !unsearched_pairs.is_empty() {
+        let mut leaves: Vec<TreeNode> = Vec::with_capacity(unsearched_pairs.len());
+        for (first, second, _static) in unsearched_pairs {
+            ensure_not_cancelled(cancel)?;
+            let mut child_state = state.clone();
+            push_action(&mut child_state, turn, first);
+            push_action(&mut child_state, pair_end_turn, second);
+            let leaf = search_recursive(
+                &child_state,
+                params,
+                0,
+                eval_ctx,
+                cancel,
+                cache,
+                accum,
+                lineage,
+                alpha,
+                beta,
+            )?;
+            let child_pair: SideValues = leaf.scores.composite_per_side;
+            leaves.push(TreeNode {
+                champion_ids: vec![first.clone(), second.clone()],
+                scores: ScoreSet {
+                    composite: child_pair.for_side(eval_ctx.side),
+                    composite_per_side: child_pair,
+                    ..Default::default()
+                },
+                side: Some(turn.side),
+                slots: vec![pair_start_slot, pair_end_slot],
+                action_type: turn.action_type,
+                phase: turn.phase,
+                user_injected: injected,
+                unsearched: true,
+                children: vec![],
+            });
+        }
+        leaves.sort_by(|a, b| {
+            b.scores
+                .composite
+                .partial_cmp(&a.scores.composite)
+                .unwrap_or(Ordering::Equal)
+        });
+        children.extend(leaves);
+    }
+
     // best_value is derivative: the request-side's slice of best_value_pair.
     let best_value = best_value_pair.for_side(eval_ctx.side);
     let result = TreeNode {
@@ -963,6 +1047,7 @@ fn expand_pair(
         action_type: turn.action_type,
         phase: turn.phase,
         user_injected: false,
+        unsearched: false,
         children,
     };
     let cache_key = state_cache_key(state, remaining_depth);
@@ -1124,7 +1209,7 @@ fn top_k_for_role(
     let mut scored: Vec<(String, f64)> = role_pool
         .par_iter()
         .filter_map(|c| {
-            if used.contains(c.as_str()) || cancel.is_cancelled() {
+            if used.contains(c.as_str()) || cancel.should_stop() {
                 None
             } else {
                 let s = score_pick(c, role, state, &sub_ctx, turn.action_type);

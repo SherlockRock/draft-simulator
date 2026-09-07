@@ -103,6 +103,7 @@ fn backend_params(max_depth: usize) -> SearchParams {
         pair_branch_width: PAIR_BRANCH_WIDTH,
         max_depth,
         disable_alpha_beta: false,
+        single_pair_top_k: 32,
         forced_branches: vec![],
     }
 }

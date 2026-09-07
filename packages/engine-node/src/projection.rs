@@ -39,6 +39,11 @@ pub fn request_to_core(
     let cross_game_exclusions = req.pools.cross_game_exclusions.clone();
     let search_params = build_search_params(req)?;
     let latency_budget_ms = req.config.search.latency_budget_ms.max(0) as u64;
+    let min_completed_depth = req
+        .config
+        .search
+        .min_completed_depth
+        .map(|d| d.max(0) as usize);
 
     let phase_weights_blue = phase_table_blue(&req.config.weights.phase_weights.blue);
     let phase_weights_red = phase_table_red(&req.config.weights.phase_weights.red);
@@ -55,6 +60,7 @@ pub fn request_to_core(
         cross_game_exclusions,
         search_params,
         latency_budget_ms,
+        min_completed_depth,
         champion_meta,
         meta_overrides: None,
         phase_weights_blue,
@@ -146,12 +152,16 @@ fn build_search_params(req: &proto::EngineRequest) -> Result<SearchParams, Engin
     let branch_width = req.config.search.branch_width.max(1) as usize;
     let pair_branch_width = req.config.search.pair_branch_width.max(1) as usize;
     let max_depth = req.config.search.max_depth.max(0) as usize;
+    // 0 would mean "recurse every pair" in engine-core; the Zod schema makes
+    // the field positive, so the clamp only guards a hand-built request.
+    let single_pair_top_k = req.config.search.single_pair_top_k.max(0) as usize;
     let forced_branches = convert_forced_branches(&req.config.forced_branches)?;
     Ok(SearchParams {
         branch_width,
         pair_branch_width,
         max_depth,
         disable_alpha_beta: false,
+        single_pair_top_k,
         forced_branches,
     })
 }
@@ -541,10 +551,28 @@ mod tests {
         assert_eq!(core.search_params.pair_branch_width, 8);
         assert_eq!(core.search_params.max_depth, 2);
         assert!(!core.search_params.disable_alpha_beta);
+        assert_eq!(
+            core.search_params.single_pair_top_k, 8,
+            "singlePairTopK reaches the search (it was plumbed but never read)"
+        );
         assert_eq!(core.latency_budget_ms, 500);
+        assert_eq!(
+            core.min_completed_depth, None,
+            "minCompletedDepth is optional; absent means the engine's own floor"
+        );
         assert_eq!(core.our_side, Side::Blue);
         assert_eq!(core.penalties.out_of_pool, 0.75);
         assert_eq!(core.phase_weights_blue.pick1.comp, 0.6);
+    }
+
+    #[test]
+    fn request_to_core_projects_an_explicit_min_completed_depth() {
+        let mut raw = serde_json::to_value(sample_request()).unwrap();
+        raw["config"]["search"]["minCompletedDepth"] = serde_json::json!(3);
+        let req: proto::EngineRequest =
+            serde_json::from_value(raw).expect("minCompletedDepth is a known optional field");
+        let core = request_to_core(&req, HashMap::new()).expect("projection ok");
+        assert_eq!(core.min_completed_depth, Some(3));
     }
 
     #[test]
@@ -578,6 +606,7 @@ mod tests {
             action_type: ActionType::Pick,
             phase: Phase::Pick1,
             user_injected: false,
+            unsearched: false,
             children: vec![],
         };
         let root = TreeNode {
@@ -588,6 +617,7 @@ mod tests {
             action_type: ActionType::Pick,
             phase: Phase::Pick1,
             user_injected: false,
+            unsearched: false,
             children: vec![leaf],
         };
         let proto_root = to_protocol_tree(&root, &[]);
@@ -618,6 +648,7 @@ mod tests {
                 action_type: ActionType::Pick,
                 phase: Phase::Pick2,
                 user_injected: false,
+                unsearched: false,
                 children: vec![],
             });
         }
@@ -629,6 +660,7 @@ mod tests {
             action_type: ActionType::Pick,
             phase: Phase::Pick2,
             user_injected: false,
+            unsearched: false,
             children: wide_children,
         };
         let projected = to_protocol_tree(&root, &[]);
@@ -662,6 +694,7 @@ mod tests {
                 action_type: ActionType::Pick,
                 phase: Phase::Pick2,
                 user_injected: false,
+                unsearched: false,
                 children: vec![],
             });
         }
@@ -673,6 +706,7 @@ mod tests {
             action_type: ActionType::Pick,
             phase: Phase::Pick2,
             user_injected: false,
+            unsearched: false,
             children: wide_children,
         };
         // A scenario that picks Champ150/Other150 — well outside top-32.
@@ -723,6 +757,7 @@ mod tests {
                 action_type: ActionType::Pick,
                 phase: Phase::Pick2,
                 user_injected: false,
+                unsearched: false,
                 children: vec![],
             });
         }
@@ -736,6 +771,7 @@ mod tests {
                 action_type: ActionType::Pick,
                 phase: Phase::Pick2,
                 user_injected: false,
+                unsearched: false,
                 children: grandchildren.clone(),
             });
         }
@@ -747,6 +783,7 @@ mod tests {
             action_type: ActionType::Pick,
             phase: Phase::Pick2,
             user_injected: false,
+            unsearched: false,
             children,
         };
         // Scenario goes through B80 (outside depth-1 top-32) → R90 (outside
@@ -797,6 +834,7 @@ mod tests {
                 action_type: ActionType::Pick,
                 phase: Phase::Pick1,
                 user_injected: false,
+                unsearched: false,
                 children: vec![],
             },
             scenarios: vec![],
