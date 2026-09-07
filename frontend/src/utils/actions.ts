@@ -68,6 +68,7 @@ export const postNewDraft = async (data: {
     positionX?: number;
     positionY?: number;
     group_id?: string;
+    description?: string;
 }) => {
     const result = await apiPost("/drafts", data, DraftSchema);
     track("draft_created");
