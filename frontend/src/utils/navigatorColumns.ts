@@ -156,3 +156,31 @@ export function describeLine(
             `${turnLabelForSlots(n.slots)}: ${n.championIds.map(nameOf).join(" + ")} (${n.scores.composite.toFixed(2)})`
     );
 }
+
+export const NO_BAN_SIGNAL_LABEL = "no ban signal yet";
+
+// Controller ruling 2026-09-07 (verified against NavigatorContext.ts:4-10):
+// NavigatorScoreSet has no `roleCoverage` key — the brief's five-key list is
+// amended to these four.
+const SCORE_COMPONENTS = [
+    "compStrength",
+    "informationValue",
+    "flexRetention",
+    "revealCost"
+] as const;
+
+/** Design § 5: a ban fan carries no engine signal when every sibling is a ban
+ *  with the same composite and every score component is zero (phase-1 bans
+ *  today: 0.003 across the board). Phase-2 bans differ per child and keep
+ *  their numbers; slice 4 gives bans real scores and this returns false on
+ *  its own. */
+export function banSignalAbsent(nodes: readonly NavigatorTreeNode[]): boolean {
+    if (nodes.length === 0) return false;
+    if (!nodes.every((n) => n.actionType === "ban")) return false;
+    const first = nodes[0].scores.composite;
+    return nodes.every(
+        (n) =>
+            Math.abs(n.scores.composite - first) < 1e-9 &&
+            SCORE_COMPONENTS.every((k) => n.scores[k] === 0)
+    );
+}

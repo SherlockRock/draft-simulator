@@ -1,0 +1,133 @@
+{
+  "tree": {
+    "side": "red",
+    "phase": "ban1",
+    "slots": [
+      1
+    ],
+    "scores": {
+      "composite": 0.0029999999999999996,
+      "revealCost": 0,
+      "compStrength": 0,
+      "roleCoverage": 0,
+      "flexRetention": 0,
+      "informationValue": 0
+    },
+    "children": [
+      {
+        "side": "red",
+        "phase": "ban1",
+        "slots": [
+          1
+        ],
+        "scores": {
+          "composite": 0.0029999999999999996,
+          "revealCost": 0,
+          "compStrength": 0,
+          "roleCoverage": 0,
+          "flexRetention": 0,
+          "informationValue": 0
+        },
+        "children": [],
+        "actionType": "ban",
+        "championIds": [
+          "Ivern"
+        ],
+        "userInjected": false,
+        "assignmentDistribution": []
+      },
+      {
+        "side": "red",
+        "phase": "ban1",
+        "slots": [
+          1
+        ],
+        "scores": {
+          "composite": 0.0029999999999999996,
+          "revealCost": 0,
+          "compStrength": 0,
+          "roleCoverage": 0,
+          "flexRetention": 0,
+          "informationValue": 0
+        },
+        "children": [],
+        "actionType": "ban",
+        "championIds": [
+          "Nidalee"
+        ],
+        "userInjected": false,
+        "assignmentDistribution": []
+      },
+      {
+        "side": "red",
+        "phase": "ban1",
+        "slots": [
+          1
+        ],
+        "scores": {
+          "composite": 0.0029999999999999996,
+          "revealCost": 0,
+          "compStrength": 0,
+          "roleCoverage": 0,
+          "flexRetention": 0,
+          "informationValue": 0
+        },
+        "children": [],
+        "actionType": "ban",
+        "championIds": [
+          "Blitzcrank"
+        ],
+        "userInjected": false,
+        "assignmentDistribution": []
+      },
+      {
+        "side": "red",
+        "phase": "ban1",
+        "slots": [
+          1
+        ],
+        "scores": {
+          "composite": 0.0029999999999999996,
+          "revealCost": 0,
+          "compStrength": 0,
+          "roleCoverage": 0,
+          "flexRetention": 0,
+          "informationValue": 0
+        },
+        "children": [],
+        "actionType": "ban",
+        "championIds": [
+          "Leona"
+        ],
+        "userInjected": false,
+        "assignmentDistribution": []
+      },
+      {
+        "side": "red",
+        "phase": "ban1",
+        "slots": [
+          1
+        ],
+        "scores": {
+          "composite": 0.0029999999999999996,
+          "revealCost": 0,
+          "compStrength": 0,
+          "roleCoverage": 0,
+          "flexRetention": 0,
+          "informationValue": 0
+        },
+        "children": [],
+        "actionType": "ban",
+        "championIds": [
+          "Ahri"
+        ],
+        "userInjected": false,
+        "assignmentDistribution": []
+      }
+    ],
+    "actionType": "ban",
+    "championIds": [],
+    "userInjected": false,
+    "assignmentDistribution": []
+  }
+}

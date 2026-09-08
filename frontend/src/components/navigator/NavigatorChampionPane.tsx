@@ -12,6 +12,7 @@ import type { NavigatorTreeNode } from "../../contexts/NavigatorContext";
 import { useMultiFilterableItems } from "../../hooks/useFilterableItems";
 import { getChampionImg } from "../../utils/championRoles";
 import { championCategories, champions } from "../../utils/constants";
+import { banSignalAbsent, NO_BAN_SIGNAL_LABEL } from "../../utils/navigatorColumns";
 import { rankedTiles } from "../../utils/navigatorPalette";
 import type { ChampionColorState } from "../ChampionPicker";
 import { RoleFilter } from "../RoleFilter";
@@ -57,6 +58,7 @@ export const NavigatorChampionPane: Component<NavigatorChampionPaneProps> = (pro
         items: champions,
         categoryMap: championCategories
     });
+    const noSignal = createMemo(() => banSignalAbsent(props.fan));
     createEffect(() => filterState.setSearchText(props.query));
     const [highlight, setHighlight] = createSignal(0);
 
@@ -167,7 +169,7 @@ export const NavigatorChampionPane: Component<NavigatorChampionPaneProps> = (pro
             />
             <Show when={score !== null}>
                 <span class="absolute bottom-0 right-0 rounded-tl bg-black/80 px-1 text-[10px] font-bold tabular-nums text-slate-50">
-                    {score?.toFixed(2)}
+                    {noSignal() ? "—" : score?.toFixed(2)}
                 </span>
             </Show>
         </button>
@@ -185,7 +187,7 @@ export const NavigatorChampionPane: Component<NavigatorChampionPaneProps> = (pro
             <div class="custom-scrollbar max-h-[340px] overflow-y-auto pr-1">
                 <Show when={ranked().length > 0}>
                     <div class="mb-1 text-[10px] uppercase tracking-wider text-slate-400">
-                        Ranked · score
+                        Ranked · {noSignal() ? NO_BAN_SIGNAL_LABEL : "score"}
                     </div>
                     <div class="mb-2 grid grid-cols-6 gap-1.5">
                         <For each={ranked()}>

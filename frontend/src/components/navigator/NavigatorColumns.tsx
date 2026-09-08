@@ -2,7 +2,11 @@ import { Component, For, Index, Show, createMemo } from "solid-js";
 import type { NavigatorTreeNode } from "../../contexts/NavigatorContext";
 import { getChampionImg } from "../../utils/championRoles";
 import { resolveChampion } from "../../utils/constants";
-import type { ColumnModel } from "../../utils/navigatorColumns";
+import {
+    banSignalAbsent,
+    NO_BAN_SIGNAL_LABEL,
+    type ColumnModel
+} from "../../utils/navigatorColumns";
 import { turnLabelForSlots } from "../../utils/turnSequence";
 
 export interface NodeRoleLine {
@@ -226,12 +230,21 @@ export const NavigatorColumns: Component<NavigatorColumnsProps> = (props) => {
                                                 </Show>
                                             </div>
                                         </div>
-                                        <span
-                                            data-node-score
-                                            class="text-sm font-bold tabular-nums text-slate-50"
+                                        <Show
+                                            when={!banSignalAbsent(column().nodes)}
+                                            fallback={
+                                                <span data-no-ban-signal class="text-[11px] italic text-slate-500">
+                                                    {NO_BAN_SIGNAL_LABEL}
+                                                </span>
+                                            }
                                         >
-                                            {node.scores.composite.toFixed(2)}
-                                        </span>
+                                            <span
+                                                data-node-score
+                                                class="text-sm font-bold tabular-nums text-slate-50"
+                                            >
+                                                {node.scores.composite.toFixed(2)}
+                                            </span>
+                                        </Show>
                                         <Show
                                             when={column().depth === 0 && props.canMutate}
                                         >
