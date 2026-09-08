@@ -130,3 +130,47 @@ fn a_deadline_returns_within_a_second_at_slot_6() {
         "deadline must be honoured within 1 s; overshoot {overshoot:?}"
     );
 }
+
+#[test]
+#[ignore]
+fn streaming_at_slot_6_yields_a_depth_one_partial_within_two_seconds() {
+    use engine_core::engine::{ComputeRequest, Engine};
+    use engine_core::pools::Penalties;
+    let (meta, champion_meta) = load_production_data();
+    let pool = common::full_roster_pool(&champion_meta);
+    let req = ComputeRequest {
+        state: slot6_state(),
+        our_side: Side::Red,
+        our_pool: pool.clone(),
+        opp_pool: pool,
+        cross_game_exclusions: vec![],
+        search_params: production_params(8, 32),
+        latency_budget_ms: 5000,
+        min_completed_depth: None,
+        champion_meta: champion_meta.clone(),
+        meta_overrides: Some(meta.clone()),
+        phase_weights_blue: common::phase_weights_blue(),
+        phase_weights_red: common::phase_weights_red(),
+        penalties: Penalties { out_of_role: 0.25, out_of_pool: 0.75 },
+        synergy_multiplier: 1.0,
+        counter_multiplier: 1.0,
+        flex_retention_weight: 1.0,
+        reveal_cost_weight: 1.0,
+    };
+    let engine = Engine::new(meta, champion_meta);
+    let cancel = CancelHandle::new();
+    let t0 = Instant::now();
+    let mut first_partial_at: Option<Duration> = None;
+    let resp = engine
+        .compute_streaming(req, &cancel, &mut |p| {
+            if first_partial_at.is_none() {
+                first_partial_at = Some(t0.elapsed());
+                assert_eq!(p.depth_reached, 1);
+            }
+        })
+        .unwrap();
+    let first = first_partial_at.expect("depth 1 completes and depth 2 starts at slot 6");
+    println!("first partial at {:?}, final depth {} in {:?}", first, resp.depth_reached, t0.elapsed());
+    assert!(first < Duration::from_secs(2), "depth 1 must paint within 2 s (measured 0.7 s)");
+    assert!(resp.depth_reached >= 2);
+}

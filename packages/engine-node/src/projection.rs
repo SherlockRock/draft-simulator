@@ -845,6 +845,9 @@ mod tests {
             transpositions_found: 7,
             forced_branches_dropped: 0,
             cancelled: false,
+            in_progress: false,
+            depth_in_progress: 0,
+            budget_hit: false,
         };
         let proto_resp = core_to_response(resp);
         assert_eq!(proto_resp.protocol_version, PROTOCOL_VERSION);

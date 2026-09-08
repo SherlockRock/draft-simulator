@@ -8,7 +8,7 @@ use crate::iterative_deepening::{self, SearchResult};
 use crate::pools::{Penalties, TeamPool};
 use crate::role_solver::ChampionMeta;
 use crate::scenarios::{extract_scenarios, Scenario};
-use crate::search::{search_with_stats, SearchParams, TreeNode};
+use crate::search::{search_with_stats, SearchParams, SearchStats, TreeNode};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -101,6 +101,14 @@ pub struct ComputeResponse {
     pub transpositions_found: usize,
     pub forced_branches_dropped: usize,
     pub cancelled: bool,
+    /// Streaming (engine target § 2): true on a per-depth partial handed to
+    /// `compute_streaming`'s sink, false on the returned final.
+    pub in_progress: bool,
+    /// The depth now being searched when `in_progress`; 0 on the final.
+    pub depth_in_progress: usize,
+    /// The budget or deadline cut the search: `depth_reached` is the last
+    /// completed depth (`SearchResult::partial`). Never true on a partial.
+    pub budget_hit: bool,
 }
 
 impl Engine {
@@ -120,6 +128,20 @@ impl Engine {
         &self,
         request: ComputeRequest,
         cancel: &CancelHandle,
+    ) -> Result<ComputeResponse, EngineError> {
+        self.compute_streaming(request, cancel, &mut |_| {})
+    }
+
+    /// `compute` with a sink for per-depth partials (engine target § 2). The
+    /// sink receives a full response (tree, scenarios, stats) for every depth
+    /// that completed while a deeper one was starting — see
+    /// `iterative_deepening::deepen_with_hook` for exactly when that is. The
+    /// returned final is never also sent to the sink.
+    pub fn compute_streaming(
+        &self,
+        request: ComputeRequest,
+        cancel: &CancelHandle,
+        on_partial: &mut dyn FnMut(ComputeResponse),
     ) -> Result<ComputeResponse, EngineError> {
         if cancel.is_cancelled() {
             return Err(EngineError::Cancelled);
@@ -183,62 +205,74 @@ impl Engine {
         // and the floor yields to the budget deadline (iterative_deepening.rs).
         let min_completed_depth = effective_min_completed_depth(&state, min_completed_depth);
 
-        let mut latest_stats = None;
-        let result = iterative_deepening::deepen(
+        // One builder for partials and the final. `cancelled` is derived from
+        // the handle by the caller (see below); partials are never cancelled.
+        let build = |tree: &TreeNode,
+                     stats: &SearchStats,
+                     depth: usize,
+                     in_progress: bool,
+                     depth_in_progress: usize,
+                     budget_hit: bool|
+         -> ComputeResponse {
+            let scenarios = extract_scenarios(
+                tree,
+                &eval_ctx.champion_meta,
+                5,
+                &state.blue_picks,
+                &state.red_picks,
+            );
+            ComputeResponse {
+                tree: tree.clone(),
+                scenarios,
+                nodes_evaluated: stats.nodes_evaluated,
+                compute_time_ms: start.elapsed().as_millis() as u64,
+                pruning_rate: if stats.nodes_evaluated + stats.nodes_pruned > 0 {
+                    stats.nodes_pruned as f64
+                        / (stats.nodes_evaluated + stats.nodes_pruned) as f64
+                } else {
+                    0.0
+                },
+                depth_reached: depth,
+                transpositions_found: stats.transpositions_found,
+                forced_branches_dropped: stats.forced_branches_dropped,
+                cancelled: false,
+                in_progress,
+                depth_in_progress,
+                budget_hit,
+            }
+        };
+
+        let result = iterative_deepening::deepen_with_hook(
             |depth, handle| {
                 let mut params = search_params.clone();
                 params.max_depth = depth;
                 let (tree, stats) = search_with_stats(&state, &params, &eval_ctx, handle)?;
-                latest_stats = Some(stats);
                 Ok(SearchResult {
                     score: tree.scores.composite,
                     depth,
                     partial: false,
-                    payload: tree,
+                    payload: (tree, stats),
                 })
             },
             search_params.max_depth,
             Duration::from_millis(latency_budget_ms),
             min_completed_depth,
             cancel,
+            |completed: &SearchResult<(TreeNode, SearchStats)>| {
+                let (tree, stats) = &completed.payload;
+                on_partial(build(tree, stats, completed.depth, true, completed.depth + 1, false));
+            },
         );
 
         match result {
             Ok(result) => {
-                let stats = latest_stats.ok_or_else(|| {
-                    EngineError::Internal("search completed without producing stats".into())
-                })?;
-                let tree = result.payload;
-                let scenarios = extract_scenarios(
-                    &tree,
-                    &eval_ctx.champion_meta,
-                    5,
-                    &state.blue_picks,
-                    &state.red_picks,
-                );
-                Ok(ComputeResponse {
-                    tree,
-                    scenarios,
-                    nodes_evaluated: stats.nodes_evaluated,
-                    compute_time_ms: start.elapsed().as_millis() as u64,
-                    pruning_rate: if stats.nodes_evaluated + stats.nodes_pruned > 0 {
-                        stats.nodes_pruned as f64
-                            / (stats.nodes_evaluated + stats.nodes_pruned) as f64
-                    } else {
-                        0.0
-                    },
-                    depth_reached: result.depth,
-                    transpositions_found: stats.transpositions_found,
-                    forced_branches_dropped: stats.forced_branches_dropped,
-                    // `result.partial` is true for both timeout-partial AND
-                    // external-cancel-with-best (per iterative_deepening). The
-                    // protocol's `cancelled` field gates the backend's
-                    // swallow-vs-persist decision and should ONLY be true for
-                    // external supersession cancels. Distinguish via the cancel
-                    // handle's actual state: timeout returns Ok without tripping
-                    // the handle, external cancel trips it before returning.
-                    cancelled: cancel.is_cancelled(),
-                })
+                let (tree, stats) = result.payload;
+                let mut response = build(&tree, &stats, result.depth, false, 0, result.partial);
+                // `cancelled` gates the backend's swallow-vs-persist decision and
+                // is ONLY true for external supersession: a deadline returns Ok
+                // without tripping the handle, an external cancel trips it.
+                response.cancelled = cancel.is_cancelled();
+                Ok(response)
             }
             Err(EngineError::Cancelled) => Err(EngineError::Cancelled),
             Err(err) => Err(err),
