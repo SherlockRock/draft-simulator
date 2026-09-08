@@ -300,6 +300,31 @@ function supersedePriorCompute(sessionId) {
   }
 }
 
+// Streaming (design § 3): forwards the engine's progress strings to the
+// caller's consumer while `isCurrent()` still says this compute owns the
+// session — a superseded compute's late partials and heartbeats are dropped
+// here, before any socket work. A consumer that throws must not kill the
+// compute, so it is caught and logged. Returns undefined when there is no
+// consumer so the engine spawns no ticker at all.
+function makeProgressForwarder(isCurrent, onProgress) {
+  if (typeof onProgress !== "function") return undefined;
+  return (raw) => {
+    if (!isCurrent()) return;
+    let message;
+    try {
+      message = JSON.parse(raw);
+    } catch (err) {
+      console.warn(`[nav] progress message is not JSON: ${err.message}`);
+      return;
+    }
+    try {
+      onProgress(message);
+    } catch (err) {
+      console.warn(`[nav] onProgress consumer threw: ${err.message}`);
+    }
+  };
+}
+
 async function computeForDraft(navigatorDraft, session, events, version, io, options = {}) {
   if (!navigatorDraft || !navigatorDraft.id) {
     throw new Error("navigatorDraft.id is required");
@@ -330,7 +355,14 @@ async function computeForDraftAB(navigatorDraft, session, events, version, io, o
 
   let responseJson;
   try {
-    responseJson = await engine.compute(JSON.stringify(request), token);
+    const forward = makeProgressForwarder(
+      () => {
+        const current = activeTokens.get(session.id);
+        return Boolean(current) && current.version === version;
+      },
+      options.onProgress,
+    );
+    responseJson = await engine.compute(JSON.stringify(request), token, forward);
   } catch (err) {
     const decoded = decodeEngineError(err);
     if (decoded.code === "engine.cancelled") {
@@ -387,5 +419,6 @@ module.exports = {
   getLastEventId,
   resolveEngineOptions,
   formatPositionsSourceLine,
+  makeProgressForwarder,
   FM_WEIGHTS_PATH,
 };
