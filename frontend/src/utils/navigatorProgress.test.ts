@@ -2,7 +2,9 @@ import { describe, expect, test } from "vitest";
 import {
     NavigatorEngineHeartbeatSchema,
     deriveIsComputing,
+    eventListChanged,
     heartbeatMatchesState,
+    partialMatchesState,
     shouldCacheSnapshot
 } from "./navigatorProgress";
 
@@ -87,5 +89,58 @@ describe("shouldCacheSnapshot", () => {
         expect(shouldCacheSnapshot("persisted")).toBe(true);
         expect(shouldCacheSnapshot("cache")).toBe(true);
         expect(shouldCacheSnapshot("partial")).toBe(false);
+    });
+});
+
+describe("partialMatchesState (final review #1, design § 7)", () => {
+    test("a non-partial always passes, regardless of after_event_id", () => {
+        expect(
+            partialMatchesState({ source: "persisted", after_event_id: "e7" }, "e9")
+        ).toBe(true);
+        expect(
+            partialMatchesState({ source: "cache", after_event_id: null }, "e9")
+        ).toBe(true);
+    });
+    test("a partial with a matching after_event_id passes", () => {
+        expect(
+            partialMatchesState({ source: "partial", after_event_id: "e7" }, "e7")
+        ).toBe(true);
+    });
+    test("a partial with a different after_event_id is dropped", () => {
+        expect(
+            partialMatchesState({ source: "partial", after_event_id: "e6" }, "e7")
+        ).toBe(false);
+    });
+    test("a partial mismatched null-vs-id is dropped in either direction", () => {
+        expect(
+            partialMatchesState({ source: "partial", after_event_id: null }, "e7")
+        ).toBe(false);
+        expect(
+            partialMatchesState({ source: "partial", after_event_id: "e7" }, null)
+        ).toBe(false);
+    });
+    test("a zero-event partial matches a null after_event_id", () => {
+        expect(
+            partialMatchesState({ source: "partial", after_event_id: null }, null)
+        ).toBe(true);
+    });
+});
+
+describe("eventListChanged (final review #2)", () => {
+    const ev = (id: string) => ({ id });
+    test("two distinct arrays with the same ids are unchanged", () => {
+        expect(eventListChanged([ev("e1"), ev("e2")], [ev("e1"), ev("e2")])).toBe(false);
+    });
+    test("an appended event is a change", () => {
+        expect(eventListChanged([ev("e1")], [ev("e1"), ev("e2")])).toBe(true);
+    });
+    test("a removed event (undo) is a change", () => {
+        expect(eventListChanged([ev("e1"), ev("e2")], [ev("e1")])).toBe(true);
+    });
+    test("the last id replaced at equal length is a change", () => {
+        expect(eventListChanged([ev("e1"), ev("e2")], [ev("e1"), ev("e3")])).toBe(true);
+    });
+    test("both empty is unchanged", () => {
+        expect(eventListChanged([], [])).toBe(false);
     });
 });

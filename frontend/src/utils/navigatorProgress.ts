@@ -63,3 +63,33 @@ export function deriveIsComputing(input: ComputingInput): boolean {
 export function shouldCacheSnapshot(source: "persisted" | "cache" | "partial"): boolean {
     return source !== "partial";
 }
+
+/** Design § 7: the client drops a `source: "partial"` snapshot whose
+ *  `after_event_id` is not the current state — a superseded compute's late
+ *  partial for the state the client has already left. Non-partials (final,
+ *  cached) always pass; they carry their own version/session guards. */
+export function partialMatchesState(
+    snapshot: {
+        source: "persisted" | "cache" | "partial";
+        after_event_id: string | null;
+    },
+    latestEventId: string | null
+): boolean {
+    if (snapshot.source !== "partial") return true;
+    return snapshot.after_event_id === latestEventId;
+}
+
+/** True when the event LIST actually changed — length differs, or the last
+ *  event id differs — as opposed to array-identity change. Every partial
+ *  rides `navigatorDraftUpdate` with a freshly-parsed `events` array even
+ *  when the underlying list is unchanged; keying the heartbeat clear on
+ *  identity would clear a live heartbeat on every partial (final review #2). */
+export function eventListChanged(
+    prev: readonly { id: string }[],
+    next: readonly { id: string }[]
+): boolean {
+    if (prev.length !== next.length) return true;
+    const prevLastId = prev.length > 0 ? prev[prev.length - 1].id : null;
+    const nextLastId = next.length > 0 ? next[next.length - 1].id : null;
+    return prevLastId !== nextLastId;
+}
