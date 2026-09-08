@@ -269,6 +269,101 @@ describe("engine-node boundary", () => {
     10000,
   );
 
+  // Cancelling before depth 1 completes (~230 ms) is the only path that
+  // rejects (iterative_deepening.rs: `best` is still `None`, so
+  // `Err(EngineError::Cancelled)` propagates instead of degrading to a
+  // partial `Ok`) — 100 ms leaves comfortable margin under that boundary,
+  // and well under the ticker's fixed first tick at 250 ms, so zero
+  // heartbeats can have fired yet either.
+  it(
+    "aborts the heartbeat ticker when a cancel before depth 1 rejects the compute",
+    async () => {
+      const req = slot7PairRootRequest();
+      const pool = [
+        "Aatrox", "LeeSin", "Ahri", "Jinx", "Leona", "Zyra", "Garen", "Ezreal", "Yasuo", "Thresh",
+        "Vayne", "Malphite", "Orianna", "Kaisa", "Nautilus", "Camille", "Viktor", "Jhin", "Braum", "Lux",
+      ];
+      const display = { TOP: [], JUNGLE: [], MIDDLE: [], ADC: [], SUPPORT: [] };
+      req.pools.blue = { display, search: pool };
+      req.pools.red = { display, search: pool };
+      // No budget cap here — only token.cancel() below ends the compute.
+      req.config.search = { ...req.config.search, singlePairTopK: 30, maxDepth: 8, latencyBudgetMs: 10000 };
+
+      const token = new CancelToken();
+      const heartbeats = [];
+      setTimeout(() => token.cancel(), 100);
+
+      await expect(
+        engine.compute(JSON.stringify(req), token, (raw) => {
+          const m = JSON.parse(raw);
+          if (m.kind === "heartbeat") heartbeats.push(m);
+        }),
+      ).rejects.toSatisfy((e) => decodeError(e).code === "engine.cancelled");
+
+      expect(heartbeats).toHaveLength(0);
+
+      // A surviving ticker (e.g. abort() moved below the `?` on the join
+      // result, so it's unreachable on this error return) would have fired
+      // at least twice more in this window (250 ms cadence, 600 ms wait).
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      expect(heartbeats).toHaveLength(0);
+    },
+    10000,
+  );
+
+  // Cancelling after depth 1 completes takes the OTHER exit path: `best` is
+  // already `Some`, so the compute degrades to a successful partial
+  // (`meta.cancelled: true`) instead of rejecting. Trigger is the first
+  // streamed "partial" message (depth 1 done, depth 2 now running) plus a
+  // fixed 300 ms, not a wall-clock delay from compute start — a plain
+  // `setTimeout(..., 400)` raced depth 1's completion under full-suite CPU
+  // contention (depth 1 can land past 400 ms when other test files are
+  // competing for CPU) and flipped this into the reject path test 1 already
+  // covers. Arming off the first partial instead lands the cancel inside
+  // depth 2 regardless of load, and the +300 ms guarantees at least one
+  // heartbeat (250 ms cadence) has fired by the time it lands.
+  it(
+    "aborts the heartbeat ticker when a cancel after depth 1 resolves with cancelled true",
+    async () => {
+      const req = slot7PairRootRequest();
+      const pool = [
+        "Aatrox", "LeeSin", "Ahri", "Jinx", "Leona", "Zyra", "Garen", "Ezreal", "Yasuo", "Thresh",
+        "Vayne", "Malphite", "Orianna", "Kaisa", "Nautilus", "Camille", "Viktor", "Jhin", "Braum", "Lux",
+      ];
+      const display = { TOP: [], JUNGLE: [], MIDDLE: [], ADC: [], SUPPORT: [] };
+      req.pools.blue = { display, search: pool };
+      req.pools.red = { display, search: pool };
+      req.config.search = { ...req.config.search, singlePairTopK: 30, maxDepth: 8, latencyBudgetMs: 10000 };
+
+      const token = new CancelToken();
+      const heartbeats = [];
+      let armed = false;
+
+      const r = JSON.parse(
+        await engine.compute(JSON.stringify(req), token, (raw) => {
+          const m = JSON.parse(raw);
+          if (m.kind === "heartbeat") heartbeats.push(m);
+          else if (m.kind === "partial" && !armed) {
+            armed = true;
+            setTimeout(() => token.cancel(), 300);
+          }
+        }),
+      );
+      expect(r.meta.cancelled).toBe(true);
+      expect(r.meta.inProgress).toBe(false);
+      expect(r.meta.depthReached).toBeGreaterThanOrEqual(1);
+
+      const seen = heartbeats.length;
+      expect(seen).toBeGreaterThanOrEqual(1);
+
+      // A surviving ticker would keep adding to this; a correctly aborted
+      // one allows at most one bounded late tick already in flight.
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      expect(heartbeats.length).toBeLessThanOrEqual(seen + 1);
+    },
+    10000,
+  );
+
   it("compute without a callback still resolves and carries the new meta fields", async () => {
     const r = JSON.parse(await engine.compute(makeRequest(), new CancelToken()));
     expect(r.meta.inProgress).toBe(false);
