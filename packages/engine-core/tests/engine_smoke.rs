@@ -815,3 +815,46 @@ fn non_pair_start_root_stops_at_depth_one_under_zero_budget() {
         resp.depth_reached
     );
 }
+
+#[test]
+fn the_handle_counts_every_node_the_search_expands() {
+    // max_depth 1 so the counter (cumulative over iterations) equals the last
+    // iteration's stats exactly.
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 6);
+    let champs = ["A", "B", "C", "D", "E", "F", "G", "H"];
+    let mut req = default_request(state);
+    req.our_pool = pool_with(&champs);
+    req.opp_pool = pool_with(&champs);
+    req.latency_budget_ms = 60_000;
+    req.search_params.max_depth = 1;
+    req.search_params.branch_width = 5;
+    req.meta_overrides = Some(MetaData {
+        win_rates: champs
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (c.to_string(), 0.9 - 0.1 * i as f64))
+            .collect(),
+        ..Default::default()
+    });
+    req.champion_meta = champs
+        .into_iter()
+        .map(|champ| {
+            (
+                champ.to_string(),
+                ChampionMeta {
+                    id: champ.to_string(),
+                    positions: vec![Role::Top],
+                    ..Default::default()
+                },
+            )
+        })
+        .collect();
+
+    let engine = Engine::new(MetaData::default(), HashMap::new());
+    let cancel = CancelHandle::new();
+    let resp = engine.compute(req, &cancel).unwrap();
+
+    assert!(resp.nodes_evaluated > 0);
+    assert_eq!(cancel.nodes_so_far(), resp.nodes_evaluated);
+}

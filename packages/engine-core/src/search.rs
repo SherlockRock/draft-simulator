@@ -293,6 +293,7 @@ fn search_recursive(
     }
 
     accum.nodes_evaluated += 1;
+    cancel.count_node();
 
     let our_turn = turn.side == eval_ctx.side;
     let candidates = collect_candidates(state, turn, eval_ctx);
@@ -801,6 +802,7 @@ fn expand_pair(
     turn: TurnInfo,
 ) -> Result<TreeNode, EngineError> {
     accum.nodes_evaluated += 1;
+    cancel.count_node();
 
     let our_turn = turn.side == eval_ctx.side;
     let pair_start_slot = state.turn_index();

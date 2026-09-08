@@ -1,6 +1,18 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+
+/// Live counters a caller may sample while a search runs (engine target § 2
+/// heartbeat: depth in progress, nodes). Shared by every clone of a handle,
+/// including deadline-bearing clones. Nothing inside engine-core reads them.
+#[derive(Debug, Default)]
+pub struct Progress {
+    /// Internal expansions so far — the running form of
+    /// `SearchStats.nodes_evaluated`, cumulative across iterations.
+    pub nodes: AtomicUsize,
+    /// Depth of the iteration currently running; 0 before the first starts.
+    pub depth_in_progress: AtomicUsize,
+}
 
 /// Cooperative stop signal threaded through the search.
 ///
@@ -21,6 +33,7 @@ use std::time::Instant;
 pub struct CancelHandle {
     flag: Arc<AtomicBool>,
     deadline: Option<Instant>,
+    progress: Arc<Progress>,
 }
 
 impl CancelHandle {
@@ -28,15 +41,17 @@ impl CancelHandle {
         Self {
             flag: Arc::new(AtomicBool::new(false)),
             deadline: None,
+            progress: Arc::new(Progress::default()),
         }
     }
 
-    /// A clone sharing this handle's external flag, with `deadline` attached.
-    /// The receiver is unchanged.
+    /// A clone sharing this handle's external flag AND progress counters, with
+    /// `deadline` attached. The receiver is unchanged.
     pub fn with_deadline(&self, deadline: Instant) -> Self {
         Self {
             flag: Arc::clone(&self.flag),
             deadline: Some(deadline),
+            progress: Arc::clone(&self.progress),
         }
     }
 
@@ -61,6 +76,24 @@ impl CancelHandle {
     /// `ensure_not_cancelled`, which also says which one fired).
     pub fn should_stop(&self) -> bool {
         self.is_cancelled() || self.deadline_passed()
+    }
+
+    /// One internal expansion. Relaxed: the count is advisory (heartbeat).
+    #[inline]
+    pub fn count_node(&self) {
+        self.progress.nodes.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn nodes_so_far(&self) -> usize {
+        self.progress.nodes.load(Ordering::Relaxed)
+    }
+
+    pub fn set_depth_in_progress(&self, depth: usize) {
+        self.progress.depth_in_progress.store(depth, Ordering::Relaxed);
+    }
+
+    pub fn depth_in_progress(&self) -> usize {
+        self.progress.depth_in_progress.load(Ordering::Relaxed)
     }
 }
 
