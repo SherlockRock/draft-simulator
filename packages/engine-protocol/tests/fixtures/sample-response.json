@@ -20,6 +20,9 @@
     "depthReached": 0,
     "transpositionsFound": 0,
     "forcedBranchesDropped": 0,
-    "cancelled": false
+    "cancelled": false,
+    "inProgress": false,
+    "depthInProgress": 0,
+    "budgetHit": false
   }
 }
