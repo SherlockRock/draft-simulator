@@ -124,6 +124,30 @@ describe("makeProgressForwarder", () => {
     expect(() => fwd(JSON.stringify({ kind: "heartbeat" }))).not.toThrow();
     expect(() => fwd("{not json")).not.toThrow();
   });
+
+  it("drops a partial whose protocolVersion major mismatches, forwards a matching partial, and leaves heartbeats unaffected (final review #3)", () => {
+    const seen = [];
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fwd = makeProgressForwarder(() => true, (m) => seen.push(m));
+    fwd(
+      JSON.stringify({
+        kind: "partial",
+        response: { protocolVersion: "2.0.0", meta: { depthReached: 1 } },
+      }),
+    );
+    fwd(
+      JSON.stringify({
+        kind: "partial",
+        response: { protocolVersion: "1.2.0", meta: { depthReached: 1 } },
+      }),
+    );
+    fwd(JSON.stringify({ kind: "heartbeat", depthInProgress: 1, nodes: 5, elapsedMs: 10 }));
+    expect(seen).toHaveLength(2);
+    expect(seen[0].response.protocolVersion).toBe("1.2.0");
+    expect(seen[1].kind).toBe("heartbeat");
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+  });
 });
 
 describe("computeForDraft streams progress from the real engine", () => {
