@@ -1,6 +1,6 @@
 use engine_core::cancellation::{ensure_not_cancelled, CancelHandle};
 use engine_core::engine::EngineError;
-use engine_core::iterative_deepening::{deepen, SearchResult};
+use engine_core::iterative_deepening::{deepen, deepen_with_hook, SearchResult};
 use std::time::{Duration, Instant};
 
 #[test]
@@ -211,4 +211,105 @@ fn an_external_cancel_mid_first_iteration_is_still_cancelled() {
         &h,
     );
     assert!(matches!(r, Err(EngineError::Cancelled)));
+}
+
+// ---- deepen_with_hook tests -----------------------------------------------
+
+#[test]
+fn hook_fires_once_per_completed_depth_that_is_followed_by_another() {
+    let h = CancelHandle::new();
+    let mut seen = Vec::new();
+    let r = deepen_with_hook(
+        cooperative(|_| 5),
+        3,
+        Duration::from_secs(10),
+        1,
+        &h,
+        |res: &SearchResult<usize>| seen.push(res.depth),
+    )
+    .unwrap();
+    assert_eq!(r.depth, 3);
+    assert!(!r.partial);
+    assert_eq!(seen, vec![1, 2], "depth 3 is the return value, never a partial");
+}
+
+#[test]
+fn hook_does_not_fire_when_the_heuristic_bails_after_depth_one() {
+    // Depth 1 = 30 ms, budget 45 ms: est. 60 ms for depth 2 > 15 ms remaining → bail.
+    let h = CancelHandle::new();
+    let mut seen = Vec::new();
+    let r = deepen_with_hook(
+        cooperative(|_| 30),
+        5,
+        Duration::from_millis(45),
+        1,
+        &h,
+        |res: &SearchResult<usize>| seen.push(res.depth),
+    )
+    .unwrap();
+    assert_eq!(r.depth, 1);
+    assert!(r.partial);
+    assert!(seen.is_empty(), "the returned depth is not a partial");
+}
+
+#[test]
+fn hook_fires_for_the_depth_before_a_deadline_cut_iteration() {
+    // Slot-6 shape: depth 1 = 10 ms, depth 2 = 400 ms, budget 40 ms → depth 2 starts and is cut.
+    let h = CancelHandle::new();
+    let mut seen = Vec::new();
+    let r = deepen_with_hook(
+        cooperative(|d| if d == 1 { 10 } else { 400 }),
+        5,
+        Duration::from_millis(40),
+        1,
+        &h,
+        |res: &SearchResult<usize>| seen.push(res.depth),
+    )
+    .unwrap();
+    assert_eq!(r.depth, 1);
+    assert!(r.partial);
+    assert_eq!(seen, vec![1]);
+}
+
+#[test]
+fn hook_never_fires_on_an_external_cancel_before_the_first_depth() {
+    let h = CancelHandle::new();
+    h.cancel();
+    let mut seen = Vec::new();
+    let r = deepen_with_hook(
+        cooperative(|_| 5),
+        3,
+        Duration::from_secs(1),
+        1,
+        &h,
+        |res: &SearchResult<usize>| seen.push(res.depth),
+    );
+    assert!(matches!(r, Err(EngineError::Cancelled)));
+    assert!(seen.is_empty());
+}
+
+#[test]
+fn depth_in_progress_is_the_depth_now_running() {
+    let h = CancelHandle::new();
+    let observed = std::cell::RefCell::new(Vec::new());
+    let r = deepen_with_hook(
+        |depth, handle| {
+            observed.borrow_mut().push(handle.depth_in_progress());
+            Ok(SearchResult {
+                score: depth as f64,
+                depth,
+                partial: false,
+                payload: depth,
+            })
+        },
+        3,
+        Duration::from_secs(10),
+        1,
+        &h,
+        |_: &SearchResult<usize>| {},
+    )
+    .unwrap();
+    assert_eq!(r.depth, 3);
+    assert_eq!(*observed.borrow(), vec![1, 2, 3]);
+    assert_eq!(h.depth_in_progress(), 3, "left at the last depth that ran");
 }
