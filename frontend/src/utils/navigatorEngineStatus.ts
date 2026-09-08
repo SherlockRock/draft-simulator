@@ -1,46 +1,82 @@
+import { HEARTBEAT_STALE_MS } from "./navigatorProgress";
+
+export interface EngineProgress {
+    /** Last partial's depthReached; 0 before the first partial. */
+    depthPainted: number;
+    depthInProgress: number;
+    nodes: number;
+}
+
 export type EngineStatus =
     | { kind: "initial" }
     | { kind: "complete" }
-    | { kind: "thinking"; elapsedMs: number }
+    | {
+          kind: "thinking";
+          elapsedMs: number;
+          /** Fan size of the painted partial; null before the first partial. */
+          candidates: number | null;
+          progress: EngineProgress | null;
+          /** Client clock since the last heartbeat; null when none has arrived. */
+          heartbeatStaleMs: number | null;
+      }
     | {
           kind: "ready";
           candidates: number;
           depthReached: number | null;
           computeTimeMs: number | null;
+          budgetHit: boolean;
       }
     | { kind: "empty"; reason: string };
 
 export interface EngineStatusInput {
     hasSnapshot: boolean;
-    /** Confirmed (ban/pick) events. */
     eventCount: number;
     draftComplete: boolean;
     isComputing: boolean;
-    /** `fanoutParent(...).children.length`. */
     fanCount: number;
     meta: { depthReached: number; computeTimeMs: number } | null;
-    /** Client clock since the latest confirmed event. */
     elapsedMs: number;
-    /** Lazy: only evaluated for the empty state (it runs the role solver). */
     reason: () => string;
+    /** From the heartbeat, else from a partial's meta; null with neither. */
+    progress: EngineProgress | null;
+    budgetHit: boolean;
+    heartbeatStaleMs: number | null;
 }
 
-/** Design § 4: thinking · ready · empty, plus the two edges (initial join before
- *  any snapshot at zero events; draft complete). */
 export function deriveEngineStatus(input: EngineStatusInput): EngineStatus {
     if (input.draftComplete) return { kind: "complete" };
-    if (input.isComputing) return { kind: "thinking", elapsedMs: input.elapsedMs };
+    if (input.isComputing) {
+        const painted = input.progress !== null && input.progress.depthPainted > 0;
+        return {
+            kind: "thinking",
+            elapsedMs: input.elapsedMs,
+            candidates: painted && input.fanCount > 0 ? input.fanCount : null,
+            progress: input.progress,
+            heartbeatStaleMs: input.heartbeatStaleMs
+        };
+    }
     if (!input.hasSnapshot && input.eventCount === 0) return { kind: "initial" };
     if (input.fanCount > 0) {
         return {
             kind: "ready",
             candidates: input.fanCount,
             depthReached: input.meta?.depthReached ?? null,
-            computeTimeMs: input.meta?.computeTimeMs ?? null
+            computeTimeMs: input.meta?.computeTimeMs ?? null,
+            budgetHit: input.budgetHit
         };
     }
     return { kind: "empty", reason: input.reason() };
 }
+
+export function isHeartbeatStale(status: EngineStatus): boolean {
+    return (
+        status.kind === "thinking" &&
+        status.heartbeatStaleMs !== null &&
+        status.heartbeatStaleMs >= HEARTBEAT_STALE_MS
+    );
+}
+
+const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
 
 export function formatEngineStatus(status: EngineStatus): string {
     switch (status.kind) {
@@ -48,10 +84,28 @@ export function formatEngineStatus(status: EngineStatus): string {
             return "Waiting for engine output";
         case "complete":
             return "Draft complete";
-        case "thinking":
-            return `◐ Thinking · ${(status.elapsedMs / 1000).toFixed(1)} s`;
+        case "thinking": {
+            const parts: string[] = [];
+            if (status.candidates !== null && status.progress !== null) {
+                parts.push(`◐ ${status.candidates} candidates`);
+                parts.push(`depth ${status.progress.depthPainted} painted`);
+            } else {
+                parts.push("◐ Thinking");
+            }
+            if (status.progress !== null)
+                parts.push(`searching depth ${status.progress.depthInProgress}`);
+            parts.push(seconds(status.elapsedMs));
+            if (status.progress !== null)
+                parts.push(`${status.progress.nodes.toLocaleString("en-US")} nodes`);
+            if (isHeartbeatStale(status) && status.heartbeatStaleMs !== null)
+                parts.push(`no heartbeat for ${Math.round(status.heartbeatStaleMs / 1000)} s`);
+            return parts.join(" · ");
+        }
         case "ready":
-            return `● ${status.candidates} candidates · depth ${status.depthReached ?? "?"} · ${status.computeTimeMs ?? "?"} ms`;
+            return (
+                `● ${status.candidates} candidates · depth ${status.depthReached ?? "?"} · ${status.computeTimeMs ?? "?"} ms` +
+                (status.budgetHit ? " · budget hit" : "")
+            );
         case "empty":
             return `✕ No legal completion — ${status.reason} · undo or relax pool`;
     }

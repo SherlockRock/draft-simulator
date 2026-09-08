@@ -32,7 +32,7 @@ import {
     topLinePath,
     type ColumnModel
 } from "../../utils/navigatorColumns";
-import { deriveEngineStatus } from "../../utils/navigatorEngineStatus";
+import { deriveEngineStatus, type EngineProgress } from "../../utils/navigatorEngineStatus";
 import {
     EXPORT_CANVAS_STORAGE_KEY,
     exportDraftDescription,
@@ -99,6 +99,7 @@ const NavigatorDrafting: Component = () => {
         syntheticTree,
         isComputing,
         currentMeta,
+        engineHeartbeat,
         emitPickStep,
         emitBan,
         emitUndo,
@@ -224,8 +225,8 @@ const NavigatorDrafting: Component = () => {
     // ---- thinking clock (design § 4: elapsed on the client clock) ----
     // Anchored on the transition INTO computing, not on the event count: a
     // reconnect with an unchanged count and a stale snapshot would otherwise read
-    // minutes. Swap/branch recomputes never enter `isComputing` (the server sends
-    // no Phase-1 update for them) — accepted, see Self-review.
+    // minutes. Swap/branch recomputes now DO enter `isComputing` via the
+    // heartbeat clause.
     const [thinkingSince, setThinkingSince] = createSignal(Date.now());
     const [elapsedMs, setElapsedMs] = createSignal(0);
     createEffect(
@@ -233,13 +234,30 @@ const NavigatorDrafting: Component = () => {
             if (now && prev !== true) setThinkingSince(Date.now());
         })
     );
+    const [heartbeatStaleMs, setHeartbeatStaleMs] = createSignal<number | null>(null);
     createEffect(() => {
         if (!computing()) {
             setElapsedMs(0);
+            setHeartbeatStaleMs(null);
             return;
         }
-        const timer = setInterval(() => setElapsedMs(Date.now() - thinkingSince()), 100);
+        const tick = () => {
+            setElapsedMs(Date.now() - thinkingSince());
+            const hb = engineHeartbeat();
+            setHeartbeatStaleMs(hb ? Date.now() - hb.receivedAt : null);
+        };
+        tick();
+        const timer = setInterval(tick, 100);
         onCleanup(() => clearInterval(timer));
+    });
+    // Heartbeat first (live), else the painted partial's own meta.
+    const progress = createMemo<EngineProgress | null>(() => {
+        const hb = engineHeartbeat();
+        if (hb) return { depthPainted: hb.depthPainted, depthInProgress: hb.depthInProgress, nodes: hb.nodes };
+        const m = currentMeta();
+        if (m && m.inProgress === true)
+            return { depthPainted: m.depthReached, depthInProgress: m.depthInProgress ?? 0, nodes: m.nodesEvaluated };
+        return null;
     });
     const status = createMemo(() =>
         deriveEngineStatus({
@@ -251,7 +269,10 @@ const NavigatorDrafting: Component = () => {
             fanCount: fan().length,
             meta: currentMeta(),
             elapsedMs: elapsedMs(),
-            reason: () => emptyFanReason(picksOf("blue"), picksOf("red"), nameOf)
+            reason: () => emptyFanReason(picksOf("blue"), picksOf("red"), nameOf),
+            progress: progress(),
+            budgetHit: currentMeta()?.budgetHit === true,
+            heartbeatStaleMs: heartbeatStaleMs()
         })
     );
 
