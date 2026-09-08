@@ -108,6 +108,39 @@ function makeRequest(overrides = {}) {
   return JSON.stringify(base);
 }
 
+// Slot 7 (Red 1+2 pair start) after six bans and Blue's Zyra, with
+// singlePairTopK: 2 and maxDepth: 2. Exactly two root pairs carry the Blue
+// 2+3 pair below them; the others are leaf pair children with the same wire
+// shape (two championIds, no children). This is the wire the frontend's
+// ranked fan reads.
+function slot7PairRootRequest() {
+  const pool = ["Aatrox", "LeeSin", "Ahri", "Jinx", "Leona", "Zyra", "Garen", "Ezreal"];
+  const display = { TOP: [], JUNGLE: [], MIDDLE: [], ADC: [], SUPPORT: [] };
+  const req = JSON.parse(makeRequest());
+  req.draftState = {
+    format: "standard",
+    bans: ["Annie", "Brand", "Corki", "Darius", "Ekko", "Fizz"].map((championId, slot) => ({
+      championId,
+      side: slot % 2 === 0 ? "blue" : "red",
+      slot,
+    })),
+    picks: [{ championId: "Zyra", side: "blue", slot: 6 }],
+    currentPhase: "pick1",
+    currentSlot: 7,
+    currentSide: "red",
+  };
+  req.pools.blue = { display, search: pool };
+  req.pools.red = { display, search: pool };
+  req.config.search = {
+    ...req.config.search,
+    pairBranchWidth: 500,
+    singlePairTopK: 2,
+    maxDepth: 2,
+    latencyBudgetMs: 10000,
+  };
+  return req;
+}
+
 describe("engine-node boundary", () => {
   it("createEngine constructs from real JSON files", () => {
     expect(engine).toBeTruthy();
@@ -163,35 +196,7 @@ describe("engine-node boundary", () => {
   });
 
   it("singlePairTopK bounds the pairs searched while the root fan still lists every pair", async () => {
-    // Slot 7 (Red 1+2 pair start) after six bans and Blue's Zyra. With
-    // singlePairTopK: 2 and maxDepth: 2, exactly two root pairs carry the
-    // Blue 2+3 pair below them; the others are leaf pair children with the
-    // same wire shape (two championIds, no children). This is the wire the
-    // frontend's ranked fan reads.
-    const pool = ["Aatrox", "LeeSin", "Ahri", "Jinx", "Leona", "Zyra", "Garen", "Ezreal"];
-    const display = { TOP: [], JUNGLE: [], MIDDLE: [], ADC: [], SUPPORT: [] };
-    const req = JSON.parse(makeRequest());
-    req.draftState = {
-      format: "standard",
-      bans: ["Annie", "Brand", "Corki", "Darius", "Ekko", "Fizz"].map((championId, slot) => ({
-        championId,
-        side: slot % 2 === 0 ? "blue" : "red",
-        slot,
-      })),
-      picks: [{ championId: "Zyra", side: "blue", slot: 6 }],
-      currentPhase: "pick1",
-      currentSlot: 7,
-      currentSide: "red",
-    };
-    req.pools.blue = { display, search: pool };
-    req.pools.red = { display, search: pool };
-    req.config.search = {
-      ...req.config.search,
-      pairBranchWidth: 500,
-      singlePairTopK: 2,
-      maxDepth: 2,
-      latencyBudgetMs: 10000,
-    };
+    const req = slot7PairRootRequest();
     const token = new CancelToken();
     const r = JSON.parse(await engine.compute(JSON.stringify(req), token));
 
@@ -207,5 +212,67 @@ describe("engine-node boundary", () => {
     expect(children.slice(0, 2).every((c) => c.children.length > 0)).toBe(true);
     expect(r.meta.depthReached).toBe(2);
     expect(r.meta.cancelled).toBe(false);
+  });
+
+  it("streams one partial per completed depth, ascending, then resolves the final with inProgress false", async () => {
+    const req = slot7PairRootRequest();
+    req.config.search.maxDepth = 3;
+    const messages = [];
+    const r = JSON.parse(
+      await engine.compute(JSON.stringify(req), new CancelToken(), (raw) => {
+        messages.push(JSON.parse(raw));
+      }),
+    );
+    const partials = messages.filter((m) => m.kind === "partial").map((m) => m.response);
+    expect(partials.map((p) => p.meta.depthReached)).toEqual([1, 2]);
+    expect(partials.map((p) => p.meta.depthInProgress)).toEqual([2, 3]);
+    expect(partials.every((p) => p.meta.inProgress === true)).toBe(true);
+    expect(partials.every((p) => p.meta.budgetHit === false)).toBe(true);
+    expect(partials.every((p) => p.protocolVersion === "1.2.0")).toBe(true);
+    expect(partials.every((p) => Array.isArray(p.tree.children) && p.tree.children.length > 0)).toBe(true);
+    expect(r.meta.inProgress).toBe(false);
+    expect(r.meta.depthInProgress).toBe(0);
+    expect(r.meta.depthReached).toBe(3);
+  });
+
+  it(
+    "emits heartbeats every ~250 ms while a budget-bound compute runs",
+    async () => {
+      const req = slot7PairRootRequest();
+      const pool = [
+        "Aatrox", "LeeSin", "Ahri", "Jinx", "Leona", "Zyra", "Garen", "Ezreal", "Yasuo", "Thresh",
+        "Vayne", "Malphite", "Orianna", "Kaisa", "Nautilus", "Camille", "Viktor", "Jhin", "Braum", "Lux",
+      ];
+      const display = { TOP: [], JUNGLE: [], MIDDLE: [], ADC: [], SUPPORT: [] };
+      req.pools.blue = { display, search: pool };
+      req.pools.red = { display, search: pool };
+      req.config.search = { ...req.config.search, singlePairTopK: 30, maxDepth: 8, latencyBudgetMs: 1000 };
+
+      const heartbeats = [];
+      const r = JSON.parse(
+        await engine.compute(JSON.stringify(req), new CancelToken(), (raw) => {
+          const m = JSON.parse(raw);
+          if (m.kind === "heartbeat") heartbeats.push(m);
+        }),
+      );
+      expect(heartbeats.length).toBeGreaterThanOrEqual(2);
+      for (let i = 1; i < heartbeats.length; i++) {
+        expect(heartbeats[i].nodes).toBeGreaterThanOrEqual(heartbeats[i - 1].nodes);
+        expect(heartbeats[i].elapsedMs).toBeGreaterThanOrEqual(heartbeats[i - 1].elapsedMs);
+      }
+      expect(heartbeats[heartbeats.length - 1].depthInProgress).toBeGreaterThanOrEqual(1);
+      expect(r.meta.budgetHit).toBe(true);
+      expect(r.meta.inProgress).toBe(false);
+      expect(r.meta.cancelled).toBe(false);
+      expect(r.meta.depthReached).toBeGreaterThanOrEqual(1);
+    },
+    10000,
+  );
+
+  it("compute without a callback still resolves and carries the new meta fields", async () => {
+    const r = JSON.parse(await engine.compute(makeRequest(), new CancelToken()));
+    expect(r.meta.inProgress).toBe(false);
+    expect(typeof r.meta.depthInProgress).toBe("number");
+    expect(typeof r.meta.budgetHit).toBe("boolean");
   });
 });
