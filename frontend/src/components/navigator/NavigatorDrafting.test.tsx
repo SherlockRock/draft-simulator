@@ -209,6 +209,7 @@ function mount(
         effectiveScenarios: () => [],
         isComputing: () => computing,
         currentMeta: () => state.snapshot?.meta ?? null,
+        engineHeartbeat: () => null,
         joinSession: vi.fn(),
         leaveSession: vi.fn(),
         emitPickStep,
