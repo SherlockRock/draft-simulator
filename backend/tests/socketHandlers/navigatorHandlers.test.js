@@ -421,6 +421,76 @@ describe("loadAuthorizedContext", () => {
   });
 });
 
+describe("streaming progress from recomputeAndBroadcast", () => {
+  it("broadcasts a partial as a non-persisted snapshot and a heartbeat as navigatorEngineHeartbeat", async () => {
+    setupHappyMocks();
+    vi.spyOn(NavigatorEvent, "findAll").mockResolvedValue([
+      { id: "ev-1", navigator_draft_id: "draft-1", event_type: "ban", slot: 0, side: "blue", champion_id: "Aatrox", user_injected: false, createdAt: new Date() },
+    ]);
+    const persistSpy = vi.spyOn(NavigatorSnapshot, "create");
+    let capturedOnProgress = null;
+    vi.spyOn(navigatorEngine, "computeForDraft").mockImplementation(async (_draft, _session, _events, version, _io, options) => {
+      capturedOnProgress = options.onProgress;
+      return { version, snapshot: null, cancelled: true };
+    });
+
+    const { socket, handlers } = buildFakeSocket();
+    const { io } = installHandlers({ socket });
+    await handlers.get("navigatorPick")({ sessionId: "sess-1", draftId: "draft-1", championIds: ["Ahri"], firstSlot: 6 });
+
+    expect(typeof capturedOnProgress).toBe("function");
+    io.emit.mockClear();
+
+    const response = {
+      protocolVersion: "1.2.0",
+      tree: { championIds: [], children: [{ championIds: ["Ahri"], children: [] }] },
+      scenarios: [],
+      meta: { nodesEvaluated: 3, computeTimeMs: 700, pruningRate: 0, depthReached: 1, transpositionsFound: 0, forcedBranchesDropped: 0, cancelled: false, inProgress: true, depthInProgress: 2, budgetHit: false },
+    };
+    capturedOnProgress({ kind: "partial", response });
+    await Promise.resolve();
+
+    const draftUpdates = io.emit.mock.calls.filter(([name]) => name === "navigatorDraftUpdate");
+    expect(draftUpdates).toHaveLength(1);
+    const [, payload] = draftUpdates[0];
+    expect(payload.snapshot.source).toBe("partial");
+    expect(payload.snapshot.id).toBeNull();
+    expect(payload.snapshot.after_event_id).toBe("ev-1");
+    expect(payload.snapshot.meta.inProgress).toBe(true);
+    expect(payload.snapshot.tree).toEqual(response.tree);
+    expect(persistSpy).not.toHaveBeenCalled();
+
+    capturedOnProgress({ kind: "heartbeat", depthInProgress: 2, nodes: 1840, elapsedMs: 4200 });
+    const heartbeats = io.emit.mock.calls.filter(([name]) => name === "navigatorEngineHeartbeat");
+    expect(heartbeats).toHaveLength(1);
+    expect(heartbeats[0][1]).toEqual({
+      draftId: "draft-1",
+      afterEventId: "ev-1",
+      depthPainted: 1,
+      depthInProgress: 2,
+      nodes: 1840,
+      elapsedMs: 4200,
+    });
+  });
+
+  it("a heartbeat before any partial reports depthPainted 0", async () => {
+    setupHappyMocks();
+    let capturedOnProgress = null;
+    vi.spyOn(navigatorEngine, "computeForDraft").mockImplementation(async (_d, _s, _e, version, _io, options) => {
+      capturedOnProgress = options.onProgress;
+      return { version, snapshot: null, cancelled: true };
+    });
+    const { socket, handlers } = buildFakeSocket();
+    const { io } = installHandlers({ socket });
+    await handlers.get("navigatorPick")({ sessionId: "sess-1", draftId: "draft-1", championIds: ["Ahri"], firstSlot: 6 });
+    io.emit.mockClear();
+    capturedOnProgress({ kind: "heartbeat", depthInProgress: 1, nodes: 12, elapsedMs: 260 });
+    const [, hb] = io.emit.mock.calls.find(([name]) => name === "navigatorEngineHeartbeat");
+    expect(hb.depthPainted).toBe(0);
+    expect(hb.afterEventId).toBeNull();
+  });
+});
+
 describe("navigatorStartDraft", () => {
   it("broadcasts the draft update to the session room instead of throwing", async () => {
     const { socket, handlers } = buildFakeSocket();

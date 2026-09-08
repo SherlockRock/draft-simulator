@@ -212,7 +212,33 @@ async function emitDraftUpdate(io, sessionId, payload) {
 
 async function recomputeAndBroadcast(io, socket, session, draft, events, version, options = {}) {
   try {
-    const mergedOptions = { ...options, socketId: socket.id };
+    // Streaming (design § 3). Partials ride navigatorDraftUpdate as a
+    // `source: "partial"` snapshot (never persisted); heartbeats are their own
+    // lightweight room event. `afterEventId` lets the client discard anything
+    // for a state it has already left. The version gate lives in the service.
+    const lastEventId = navigatorEngine.getLastEventId(events);
+    let depthPainted = 0;
+    const onProgress = (message) => {
+      if (message.kind === "partial") {
+        const response = message.response;
+        depthPainted = response.meta.depthReached;
+        const snapshot = {
+          ...navigatorEngine.shapeSnapshot(draft.id, lastEventId, response),
+          source: "partial",
+        };
+        void emitDraftUpdate(io, session.id, { draft, events, snapshot });
+      } else if (message.kind === "heartbeat") {
+        io.to(getRoomName(session.id)).emit("navigatorEngineHeartbeat", {
+          draftId: draft.id,
+          afterEventId: lastEventId,
+          depthPainted,
+          depthInProgress: message.depthInProgress,
+          nodes: message.nodes,
+          elapsedMs: message.elapsedMs,
+        });
+      }
+    };
+    const mergedOptions = { ...options, socketId: socket.id, onProgress };
     const result = await navigatorEngine.computeForDraft(draft, session, events, version, io, mergedOptions);
 
     // Cancellation-driven swallow (engine.cancelled or meta.cancelled === true).
