@@ -17,7 +17,7 @@ use engine_core::search::{SearchParams, TreeNode};
 
 use engine_core::protocol_types as proto;
 
-pub const PROTOCOL_VERSION: &str = "1.1.0";
+pub const PROTOCOL_VERSION: &str = "1.2.0";
 pub const ENGINE_ID: &str = "firstpick/v1.0.0";
 
 // ---- Request: protocol → internal ComputeRequest ---------------------------
@@ -251,6 +251,9 @@ pub fn core_to_response(resp: ComputeResponse) -> proto::EngineResponse {
             nodes_evaluated: resp.nodes_evaluated as i64,
             pruning_rate: resp.pruning_rate.clamp(0.0, 1.0),
             transpositions_found: resp.transpositions_found as i64,
+            in_progress: resp.in_progress,
+            depth_in_progress: resp.depth_in_progress as i64,
+            budget_hit: resp.budget_hit,
         },
         scenarios,
         tree: to_protocol_tree(&resp.tree, &must_keep_paths),
@@ -845,6 +848,9 @@ mod tests {
             transpositions_found: 7,
             forced_branches_dropped: 0,
             cancelled: false,
+            in_progress: true,
+            depth_in_progress: 4,
+            budget_hit: true,
         };
         let proto_resp = core_to_response(resp);
         assert_eq!(proto_resp.protocol_version, PROTOCOL_VERSION);
@@ -852,5 +858,9 @@ mod tests {
         assert_eq!(proto_resp.meta.nodes_evaluated, 42);
         assert_eq!(proto_resp.meta.depth_reached, 3);
         assert_eq!(proto_resp.meta.compute_time_ms, 13.0);
+        assert!(proto_resp.meta.in_progress);
+        assert_eq!(proto_resp.meta.depth_in_progress, 4);
+        assert!(proto_resp.meta.budget_hit);
+        assert_eq!(proto_resp.protocol_version, "1.2.0");
     }
 }

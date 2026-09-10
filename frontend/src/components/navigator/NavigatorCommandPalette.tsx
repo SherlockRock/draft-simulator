@@ -11,6 +11,7 @@ import {
 import type { NavigatorTreeNode } from "../../contexts/NavigatorContext";
 import { getChampionImg } from "../../utils/championRoles";
 import { resolveChampion } from "../../utils/constants";
+import { banSignalAbsent, NO_BAN_SIGNAL_LABEL } from "../../utils/navigatorColumns";
 import {
     cycleIndex,
     filterPaletteCommands,
@@ -105,6 +106,7 @@ export const NavigatorCommandPalette: Component<NavigatorCommandPaletteProps> = 
     const ranked = createMemo(() =>
         rankedTiles(props.fan, props.turn?.partnerOf ?? null).slice(0, 6)
     );
+    const noSignal = createMemo(() => banSignalAbsent(props.fan));
     const canvasRows = createMemo(() => {
         const q = query().trim().toLowerCase();
         return props.canvases.filter((c) => q === "" || c.name.toLowerCase().includes(q));
@@ -418,8 +420,10 @@ export const NavigatorCommandPalette: Component<NavigatorCommandPaletteProps> = 
                                             <span class="w-32 truncate whitespace-nowrap text-right text-[11px] text-slate-400">
                                                 {props.rankedRoleLine(t.championId)}
                                             </span>
-                                            <span class="font-bold tabular-nums text-slate-50">
-                                                {t.score.toFixed(2)}
+                                            <span
+                                                class={`font-bold tabular-nums ${noSignal() ? "italic text-slate-500" : "text-slate-50"}`}
+                                            >
+                                                {noSignal() ? NO_BAN_SIGNAL_LABEL : t.score.toFixed(2)}
                                             </span>
                                         </button>
                                     )}

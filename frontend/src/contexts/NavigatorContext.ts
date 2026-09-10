@@ -1,5 +1,6 @@
 import { createContext, useContext, Accessor } from "solid-js";
 import type { TeamPool } from "@draft-sim/shared-types";
+import type { LiveHeartbeat } from "../utils/navigatorProgress";
 
 export interface NavigatorScoreSet {
     composite: number;
@@ -118,7 +119,7 @@ export interface NavigatorEventData {
 }
 
 export interface NavigatorSnapshotData {
-    source: "persisted" | "cache";
+    source: "persisted" | "cache" | "partial";
     id: string | null;
     navigator_draft_id: string;
     after_event_id: string | null;
@@ -130,6 +131,10 @@ export interface NavigatorSnapshotData {
         pruningRate: number;
         depthReached: number;
         transpositionsFound: number;
+        /** Streaming (design § 4): true on a partial. Absent from older engines → false. */
+        inProgress?: boolean;
+        depthInProgress?: number;
+        budgetHit?: boolean;
     } | null;
     createdAt: string | null;
 }
@@ -142,6 +147,9 @@ export interface NavigatorWorkflowContextValue {
     /** The meta block to show in the Computing readout. Reads the persisted
      *  snapshot's meta. Null when there is no meta block. */
     currentMeta: Accessor<NavigatorSnapshotData["meta"]>;
+    /** The latest heartbeat for the CURRENT state, or null (no compute running,
+     *  or none received yet). Cleared by the final snapshot and by any event change. */
+    engineHeartbeat: Accessor<LiveHeartbeat | null>;
     joinSession: (sessionId: string) => void;
     leaveSession: () => void;
     emitPickStep: (draftId: string, championIds: string[], firstSlot: number) => void;

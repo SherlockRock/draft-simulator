@@ -42,6 +42,15 @@ import { validateSocketEvent } from "../utils/socketValidation";
 import { hashNavigatorEvents, makeCacheKey } from "../utils/navigatorEventHash";
 import { TURN_SEQUENCE } from "../utils/turnSequence";
 import {
+    NavigatorEngineHeartbeatSchema,
+    deriveIsComputing,
+    eventListChanged,
+    heartbeatMatchesState,
+    partialMatchesState,
+    shouldCacheSnapshot,
+    type LiveHeartbeat
+} from "../utils/navigatorProgress";
+import {
     NavigatorTreeNodeSchema,
     NavigatorWeightedAssignmentSchema
 } from "../utils/navigatorTreeSchema";
@@ -110,7 +119,7 @@ const NavigatorScenarioSchema: z.ZodType<NavigatorScenario> = z.object({
 });
 
 const NavigatorSnapshotDataSchema = z.object({
-    source: z.enum(["persisted", "cache"]),
+    source: z.enum(["persisted", "cache", "partial"]),
     id: z.string().nullable(),
     navigator_draft_id: z.string(),
     after_event_id: z.string().nullable(),
@@ -122,7 +131,10 @@ const NavigatorSnapshotDataSchema = z.object({
             computeTimeMs: z.number(),
             pruningRate: z.number(),
             depthReached: z.number(),
-            transpositionsFound: z.number()
+            transpositionsFound: z.number(),
+            inProgress: z.boolean().optional(),
+            depthInProgress: z.number().optional(),
+            budgetHit: z.boolean().optional()
         })
         .nullable(),
     createdAt: z.string().nullable()
@@ -220,6 +232,9 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     const [syntheticTreeSignal, setSyntheticTreeSignal] =
         createSignal<NavigatorTreeNode | null>(null);
     const [lastEventIdSeen, setLastEventIdSeen] = createSignal<string | null>(null);
+    const [engineHeartbeat, setEngineHeartbeat] = createSignal<LiveHeartbeat | null>(
+        null
+    );
     const [viewingGameNumber, setViewingGameNumberSignal] = createSignal<number | null>(
         null
     );
@@ -273,18 +288,22 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             setLastEventIdSeen(
                 nextEvents.length > 0 ? nextEvents[nextEvents.length - 1].id : null
             );
+            setEngineHeartbeat(null);
         });
         console.log("[nav] cache hit — restored prior snapshot from local cache");
     };
 
     const isComputing = createMemo(() => {
         const ctx = navigatorContext();
-        const snapshot = ctx.snapshot;
         const events = ctx.events;
-        if (events.length === 0) return false;
-        const latestEventId = lastEventIdSeen() ?? events[events.length - 1].id;
-        if (!snapshot) return true;
-        return snapshot.after_event_id !== latestEventId;
+        return deriveIsComputing({
+            eventCount: events.length,
+            latestEventId:
+                lastEventIdSeen() ??
+                (events.length > 0 ? events[events.length - 1].id : null),
+            snapshot: ctx.snapshot,
+            hasLiveHeartbeat: engineHeartbeat() !== null
+        });
     });
 
     let socketWithListeners: Socket | undefined = undefined;
@@ -295,6 +314,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     const resetNavigatorContext = () => {
         setSyntheticTreeSignal(null);
         setLastEventIdSeen(null);
+        setEngineHeartbeat(null);
         setNavigatorContext(initialNavigatorState());
     };
 
@@ -370,7 +390,11 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             setLastEventIdSeen(events.length > 0 ? events[events.length - 1].id : null);
             setCurrentSessionId(session.id);
         });
-        if (response.snapshot && response.session) {
+        if (
+            response.snapshot &&
+            response.session &&
+            shouldCacheSnapshot(response.snapshot.source)
+        ) {
             writeCacheEntry(
                 response.session.config_version,
                 response.events ?? [],
@@ -398,6 +422,20 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         }
 
         const prev = untrack(navigatorContext);
+
+        // Design § 7: drop a stale partial for a state the client has already
+        // left — the current-state derivation mirrors handleEngineHeartbeat's
+        // exactly so the two gates agree. Checked before anything else touches
+        // state so a stale partial's `events` payload is dropped too (Important #1).
+        if (data.snapshot) {
+            const latestEventIdForGate =
+                untrack(lastEventIdSeen) ??
+                (prev.events.length > 0 ? prev.events[prev.events.length - 1].id : null);
+            if (!partialMatchesState(data.snapshot, latestEventIdForGate)) {
+                return;
+            }
+        }
+
         const incomingDraft = data.draft;
         if (
             incomingDraft &&
@@ -442,6 +480,12 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         const nextSnapshot = data.snapshot === undefined ? prevSnapshot : data.snapshot;
 
         const eventsChanged = nextEvents !== prevEvents;
+        // Final review #2: array identity (`eventsChanged`) is true on every
+        // partial (a freshly-parsed `events` array rides every
+        // navigatorDraftUpdate), which would clear a live heartbeat on every
+        // partial. The heartbeat clear below needs an actual change of the
+        // event LIST instead; every other use of `eventsChanged` is unchanged.
+        const eventListActuallyChanged = eventListChanged(prevEvents, nextEvents);
         const snapshotChanged =
             nextSnapshot !== prevSnapshot && nextSnapshot !== undefined;
 
@@ -619,6 +663,17 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             if (nextSynthetic !== prevSynthetic) {
                 setSyntheticTreeSignal(nextSynthetic);
             }
+            // A final snapshot for this state ends the heartbeat; an events change
+            // or a draft change invalidates any heartbeat for the old state.
+            // Final review #2: gate on the event LIST actually changing, not
+            // array identity — every partial gets a fresh `events` array.
+            if (
+                eventListActuallyChanged ||
+                draftChanged ||
+                (finalSnapshot && finalSnapshot.meta?.inProgress !== true)
+            ) {
+                setEngineHeartbeat(null);
+            }
             setNavigatorContext((p) => ({
                 session: data.session ?? p.session,
                 draft: data.draft === undefined ? p.draft : data.draft,
@@ -633,7 +688,11 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             );
         });
 
-        if (finalSnapshot && (data.session ?? untrack(navigatorContext).session)) {
+        if (
+            finalSnapshot &&
+            shouldCacheSnapshot(finalSnapshot.source) &&
+            (data.session ?? untrack(navigatorContext).session)
+        ) {
             const sess = data.session ?? untrack(navigatorContext).session;
             if (sess) {
                 writeCacheEntry(
@@ -716,6 +775,21 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         toast.error(data.error);
     };
 
+    const handleEngineHeartbeat = (rawData: unknown) => {
+        const hb = validateSocketEvent(
+            "navigatorEngineHeartbeat",
+            rawData,
+            NavigatorEngineHeartbeatSchema
+        );
+        if (!hb) return;
+        const ctx = untrack(navigatorContext);
+        const latestEventId =
+            untrack(lastEventIdSeen) ??
+            (ctx.events.length > 0 ? ctx.events[ctx.events.length - 1].id : null);
+        if (!heartbeatMatchesState(hb, ctx.draft?.id ?? null, latestEventId)) return;
+        setEngineHeartbeat({ ...hb, receivedAt: Date.now() });
+    };
+
     createEffect(() => {
         const sock = socketAccessor();
         const connectionStatus = connectionStatusAccessor();
@@ -738,6 +812,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         sock.on("navigatorJoinResponse", handleJoinResponse);
         sock.on("navigatorDraftUpdate", handleDraftUpdate);
         sock.on("navigatorError", handleError);
+        sock.on("navigatorEngineHeartbeat", handleEngineHeartbeat);
 
         socketWithListeners = sock;
 
@@ -749,6 +824,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             sock.off("navigatorJoinResponse");
             sock.off("navigatorDraftUpdate");
             sock.off("navigatorError");
+            sock.off("navigatorEngineHeartbeat");
         });
     });
 
@@ -1035,6 +1111,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         effectiveScenarios,
         isComputing,
         currentMeta,
+        engineHeartbeat,
         joinSession,
         leaveSession,
         emitPickStep,

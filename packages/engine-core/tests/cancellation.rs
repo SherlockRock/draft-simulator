@@ -74,3 +74,22 @@ fn the_deadline_clone_shares_the_external_flag_both_ways() {
         "the outer handle carries no deadline of its own"
     );
 }
+
+#[test]
+fn progress_counters_are_shared_by_deadline_clones() {
+    let h = CancelHandle::new();
+    let d = h.with_deadline(Instant::now() + Duration::from_secs(1));
+    d.count_node();
+    d.count_node();
+    d.set_depth_in_progress(3);
+    assert_eq!(h.nodes_so_far(), 2, "a deadline clone counts into the parent's counter");
+    assert_eq!(h.depth_in_progress(), 3);
+    assert_eq!(d.nodes_so_far(), 2);
+}
+
+#[test]
+fn progress_counters_start_at_zero() {
+    let h = CancelHandle::new();
+    assert_eq!(h.nodes_so_far(), 0);
+    assert_eq!(h.depth_in_progress(), 0);
+}

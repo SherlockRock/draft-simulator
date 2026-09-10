@@ -815,3 +815,129 @@ fn non_pair_start_root_stops_at_depth_one_under_zero_budget() {
         resp.depth_reached
     );
 }
+
+#[test]
+fn the_handle_counts_every_node_the_search_expands() {
+    // max_depth 1 so the counter (cumulative over iterations) equals the last
+    // iteration's stats exactly.
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 6);
+    let champs = ["A", "B", "C", "D", "E", "F", "G", "H"];
+    let mut req = default_request(state);
+    req.our_pool = pool_with(&champs);
+    req.opp_pool = pool_with(&champs);
+    req.latency_budget_ms = 60_000;
+    req.search_params.max_depth = 1;
+    req.search_params.branch_width = 5;
+    req.meta_overrides = Some(MetaData {
+        win_rates: champs
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (c.to_string(), 0.9 - 0.1 * i as f64))
+            .collect(),
+        ..Default::default()
+    });
+    req.champion_meta = champs
+        .into_iter()
+        .map(|champ| {
+            (
+                champ.to_string(),
+                ChampionMeta {
+                    id: champ.to_string(),
+                    positions: vec![Role::Top],
+                    ..Default::default()
+                },
+            )
+        })
+        .collect();
+
+    let engine = Engine::new(MetaData::default(), HashMap::new());
+    let cancel = CancelHandle::new();
+    let resp = engine.compute(req, &cancel).unwrap();
+
+    assert!(resp.nodes_evaluated > 0);
+    assert_eq!(cancel.nodes_so_far(), resp.nodes_evaluated);
+}
+
+fn role_covering_roster_at_slot_6(max_depth: usize) -> ComputeRequest {
+    let mut state = DraftState::default();
+    fast_forward_to_slot(&mut state, 6);
+    // A/B = TOP, C/D = JG, E/F = MID, G/H = ADC, I/J = SUP — matches the
+    // ten-champion role-covering pattern used elsewhere in this file so the
+    // feasibility prune (a full 5-role comp must remain completable) does
+    // not drop every root candidate.
+    let champs = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+    let role_map: [Role; 10] = [
+        Role::Top, Role::Top,
+        Role::Jungle, Role::Jungle,
+        Role::Middle, Role::Middle,
+        Role::Adc, Role::Adc,
+        Role::Support, Role::Support,
+    ];
+    let mut req = default_request(state);
+    req.our_pool = pool_with(&champs);
+    req.opp_pool = pool_with(&champs);
+    req.latency_budget_ms = 60_000;
+    req.search_params.max_depth = max_depth;
+    req.search_params.branch_width = 5;
+    req.meta_overrides = Some(MetaData {
+        win_rates: champs
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (c.to_string(), 0.9 - 0.05 * i as f64))
+            .collect(),
+        ..Default::default()
+    });
+    req.champion_meta = champs
+        .into_iter()
+        .zip(role_map.iter())
+        .map(|(champ, role)| {
+            (
+                champ.to_string(),
+                ChampionMeta {
+                    id: champ.to_string(),
+                    positions: vec![*role],
+                    ..Default::default()
+                },
+            )
+        })
+        .collect();
+    req
+}
+
+#[test]
+fn compute_streaming_emits_one_partial_per_completed_depth_before_the_final() {
+    let engine = Engine::new(MetaData::default(), HashMap::new());
+    let cancel = CancelHandle::new();
+    let mut partials: Vec<(usize, usize, bool, bool)> = Vec::new();
+    let resp = engine
+        .compute_streaming(role_covering_roster_at_slot_6(3), &cancel, &mut |p| {
+            partials.push((p.depth_reached, p.depth_in_progress, p.in_progress, p.budget_hit));
+            assert!(!p.tree.children.is_empty(), "a partial carries a real tree");
+            assert!(!p.scenarios.is_empty(), "a partial carries scenarios");
+        })
+        .unwrap();
+
+    assert_eq!(resp.depth_reached, 3);
+    assert!(!resp.in_progress);
+    assert_eq!(resp.depth_in_progress, 0);
+    assert!(!resp.budget_hit);
+    assert_eq!(
+        partials,
+        vec![(1, 2, true, false), (2, 3, true, false)],
+        "depth 1 then 2 as partials, each naming the depth now running; depth 3 is the final"
+    );
+}
+
+#[test]
+fn compute_without_a_sink_is_unchanged_and_reports_budget_hit_on_exhaustion() {
+    let engine = Engine::new(MetaData::default(), HashMap::new());
+    let cancel = CancelHandle::new();
+    let mut req = role_covering_roster_at_slot_6(8);
+    req.latency_budget_ms = 1;
+    let resp = engine.compute(req, &cancel).unwrap();
+    assert!(resp.depth_reached >= 1);
+    assert!(!resp.in_progress);
+    assert!(resp.budget_hit, "a budget/deadline cut sets budget_hit on the final");
+    assert!(!resp.cancelled);
+}

@@ -34,7 +34,7 @@ pub struct SearchResult<T> {
 /// returned as `partial: true`. The first iteration is exempt: a caller
 /// always gets a tree, and a late depth 1 beats a Timeout error.
 pub fn deepen<T, F>(
-    mut search_at_depth: F,
+    search_at_depth: F,
     max_depth: usize,
     budget: Duration,
     min_completed_depth: usize,
@@ -42,6 +42,28 @@ pub fn deepen<T, F>(
 ) -> Result<SearchResult<T>, EngineError>
 where
     F: FnMut(usize, &CancelHandle) -> Result<SearchResult<T>, EngineError>,
+{
+    deepen_with_hook(search_at_depth, max_depth, budget, min_completed_depth, cancel, |_| {})
+}
+
+/// `deepen` with a per-depth hook (engine target § 2: partial results while
+/// computing). `on_depth` fires at the top of the loop body, only once the
+/// three stop checks have decided to run ANOTHER iteration, with the previous
+/// depth's result — so it fires once per completed depth that is followed by
+/// a deeper one and never for the depth that becomes the return value. A
+/// partial therefore always means "this depth is done and a deeper one is now
+/// running". `cancel.depth_in_progress` is set at the same point.
+pub fn deepen_with_hook<T, F, H>(
+    mut search_at_depth: F,
+    max_depth: usize,
+    budget: Duration,
+    min_completed_depth: usize,
+    cancel: &CancelHandle,
+    mut on_depth: H,
+) -> Result<SearchResult<T>, EngineError>
+where
+    F: FnMut(usize, &CancelHandle) -> Result<SearchResult<T>, EngineError>,
+    H: FnMut(&SearchResult<T>),
 {
     let start = Instant::now();
     let deadline = start + budget;
@@ -82,6 +104,11 @@ where
                 }
             }
         }
+
+        if let Some(prev) = &best {
+            on_depth(prev);
+        }
+        cancel.set_depth_in_progress(depth);
 
         let handle = if best.is_some() {
             cancel.with_deadline(deadline)

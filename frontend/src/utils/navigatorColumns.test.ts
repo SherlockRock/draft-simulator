@@ -1,8 +1,12 @@
 import { describe, expect, test } from "vitest";
 import type { NavigatorTreeNode } from "../contexts/NavigatorContext";
 import type { ConfirmedTurn } from "./treeReconcile";
+import banFixture from "./__fixtures__/navigator-ban1-snapshot.json";
+import pickFixture from "./__fixtures__/navigator-item5-snapshot.json";
+import { NavigatorTreeNodeSchema } from "./navigatorTreeSchema";
 import {
     MAX_COLUMNS,
+    banSignalAbsent,
     clampSelectedPath,
     deriveColumns,
     describeLine,
@@ -201,5 +205,30 @@ describe("sidePicksBefore / describeLine", () => {
             "Blue Pick 4 + Blue Pick 5: Xayah + Shen (2.90)",
             "Red Pick 5: Pantheon (3.00)"
         ]);
+    });
+});
+
+describe("banSignalAbsent (design § 5)", () => {
+    const banRoot = NavigatorTreeNodeSchema.parse(banFixture.tree);
+    const pickRoot = NavigatorTreeNodeSchema.parse(pickFixture.tree);
+
+    test("a phase-1 ban fan with equal composites and zero components has no signal", () => {
+        expect(banSignalAbsent(banRoot.children)).toBe(true);
+    });
+    test("a pick fan has signal", () => {
+        expect(banSignalAbsent(pickRoot.children)).toBe(false);
+    });
+    test("a ban fan whose composites differ has signal (phase-2 bans)", () => {
+        const [a, ...rest] = banRoot.children;
+        const varied = [{ ...a, scores: { ...a.scores, composite: a.scores.composite + 0.1 } }, ...rest];
+        expect(banSignalAbsent(varied)).toBe(false);
+    });
+    test("a ban fan with a non-zero component has signal", () => {
+        const [a, ...rest] = banRoot.children;
+        const withInfo = [{ ...a, scores: { ...a.scores, informationValue: 0.2 } }, ...rest];
+        expect(banSignalAbsent(withInfo)).toBe(false);
+    });
+    test("an empty fan is not 'absent signal'", () => {
+        expect(banSignalAbsent([])).toBe(false);
     });
 });

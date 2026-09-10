@@ -75,6 +75,12 @@ const ComputeMetaSchema = z.object({
   transpositionsFound: z.number().int().nonnegative(),
   forcedBranchesDropped: z.number().int().nonnegative(),
   cancelled: z.boolean(),
+  /** Streaming: true on a per-depth partial, false on the final. */
+  inProgress: z.boolean(),
+  /** The depth now being searched when `inProgress`; 0 on the final. */
+  depthInProgress: z.number().int().nonnegative(),
+  /** The budget or deadline cut the search; `depthReached` is the last completed depth. */
+  budgetHit: z.boolean(),
 });
 
 export const EngineResponseSchema = z.object({

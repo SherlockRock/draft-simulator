@@ -300,6 +300,45 @@ function supersedePriorCompute(sessionId) {
   }
 }
 
+// Streaming (design § 3): forwards the engine's progress strings to the
+// caller's consumer while `isCurrent()` still says this compute owns the
+// session — a superseded compute's late partials and heartbeats are dropped
+// here, before any socket work. A consumer that throws must not kill the
+// compute, so it is caught and logged. Returns undefined when there is no
+// consumer so the engine spawns no ticker at all.
+//
+// Final review #3 (design § 3): a partial's `response.protocolVersion` is
+// checked here, same as the final's, so a major mismatch never reaches the
+// consumer (and never gets broadcast) — a mismatched partial is dropped with
+// one console.warn. Heartbeats carry no protocolVersion and are unaffected.
+// The check is a pure function of the message, so the forwarder stays pure.
+function makeProgressForwarder(isCurrent, onProgress) {
+  if (typeof onProgress !== "function") return undefined;
+  return (raw) => {
+    if (!isCurrent()) return;
+    let message;
+    try {
+      message = JSON.parse(raw);
+    } catch (err) {
+      console.warn(`[nav] progress message is not JSON: ${err.message}`);
+      return;
+    }
+    if (message.kind === "partial") {
+      try {
+        assertProtocolMajor(message.response.protocolVersion);
+      } catch (err) {
+        console.warn(`[nav] dropping partial: ${err.message}`);
+        return;
+      }
+    }
+    try {
+      onProgress(message);
+    } catch (err) {
+      console.warn(`[nav] onProgress consumer threw: ${err.message}`);
+    }
+  };
+}
+
 async function computeForDraft(navigatorDraft, session, events, version, io, options = {}) {
   if (!navigatorDraft || !navigatorDraft.id) {
     throw new Error("navigatorDraft.id is required");
@@ -324,13 +363,30 @@ async function computeForDraftAB(navigatorDraft, session, events, version, io, o
   );
   const lastEventId = getLastEventId(events);
 
+  // Invariant (ledger, Task 6 deferred minor): no macrotask may sit between
+  // here and `activeTokens.set` below. `supersedePriorCompute` is
+  // synchronous — `await`ing it only awaits its own return value, not a
+  // suspension point — so the cancel-then-set pair completes within one
+  // microtask turn, before the napi callback's macrotask can run. That is
+  // what makes the streaming gate (`isCurrent` in makeProgressForwarder)
+  // correct: a stale compute's forwarder must observe the new token before
+  // it can emit another partial. Introducing a real `await` between the
+  // cancel and the set (e.g. an async supersedePriorCompute body, or a
+  // query inserted here) reopens the window this comment closes.
   await supersedePriorCompute(session.id);
   const token = new CancelToken();
   activeTokens.set(session.id, { version, token });
 
   let responseJson;
   try {
-    responseJson = await engine.compute(JSON.stringify(request), token);
+    const forward = makeProgressForwarder(
+      () => {
+        const current = activeTokens.get(session.id);
+        return Boolean(current) && current.version === version;
+      },
+      options.onProgress,
+    );
+    responseJson = await engine.compute(JSON.stringify(request), token, forward);
   } catch (err) {
     const decoded = decodeEngineError(err);
     if (decoded.code === "engine.cancelled") {
@@ -387,5 +443,6 @@ module.exports = {
   getLastEventId,
   resolveEngineOptions,
   formatPositionsSourceLine,
+  makeProgressForwarder,
   FM_WEIGHTS_PATH,
 };

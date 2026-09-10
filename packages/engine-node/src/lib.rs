@@ -13,12 +13,20 @@ mod evaluator_scores_test;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use engine_core::cancellation::CancelHandle;
 use engine_core::engine::Engine as CoreEngine;
 use engine_core::protocol_types as proto;
 use engine_core::role_solver::ChampionMeta;
+use napi::threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
+
+/// Heartbeat cadence while a compute runs (design § 2). Sampled from the
+/// cancel handle's progress counters; the message carries no tree.
+const HEARTBEAT_INTERVAL_MS: u64 = 250;
+
+type ProgressSink = ThreadsafeFunction<String, ErrorStrategy::Fatal>;
 
 #[napi]
 pub fn engine_version() -> String {
@@ -118,11 +126,17 @@ impl Engine {
         self.fm_status.clone()
     }
 
+    /// `onProgress`, when given, receives JSON strings while the compute runs:
+    /// `{"kind":"partial","response":<EngineResponse>}` once per completed
+    /// depth that a deeper one follows, and
+    /// `{"kind":"heartbeat","depthInProgress":n,"nodes":n,"elapsedMs":n}`
+    /// every `HEARTBEAT_INTERVAL_MS`. Without it the call is unchanged.
     #[napi]
     pub async fn compute(
         &self,
         request_json: String,
         token: &CancelToken,
+        #[napi(ts_arg_type = "(raw: string) => void")] on_progress: Option<ProgressSink>,
     ) -> napi::Result<String> {
         let proto_request: proto::EngineRequest = serde_json::from_str(&request_json)
             .map_err(|e| error::invalid_input(vec![], format!("request parse failed: {}", e)))?;
@@ -131,14 +145,58 @@ impl Engine {
         let core_request = projection::request_to_core(&proto_request, champion_meta)
             .map_err(error::map_engine_error)?;
 
+        let sink: Option<ProgressSink> = on_progress;
+
+        let started = Instant::now();
+        let ticker = sink.clone().map(|tsfn| {
+            let handle = token.inner.clone();
+            tokio::spawn(async move {
+                let mut interval =
+                    tokio::time::interval(Duration::from_millis(HEARTBEAT_INTERVAL_MS));
+                interval.tick().await; // the first tick completes immediately
+                loop {
+                    interval.tick().await;
+                    let msg = serde_json::json!({
+                        "kind": "heartbeat",
+                        "depthInProgress": handle.depth_in_progress(),
+                        "nodes": handle.nodes_so_far(),
+                        "elapsedMs": started.elapsed().as_millis() as u64,
+                    });
+                    tsfn.call(msg.to_string(), ThreadsafeFunctionCallMode::NonBlocking);
+                }
+            })
+        });
+
         let token_handle = token.inner.clone();
         let engine = self.inner.clone();
-        let core_response = tokio::task::spawn_blocking(move || {
-            engine.compute(core_request, &token_handle)
+        let partial_sink = sink.clone();
+        let joined = tokio::task::spawn_blocking(move || {
+            let mut on_partial = |resp: engine_core::engine::ComputeResponse| {
+                if let Some(tsfn) = &partial_sink {
+                    let proto_partial = projection::core_to_response(resp);
+                    match serde_json::to_string(&proto_partial) {
+                        Ok(json) => {
+                            tsfn.call(
+                                format!("{{\"kind\":\"partial\",\"response\":{}}}", json),
+                                ThreadsafeFunctionCallMode::NonBlocking,
+                            );
+                        }
+                        Err(_) => {} // a partial that cannot serialize is dropped; the final still returns
+                    }
+                }
+            };
+            engine.compute_streaming(core_request, &token_handle, &mut on_partial)
         })
-        .await
-        .map_err(|e| error::internal(format!("join error: {}", e)))?
-        .map_err(error::map_engine_error)?;
+        .await;
+
+        if let Some(t) = ticker {
+            t.abort();
+        }
+        drop(sink);
+
+        let core_response = joined
+            .map_err(|e| error::internal(format!("join error: {}", e)))?
+            .map_err(error::map_engine_error)?;
 
         let proto_response = projection::core_to_response(core_response);
         serde_json::to_string(&proto_response)

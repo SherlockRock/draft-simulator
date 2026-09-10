@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
     deriveEngineStatus,
     formatEngineStatus,
+    isHeartbeatStale,
     type EngineStatusInput
 } from "./navigatorEngineStatus";
 
@@ -13,7 +14,10 @@ const base: EngineStatusInput = {
     fanCount: 8,
     meta: { depthReached: 3, computeTimeMs: 301 },
     elapsedMs: 0,
-    reason: () => "should not be called"
+    reason: () => "should not be called",
+    progress: null,
+    budgetHit: false,
+    heartbeatStaleMs: null
 };
 
 describe("deriveEngineStatus (design § 4 table)", () => {
@@ -22,7 +26,8 @@ describe("deriveEngineStatus (design § 4 table)", () => {
             kind: "ready",
             candidates: 8,
             depthReached: 3,
-            computeTimeMs: 301
+            computeTimeMs: 301,
+            budgetHit: false
         });
         expect(formatEngineStatus(deriveEngineStatus(base))).toBe(
             "● 8 candidates · depth 3 · 301 ms"
@@ -30,7 +35,13 @@ describe("deriveEngineStatus (design § 4 table)", () => {
     });
     test("thinking wins over the fan (optimistic phase still shows the promoted continuation)", () => {
         const s = deriveEngineStatus({ ...base, isComputing: true, elapsedMs: 4200 });
-        expect(s).toEqual({ kind: "thinking", elapsedMs: 4200 });
+        expect(s).toEqual({
+            kind: "thinking",
+            elapsedMs: 4200,
+            candidates: null,
+            progress: null,
+            heartbeatStaleMs: null
+        });
         expect(formatEngineStatus(s)).toBe("◐ Thinking · 4.2 s");
     });
     test("empty fan with a reason", () => {
@@ -67,5 +78,62 @@ describe("deriveEngineStatus (design § 4 table)", () => {
         expect(formatEngineStatus(deriveEngineStatus({ ...base, meta: null }))).toBe(
             "● 8 candidates · depth ? · ? ms"
         );
+    });
+});
+
+describe("streaming states (design § 4)", () => {
+    test("thinking before any partial shows the depth being searched and the node count", () => {
+        const s = deriveEngineStatus({
+            ...base,
+            isComputing: true,
+            fanCount: 0,
+            elapsedMs: 400,
+            progress: { depthPainted: 0, depthInProgress: 1, nodes: 120 }
+        });
+        expect(formatEngineStatus(s)).toBe("◐ Thinking · searching depth 1 · 0.4 s · 120 nodes");
+    });
+    test("thinking with a painted depth names the candidates and both depths", () => {
+        const s = deriveEngineStatus({
+            ...base,
+            isComputing: true,
+            fanCount: 8,
+            elapsedMs: 4200,
+            progress: { depthPainted: 2, depthInProgress: 3, nodes: 1840 }
+        });
+        expect(formatEngineStatus(s)).toBe(
+            "◐ 8 candidates · depth 2 painted · searching depth 3 · 4.2 s · 1,840 nodes"
+        );
+    });
+    test("a stale heartbeat is appended and flagged", () => {
+        const s = deriveEngineStatus({
+            ...base,
+            isComputing: true,
+            fanCount: 8,
+            elapsedMs: 7100,
+            progress: { depthPainted: 2, depthInProgress: 3, nodes: 1840 },
+            heartbeatStaleMs: 3000
+        });
+        expect(formatEngineStatus(s)).toBe(
+            "◐ 8 candidates · depth 2 painted · searching depth 3 · 7.1 s · 1,840 nodes · no heartbeat for 3 s"
+        );
+        expect(isHeartbeatStale(s)).toBe(true);
+    });
+    test("a fresh heartbeat is not flagged", () => {
+        const s = deriveEngineStatus({
+            ...base,
+            isComputing: true,
+            elapsedMs: 1000,
+            progress: { depthPainted: 1, depthInProgress: 2, nodes: 10 },
+            heartbeatStaleMs: 500
+        });
+        expect(isHeartbeatStale(s)).toBe(false);
+        expect(formatEngineStatus(s)).not.toContain("no heartbeat");
+    });
+    test("ready after a deadline cut says budget hit", () => {
+        const s = deriveEngineStatus({ ...base, meta: { depthReached: 2, computeTimeMs: 5003 }, budgetHit: true });
+        expect(formatEngineStatus(s)).toBe("● 8 candidates · depth 2 · 5003 ms · budget hit");
+    });
+    test("a stale check never applies outside thinking", () => {
+        expect(isHeartbeatStale(deriveEngineStatus(base))).toBe(false);
     });
 });
