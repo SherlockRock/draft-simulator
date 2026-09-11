@@ -84,10 +84,6 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
             );
         }
     });
-    const pendingPicks = createMemo(() => {
-        pickSyncVersion();
-        return pickSync.pendingCount();
-    });
     const pickSaveError = createMemo(() => {
         pickSyncVersion();
         return pickSync.error();
@@ -353,19 +349,16 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
     return (
         <CanvasSocketContext.Provider value={contextValue}>
             <div class="flex flex-1 flex-col overflow-hidden">
-                <Show when={pendingPicks() > 0}>
-                    <div
-                        class="fixed bottom-4 left-1/2 z-50 flex max-w-[calc(100%-2rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-3 rounded border border-purple-500/30 bg-slate-800 px-3 py-2 text-sm text-slate-200 shadow-lg"
-                        role="status"
-                        aria-live="polite"
-                    >
-                        <span>
-                            {pickSaveError() ??
-                                (connectionStatus() === "connected"
-                                    ? "Saving pick changes…"
-                                    : "Pick changes will save when reconnected.")}
-                        </span>
-                        <Show when={pickSaveError()}>
+                {/* In-flight and queued saves are silent; only a save the
+                    queue cannot complete on its own gets a surface, because
+                    the draft's queue stays parked until Retry or Discard. */}
+                <Show when={pickSaveError()}>
+                    {(message) => (
+                        <div
+                            class="fixed bottom-4 left-1/2 z-50 flex max-w-[calc(100%-2rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-3 rounded border border-purple-500/30 bg-slate-800 px-3 py-2 text-sm text-slate-200 shadow-lg"
+                            role="alert"
+                        >
+                            <span>{message()}</span>
                             <button
                                 type="button"
                                 class="rounded px-2 py-1 text-purple-400 hover:bg-slate-700 disabled:opacity-50"
@@ -381,8 +374,8 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
                             >
                                 Discard unsaved changes
                             </button>
-                        </Show>
-                    </div>
+                        </div>
+                    )}
                 </Show>
                 {!isLocalMode() && (
                     <ConnectionBanner

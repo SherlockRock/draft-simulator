@@ -137,10 +137,12 @@ describe("Canvas socket recovery", () => {
         const app = setup();
         socket.connect();
         app.ctx.pickSync.edit(initial, [{ index: 10, championId: "Orianna" }]);
-        expect(app.getByText("Saving pick changes…")).toBeTruthy();
+        // In-flight and queued saves show nothing; only failures surface.
+        expect(app.ctx.pickSync.pendingCount()).toBe(1);
+        expect(app.queryByRole("alert")).toBeNull();
         const original = socket.requests[0].request;
         socket.disconnect();
-        expect(app.getByText("Pick changes will save when reconnected.")).toBeTruthy();
+        expect(app.queryByRole("alert")).toBeNull();
         socket.connect();
         expect(socket.requests[1].request).toEqual(original);
         expect(app.ctx.pickSync.merge(initial).picks[10]).toBe("Orianna");
@@ -151,7 +153,7 @@ describe("Canvas socket recovery", () => {
             mutationId: original.mutationId,
             draft: saved
         });
-        expect(app.queryByText("Saving pick changes…")).toBeNull();
+        expect(app.ctx.pickSync.pendingCount()).toBe(0);
         socket.emit("draftUpdate", initial);
         expect(app.ctx.pickSync.merge(initial).picks[10]).toBe("Orianna");
     });
